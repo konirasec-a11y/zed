@@ -10,6 +10,7 @@ mod integration;
 mod theme;
 mod hierarchy;
 mod property_editor;
+mod quick_edit_view;
 mod symbol_library;
 pub use symbol_library::MdeSymbolLibraryItem;
 pub use integration::register_mde_workspace;
@@ -22,6 +23,7 @@ use bellatrix_mde_cordis::{
     MdeUiCommand, ModelingCreateElementRequested, ModelingElementKind,
     ModelingMoveViewRequested, ModelingRenameRequested, ModelingResizeViewRequested,
     ModelingDeleteElementRequested, ModelingSetPropertyRequested,
+    ModelingAddMemberRequested, ModelingMemberKind,
 };
 use bellatrix_mde_model::Geometry;
 use bellatrix_ui_uml::UmlClassCard;
@@ -218,6 +220,29 @@ impl MdeWorkbenchItem {
             );
             cx.notify();
         }
+    }
+
+    /// The Class/Interface Quick Edit surface adds real semantic members through
+    /// the same revision-checked Cordis transport as the Inspector.
+    pub fn add_member_to_selected(
+        &mut self, kind: ModelingMemberKind, cx: &mut Context<Self>
+    ) {
+        let Some(owner_id) = self.selected_element.clone() else {
+            self.feedback = "Select a Class or Interface first".into();
+            cx.notify();
+            return;
+        };
+        let Ok(snapshot) = self.source.snapshot() else {
+            self.feedback = "Project snapshot unavailable".into();
+            cx.notify();
+            return;
+        };
+        self.submit(MdeUiCommand::AddMember(ModelingAddMemberRequested {
+            project_id: self.project_id().clone(),
+            owner_id,
+            kind,
+            expected_revision: snapshot.revision,
+        }), cx);
     }
 
     /// User-editable Inspector values are typed and revision-checked in MDE.
