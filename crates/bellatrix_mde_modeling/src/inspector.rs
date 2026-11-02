@@ -156,12 +156,14 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
         }
         for (key,value) in &relation.properties {
             if known.contains(key.as_str()) {continue;}
-            let (editor,editable)=match value {
+            let (editor,editable)=if key=="end1Aggregation" {
+                (PropertyEditor::Choice(&["none","shared","composite"]),true)
+            } else { match value {
                 Value::String(_)=>(PropertyEditor::Text,true),
                 Value::Bool(_)=>(PropertyEditor::Boolean,true),
                 Value::Number(_)=>(PropertyEditor::Number,true),
                 _=>(PropertyEditor::ReadOnly,false),
-            };
+            } };
             properties.push(InspectorProperty {
                 path:format!("properties.{key}"),label:key.clone(),
                 group:"Other properties",editor,value:value.clone(),editable,
