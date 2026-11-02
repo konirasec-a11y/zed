@@ -18,6 +18,7 @@ pub struct UmlQuickAction {
     pub id: &'static str,
     pub label: &'static str,
     pub icon: IconName,
+    pub row: u8,
 }
 
 /// A small set of *available* icon buttons beside an active UML element.
@@ -26,6 +27,7 @@ pub struct UmlQuickAction {
 pub struct UmlQuickEdit {
     actions: Vec<UmlQuickAction>,
     handler: ActionHandler,
+    side: &'static str,
 }
 
 impl UmlQuickEdit {
@@ -33,35 +35,41 @@ impl UmlQuickEdit {
         actions: Vec<UmlQuickAction>,
         on_action: impl Fn(&str, &mut Window, &mut App) + 'static,
     ) -> Self {
-        Self { actions, handler: Rc::new(on_action) }
+        Self { actions, handler: Rc::new(on_action), side: "right" }
+    }
+    pub fn side(mut self, side: &'static str) -> Self {
+        self.side = side;
+        self
     }
 }
 
 impl RenderOnce for UmlQuickEdit {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let palette = bellatrix_design_system::Palette::current(cx);
-        div()
-            .id("bellatrix-uml-quick-actions")
-            .flex()
-            .flex_wrap()
-            .gap_1()
-            .p_1()
-            .rounded_sm()
-            .border_1()
-            .border_color(gpui::rgb(palette.border))
-            .bg(gpui::rgb(palette.panel))
-            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .children(self.actions.into_iter().map(|action| {
-                let handler = self.handler.clone();
-                IconButton::new(format!("uml-action-{}", action.id), action.icon)
-                    .shape(IconButtonShape::Square)
-                    .aria_label(action.label)
-                    .tooltip(Tooltip::text(action.label))
-                    .on_click(move |_, window, cx| {
-                        handler(action.id, window, cx);
-                        cx.stop_propagation();
-                    })
-            }))
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        // Mirror the reference 25px Quick Edit grid. Buttons are glyph-only
+        // and arranged in two rows around the currently edited classifier.
+        let mut upper = Vec::new();
+        let mut lower = Vec::new();
+        for action in self.actions {
+            let handler=self.handler.clone();
+            let button=IconButton::new(format!("uml-action-{}",action.id),action.icon)
+                .shape(IconButtonShape::Square)
+                .aria_label(action.label)
+                .tooltip(Tooltip::text(action.label))
+                .on_click(move |_,window,cx| {
+                    handler(action.id,window,cx);
+                    cx.stop_propagation();
+                }).into_any_element();
+            if action.row<=1 {upper.push(button);} else {lower.push(button);}
+        }
+        div().id(format!("bellatrix-uml-quick-actions-{}",self.side))
+            .flex().flex_col().gap_1()
+            .on_mouse_down(MouseButton::Left,|_,_,cx|cx.stop_propagation())
+            .when(!upper.is_empty(),|el|el.child(
+                div().flex().gap_1().children(upper)
+            ))
+            .when(!lower.is_empty(),|el|el.child(
+                div().flex().gap_1().children(lower)
+            ))
     }
 }
 
