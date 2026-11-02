@@ -6,7 +6,7 @@ try {
     & python script/bellatrix_mde/static_check.py
     if ($LASTEXITCODE -ne 0) { throw 'Bellatrix architecture check failed' }
     foreach ($name in @(
-        'bellatrix_project', 'bellatrix_mde_model', 'bellatrix_mde_modeling',
+        'bellatrix_project', 'bellatrix_mde', 'bellatrix_mde_templates',
         'bellatrix_mde_cordis', 'bellatrix_mde_rust_generator',
         'bellatrix_mde_html_exporter', 'bellatrix_mde_workbench', 'bellatrix_zed_host'
     )) {

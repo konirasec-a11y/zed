@@ -6,7 +6,7 @@ use bellatrix_mde_cordis::{
     ModelingElementKind, ModelingRelationKind, ModelingDeleteElement,
     ModelingDeleteElementRequested, ModelingMoveView, ModelingMoveViewRequested, with_model,
 };
-use bellatrix_mde_model::{Geometry, ModelingSection, Project};
+use bellatrix_mde::{Geometry, ModelingSection, Project};
 use bellatrix_project::{
     ProjectCreate, ProjectCreateRequested, ProjectDocument, ProjectId, ProjectPlugin, ProjectService,
 };
@@ -25,7 +25,7 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
     let plugin=cx.spawn(PreparedPlugin::from_input(plugin,input)).await.unwrap();
     let id=ProjectId::new("uml-acceptance").unwrap();
     let mut model:Project=serde_json::from_str(
-        include_str!("../../bellatrix_mde_model/fixtures/todo.json")
+        include_str!("../../bellatrix_mde/fixtures/todo.json")
     ).unwrap();
     model.id=id.as_str().into();
     model.name="UML acceptance".into();

@@ -1,7 +1,6 @@
 use bellatrix_mde_cordis::{MdePlugin, ModelingRename, ModelingRenameRequested, with_model};
 use bellatrix_mde_cordis::{ModelingRun, ModelingRunRequested, ModelingTaskKind};
-use bellatrix_mde_model::Project;
-use bellatrix_mde_modeling::Scope;
+use bellatrix_mde::{Project, Scope};
 use bellatrix_project::{
     ProjectClose, ProjectCloseRequested, ProjectCreate, ProjectCreateRequested, ProjectDocument,
     ProjectId, ProjectOpen, ProjectOpenRequested, ProjectPlugin, ProjectReplace,
@@ -13,7 +12,7 @@ use cordis::{Context, FiberState, Plugin, PreparedPlugin, Routing};
 use std::sync::{Arc, Mutex};
 
 fn fixture() -> Project {
-    serde_json::from_str(include_str!("../../bellatrix_mde_model/fixtures/todo.json")).unwrap()
+    serde_json::from_str(include_str!("../../bellatrix_mde/fixtures/todo.json")).unwrap()
 }
 
 async fn admit<P: Plugin>(ctx: &Context, plugin: P) -> cordis::FiberHandle

@@ -22,8 +22,7 @@ members = [
     "crates/aws_http_client",
     "crates/bedrock",
     "crates/bellatrix_project",
-    "crates/bellatrix_mde_model",
-    "crates/bellatrix_mde_modeling",
+    "crates/bellatrix_mde",
     "crates/bellatrix_mde_cordis",
     "crates/bellatrix_mde_templates",
     "crates/bellatrix_mde_rust_generator",
@@ -300,8 +299,7 @@ edition = "2024"
 
 # Bellatrix bounded contexts and native Zed Workspace contributions.
 bellatrix_project = { path = "crates/bellatrix_project" }
-bellatrix_mde_model = { path = "crates/bellatrix_mde_model" }
-bellatrix_mde_modeling = { path = "crates/bellatrix_mde_modeling" }
+bellatrix_mde = { path = "crates/bellatrix_mde" }
 bellatrix_mde_cordis = { path = "crates/bellatrix_mde_cordis" }
 bellatrix_mde_rust_generator = { path = "crates/bellatrix_mde_rust_generator" }
 bellatrix_mde_templates = { path = "crates/bellatrix_mde_templates" }

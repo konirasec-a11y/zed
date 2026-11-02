@@ -1,5 +1,5 @@
 use bellatrix_mde_cordis::{MdePlugin, ModelingQuickEdit, ModelingQuickEditRequested, UmlQuickCommand, with_model};
-use bellatrix_mde_model::{ModelingSection, Project};
+use bellatrix_mde::{ModelingSection, Project};
 use bellatrix_project::{ProjectCreate, ProjectCreateRequested, ProjectDocument, ProjectId, ProjectPlugin, ProjectService};
 use cordis::{Context, Plugin, PreparedPlugin, Routing};
 use cordis::event::QueryOutcome;
@@ -17,7 +17,7 @@ async fn common_quick_edit_is_revisioned_project_scoped_and_disposed() {
     let engine = context.spawn(PreparedPlugin::from_input(engine, engine_input)).await.unwrap();
     let mut active_diagram = String::new();
     for name in ["capabilities-a", "capabilities-b"] {
-        let mut model: Project = serde_json::from_str(include_str!("../../bellatrix_mde_model/fixtures/todo.json")).unwrap();
+        let mut model: Project = serde_json::from_str(include_str!("../../bellatrix_mde/fixtures/todo.json")).unwrap();
         model.id = name.into(); model.name = name.into();
         active_diagram = model.diagrams[0].id.clone();
         let document = with_model(ProjectDocument::new(ProjectId::new(name).unwrap(), name).unwrap(), &model).unwrap();

@@ -1,7 +1,7 @@
 use bellatrix_mde_cordis::{
     MdePlugin, ModelingResizeView, ModelingResizeViewRequested, with_model,
 };
-use bellatrix_mde_model::{Geometry, ModelingSection, Project};
+use bellatrix_mde::{Geometry, ModelingSection, Project};
 use bellatrix_project::{
     ProjectCreate, ProjectCreateRequested, ProjectDocument, ProjectId, ProjectPlugin,
     ProjectService,
@@ -27,7 +27,7 @@ async fn rectangle_resize_is_versioned_and_persisted() {
     let project = admit(&ctx, ProjectPlugin::new(Arc::clone(&service))).await;
     let mde = admit(&ctx, MdePlugin).await;
     let mut model: Project =
-        serde_json::from_str(include_str!("../../bellatrix_mde_model/fixtures/todo.json")).unwrap();
+        serde_json::from_str(include_str!("../../bellatrix_mde/fixtures/todo.json")).unwrap();
     model.id = "resized-project".into();
     model.name = "Resized project".into();
     let id = ProjectId::new(model.id.clone()).unwrap();

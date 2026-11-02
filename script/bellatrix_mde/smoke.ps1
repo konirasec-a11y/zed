@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 Push-Location $root
 try {
-    $fixture = 'crates/bellatrix_mde_model/fixtures/todo.json'
+    $fixture = 'crates/bellatrix_mde/fixtures/todo.json'
     function Run-Cargo {
         param([string[]]$CargoArgs)
         & cargo +1.98.1 @CargoArgs

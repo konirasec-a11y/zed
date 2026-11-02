@@ -2,7 +2,7 @@ use bellatrix_mde_cordis::{
     MdePlugin, ModelingAddMember, ModelingAddMemberRequested, ModelingMemberKind, with_model,
     ModelingQuickEdit, ModelingQuickEditRequested, UmlQuickCommand,
 };
-use bellatrix_mde_model::{ModelingSection, Project};
+use bellatrix_mde::{ModelingSection, Project};
 use bellatrix_project::{
     ProjectCreate, ProjectCreateRequested, ProjectDocument, ProjectId, ProjectPlugin, ProjectService,
 };
@@ -18,7 +18,7 @@ where P::Config: Default, P::PrepareError:std::fmt::Debug
 }
 fn model_document(id:&str)->ProjectDocument {
     let mut model:Project=serde_json::from_str(
-        include_str!("../../bellatrix_mde_model/fixtures/todo.json")).unwrap();
+        include_str!("../../bellatrix_mde/fixtures/todo.json")).unwrap();
     model.id=id.into();
     model.name=id.into();
     with_model(ProjectDocument::new(ProjectId::new(id).unwrap(),id).unwrap(),&model).unwrap()

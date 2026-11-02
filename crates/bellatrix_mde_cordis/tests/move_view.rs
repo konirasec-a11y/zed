@@ -1,5 +1,5 @@
 use bellatrix_mde_cordis::{MdePlugin, ModelingMoveView, ModelingMoveViewRequested, with_model};
-use bellatrix_mde_model::{Geometry, ModelingSection, Project};
+use bellatrix_mde::{Geometry, ModelingSection, Project};
 use bellatrix_project::{
     ProjectClose, ProjectCloseRequested, ProjectCreate, ProjectCreateRequested, ProjectDocument,
     ProjectId, ProjectOpen, ProjectOpenRequested, ProjectPlugin, ProjectSave, ProjectSaveRequested,
@@ -22,7 +22,7 @@ where
 
 fn fixture(name: &str) -> ProjectDocument {
     let mut model: Project =
-        serde_json::from_str(include_str!("../../bellatrix_mde_model/fixtures/todo.json")).unwrap();
+        serde_json::from_str(include_str!("../../bellatrix_mde/fixtures/todo.json")).unwrap();
     model.id = name.into();
     model.name = name.into();
     let doc = ProjectDocument::new(ProjectId::new(name).unwrap(), name).unwrap();

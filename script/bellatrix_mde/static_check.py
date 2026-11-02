@@ -9,8 +9,8 @@ import tomllib
 ROOT = Path(__file__).resolve().parents[2]
 CRATES = [
     "bellatrix_project",
-    "bellatrix_mde_model",
-    "bellatrix_mde_modeling",
+    "bellatrix_mde",
+    "bellatrix_mde_templates",
     "bellatrix_mde_cordis",
     "bellatrix_mde_rust_generator",
     "bellatrix_mde_html_exporter",
@@ -29,8 +29,8 @@ CRATES = [
 ]
 HEADLESS = {
     "bellatrix_project",
-    "bellatrix_mde_model",
-    "bellatrix_mde_modeling",
+    "bellatrix_mde",
+    "bellatrix_mde_templates",
     "bellatrix_mde_cordis",
     "bellatrix_mde_rust_generator",
     "bellatrix_mde_html_exporter",
@@ -66,6 +66,11 @@ def check() -> None:
                 for key in ("gpui", "workspace", "editor", "ui")
             ), f"Backend engine has GUI dependency: {package}"
 
+    for obsolete in ("bellatrix_mde_model", "bellatrix_mde_modeling", "bellatrix_uml_metamodel"):
+        assert f"crates/{obsolete}" not in workspace["members"], obsolete
+        assert obsolete not in dependencies, obsolete
+        assert not (ROOT / "crates" / obsolete / "Cargo.toml").exists(), obsolete
+
     includes = 0
     include_rx = re.compile(r'include_(?:str|bytes)!\s*\(\s*"([^"]+)"\s*\)')
     for package in CRATES:
@@ -80,8 +85,8 @@ def check() -> None:
     zed_main = (ROOT / "crates/zed/src/main.rs").read_text(encoding="utf-8")
     assert "initialize_workspace(app_state.clone(), cx);" in zed_main
     assert "bellatrix_zed_host::install(cx)" in zed_main
-    assert (ROOT / "crates/bellatrix_mde_model/fixtures/todo.json").is_file()
-    assert (ROOT / "crates/bellatrix_mde_model/schema/mde-model-v1.proto").is_file()
+    assert (ROOT / "crates/bellatrix_mde/fixtures/todo.json").is_file()
+    assert (ROOT / "crates/bellatrix_mde/schema/mde-model-v1.proto").is_file()
     print(f"Bellatrix Zed source contracts OK: {len(CRATES)} crates; {includes} includes")
 
 if __name__ == "__main__":
