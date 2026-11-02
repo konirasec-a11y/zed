@@ -17,7 +17,8 @@ impl RenderOnce for UmlInterfaceBall {
         let interactions = classifier.member_interactions();
         let contents = ClassifierContents {
             attributes: classifier.attributes.len(), operations: classifier.operations.len(),
-            receptions: classifier.receptions.len(), stereotype: classifier.stereotype.is_some(),
+            receptions: classifier.receptions.len(), template_parameters: classifier.template_parameters.len(),
+            stereotype: classifier.stereotype.is_some(),
         };
         let layout = interface_layout(classifier.view_width, classifier.view_height, contents);
         let units = |value: f64| px(value as f32 * scale);
