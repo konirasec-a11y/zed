@@ -818,10 +818,10 @@ impl Render for MdeWorkbenchItem {
                             self.editing_subject.as_deref() == Some(selected.id.as_str())
                                 && self.inline_editor.is_some()
                         });
-                        let (quick_actions, visibility_picker) = if let Some(selected) = editing {
+                        let (quick_actions, left_actions, visibility_picker) = if let Some(selected) = editing {
                             quick_edit_for_element(selected, cx.entity())
                         } else {
-                            (None, None)
+                            (None, None, None)
                         };
                         let title_id = element.id.clone();
                         let title_owner = cx.weak_entity();
@@ -850,6 +850,12 @@ impl Render for MdeWorkbenchItem {
                                     item.begin_inline_edit(id, window, cx);
                                 });
                             });
+                        if let Some(value) = element.properties.get("stereotype")
+                            .and_then(serde_json::Value::as_str)
+                            .filter(|value| !value.trim().is_empty())
+                        {
+                            class_card = class_card.stereotype(format!("«{value}»"));
+                        }
                         for relation in &snapshot.section.relations {
                             if relation.kind != "owns" || relation.from != element.id {
                                 continue;
@@ -953,6 +959,16 @@ impl Render for MdeWorkbenchItem {
                                             .absolute()
                                             .left(px(px_w * zoom + 6.0))
                                             .top(px(0.0))
+                                            .child(actions)
+                                    )
+                                })
+                                .when_some(left_actions, |card, actions| {
+                                    card.child(
+                                        div()
+                                            .id(format!("mde-quick-left-actions-{}", view.id))
+                                            .absolute()
+                                            .left(px(-78.0))
+                                            .top(px(28.0))
                                             .child(actions)
                                     )
                                 })
