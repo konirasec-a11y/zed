@@ -1,6 +1,7 @@
 //! Native UML 2.5 declarations: behavioral/common_behavior.
 #![allow(dead_code)]
 use serde::{Deserialize, Serialize};
+
 use crate::uml::structural::common_structure::VisibilityKind;
 
 // Original module: behavior.rs
@@ -257,4 +258,160 @@ pub struct AnyReceiveEvent {
     pub name_expression: Option<String>,
     pub owning_template_parameter: Option<String>,
     pub template_parameter: Option<String>,
+}
+
+// Original module: send_operation_event.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SendOperationEvent {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub operation: String,
+}
+
+// Original module: send_signal_event.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SendSignalEvent {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub signal: String,
+}
+
+// Original module: receive_operation_event.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReceiveOperationEvent {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub operation: String,
+}
+
+// Original module: receive_signal_event.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReceiveSignalEvent {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub signal: String,
+}
+
+// Original module: time_event.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeEvent {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub is_relative: String,
+    pub when: String,
+}
+
+// Original module: execution_event.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutionEvent {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+}
+
+// Original module: time_expression.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeExpression {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub type_: Option<String>,
+    pub expr: Option<String>,
+    pub observation: Vec<String>,
+}
+
+// Original module: observation.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Observation {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+}
+
+// Original module: duration.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Duration {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub type_: Option<String>,
+    pub expr: Option<String>,
+    pub observation: Vec<String>,
 }
