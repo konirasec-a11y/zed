@@ -9,6 +9,7 @@ pub use task_events::{
 mod project_integration;
 mod name_expression;
 pub use name_expression::{ModelingSetNameExpression, ModelingSetNameExpressionRequested};
+mod class_features;
 mod quick_edit_commands;
 pub use quick_edit_commands::{ModelingQuickEdit, ModelingQuickEditRequested};
 pub use bellatrix_mde_modeling::UmlQuickCommand;
