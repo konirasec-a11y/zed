@@ -40,6 +40,8 @@ pub(crate) async fn move_view(
     let diagram_id = section.diagrams.iter()
         .find(|d| d.views.iter().any(|v| v.id == request.view_id))
         .map(|d| d.id.clone()).ok_or("view not found")?;
+    let subject=section.diagrams.iter().flat_map(|d|&d.views)
+        .find(|v|v.id==request.view_id).and_then(|v|v.subject.clone());
     let view = section
         .diagrams
         .iter_mut()
@@ -47,6 +49,11 @@ pub(crate) async fn move_view(
         .find(|view| view.id == request.view_id)
         .ok_or("view not found")?;
     view.geometry.translate(request.dx, request.dy);
+    if let Some(subject)=subject {
+        crate::class_features::translate_contained_views(
+            &mut section,&diagram_id,&subject,request.dx,request.dy
+        );
+    }
     crate::create_relation::reroute(&mut section, &diagram_id);
     Graph::new(&section.to_model(document.id().as_str(), document.name()))
         .validate()
