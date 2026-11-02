@@ -92,7 +92,9 @@ const FUNCTION: &[Declared] = &[
 ];
 
 fn fields_for(kind: &str) -> impl Iterator<Item = &Declared> {
-    let classifier = matches!(kind, "rust.struct" | "rust.trait" | "uml.class" | "uml.interface");
+    let classifier = matches!(kind, "rust.struct" | "rust.trait" | "uml.class" | "uml.interface"
+        | "uml.signal" | "uml.data_type" | "uml.primitive_type"
+        | "uml.enumeration" | "uml.association_class" | "uml.template");
     (if classifier { COMMON_CLASSIFIER } else { &[] }).iter().chain(
         match kind {
             "rust.struct" | "uml.class" => CLASS,
@@ -111,6 +113,62 @@ fn inherited_value(element: &Element, key: &str, fallback: fn() -> Value) -> Val
 /// The selected object drives its property editor, not the other way around.
 /// The projection is independent of Zed, GPUI, Cordis and persisted revisions.
 pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementInspector> {
+    // UML connections are Relations, not fake Elements that inherit Class
+    // properties. The Inspector handles their endpoint roles and attributes.
+    if let Some(relation) = section.relations.iter().find(|relation| relation.id == id
+        && relation.kind.starts_with("uml.")) {
+        let source = section.elements.iter().find(|e|e.id==relation.from)
+            .map(|e|e.name.as_str()).unwrap_or(relation.from.as_str());
+        let target = section.elements.iter().find(|e|e.id==relation.to)
+            .map(|e|e.name.as_str()).unwrap_or(relation.to.as_str());
+        let mut properties=vec![
+            InspectorProperty {path:"id".into(),label:"ID".into(),group:"Identity",
+                editor:PropertyEditor::ReadOnly,value:json!(relation.id),editable:false},
+            InspectorProperty {path:"kind".into(),label:"Relationship".into(),group:"Identity",
+                editor:PropertyEditor::ReadOnly,value:json!(relation.kind),editable:false},
+            InspectorProperty {path:"from".into(),label:"Source".into(),group:"Endpoints",
+                editor:PropertyEditor::ReadOnly,value:json!(source),editable:false},
+            InspectorProperty {path:"to".into(),label:"Target".into(),group:"Endpoints",
+                editor:PropertyEditor::ReadOnly,value:json!(target),editable:false},
+        ];
+        let common = [
+            ("name","Name",PropertyEditor::Text,Value::String(String::new())),
+            ("sourceMultiplicity","Source multiplicity",PropertyEditor::Text,json!("")),
+            ("targetMultiplicity","Target multiplicity",PropertyEditor::Text,json!("")),
+            ("sourceRole","Source role",PropertyEditor::Text,json!("")),
+            ("targetRole","Target role",PropertyEditor::Text,json!("")),
+            ("navigable","Navigable",PropertyEditor::Boolean,json!(false)),
+            ("stereotype","Stereotype",PropertyEditor::Text,json!("")),
+        ];
+        let mut known=HashSet::new();
+        for (key,label,editor,default) in common {
+            known.insert(key);
+            properties.push(InspectorProperty {
+                path:format!("properties.{key}"),label:label.into(),
+                group:"Relationship",editor,
+                value:relation.properties.get(key).cloned().unwrap_or(default),
+                editable:true,
+            });
+        }
+        for (key,value) in &relation.properties {
+            if known.contains(key.as_str()) {continue;}
+            let (editor,editable)=match value {
+                Value::String(_)=>(PropertyEditor::Text,true),
+                Value::Bool(_)=>(PropertyEditor::Boolean,true),
+                Value::Number(_)=>(PropertyEditor::Number,true),
+                _=>(PropertyEditor::ReadOnly,false),
+            };
+            properties.push(InspectorProperty {
+                path:format!("properties.{key}"),label:key.clone(),
+                group:"Other properties",editor,value:value.clone(),editable,
+            });
+        }
+        return Some(ElementInspector {
+            element_id:relation.id.clone(),kind:relation.kind.clone(),
+            name:format!("{source} → {target}"),
+            properties,attributes:Vec::new(),operations:Vec::new(),
+        });
+    }
     let element = section.elements.iter().find(|element| element.id == id)?;
     let mut properties = vec![
         InspectorProperty { path:"id".into(), label:"ID".into(), group:"Identity",
@@ -192,6 +250,11 @@ pub fn set_inspected_property(
             return Err("invalid option".into());
         },
         _ => {},
+    }
+    if let Some(relation) = section.relations.iter_mut().find(|r| r.id==id && r.kind.starts_with("uml.")) {
+        let key=path.strip_prefix("properties.").ok_or("relationship identity is read-only")?;
+        relation.properties.insert(key.into(),value);
+        return Ok(());
     }
     let element = section.elements.iter_mut().find(|e| e.id == id).ok_or("element not found")?;
     match path {
