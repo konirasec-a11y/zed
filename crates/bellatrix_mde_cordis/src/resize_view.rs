@@ -32,15 +32,25 @@ pub(crate) async fn resize_view(context: &Context, projects: &ProjectService,
         .map(|diagram| diagram.id.clone()).ok_or("view not found")?;
     let subject = section.diagrams.iter().flat_map(|diagram| &diagram.views)
         .find(|view| view.id == request.view_id).and_then(|view| view.subject.as_deref());
+    let owner_id=subject.map(str::to_owned);
+    let min_class=owner_id.as_deref().and_then(|id|
+        crate::class_features::class_minimum_bounds(&section,&diagram_id,id));
     let minimum_height = subject.and_then(|id| section.elements.iter().find(|element| element.id == id))
         .filter(|element| UmlType::from_kind(&element.kind) == Some(UmlType::Interface))
         .map(|element| classifier_contents(&section, &element.id).minimum_interface_height())
         .unwrap_or(48.0);
     let view = section.diagrams.iter_mut().flat_map(|diagram| &mut diagram.views)
         .find(|view| view.id == request.view_id).ok_or("view not found")?;
+    let (min_width,min_part_height)=min_class.unwrap_or((80.0,48.0));
     match &mut view.geometry {
-        Geometry::Rect { width, height, .. } => { *width = request.width; *height = request.height.max(minimum_height); }
+        Geometry::Rect { width, height, .. } => {
+            *width = request.width.max(min_width);
+            *height = request.height.max(minimum_height).max(min_part_height);
+        }
         _ => return Err("only node Views can be resized with this command".into()),
+    }
+    if let Some(owner_id)=owner_id.as_deref() {
+        crate::class_features::reposition_ports(&mut section,&diagram_id,owner_id);
     }
     crate::create_relation::reroute(&mut section, &diagram_id);
     Graph::new(&section.to_model(document.id().as_str(), document.name())).validate().map_err(|error| error.to_string())?;
