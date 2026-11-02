@@ -8,7 +8,7 @@ mod quick_edit;
 mod figures;
 mod relationship;
 pub use figures::UmlFigure;
-pub use relationship::UmlRelationGlyph;
+pub use relationship::{UmlLineSegment, UmlRelationGlyph};
 pub use class::{UmlClassCard, UmlClassifier};
 pub use inline_edit::UmlInlineNameEditor;
 pub use quick_edit::{UmlQuickAction, UmlQuickEdit, UmlVisibilityPicker};
