@@ -23,6 +23,78 @@ fn name(section: &ModelingSection, prefix: &str) -> Result<String,String> {
     Err("member name overflow".into())
 }
 
+fn contained_ids(section: &ModelingSection, owner_id: &str) -> std::collections::HashSet<String> {
+    section.relations.iter().filter(|relation|relation.kind=="owns"&&relation.from==owner_id)
+        .filter_map(|relation|section.elements.iter().find(|element|element.id==relation.to))
+        .filter(|element|matches!(element.kind.as_str(),"uml.port"|"uml.part"))
+        .map(|element|element.id.clone()).collect()
+}
+
+/// A parent Class move transports its contained Port and Part Views.
+/// Their identities and owners remain in the MDE graph.
+pub(crate) fn translate_contained_views(
+    section: &mut ModelingSection, diagram_id: &str, owner_id: &str, dx: f64, dy: f64
+) {
+    let children=contained_ids(section,owner_id);
+    if let Some(diagram)=section.diagrams.iter_mut().find(|d|d.id==diagram_id) {
+        for view in &mut diagram.views {
+            if view.subject.as_ref().is_some_and(|id|children.contains(id)) {
+                view.geometry.translate(dx,dy);
+            }
+        }
+    }
+}
+
+/// Ports are bound to the right border of the containing Class.
+pub(crate) fn reposition_ports(section:&mut ModelingSection,diagram_id:&str,owner_id:&str) {
+    let port_ids:std::collections::HashSet<_>=section.relations.iter()
+        .filter(|r|r.kind=="owns"&&r.from==owner_id)
+        .filter_map(|r|section.elements.iter().find(|e|e.id==r.to))
+        .filter(|e|e.kind=="uml.port").map(|e|e.id.clone()).collect();
+    if let Some(diagram)=section.diagrams.iter_mut().find(|d|d.id==diagram_id) {
+        let box_position=diagram.views.iter()
+            .find(|view|view.subject.as_deref()==Some(owner_id))
+            .and_then(|view|match view.geometry {
+                Geometry::Rect{x,y,width,height}=>Some((x,y,width,height)),_=>None,
+            });
+        if let Some((x,y,width,height))=box_position {
+            for view in &mut diagram.views {
+                if !view.subject.as_ref().is_some_and(|id|port_ids.contains(id)) {continue}
+                if let Geometry::Rect{x:child_x,y:child_y,width:child_width,height:child_height}=&mut view.geometry {
+                    *child_x=x+width-*child_width/2.0;
+                    *child_y=(*child_y).clamp(y-*child_height/2.0,
+                        y+height-*child_height/2.0);
+                }
+            }
+        }
+    }
+}
+
+/// A part must remain inside its Class when the parent is resized.
+pub(crate) fn class_minimum_bounds(
+    section:&ModelingSection,diagram_id:&str,owner_id:&str
+) -> Option<(f64,f64)> {
+    let diagram=section.diagrams.iter().find(|d|d.id==diagram_id)?;
+    let (x,y)=diagram.views.iter().find(|v|v.subject.as_deref()==Some(owner_id))
+        .and_then(|view|match view.geometry {
+            Geometry::Rect{x,y,..}=>Some((x,y)),_=>None,
+        })?;
+    let part_ids:std::collections::HashSet<_>=section.relations.iter()
+        .filter(|r|r.kind=="owns"&&r.from==owner_id)
+        .filter_map(|r|section.elements.iter().find(|e|e.id==r.to))
+        .filter(|e|e.kind=="uml.part").map(|e|e.id.clone()).collect();
+    let mut min_width:f64=80.0;
+    let mut min_height:f64=48.0;
+    for view in &diagram.views {
+        if !view.subject.as_ref().is_some_and(|id|part_ids.contains(id)) {continue}
+        if let Geometry::Rect{x:child_x,y:child_y,width,height} = view.geometry {
+            min_width=min_width.max(child_x+width-x+12.0);
+            min_height=min_height.max(child_y+height-y+12.0);
+        }
+    }
+    Some((min_width,min_height))
+}
+
 pub(crate) fn insert_feature(
     section: &mut ModelingSection, diagram_id: &str,
     owner_id: &str, action: UmlQuickCommand, revision: u64,
@@ -96,6 +168,18 @@ pub(crate) fn insert_feature(
     }
     if action==UmlQuickCommand::AddTemplateParameter {
         crate::add_member::grow_classifier_views(section,owner_id);
+    }
+    if action==UmlQuickCommand::AddPart {
+        if let Some((min_width,min_height))=class_minimum_bounds(section,diagram_id,owner_id) {
+            if let Some(view)=section.diagrams.iter_mut().find(|d|d.id==diagram_id)
+                .and_then(|d|d.views.iter_mut().find(|v|v.subject.as_deref()==Some(owner_id))) {
+                if let Geometry::Rect{width,height,..}=&mut view.geometry {
+                    *width=(*width).max(min_width);
+                    *height=(*height).max(min_height);
+                }
+            }
+        }
+        reposition_ports(section,diagram_id,owner_id);
     }
     Ok(())
 }
