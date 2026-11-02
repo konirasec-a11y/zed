@@ -344,7 +344,7 @@ pub fn quick_edit_for(kind: &str) -> &'static [QuickEditAction] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::UmlQuickCommand;
+    use crate::UmlQuickCreate;
     #[test]
     fn classes_and_interfaces_share_exactly_the_same_common_actions() {
         let class = quick_edit_for("uml.class");
@@ -373,7 +373,7 @@ mod tests {
                 .iter()
                 .any(|action| action.id == "uml.add-subclass")
         );
-        assert!(!UmlQuickCommand::AddRealizingClass.accepts("uml.class"));
+        assert!(!UmlQuickCreate::RealizingClass.accepts("uml.class"));
     }
     #[test]
     fn specialized_kinds_have_distinct_actions() {

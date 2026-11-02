@@ -160,3 +160,38 @@ metaclasses, Association endpoint Types, literal multiplicity bounds, and direct
 Package ownership visibility. Unsupported expressions and unresolved mappings
 produce warnings rather than false normative violations. These checks are not a
 complete implementation of Association ends or all seven diagram metamodels.
+
+## Root workspace and view-only editing checkpoint
+
+Cargo itself refreshed the real root `Cargo.lock`; the delta is limited to the
+consolidated Bellatrix packages and Tera. Root metadata resolution succeeded.
+Actual root workspace tests with `--locked --offline` passed **147 tests** for
+`bellatrix_mde`, `bellatrix_mde_cordis` and `bellatrix_project`. This is a different
+scope from the seven-package supplemental suite, not a decrease in its coverage.
+No native graphical crate was built by that check.
+
+RemoveView is distinct from DeleteElement: ordinary diagram deletion removes a
+selected View and newly unrenderable local edge Views, preserving semantic objects,
+other diagrams and alternate Views. Explicit Delete from Model retains semantic
+cascading and context-reference protection. Endpoint labels project existing
+role/multiplicity/name properties without changing arrow semantics or model IDs.
+
+The unused imported structural/behavioral DTO family was removed after checking
+all consumers, includes, manifests and scripts. The active metamodel catalog and
+canonical domain remain; original reference/licensing files remain documentation.
+
+One necessary native integration-line change replaces the existing Bellatrix
+bootstrap `expect` with Zed's existing `log_err`. An MDE startup failure must not
+panic the entire Zed editor. This changes only the already-added Bellatrix hook,
+not Zed's editor/runtime logic; native startup behavior still needs Windows QA.
+
+The view-only slice also adds PlaceElementView: existing elements are shown using
+fresh view identities, copied geometry/style where available, and shared factory
+geometry otherwise. Explorer Show in active diagram focuses an existing view
+instead of duplicating it as a convenience; multiple views remain legal data.
+
+Root Clippy on MDE/Cordis passed with the real repository configuration and
+warnings denied. The redundant Add prefix was removed by adopting UmlQuickCreate
+noun variants, and the obsolete Interface-only event wrapper was removed rather
+than kept as a compatibility envelope. Interface behavior uses the same canonical
+Quick Edit path and its acceptance test remains active.

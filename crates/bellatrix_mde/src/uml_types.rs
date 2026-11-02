@@ -48,21 +48,21 @@ pub enum UmlCapability {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum UmlQuickCommand {
-    AddNote,
-    AddConstraint,
-    AddReception,
-    AddSubtype,
-    AddSupertype,
-    AddRealizingClass,
-    AddTemplateParameter,
-    AddProvidedInterface,
-    AddRequiredInterface,
-    AddAssociatedClass,
-    AddAggregatedClass,
-    AddCompositedClass,
-    AddPort,
-    AddPart,
+pub enum UmlQuickCreate {
+    Note,
+    Constraint,
+    Reception,
+    Subtype,
+    Supertype,
+    RealizingClass,
+    TemplateParameter,
+    ProvidedInterface,
+    RequiredInterface,
+    AssociatedClass,
+    AggregatedClass,
+    CompositedClass,
+    Port,
+    Part,
 }
 
 impl UmlType {
@@ -187,22 +187,20 @@ impl UmlType {
     }
 }
 
-impl UmlQuickCommand {
+impl UmlQuickCreate {
     pub fn capability(self) -> UmlCapability {
         match self {
-            Self::AddNote | Self::AddConstraint => UmlCapability::Annotation,
-            Self::AddReception => UmlCapability::Reception,
-            Self::AddSubtype | Self::AddSupertype => UmlCapability::Specialization,
-            Self::AddRealizingClass => UmlCapability::RealizationTarget,
-            Self::AddTemplateParameter => UmlCapability::TemplateParameter,
-            Self::AddProvidedInterface | Self::AddRequiredInterface => {
-                UmlCapability::ClassInterfaces
-            }
-            Self::AddAssociatedClass | Self::AddAggregatedClass | Self::AddCompositedClass => {
+            Self::Note | Self::Constraint => UmlCapability::Annotation,
+            Self::Reception => UmlCapability::Reception,
+            Self::Subtype | Self::Supertype => UmlCapability::Specialization,
+            Self::RealizingClass => UmlCapability::RealizationTarget,
+            Self::TemplateParameter => UmlCapability::TemplateParameter,
+            Self::ProvidedInterface | Self::RequiredInterface => UmlCapability::ClassInterfaces,
+            Self::AssociatedClass | Self::AggregatedClass | Self::CompositedClass => {
                 UmlCapability::ClassAssociation
             }
-            Self::AddPort => UmlCapability::Port,
-            Self::AddPart => UmlCapability::Part,
+            Self::Port => UmlCapability::Port,
+            Self::Part => UmlCapability::Part,
         }
     }
 
@@ -231,7 +229,7 @@ mod tests {
         assert!(UmlType::Interface.supports(UmlCapability::RealizationTarget));
         assert!(UmlType::Package.supports(UmlCapability::Annotation));
         assert!(!UmlType::Package.supports(UmlCapability::Operation));
-        assert!(!UmlQuickCommand::AddNote.accepts("fs.file"));
+        assert!(!UmlQuickCreate::Note.accepts("fs.file"));
     }
 
     #[test]
@@ -330,7 +328,7 @@ mod tests {
             assert!(!kind.is_classifier());
         }
         assert_eq!(UmlType::from_kind("uml.unknown"), None);
-        assert!(!UmlQuickCommand::AddSubtype.accepts("uml.unknown"));
+        assert!(!UmlQuickCreate::Subtype.accepts("uml.unknown"));
     }
 
     #[test]

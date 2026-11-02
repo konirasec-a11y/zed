@@ -505,8 +505,17 @@ pub fn relationship_style_for_notation(kind: &str) -> RelationshipStyle {
         dashed,
     }
 }
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RelationshipEndpointLabels {
+    pub role: Option<String>,
+    pub multiplicity: Option<String>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RelationshipPresentation {
+    pub name: Option<String>,
+    pub source_labels: RelationshipEndpointLabels,
+    pub target_labels: RelationshipEndpointLabels,
     pub label: String,
     pub notation: String,
     pub style: RelationshipStyle,
@@ -556,7 +565,23 @@ pub fn relationship_presentation(relation: &Relation) -> RelationshipPresentatio
         "uml.association" => ("end1", "end2"),
         _ => ("source", "target"),
     };
+    let text = |key: &str| {
+        relation
+            .properties
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+    };
     RelationshipPresentation {
+        name: text("name"),
+        source_labels: RelationshipEndpointLabels {
+            role: text("sourceRole"),
+            multiplicity: text("sourceMultiplicity"),
+        },
+        target_labels: RelationshipEndpointLabels {
+            role: text("targetRole"),
+            multiplicity: text("targetMultiplicity"),
+        },
         label,
         notation: notation.to_owned(),
         style: relationship_style_for_notation(notation),
@@ -604,55 +629,55 @@ pub struct QuickRelationRule {
     pub child_is_source: bool,
     pub aggregation: Option<&'static str>,
 }
-pub fn quick_relation_rule(action: crate::UmlQuickCommand) -> Option<QuickRelationRule> {
-    use crate::UmlQuickCommand as A;
+pub fn quick_relation_rule(action: crate::UmlQuickCreate) -> Option<QuickRelationRule> {
+    use crate::UmlQuickCreate as A;
     let rule = match action {
-        A::AddNote => QuickRelationRule {
+        A::Note => QuickRelationRule {
             kind: "uml.note_link",
             child_is_source: false,
             aggregation: None,
         },
-        A::AddConstraint => QuickRelationRule {
+        A::Constraint => QuickRelationRule {
             kind: "uml.constraint_link",
             child_is_source: true,
             aggregation: None,
         },
-        A::AddSubtype => QuickRelationRule {
+        A::Subtype => QuickRelationRule {
             kind: "uml.generalization",
             child_is_source: true,
             aggregation: None,
         },
-        A::AddSupertype => QuickRelationRule {
+        A::Supertype => QuickRelationRule {
             kind: "uml.generalization",
             child_is_source: false,
             aggregation: None,
         },
-        A::AddRealizingClass => QuickRelationRule {
+        A::RealizingClass => QuickRelationRule {
             kind: "uml.interface_realization",
             child_is_source: true,
             aggregation: None,
         },
-        A::AddProvidedInterface => QuickRelationRule {
+        A::ProvidedInterface => QuickRelationRule {
             kind: "uml.interface_realization",
             child_is_source: false,
             aggregation: None,
         },
-        A::AddRequiredInterface => QuickRelationRule {
+        A::RequiredInterface => QuickRelationRule {
             kind: "uml.dependency",
             child_is_source: false,
             aggregation: None,
         },
-        A::AddAssociatedClass => QuickRelationRule {
+        A::AssociatedClass => QuickRelationRule {
             kind: "uml.association",
             child_is_source: false,
             aggregation: None,
         },
-        A::AddAggregatedClass => QuickRelationRule {
+        A::AggregatedClass => QuickRelationRule {
             kind: "uml.association",
             child_is_source: false,
             aggregation: Some("shared"),
         },
-        A::AddCompositedClass => QuickRelationRule {
+        A::CompositedClass => QuickRelationRule {
             kind: "uml.association",
             child_is_source: false,
             aggregation: Some("composite"),
@@ -665,6 +690,77 @@ pub fn quick_relation_rule(action: crate::UmlQuickCommand) -> Option<QuickRelati
 #[cfg(test)]
 mod graph_relationship_contract_tests {
     use super::*;
+    #[test]
+    fn endpoint_text_projection_preserves_raw_values_and_model_identity() {
+        let relation = Relation {
+            id: "r".into(),
+            kind: "uml.association".into(),
+            from: "source".into(),
+            to: "target".into(),
+            properties: [
+                ("name", "owns"),
+                ("sourceRole", " owner "),
+                ("targetRole", "items"),
+                ("sourceMultiplicity", "1"),
+                ("targetMultiplicity", " 0..* "),
+            ]
+            .into_iter()
+            .map(|(key, value)| (key.into(), serde_json::json!(value)))
+            .collect(),
+        };
+        let before = relation.clone();
+        let presentation = relationship_presentation(&relation);
+        assert_eq!(presentation.name.as_deref(), Some("owns"));
+        assert_eq!(presentation.source_labels.role.as_deref(), Some(" owner "));
+        assert_eq!(presentation.target_labels.role.as_deref(), Some("items"));
+        assert_eq!(
+            presentation.source_labels.multiplicity.as_deref(),
+            Some("1")
+        );
+        assert_eq!(
+            presentation.target_labels.multiplicity.as_deref(),
+            Some(" 0..* ")
+        );
+        assert_eq!(
+            presentation.style,
+            relationship_style_for_notation("uml.association")
+        );
+        assert_eq!(relation, before);
+    }
+
+    #[test]
+    fn endpoint_text_projection_does_not_invent_or_cross_fill_labels() {
+        let mut relation = Relation {
+            id: "r".into(),
+            kind: "uml.composition".into(),
+            from: "source".into(),
+            to: "target".into(),
+            properties: Default::default(),
+        };
+        let absent = relationship_presentation(&relation);
+        assert_eq!(absent.name, None);
+        assert_eq!(absent.source_labels, RelationshipEndpointLabels::default());
+        assert_eq!(absent.target_labels, RelationshipEndpointLabels::default());
+        relation
+            .properties
+            .insert("sourceRole".into(), serde_json::json!(""));
+        relation.properties.insert(
+            "targetMultiplicity".into(),
+            serde_json::json!("unvalidated"),
+        );
+        relation
+            .properties
+            .insert("sourceMultiplicity".into(), serde_json::json!(7));
+        let independent = relationship_presentation(&relation);
+        assert_eq!(independent.source_labels.role.as_deref(), Some(""));
+        assert_eq!(independent.source_labels.multiplicity, None);
+        assert_eq!(independent.target_labels.role, None);
+        assert_eq!(
+            independent.target_labels.multiplicity.as_deref(),
+            Some("unvalidated")
+        );
+    }
+
     #[test]
     fn toolbox_and_legacy_notation_have_one_direction_table() {
         use RelationshipMarker::*;
@@ -697,6 +793,9 @@ mod graph_relationship_contract_tests {
             None
         );
         let make = |kind: &str| RelationshipPresentation {
+            name: Option::None,
+            source_labels: RelationshipEndpointLabels::default(),
+            target_labels: RelationshipEndpointLabels::default(),
             label: kind.into(),
             notation: kind.into(),
             style: relationship_style_for_notation(kind),
@@ -801,40 +900,32 @@ mod graph_relationship_contract_tests {
     }
     #[test]
     fn quick_edit_composes_same_endpoints_without_reversing_roles() {
-        use crate::UmlQuickCommand as A;
+        use crate::UmlQuickCreate as A;
         assert_eq!(
-            quick_relation_rule(A::AddSubtype).unwrap(),
+            quick_relation_rule(A::Subtype).unwrap(),
             QuickRelationRule {
                 kind: "uml.generalization",
                 child_is_source: true,
                 aggregation: None
             }
         );
+        assert!(!quick_relation_rule(A::Supertype).unwrap().child_is_source);
         assert!(
-            !quick_relation_rule(A::AddSupertype)
+            !quick_relation_rule(A::ProvidedInterface)
                 .unwrap()
                 .child_is_source
         );
         assert!(
-            !quick_relation_rule(A::AddProvidedInterface)
-                .unwrap()
-                .child_is_source
-        );
-        assert!(
-            quick_relation_rule(A::AddRealizingClass)
+            quick_relation_rule(A::RealizingClass)
                 .unwrap()
                 .child_is_source
         );
         assert_eq!(
-            quick_relation_rule(A::AddAggregatedClass)
-                .unwrap()
-                .aggregation,
+            quick_relation_rule(A::AggregatedClass).unwrap().aggregation,
             Some("shared")
         );
         assert_eq!(
-            quick_relation_rule(A::AddCompositedClass)
-                .unwrap()
-                .aggregation,
+            quick_relation_rule(A::CompositedClass).unwrap().aggregation,
             Some("composite")
         );
     }

@@ -1,6 +1,6 @@
 use bellatrix_mde::{ModelingSection, Project};
 use bellatrix_mde_cordis::{
-    MdePlugin, ModelingQuickEdit, ModelingQuickEditRequested, UmlQuickCommand, with_model,
+    MdePlugin, ModelingQuickEdit, ModelingQuickEditRequested, UmlQuickCreate, with_model,
 };
 use bellatrix_project::{
     ProjectCreate, ProjectCreateRequested, ProjectDocument, ProjectId, ProjectPlugin,
@@ -52,7 +52,7 @@ async fn common_quick_edit_is_revisioned_project_scoped_and_disposed() {
         project_id: project_id.clone(),
         diagram_id: active_diagram.clone(),
         element_id: "type-task".into(),
-        action: UmlQuickCommand::AddNote,
+        action: UmlQuickCreate::Note,
         expected_revision: 0,
     };
     assert!(matches!(
@@ -70,10 +70,10 @@ async fn common_quick_edit_is_revisioned_project_scoped_and_disposed() {
         QueryOutcome::Answer(Err(_))
     ));
     for (action, expected_revision) in [
-        (UmlQuickCommand::AddConstraint, 1),
-        (UmlQuickCommand::AddReception, 2),
-        (UmlQuickCommand::AddSubtype, 3),
-        (UmlQuickCommand::AddSupertype, 4),
+        (UmlQuickCreate::Constraint, 1),
+        (UmlQuickCreate::Reception, 2),
+        (UmlQuickCreate::Subtype, 3),
+        (UmlQuickCreate::Supertype, 4),
     ] {
         assert!(
             matches!(context.query::<ModelingQuickEdit>(Routing::Unscoped, ModelingQuickEditRequested {
@@ -129,7 +129,7 @@ async fn common_quick_edit_is_revisioned_project_scoped_and_disposed() {
                     project_id: project_id.clone(),
                     diagram_id: active_diagram,
                     element_id: "type-task".into(),
-                    action: UmlQuickCommand::AddNote,
+                    action: UmlQuickCreate::Note,
                     expected_revision: 5,
                 }
             )

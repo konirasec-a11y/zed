@@ -86,7 +86,7 @@ def check() -> None:
 
     zed_main = (ROOT / "crates/zed/src/main.rs").read_text(encoding="utf-8")
     assert "initialize_workspace(app_state.clone(), cx);" in zed_main
-    assert "bellatrix_zed_host::install(cx)" in zed_main
+    assert "bellatrix_zed_host::install(cx).log_err();" in zed_main
     assert (ROOT / "crates/bellatrix_mde/fixtures/todo.json").is_file()
     assert (ROOT / "crates/bellatrix_mde/schema/mde-model-v1.proto").is_file()
     subprocess.run([sys.executable, str(ROOT / "script/bellatrix_mde/bellatrix_uml_catalog.py"), "--check"], check=True)

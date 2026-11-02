@@ -1,4 +1,4 @@
-use crate::{Element, Geometry, ModelingSection, Relation, Style, UmlQuickCommand, View};
+use crate::{Element, Geometry, ModelingSection, Relation, Style, UmlQuickCreate, View};
 use std::collections::HashSet;
 
 fn fresh(section: &ModelingSection, prefix: &str, revision: u64) -> Result<String, String> {
@@ -177,7 +177,7 @@ pub(super) fn insert_feature(
     section: &mut ModelingSection,
     diagram_id: &str,
     owner_id: &str,
-    action: UmlQuickCommand,
+    action: UmlQuickCreate,
     revision: u64,
 ) -> Result<(), String> {
     let owner = section
@@ -216,11 +216,9 @@ pub(super) fn insert_feature(
         _ => return Err("Class geometry must be Rect".into()),
     };
     let (kind, prefix, shape) = match action {
-        UmlQuickCommand::AddTemplateParameter => {
-            ("uml.template_parameter", "TemplateParameter", None)
-        }
-        UmlQuickCommand::AddPort => ("uml.port", "Port", Some((16.0, 16.0))),
-        UmlQuickCommand::AddPart => ("uml.part", "Part", Some((86.0, 48.0))),
+        UmlQuickCreate::TemplateParameter => ("uml.template_parameter", "TemplateParameter", None),
+        UmlQuickCreate::Port => ("uml.port", "Port", Some((16.0, 16.0))),
+        UmlQuickCreate::Part => ("uml.part", "Part", Some((86.0, 48.0))),
         _ => return Err("not a contained Class specialization".into()),
     };
     let previous = section
@@ -239,13 +237,13 @@ pub(super) fn insert_feature(
     let label = name(section, prefix)?;
     let mut properties = std::collections::BTreeMap::new();
     properties.insert("visibility".into(), serde_json::json!("public"));
-    if action == UmlQuickCommand::AddTemplateParameter {
+    if action == UmlQuickCreate::TemplateParameter {
         properties.insert("parameterType".into(), serde_json::json!("UMLClassifier"));
     }
-    if action == UmlQuickCommand::AddPort {
+    if action == UmlQuickCreate::Port {
         properties.insert("isService".into(), serde_json::json!(false));
     }
-    if action == UmlQuickCommand::AddPart {
+    if action == UmlQuickCreate::Part {
         properties.insert("type".into(), serde_json::json!(""));
     }
     section.elements.push(Element {
@@ -268,7 +266,7 @@ pub(super) fn insert_feature(
     });
     if let Some((element_width, element_height)) = shape {
         let view_id = fresh(section, "feature-view", revision)?;
-        let (position_x, position_y) = if action == UmlQuickCommand::AddPort {
+        let (position_x, position_y) = if action == UmlQuickCreate::Port {
             (
                 x + width - element_width / 2.0,
                 y + height * 0.3 + previous as f64 * 24.0,
@@ -299,10 +297,10 @@ pub(super) fn insert_feature(
                 z_index,
             });
     }
-    if action == UmlQuickCommand::AddTemplateParameter {
+    if action == UmlQuickCreate::TemplateParameter {
         super::members::grow_classifier_views(section, owner_id);
     }
-    if action == UmlQuickCommand::AddPart
+    if action == UmlQuickCreate::Part
         && let Some((minimum_width, minimum_height)) =
             class_minimum_bounds(section, diagram_id, owner_id)
         && let Some(view) = section
@@ -320,9 +318,9 @@ pub(super) fn insert_feature(
         *width = (*width).max(minimum_width);
         *height = (*height).max(minimum_height);
     }
-    if matches!(action, UmlQuickCommand::AddPort | UmlQuickCommand::AddPart) {
+    if matches!(action, UmlQuickCreate::Port | UmlQuickCreate::Part) {
         reposition_ports(section, diagram_id, owner_id);
-        if action == UmlQuickCommand::AddPart {
+        if action == UmlQuickCreate::Part {
             crate::reroute_relationships(section, diagram_id);
         }
     }
@@ -344,7 +342,7 @@ mod tests {
             &mut section,
             &diagram_id,
             "type-task",
-            UmlQuickCommand::AddPort,
+            UmlQuickCreate::Port,
             0,
         )
         .unwrap();
@@ -352,7 +350,7 @@ mod tests {
             &mut section,
             &diagram_id,
             "type-task",
-            UmlQuickCommand::AddPart,
+            UmlQuickCreate::Part,
             1,
         )
         .unwrap();
@@ -434,9 +432,9 @@ mod tests {
     fn template_port_part_are_owned_and_visually_distinct() {
         let mut section = fixture();
         for (index, action) in [
-            UmlQuickCommand::AddTemplateParameter,
-            UmlQuickCommand::AddPort,
-            UmlQuickCommand::AddPart,
+            UmlQuickCreate::TemplateParameter,
+            UmlQuickCreate::Port,
+            UmlQuickCreate::Part,
         ]
         .into_iter()
         .enumerate()

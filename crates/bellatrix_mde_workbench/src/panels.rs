@@ -599,27 +599,70 @@ impl Render for MdeRightPanel {
                 let owner = item.clone();
                 let disclosure_id = row.element_id.clone();
                 let disclosure_panel = cx.weak_entity();
+                let menu_owner = item.clone();
+                let menu_subject = id.clone();
+                let tree_item = TreeViewItem::new(id.clone(), row.label.clone())
+                    .root_item(has_children)
+                    .expanded(expanded)
+                    .toggle_state(selected_id.as_deref() == Some(id.as_str()))
+                    .on_toggle(move |_, _, cx| {
+                        if let Err(error) = disclosure_panel.update(cx, |panel, cx| {
+                            if !panel.collapsed_elements.insert(disclosure_id.clone()) {
+                                panel.collapsed_elements.remove(&disclosure_id);
+                            }
+                            cx.notify();
+                        }) {
+                            eprintln!("MDE Explorer expansion failed: {error}");
+                        }
+                    })
+                    .on_click(move |_, _, cx| {
+                        owner.update(cx, |workbench, cx| workbench.select_element(id.clone(), cx));
+                    });
                 rows.push(
                     div()
-                        .id(format!("mde-explorer-row-{id}"))
+                        .id(format!("mde-explorer-row-{}", row.element_id))
                         .pl(px(row.depth.min(15) as f32 * 14.0))
                         .child(
-                            TreeViewItem::new(id.clone(), row.label.clone())
-                                .root_item(has_children)
-                                .expanded(expanded)
-                                .toggle_state(selected_id.as_deref() == Some(id.as_str()))
-                                .on_toggle(move |_, _, cx| {
-                                    let _ = disclosure_panel.update(cx, |panel, cx| {
-                                        if !panel.collapsed_elements.insert(disclosure_id.clone()) {
-                                            panel.collapsed_elements.remove(&disclosure_id);
-                                        }
-                                        cx.notify();
-                                    });
-                                })
-                                .on_click(move |_, _, cx| {
-                                    owner.update(cx, |workbench, cx| {
-                                        workbench.select_element(id.clone(), cx)
-                                    });
+                            ui::right_click_menu(format!("mde-explorer-menu-{}", row.element_id))
+                                .trigger(move |_, _, _| tree_item)
+                                .menu(move |window, cx| {
+                                    let show_owner = menu_owner.clone();
+                                    let show_subject = menu_subject.clone();
+                                    let delete_owner = menu_owner.clone();
+                                    let delete_subject = menu_subject.clone();
+                                    ui::ContextMenu::build(window, cx, move |menu, _, _| {
+                                        menu.entry(
+                                            "Show in active diagram",
+                                            None,
+                                            move |window, cx| {
+                                                show_owner.update(cx, |item, cx| {
+                                                    item.show_element_in_active_diagram(
+                                                        show_subject.clone(),
+                                                        window,
+                                                        cx,
+                                                    )
+                                                });
+                                                window.dispatch_action(
+                                                    Box::new(OpenMdeWorkbench),
+                                                    cx,
+                                                );
+                                            },
+                                        )
+                                        .entry(
+                                            "Delete from model",
+                                            None,
+                                            move |window, cx| {
+                                                delete_owner.update(cx, |item, cx| {
+                                                    item.select_element(delete_subject.clone(), cx);
+                                                    item.delete_selected_from_model(cx);
+                                                });
+                                                window.dispatch_action(
+                                                    Box::new(OpenMdeWorkbench),
+                                                    cx,
+                                                );
+                                            },
+                                        )
+                                    })
                                 }),
                         ),
                 );
@@ -824,12 +867,13 @@ impl Render for MdeRightPanel {
                             .gap_2()
                             .children(inspector_rows)
                             .child(
-                                Button::new("mde-delete-element", "Delete selected element")
-                                    .on_click(move |_, _, cx| {
+                                Button::new("mde-delete-element", "Delete from model").on_click(
+                                    move |_, _, cx| {
                                         delete_item.update(cx, |workbench, cx| {
-                                            workbench.delete_selected(cx)
+                                            workbench.delete_selected_from_model(cx)
                                         });
-                                    }),
+                                    },
+                                ),
                             ),
                     )
                     .child(

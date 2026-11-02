@@ -873,8 +873,7 @@ fn main() {
         }
 
         initialize_workspace(app_state.clone(), cx);
-        bellatrix_zed_host::install(cx)
-            .expect("Could not install Bellatrix Project/MDE services");
+        bellatrix_zed_host::install(cx).log_err();
 
         cx.activate(true);
 

@@ -1,9 +1,9 @@
 use bellatrix_mde::{Geometry, Graph, ModelingSection, Project};
 use bellatrix_mde_cordis::{
-    InterfaceQuickAction, MdePlugin, ModelingAddMember, ModelingAddMemberRequested,
-    ModelingCreateElement, ModelingCreateElementRequested, ModelingElementKind,
-    ModelingInterfaceQuickEdit, ModelingInterfaceQuickEditRequested, ModelingMemberKind,
-    ModelingSetNameExpression, ModelingSetNameExpressionRequested, with_model,
+    MdePlugin, ModelingAddMember, ModelingAddMemberRequested, ModelingCreateElement,
+    ModelingCreateElementRequested, ModelingElementKind, ModelingMemberKind, ModelingQuickEdit,
+    ModelingQuickEditRequested, ModelingSetNameExpression, ModelingSetNameExpressionRequested,
+    UmlQuickCreate, with_model,
 };
 use bellatrix_project::{
     ProjectCreate, ProjectCreateRequested, ProjectDocument, ProjectId, ProjectPlugin,
@@ -80,20 +80,20 @@ async fn interface_quick_edit_commands_create_real_objects_and_names() {
         .id
         .clone();
     for (index, action) in [
-        InterfaceQuickAction::AddNote,
-        InterfaceQuickAction::AddConstraint,
-        InterfaceQuickAction::AddReception,
-        InterfaceQuickAction::AddSubinterface,
-        InterfaceQuickAction::AddSuperinterface,
-        InterfaceQuickAction::AddRealizingClass,
+        UmlQuickCreate::Note,
+        UmlQuickCreate::Constraint,
+        UmlQuickCreate::Reception,
+        UmlQuickCreate::Subtype,
+        UmlQuickCreate::Supertype,
+        UmlQuickCreate::RealizingClass,
     ]
     .into_iter()
     .enumerate()
     {
         let revision = (index + 1) as u64;
         assert!(
-            matches!(ctx.query::<ModelingInterfaceQuickEdit>(Routing::Unscoped, ModelingInterfaceQuickEditRequested {
-            project_id: id.clone(), diagram_id: diagram_id.clone(), interface_id: interface_id.clone(), action, expected_revision: revision,
+            matches!(ctx.query::<ModelingQuickEdit>(Routing::Unscoped, ModelingQuickEditRequested {
+            project_id: id.clone(), diagram_id: diagram_id.clone(), element_id: interface_id.clone(), action, expected_revision: revision,
         }).await.unwrap(), QueryOutcome::Answer(Ok(updated)) if updated == revision + 1)
         );
     }

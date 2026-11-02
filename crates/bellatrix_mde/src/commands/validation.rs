@@ -52,7 +52,7 @@ pub(super) fn new_relationships(before: &Project, after: &Project) -> Result<(),
 mod tests {
     use super::*;
     use crate::{
-        ModelingRelationKind, Relation, UmlQuickCommand,
+        ModelingRelationKind, Relation, UmlQuickCreate,
         commands::{Command, apply},
     };
 
@@ -169,7 +169,7 @@ mod tests {
             Command::QuickEdit {
                 diagram_id: "diagram".into(),
                 element_id: "b".into(),
-                action: UmlQuickCommand::AddSubtype,
+                action: UmlQuickCreate::Subtype,
             },
             "UML_GENERALIZATION_FINAL_PARENT",
         );
@@ -179,7 +179,7 @@ mod tests {
                 &Command::QuickEdit {
                     diagram_id: "diagram".into(),
                     element_id: "b".into(),
-                    action: UmlQuickCommand::AddSupertype
+                    action: UmlQuickCreate::Supertype
                 },
                 0
             )

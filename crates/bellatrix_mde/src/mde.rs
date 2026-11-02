@@ -44,10 +44,10 @@ pub use quick_edit::{
     QuickEditAction, QuickEditAvailability, QuickEditControl, QuickEditSide, quick_edit_for,
 };
 pub use relationships::{
-    ModelingRelationKind, QuickRelationRule, RelationshipGraph, RelationshipMarker,
-    RelationshipPresentation, RelationshipStyle, projected_relationship_paths, quick_relation_rule,
-    relation_kind_for_creation, relationship_presentation, relationship_style_for_notation,
-    reroute_relationships, route as route_relationship,
+    ModelingRelationKind, QuickRelationRule, RelationshipEndpointLabels, RelationshipGraph,
+    RelationshipMarker, RelationshipPresentation, RelationshipStyle, projected_relationship_paths,
+    quick_relation_rule, relation_kind_for_creation, relationship_presentation,
+    relationship_style_for_notation, reroute_relationships, route as route_relationship,
 };
 pub use scope::{Scope, ScopeError, select_elements};
 pub use structural_diagrams::{
@@ -59,6 +59,6 @@ pub use uml_geometry::{
     ClassifierContents, FoldedNoteLayout, InterfaceLayout, classifier_contents, folded_note_layout,
     interface_layout,
 };
-pub use uml_types::{UmlCapability, UmlQuickCommand, UmlType};
+pub use uml_types::{UmlCapability, UmlQuickCreate, UmlType};
 
 pub use uml_notation::{UmlHeader, UmlNotation, uml_header, uml_notation};

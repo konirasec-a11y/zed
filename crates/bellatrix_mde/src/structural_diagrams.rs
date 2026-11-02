@@ -188,8 +188,8 @@ pub fn validate_structural_diagram(
                     "The diagram context does not identify a model Element",
                 )),
                 Some(context) if context.kind == "uml.instance_specification" => {
-                    // The native UML declaration has classifier IDs, but the
-                    // compatibility Project has no established instance adapter.
+                    // The active domain has no established instance-classifier
+                    // adapter; do not infer conformance from unvalidated properties.
                     issues.push(StructuralDiagnostic { severity: StructuralSeverity::Warning,
                         code: "UMLDI_INSTANCE_CONTEXT_UNSUPPORTED", subject_id: context_id.clone(),
                         message: "InstanceSpecification context classifier conformance cannot yet be verified".into() });

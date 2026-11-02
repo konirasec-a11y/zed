@@ -55,6 +55,7 @@ impl Plugin for MdePlugin {
             .map_err(|error| io::Error::other(error.to_string()))?;
         crate::task_events::register(&ctx, Arc::clone(&projects))?;
         crate::diagrams::register(&ctx, Arc::clone(&projects))?;
+        crate::views::register(&ctx, Arc::clone(&projects))?;
         let quick_projects = Arc::clone(&projects);
         let _quick_edit = ctx
             .on::<crate::ModelingQuickEdit, _>(responder(
@@ -119,16 +120,6 @@ impl Plugin for MdePlugin {
                 let projects = Arc::clone(&names_projects);
                 async move {
                     let result = crate::name_expression::set_name_expression(&ctx, &projects, request).await;
-                    Ok::<_, Infallible>(Some(result))
-                }
-            },
-        )).map_err(|error| io::Error::other(error.to_string()))?;
-        let interface_projects = Arc::clone(&projects);
-        let _interface_quick_edit = ctx.on::<crate::interface_quick_edit::ModelingInterfaceQuickEdit, _>(responder(
-            move |ctx: Context, request: crate::interface_quick_edit::ModelingInterfaceQuickEditRequested| {
-                let projects = Arc::clone(&interface_projects);
-                async move {
-                    let result = crate::interface_quick_edit::execute_quick_edit(&ctx, &projects, request).await;
                     Ok::<_, Infallible>(Some(result))
                 }
             },

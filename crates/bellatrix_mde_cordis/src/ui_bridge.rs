@@ -5,12 +5,13 @@ use crate::{
     ModelingCreateDiagramRequested, ModelingCreateElement, ModelingCreateElementRequested,
     ModelingCreateRelation, ModelingCreateRelationRequested, ModelingDeleteDiagram,
     ModelingDeleteDiagramRequested, ModelingDeleteElement, ModelingDeleteElementRequested,
-    ModelingInterfaceQuickEdit, ModelingInterfaceQuickEditRequested, ModelingMoveView,
-    ModelingMoveViewRequested, ModelingQuickEdit, ModelingQuickEditRequested, ModelingRename,
-    ModelingRenameDiagram, ModelingRenameDiagramRequested, ModelingRenameRequested,
-    ModelingResizeView, ModelingResizeViewRequested, ModelingSetNameExpression,
-    ModelingSetNameExpressionRequested, ModelingSetProperty, ModelingSetPropertyRequested,
-    ModelingValidateDiagram, ModelingValidateDiagramRequested,
+    ModelingMoveView, ModelingMoveViewRequested, ModelingPlaceElementView,
+    ModelingPlaceElementViewRequested, ModelingQuickEdit, ModelingQuickEditRequested,
+    ModelingRemoveView, ModelingRemoveViewRequested, ModelingRename, ModelingRenameDiagram,
+    ModelingRenameDiagramRequested, ModelingRenameRequested, ModelingResizeView,
+    ModelingResizeViewRequested, ModelingSetNameExpression, ModelingSetNameExpressionRequested,
+    ModelingSetProperty, ModelingSetPropertyRequested, ModelingValidateDiagram,
+    ModelingValidateDiagramRequested,
 };
 use bellatrix_project::{
     ProjectId, ProjectSave, ProjectSaveRequested, ProjectStateChanged, ProjectStateChangedEvent,
@@ -30,12 +31,13 @@ pub enum MdeUiCommand {
     CreateRelation(ModelingCreateRelationRequested),
     MoveView(ModelingMoveViewRequested),
     ResizeView(ModelingResizeViewRequested),
+    RemoveView(ModelingRemoveViewRequested),
+    PlaceElementView(ModelingPlaceElementViewRequested),
     Rename(ModelingRenameRequested),
     DeleteElement(ModelingDeleteElementRequested),
     SetProperty(ModelingSetPropertyRequested),
     AddMember(ModelingAddMemberRequested),
     QuickEdit(ModelingQuickEditRequested),
-    InterfaceQuickEdit(ModelingInterfaceQuickEditRequested),
     SetNameExpression(ModelingSetNameExpressionRequested),
     SaveProject(ProjectSaveRequested),
 }
@@ -107,6 +109,18 @@ impl MdeUiBridge {
                             .query::<ModelingMoveView>(Routing::Unscoped, request)
                             .await,
                     ),
+                    MdeUiCommand::PlaceElementView(request) => describe(
+                        "Existing element placed in diagram",
+                        cordis
+                            .query::<ModelingPlaceElementView>(Routing::Unscoped, request)
+                            .await,
+                    ),
+                    MdeUiCommand::RemoveView(request) => describe(
+                        "View removed from diagram",
+                        cordis
+                            .query::<ModelingRemoveView>(Routing::Unscoped, request)
+                            .await,
+                    ),
                     MdeUiCommand::ResizeView(request) => describe(
                         "View resized",
                         cordis
@@ -141,12 +155,6 @@ impl MdeUiBridge {
                         "UML Quick Edit",
                         cordis
                             .query::<ModelingQuickEdit>(Routing::Unscoped, request)
-                            .await,
-                    ),
-                    MdeUiCommand::InterfaceQuickEdit(request) => describe(
-                        "Interface Quick Edit",
-                        cordis
-                            .query::<ModelingInterfaceQuickEdit>(Routing::Unscoped, request)
                             .await,
                     ),
                     MdeUiCommand::SetNameExpression(request) => describe(

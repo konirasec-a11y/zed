@@ -21,15 +21,10 @@
   "independent_registry": false,
   "original_manifest": "docs/bellatrix/references/ruml-import-original-manifest.json",
   "coverage": {
-    "status": "partial imported declarations; not a UML conformance certificate",
-    "note": "The previous manifest's 259 types described the intended import, not a verified count of compiled and integrated definitions. The crate consolidation preserves existing grouped modules and the unique declarations from the abandoned metamodel directory."
+    "status": "consultation archive only; unused imported DTO declarations removed",
+    "note": "The original manifest describes an intended import, not integrated UML coverage. Canonical Element/Graph state and the OMG XMI-derived uml::metamodel catalog remain active; they do not provide complete UML typing or a conformance certificate."
   },
-  "retained_modules": [
-    "structural/common_structure", "structural/classifiers", "structural/packages",
-    "structural/values", "structural/deployments",
-    "behavioral/actions", "behavioral/activities", "behavioral/common_behavior",
-    "behavioral/interactions", "behavioral/interaction_operator_kind", "behavioral/state_machines"
-  ],
+  "retained_modules": [],
   "conformance": {
     "source_of_rules": "OMG UML 2.5.1 and normative XMI",
     "all_structural_diagrams_validated": false,

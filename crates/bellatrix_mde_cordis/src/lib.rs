@@ -1,7 +1,7 @@
 //! Cordis transport and project-revision integration for the single MDE domain.
 pub use bellatrix_mde::MODELING_NAMESPACE;
 pub use bellatrix_mde::commands::{ModelingElementKind, ModelingTool};
-pub use bellatrix_mde::{ModelingRelationKind, ModelingSection, UmlQuickCommand};
+pub use bellatrix_mde::{ModelingRelationKind, ModelingSection, UmlQuickCreate};
 mod diagrams;
 mod mutation;
 pub use diagrams::{
@@ -19,10 +19,6 @@ mod project_integration;
 pub use name_expression::{ModelingSetNameExpression, ModelingSetNameExpressionRequested};
 mod quick_edit_commands;
 pub use quick_edit_commands::{ModelingQuickEdit, ModelingQuickEditRequested};
-mod interface_quick_edit;
-pub use interface_quick_edit::{
-    InterfaceQuickAction, ModelingInterfaceQuickEdit, ModelingInterfaceQuickEditRequested,
-};
 mod create_relation;
 pub use create_relation::{
     ModelingCreateRelation, ModelingCreateRelationRequested, projected_automatic_routes,
@@ -34,9 +30,14 @@ mod delete_element;
 mod resize_view;
 mod set_property;
 mod view_edits;
+mod views;
 pub use delete_element::{ModelingDeleteElement, ModelingDeleteElementRequested};
 pub use resize_view::{ModelingResizeView, ModelingResizeViewRequested};
 pub use set_property::{ModelingSetProperty, ModelingSetPropertyRequested};
+pub use views::{
+    ModelingPlaceElementView, ModelingPlaceElementViewRequested, ModelingRemoveView,
+    ModelingRemoveViewRequested,
+};
 mod ui_bridge;
 use bellatrix_mde::Scope;
 use cordis::event::{ListenerRegistrationError, observer_sync};

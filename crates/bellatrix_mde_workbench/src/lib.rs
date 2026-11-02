@@ -18,7 +18,7 @@ pub use theme::WorkbenchPalette;
 
 use bellatrix_mde::commands::{ModelingElementKind, ModelingMemberKind, ModelingTool};
 use bellatrix_mde::{
-    Geometry, ModelingRelationKind, PathSegment, RelationshipGraph, UmlQuickCommand, UmlType,
+    Geometry, ModelingRelationKind, PathSegment, RelationshipGraph, UmlQuickCreate, UmlType,
     classifier_contents, interface_layout, relationship_presentation,
 };
 use bellatrix_mde_cordis::{
@@ -83,6 +83,7 @@ pub struct MdeWorkbenchItem {
     source: MdeUiSource,
     focus_handle: FocusHandle,
     selected_element: Option<String>,
+    selected_view: Option<String>,
     inline_editor: Option<Entity<InputField>>,
     editing_subject: Option<String>,
     active_diagram: Option<String>,
@@ -147,6 +148,43 @@ fn diagram_validation_kind(
         .ok_or_else(|| format!("Cannot validate unsupported diagram type {stored_type}"))
 }
 
+fn selected_view_target(diagram: Option<&str>, view: Option<&str>) -> Option<(String, String)> {
+    Some((diagram?.to_owned(), view?.to_owned()))
+}
+
+fn canvas_delete_action_allowed(canvas_focused: bool, editing: bool) -> bool {
+    canvas_focused && !editing
+}
+
+fn next_diagram_grid_position(view_count: usize) -> (f64, f64) {
+    (
+        24.0 + (view_count % 4) as f64 * 200.0,
+        36.0 + (view_count / 4) as f64 * 148.0,
+    )
+}
+
+#[derive(Debug, PartialEq)]
+enum ElementViewPlacement {
+    Existing(String),
+    NewAt(f64, f64),
+}
+
+fn element_view_placement(
+    diagram: &bellatrix_mde::Diagram,
+    element_id: &str,
+) -> ElementViewPlacement {
+    if let Some(view) = diagram
+        .views
+        .iter()
+        .find(|view| view.subject.as_deref() == Some(element_id))
+    {
+        ElementViewPlacement::Existing(view.id.clone())
+    } else {
+        let (x, y) = next_diagram_grid_position(diagram.views.len());
+        ElementViewPlacement::NewAt(x, y)
+    }
+}
+
 fn canvas_model_position(
     position: (f64, f64),
     origin: (f64, f64),
@@ -200,6 +238,7 @@ impl MdeWorkbenchItem {
             source,
             focus_handle: cx.focus_handle(),
             selected_element: None,
+            selected_view: None,
             inline_editor: None,
             editing_subject: None,
             active_diagram: initial_diagram,
@@ -230,6 +269,9 @@ impl MdeWorkbenchItem {
         self.active_diagram.as_deref()
     }
     pub fn select_element(&mut self, id: String, cx: &mut Context<Self>) {
+        if self.selected_view.take().is_some() {
+            cx.notify();
+        }
         if self.selected_element.as_deref() != Some(id.as_str()) {
             self.selected_element = Some(id);
             self.inline_editor = None;
@@ -237,10 +279,87 @@ impl MdeWorkbenchItem {
             cx.notify();
         }
     }
+    fn select_view(&mut self, subject: String, view_id: String, cx: &mut Context<Self>) {
+        self.select_element(subject, cx);
+        self.selected_view = Some(view_id);
+        cx.notify();
+    }
+
+    pub fn remove_selected_view(&mut self, cx: &mut Context<Self>) {
+        let Some((diagram_id, view_id)) = selected_view_target(
+            self.active_diagram.as_deref(),
+            self.selected_view.as_deref(),
+        ) else {
+            self.feedback = "Select a view in the active diagram to remove".into();
+            cx.notify();
+            return;
+        };
+        self.remove_view(diagram_id, view_id, cx);
+    }
+
+    fn remove_view(&mut self, diagram_id: String, view_id: String, cx: &mut Context<Self>) {
+        let Ok(snapshot) = self.source.snapshot() else {
+            self.feedback = "Project snapshot unavailable".into();
+            cx.notify();
+            return;
+        };
+        if !snapshot.section.diagrams.iter().any(|diagram| {
+            diagram.id == diagram_id && diagram.views.iter().any(|view| view.id == view_id)
+        }) {
+            self.feedback = "Selected diagram view no longer exists".into();
+            cx.notify();
+            return;
+        }
+        self.submit(
+            MdeUiCommand::RemoveView(bellatrix_mde_cordis::ModelingRemoveViewRequested {
+                project_id: self.project_id().clone(),
+                diagram_id,
+                view_id,
+                expected_revision: snapshot.revision,
+            }),
+            cx,
+        );
+    }
+
+    fn view_context_menu(
+        owner: Entity<Self>,
+        diagram_id: String,
+        view_id: String,
+        subject: String,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Entity<ui::ContextMenu> {
+        owner.update(cx, |item, cx| {
+            item.select_view(subject.clone(), view_id.clone(), cx)
+        });
+        ui::ContextMenu::build(window, cx, move |menu, _, _| {
+            let remove_owner = owner.clone();
+            menu.entry(
+                "Remove from diagram",
+                Some(Box::new(integration::RemoveFromDiagram)),
+                move |_, cx| {
+                    remove_owner.update(cx, |item, cx| {
+                        item.remove_view(diagram_id.clone(), view_id.clone(), cx)
+                    });
+                },
+            )
+            .entry(
+                "Delete from model",
+                Some(Box::new(integration::DeleteFromModel)),
+                move |_, cx| {
+                    owner.update(cx, |item, cx| {
+                        item.select_element(subject.clone(), cx);
+                        item.delete_selected_from_model(cx);
+                    });
+                },
+            )
+        })
+    }
+
     fn name_expression_text(element: &bellatrix_mde::Element) -> String {
         bellatrix_mde::commands::name_expression_text(element)
     }
-    pub(crate) fn run_quick_action(&mut self, action: UmlQuickCommand, cx: &mut Context<Self>) {
+    pub(crate) fn run_quick_action(&mut self, action: UmlQuickCreate, cx: &mut Context<Self>) {
         let Some(element_id) = self.selected_element.clone() else {
             self.feedback = "Select a UML element first".into();
             cx.notify();
@@ -462,6 +581,10 @@ impl MdeWorkbenchItem {
     }
 
     pub fn select_diagram(&mut self, id: String, cx: &mut Context<Self>) {
+        if self.active_diagram.as_deref() != Some(id.as_str()) {
+            self.selected_view = None;
+        }
+
         switch_diagram_selection(&mut self.active_diagram, &mut self.selected_element, id);
         self.gesture = None;
         self.pending_relation_source = None;
@@ -637,7 +760,7 @@ impl MdeWorkbenchItem {
             cx,
         );
     }
-    pub fn delete_selected(&mut self, cx: &mut Context<Self>) {
+    pub fn delete_selected_from_model(&mut self, cx: &mut Context<Self>) {
         let Some(element_id) = self.selected_element.clone() else {
             self.feedback = "Select an element to delete".into();
             cx.notify();
@@ -648,16 +771,6 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
-        if !snapshot.section.diagrams.iter().any(|diagram| {
-            diagram
-                .views
-                .iter()
-                .any(|view| view.subject.as_deref() == Some(element_id.as_str()))
-        }) {
-            self.feedback = "Delete is available for visible diagram elements only".into();
-            cx.notify();
-            return;
-        }
         self.submit(
             MdeUiCommand::DeleteElement(ModelingDeleteElementRequested {
                 project_id: self.project_id().clone(),
@@ -667,10 +780,22 @@ impl MdeWorkbenchItem {
             cx,
         );
         self.selected_element = None;
+        self.selected_view = None;
         cx.notify();
     }
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
         self.gesture = None;
+        if let Ok(snapshot) = self.source.snapshot() {
+            if !snapshot.section.diagrams.iter().any(|diagram| {
+                Some(diagram.id.as_str()) == self.active_diagram.as_deref()
+                    && diagram
+                        .views
+                        .iter()
+                        .any(|view| Some(view.id.as_str()) == self.selected_view.as_deref())
+            }) {
+                self.selected_view = None;
+            }
+        }
         cx.notify();
     }
     fn submit(&mut self, command: MdeUiCommand, cx: &mut Context<Self>) {
@@ -758,6 +883,54 @@ impl MdeWorkbenchItem {
         );
         self.selected_tool = None;
     }
+    pub fn show_element_in_active_diagram(
+        &mut self,
+        element_id: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Ok(snapshot) = self.source.snapshot() else {
+            self.feedback = "Project snapshot unavailable".into();
+            cx.notify();
+            return;
+        };
+        let Some(diagram) = self.active_diagram.as_deref().and_then(|id| {
+            snapshot
+                .section
+                .diagrams
+                .iter()
+                .find(|diagram| diagram.id == id)
+        }) else {
+            self.feedback = "Select an active diagram before showing a model element".into();
+            cx.notify();
+            return;
+        };
+        match element_view_placement(diagram, &element_id) {
+            ElementViewPlacement::Existing(view_id) => {
+                self.select_view(element_id, view_id, cx);
+                self.feedback = "Selected existing view in active diagram".into();
+                cx.notify();
+            }
+            ElementViewPlacement::NewAt(x, y) => {
+                self.select_element(element_id.clone(), cx);
+                self.submit(
+                    MdeUiCommand::PlaceElementView(
+                        bellatrix_mde_cordis::ModelingPlaceElementViewRequested {
+                            project_id: self.project_id().clone(),
+                            diagram_id: diagram.id.clone(),
+                            element_id,
+                            x,
+                            y,
+                            expected_revision: snapshot.revision,
+                        },
+                    ),
+                    cx,
+                );
+            }
+        }
+        self.focus_handle.focus(window, cx);
+    }
+
     pub fn create_in_next_slot(&mut self, kind: ModelingElementKind, cx: &mut Context<Self>) {
         let count = self
             .source
@@ -777,12 +950,8 @@ impl MdeWorkbenchItem {
                     .map(|diagram| diagram.views.len())
             })
             .unwrap_or(0);
-        self.create_element(
-            kind,
-            24.0 + ((count % 4) as f64 * 200.0),
-            36.0 + ((count / 4) as f64 * 148.0),
-            cx,
-        );
+        let (x, y) = next_diagram_grid_position(count);
+        self.create_element(kind, x, y, cx);
     }
     fn start_move(
         &mut self,
@@ -796,7 +965,7 @@ impl MdeWorkbenchItem {
             self.link_endpoint(kind, subject, cx);
             return;
         }
-        self.select_element(subject, cx);
+        self.select_view(subject, view_id.clone(), cx);
         self.gesture = Some(CanvasGesture::Move {
             view_id,
             start: position,
@@ -1065,9 +1234,16 @@ impl Render for MdeWorkbenchItem {
                                     place(end),
                                 )
                                 .segments(local_segments)
+                                .labels(presentation)
+                                .view_scale(zoom)
                                 .selected(self.selected_element.as_deref() == Some(subject));
                                 let edge_owner = cx.weak_entity();
                                 let edge_id = relation.id.clone();
+                                let edge_view_id = view.id.clone();
+                                let menu_owner = cx.entity();
+                                let menu_diagram = diagram.id.clone();
+                                let menu_view = view.id.clone();
+                                let menu_subject = relation.id.clone();
                                 edges.push(
                                     div()
                                         .id(format!("mde-edge-{}", view.id))
@@ -1079,12 +1255,34 @@ impl Render for MdeWorkbenchItem {
                                         .cursor_pointer()
                                         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                                             let _ = edge_owner.update(cx, |item, cx| {
-                                                item.select_element(edge_id.clone(), cx);
+                                                item.select_view(
+                                                    edge_id.clone(),
+                                                    edge_view_id.clone(),
+                                                    cx,
+                                                );
                                                 cx.focus_self(window);
                                             });
                                             cx.stop_propagation();
                                         })
-                                        .child(glyph),
+                                        .child(
+                                            ui::right_click_menu(format!(
+                                                "mde-edge-menu-{}",
+                                                view.id
+                                            ))
+                                            .trigger(move |_, _, _| glyph)
+                                            .menu(
+                                                move |window, cx| {
+                                                    Self::view_context_menu(
+                                                        menu_owner.clone(),
+                                                        menu_diagram.clone(),
+                                                        menu_view.clone(),
+                                                        menu_subject.clone(),
+                                                        window,
+                                                        cx,
+                                                    )
+                                                },
+                                            ),
+                                        ),
                                 );
                             }
                             continue;
@@ -1364,6 +1562,10 @@ impl Render for MdeWorkbenchItem {
                                 )))
                                 .into_any_element()
                         };
+                        let menu_owner = cx.entity();
+                        let menu_diagram = diagram.id.clone();
+                        let menu_view = view.id.clone();
+                        let menu_subject = subject.to_owned();
                         let drag_owner = cx.weak_entity();
                         let drag_id = view.id.clone();
                         let connection_mode =
@@ -1398,7 +1600,20 @@ impl Render for MdeWorkbenchItem {
                                         cx.stop_propagation();
                                     },
                                 )
-                                .child(figure)
+                                .child(
+                                    ui::right_click_menu(format!("mde-view-menu-{}", view.id))
+                                        .trigger(move |_, _, _| figure)
+                                        .menu(move |window, cx| {
+                                            Self::view_context_menu(
+                                                menu_owner.clone(),
+                                                menu_diagram.clone(),
+                                                menu_view.clone(),
+                                                menu_subject.clone(),
+                                                window,
+                                                cx,
+                                            )
+                                        }),
+                                )
                                 .when_some(quick_actions, |card, actions| {
                                     card.child(
                                         div()
@@ -1509,7 +1724,6 @@ impl Render for MdeWorkbenchItem {
         let pan_start_owner = cx.weak_entity();
         let pan_end_owner = cx.weak_entity();
         let pan_out_owner = cx.weak_entity();
-        let delete_owner = cx.weak_entity();
         let f2_owner = cx.weak_entity();
         let member_shortcut_owner = cx.weak_entity();
         let zoom_in_owner = cx.weak_entity();
@@ -1526,6 +1740,31 @@ impl Render for MdeWorkbenchItem {
             .flex()
             .flex_col()
             .track_focus(&self.focus_handle)
+            .key_context("BellatrixMde")
+            .on_action(
+                cx.listener(|item, _: &integration::RemoveFromDiagram, window, cx| {
+                    if canvas_delete_action_allowed(
+                        item.focus_handle.is_focused(window),
+                        item.editing_subject.is_some(),
+                    ) {
+                        item.remove_selected_view(cx);
+                    } else {
+                        cx.propagate();
+                    }
+                }),
+            )
+            .on_action(
+                cx.listener(|item, _: &integration::DeleteFromModel, window, cx| {
+                    if canvas_delete_action_allowed(
+                        item.focus_handle.is_focused(window),
+                        item.editing_subject.is_some(),
+                    ) {
+                        item.delete_selected_from_model(cx);
+                    } else {
+                        cx.propagate();
+                    }
+                }),
+            )
             .on_key_down(move |event: &KeyDownEvent, window, cx| {
                 if event.keystroke.key.eq_ignore_ascii_case("f2") {
                     let _ = f2_owner.update(cx, |item, cx| {
@@ -1551,13 +1790,6 @@ impl Render for MdeWorkbenchItem {
                             item.cancel_tool(cx);
                         }
                     });
-                } else if matches!(event.keystroke.key.as_str(), "delete" | "backspace") {
-                    let _ = delete_owner.update(cx, |item, cx| {
-                        if item.editing_subject.is_none() {
-                            item.delete_selected(cx);
-                        }
-                    });
-                    cx.stop_propagation();
                 }
             })
             .bg(background)
@@ -1827,5 +2059,50 @@ mod relationship_interaction_tests {
         assert!(diagram_validation_kind("").is_err());
         assert!(diagram_validation_kind("  ").is_err());
         assert!(diagram_validation_kind("UMLFutureDiagram").is_err());
+    }
+
+    #[test]
+    fn ordinary_delete_requires_an_explicit_view_and_diagram() {
+        assert_eq!(
+            selected_view_target(Some("diagram"), Some("view")),
+            Some(("diagram".into(), "view".into()))
+        );
+        assert!(selected_view_target(Some("diagram"), None).is_none());
+        assert!(selected_view_target(None, Some("view")).is_none());
+    }
+
+    #[test]
+    fn native_delete_actions_never_handle_editor_focus_or_inline_editing() {
+        assert!(canvas_delete_action_allowed(true, false));
+        assert!(!canvas_delete_action_allowed(false, false));
+        assert!(!canvas_delete_action_allowed(true, true));
+        assert!(!canvas_delete_action_allowed(false, true));
+    }
+
+    #[test]
+    fn show_element_reuses_existing_view_without_changing_diagram() -> serde_json::Result<()> {
+        let diagram: bellatrix_mde::Diagram = serde_json::from_value(serde_json::json!({
+            "id": "active", "name": "Active", "uml_di_type": "UMLClassDiagram", "views": [
+                {"id": "existing", "subject": "element", "geometry": {"kind": "rect", "x": 0.0, "y": 0.0, "width": 180.0, "height": 112.0}}
+            ]
+        }))?;
+        let before = diagram.clone();
+        assert_eq!(
+            element_view_placement(&diagram, "element"),
+            ElementViewPlacement::Existing("existing".into())
+        );
+        assert_eq!(
+            element_view_placement(&diagram, "other"),
+            ElementViewPlacement::NewAt(224.0, 36.0)
+        );
+        assert_eq!(diagram, before);
+        Ok(())
+    }
+
+    #[test]
+    fn new_view_grid_uses_active_diagram_view_count() {
+        assert_eq!(next_diagram_grid_position(0), (24.0, 36.0));
+        assert_eq!(next_diagram_grid_position(4), (24.0, 184.0));
+        assert_eq!(next_diagram_grid_position(5), (224.0, 184.0));
     }
 }

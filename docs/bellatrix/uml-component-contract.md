@@ -15,7 +15,7 @@ Este contrato pertence à engine MDE. Ele não redefine Bellatrix como editor UM
 
 **Capacidades.** `UmlCapability` declara quais operações o tipo aceita. Nota e Constraint não são funções exclusivas de Interface. Attribute e Operation pertencem a classificadores; Reception possui uma restrição adicional. Package pode receber uma anotação, mas não recebe uma Operation por parecer uma caixa na tela. Criar classe realizadora continua específico de um alvo Interface.
 
-**Comando.** `ModelingQuickEdit` recebe `element_id`, ação tipada, diagrama, projeto e revisão. O mesmo executor realiza as ações comuns. Subtipo/supertipo preservam o tipo do classificador selecionado e a direção da generalização. O evento antigo `ModelingInterfaceQuickEdit` fica apenas como adaptador de compatibilidade; não contém outra implementação das mutações.
+**Comando.** `ModelingQuickEdit` recebe `element_id`, ação tipada, diagrama, projeto e revisão. O mesmo executor realiza as ações comuns. Subtipo/supertipo preservam o tipo do classificador selecionado e a direção da generalização. Classes e Interfaces usam exclusivamente esse evento e `UmlQuickCreate`; não há envelope separado por tipo.
 
 **Notação.** `UmlClassifier` compõe título, compartments, seleção e edição. A notação retangular e a notação circular usam o mesmo renderer de membros. `UmlFigure` apresenta as notações não classificadoras. Note e Constraint usam o mesmo contorno de folha, sem se tornarem o mesmo objeto semântico.
 
@@ -55,7 +55,7 @@ As **17 entradas** de Class são compostas a partir dos tipos/capacidades; não 
 
 A UI usa **quatro fileiras à direita**, em vez de comprimir todas as especializações na segunda linha. Note/Constraint e Visibility permanecem à esquerda. Os `IconButton` usam tooltips, rótulos acessíveis e despacham as ações tipadas correspondentes.
 
-O fluxo `GPUI → MdeUiCommand::QuickEdit → Cordis → MdePlugin → ProjectReplace` aplica as operações em **uma revisão do projeto**, sem elementos órfãos se houver erro. `UmlQuickCommand::accepts` bloqueia ações Class-only quando a seleção é Interface ou Package. Ports e Parts são identidades semânticas próprias, não atributos convertidos em caixas. A movimentação da Class transporta essas Views; o redimensionamento preserva Parts e reposiciona Ports na borda. Se a validação de domínio rejeitar uma ação, nenhuma alteração parcial é persistida.
+O fluxo `GPUI → MdeUiCommand::QuickEdit → Cordis → MdePlugin → ProjectReplace` aplica as operações em **uma revisão do projeto**, sem elementos órfãos se houver erro. `UmlQuickCreate::accepts` bloqueia ações Class-only quando a seleção é Interface ou Package. Ports e Parts são identidades semânticas próprias, não atributos convertidos em caixas. A movimentação da Class transporta essas Views; o redimensionamento preserva Parts e reposiciona Ports na borda. Se a validação de domínio rejeitar uma ação, nenhuma alteração parcial é persistida.
 
 **Limite atual de fidelidade:** a persistência registra os tipos e relações especificados, mas ainda é necessário validar visualmente o layout completo, a aparência dos templates e os detalhes de notação de ports/parts no Windows. Não afirmar equivalência integral ao StarUML até validar os comportamentos com o mantenedor.
 

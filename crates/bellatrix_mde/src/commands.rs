@@ -6,6 +6,7 @@ mod members;
 mod name_expression;
 mod quick_edit;
 mod validation;
+mod views;
 
 pub use kinds::{ModelingElementKind, ModelingTool};
 pub use members::ModelingMemberKind;
@@ -13,7 +14,7 @@ pub use name_expression::format as name_expression_text;
 
 use crate::{
     Element, Geometry, Graph, ModelingRelationKind, ModelingSection, Project, Relation,
-    RelationshipGraph, StructuralDiagramKind, Style, UmlQuickCommand, UmlType, View,
+    RelationshipGraph, StructuralDiagramKind, Style, UmlQuickCreate, UmlType, View,
     classifier_contents, relation_kind_for_creation, reroute_relationships, route_relationship,
 };
 use serde_json::Value;
@@ -53,7 +54,17 @@ pub enum Command {
     QuickEdit {
         diagram_id: String,
         element_id: String,
-        action: UmlQuickCommand,
+        action: UmlQuickCreate,
+    },
+    PlaceElementView {
+        diagram_id: String,
+        element_id: String,
+        x: f64,
+        y: f64,
+    },
+    RemoveView {
+        diagram_id: String,
+        view_id: String,
     },
     MoveView {
         view_id: String,
@@ -126,6 +137,16 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
             element_id,
             action,
         } => quick_edit::apply(&mut section, diagram_id, element_id, *action, revision)?,
+        Command::PlaceElementView {
+            diagram_id,
+            element_id,
+            x,
+            y,
+        } => views::place(&mut section, diagram_id, element_id, *x, *y, revision)?,
+        Command::RemoveView {
+            diagram_id,
+            view_id,
+        } => views::remove(&mut section, diagram_id, view_id)?,
         Command::MoveView { view_id, dx, dy } => move_view(&mut section, view_id, *dx, *dy)?,
         Command::ResizeView {
             view_id,
@@ -222,17 +243,11 @@ fn create_element(
         .unwrap_or(0)
         .checked_add(1)
         .ok_or("diagram z-index overflow")?;
-    let (width, height) = kind.initial_size();
     diagram.views.push(View {
         id: view_id,
         subject: Some(element_id.clone()),
         label: None,
-        geometry: Geometry::Rect {
-            x,
-            y,
-            width,
-            height,
-        },
+        geometry: views::initial_geometry(kind, x, y),
         style: Style::default(),
         z_index,
     });
@@ -553,7 +568,7 @@ mod tests {
             &Command::QuickEdit {
                 diagram_id: "diagram-tasks".into(),
                 element_id: "type-list".into(),
-                action: UmlQuickCommand::AddCompositedClass,
+                action: UmlQuickCreate::CompositedClass,
             },
             0,
         )
@@ -574,3 +589,6 @@ mod tests {
 
 #[cfg(test)]
 mod deletion_tests;
+
+#[cfg(test)]
+mod placement_tests;

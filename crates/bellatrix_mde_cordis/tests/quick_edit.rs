@@ -1,7 +1,7 @@
 use bellatrix_mde::{ModelingSection, Project};
 use bellatrix_mde_cordis::{
     MdePlugin, ModelingAddMember, ModelingAddMemberRequested, ModelingMemberKind,
-    ModelingQuickEdit, ModelingQuickEditRequested, UmlQuickCommand, with_model,
+    ModelingQuickEdit, ModelingQuickEditRequested, UmlQuickCreate, with_model,
 };
 use bellatrix_project::{
     ProjectCreate, ProjectCreateRequested, ProjectDocument, ProjectId, ProjectPlugin,
@@ -157,14 +157,14 @@ async fn class_specializations_use_the_same_versioned_cordis_event() {
     .unwrap();
     let diagram_id = section.diagrams[0].id.clone();
     let actions = [
-        UmlQuickCommand::AddTemplateParameter,
-        UmlQuickCommand::AddProvidedInterface,
-        UmlQuickCommand::AddRequiredInterface,
-        UmlQuickCommand::AddAssociatedClass,
-        UmlQuickCommand::AddAggregatedClass,
-        UmlQuickCommand::AddCompositedClass,
-        UmlQuickCommand::AddPort,
-        UmlQuickCommand::AddPart,
+        UmlQuickCreate::TemplateParameter,
+        UmlQuickCreate::ProvidedInterface,
+        UmlQuickCreate::RequiredInterface,
+        UmlQuickCreate::AssociatedClass,
+        UmlQuickCreate::AggregatedClass,
+        UmlQuickCreate::CompositedClass,
+        UmlQuickCreate::Port,
+        UmlQuickCreate::Part,
     ];
     for (index, action) in actions.into_iter().enumerate() {
         let revision = index as u64;
