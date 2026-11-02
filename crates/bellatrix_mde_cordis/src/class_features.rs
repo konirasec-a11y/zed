@@ -36,6 +36,8 @@ pub(crate) fn insert_feature(
         .ok_or("diagram missing")?;
     let owner_view=diagram.views.iter().find(|view|view.subject.as_deref()==Some(owner_id))
         .ok_or("Class has no View in diagram")?;
+    let z_index=diagram.views.iter().map(|view|view.z_index).max()
+        .unwrap_or(0).checked_add(1).ok_or("z-index overflow")?;
     let (x,y,width,height)=match owner_view.geometry {
         Geometry::Rect {x,y,width,height}=>(x,y,width,height),
         _=>return Err("Class geometry must be Rect".into()),
@@ -74,8 +76,7 @@ pub(crate) fn insert_feature(
     });
     if let Some((element_width,element_height))=shape {
         let view_id=fresh(section,"feature-view",revision)?;
-        let z_index=diagram.views.iter().map(|view|view.z_index).max()
-            .unwrap_or(0).checked_add(1).ok_or("z-index overflow")?;
+
         let (position_x,position_y)=if action==UmlQuickCommand::AddPort {
             (x+width-element_width/2.0,
                 y+height*0.3+previous as f64*24.0)
