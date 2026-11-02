@@ -7,4 +7,6 @@ description = "Reusable UML presentation on Zed GPUI, independent from MDE model
 
 [dependencies]
 gpui.workspace = true
+ui.workspace = true
+ui_input.workspace = true
 bellatrix_design_system = { path = "../bellatrix_design_system" }
