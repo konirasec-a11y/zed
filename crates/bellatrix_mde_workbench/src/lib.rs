@@ -485,7 +485,7 @@ impl Render for MdeWorkbenchItem {
                                 .left(px(-78.0)).top(px(quick_top + 28.0)).child(actions)))
                             .when_some(visibility_picker, |card, picker| card.child(div().id(format!("mde-quick-visibility-{}", view.id)).absolute()
                                 .left(px(-34.0)).top(px(quick_top)).child(picker)))
-                            .when(is_selected, |card| card.child(div().id(format!("mde-resize-{}", view.id)).absolute().bottom_0().right_0()
+                            .when(is_selected && semantic_type != Some(UmlType::Port), |card| card.child(div().id(format!("mde-resize-{}", view.id)).absolute().bottom_0().right_0()
                                 .w(px(10.0)).h(px(10.0)).bg(selection)
                                 .on_mouse_down(MouseButton::Left, move |event: &MouseDownEvent, _, cx| {
                                     let _ = resize_owner.update(cx, |item, cx| item.start_resize(resize_id.clone(), width, height, revision, event.position, cx));
