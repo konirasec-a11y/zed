@@ -45,11 +45,8 @@ fn fresh_id(section: &ModelingSection, label: &str, revision: u64) -> Result<Str
         i=i.checked_add(1).ok_or("identifier overflow")?;
     }
 }
-fn unique_name(section:&ModelingSection, parent:&str, prefix:&str)->String {
-    let existing=section.relations.iter()
-        .filter(|r|r.kind=="owns" && r.from==parent)
-        .filter_map(|r|section.elements.iter().find(|e|e.id==r.to))
-        .map(|e|e.name.as_str()).collect::<Vec<_>>();
+fn unique_name(section:&ModelingSection, prefix:&str)->String {
+    let existing=section.elements.iter().map(|e|e.name.as_str()).collect::<Vec<_>>();
     (1_u64..).map(|n|format!("{prefix}{n}"))
         .find(|name|!existing.contains(&name.as_str()))
         .expect("finite model cannot exhaust all names")
@@ -96,7 +93,7 @@ pub(crate) fn apply_quick_edit(
             ("rust.struct","Class",(width+65.0,height+50.0),(185.0,112.0),Some("uml.interface_realization")),
     };
     let new_id=fresh_id(section,"node",req.expected_revision)?;
-    let name=unique_name(section,&req.interface_id,prefix);
+    let name=unique_name(section,prefix);
     section.elements.push(Element {
         id:new_id.clone(),kind:kind.into(),name,
         label:None,description:None,properties:Default::default(),
@@ -104,10 +101,8 @@ pub(crate) fn apply_quick_edit(
     });
     let Some(link)=link else{return Ok(());};
     if link=="owns" {
-        insert_relation(
-            section,fresh_id(section,"owns",req.expected_revision)?,
-            "owns",&req.interface_id,&new_id
-        );
+        let owns_id=fresh_id(section,"owns",req.expected_revision)?;
+        insert_relation(section,owns_id,"owns",&req.interface_id,&new_id);
         return Ok(());
     }
     let diagram=section.diagrams.iter_mut().find(|d|d.id==req.diagram_id)
