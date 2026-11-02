@@ -51,6 +51,7 @@ impl ModelingElementKind {
     }
     pub fn initial_size(self) -> (f64, f64) {
         match self {
+            Self::Interface => (120.0, 76.0), // lollipop, not a class rectangle
             Self::Frame => (280.0, 205.0),
             Self::Package | Self::Model | Self::Subsystem => (190.0, 125.0),
             Self::Comment => (180.0, 92.0),
