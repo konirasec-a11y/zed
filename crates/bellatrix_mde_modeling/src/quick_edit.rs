@@ -35,17 +35,17 @@ const RECEPTION: QuickEditAction = act("uml.add-reception", "Add Reception", But
 
 const CLASS_ACTIONS: &[QuickEditAction] = &[
     NAME, VISIBILITY, NOTE, CONSTRAINT, ATTRIBUTE, OPERATION,
-    act("uml.add-template-parameter", "Add Template Parameter", Button, Right, 1, Pending, None),
+    act("uml.add-template-parameter", "Add Template Parameter", Button, Right, 1, Ready, None),
     RECEPTION,
     act("uml.add-subclass", "Add Sub-Class", Button, Right, 2, Ready, None),
     act("uml.add-superclass", "Add Super-Class", Button, Right, 2, Ready, None),
-    act("uml.add-provided-interface", "Add Provided Interface", Button, Right, 2, Pending, None),
-    act("uml.add-required-interface", "Add Required Interface", Button, Right, 2, Pending, None),
-    act("uml.add-associated-class", "Add Associated Class", Button, Right, 3, Pending, None),
-    act("uml.add-aggregated-class", "Add Aggregated Class", Button, Right, 3, Pending, None),
-    act("uml.add-composited-class", "Add Composited Class", Button, Right, 3, Pending, None),
-    act("uml.add-port", "Add Port", Button, Right, 4, Pending, None),
-    act("uml.add-part", "Add Part", Button, Right, 4, Pending, None),
+    act("uml.add-provided-interface", "Add Provided Interface", Button, Right, 2, Ready, None),
+    act("uml.add-required-interface", "Add Required Interface", Button, Right, 2, Ready, None),
+    act("uml.add-associated-class", "Add Associated Class", Button, Right, 3, Ready, None),
+    act("uml.add-aggregated-class", "Add Aggregated Class", Button, Right, 3, Ready, None),
+    act("uml.add-composited-class", "Add Composited Class", Button, Right, 3, Ready, None),
+    act("uml.add-port", "Add Port", Button, Right, 4, Ready, None),
+    act("uml.add-part", "Add Part", Button, Right, 4, Ready, None),
 ];
 const INTERFACE_ACTIONS: &[QuickEditAction] = &[
     NAME, VISIBILITY, NOTE, CONSTRAINT, ATTRIBUTE, OPERATION, RECEPTION,
@@ -112,9 +112,17 @@ mod tests {
         assert!(!quick_edit_for("uml.package").contains(&OPERATION));
     }
     #[test]
-    fn still_unimplemented_specializations_are_not_actionable() {
-        for id in ["uml.add-template-parameter", "uml.add-provided-interface", "uml.add-port", "uml.add-part"] {
-            assert!(quick_edit_for("uml.class").iter().any(|action| action.id == id && action.availability == Pending));
+    fn class_actions_have_specialized_rows_one_through_four() {
+        let actions=quick_edit_for("rust.struct");
+        assert_eq!(actions.len(),17);
+        assert!(actions.iter().all(|a|a.availability==Ready));
+        for (row,ids) in [
+            (1,&["uml.add-attribute","uml.add-operation","uml.add-template-parameter","uml.add-reception"][..]),
+            (2,&["uml.add-subclass","uml.add-superclass","uml.add-provided-interface","uml.add-required-interface"][..]),
+            (3,&["uml.add-associated-class","uml.add-aggregated-class","uml.add-composited-class"][..]),
+            (4,&["uml.add-port","uml.add-part"][..]),
+        ] {
+            assert_eq!(actions.iter().filter(|a|a.side==Right && a.row==row).map(|a|a.id).collect::<Vec<_>>(),ids);
         }
     }
 }
