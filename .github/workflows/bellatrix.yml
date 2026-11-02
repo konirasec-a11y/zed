@@ -4,6 +4,10 @@ on:
   pull_request:
     paths:
       - 'crates/bellatrix_*/**'
+      - 'crates/workspace/src/status_bar.rs'
+      - 'crates/workspace/src/workspace.rs'
+      - 'crates/icons/src/icons.rs'
+      - 'assets/icons/bellatrix_mde_*.svg'
       - 'crates/zed/Cargo.toml'
       - 'crates/zed/src/main.rs'
       - 'Cargo.toml'
@@ -13,6 +17,10 @@ on:
     branches: [main]
     paths:
       - 'crates/bellatrix_*/**'
+      - 'crates/workspace/src/status_bar.rs'
+      - 'crates/workspace/src/workspace.rs'
+      - 'crates/icons/src/icons.rs'
+      - 'assets/icons/bellatrix_mde_*.svg'
       - 'crates/zed/Cargo.toml'
       - 'crates/zed/src/main.rs'
       - 'Cargo.toml'
