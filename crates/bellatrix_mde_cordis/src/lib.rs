@@ -7,6 +7,8 @@ pub use task_events::{
     ModelingTaskKind, ModelingTaskSummary,
 };
 mod project_integration;
+mod interface_quick_edit;
+pub use interface_quick_edit::{InterfaceQuickAction, ModelingInterfaceQuickEdit, ModelingInterfaceQuickEditRequested};
 mod class_diagram;
 pub use class_diagram::{ModelingElementKind, ModelingRelationKind, ModelingTool};
 mod create_relation;
