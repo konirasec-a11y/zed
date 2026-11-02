@@ -72,7 +72,7 @@ mod tests {
         let mut templates = default_templates().unwrap();
         assert!(templates.contains("rust/struct.rs.tera"));
         templates.override_template("rust/struct.rs.tera",
-            "{{ annotations }}pub struct {{ name }} { {% for field in fields %}{{ field }} {% endfor %}}"
+            "{{ annotations }}pub struct {{ name }} { {% for field in fields %}{{ field }} {% endfor %}}{% for dep in requires %}\n// depends on {{ dep.name }} ({{ dep.id }}){% endfor %}"
         ).unwrap();
         let changed = plan_with_templates(&project, &Scope::Project,
             GenerationOptions::default(), &templates).unwrap();
@@ -82,6 +82,7 @@ mod tests {
         ).unwrap();
         assert_ne!(src(&baseline), src(&changed));
         assert!(src(&changed).contains("pub struct TaskList"));
+        assert!(src(&changed).contains("// depends on Task (type-task)"));
         assert_eq!(project.relations.iter().filter(|r|r.kind=="depends_on").count(), 1);
     }
     #[test]
