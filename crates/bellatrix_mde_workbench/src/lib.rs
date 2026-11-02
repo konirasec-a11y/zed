@@ -374,7 +374,14 @@ impl Render for MdeWorkbenchItem {
                                 let width = (max_x - min_x + 2.0 * padding).max(48.0) * zoom;
                                 let height = (max_y - min_y + 2.0 * padding).max(48.0) * zoom;
                                 let place = |point: bellatrix_mde_model::Point| ((point.x as f32 - min_x + padding) * zoom, (point.y as f32 - min_y + padding) * zoom);
-                                let mut glyph = UmlRelationGlyph::new(relation.kind.clone(), width, height, place(*start), place(end)).selected(self.selected_element.as_deref() == Some(subject));
+                                let notation=if relation.kind=="uml.association" {
+                                    match relation.properties.get("end1Aggregation").and_then(serde_json::Value::as_str) {
+                                        Some("shared")=>"uml.aggregation",
+                                        Some("composite")=>"uml.composition",
+                                        _=>relation.kind.as_str(),
+                                    }
+                                } else { relation.kind.as_str() };
+                                let mut glyph = UmlRelationGlyph::new(notation, width, height, place(*start), place(end)).selected(self.selected_element.as_deref() == Some(subject));
                                 if let Some(PathSegment::Cubic { control1, control2, .. }) = segments.last() { glyph = glyph.cubic(place(*control1), place(*control2)); }
                                 let edge_owner = cx.weak_entity(); let edge_id = relation.id.clone();
                                 edges.push(div().id(format!("mde-edge-{}", view.id)).absolute()
