@@ -42,11 +42,11 @@ jobs:
         run: rustup toolchain install 1.98.1 --profile minimal --component rustfmt,clippy
       - name: Resolve Zed and Bellatrix dependencies
         shell: pwsh
-        run: cargo +1.98.1 metadata --format-version 1 > $null
+        run: cargo +1.98.1 metadata --no-deps --format-version 1 > $null
       - name: Check Bellatrix host and Zed runtime together
         shell: pwsh
         run: |
-          cargo +1.98.1 check -p bellatrix_zed_host -p zed
+          cargo +1.98.1 check -p bellatrix_mde_cordis -p bellatrix_ui_uml -p bellatrix_mde_workbench -p bellatrix_zed_host -p zed
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Test headless Bellatrix domain and Cordis lifecycle
         shell: pwsh
