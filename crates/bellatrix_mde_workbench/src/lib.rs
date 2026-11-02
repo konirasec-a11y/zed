@@ -78,6 +78,18 @@ fn choose_relation_endpoint(pending: &mut Option<String>, clicked: &str) -> Rela
     }
 }
 
+fn canvas_model_position(position: (f64, f64), origin: (f64, f64), pan: (f32, f32), zoom: f32) -> (f64, f64) {
+    ((position.0 - origin.0 - f64::from(pan.0)) / f64::from(zoom),
+     (position.1 - origin.1 - f64::from(pan.1)) / f64::from(zoom))
+}
+
+fn switch_diagram_selection(active: &mut Option<String>, selected: &mut Option<String>, id: String) {
+    if active.as_deref() != Some(id.as_str()) {
+        *selected = None;
+    }
+    *active = Some(id);
+}
+
 impl MdeWorkbenchItem {
     pub fn new(source: MdeUiSource, cx: &mut Context<Self>) -> Self {
         let initial_diagram = source.snapshot().ok().and_then(|snapshot| snapshot.section.diagrams.first().map(|diagram| diagram.id.clone()));
@@ -193,7 +205,7 @@ impl MdeWorkbenchItem {
         cx.notify();
     }
     pub fn select_diagram(&mut self, id: String, cx: &mut Context<Self>) {
-        self.active_diagram = Some(id);
+        switch_diagram_selection(&mut self.active_diagram, &mut self.selected_element, id);
         self.gesture = None;
         self.pending_relation_source = None;
         self.selected_tool = None;
@@ -308,7 +320,10 @@ impl MdeWorkbenchItem {
         }), cx); self.selected_tool = None;
     }
     pub fn create_in_next_slot(&mut self, kind: ModelingElementKind, cx: &mut Context<Self>) {
-        let count = self.source.snapshot().ok().and_then(|snapshot| snapshot.section.diagrams.first().map(|diagram| diagram.views.len())).unwrap_or(0);
+        let count = self.source.snapshot().ok().and_then(|snapshot| {
+            self.active_diagram.as_deref().and_then(|id| snapshot.section.diagrams.iter().find(|diagram| diagram.id == id))
+                .or_else(|| snapshot.section.diagrams.first()).map(|diagram| diagram.views.len())
+        }).unwrap_or(0);
         self.create_element(kind, 24.0 + ((count % 4) as f64 * 200.0), 36.0 + ((count / 4) as f64 * 148.0), cx);
     }
     fn start_move(&mut self, view_id: String, subject: String, revision: u64, position: Point<Pixels>, cx: &mut Context<Self>) {
@@ -552,6 +567,8 @@ impl Render for MdeWorkbenchItem {
         let delete_owner = cx.weak_entity(); let f2_owner = cx.weak_entity(); let member_shortcut_owner = cx.weak_entity();
         let zoom_in_owner = cx.weak_entity(); let zoom_out_owner = cx.weak_entity(); let reset_owner = cx.weak_entity();
         let cancel_relation_owner = cx.weak_entity(); let escape_relation_owner = cx.weak_entity();
+        let canvas_origin = std::rc::Rc::new(std::cell::Cell::new(None::<(f64, f64)>));
+        let measured_canvas_origin = canvas_origin.clone();
         div().id(format!("mde-workbench-{}", self.project_id().as_str())).size_full().flex().flex_col().track_focus(&self.focus_handle)
             .on_key_down(move |event: &KeyDownEvent, window, cx| {
                 if event.keystroke.key.eq_ignore_ascii_case("f2") {
@@ -583,14 +600,25 @@ impl Render for MdeWorkbenchItem {
                 .on_mouse_down(MouseButton::Middle, move |event: &MouseDownEvent, _, cx| { let _ = pan_start_owner.update(cx, |item, _| item.start_pan(event.position)); cx.stop_propagation(); })
                 .on_mouse_up(MouseButton::Middle, move |_: &MouseUpEvent, _, cx| { let _ = pan_end_owner.update(cx, |item, _| item.pan_origin = None); })
                 .on_mouse_up_out(MouseButton::Middle, move |_: &MouseUpEvent, _, cx| { let _ = pan_out_owner.update(cx, |item, _| item.pan_origin = None); })
-                .on_mouse_down(MouseButton::Left, move |_: &MouseDownEvent, _, cx| { let _ = owner.update(cx, |item, cx| { if let Some(ModelingTool::Element(kind)) = item.selected_tool { item.create_in_next_slot(kind, cx); } }); })
+                .on_mouse_down(MouseButton::Left, move |event: &MouseDownEvent, _, cx| {
+                    let Some(origin) = canvas_origin.get() else { return; };
+                    if let Err(error) = owner.update(cx, |item, cx| {
+                        if let Some(ModelingTool::Element(kind)) = item.selected_tool {
+                            let position = (f64::from(event.position.x), f64::from(event.position.y));
+                            let (x, y) = canvas_model_position(position, origin, item.pan, item.zoom);
+                            item.create_element(kind, x, y, cx);
+                        }
+                    }) { eprintln!("MDE canvas placement failed: {error}"); }
+                })
                 .on_mouse_move(move |event: &MouseMoveEvent, _, cx| { let _ = move_owner.update(cx, |item, cx| { item.update_pan(event, cx); item.update_gesture(event, cx); }); })
                 .on_mouse_up(MouseButton::Left, move |_: &MouseUpEvent, _, cx| { let _ = up_owner.update(cx, |item, cx| item.finish_gesture(cx)); })
                 .on_mouse_up_out(MouseButton::Left, move |_: &MouseUpEvent, _, cx| { let _ = out_owner.update(cx, |item, cx| item.finish_gesture(cx)); })
                 .on_drag_move(move |event: &DragMoveEvent<MdeToolDrag>, _, cx| {
-                    let delta_x = f64::from(event.event.position.x - event.bounds.origin.x);
-                    let delta_y = f64::from(event.event.position.y - event.bounds.origin.y);
-                    let _ = dragging_owner.update(cx, |item, _| { item.drop_point = Some(((delta_x - f64::from(item.pan.0)) / f64::from(item.zoom), (delta_y - f64::from(item.pan.1)) / f64::from(item.zoom))); });
+                    let position = (f64::from(event.event.position.x), f64::from(event.event.position.y));
+                    let origin = (f64::from(event.bounds.origin.x), f64::from(event.bounds.origin.y));
+                    if let Err(error) = dragging_owner.update(cx, |item, _| {
+                        item.drop_point = Some(canvas_model_position(position, origin, item.pan, item.zoom));
+                    }) { eprintln!("MDE canvas drag failed: {error}"); }
                 })
                 .on_drop(move |drag: &MdeToolDrag, _, cx| {
                     let _ = dropping_owner.update(cx, |item, cx| {
@@ -598,7 +626,9 @@ impl Render for MdeWorkbenchItem {
                         let (x, y) = item.drop_point.take().unwrap_or((40.0, 40.0));
                         match drag.kind { ModelingTool::Element(kind) => item.create_element(kind, x, y, cx), ModelingTool::Relation(kind) => item.arm_drag_tool(ModelingTool::Relation(kind), cx) }
                     });
-                }).children(edges).children(cards))
+                }).child(gpui::canvas(move |bounds, _, _| {
+                    measured_canvas_origin.set(Some((f64::from(bounds.origin.x), f64::from(bounds.origin.y))));
+                }, |_, _, _, _| {}).absolute().top_0().left_0().size_full()).children(edges).children(cards))
             .child(div().h(px(25.0)).px_2().flex().items_center().border_t_1().border_color(border)
                 .text_color(muted).child(Label::new(self.feedback.clone())))
     }
@@ -623,4 +653,28 @@ mod relationship_interaction_tests {
         assert_eq!(pending.as_deref(), Some("type-list"));
         assert_eq!(choose_relation_endpoint(&mut pending, "type-task"), RelationClick::Connect("type-list".into()));
     }
+
+    #[test]
+    fn switching_diagrams_clears_selection_but_reopening_same_diagram_preserves_it() {
+        let mut active = Some("first".to_owned());
+        let mut selected = Some("class".to_owned());
+        switch_diagram_selection(&mut active, &mut selected, "first".to_owned());
+        assert_eq!(selected.as_deref(), Some("class"));
+        switch_diagram_selection(&mut active, &mut selected, "second".to_owned());
+        assert_eq!(active.as_deref(), Some("second"));
+        assert_eq!(selected, None);
+    }
+
+    #[test]
+    fn canvas_placement_inverts_window_origin_pan_and_zoom() {
+        for zoom in [0.25_f32, 1.0, 3.0] {
+            let origin = (246.0, 80.0);
+            let pan = (-40.0_f32, 65.0_f32);
+            let expected = (128.0, 256.0);
+            let position = (origin.0 + f64::from(pan.0) + expected.0 * f64::from(zoom),
+                origin.1 + f64::from(pan.1) + expected.1 * f64::from(zoom));
+            assert_eq!(canvas_model_position(position, origin, pan, zoom), expected);
+        }
+    }
+
 }
