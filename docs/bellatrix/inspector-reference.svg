@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="620" viewBox="0 0 1100 620" role="img" aria-labelledby="title desc">
+<title id="title">MDE Inspector — objeto selecionado, propriedades por tipo</title>
+<desc id="desc">Ilustração original do contrato do Bellatrix, baseada nas capturas de referência do StarUML fornecidas pelo mantenedor.</desc>
+<rect width="1100" height="620" fill="#181b20"/>
+<text x="36" y="45" font-family="sans-serif" font-weight="bold" font-size="23" fill="#f0f2f4">Bellatrix MDE — Inspector orientado ao elemento</text>
+<text x="36" y="71" font-family="sans-serif" font-size="13" fill="#a6b2c2">Esquema de comportamento · não é uma captura nem uma cópia do código StarUML</text>
+<rect x="35" y="105" width="255" height="454" rx="7" fill="#242a30" stroke="#434e59"/>
+<text x="54" y="137" font-family="sans-serif" font-size="17" font-weight="bold" fill="#e2e8f0">Model Explorer</text>
+<line x1="35" x2="290" y1="150" y2="150" stroke="#434e59"/>
+<g font-family="sans-serif" font-size="15" fill="#cbd5df">
+<text x="53" y="188">▾  Model</text><text x="68" y="224">▾  Classes</text>
+<rect x="78" y="236" width="194" height="34" rx="4" fill="#36516d"/>
+<text x="91" y="258" fill="#f5fafe">▾  Class1 : Class</text>
+<text x="105" y="296">▸  attributes</text>
+<text x="105" y="332">▸  operations</text>
+</g>
+<path d="M305 320 H365" stroke="#86b7f0" stroke-width="2"/><path d="M356 313l12 7-12 7" fill="none" stroke="#86b7f0" stroke-width="2"/>
+<rect x="380" y="193" width="235" height="205" rx="5" fill="#242b32" stroke="#8ab6ef" stroke-width="2"/>
+<rect x="382" y="194" width="231" height="41" rx="3" fill="#344050"/>
+<g font-family="sans-serif" fill="#ecf2fa" font-size="15"><text x="460" y="220">Class1</text></g>
+<path d="M382 275 H613 M382 325 H613" stroke="#68788b"/>
+<g fill="#b9c7d5" font-family="sans-serif" font-size="13">
+<text x="400" y="259">+ title : String</text><text x="400" y="306">+ isActive : bool</text><text x="400" y="355">+ complete() : bool</text></g>
+<path d="M630 320 H686" stroke="#86b7f0" stroke-width="2"/><path d="M678 313l12 7-12 7" fill="none" stroke="#86b7f0" stroke-width="2"/>
+<rect x="702" y="105" width="364" height="454" rx="7" fill="#242a30" stroke="#516276"/>
+<text x="724" y="135" font-family="sans-serif" font-size="17" font-weight="bold" fill="#e9f1fa">Property Editor · Inspector</text>
+<text x="724" y="158" font-family="sans-serif" font-size="12" fill="#97aac1">Class1 · rust.struct</text>
+<line x1="702" x2="1066" y1="174" y2="174" stroke="#516276"/>
+<g fill="#b8c5d2" font-family="sans-serif" font-size="13">
+<text x="722" y="209">Name</text><text x="722" y="247">Visibility</text><text x="722" y="286">Abstract</text>
+<text x="722" y="325">Final specialization</text><text x="722" y="364">Leaf</text><text x="722" y="403">Active</text>
+<text x="722" y="447">Documentation</text></g>
+<g fill="#171d24" stroke="#5d6e80"><rect x="875" y="190" width="169" height="27" rx="4"/><rect x="875" y="229" width="169" height="27" rx="4"/><rect x="875" y="429" width="169" height="83" rx="4"/></g>
+<g fill="#e4edf8" font-family="sans-serif" font-size="13"><text x="888" y="208">Class1</text><text x="888" y="247">public   ▾</text></g>
+<g fill="none" stroke="#afc9dd" stroke-width="1.3"><rect x="878" y="274" width="16" height="16" rx="3"/><rect x="878" y="313" width="16" height="16" rx="3"/><rect x="878" y="352" width="16" height="16" rx="3"/><rect x="878" y="391" width="16" height="16" rx="3"/></g>
+<text x="35" y="596" font-family="sans-serif" font-size="12" fill="#91a4bb">Fonte comportamental: StarUML Model Explorer + propriedade tipada · Seleção e edição persistida passam pelos contratos MDE/Cordis.</text>
+</svg>
