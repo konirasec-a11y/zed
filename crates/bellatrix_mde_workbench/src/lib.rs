@@ -20,13 +20,14 @@ pub use snapshot::{LEGACY_MODELING_NAMESPACE, MDE_NAMESPACE, MdeSnapshot, from_d
 pub use source::MdeUiSource;
 
 use bellatrix_mde_cordis::{
-    MdeUiCommand, ModelingCreateElementRequested, ModelingElementKind,
+    MdeUiCommand, ModelingCreateElementRequested, ModelingCreateRelationRequested,
+    ModelingElementKind, ModelingRelationKind, ModelingTool,
     ModelingMoveViewRequested, ModelingRenameRequested, ModelingResizeViewRequested,
     ModelingDeleteElementRequested, ModelingSetPropertyRequested,
     ModelingAddMemberRequested, ModelingMemberKind,
 };
 use bellatrix_mde_model::Geometry;
-use bellatrix_ui_uml::UmlClassCard;
+use bellatrix_ui_uml::{UmlClassCard, UmlFigure, UmlRelationGlyph};
 use quick_edit_view::quick_edit_for_element;
 use ui_input::InputField;
 use bellatrix_project::{ProjectId, ProjectSaveRequested};
@@ -43,16 +44,13 @@ use workspace::{Workspace, item::Item};
 #[derive(Clone)]
 pub struct MdeToolDrag {
     pub project_id: ProjectId,
-    pub kind: ModelingElementKind,
+    pub kind: ModelingTool,
 }
 
 impl Render for MdeToolDrag {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = WorkbenchPalette::current(cx);
-        let name = match self.kind {
-            ModelingElementKind::Class => "Class",
-            ModelingElementKind::Interface => "Interface",
-        };
+        let name = self.kind.label();
         div()
             .w(px(140.0))
             .h(px(48.0))
@@ -94,7 +92,8 @@ pub struct MdeWorkbenchItem {
     inline_editor: Option<Entity<InputField>>,
     editing_subject: Option<String>,
     active_diagram: Option<String>,
-    selected_tool: Option<ModelingElementKind>,
+    selected_tool: Option<ModelingTool>,
+    pending_relation_source: Option<String>,
     gesture: Option<CanvasGesture>,
     drop_point: Option<(f64, f64)>,
     // Viewport is strictly transient UI state, never part of ProjectDocument.
@@ -137,6 +136,7 @@ impl MdeWorkbenchItem {
             editing_subject: None,
             active_diagram: initial_diagram,
             selected_tool: None,
+            pending_relation_source: None,
             gesture: None,
             drop_point: None,
             zoom: 1.0,
@@ -159,7 +159,7 @@ impl MdeWorkbenchItem {
         self.selected_element.as_deref()
     }
 
-    pub fn selected_tool(&self) -> Option<ModelingElementKind> {
+    pub fn selected_tool(&self) -> Option<ModelingTool> {
         self.selected_tool
     }
 
@@ -253,8 +253,46 @@ impl MdeWorkbenchItem {
         cx.notify();
     }
 
-    pub fn select_tool(&mut self, kind: ModelingElementKind, cx: &mut Context<Self>) {
+    pub fn select_tool(&mut self, kind: ModelingTool, cx: &mut Context<Self>) {
         self.selected_tool = if self.selected_tool == Some(kind) { None } else { Some(kind) };
+        self.pending_relation_source = None;
+        cx.notify();
+    }
+
+    fn link_endpoint(&mut self, kind: ModelingRelationKind, target: String, cx: &mut Context<Self>) {
+        self.select_element(target.clone(), cx);
+        let Some(source) = self.pending_relation_source.take() else {
+            self.pending_relation_source = Some(target);
+            self.feedback = format!("{}: choose target element", kind.label());
+            cx.notify();
+            return;
+        };
+        let Ok(snapshot) = self.source.snapshot() else {
+            self.feedback = "Project snapshot unavailable".into();
+            cx.notify();
+            return;
+        };
+        let Some(diagram_id) = self.active_diagram.clone().or_else(||
+            snapshot.section.diagrams.first().map(|d| d.id.clone())) else {
+            self.feedback = "Project has no diagram".into();
+            cx.notify();
+            return;
+        };
+        self.submit(MdeUiCommand::CreateRelation(ModelingCreateRelationRequested {
+            project_id: self.project_id().clone(), diagram_id, kind,
+            from: source, to: target, expected_revision: snapshot.revision,
+        }), cx);
+        self.selected_tool = None;
+        cx.notify();
+    }
+
+    pub fn arm_drag_tool(&mut self, tool: ModelingTool, cx: &mut Context<Self>) {
+        self.selected_tool = Some(tool);
+        self.pending_relation_source = None;
+        self.feedback = match tool {
+            ModelingTool::Relation(kind) => format!("{}: click source, then target",kind.label()),
+            ModelingTool::Element(kind) => format!("{}: click canvas to place",kind.label()),
+        };
         cx.notify();
     }
 
@@ -476,6 +514,10 @@ impl MdeWorkbenchItem {
         position: Point<Pixels>,
         cx: &mut Context<Self>,
     ) {
+        if let Some(ModelingTool::Relation(kind)) = self.selected_tool {
+            self.link_endpoint(kind, subject, cx);
+            return;
+        }
         self.select_element(subject, cx);
         self.gesture = Some(CanvasGesture::Move {
             view_id, start: position, dx: 0.0, dy: 0.0, revision,
