@@ -127,6 +127,7 @@ pub(crate) fn render_inspector(
     for (title, members) in [
         ("Attributes", &inspector.attributes),
         ("Operations", &inspector.operations),
+        ("Receptions", &inspector.receptions),
     ] {
         children.push(section_title(title));
         if members.is_empty() {
