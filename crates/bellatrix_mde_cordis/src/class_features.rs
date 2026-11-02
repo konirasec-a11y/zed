@@ -182,6 +182,9 @@ pub(crate) fn insert_feature(
     }
     if matches!(action,UmlQuickCommand::AddPort | UmlQuickCommand::AddPart) {
         reposition_ports(section,diagram_id,owner_id);
+        if action==UmlQuickCommand::AddPart {
+            crate::create_relation::reroute(section,diagram_id);
+        }
     }
     Ok(())
 }
