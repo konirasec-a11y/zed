@@ -440,6 +440,8 @@ impl Render for MdeWorkbenchItem {
                                 "rust.field" | "uml.attribute" => classifier = classifier.attribute_with_id(member.id.clone(), text),
                                 "rust.function" | "uml.operation" => classifier = classifier.operation_with_id(member.id.clone(), text),
                                 "uml.reception" => classifier = classifier.reception_with_id(member.id.clone(), text),
+                                "uml.template_parameter" => classifier = classifier.template_parameter_with_id(
+                                    member.id.clone(), format!("T: {}", member.name)),
                                 _ => {}
                             }
                         }
