@@ -7,6 +7,8 @@ pub use task_events::{
     ModelingTaskKind, ModelingTaskSummary,
 };
 mod project_integration;
+mod name_expression;
+pub use name_expression::{ModelingSetNameExpression, ModelingSetNameExpressionRequested};
 mod interface_quick_edit;
 pub use interface_quick_edit::{InterfaceQuickAction, ModelingInterfaceQuickEdit, ModelingInterfaceQuickEditRequested};
 mod class_diagram;
