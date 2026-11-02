@@ -17,7 +17,6 @@ pub use source::MdeUiSource;
 
 use bellatrix_mde_cordis::{
     MdeUiCommand, ModelingCreateElementRequested, ModelingCreateRelationRequested,
-    projected_automatic_routes,
     ModelingElementKind, ModelingRelationKind, ModelingTool,
     ModelingMoveViewRequested, ModelingRenameRequested, ModelingResizeViewRequested,
     ModelingDeleteElementRequested, ModelingSetPropertyRequested,
@@ -25,7 +24,7 @@ use bellatrix_mde_cordis::{
     ModelingAddMemberRequested, ModelingMemberKind,
 };
 use bellatrix_mde_model::{Geometry, PathSegment};
-use bellatrix_mde_modeling::{UmlType, classifier_contents, interface_layout};
+use bellatrix_mde_modeling::{UmlType, RelationshipGraph, relationship_presentation, classifier_contents, interface_layout};
 use bellatrix_ui_uml::{UmlClassifier, UmlFigure, UmlLineSegment, UmlRelationGlyph};
 use quick_edit_view::quick_edit_for_element;
 use ui_input::InputField;
@@ -418,7 +417,7 @@ impl Render for MdeWorkbenchItem {
                     title = format!("{} / {}", snapshot.name, diagram.name);
                     // Auto routes are a visual projection. Recompute old
                     // persisted overlapping lines without mutating the model.
-                    let auto_routes = projected_automatic_routes(&snapshot.section, &diagram.id);
+                    let auto_routes = RelationshipGraph::new(&snapshot.section, &diagram.id).paths();
                     let mut views = diagram.views.iter().collect::<Vec<_>>();
                     views.sort_by_key(|view| view.z_index);
                     for view in views {
@@ -440,13 +439,7 @@ impl Render for MdeWorkbenchItem {
                                 let width = (max_x - min_x + 2.0 * padding).max(48.0) * zoom;
                                 let height = (max_y - min_y + 2.0 * padding).max(48.0) * zoom;
                                 let place = |point: bellatrix_mde_model::Point| ((point.x as f32 - min_x + padding) * zoom, (point.y as f32 - min_y + padding) * zoom);
-                                let notation=if relation.kind=="uml.association" {
-                                    match relation.properties.get("end1Aggregation").and_then(serde_json::Value::as_str) {
-                                        Some("shared")=>"uml.aggregation",
-                                        Some("composite")=>"uml.composition",
-                                        _=>relation.kind.as_str(),
-                                    }
-                                } else { relation.kind.as_str() };
+                                let presentation = relationship_presentation(relation);
                                 let local_segments = segments.iter().map(|segment| match segment {
                                     PathSegment::Line { to } => UmlLineSegment::Line { to: place(*to) },
                                     PathSegment::Cubic { control1, control2, to } => UmlLineSegment::Cubic {
@@ -455,7 +448,7 @@ impl Render for MdeWorkbenchItem {
                                         to: place(*to),
                                     },
                                 }).collect();
-                                let glyph = UmlRelationGlyph::new(notation, width, height, place(*start), place(end))
+                                let glyph = UmlRelationGlyph::new(presentation.style, width, height, place(*start), place(end))
                                     .segments(local_segments)
                                     .selected(self.selected_element.as_deref() == Some(subject));
                                 let edge_owner = cx.weak_entity(); let edge_id = relation.id.clone();
