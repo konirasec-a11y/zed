@@ -259,7 +259,13 @@ impl MdeWorkbenchItem {
         self.selected_tool = None; cx.notify();
     }
     pub fn arm_drag_tool(&mut self, tool: ModelingTool, cx: &mut Context<Self>) {
-        self.selected_tool = Some(tool); self.pending_relation_source = None;
+        // Starting a connection cancels any previous move/resize or Quick Edit
+        // gesture. The next two clicks belong only to endpoint selection.
+        self.gesture = None;
+        self.inline_editor = None;
+        self.editing_subject = None;
+        self.selected_tool = Some(tool);
+        self.pending_relation_source = None;
         self.feedback = match tool {
             ModelingTool::Relation(kind) => format!("{}: click source, then target", kind.label()),
             ModelingTool::Element(kind) => format!("{}: click canvas to place", kind.label()),
