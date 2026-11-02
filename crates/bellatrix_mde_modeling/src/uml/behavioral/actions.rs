@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 
 
+
 use crate::uml::behavioral::activities::ObjectNodeOrderingKind;
 use crate::uml::structural::common_structure::VisibilityKind;
 
@@ -1222,5 +1223,257 @@ pub struct ReclassifyObjectAction {
     pub is_replace_all: String,
     pub old_classifier: Vec<String>,
     pub new_classifier: Vec<String>,
+    pub object: String,
+}
+
+// Original module: read_is_classified_object_action.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadIsClassifiedObjectAction {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub handler: Vec<String>,
+    pub local_precondition: Vec<String>,
+    pub local_postcondition: Vec<String>,
+    pub is_direct: String,
+    pub classifier: String,
+    pub result: String,
+    pub object: String,
+}
+
+// Original module: start_classifier_behavior_action.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartClassifierBehaviorAction {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub handler: Vec<String>,
+    pub local_precondition: Vec<String>,
+    pub local_postcondition: Vec<String>,
+    pub object: String,
+}
+
+// Original module: read_link_object_end_action.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadLinkObjectEndAction {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub handler: Vec<String>,
+    pub local_precondition: Vec<String>,
+    pub local_postcondition: Vec<String>,
+    pub object: String,
+    pub end: String,
+    pub result: String,
+}
+
+// Original module: read_link_object_end_qualifier_action.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadLinkObjectEndQualifierAction {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub handler: Vec<String>,
+    pub local_precondition: Vec<String>,
+    pub local_postcondition: Vec<String>,
+    pub object: String,
+    pub result: String,
+    pub qualifier: String,
+}
+
+// Original module: create_link_object_action.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateLinkObjectAction {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub handler: Vec<String>,
+    pub local_precondition: Vec<String>,
+    pub local_postcondition: Vec<String>,
+    pub end_data: Vec<String>,
+    pub input_value: Vec<String>,
+    pub result: String,
+}
+
+// Original module: accept_event_action.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcceptEventAction {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub handler: Vec<String>,
+    pub local_precondition: Vec<String>,
+    pub local_postcondition: Vec<String>,
+    pub is_unmarshall: String,
+    pub result: Vec<String>,
+    pub trigger: Vec<String>,
+}
+
+// Original module: accept_call_action.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcceptCallAction {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub handler: Vec<String>,
+    pub local_precondition: Vec<String>,
+    pub local_postcondition: Vec<String>,
+    pub is_unmarshall: String,
+    pub result: Vec<String>,
+    pub trigger: Vec<String>,
+    pub return_information: String,
+}
+
+// Original module: reply_action.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplyAction {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub handler: Vec<String>,
+    pub local_precondition: Vec<String>,
+    pub local_postcondition: Vec<String>,
+    pub reply_to_call: String,
+    pub return_information: String,
+    pub reply_value: Vec<String>,
+}
+
+// Original module: unmarshall_action.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnmarshallAction {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub handler: Vec<String>,
+    pub local_precondition: Vec<String>,
+    pub local_postcondition: Vec<String>,
+    pub result: Vec<String>,
+    pub unmarshall_type: String,
     pub object: String,
 }
