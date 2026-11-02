@@ -654,12 +654,12 @@ impl Dock {
                         return;
                     };
 
-                    let panel_id = Entity::entity_id(&panel);
+                    let panel_id = Entity::entity_id(panel);
                     let was_visible = self.is_open()
-                        && this
+                        && self
                             .visible_panel()
                             .is_some_and(|active_panel| active_panel.panel_id() == panel_id);
-                    let size_state = this
+                    let size_state = self
                         .panel_entries
                         .iter()
                         .find(|entry| entry.panel.panel_id() == panel_id)
@@ -712,7 +712,7 @@ impl Dock {
             cx.observe_in(&panel, window, {
                 let workspace = workspace.clone();
                 move |this, panel, window, cx| {
-                    this.relocate_panel_if_needed(panel, &workspace, window, cx);
+                    this.relocate_panel_if_needed(&panel, &workspace, window, cx);
                     cx.notify();
                 }
             }),
