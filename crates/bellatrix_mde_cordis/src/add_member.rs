@@ -80,6 +80,9 @@ fn append_member(
         id:relation_id,kind:"owns".into(),from:owner_id.into(),
         to:member_id.clone(),properties:Default::default(),
     });
+    if matches!(owner.kind.as_str(),"rust.trait"|"uml.interface") {
+        crate::interface_quick_edit::grow_interface_views(section,owner_id);
+    }
     Ok(member_id)
 }
 
