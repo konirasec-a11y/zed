@@ -25,6 +25,8 @@ pub use uml_geometry::{ClassifierContents, InterfaceLayout, FoldedNoteLayout, cl
 
 pub use relationships::{
     ModelingRelationKind, RelationshipGraph, RelationshipPresentation,
-    relationship_presentation, relation_kind_for_creation,
+    RelationshipMarker, RelationshipStyle, QuickRelationRule,
+    relationship_presentation, relationship_style_for_notation,
+    relation_kind_for_creation, quick_relation_rule,
     route as route_relationship, projected_relationship_paths, reroute_relationships,
 };
