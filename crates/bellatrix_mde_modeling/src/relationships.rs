@@ -45,6 +45,24 @@ impl ModelingRelationKind {
             Self::Containment => "uml.containment",
         }
     }
+    /// Endpoint order is a graph contract, not a geometric convention.
+    /// The first Toolbox click becomes Relation.from and the second Relation.to.
+    /// The marker can appear on either end according to UML semantics.
+    pub fn endpoint_instruction(self) -> &'static str {
+        match self {
+            Self::Association => "click either first class, then the second (no arrow)",
+            Self::DirectedAssociation => "click source, then navigable target (arrow at target)",
+            Self::Aggregation => "click the whole, then the part (hollow diamond at first)",
+            Self::Composition => "click the whole, then the part (filled diamond at first)",
+            Self::Dependency => "click dependent client, then supplier (arrow at target)",
+            Self::Generalization => "click subtype, then supertype (triangle at target)",
+            Self::InterfaceRealization => "click implementing class, then interface (triangle at target)",
+            Self::TemplateBinding => "click bound element, then template (arrow at target)",
+            Self::Realization => "click implementing classifier, then specification (triangle at target)",
+            Self::Containment => "click container, then contained element (circle at first)",
+        }
+    }
+
     pub fn validate_endpoints(self, source: &str, target: &str) -> Result<(), &'static str> {
         const CLASSIFIERS: &[&str] = &[
             "rust.struct", "rust.trait", "uml.class", "uml.interface",
@@ -276,11 +294,40 @@ pub fn reroute_relationships(section: &mut ModelingSection, diagram_id: &str) {
 
 
 
+/// UML edge-marker grammar. A source marker is drawn at Relation.from and
+/// a target marker at Relation.to. Geometry does not decide orientation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RelationshipMarker {
+    None, OpenArrow, Triangle, Diamond, FilledDiamond, Containment,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RelationshipStyle {
+    pub source_marker: RelationshipMarker,
+    pub target_marker: RelationshipMarker,
+    pub dashed: bool,
+}
+/// One authoritative notation table for Toolbox, Quick Edit and legacy data.
+pub fn relationship_style_for_notation(kind: &str) -> RelationshipStyle {
+    use RelationshipMarker::*;
+    let (source_marker, target_marker, dashed) = match kind {
+        "uml.generalization" => (None, Triangle, false),
+        "uml.interface_realization" | "uml.realization" => (None, Triangle, true),
+        "uml.directed_association" => (None, OpenArrow, false),
+        "uml.dependency" | "uml.template_binding" | "depends_on" =>
+            (None, OpenArrow, true),
+        "uml.aggregation" => (Diamond, None, false),
+        "uml.composition" => (FilledDiamond, None, false),
+        "uml.containment" => (Containment, None, false),
+        "uml.note_link" | "uml.constraint_link" => (None, None, true),
+        _ => (None, None, false),
+    };
+    RelationshipStyle {source_marker, target_marker, dashed}
+}
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RelationshipPresentation {
     pub label: String,
-    /// UML stroke/marker notation; presentation crates interpret this key.
     pub notation: String,
+    pub style: RelationshipStyle,
 }
 /// Sole mapping from semantic relationship into visible behavior.
 /// The legacy "depends_on" is a graph Dependency, not a "project" decoration.
@@ -296,7 +343,11 @@ pub fn relationship_presentation(relation: &Relation) -> RelationshipPresentatio
         other => other,
     };
     let label = notation.strip_prefix("uml.").unwrap_or(notation).replace('_', " ");
-    RelationshipPresentation { label, notation: notation.to_owned() }
+    RelationshipPresentation {
+        label,
+        notation: notation.to_owned(),
+        style: relationship_style_for_notation(notation),
+    }
 }
 /// Authoritative graph projection consumed by both Canvas and Model Explorer.
 pub struct RelationshipGraph<'a> {
@@ -325,5 +376,61 @@ pub fn relation_kind_for_creation(kind: ModelingRelationKind) -> (&'static str, 
         ModelingRelationKind::Aggregation => ("uml.association", Some("shared")),
         ModelingRelationKind::Composition => ("uml.association", Some("composite")),
         other => (other.model_kind(), None),
+    }
+}
+
+/// Maps contextual create-new action to its directed graph edge. New node
+/// creation uses the same relation semantics as Toolbox; only the UI gesture
+/// differs. The clicked classifier is `subject`, and `child_is_source`
+/// controls which endpoint of Relation receives the newly created node.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct QuickRelationRule {
+    pub kind: &'static str,
+    pub child_is_source: bool,
+    pub aggregation: Option<&'static str>,
+}
+pub fn quick_relation_rule(action: crate::UmlQuickCommand) -> Option<QuickRelationRule> {
+    use crate::UmlQuickCommand as A;
+    let rule = match action {
+        A::AddNote => QuickRelationRule {kind:"uml.note_link",child_is_source:false,aggregation:None},
+        A::AddConstraint => QuickRelationRule {kind:"uml.constraint_link",child_is_source:true,aggregation:None},
+        A::AddSubtype => QuickRelationRule {kind:"uml.generalization",child_is_source:true,aggregation:None},
+        A::AddSupertype => QuickRelationRule {kind:"uml.generalization",child_is_source:false,aggregation:None},
+        A::AddRealizingClass => QuickRelationRule {kind:"uml.interface_realization",child_is_source:true,aggregation:None},
+        A::AddProvidedInterface => QuickRelationRule {kind:"uml.interface_realization",child_is_source:false,aggregation:None},
+        A::AddRequiredInterface => QuickRelationRule {kind:"uml.dependency",child_is_source:false,aggregation:None},
+        A::AddAssociatedClass => QuickRelationRule {kind:"uml.association",child_is_source:false,aggregation:None},
+        A::AddAggregatedClass => QuickRelationRule {kind:"uml.association",child_is_source:false,aggregation:Some("shared")},
+        A::AddCompositedClass => QuickRelationRule {kind:"uml.association",child_is_source:false,aggregation:Some("composite")},
+        _ => return None,
+    };
+    Some(rule)
+}
+
+#[cfg(test)]
+mod graph_relationship_contract_tests {
+    use super::*;
+    #[test]
+    fn toolbox_and_legacy_notation_have_one_direction_table() {
+        use RelationshipMarker::*;
+        assert_eq!(relationship_style_for_notation("uml.generalization").target_marker, Triangle);
+        assert_eq!(relationship_style_for_notation("uml.interface_realization").target_marker, Triangle);
+        assert_eq!(relationship_style_for_notation("uml.dependency").target_marker, OpenArrow);
+        assert_eq!(relationship_style_for_notation("depends_on"), relationship_style_for_notation("uml.dependency"));
+        assert_eq!(relationship_style_for_notation("uml.aggregation").source_marker, Diamond);
+        assert_eq!(relationship_style_for_notation("uml.composition").source_marker, FilledDiamond);
+        assert_eq!(relationship_style_for_notation("uml.association").target_marker, None);
+    }
+    #[test]
+    fn quick_edit_composes_same_endpoints_without_reversing_roles() {
+        use crate::UmlQuickCommand as A;
+        assert_eq!(quick_relation_rule(A::AddSubtype).unwrap(), QuickRelationRule {
+            kind:"uml.generalization",child_is_source:true,aggregation:None
+        });
+        assert_eq!(quick_relation_rule(A::AddSupertype).unwrap().child_is_source, false);
+        assert_eq!(quick_relation_rule(A::AddProvidedInterface).unwrap().child_is_source, false);
+        assert_eq!(quick_relation_rule(A::AddRealizingClass).unwrap().child_is_source, true);
+        assert_eq!(quick_relation_rule(A::AddAggregatedClass).unwrap().aggregation, Some("shared"));
+        assert_eq!(quick_relation_rule(A::AddCompositedClass).unwrap().aggregation, Some("composite"));
     }
 }
