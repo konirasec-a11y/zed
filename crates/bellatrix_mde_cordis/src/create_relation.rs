@@ -57,6 +57,12 @@ pub(crate) fn route(section: &ModelingSection, diagram_id: &str, from: &str, to:
             control2: Point { x:end.x + 62.0, y:end.y + 56.0 }, to:end,
         }]});
     }
+    // Coincident centers must never produce NaN when routing the connector.
+    if (a.x - b.x).abs() < f64::EPSILON && (a.y - b.y).abs() < f64::EPSILON {
+        let start = Point { x: a.x + wa / 2.0, y: a.y };
+        let to = Point { x: b.x - wb / 2.0, y: b.y };
+        return Ok(Geometry::Path { start, segments: vec![PathSegment::Line { to }] });
+    }
     let start = anchor(a,b,wa,ha);
     let to = anchor(b,a,wb,hb);
     Ok(Geometry::Path { start, segments: vec![PathSegment::Line { to }] })
@@ -72,7 +78,7 @@ pub(crate) fn reroute(section: &mut ModelingSection, diagram_id: &str) {
         .collect::<Vec<_>>();
     if let Some(diagram) = section.diagrams.iter_mut().find(|d| d.id == diagram_id) {
         for (subject,geometry) in routes {
-            if let Some(view) = diagram.views.iter_mut().find(|v| v.subject.as_deref()==Some(&subject)) {
+            if let Some(view) = diagram.views.iter_mut().find(|v| v.subject.as_deref()==Some(subject.as_str())) {
                 view.geometry=geometry;
             }
         }
