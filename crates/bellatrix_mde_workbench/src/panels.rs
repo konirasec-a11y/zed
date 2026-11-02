@@ -208,25 +208,31 @@ impl Render for MdeLeftPanel {
             for (index,tool) in tools.into_iter().enumerate() {
                 let click_item = item.clone();
                 let glyph_bytes = glyph(tool_glyph(tool));
-                tool_buttons.push(
-                    div()
-                        .id(format!("mde-tool-{group_index}-{index}"))
-                        .w_full().h(px(34.0)).flex().items_center().gap_2().px_2()
-                        .border_1().border_color(palette.border).rounded_sm()
-                        .when(chosen == Some(tool), |entry| entry
-                            .border_color(palette.selection).bg(palette.surface))
-                        .cursor_grab()
+                // Relation tools are click-to-arm commands, not draggable
+                // shapes. GPUI's drag recognizer on the same surface can
+                // consume the click, leaving the Canvas in ordinary move mode.
+                let entry = div()
+                    .id(format!("mde-tool-{group_index}-{index}"))
+                    .w_full().h(px(34.0)).flex().items_center().gap_2().px_2()
+                    .border_1().border_color(palette.border).rounded_sm()
+                    .when(chosen == Some(tool), |entry| entry
+                        .border_color(palette.selection).bg(palette.surface))
+                    .on_click(move |_, _, cx| {
+                        click_item.update(cx, |workbench, cx| workbench.select_tool(tool, cx));
+                    })
+                    .child(svg().data(glyph_bytes).w(px(18.0)).h(px(18.0))
+                        .text_color(palette.muted))
+                    .child(Label::new(tool.label()));
+                let entry: gpui::AnyElement = if matches!(tool, ModelingTool::Element(_)) {
+                    entry.cursor_grab()
                         .on_drag(MdeToolDrag {
                             project_id: project.clone(), kind:tool,
                         }, |drag: &MdeToolDrag, _, _, cx| cx.new(|_| drag.clone()))
-                        .on_click(move |_, _, cx| {
-                            click_item.update(cx, |workbench, cx| workbench.select_tool(tool, cx));
-                        })
-                        .child(svg().data(glyph_bytes).w(px(18.0)).h(px(18.0))
-                            .text_color(palette.muted))
-                        .child(Label::new(tool.label()))
                         .into_any_element()
-                );
+                } else {
+                    entry.cursor_pointer().into_any_element()
+                };
+                tool_buttons.push(entry);
             }
         }
 
