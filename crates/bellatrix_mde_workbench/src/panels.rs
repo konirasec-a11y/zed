@@ -19,6 +19,26 @@ use workspace::{
 
 actions!(bellatrix_mde, [ToggleMdeLeft, ToggleMdeRight, ToggleMdeBottom]);
 
+// Zed's built-in panels currently occupy priorities 0..=7. Dock::add_panel
+// panics on duplicate priorities, even when the panels are on different sides.
+// Reserve a stable, separate range for all Bellatrix MDE panels.
+const MDE_LEFT_PRIORITY: u32 = 10_000;
+const MDE_RIGHT_PRIORITY: u32 = 10_001;
+const MDE_BOTTOM_PRIORITY: u32 = 10_002;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bellatrix_panel_priorities_do_not_collide_with_zed_or_each_other() {
+        let priorities = [MDE_LEFT_PRIORITY, MDE_RIGHT_PRIORITY, MDE_BOTTOM_PRIORITY];
+        assert!(priorities.iter().all(|priority| *priority > 7));
+        assert_eq!(priorities.iter().copied().collect::<std::collections::HashSet<_>>().len(), 3);
+    }
+}
+
+
 struct PanelState {
     item: Entity<MdeWorkbenchItem>,
     focus: FocusHandle,
@@ -65,7 +85,7 @@ impl Panel for MdeLeftPanel {
     fn icon_tooltip(&self, _: &Window, _: &App) -> Option<&'static str> { Some("MDE Tools") }
     fn toggle_action(&self) -> Box<dyn Action> { Box::new(ToggleMdeLeft) }
     fn starts_open(&self, _: &Window, _: &App) -> bool { true }
-    fn activation_priority(&self) -> u32 { 2 }
+    fn activation_priority(&self) -> u32 { MDE_LEFT_PRIORITY }
 }
 
 impl Render for MdeLeftPanel {
@@ -197,7 +217,7 @@ impl Panel for MdeRightPanel {
     fn icon_tooltip(&self, _: &Window, _: &App) -> Option<&'static str> { Some("MDE Inspector") }
     fn toggle_action(&self) -> Box<dyn Action> { Box::new(ToggleMdeRight) }
     fn starts_open(&self, _: &Window, _: &App) -> bool { true }
-    fn activation_priority(&self) -> u32 { 3 }
+    fn activation_priority(&self) -> u32 { MDE_RIGHT_PRIORITY }
 }
 
 impl Render for MdeRightPanel {
@@ -323,7 +343,7 @@ impl Panel for MdeBottomPanel {
     fn icon_tooltip(&self, _: &Window, _: &App) -> Option<&'static str> { Some("MDE Details") }
     fn toggle_action(&self) -> Box<dyn Action> { Box::new(ToggleMdeBottom) }
     fn starts_open(&self, _: &Window, _: &App) -> bool { false }
-    fn activation_priority(&self) -> u32 { 4 }
+    fn activation_priority(&self) -> u32 { MDE_BOTTOM_PRIORITY }
 }
 
 impl Render for MdeBottomPanel {
