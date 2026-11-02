@@ -34,6 +34,7 @@ fn document(name: &str) -> ProjectDocument {
 }
 fn request(id: &ProjectId, revision: u64) -> ModelingCreateElementRequested {
     ModelingCreateElementRequested {
+        owner_id: None,
         project_id: id.clone(),
         diagram_id: "diagram-classes".into(),
         kind: ModelingElementKind::Class,
@@ -155,4 +156,140 @@ async fn rejects_invalid_geometry_and_missing_diagram() {
     assert_eq!(projects.snapshot(&id).unwrap().revision(), 0);
     mde.dispose().await.unwrap();
     provider.dispose().await.unwrap();
+}
+
+#[tokio::test]
+async fn component_and_artifact_creation_require_explicit_owner_and_commit_atomically()
+-> Result<(), Box<dyn std::error::Error>> {
+    let context = Context::new();
+    let projects = Arc::new(ProjectService::new());
+    let provider = admit(&context, ProjectPlugin::new(Arc::clone(&projects))).await;
+    let mde = admit(&context, MdePlugin).await;
+    let mut model: Project =
+        serde_json::from_str(include_str!("../../bellatrix_mde/fixtures/todo.json"))?;
+    for (id, kind) in [
+        ("package-owner", "uml.package"),
+        ("model-owner", "uml.model"),
+    ] {
+        model
+            .elements
+            .push(serde_json::from_value(serde_json::json!({
+                "id": id, "kind": kind, "name": id
+            }))?);
+    }
+    // Context must never silently select semantic ownership.
+    model
+        .diagrams
+        .first_mut()
+        .ok_or("diagram missing")?
+        .model_elements = vec!["package-owner".into()];
+    let id = ProjectId::new(model.id.clone())?;
+    let document = with_model(ProjectDocument::new(id.clone(), &model.name)?, &model)?;
+    assert!(matches!(
+        context
+            .query::<ProjectCreate>(Routing::Unscoped, ProjectCreateRequested { document })
+            .await?,
+        QueryOutcome::Answer(Ok(_))
+    ));
+    let request = |kind, owner: Option<&str>, revision| ModelingCreateElementRequested {
+        project_id: id.clone(),
+        diagram_id: "diagram-tasks".into(),
+        kind,
+        name: Some("Owned element".into()),
+        owner_id: owner.map(str::to_owned),
+        x: 20.0,
+        y: 30.0,
+        expected_revision: revision,
+    };
+    for kind in [
+        ModelingElementKind::Component,
+        ModelingElementKind::Artifact,
+    ] {
+        for owner in [None, Some("missing"), Some("type-task")] {
+            assert!(matches!(
+                context
+                    .query::<ModelingCreateElement>(Routing::Unscoped, request(kind, owner, 0))
+                    .await?,
+                QueryOutcome::Answer(Err(_))
+            ));
+            let unchanged = projects.snapshot(&id)?;
+            assert_eq!(unchanged.revision(), 0);
+            let section: ModelingSection = serde_json::from_value(
+                unchanged
+                    .section(bellatrix_mde::MODELING_NAMESPACE)
+                    .ok_or("section missing")?
+                    .clone(),
+            )?;
+            assert_eq!(section, ModelingSection::from_model(&model));
+        }
+    }
+    for (index, (kind, model_kind, owner)) in [
+        (
+            ModelingElementKind::Component,
+            "uml.component",
+            "package-owner",
+        ),
+        (ModelingElementKind::Artifact, "uml.artifact", "model-owner"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let revision = index as u64;
+        assert!(
+            matches!(context.query::<ModelingCreateElement>(Routing::Unscoped,
+            request(kind, Some(owner), revision)).await?, QueryOutcome::Answer(Ok(next)) if next == revision + 1)
+        );
+        let updated = projects.snapshot(&id)?;
+        let state = updated
+            .section(bellatrix_mde::MODELING_NAMESPACE)
+            .ok_or("section missing")?
+            .clone();
+        let section: ModelingSection = serde_json::from_value(state.clone())?;
+        assert_eq!(section.elements.len(), model.elements.len() + index + 1);
+        assert_eq!(section.relations.len(), model.relations.len() + index + 1);
+        let created = section
+            .elements
+            .iter()
+            .find(|element| element.kind == model_kind)
+            .ok_or("created semantic element missing")?;
+        assert!(
+            section
+                .relations
+                .iter()
+                .any(|relation| relation.kind == "owns"
+                    && relation.from == owner
+                    && relation.to == created.id)
+        );
+        let diagram = section.diagrams.first().ok_or("diagram missing")?;
+        assert_eq!(diagram.model_elements, vec!["package-owner"]);
+        assert_eq!(
+            diagram.views.len(),
+            model.diagrams.first().ok_or("diagram missing")?.views.len() + index + 1
+        );
+        assert!(
+            diagram
+                .views
+                .iter()
+                .any(|view| view.subject.as_deref() == Some(created.id.as_str()))
+        );
+        assert_eq!(section.diagrams.get(1), model.diagrams.get(1));
+        assert!(matches!(
+            context
+                .query::<ModelingCreateElement>(
+                    Routing::Unscoped,
+                    request(kind, Some(owner), revision)
+                )
+                .await?,
+            QueryOutcome::Answer(Err(_))
+        ));
+        let unchanged = projects.snapshot(&id)?;
+        assert_eq!(unchanged.revision(), revision + 1);
+        assert_eq!(
+            unchanged.section(bellatrix_mde::MODELING_NAMESPACE),
+            Some(&state)
+        );
+    }
+    mde.dispose().await?;
+    provider.dispose().await?;
+    Ok(())
 }

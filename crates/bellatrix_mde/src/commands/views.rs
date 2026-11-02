@@ -1,7 +1,5 @@
 use super::ModelingElementKind;
-use crate::{
-    Geometry, ModelingSection, RelationshipGraph, Style, UmlType, View, reroute_relationships,
-};
+use crate::{Geometry, ModelingSection, RelationshipGraph, Style, UmlType, View};
 use std::collections::HashSet;
 
 pub(super) fn initial_geometry(kind: ModelingElementKind, x: f64, y: f64) -> Geometry {
@@ -21,6 +19,7 @@ pub(super) fn place(
     x: f64,
     y: f64,
     revision: u64,
+    project_id: &str,
 ) -> Result<(), String> {
     if !x.is_finite() || !y.is_finite() {
         return Err("view position must be finite".into());
@@ -71,12 +70,13 @@ pub(super) fn place(
         let semantic_type = UmlType::from_kind(&element.kind);
         let kind = ModelingElementKind::BASIC.iter().chain(ModelingElementKind::ADVANCED)
             .chain(ModelingElementKind::PACKAGES).chain(ModelingElementKind::ANNOTATIONS)
+            .chain(ModelingElementKind::STRUCTURAL)
             .copied().find(|kind| kind.model_kind() == element.kind
                 || semantic_type.is_some() && UmlType::from_kind(kind.model_kind()) == semantic_type)
             .ok_or_else(|| format!("unsupported element View: {} has no existing geometry or registered creation kind", element.kind))?;
         (initial_geometry(kind, x, y), Style::default(), None)
     };
-    let [identifier] = super::fresh_ids(section, ["mde-view"], revision)?;
+    let [identifier] = super::fresh_ids(section, ["mde-view"], revision, project_id)?;
     section
         .diagrams
         .iter_mut()
@@ -109,13 +109,23 @@ pub(super) fn remove(
         .iter()
         .find(|view| view.id == view_id)
         .ok_or("view not found in diagram")?;
-    let is_element = view.subject.as_ref().is_some_and(|subject| {
-        section
-            .elements
-            .iter()
-            .any(|element| &element.id == subject)
-    });
-    let previous_paths = RelationshipGraph::new(section, diagram_id).paths();
+    let element_id = view
+        .subject
+        .as_ref()
+        .filter(|subject| {
+            section
+                .elements
+                .iter()
+                .any(|element| &element.id == *subject)
+        })
+        .cloned();
+    let graph = RelationshipGraph::new(section, diagram_id);
+    let previously_drawable = diagram
+        .views
+        .iter()
+        .filter(|view| graph.view_path(&view.id).is_some())
+        .map(|view| view.id.clone())
+        .collect::<Vec<_>>();
     section
         .diagrams
         .iter_mut()
@@ -123,14 +133,13 @@ pub(super) fn remove(
         .ok_or("diagram not found")?
         .views
         .retain(|view| view.id != view_id);
-    if is_element {
-        let remaining_paths = RelationshipGraph::new(section, diagram_id).paths();
+    if let Some(element_id) = element_id {
+        let graph = RelationshipGraph::new(section, diagram_id);
         // A second View of the same endpoint can keep an edge renderable. Do not
         // erase unrelated draft edges that were already missing a usable route.
-        let hidden = previous_paths
-            .keys()
-            .filter(|identifier| !remaining_paths.contains_key(*identifier))
-            .cloned()
+        let hidden = previously_drawable
+            .into_iter()
+            .filter(|identifier| graph.view_path(identifier).is_none())
             .collect::<HashSet<_>>();
         section
             .diagrams
@@ -138,12 +147,8 @@ pub(super) fn remove(
             .find(|diagram| diagram.id == diagram_id)
             .ok_or("diagram not found")?
             .views
-            .retain(|view| {
-                view.subject
-                    .as_ref()
-                    .is_none_or(|subject| !hidden.contains(subject))
-            });
-        reroute_relationships(section, diagram_id);
+            .retain(|view| !hidden.contains(&view.id));
+        crate::relationships::reroute_relationships_for_endpoint(section, diagram_id, &element_id);
     }
     Ok(())
 }
@@ -253,6 +258,157 @@ mod tests {
             diagram.views.retain(|view| view.id != "link-first");
         }
         assert_eq!(updated, expected);
+        Ok(())
+    }
+
+    fn manual_copies() -> Result<Project, Box<dyn std::error::Error>> {
+        let mut project = fixture()?;
+        project
+            .relations
+            .first_mut()
+            .ok_or("relation missing")?
+            .properties
+            .clear();
+        let diagram = project.diagrams.first_mut().ok_or("diagram missing")?;
+        let mut edge = diagram
+            .views
+            .iter()
+            .find(|view| view.id == "link-first")
+            .cloned()
+            .ok_or("edge missing")?;
+        edge.id = "link-second".into();
+        if let crate::Geometry::Path { segments, .. } = &mut edge.geometry {
+            segments.insert(
+                0,
+                crate::PathSegment::Line {
+                    to: crate::Point { x: 300.0, y: 180.0 },
+                },
+            );
+        }
+        diagram.views.push(edge);
+        Ok(project)
+    }
+
+    #[test]
+    fn manual_view_projection_preserves_distinct_paths_and_is_diagram_scoped()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let original = manual_copies()?;
+        let section = crate::ModelingSection::from_model(&original);
+        let graph = crate::RelationshipGraph::new(&section, "one");
+        let first = graph.view_path("link-first").ok_or("first path missing")?;
+        let second = graph
+            .view_path("link-second")
+            .ok_or("second path missing")?;
+        assert_ne!(first, second);
+        for identifier in ["missing", "link", "a-first", "other-link-first"] {
+            assert!(graph.view_path(identifier).is_none(), "{identifier}");
+        }
+        assert!(
+            crate::RelationshipGraph::new(&section, "missing")
+                .view_path("link-first")
+                .is_none()
+        );
+        let mut persisted = section.clone();
+        crate::reroute_relationships(&mut persisted, "one");
+        let diagram = persisted.diagrams.first().ok_or("diagram missing")?;
+        for (identifier, expected) in [("link-first", first), ("link-second", second)] {
+            assert_eq!(
+                diagram
+                    .views
+                    .iter()
+                    .find(|view| view.id == identifier)
+                    .map(|view| &view.geometry),
+                Some(&expected)
+            );
+        }
+        assert_eq!(section, crate::ModelingSection::from_model(&original));
+        Ok(())
+    }
+
+    #[test]
+    fn endpoint_removal_checks_each_edge_view_and_preserves_existing_drafts()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut original = manual_copies()?;
+        let diagram = original.diagrams.first_mut().ok_or("diagram missing")?;
+        let edge = diagram
+            .views
+            .iter_mut()
+            .find(|view| view.id == "link-first")
+            .ok_or("edge missing")?;
+        if let crate::Geometry::Path { segments, .. } = &mut edge.geometry {
+            segments.clear();
+        }
+        let updated = apply(&original, &remove("one", "b-first"), 0)?;
+        let diagram = updated.diagrams.first().ok_or("diagram missing")?;
+        assert!(diagram.views.iter().any(|view| view.id == "link-first"));
+        assert!(!diagram.views.iter().any(|view| view.id == "link-second"));
+        assert_eq!(updated.elements, original.elements);
+        assert_eq!(updated.relations, original.relations);
+        assert_eq!(updated.diagrams.get(1), original.diagrams.get(1));
+        Ok(())
+    }
+
+    #[test]
+    fn removing_unrelated_node_preserves_each_manual_edge_view_geometry()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut original = manual_copies()?;
+        let mut unrelated = original
+            .elements
+            .first()
+            .cloned()
+            .ok_or("element missing")?;
+        unrelated.id = "unrelated".into();
+        original.elements.push(unrelated);
+        let diagram = original.diagrams.first_mut().ok_or("diagram missing")?;
+        let mut view = diagram.views.first().cloned().ok_or("view missing")?;
+        view.id = "unrelated-view".into();
+        view.subject = Some("unrelated".into());
+        diagram.views.push(view);
+        let updated = apply(&original, &remove("one", "unrelated-view"), 0)?;
+        let mut expected = original.clone();
+        expected
+            .diagrams
+            .first_mut()
+            .ok_or("diagram missing")?
+            .views
+            .retain(|view| view.id != "unrelated-view");
+        assert_eq!(updated, expected);
+        Ok(())
+    }
+
+    #[test]
+    fn endpoint_removal_and_movement_preserve_each_manual_edge_shape()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let original = manual_copies()?;
+        for command in [
+            remove("one", "a-first"),
+            Command::MoveView {
+                view_id: "a-first".into(),
+                dx: 0.0,
+                dy: 150.0,
+            },
+        ] {
+            let updated = apply(&original, &command, 0)?;
+            assert_eq!(updated.elements, original.elements);
+            assert_eq!(updated.relations, original.relations);
+            assert_eq!(updated.diagrams.get(1), original.diagrams.get(1));
+            let diagram = updated.diagrams.first().ok_or("diagram missing")?;
+            for (identifier, expected_segments) in [("link-first", 1), ("link-second", 2)] {
+                let view = diagram
+                    .views
+                    .iter()
+                    .find(|view| view.id == identifier)
+                    .ok_or("edge missing")?;
+                let crate::Geometry::Path { start, segments } = &view.geometry else {
+                    return Err("edge must remain a path".into());
+                };
+                assert_eq!(segments.len(), expected_segments, "{identifier}");
+                assert_ne!(
+                    start.y, 70.0,
+                    "endpoint must follow remaining or moved node"
+                );
+            }
+        }
         Ok(())
     }
 

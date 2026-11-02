@@ -54,6 +54,7 @@ pub(super) fn append_member(
     owner_id: &str,
     kind: ModelingMemberKind,
     revision: u64,
+    project_id: &str,
 ) -> Result<String, String> {
     let owner = section
         .elements
@@ -116,6 +117,7 @@ pub(super) fn append_member(
         section,
         [member_prefix.as_str(), relation_prefix.as_str()],
         revision,
+        project_id,
     )?;
     let mut properties = std::collections::BTreeMap::new();
     properties.insert("visibility".into(), serde_json::json!("public"));
@@ -170,7 +172,7 @@ mod tests {
                 ModelingMemberKind::Operation,
                 ModelingMemberKind::Reception,
             ] {
-                let id = append_member(&mut section, "type-task", kind, 0).unwrap();
+                let id = append_member(&mut section, "type-task", kind, 0, "test-project").unwrap();
                 assert!(
                     section
                         .relations
@@ -182,7 +184,14 @@ mod tests {
             }
             let before = section.clone();
             assert!(
-                append_member(&mut section, "file-main", ModelingMemberKind::Attribute, 0).is_err()
+                append_member(
+                    &mut section,
+                    "file-main",
+                    ModelingMemberKind::Attribute,
+                    0,
+                    "test-project"
+                )
+                .is_err()
             );
             assert_eq!(section, before);
             crate::Graph::new(&section.to_model("project-todo", "Task List / Todo Project"))

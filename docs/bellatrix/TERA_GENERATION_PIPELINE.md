@@ -9,12 +9,12 @@ ou restrições**; é o renderizador textual M2T, com templates por alvo.
 
 | Etapa | Código atual | Papel |
 | --- | --- | --- |
-| Fonte ASG | `bellatrix_mde_model::{Project, Element, Relation}` | Identidades, atributos, escopo e relações persistidas |
-| Análise de grafos | `bellatrix_mde_modeling::{Graph, GraphIndex, analyze_generation_graph}` | Validação, escopo, dependências orientadas e ordem determinística |
+| Fonte ASG | `bellatrix_mde::{Project, Element, Relation}` | Identidades, atributos, escopo e relações persistidas |
+| Análise de grafos | `bellatrix_mde::{Graph, GraphIndex, analyze_generation_graph}` | Validação, escopo, dependências orientadas e ordem determinística |
 | IR intermediário de geração | `GenerationModel { units: Vec<GenerationUnit> }` | Dados estáveis e dependências sem tipo GPUI/Cordis nem filesystem |
 | Adaptador Rust | `bellatrix_mde_rust_generator::plan_with_templates` | Resolve declarações, nomes, assinaturas e manifestos |
 | M2T Tera 2.4.0 | `bellatrix_mde_templates::TemplatePack` + `templates/*.tera` | Renderiza exclusivamente texto de contexto serializável |
-| Artefatos e I/O | `bellatrix_mde_modeling::{Plan, publish_new, publish_replace}` | Protege caminhos/collisions, diff/ownership e publicação em staging |
+| Artefatos e I/O | `bellatrix_mde::{Plan, publish_new, publish_replace}` | Protege caminhos/collisions, diff/ownership e publicação em staging |
 
 `bellatrix_mde_templates` é propositalmente independente de Rust:
 aceita pacotes embutidos, renderiza dados `serde::Serialize` e permite
@@ -104,9 +104,9 @@ não garantir por si só equivalência de execução.
 
 ```powershell
 git pull --ff-only origin feat/bellatrix-native-engines
-cargo +1.98.1 check -p bellatrix_mde_templates -p bellatrix_mde_modeling -p bellatrix_mde_rust_generator
-cargo +1.98.1 test -p bellatrix_mde_templates -p bellatrix_mde_modeling -p bellatrix_mde_rust_generator
-cargo +1.98.1 run -p bellatrix_mde_cli -- plan crates/bellatrix_mde_model/fixtures/todo.json
+cargo +1.98.1 check -p bellatrix_mde_templates -p bellatrix_mde -p bellatrix_mde_rust_generator
+cargo +1.98.1 test -p bellatrix_mde_templates -p bellatrix_mde -p bellatrix_mde_rust_generator
+cargo +1.98.1 run -p bellatrix_mde_cli -- plan crates/bellatrix_mde/fixtures/todo.json
 ```
 
 O último comando é um exemplo de uso da CLI; a resolução do workspace e

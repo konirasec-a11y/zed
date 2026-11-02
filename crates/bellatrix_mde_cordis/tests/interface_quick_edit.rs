@@ -51,6 +51,7 @@ async fn interface_quick_edit_commands_create_real_objects_and_names() {
         ctx.query::<ModelingCreateElement>(
             Routing::Unscoped,
             ModelingCreateElementRequested {
+                owner_id: None,
                 project_id: id.clone(),
                 diagram_id: diagram_id.clone(),
                 kind: ModelingElementKind::Interface,

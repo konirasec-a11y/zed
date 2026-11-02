@@ -55,6 +55,7 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
     let mut revision = 0_u64;
     for (index, kind) in nodes.copied().enumerate() {
         let request = ModelingCreateElementRequested {
+            owner_id: None,
             project_id: id.clone(),
             diagram_id: diagram_id.clone(),
             kind,

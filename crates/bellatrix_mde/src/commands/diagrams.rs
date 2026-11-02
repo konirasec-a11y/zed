@@ -14,7 +14,7 @@ pub(super) fn create(
     if name.trim().is_empty() {
         return Err("diagram name must not be blank".into());
     }
-    let [identifier] = super::fresh_ids(section, ["mde-diagram"], revision)?;
+    let [identifier] = super::fresh_ids(section, ["mde-diagram"], revision, &project.id)?;
     section.diagrams.push(Diagram {
         id: identifier.clone(),
         name: name.into(),

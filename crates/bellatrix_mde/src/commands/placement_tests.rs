@@ -190,3 +190,22 @@ fn invalid_placements_are_atomic_and_do_not_invent_unsupported_geometry() -> ser
     assert_eq!(path_source, before);
     Ok(())
 }
+
+#[test]
+fn project_identity_is_reserved_when_allocating_a_view_id() -> Result<(), Box<dyn std::error::Error>>
+{
+    let mut source = fixture()?;
+    source.id = "mde-view-1".into();
+    let updated = apply(&source, &place("two", "class", 400.0, 500.0), 0)?;
+    let view = updated
+        .diagrams
+        .get(1)
+        .and_then(|diagram| diagram.views.first())
+        .ok_or("placed view missing")?;
+    assert_ne!(view.id, source.id);
+    assert_eq!(updated.id, source.id);
+    assert_eq!(updated.elements, source.elements);
+    assert_eq!(updated.relations, source.relations);
+    crate::Graph::new(&updated).validate()?;
+    Ok(())
+}

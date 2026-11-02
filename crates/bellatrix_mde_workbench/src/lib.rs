@@ -27,7 +27,7 @@ use bellatrix_mde_cordis::{
     ModelingQuickEditRequested, ModelingRenameRequested, ModelingResizeViewRequested,
     ModelingSetNameExpressionRequested, ModelingSetPropertyRequested,
 };
-use bellatrix_project::{ProjectId, ProjectSaveRequested};
+use bellatrix_project::ProjectId;
 use bellatrix_ui_uml::{UmlClassifier, UmlFigure, UmlLineSegment, UmlRelationGlyph};
 use gpui::{
     App, AppContext, Context, DragMoveEvent, Entity, EventEmitter, FocusHandle, Focusable,
@@ -35,7 +35,6 @@ use gpui::{
     Point, Render, ScrollEvent, SharedString, Task, Window, div, prelude::*, px,
 };
 use quick_edit_view::quick_edit_for_element;
-use std::path::PathBuf;
 use ui::{Clickable, Label};
 use ui_input::InputField;
 use workspace::{Workspace, item::Item};
@@ -146,6 +145,14 @@ fn diagram_validation_kind(
 ) -> Result<bellatrix_mde::StructuralDiagramKind, String> {
     bellatrix_mde::StructuralDiagramKind::from_uml_di_type(stored_type)
         .ok_or_else(|| format!("Cannot validate unsupported diagram type {stored_type}"))
+}
+
+fn creation_owner(kind: ModelingElementKind, selected: Option<&str>) -> Option<String> {
+    if kind.requires_owner() {
+        selected.map(str::to_owned)
+    } else {
+        None
+    }
 }
 
 fn selected_view_target(diagram: Option<&str>, view: Option<&str>) -> Option<(String, String)> {
@@ -668,6 +675,10 @@ impl MdeWorkbenchItem {
             ModelingTool::Relation(kind) => {
                 format!("{}: {}", kind.label(), kind.endpoint_instruction())
             }
+            ModelingTool::Element(kind) if kind.requires_owner() => format!(
+                "{}: select a Package or Model owner in Model explorer, then click canvas to place",
+                kind.label()
+            ),
             ModelingTool::Element(kind) => format!("{}: click canvas to place", kind.label()),
         };
         cx.notify();
@@ -781,19 +792,26 @@ impl MdeWorkbenchItem {
         );
         self.selected_element = None;
         self.selected_view = None;
+        self.inline_editor = None;
+        self.editing_subject = None;
+        self.gesture = None;
         cx.notify();
     }
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
         self.gesture = None;
         if let Ok(snapshot) = self.source.snapshot() {
-            if !snapshot.section.diagrams.iter().any(|diagram| {
-                Some(diagram.id.as_str()) == self.active_diagram.as_deref()
-                    && diagram
-                        .views
-                        .iter()
-                        .any(|view| Some(view.id.as_str()) == self.selected_view.as_deref())
-            }) {
+            if self.selected_view.is_some()
+                && !snapshot.section.diagrams.iter().any(|diagram| {
+                    Some(diagram.id.as_str()) == self.active_diagram.as_deref()
+                        && diagram
+                            .views
+                            .iter()
+                            .any(|view| Some(view.id.as_str()) == self.selected_view.as_deref())
+                })
+            {
                 self.selected_view = None;
+                self.inline_editor = None;
+                self.editing_subject = None;
             }
         }
         cx.notify();
@@ -822,20 +840,6 @@ impl MdeWorkbenchItem {
                 element_id: id,
                 new_name: name,
                 expected_revision: snapshot.revision,
-            }),
-            cx,
-        );
-    }
-    pub fn save_project(&mut self, path: String, cx: &mut Context<Self>) {
-        if path.trim().is_empty() {
-            self.feedback = "Specify a project file".into();
-            cx.notify();
-            return;
-        }
-        self.submit(
-            MdeUiCommand::SaveProject(ProjectSaveRequested {
-                id: self.project_id().clone(),
-                path: PathBuf::from(path.trim()),
             }),
             cx,
         );
@@ -873,6 +877,7 @@ impl MdeWorkbenchItem {
             MdeUiCommand::CreateElement(ModelingCreateElementRequested {
                 project_id: self.project_id().clone(),
                 diagram_id,
+                owner_id: creation_owner(kind, self.selected_element.as_deref()),
                 kind,
                 name: None,
                 x: x.max(0.0),
@@ -1142,8 +1147,7 @@ impl Render for MdeWorkbenchItem {
                 );
                 if let Some(diagram) = diagram {
                     title = format!("{} / {}", snapshot.name, diagram.name);
-                    let auto_routes =
-                        RelationshipGraph::new(&snapshot.section, &diagram.id).paths();
+                    let graph = RelationshipGraph::new(&snapshot.section, &diagram.id);
                     let mut views = diagram.views.iter().collect::<Vec<_>>();
                     views.sort_by_key(|view| view.z_index);
                     for view in views {
@@ -1156,7 +1160,9 @@ impl Render for MdeWorkbenchItem {
                             .iter()
                             .find(|relation| relation.id == subject)
                         {
-                            let geometry = auto_routes.get(subject).unwrap_or(&view.geometry);
+                            let routed_geometry = graph.view_path(&view.id);
+                            // Keep an unroutable draft visible using its stored geometry.
+                            let geometry = routed_geometry.as_ref().unwrap_or(&view.geometry);
                             if let Geometry::Path { start, segments } = geometry {
                                 let mut points = vec![*start];
                                 for segment in segments {
@@ -2104,5 +2110,19 @@ mod relationship_interaction_tests {
         assert_eq!(next_diagram_grid_position(0), (24.0, 36.0));
         assert_eq!(next_diagram_grid_position(4), (24.0, 184.0));
         assert_eq!(next_diagram_grid_position(5), (224.0, 184.0));
+    }
+    #[test]
+    fn structural_creation_forwards_explicit_selection_as_owner() {
+        for kind in ModelingElementKind::STRUCTURAL {
+            assert_eq!(
+                creation_owner(*kind, Some("hidden-package")),
+                Some("hidden-package".into())
+            );
+            assert_eq!(creation_owner(*kind, None), None);
+        }
+        assert_eq!(
+            creation_owner(ModelingElementKind::Class, Some("selected")),
+            None
+        );
     }
 }

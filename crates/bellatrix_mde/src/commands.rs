@@ -36,6 +36,7 @@ pub enum Command {
     },
     CreateElement {
         diagram_id: String,
+        owner_id: Option<String>,
         kind: ModelingElementKind,
         name: Option<String>,
         x: f64,
@@ -108,41 +109,52 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
             diagrams::rename(&mut section, diagram_id, name)?
         }
         Command::DeleteDiagram { diagram_id } => diagrams::delete(&mut section, diagram_id)?,
-        Command::CreateElement {
-            diagram_id,
-            kind,
-            name,
-            x,
-            y,
-        } => create_element(
-            &mut section,
-            diagram_id,
-            *kind,
-            name.as_deref(),
-            *x,
-            *y,
-            revision,
-        )?,
+        Command::CreateElement { .. } => {
+            create_element(&mut section, command, revision, &project.id)?
+        }
         Command::CreateRelation {
             diagram_id,
             kind,
             from,
             to,
-        } => create_relation(&mut section, diagram_id, *kind, from, to, revision)?,
+        } => create_relation(
+            &mut section,
+            diagram_id,
+            *kind,
+            from,
+            to,
+            revision,
+            &project.id,
+        )?,
         Command::AddMember { owner_id, kind } => {
-            members::append_member(&mut section, owner_id, *kind, revision)?;
+            members::append_member(&mut section, owner_id, *kind, revision, &project.id)?;
         }
         Command::QuickEdit {
             diagram_id,
             element_id,
             action,
-        } => quick_edit::apply(&mut section, diagram_id, element_id, *action, revision)?,
+        } => quick_edit::apply(
+            &mut section,
+            diagram_id,
+            element_id,
+            *action,
+            revision,
+            &project.id,
+        )?,
         Command::PlaceElementView {
             diagram_id,
             element_id,
             x,
             y,
-        } => views::place(&mut section, diagram_id, element_id, *x, *y, revision)?,
+        } => views::place(
+            &mut section,
+            diagram_id,
+            element_id,
+            *x,
+            *y,
+            revision,
+            &project.id,
+        )?,
         Command::RemoveView {
             diagram_id,
             view_id,
@@ -188,12 +200,14 @@ fn fresh_ids<const N: usize>(
     section: &ModelingSection,
     prefixes: [&str; N],
     revision: u64,
+    project_id: &str,
 ) -> Result<[String; N], String> {
     let mut sequence = revision.checked_add(1).ok_or("identifier overflow")?;
     loop {
         let ids = prefixes.map(|prefix| format!("{prefix}-{sequence}"));
         let occupied = ids.iter().any(|id| {
-            section.elements.iter().any(|element| &element.id == id)
+            id == project_id
+                || section.elements.iter().any(|element| &element.id == id)
                 || section.relations.iter().any(|relation| &relation.id == id)
                 || section.diagrams.iter().any(|diagram| {
                     &diagram.id == id || diagram.views.iter().any(|view| &view.id == id)
@@ -208,32 +222,61 @@ fn fresh_ids<const N: usize>(
 
 fn create_element(
     section: &mut ModelingSection,
-    diagram_id: &str,
-    kind: ModelingElementKind,
-    name: Option<&str>,
-    x: f64,
-    y: f64,
+    command: &Command,
     revision: u64,
+    project_id: &str,
 ) -> Result<(), String> {
+    let Command::CreateElement {
+        diagram_id,
+        owner_id,
+        kind,
+        name,
+        x,
+        y,
+    } = command
+    else {
+        return Err("expected element creation command".into());
+    };
     if !x.is_finite() || !y.is_finite() {
         return Err("element position must be finite".into());
     }
-    let name = name.unwrap_or(kind.default_name());
+    let name = name.as_deref().unwrap_or(kind.default_name());
     if name.trim().is_empty() {
         return Err("element name must not be empty".into());
+    }
+    if kind.requires_owner() && owner_id.is_none() {
+        return Err(
+            "Component/Artifact creation requires an explicit Package or Model owner".into(),
+        );
+    }
+    if let Some(owner_id) = owner_id {
+        let owner = section
+            .elements
+            .iter()
+            .find(|element| element.id == *owner_id)
+            .ok_or("element owner not found")?;
+        // This creation slice supports package ownership, not every UML ownership context.
+        if !matches!(owner.kind.as_str(), "uml.package" | "uml.model") {
+            return Err("this creation command requires a Package or Model owner".into());
+        }
     }
     if !section
         .diagrams
         .iter()
-        .any(|diagram| diagram.id == diagram_id)
+        .any(|diagram| diagram.id == *diagram_id)
     {
         return Err("diagram not found".into());
     }
-    let [element_id, view_id] = fresh_ids(section, ["mde-element", "mde-view"], revision)?;
+    let [element_id, view_id, ownership_id] = fresh_ids(
+        section,
+        ["mde-element", "mde-view", "mde-ownership"],
+        revision,
+        project_id,
+    )?;
     let diagram = section
         .diagrams
         .iter_mut()
-        .find(|diagram| diagram.id == diagram_id)
+        .find(|diagram| diagram.id == *diagram_id)
         .ok_or("diagram not found")?;
     let z_index = diagram
         .views
@@ -247,21 +290,43 @@ fn create_element(
         id: view_id,
         subject: Some(element_id.clone()),
         label: None,
-        geometry: views::initial_geometry(kind, x, y),
+        geometry: views::initial_geometry(*kind, *x, *y),
         style: Style::default(),
         z_index,
     });
+    let mut properties = std::collections::BTreeMap::new();
+    if matches!(
+        kind,
+        ModelingElementKind::Component | ModelingElementKind::Artifact
+    ) {
+        properties.insert("visibility".into(), serde_json::json!("public"));
+        properties.insert("isAbstract".into(), serde_json::json!(false));
+        properties.insert("isFinalSpecialization".into(), serde_json::json!(false));
+    }
+    if *kind == ModelingElementKind::Component {
+        properties.insert("isIndirectlyInstantiated".into(), serde_json::json!(true));
+        properties.insert("isActive".into(), serde_json::json!(false));
+    }
     section.elements.push(Element {
-        id: element_id,
+        id: element_id.clone(),
         kind: kind.model_kind().into(),
         name: name.into(),
         label: None,
         description: None,
-        properties: Default::default(),
+        properties,
         annotations: Vec::new(),
         implementations: Vec::new(),
         content: None,
     });
+    if let Some(owner_id) = owner_id {
+        section.relations.push(Relation {
+            id: ownership_id,
+            kind: "owns".into(),
+            from: owner_id.clone(),
+            to: element_id,
+            properties: Default::default(),
+        });
+    }
     Ok(())
 }
 
@@ -272,6 +337,7 @@ fn create_relation(
     from: &str,
     to: &str,
     revision: u64,
+    project_id: &str,
 ) -> Result<(), String> {
     let source = section
         .elements
@@ -289,6 +355,7 @@ fn create_relation(
         section,
         ["mde-uml-relation", "mde-uml-relation-view"],
         revision,
+        project_id,
     )?;
     let mut properties = std::collections::BTreeMap::new();
     properties.insert("routing".into(), serde_json::json!("automatic"));
@@ -505,6 +572,7 @@ mod tests {
                 element_id: "missing".into(),
             },
             Command::CreateElement {
+                owner_id: None,
                 diagram_id: "missing".into(),
                 kind: ModelingElementKind::Class,
                 name: None,
@@ -592,3 +660,6 @@ mod deletion_tests;
 
 #[cfg(test)]
 mod placement_tests;
+
+#[cfg(test)]
+mod structural_creation_tests;

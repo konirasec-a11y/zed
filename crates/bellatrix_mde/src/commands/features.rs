@@ -1,9 +1,14 @@
 use crate::{Element, Geometry, ModelingSection, Relation, Style, UmlQuickCreate, View};
 use std::collections::HashSet;
 
-fn fresh(section: &ModelingSection, prefix: &str, revision: u64) -> Result<String, String> {
+fn fresh(
+    section: &ModelingSection,
+    prefix: &str,
+    revision: u64,
+    project_id: &str,
+) -> Result<String, String> {
     let prefix = format!("mde-class-{prefix}");
-    let [id] = super::fresh_ids(section, [prefix.as_str()], revision)?;
+    let [id] = super::fresh_ids(section, [prefix.as_str()], revision, project_id)?;
     Ok(id)
 }
 
@@ -179,6 +184,7 @@ pub(super) fn insert_feature(
     owner_id: &str,
     action: UmlQuickCreate,
     revision: u64,
+    project_id: &str,
 ) -> Result<(), String> {
     let owner = section
         .elements
@@ -232,8 +238,8 @@ pub(super) fn insert_feature(
                 .any(|element| element.id == relation.to && element.kind == kind)
         })
         .count();
-    let node_id = fresh(section, "feature", revision)?;
-    let owner_relation_id = fresh(section, "owns", revision)?;
+    let node_id = fresh(section, "feature", revision, project_id)?;
+    let owner_relation_id = fresh(section, "owns", revision, project_id)?;
     let label = name(section, prefix)?;
     let mut properties = std::collections::BTreeMap::new();
     properties.insert("visibility".into(), serde_json::json!("public"));
@@ -265,7 +271,7 @@ pub(super) fn insert_feature(
         properties: Default::default(),
     });
     if let Some((element_width, element_height)) = shape {
-        let view_id = fresh(section, "feature-view", revision)?;
+        let view_id = fresh(section, "feature-view", revision, project_id)?;
         let (position_x, position_y) = if action == UmlQuickCreate::Port {
             (
                 x + width - element_width / 2.0,
@@ -344,6 +350,7 @@ mod tests {
             "type-task",
             UmlQuickCreate::Port,
             0,
+            "test-project",
         )
         .unwrap();
         insert_feature(
@@ -352,6 +359,7 @@ mod tests {
             "type-task",
             UmlQuickCreate::Part,
             1,
+            "test-project",
         )
         .unwrap();
         let children = contained_ids(&section, "type-task");
@@ -440,7 +448,15 @@ mod tests {
         .enumerate()
         {
             let diagram_id = section.diagrams[0].id.clone();
-            insert_feature(&mut section, &diagram_id, "type-task", action, index as u64).unwrap();
+            insert_feature(
+                &mut section,
+                &diagram_id,
+                "type-task",
+                action,
+                index as u64,
+                "test-project",
+            )
+            .unwrap();
         }
         for kind in ["uml.template_parameter", "uml.port", "uml.part"] {
             let element = section

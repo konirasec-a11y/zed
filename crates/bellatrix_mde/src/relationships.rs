@@ -366,29 +366,40 @@ pub fn projected_relationship_paths(
                 .views
                 .iter()
                 .find(|v| v.subject.as_deref() == Some(relation.id.as_str()))?;
-            let Geometry::Path { .. } = &view.geometry else {
-                return None;
-            };
-            let routing = relation
-                .properties
-                .get("routing")
-                .and_then(serde_json::Value::as_str);
-            let geometry = if routing == Some("automatic") {
-                route_with_lane(
-                    section,
-                    diagram_id,
-                    &relation.from,
-                    &relation.to,
-                    lane_for_relation(section, diagram_id, relation),
-                )
-                .ok()?
-            } else {
-                // No routing flag means preserve bends, not detach the edge.
-                reanchor_path(section, diagram_id, relation, &view.geometry).ok()?
-            };
+            let geometry =
+                projected_relationship_view_path(section, diagram_id, relation, &view.geometry)?;
             Some((relation.id.clone(), geometry))
         })
         .collect()
+}
+
+fn projected_relationship_view_path(
+    section: &ModelingSection,
+    diagram_id: &str,
+    relation: &Relation,
+    geometry: &Geometry,
+) -> Option<Geometry> {
+    if !matches!(geometry, Geometry::Path { .. }) {
+        return None;
+    }
+    if relation
+        .properties
+        .get("routing")
+        .and_then(serde_json::Value::as_str)
+        == Some("automatic")
+    {
+        route_with_lane(
+            section,
+            diagram_id,
+            &relation.from,
+            &relation.to,
+            lane_for_relation(section, diagram_id, relation),
+        )
+        .ok()
+    } else {
+        // Each View owns its bends, even when several Views show one relation.
+        reanchor_path(section, diagram_id, relation, geometry).ok()
+    }
 }
 
 fn reanchor_path(
@@ -459,12 +470,55 @@ fn reanchor_path(
 }
 
 pub fn reroute_relationships(section: &mut ModelingSection, diagram_id: &str) {
-    let routes = projected_relationship_paths(section, diagram_id);
-    if let Some(diagram) = section.diagrams.iter_mut().find(|d| d.id == diagram_id) {
+    reroute_matching_relationships(section, diagram_id, |_| true);
+}
+
+pub(crate) fn reroute_relationships_for_endpoint(
+    section: &mut ModelingSection,
+    diagram_id: &str,
+    endpoint: &str,
+) {
+    reroute_matching_relationships(section, diagram_id, |relation| {
+        relation.from == endpoint || relation.to == endpoint
+    });
+}
+
+fn reroute_matching_relationships(
+    section: &mut ModelingSection,
+    diagram_id: &str,
+    matches: impl Fn(&Relation) -> bool,
+) {
+    let Some(diagram) = section
+        .diagrams
+        .iter()
+        .find(|diagram| diagram.id == diagram_id)
+    else {
+        return;
+    };
+    let routes: std::collections::BTreeMap<_, _> = diagram
+        .views
+        .iter()
+        .filter_map(|view| {
+            let subject = view.subject.as_deref()?;
+            let relation = section
+                .relations
+                .iter()
+                .find(|relation| relation.id == subject)?;
+            if !matches(relation) {
+                return None;
+            }
+            let geometry =
+                projected_relationship_view_path(section, diagram_id, relation, &view.geometry)?;
+            Some((view.id.clone(), geometry))
+        })
+        .collect();
+    if let Some(diagram) = section
+        .diagrams
+        .iter_mut()
+        .find(|diagram| diagram.id == diagram_id)
+    {
         for view in &mut diagram.views {
-            if let Some(subject) = &view.subject
-                && let Some(geometry) = routes.get(subject)
-            {
+            if let Some(geometry) = routes.get(&view.id) {
                 view.geometry = geometry.clone();
             }
         }
@@ -607,6 +661,21 @@ impl<'a> RelationshipGraph<'a> {
             .iter()
             .filter(|relation| has_relation_view(self.section, self.diagram_id, &relation.id))
             .collect()
+    }
+    pub fn view_path(&self, view_id: &str) -> Option<Geometry> {
+        let diagram = self
+            .section
+            .diagrams
+            .iter()
+            .find(|diagram| diagram.id == self.diagram_id)?;
+        let view = diagram.views.iter().find(|view| view.id == view_id)?;
+        let subject = view.subject.as_deref()?;
+        let relation = self
+            .section
+            .relations
+            .iter()
+            .find(|relation| relation.id == subject)?;
+        projected_relationship_view_path(self.section, self.diagram_id, relation, &view.geometry)
     }
     pub fn paths(&self) -> std::collections::BTreeMap<String, Geometry> {
         projected_relationship_paths(self.section, self.diagram_id)

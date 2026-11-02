@@ -2178,6 +2178,7 @@ dependencies = [
  "clap",
  "cordis-rs",
  "serde_json",
+ "smol",
  "tokio",
 ]
 
@@ -2237,6 +2238,7 @@ dependencies = [
  "manatee",
  "merman-core",
  "merman-render",
+ "project",
  "serde_json",
  "tokio",
  "ui",

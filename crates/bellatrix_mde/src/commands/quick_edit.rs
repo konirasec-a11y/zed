@@ -3,9 +3,14 @@ use crate::{
     quick_relation_rule, reroute_relationships, route_relationship,
 };
 
-fn fresh_id(section: &ModelingSection, purpose: &str, revision: u64) -> Result<String, String> {
+fn fresh_id(
+    section: &ModelingSection,
+    purpose: &str,
+    revision: u64,
+    project_id: &str,
+) -> Result<String, String> {
     let prefix = format!("mde-quick-{purpose}");
-    let [id] = super::fresh_ids(section, [prefix.as_str()], revision)?;
+    let [id] = super::fresh_ids(section, [prefix.as_str()], revision, project_id)?;
     Ok(id)
 }
 fn unique_name(section: &ModelingSection, prefix: &str) -> Result<String, String> {
@@ -25,6 +30,7 @@ pub(super) fn apply(
     element_id: &str,
     action: UmlQuickCreate,
     revision: u64,
+    project_id: &str,
 ) -> Result<(), String> {
     let element = section
         .elements
@@ -41,7 +47,9 @@ pub(super) fn apply(
         action,
         UmlQuickCreate::TemplateParameter | UmlQuickCreate::Port | UmlQuickCreate::Part
     ) {
-        return super::features::insert_feature(section, diagram_id, element_id, action, revision);
+        return super::features::insert_feature(
+            section, diagram_id, element_id, action, revision, project_id,
+        );
     }
     if action == UmlQuickCreate::Reception {
         super::members::append_member(
@@ -49,6 +57,7 @@ pub(super) fn apply(
             element_id,
             super::ModelingMemberKind::Reception,
             revision,
+            project_id,
         )?;
         return Ok(());
     }
@@ -128,11 +137,11 @@ pub(super) fn apply(
     };
     let rule = quick_relation_rule(action)
         .ok_or("Quick Edit action does not create a graph relationship")?;
-    let new_id = fresh_id(section, "node", revision)?;
-    let new_view_id = fresh_id(section, "view", revision)?;
-    let relation_id = fresh_id(section, "relation", revision)?;
-    let relation_view_id = fresh_id(section, "relation-view", revision)?;
-    let owner_id = fresh_id(section, "owner", revision)?;
+    let new_id = fresh_id(section, "node", revision, project_id)?;
+    let new_view_id = fresh_id(section, "view", revision, project_id)?;
+    let relation_id = fresh_id(section, "relation", revision, project_id)?;
+    let relation_view_id = fresh_id(section, "relation-view", revision, project_id)?;
+    let owner_id = fresh_id(section, "owner", revision, project_id)?;
     let name = unique_name(section, prefix)?;
     let z_index = diagram
         .views

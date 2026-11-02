@@ -32,5 +32,5 @@ separate follow-up changes with independent tests.
 
 The first checkpoint above remains a historical static-only record. See
 [Structural UML milestone](STRUCTURAL_UML_MILESTONE.md) for the subsequent
-129 passing scoped tests and domain/Cordis Clippy verification. Native GUI
-acceptance and root lockfile resolution remain separate.
+current scoped test and Clippy evidence, including subsequent real-root lockfile
+resolution. Native GUI acceptance remains separate and has not run here.

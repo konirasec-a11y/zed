@@ -9,7 +9,8 @@ RUML and StarUML remain implementation/interaction references, not authorities.
 
 Reuse order: inspect Zed protocol contracts and follow their handlers; where
 no local diagram contract exists, use native Item/Panel/Action APIs and the
-existing typed Cordis bridge. No Zed core edits are required by this increment.
+existing typed Cordis bridge. The only native Zed edit is the existing Bellatrix bootstrap hook described
+below; domain and UI behavior remain in Bellatrix crates.
 
 ## Implemented contracts (runtime verification recorded separately)
 
@@ -73,7 +74,7 @@ Use focused headless checks before a full Zed build. Preserve warmed Cargo cache
 The maintainer validates native Windows behavior on the working branch; no PR
 or manual CI run is required to obtain that feedback.
 
-## Verification record — 2026-11-02
+## Earlier supplemental verification — 2026-11-02
 
 - Exact copied sources of seven headless packages: **154 tests passed, zero failures**.
 - Repository `script/clippy` on the isolated domain/Cordis packages: **passed**, release/all-targets/all-features with warnings denied.
@@ -86,7 +87,8 @@ or manual CI run is required to obtain that feedback.
 - Two exact extracted Canvas coordinate/selection helper tests: passed with
   rustc; this is not a GPUI compilation or interaction test.
 - Native Zed/GPUI/Windows behavior: not executed here.
-- Root Cargo.lock resolution: pending; no dependency hashes invented.
+- At this supplemental checkpoint, root Cargo.lock resolution was pending;
+  the later root-workspace checkpoint below records its successful completion.
 
 The earlier class-diagram acceptance fixture attempted Class-to-Interface
 Generalization. It now uses Class-to-Class for Generalization, keeps
@@ -142,7 +144,7 @@ remain errors. Standalone non-UML kinds are not blanket-rejected.
 
 ## Beta canonicalization and notation
 
-The next increment removes legacy namespace readers, compatibility reexports
+This increment removed legacy namespace readers, compatibility reexports
 and the implicit Class-diagram fallback. `bellatrix.mde` is defined once in the
 domain. Missing/blank diagram type is a format error. The old aggregate/composite
 persisted relation kinds are rejected; their visual notations still derive from
@@ -195,3 +197,78 @@ warnings denied. The redundant Add prefix was removed by adopting UmlQuickCreate
 noun variants, and the obsolete Interface-only event wrapper was removed rather
 than kept as a compatibility envelope. Interface behavior uses the same canonical
 Quick Edit path and its acceptance test remains active.
+
+## Owned Component/Artifact creation and per-View routing
+
+The creation command now accepts explicit semantic ownership. The first supported
+owners for Component and Artifact are `uml.package` and `uml.model`; this is a
+bounded editor capability, not a UML restriction against every other owner.
+An owner may be absent from the active diagram. Neither diagram context nor
+visual containment supplies ownership implicitly.
+
+Normative trace to `standards/uml/20161101/UML.xmi`:
+
+| Implemented creation behavior | Official XMI identifier | Adaptation |
+| --- | --- | --- |
+| Required owner | `Element-has_owner`, `Element-mustBeOwned-spec` | Reject missing/unresolved owner for these two newly supported creation kinds. Existing ownerless draft creation elsewhere is not certified conformant. |
+| Package ownership | `Package-packagedElement` | Existing `owns` relation represents package-owned packageable elements; no duplicate DTO state. |
+| Public default visibility | `PackageableElement-visibility` | Explicit `visibility = public`. |
+| Classifier defaults | `Classifier-isAbstract`, `Classifier-isFinalSpecialization` | Explicit false values. |
+| Component defaults | `Component-isIndirectlyInstantiated`, `Class-isActive` | Explicit true and false respectively; Artifact does not receive Class-only flags. |
+
+Tests in `commands/structural_creation_tests.rs` and the Cordis creation integration
+suite check ownership, defaults, rollback, and existing notation. This does not
+implement all Component realization/interface constraints, Artifact manifestations,
+Deployment semantics, or a complete UML ownership validator. Nonblank generated
+names and the restricted owner picker are editor policies.
+
+UMLDI `UMLDiagramElement-modelElement` and its inverse
+`A_UMLDiagramElement_modelElement_umlDiagramElement-umlDiagramElement`
+separate model identity from graphical representations; the inverse permits
+multiple diagram elements. Bellatrix View IDs and semantic subject IDs retain
+that distinction without claiming complete UMLDI serialization support.
+
+Per-View relationship geometry is now projected independently through
+`RelationshipGraph::view_path`, retaining the relation-keyed graph query for
+semantic connectivity. Removing a node View reroutes only incident edges; existing
+manual routes on other Views remain distinct. Path interpolation and which endpoint
+View to choose are editor routing policies, not OMG-prescribed algorithms. Explicit
+edge-to-endpoint-View anchoring remains a future capability.
+
+The native Save Project As action reuses Zed's path dialog and the existing
+ProjectSave event. It preserves the selected PathBuf and cancellation submits no
+write. This is editor integration, not a UML rule. Tab closure hides the shared
+project view; native dirty indicators, autosave and discard integration are not
+implemented by this action. The Properties panel states that saving is explicit.
+
+Verification for this increment: all seven headless packages passed **177 tests**
+in the actual root workspace with `--locked --offline`. The repository Clippy wrapper passed for all seven packages, including
+release/all-targets/all-features with warnings denied. Five pre-existing CLI-test
+blocking-process calls were replaced with the workspace smol async-process API
+and existing Tokio test runtime; no lint suppressions were introduced.
+Six exact extracted Workbench pure-helper tests and one native-dialog guard test
+passed independently, without compiling or exercising GPUI. Root Linux metadata
+resolved offline; the lockfile changes add existing `project` for the Workbench native directory
+dialog and existing `smol` for CLI tests, without changing package versions.
+
+## Automatic official XMI-to-Rust coverage
+
+`script/bellatrix_mde/bellatrix_uml_catalog.py` reads the versioned official
+UML.xmi and deterministically generates `crates/bellatrix_mde/src/uml/metamodel.rs`.
+Its `--check` mode verifies exact output and records the source SHA-256. Current
+output covers all 242 metaclass identities and direct generalizations; the Rust
+query evaluates transitive inheritance with cycle protection.
+
+This is **not** a complete XML/XMI-to-Rust metamodel compiler. It does not generate
+all properties, associations, multiplicities, defaults, operations, instantiated
+Rust types, or executable OCL constraints. The represented structural validators
+are handwritten Rust with explicit normative references. UMLDI, PrimitiveTypes
+and StandardProfile sources are retained but are not all generated by this script.
+
+A separate generator smoke check used the actual built `bellatrix-mde` CLI with
+`crates/bellatrix_mde/fixtures/todo.json`, generated nine artifacts into a fresh
+external temporary directory, and ran `cargo +1.98.1 check --offline` followed by
+`cargo +1.98.1 run --offline` on the generated manifest. Both succeeded; the
+program printed `1 task(s)`. The sample retains one dead-code warning for unread
+Task fields. This verifies that fixture's existing Rust generation path, not
+arbitrary UML-to-Rust conversion or generation initiated from the native UI.

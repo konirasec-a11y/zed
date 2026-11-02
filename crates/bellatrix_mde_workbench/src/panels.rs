@@ -110,6 +110,8 @@ fn tool_glyph(tool: ModelingTool) -> ShapeKind {
             | ModelingElementKind::Template
             | ModelingElementKind::AssociationClass => ShapeKind::Class,
             ModelingElementKind::Interface => ShapeKind::Interface,
+            ModelingElementKind::Component => ShapeKind::Component,
+            ModelingElementKind::Artifact => ShapeKind::Document,
             ModelingElementKind::Enumeration => ShapeKind::Enum,
             ModelingElementKind::Package
             | ModelingElementKind::Model
@@ -244,7 +246,7 @@ impl Render for MdeLeftPanel {
                     })
                 })
         });
-        let tool_groups: [(&str, Vec<ModelingTool>); 6] = [
+        let tool_groups: [(&str, Vec<ModelingTool>); 7] = [
             (
                 "CLASSES (BASIC)",
                 ModelingElementKind::BASIC
@@ -289,6 +291,14 @@ impl Render for MdeLeftPanel {
                             .copied()
                             .map(ModelingTool::Relation),
                     )
+                    .collect(),
+            ),
+            (
+                "STRUCTURAL (PACKAGE/MODEL OWNER)",
+                ModelingElementKind::STRUCTURAL
+                    .iter()
+                    .copied()
+                    .map(ModelingTool::Element)
                     .collect(),
             ),
             (
@@ -439,7 +449,7 @@ impl Render for MdeLeftPanel {
                             .items_center()
                             .border_b_1()
                             .border_color(palette.border)
-                            .child(Label::new("Class editing tools")),
+                            .child(Label::new("Supported editing tools")),
                     )
                     .child(
                         div()
@@ -496,7 +506,6 @@ impl Render for MdeLeftPanel {
 pub struct MdeRightPanel {
     state: PanelState,
     name_input: Entity<InputField>,
-    save_input: Entity<InputField>,
     editing_id: Option<String>,
     property_inputs: HashMap<String, Entity<InputField>>,
     collapsed_elements: HashSet<String>,
@@ -508,11 +517,9 @@ impl MdeRightPanel {
         cx: &mut Context<Self>,
     ) -> Self {
         let name_input = cx.new(|cx| InputField::new(window, cx, "Element name"));
-        let save_input = cx.new(|cx| InputField::new(window, cx, "Project file path"));
         Self {
             state: PanelState::new(item, DockPosition::Right, 230.0, cx),
             name_input,
-            save_input,
             editing_id: None,
             property_inputs: HashMap::new(),
             collapsed_elements: HashSet::new(),
@@ -760,8 +767,6 @@ impl Render for MdeRightPanel {
             window,
             cx,
         );
-        let save_item = item.clone();
-        let save_input = self.save_input.clone();
         let delete_item = item.clone();
         div()
             .id("mde-right-panel")
@@ -887,13 +892,17 @@ impl Render for MdeRightPanel {
                             .flex_col()
                             .gap_1()
                             .child(Label::new("Project persistence"))
-                            .child(self.save_input.clone())
-                            .child(Button::new("mde-save-project", "Save project").on_click(
-                                move |_, _, cx| {
-                                    let path = save_input.read(cx).text(cx);
-                                    save_item.update(cx, |workbench, cx| {
-                                        workbench.save_project(path, cx)
-                                    });
+                            .child(
+                                div().text_xs().whitespace_normal().child(
+                                    "Closing this tab hides the view; save the shared project explicitly.",
+                                ),
+                            )
+                            .child(Button::new("mde-save-project", "Save Project As…").on_click(
+                                move |_, window, cx| {
+                                    window.dispatch_action(
+                                        Box::new(crate::integration::SaveMdeProjectAs),
+                                        cx,
+                                    );
                                 },
                             )),
                     ),

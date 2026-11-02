@@ -93,13 +93,14 @@ estratégia de conflito, rastreamento de identidades e teste de invariantes.
   separadamente de validador de topologia, resolução de nomes e estilo
   visual. Toda rejeição preserva o grafo/revisão anteriores.
 
-### Separação de crates / fronteiras concretas
+### Domínio único e fronteiras dos adaptadores
 
-- `bellatrix_mde_model`: contratos serializáveis, identidades, versões,
-  `Element`, `Relation`, `View`, e futuramente metamodelos e traces.
-- `bellatrix_mde_modeling`: **regras puras de grafos** e invariantes,
-  `GraphIndex`, validação, resolução de relacionamentos e, futuramente,
-  pattern matching, rewrite engine, transformações M2M.
+- `bellatrix_mde`: domínio único com contratos serializáveis, identidades,
+  versões, `Element`, `Relation`, `View`, **regras puras de grafos**,
+  `GraphIndex`, validação e resolução de relacionamentos. Os módulos internos
+  `model`, `graph` e `relationships` não são modelos ou crates independentes.
+  Pattern matching, rewrite engine, transformações M2M e traces permanecem
+  trabalho futuro.
 - `bellatrix_mde_cordis`: eventos tipados, lifecycle Cordis, revisão,
   `ProjectReplace`, autenticação/autorização da transação. Não reescrever
   domínios ou recalcular geometricamente arestas nesse adaptador.

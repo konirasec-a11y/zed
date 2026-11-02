@@ -62,7 +62,7 @@ O fluxo `GPUI → MdeUiCommand::QuickEdit → Cordis → MdePlugin → ProjectRe
 ## Validação local
 
 ```powershell
-cargo +1.98.1 test -p bellatrix_mde_modeling
+cargo +1.98.1 test -p bellatrix_mde
 cargo +1.98.1 test -p bellatrix_mde_cordis
 cargo +1.98.1 check -p bellatrix_ui_uml -p bellatrix_mde_workbench
 cargo +1.98.1 run -p zed
