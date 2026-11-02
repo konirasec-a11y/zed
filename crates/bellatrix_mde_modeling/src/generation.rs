@@ -5,9 +5,9 @@
 //! Edges are dependent -> prerequisite, so the scheduling graph reverses
 //! them (prerequisite -> dependent) before topological sorting.
 use bellatrix_mde_model::Project;
-use petgraph::{algo::toposort, graphmap::DiGraphMap};
+use petgraph::{Direction, algo::toposort, graphmap::DiGraphMap};
 use serde::Serialize;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use thiserror::Error;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -72,8 +72,26 @@ pub fn analyze_generation_graph(
             graph.add_edge(relation.to.as_str(), relation.from.as_str(), ());
         }
     }
-    let ordered = toposort(&graph, None)
+    // petgraph validates cycles; the stable Kahn frontier resolves ties by
+    // source ID, independent of HashMap iteration order or execution platform.
+    toposort(&graph, None)
         .map_err(|cycle| GenerationGraphError::Cycle(cycle.node_id().to_owned()))?;
+    let mut indegree = selected_ids.iter().map(|id|
+        (*id, graph.neighbors_directed(*id, Direction::Incoming).count())
+    ).collect::<BTreeMap<&str, usize>>();
+    let mut ready = indegree.iter().filter_map(|(id, count)|
+        (*count == 0).then_some(*id)
+    ).collect::<BTreeSet<&str>>();
+    let mut ordered = Vec::with_capacity(selected_ids.len());
+    while let Some(id) = ready.pop_first() {
+        ordered.push(id);
+        for dependent in graph.neighbors(id) {
+            let count = indegree.get_mut(dependent)
+                .expect("every scheduled dependency is a selected vertex");
+            *count -= 1;
+            if *count == 0 { ready.insert(dependent); }
+        }
+    }
     let units = ordered.into_iter().filter_map(|id| {
         let element = project.element(id)?;
         let mut requires = project.relations.iter()
