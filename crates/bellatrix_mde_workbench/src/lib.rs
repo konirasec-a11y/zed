@@ -228,6 +228,15 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
+        // Canvas deletion affects only subjects with a diagram View.
+        // A Project Explorer file/directory selection is never silently removed.
+        if !snapshot.section.diagrams.iter().any(|diagram| diagram.views.iter().any(
+            |view| view.subject.as_deref() == Some(element_id.as_str())
+        )) {
+            self.feedback = "Delete is available for visible diagram elements only".into();
+            cx.notify();
+            return;
+        }
         // All semantic deletes are versioned Cordis requests and preserve
         // unrelated models, filesystem nodes and user-created documents.
         self.submit(MdeUiCommand::DeleteElement(ModelingDeleteElementRequested {
