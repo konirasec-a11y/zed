@@ -1,3 +1,4 @@
+use bellatrix_mde_modeling::ModelingRelationKind;
 //! UML Class Diagram vocabulary. These are domain tool types; no GPUI or Zed dependency.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ModelingElementKind {
@@ -58,66 +59,6 @@ impl ModelingElementKind {
             Self::NaryAssociation => (80.0, 80.0),
             _ => (185.0, 112.0),
         }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ModelingRelationKind {
-    Association, DirectedAssociation, Aggregation, Composition, Dependency,
-    Generalization, InterfaceRealization, TemplateBinding, Realization, Containment,
-}
-impl ModelingRelationKind {
-    pub const BASIC: &'static [Self] = &[
-        Self::Association, Self::DirectedAssociation, Self::Aggregation, Self::Composition,
-        Self::Dependency, Self::Generalization, Self::InterfaceRealization,
-    ];
-    pub const ADVANCED: &'static [Self] = &[Self::TemplateBinding, Self::Realization];
-    pub const PACKAGES: &'static [Self] = &[Self::Containment];
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Association => "Association", Self::DirectedAssociation => "Directed Association",
-            Self::Aggregation => "Aggregation", Self::Composition => "Composition",
-            Self::Dependency => "Dependency", Self::Generalization => "Generalization",
-            Self::InterfaceRealization => "Interface Realization",
-            Self::TemplateBinding => "Template Binding", Self::Realization => "Realization",
-            Self::Containment => "Containment",
-        }
-    }
-    pub fn model_kind(self) -> &'static str {
-        match self {
-            Self::Association => "uml.association",
-            Self::DirectedAssociation => "uml.directed_association",
-            Self::Aggregation => "uml.aggregation",
-            Self::Composition => "uml.composition",
-            Self::Dependency => "uml.dependency",
-            Self::Generalization => "uml.generalization",
-            Self::InterfaceRealization => "uml.interface_realization",
-            Self::TemplateBinding => "uml.template_binding",
-            Self::Realization => "uml.realization",
-            Self::Containment => "uml.containment",
-        }
-    }
-    pub fn validate_endpoints(self, source: &str, target: &str) -> Result<(), &'static str> {
-        const CLASSIFIERS: &[&str] = &[
-            "rust.struct", "rust.trait", "uml.class", "uml.interface",
-            "uml.signal", "uml.data_type", "uml.primitive_type",
-            "uml.enumeration", "uml.association_class", "uml.template",
-        ];
-        const PACKAGES: &[&str] = &["uml.package", "uml.model", "uml.subsystem"];
-        if self == Self::Containment {
-            return if PACKAGES.contains(&source) { Ok(()) }
-                else { Err("containment source must be a UML Package/Model/Subsystem") };
-        }
-        if self == Self::InterfaceRealization && target != "rust.trait" && target != "uml.interface" {
-            return Err("interface realization must target an Interface");
-        }
-        if self == Self::Generalization && (!CLASSIFIERS.contains(&source) || !CLASSIFIERS.contains(&target)) {
-            return Err("generalization requires classifier endpoints");
-        }
-        if self == Self::TemplateBinding && source != "uml.template" && target != "uml.template" {
-            return Err("template binding requires a Template endpoint");
-        }
-        Ok(())
     }
 }
 
