@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 use serde::{Deserialize, Serialize};
 
+
 use crate::uml::structural::common_structure::VisibilityKind;
 
 // Original module: behavior.rs
@@ -414,4 +415,164 @@ pub struct Duration {
     pub type_: Option<String>,
     pub expr: Option<String>,
     pub observation: Vec<String>,
+}
+
+// Original module: duration_interval.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DurationInterval {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub type_: Option<String>,
+    pub min: String,
+    pub max: String,
+}
+
+// Original module: interval.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Interval {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub type_: Option<String>,
+    pub min: String,
+    pub max: String,
+}
+
+// Original module: time_constraint.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeConstraint {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub constrained_element: Vec<String>,
+    pub specification: String,
+    pub context: Option<String>,
+    pub first_event: Option<String>,
+}
+
+// Original module: interval_constraint.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IntervalConstraint {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub constrained_element: Vec<String>,
+    pub specification: String,
+    pub context: Option<String>,
+}
+
+// Original module: time_interval.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeInterval {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub type_: Option<String>,
+    pub min: String,
+    pub max: String,
+}
+
+// Original module: duration_constraint.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DurationConstraint {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub constrained_element: Vec<String>,
+    pub specification: String,
+    pub context: Option<String>,
+    pub first_event: Vec<String>,
+}
+
+// Original module: time_observation.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeObservation {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub event: String,
+    pub first_event: String,
+}
+
+// Original module: duration_observation.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DurationObservation {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub event: Vec<String>,
+    pub first_event: Vec<String>,
+}
+
+// Original module: call_concurrency_kind.rs
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CallConcurrencyKind {
+    Sequential,
+    Guarded,
+    Concurrent,
 }
