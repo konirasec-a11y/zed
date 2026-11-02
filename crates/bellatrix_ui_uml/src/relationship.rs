@@ -2,7 +2,6 @@
 //! no semantic changes, routing rules or Cordis dependencies live in this crate.
 use bellatrix_design_system::Palette;
 use gpui::{App, IntoElement, RenderOnce, Window, div, prelude::*, svg};
-use std::sync::Arc;
 
 /// Coordinates are local to the SVG element; host computes zoom/pan.
 #[derive(IntoElement)]
@@ -85,7 +84,7 @@ impl RenderOnce for UmlRelationGlyph {
             "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {:.2} {:.2}' preserveAspectRatio='none'>             <path d='{d}' fill='none' stroke='{stroke}' stroke-width='1.6'{} />{marks}</svg>",
             self.width,self.height,dash(&self.kind));
         // The caller sets the local SVG bounds; `viewBox` is normalized here.
-        div().size_full().child(svg().data(Arc::<[u8]>::from(content.into_bytes())).size_full())
+        div().size_full().child(svg().data(content.as_bytes()).size_full())
     }
 }
 #[cfg(test)]
