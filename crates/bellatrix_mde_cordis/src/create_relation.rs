@@ -42,7 +42,7 @@ fn anchor(from: Point, to: Point, width: f64, height: f64) -> Point {
 pub(crate) fn route(section: &ModelingSection, diagram_id: &str, from: &str, to: &str) -> Result<Geometry, String> {
     let diagram = section.diagrams.iter().find(|d| d.id == diagram_id)
         .ok_or("diagram not found")?;
-    let rect = |subject: &str| {
+    let rect = |subject: &str| -> Result<(Point, f64, f64), String> {
         let view = diagram.views.iter().find(|v| v.subject.as_deref() == Some(subject))
             .ok_or_else(|| format!("endpoint {subject} has no View in this diagram"))?;
         let (center,width,height) = rect_center(&view.geometry)?;
@@ -53,7 +53,7 @@ pub(crate) fn route(section: &ModelingSection, diagram_id: &str, from: &str, to:
             .map(|element|element.kind.as_str());
         if matches!(kind,Some("rust.trait"|"uml.interface")) {
             let Geometry::Rect { x,y,width:box_width,.. } = &view.geometry else {
-                return Err("interface must have a rectangular View".into());
+                return Err("interface must have a rectangular View".to_owned());
             };
             return Ok((Point{x:x+box_width/2.0,y:y+22.0},28.0,28.0));
         }
