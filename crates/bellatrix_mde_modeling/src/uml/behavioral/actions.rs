@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 
 
+
 use crate::uml::behavioral::activities::ObjectNodeOrderingKind;
 use crate::uml::structural::common_structure::VisibilityKind;
 
@@ -976,4 +977,250 @@ pub struct ValueSpecificationAction {
     pub local_postcondition: Vec<String>,
     pub value: String,
     pub result: String,
+}
+
+// Original module: variable_action.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VariableAction {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub handler: Vec<String>,
+    pub local_precondition: Vec<String>,
+    pub local_postcondition: Vec<String>,
+    pub variable: String,
+}
+
+// Original module: read_variable_action.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadVariableAction {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub handler: Vec<String>,
+    pub local_precondition: Vec<String>,
+    pub local_postcondition: Vec<String>,
+    pub variable: String,
+    pub result: String,
+}
+
+// Original module: write_variable_action.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WriteVariableAction {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub handler: Vec<String>,
+    pub local_precondition: Vec<String>,
+    pub local_postcondition: Vec<String>,
+    pub variable: String,
+    pub value: String,
+}
+
+// Original module: clear_variable_action.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClearVariableAction {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub handler: Vec<String>,
+    pub local_precondition: Vec<String>,
+    pub local_postcondition: Vec<String>,
+    pub variable: String,
+}
+
+// Original module: add_variable_value_action.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddVariableValueAction {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub handler: Vec<String>,
+    pub local_precondition: Vec<String>,
+    pub local_postcondition: Vec<String>,
+    pub variable: String,
+    pub value: String,
+    pub is_replace_all: String,
+    pub insert_at: Option<String>,
+}
+
+// Original module: remove_variable_value_action.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoveVariableValueAction {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub handler: Vec<String>,
+    pub local_precondition: Vec<String>,
+    pub local_postcondition: Vec<String>,
+    pub variable: String,
+    pub value: String,
+    pub is_remove_duplicates: String,
+    pub remove_at: Option<String>,
+}
+
+// Original module: raise_exception_action.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RaiseExceptionAction {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub handler: Vec<String>,
+    pub local_precondition: Vec<String>,
+    pub local_postcondition: Vec<String>,
+    pub exception: String,
+}
+
+// Original module: read_extent_action.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadExtentAction {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub handler: Vec<String>,
+    pub local_precondition: Vec<String>,
+    pub local_postcondition: Vec<String>,
+    pub result: String,
+    pub classifier: String,
+}
+
+// Original module: reclassify_object_action.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReclassifyObjectAction {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub handler: Vec<String>,
+    pub local_precondition: Vec<String>,
+    pub local_postcondition: Vec<String>,
+    pub is_replace_all: String,
+    pub old_classifier: Vec<String>,
+    pub new_classifier: Vec<String>,
+    pub object: String,
 }
