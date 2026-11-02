@@ -69,14 +69,14 @@ const CLASS_ACTIONS: &[QuickEditAction] = &[
 const INTERFACE_ACTIONS: &[QuickEditAction] = &[
     act("uml.name-expression","Name expression",Input,Main,0,Ready,None),
     act("uml.visibility","Visibility",Visibility,Left,1,Ready,None),
-    act("uml.add-note","Add Note",Button,Left,2,Pending,None),
-    act("uml.add-constraint","Add Constraint",Button,Left,2,Pending,None),
+    act("uml.add-note","Add Note",Button,Left,2,Ready,None),
+    act("uml.add-constraint","Add Constraint",Button,Left,2,Ready,None),
     act("uml.add-attribute","Add Attribute",Button,Right,1,Ready,Some("Ctrl+Enter")),
     act("uml.add-operation","Add Operation",Button,Right,1,Ready,Some("Ctrl+Shift+Enter")),
-    act("uml.add-reception","Add Reception",Button,Right,1,Pending,None),
-    act("uml.add-subinterface","Add Sub-Interface",Button,Right,2,Pending,None),
-    act("uml.add-superinterface","Add Super-Interface",Button,Right,2,Pending,None),
-    act("uml.add-realizing-class","Add Realizing Class",Button,Right,2,Pending,None),
+    act("uml.add-reception","Add Reception",Button,Right,1,Ready,None),
+    act("uml.add-subinterface","Add Sub-Interface",Button,Right,2,Ready,None),
+    act("uml.add-superinterface","Add Super-Interface",Button,Right,2,Ready,None),
+    act("uml.add-realizing-class","Add Realizing Class",Button,Right,2,Ready,None),
 ];
 const ATTRIBUTE_ACTIONS: &[QuickEditAction] = &[
     act("uml.attribute-expression","Attribute expression",Input,Main,0,Pending,None),
@@ -125,6 +125,18 @@ mod tests {
             action.side==Right && action.row==4));
         let ids: HashSet<_> = a.iter().map(|action| action.id).collect();
         assert_eq!(a.len(), ids.len());
+    }
+    #[test]
+    fn interface_quick_edit_matches_reference_and_all_actions_are_implemented() {
+        let actions=quick_edit_for("rust.trait");
+        let expected=[
+            "uml.name-expression","uml.visibility","uml.add-note","uml.add-constraint",
+            "uml.add-attribute","uml.add-operation","uml.add-reception",
+            "uml.add-subinterface","uml.add-superinterface","uml.add-realizing-class",
+        ];
+        assert_eq!(actions.iter().map(|a|a.id).collect::<Vec<_>>(),expected);
+        assert!(actions.iter().all(|a|a.availability==QuickEditAvailability::Implemented));
+        assert!(actions.iter().filter(|a|a.side==QuickEditSide::Right&&a.row==2).count()==3);
     }
     #[test]
     fn specialized_kinds_have_distinct_actions() {
