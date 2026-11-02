@@ -9,6 +9,7 @@ use crate::{
     ModelingSetProperty, ModelingSetPropertyRequested,
     ModelingAddMember, ModelingAddMemberRequested,
     ModelingInterfaceQuickEdit, ModelingInterfaceQuickEditRequested,
+    ModelingSetNameExpression, ModelingSetNameExpressionRequested,
 };
 use bellatrix_project::{
     ProjectId, ProjectSave, ProjectSaveRequested, ProjectStateChanged, ProjectStateChangedEvent,
@@ -29,6 +30,7 @@ pub enum MdeUiCommand {
     SetProperty(ModelingSetPropertyRequested),
     AddMember(ModelingAddMemberRequested),
     InterfaceQuickEdit(ModelingInterfaceQuickEditRequested),
+    SetNameExpression(ModelingSetNameExpressionRequested),
     SaveProject(ProjectSaveRequested),
 }
 
@@ -97,6 +99,10 @@ impl MdeUiBridge {
                     MdeUiCommand::InterfaceQuickEdit(request) => {
                         describe("Interface Quick Edit", cordis
                             .query::<ModelingInterfaceQuickEdit>(Routing::Unscoped, request).await)
+                    }
+                    MdeUiCommand::SetNameExpression(request) => {
+                        describe("UML name updated", cordis
+                            .query::<ModelingSetNameExpression>(Routing::Unscoped, request).await)
                     }
                     MdeUiCommand::SaveProject(request) => {
                         describe("Project saved", cordis
