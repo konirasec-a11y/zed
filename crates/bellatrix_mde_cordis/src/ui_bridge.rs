@@ -2,7 +2,8 @@
 //! The host owns this bridge and its lifetime. The UI only owns a sender.
 
 use crate::{
-    ModelingCreateElement, ModelingCreateElementRequested, ModelingMoveView,
+    ModelingCreateElement, ModelingCreateElementRequested,
+    ModelingCreateRelation, ModelingCreateRelationRequested, ModelingMoveView,
     ModelingMoveViewRequested, ModelingRename, ModelingRenameRequested,
     ModelingResizeView, ModelingResizeViewRequested, ModelingDeleteElement, ModelingDeleteElementRequested,
     ModelingSetProperty, ModelingSetPropertyRequested,
@@ -19,6 +20,7 @@ use tokio::sync::{mpsc, watch};
 #[derive(Clone)]
 pub enum MdeUiCommand {
     CreateElement(ModelingCreateElementRequested),
+    CreateRelation(ModelingCreateRelationRequested),
     MoveView(ModelingMoveViewRequested),
     ResizeView(ModelingResizeViewRequested),
     Rename(ModelingRenameRequested),
@@ -61,6 +63,10 @@ impl MdeUiBridge {
                     MdeUiCommand::CreateElement(request) => {
                         describe("Element created", cordis
                             .query::<ModelingCreateElement>(Routing::Unscoped, request).await)
+                    }
+                    MdeUiCommand::CreateRelation(request) => {
+                        describe("Relationship created", cordis
+                            .query::<ModelingCreateRelation>(Routing::Unscoped, request).await)
                     }
                     MdeUiCommand::MoveView(request) => {
                         describe("View moved", cordis
