@@ -96,8 +96,8 @@ fn apply_to_candidate(section: &mut ModelingSection, request: &ModelingQuickEdit
         UmlQuickCommand::AddProvidedInterface => ("rust.trait", "Interface", (width + 55.0, -75.0), (120.0, 76.0), "uml.interface_realization", false),
         UmlQuickCommand::AddRequiredInterface => ("rust.trait", "Interface", (width + 55.0, height + 10.0), (120.0, 76.0), "uml.dependency", false),
         UmlQuickCommand::AddAssociatedClass => ("rust.struct", "Class", (width + 80.0, 0.0), (185.0, 112.0), "uml.association", false),
-        UmlQuickCommand::AddAggregatedClass => ("rust.struct", "Class", (width + 80.0, 0.0), (185.0, 112.0), "uml.aggregation", false),
-        UmlQuickCommand::AddCompositedClass => ("rust.struct", "Class", (width + 80.0, 0.0), (185.0, 112.0), "uml.composition", false),
+        UmlQuickCommand::AddAggregatedClass => ("rust.struct", "Class", (width + 80.0, 0.0), (185.0, 112.0), "uml.association", false),
+        UmlQuickCommand::AddCompositedClass => ("rust.struct", "Class", (width + 80.0, 0.0), (185.0, 112.0), "uml.association", false),
         UmlQuickCommand::AddTemplateParameter | UmlQuickCommand::AddPort | UmlQuickCommand::AddPart =>
             return Err("contained features must use Class specialization".into()),
         UmlQuickCommand::AddReception => return Err("reception must use the member command".into()),
@@ -141,6 +141,17 @@ fn apply_to_candidate(section: &mut ModelingSection, request: &ModelingQuickEdit
     let geometry = create_relation::route(section, &request.diagram_id, source, target)?;
     let mut properties = std::collections::BTreeMap::new();
     properties.insert("routing".into(), serde_json::json!("automatic"));
+    // UML aggregation is a property of Association end1, not a separate
+    // semantic relationship class. The renderer chooses its diamond.
+    match request.action {
+        UmlQuickCommand::AddAggregatedClass => {
+            properties.insert("end1Aggregation".into(),serde_json::json!("shared"));
+        }
+        UmlQuickCommand::AddCompositedClass => {
+            properties.insert("end1Aggregation".into(),serde_json::json!("composite"));
+        }
+        _ => {}
+    }
     section.relations.push(Relation {
         id: relation_id.clone(), kind: relation_kind.into(), from: source.into(), to: target.into(), properties,
     });
@@ -224,8 +235,8 @@ mod tests {
             (UmlQuickCommand::AddProvidedInterface,"rust.trait",Some("uml.interface_realization")),
             (UmlQuickCommand::AddRequiredInterface,"rust.trait",Some("uml.dependency")),
             (UmlQuickCommand::AddAssociatedClass,"rust.struct",Some("uml.association")),
-            (UmlQuickCommand::AddAggregatedClass,"rust.struct",Some("uml.aggregation")),
-            (UmlQuickCommand::AddCompositedClass,"rust.struct",Some("uml.composition")),
+            (UmlQuickCommand::AddAggregatedClass,"rust.struct",Some("uml.association")),
+            (UmlQuickCommand::AddCompositedClass,"rust.struct",Some("uml.association")),
             (UmlQuickCommand::AddPort,"uml.port",None),
             (UmlQuickCommand::AddPart,"uml.part",None),
         ];
@@ -244,6 +255,14 @@ mod tests {
             if let Some(kind)=relation_kind {
                 let edge=section.relations.iter().find(|r|r.kind==kind).unwrap();
                 assert!(edge.from==child.id || edge.to==child.id);
+                let aggregation=match action {
+                    UmlQuickCommand::AddAggregatedClass=>Some("shared"),
+                    UmlQuickCommand::AddCompositedClass=>Some("composite"),
+                    _=>None,
+                };
+                if let Some(value)=aggregation {
+                    assert_eq!(edge.properties.get("end1Aggregation").and_then(|v|v.as_str()),Some(value));
+                }
                 assert!(section.diagrams.iter().flat_map(|d|&d.views).any(|v|
                     v.subject.as_deref()==Some(edge.id.as_str())));
             } else {
