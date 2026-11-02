@@ -1981,7 +1981,9 @@ impl Workspace {
                 StatusBar::new(&center_pane.clone(), multi_workspace.clone(), window, cx);
             status_bar.add_left_item(left_dock_buttons, window, cx);
             status_bar.add_right_item(right_dock_buttons, window, cx);
-            status_bar.add_right_item(bottom_dock_buttons, window, cx);
+            // Bottom panels open below the editor, so their controls live in
+            // the center group alongside Debug and Bellatrix MDE Details.
+            status_bar.add_center_item(bottom_dock_buttons, window, cx);
             status_bar
         });
 

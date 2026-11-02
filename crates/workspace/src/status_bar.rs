@@ -99,6 +99,7 @@ impl SidebarStatus {
 
 pub struct StatusBar {
     left_items: Vec<Box<dyn StatusItemViewHandle>>,
+    center_items: Vec<Box<dyn StatusItemViewHandle>>,
     right_items: Vec<Box<dyn StatusItemViewHandle>>,
     active_pane: Entity<Pane>,
     multi_workspace: Option<WeakEntity<MultiWorkspace>>,
@@ -148,7 +149,7 @@ impl Render for StatusBar {
                 }),
             )
             .w_full()
-            .justify_between()
+            .items_center()
             .gap(DynamicSpacing::Base08.rems(cx))
             .p(DynamicSpacing::Base04.rems(cx))
             .bg(cx.theme().colors().status_bar_background)
@@ -181,8 +182,24 @@ impl Render for StatusBar {
                     .border_b(px(1.0))
                     .border_color(cx.theme().colors().status_bar_background),
             })
-            .child(self.render_left_tools(&sidebar, cx))
-            .child(self.render_right_tools(&sidebar, cx))
+            // Side tool regions have equal flexible widths, keeping the bottom
+            // Dock's controls visually centered over the editor (not mixed
+            // with left/right Dock controls). Debug and MDE Details both
+            // belong to the bottom Dock.
+            .child(
+                h_flex()
+                    .flex_1()
+                    .min_w_0()
+                    .child(self.render_left_tools(&sidebar, cx)),
+            )
+            .child(self.render_center_tools(cx))
+            .child(
+                h_flex()
+                    .flex_1()
+                    .min_w_0()
+                    .justify_end()
+                    .child(self.render_right_tools(&sidebar, cx)),
+            )
     }
 }
 
@@ -202,6 +219,15 @@ impl StatusBar {
             )
             .children(self.left_items.iter().enumerate().map(|(index, item)| {
                 render_hideable_item("status-bar-left", index, item.as_ref(), cx)
+            }))
+    }
+
+    fn render_center_tools(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        h_flex()
+            .flex_shrink_0()
+            .gap_1()
+            .children(self.center_items.iter().enumerate().map(|(index, item)| {
+                render_hideable_item("status-bar-center", index, item.as_ref(), cx)
             }))
     }
 
@@ -332,6 +358,7 @@ impl StatusBar {
     ) -> Self {
         let mut this = Self {
             left_items: Default::default(),
+            center_items: Default::default(),
             right_items: Default::default(),
             active_pane: active_pane.clone(),
             multi_workspace,
@@ -364,9 +391,11 @@ impl StatusBar {
         cx.notify();
     }
 
+    /// Find an item in any of the three status bar regions.
     pub fn item_of_type<T: StatusItemView>(&self) -> Option<Entity<T>> {
         self.left_items
             .iter()
+            .chain(self.center_items.iter())
             .chain(self.right_items.iter())
             .find_map(|item| item.to_any().downcast().ok())
     }
@@ -380,9 +409,14 @@ impl StatusBar {
                 return Some(index);
             }
         }
-        for (index, item) in self.right_items.iter().enumerate() {
+        for (index, item) in self.center_items.iter().enumerate() {
             if item.item_type() == TypeId::of::<T>() {
                 return Some(index + self.left_items.len());
+            }
+        }
+        for (index, item) in self.right_items.iter().enumerate() {
+            if item.item_type() == TypeId::of::<T>() {
+                return Some(index + self.left_items.len() + self.center_items.len());
             }
         }
         None
@@ -400,21 +434,46 @@ impl StatusBar {
         let active_pane_item = self.active_pane.read(cx).active_item();
         item.set_active_pane_item(active_pane_item.as_deref(), window, cx);
 
-        if position < self.left_items.len() {
-            self.left_items.insert(position + 1, Box::new(item))
+        let left_len = self.left_items.len();
+        let center_len = self.center_items.len();
+        if position < left_len {
+            self.left_items.insert(position + 1, Box::new(item));
+        } else if position < left_len + center_len {
+            self.center_items.insert(position + 1 - left_len, Box::new(item));
         } else {
             self.right_items
-                .insert(position + 1 - self.left_items.len(), Box::new(item))
+                .insert(position + 1 - left_len - center_len, Box::new(item));
         }
         cx.notify()
     }
 
     pub fn remove_item_at(&mut self, position: usize, cx: &mut Context<Self>) {
-        if position < self.left_items.len() {
+        let left_len = self.left_items.len();
+        let center_len = self.center_items.len();
+        if position < left_len {
             self.left_items.remove(position);
+        } else if position < left_len + center_len {
+            self.center_items.remove(position - left_len);
         } else {
-            self.right_items.remove(position - self.left_items.len());
+            self.right_items.remove(position - left_len - center_len);
         }
+        cx.notify();
+    }
+
+    /// Bottom-dock controls live in the center of the status bar.
+    /// This is also the placement used by the Debug and Bellatrix MDE Details.
+    pub fn add_center_item<T>(
+        &mut self,
+        item: Entity<T>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) where
+        T: 'static + StatusItemView,
+    {
+        let active_pane_item = self.active_pane.read(cx).active_item();
+        item.set_active_pane_item(active_pane_item.as_deref(), window, cx);
+
+        self.center_items.push(Box::new(item));
         cx.notify();
     }
 
@@ -448,7 +507,7 @@ impl StatusBar {
 
     fn update_active_pane_item(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let active_pane_item = self.active_pane.read(cx).active_item();
-        for item in self.left_items.iter().chain(&self.right_items) {
+        for item in self.left_items.iter().chain(&self.center_items).chain(&self.right_items) {
             item.set_active_pane_item(active_pane_item.as_deref(), window, cx);
         }
     }
