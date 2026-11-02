@@ -37,7 +37,7 @@ use gpui_platform;
 
 use gpui_tokio::Tokio;
 use language::LanguageRegistry;
-use onboarding::{FIRST_OPEN, show_onboarding_view};
+use onboarding::FIRST_OPEN;
 use project_panel::ProjectPanel;
 use prompt_store::PromptBuilder;
 use remote::RemoteConnectionOptions;
@@ -1556,7 +1556,18 @@ pub(crate) async fn restore_or_create_workspace(
             .await?;
         }
     } else if matches!(kvp.read_kvp(FIRST_OPEN), Ok(None)) {
-        cx.update(|cx| show_onboarding_view(app_state, cx)).await?;
+        // Bellatrix is installed as a native Zed Workspace Item and is opened
+        // when the first Workspace is constructed. Do not launch the upstream
+        // Zed onboarding window instead of the Bellatrix Workbench.
+        cx.update(|cx| {
+            workspace::open_new(
+                Default::default(),
+                app_state,
+                cx,
+                |_workspace, _window, _cx| {},
+            )
+        })
+        .await?;
     } else {
         cx.update(|cx| {
             workspace::open_new(
