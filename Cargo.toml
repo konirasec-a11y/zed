@@ -25,6 +25,7 @@ members = [
     "crates/bellatrix_mde_model",
     "crates/bellatrix_mde_modeling",
     "crates/bellatrix_mde_cordis",
+    "crates/bellatrix_mde_templates",
     "crates/bellatrix_mde_rust_generator",
     "crates/bellatrix_mde_html_exporter",
     "crates/bellatrix_mde_cli",
@@ -303,6 +304,7 @@ bellatrix_mde_model = { path = "crates/bellatrix_mde_model" }
 bellatrix_mde_modeling = { path = "crates/bellatrix_mde_modeling" }
 bellatrix_mde_cordis = { path = "crates/bellatrix_mde_cordis" }
 bellatrix_mde_rust_generator = { path = "crates/bellatrix_mde_rust_generator" }
+bellatrix_mde_templates = { path = "crates/bellatrix_mde_templates" }
 bellatrix_mde_html_exporter = { path = "crates/bellatrix_mde_html_exporter" }
 bellatrix_mde_cli = { path = "crates/bellatrix_mde_cli" }
 bellatrix_zed_host = { path = "crates/bellatrix_zed_host" }
@@ -319,6 +321,7 @@ bellatrix_ui_panels = { path = "crates/bellatrix_ui_panels" }
 # Cordis is the sole lifecycle/composition runtime for Bellatrix engines.
 cordis-rs = { git = "https://github.com/dshbox/cordis-rs", rev = "cd540033487f62c1b574bffd39befb717afb8a35" }
 petgraph = "0.8.3"
+tera = "2.4.0"
 
 #
 # Workspace member crates
