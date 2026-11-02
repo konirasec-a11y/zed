@@ -18,7 +18,7 @@ pub use interface_quick_edit::{InterfaceQuickAction, ModelingInterfaceQuickEdit,
 mod class_diagram;
 pub use class_diagram::{ModelingElementKind, ModelingRelationKind, ModelingTool};
 mod create_relation;
-pub use create_relation::{ModelingCreateRelation, ModelingCreateRelationRequested};
+pub use create_relation::{ModelingCreateRelation, ModelingCreateRelationRequested, projected_automatic_routes};
 mod create_element;
 mod add_member;
 pub use add_member::{ModelingAddMember, ModelingAddMemberRequested, ModelingMemberKind};
