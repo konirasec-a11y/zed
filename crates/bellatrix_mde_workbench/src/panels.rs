@@ -444,16 +444,27 @@ impl Render for MdeRightPanel {
 
             // A relationship is a separate graph edge, never a fake child
             // in the physical/semantic containment hierarchy.
+            // Legacy/project-specific relationships are first-class model
+            // relations too. If they have a Path View, show them in Explorer;
+            // filtering only "uml." hid the fixture's depends_on curve.
             let relations = snapshot.section.relations.iter()
-                .filter(|r|r.kind.starts_with("uml.")).collect::<Vec<_>>();
+                .filter(|relation| relation.kind.starts_with("uml.")
+                    || snapshot.section.diagrams.iter().any(|diagram|
+                        diagram.views.iter().any(|view|
+                            view.subject.as_deref() == Some(relation.id.as_str())
+                        )
+                    )
+                ).collect::<Vec<_>>();
             if !relations.is_empty() {
-                rows.push(div().id("mde-uml-relationships-heading").p_2()
+                rows.push(div().id("mde-relationships-heading").p_2()
                     .text_size(px(11.0)).text_color(palette.muted)
-                    .child("UML Relationships"));
+                    .child("Relationships"));
             }
             for relation in relations {
-                let label=relation.kind.strip_prefix("uml.").unwrap_or(&relation.kind)
-                    .replace('_'," ");
+                let label = match relation.kind.as_str() {
+                    "depends_on" => "dependency (project)".to_owned(),
+                    kind => kind.strip_prefix("uml.").unwrap_or(kind).replace('_', " "),
+                };
                 let from=snapshot.section.elements.iter().find(|e|e.id==relation.from)
                     .map_or(relation.from.as_str(),|e|e.name.as_str());
                 let to=snapshot.section.elements.iter().find(|e|e.id==relation.to)
