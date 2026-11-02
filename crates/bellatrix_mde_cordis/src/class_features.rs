@@ -215,7 +215,7 @@ mod tests {
                 panic!("contained feature must remain a rectangle")
             };
             assert!((*x-old_x-35.0).abs()<1e-9);
-            assert!((y-old_y-20.0).abs()<1e-9);
+            assert!((*y-old_y-20.0).abs()<1e-9);
         }
         let part_bound=class_minimum_bounds(&section,&diagram_id,"type-task").unwrap();
         assert!(part_bound.0>80.0);
