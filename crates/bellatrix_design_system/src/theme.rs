@@ -1,7 +1,7 @@
 //! Bellatrix's native Zed GPUI palette, derived from docs/design/src/styles/tokens.css.
 //! The Zed theme owns appearance and lifecycle; these are semantic color roles.
 
-use gpui::{App, Hsla, rgb};
+use gpui::{App, Hsla};
 use ui::prelude::ActiveTheme;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -26,12 +26,30 @@ pub struct Palette {
 }
 
 impl Palette {
+    /// Colors belong to the user's active Zed theme, not to a fixed
+    /// Bellatrix light/dark palette. Retain `for_mode` only for standalone
+    /// previews and deterministic contrast tests.
     pub fn current(cx: &App) -> Self {
-        Self::for_mode(if cx.theme().appearance.is_light() {
-            ThemeMode::Light
-        } else {
-            ThemeMode::Dark
-        })
+        let c = cx.theme().colors();
+        let rgb24 = |color: Hsla| {
+            let rgba = color.to_rgb();
+            ((rgba.r.clamp(0.0, 1.0) * 255.0).round() as u32) << 16
+                | ((rgba.g.clamp(0.0, 1.0) * 255.0).round() as u32) << 8
+                | ((rgba.b.clamp(0.0, 1.0) * 255.0).round() as u32)
+        };
+        Self {
+            bar: rgb24(c.title_bar_background),
+            rail: rgb24(c.status_bar_background),
+            panel: rgb24(c.panel_background),
+            panel_alt: rgb24(c.surface_background),
+            canvas: rgb24(c.editor_background),
+            border: rgb24(c.border),
+            text: rgb24(c.text),
+            muted: rgb24(c.text_muted),
+            accent: rgb24(c.text_accent),
+            selected: rgb24(c.element_selected),
+            selection: rgb24(c.border_selected),
+        }
     }
 
     pub const fn for_mode(mode: ThemeMode) -> Self {
@@ -110,16 +128,16 @@ pub struct WorkbenchPalette {
 
 impl WorkbenchPalette {
     pub fn current(cx: &App) -> Self {
-        let p = Palette::current(cx);
+        let c = cx.theme().colors();
         Self {
-            canvas: Hsla::from(rgb(p.canvas)),
-            surface: Hsla::from(rgb(p.panel)),
-            panel: Hsla::from(rgb(p.panel_alt)),
-            border: Hsla::from(rgb(p.border)),
-            text: Hsla::from(rgb(p.text)),
-            muted: Hsla::from(rgb(p.muted)),
-            selection: Hsla::from(rgb(p.selection)),
-            accent: Hsla::from(rgb(p.accent)),
+            canvas: c.editor_background,
+            surface: c.surface_background,
+            panel: c.panel_background,
+            border: c.border,
+            text: c.text,
+            muted: c.text_muted,
+            selection: c.border_selected,
+            accent: c.text_accent,
         }
     }
 }
