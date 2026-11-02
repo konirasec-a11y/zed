@@ -238,8 +238,13 @@ impl MdeWorkbenchItem {
             return;
         };
         if self.editing_subject.as_deref() == Some(id.as_str()) { return; }
+        let hint = if matches!(target.kind.as_str(),
+            "rust.struct" | "rust.trait" | "uml.class" | "uml.interface" |
+            "uml.enumeration" | "uml.signal" | "uml.data_type" |
+            "uml.primitive_type" | "uml.association_class" | "uml.template"
+        ) { "<< stereotype >> name" } else { "Name" };
         let field = cx.new(|cx| {
-            InputField::new(window, cx, "Name").label_min_width(px(96.0))
+            InputField::new(window, cx, hint).label_min_width(px(96.0))
         });
         let display = Self::name_expression_text(target);
         field.update(cx, |field, cx| field.set_text(&display, window, cx));
