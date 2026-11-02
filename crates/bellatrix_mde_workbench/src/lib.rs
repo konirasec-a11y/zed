@@ -1022,6 +1022,7 @@ impl Render for MdeWorkbenchItem {
         let pan_out_owner = cx.weak_entity();
         let delete_owner = cx.weak_entity();
         let f2_owner = cx.weak_entity();
+        let member_shortcut_owner = cx.weak_entity();
         let zoom_in_owner = cx.weak_entity();
         let zoom_out_owner = cx.weak_entity();
         let reset_owner = cx.weak_entity();
@@ -1039,6 +1040,17 @@ impl Render for MdeWorkbenchItem {
                             item.begin_inline_edit(id, window, cx);
                         }
                     });
+                    cx.stop_propagation();
+                } else if event.keystroke.key.eq_ignore_ascii_case("enter")
+                    && event.keystroke.modifiers.control
+                {
+                    let kind = if event.keystroke.modifiers.shift {
+                        ModelingMemberKind::Operation
+                    } else {
+                        ModelingMemberKind::Attribute
+                    };
+                    let _ = member_shortcut_owner.update(cx, |item, cx|
+                        item.add_member_to_selected(kind, cx));
                     cx.stop_propagation();
                 } else if matches!(event.keystroke.key.as_str(), "delete" | "backspace") {
                     let _ = delete_owner.update(cx, |item, cx| item.delete_selected(cx));
