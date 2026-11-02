@@ -7,11 +7,10 @@ rust-version = "1.98.1"
 
 [dependencies]
 bellatrix_project = { path = "../bellatrix_project" }
-bellatrix_mde_model = { path = "../bellatrix_mde_model" }
+bellatrix_mde = { path = "../bellatrix_mde" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 cordis-rs.workspace = true
 tokio.workspace = true
-bellatrix_mde_modeling = { path = "../bellatrix_mde_modeling" }
 bellatrix_mde_rust_generator = { path = "../bellatrix_mde_rust_generator" }
 bellatrix_mde_html_exporter = { path = "../bellatrix_mde_html_exporter" }

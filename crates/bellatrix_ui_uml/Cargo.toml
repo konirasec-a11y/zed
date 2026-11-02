@@ -3,7 +3,7 @@ publish.workspace = true
 name = "bellatrix_ui_uml"
 version = "0.1.0"
 edition = "2024"
-description = "Reusable UML presentation on Zed GPUI, independent from MDE model storage"
+description = "UML presentation on Zed GPUI using the single MDE domain"
 
 [dependencies]
 gpui.workspace = true
@@ -11,4 +11,4 @@ ui.workspace = true
 ui_input.workspace = true
 log.workspace = true
 bellatrix_design_system = { path = "../bellatrix_design_system" }
-bellatrix_mde_modeling = { path = "../bellatrix_mde_modeling" }
+bellatrix_mde = { path = "../bellatrix_mde" }

@@ -1,5 +1,5 @@
 //! Engine-MDE as a native Zed Workspace Item.
-//! Zed owns tabs, focus and docks; Cordis owns domain mutations.
+//! Zed owns presentation; bellatrix_mde owns semantics; Cordis publishes revisions.
 mod snapshot;
 mod source;
 pub mod panels;
@@ -17,14 +17,13 @@ pub use source::MdeUiSource;
 
 use bellatrix_mde_cordis::{
     MdeUiCommand, ModelingCreateElementRequested, ModelingCreateRelationRequested,
-    ModelingElementKind, ModelingRelationKind, ModelingTool,
     ModelingMoveViewRequested, ModelingRenameRequested, ModelingResizeViewRequested,
     ModelingDeleteElementRequested, ModelingSetPropertyRequested,
-    UmlQuickCommand, ModelingQuickEditRequested, ModelingSetNameExpressionRequested,
-    ModelingAddMemberRequested, ModelingMemberKind,
+    ModelingQuickEditRequested, ModelingSetNameExpressionRequested, ModelingAddMemberRequested,
 };
-use bellatrix_mde_model::{Geometry, PathSegment};
-use bellatrix_mde_modeling::{UmlType, RelationshipGraph, relationship_presentation, classifier_contents, interface_layout};
+use bellatrix_mde::{Geometry, PathSegment, UmlQuickCommand, UmlType, ModelingRelationKind,
+    RelationshipGraph, relationship_presentation, classifier_contents, interface_layout};
+use bellatrix_mde::commands::{ModelingElementKind, ModelingMemberKind, ModelingTool};
 use bellatrix_ui_uml::{UmlClassifier, UmlFigure, UmlLineSegment, UmlRelationGlyph};
 use quick_edit_view::quick_edit_for_element;
 use ui_input::InputField;
@@ -69,24 +68,12 @@ pub struct MdeWorkbenchItem {
     feedback: String,
     _watch_task: Task<()>,
 }
-/// Pure two-click relationship interaction. Model identity is independent of
-/// classifier notation, and choosing an endpoint must never start a move.
 #[derive(Debug, PartialEq, Eq)]
-enum RelationClick {
-    First,
-    Repeat,
-    Connect(String),
-}
+enum RelationClick { First, Repeat, Connect(String) }
 fn choose_relation_endpoint(pending: &mut Option<String>, clicked: &str) -> RelationClick {
     match pending.take() {
-        None => {
-            *pending = Some(clicked.to_owned());
-            RelationClick::First
-        }
-        Some(from) if from == clicked => {
-            *pending = Some(from);
-            RelationClick::Repeat
-        }
+        None => { *pending = Some(clicked.to_owned()); RelationClick::First }
+        Some(from) if from == clicked => { *pending = Some(from); RelationClick::Repeat }
         Some(from) => RelationClick::Connect(from),
     }
 }
@@ -129,12 +116,8 @@ impl MdeWorkbenchItem {
             cx.notify();
         }
     }
-    fn name_expression_text(element: &bellatrix_mde_model::Element) -> String {
-        let stereotype = element.properties.get("stereotype").and_then(serde_json::Value::as_str)
-            .filter(|value| !value.trim().is_empty()).map_or_else(String::new, |value| format!("<< {value} >> "));
-        let visibility = element.properties.get("visibility").and_then(serde_json::Value::as_str)
-            .and_then(|value| match value { "protected" => Some("# "), "private" => Some("- "), "package" => Some("~ "), _ => None }).unwrap_or("");
-        format!("{stereotype}{visibility}{}", element.name)
+    fn name_expression_text(element: &bellatrix_mde::Element) -> String {
+        bellatrix_mde::commands::name_expression_text(element)
     }
     pub(crate) fn run_quick_action(&mut self, action: UmlQuickCommand, cx: &mut Context<Self>) {
         let Some(element_id) = self.selected_element.clone() else {
@@ -177,9 +160,7 @@ impl MdeWorkbenchItem {
     fn commit_inline_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let (Some(id), Some(field)) = (self.editing_subject.clone(), self.inline_editor.clone()) else { return };
         let name = field.read(cx).text(cx).trim().to_owned();
-        if name.is_empty() {
-            field.update(cx, |field, cx| field.set_error(Some("Name is required"), cx)); return;
-        }
+        if name.is_empty() { field.update(cx, |field, cx| field.set_error(Some("Name is required"), cx)); return; }
         let Ok(snapshot) = self.source.snapshot() else {
             self.feedback = "Project snapshot unavailable".into(); cx.notify(); return;
         };
@@ -221,11 +202,7 @@ impl MdeWorkbenchItem {
         cx.notify();
     }
     pub fn select_tool(&mut self, kind: ModelingTool, cx: &mut Context<Self>) {
-        if self.selected_tool == Some(kind) {
-            self.cancel_tool(cx);
-        } else {
-            self.arm_drag_tool(kind, cx);
-        }
+        if self.selected_tool == Some(kind) { self.cancel_tool(cx); } else { self.arm_drag_tool(kind, cx); }
     }
     pub fn cancel_tool(&mut self, cx: &mut Context<Self>) {
         self.selected_tool = None;
@@ -238,13 +215,11 @@ impl MdeWorkbenchItem {
             RelationClick::First => {
                 self.select_element(target, cx);
                 self.feedback = format!("{}: source selected. Click a second element", kind.label());
-                cx.notify();
-                return;
+                cx.notify(); return;
             }
             RelationClick::Repeat => {
                 self.feedback = format!("{}: choose another element to connect", kind.label());
-                cx.notify();
-                return;
+                cx.notify(); return;
             }
             RelationClick::Connect(from) => from,
         };
@@ -259,16 +234,13 @@ impl MdeWorkbenchItem {
         self.selected_tool = None; cx.notify();
     }
     pub fn arm_drag_tool(&mut self, tool: ModelingTool, cx: &mut Context<Self>) {
-        // Starting a connection cancels any previous move/resize or Quick Edit
-        // gesture. The next two clicks belong only to endpoint selection.
         self.gesture = None;
         self.inline_editor = None;
         self.editing_subject = None;
         self.selected_tool = Some(tool);
         self.pending_relation_source = None;
         self.feedback = match tool {
-            ModelingTool::Relation(kind) =>
-                format!("{}: {}", kind.label(), kind.endpoint_instruction()),
+            ModelingTool::Relation(kind) => format!("{}: {}", kind.label(), kind.endpoint_instruction()),
             ModelingTool::Element(kind) => format!("{}: click canvas to place", kind.label()),
         }; cx.notify();
     }
@@ -401,9 +373,7 @@ impl Render for MdeWorkbenchItem {
         let relation_hint = match self.selected_tool {
             Some(ModelingTool::Relation(kind)) => Some(if self.pending_relation_source.is_some() {
                 format!("{}: click second element (target)", kind.label())
-            } else {
-                format!("{}: {}", kind.label(), kind.endpoint_instruction())
-            }),
+            } else { format!("{}: {}", kind.label(), kind.endpoint_instruction()) }),
             _ => None,
         };
         let mut title = format!("MDE · {}", self.project_id().as_str());
@@ -416,8 +386,6 @@ impl Render for MdeWorkbenchItem {
                 details = format!("{} elements · {} relations · rev {}", snapshot.section.elements.len(), snapshot.section.relations.len(), snapshot.revision);
                 if let Some(diagram) = diagram {
                     title = format!("{} / {}", snapshot.name, diagram.name);
-                    // Auto routes are a visual projection. Recompute old
-                    // persisted overlapping lines without mutating the model.
                     let auto_routes = RelationshipGraph::new(&snapshot.section, &diagram.id).paths();
                     let mut views = diagram.views.iter().collect::<Vec<_>>();
                     views.sort_by_key(|view| view.z_index);
@@ -439,19 +407,16 @@ impl Render for MdeWorkbenchItem {
                                 let padding = 24.0_f32;
                                 let width = (max_x - min_x + 2.0 * padding).max(48.0) * zoom;
                                 let height = (max_y - min_y + 2.0 * padding).max(48.0) * zoom;
-                                let place = |point: bellatrix_mde_model::Point| ((point.x as f32 - min_x + padding) * zoom, (point.y as f32 - min_y + padding) * zoom);
+                                let place = |point: bellatrix_mde::Point| ((point.x as f32 - min_x + padding) * zoom, (point.y as f32 - min_y + padding) * zoom);
                                 let presentation = relationship_presentation(relation);
                                 let local_segments = segments.iter().map(|segment| match segment {
                                     PathSegment::Line { to } => UmlLineSegment::Line { to: place(*to) },
                                     PathSegment::Cubic { control1, control2, to } => UmlLineSegment::Cubic {
-                                        control1: place(*control1),
-                                        control2: place(*control2),
-                                        to: place(*to),
+                                        control1: place(*control1), control2: place(*control2), to: place(*to),
                                     },
                                 }).collect();
                                 let glyph = UmlRelationGlyph::new(presentation.style, width, height, place(*start), place(end))
-                                    .segments(local_segments)
-                                    .selected(self.selected_element.as_deref() == Some(subject));
+                                    .segments(local_segments).selected(self.selected_element.as_deref() == Some(subject));
                                 let edge_owner = cx.weak_entity(); let edge_id = relation.id.clone();
                                 edges.push(div().id(format!("mde-edge-{}", view.id)).absolute()
                                     .left(px((min_x - padding) * zoom + pan.0)).top(px((min_y - padding) * zoom + pan.1)).w(px(width)).h(px(height)).cursor_pointer()
@@ -516,8 +481,7 @@ impl Render for MdeWorkbenchItem {
                                 "rust.field" | "uml.attribute" => classifier = classifier.attribute_with_id(member.id.clone(), text),
                                 "rust.function" | "uml.operation" => classifier = classifier.operation_with_id(member.id.clone(), text),
                                 "uml.reception" => classifier = classifier.reception_with_id(member.id.clone(), text),
-                                "uml.template_parameter" => classifier = classifier.template_parameter_with_id(
-                                    member.id.clone(), format!("T: {}", member.name)),
+                                "uml.template_parameter" => classifier = classifier.template_parameter_with_id(member.id.clone(), format!("T: {}", member.name)),
                                 _ => {}
                             }
                         }
@@ -546,16 +510,12 @@ impl Render for MdeWorkbenchItem {
                         } else if semantic_type.is_some_and(UmlType::is_classifier) { classifier.into_any_element() }
                         else { div().size_full().border_1().border_color(border).child(Label::new(format!("Unsupported notation: {}", element.kind))).into_any_element() };
                         let drag_owner = cx.weak_entity(); let drag_id = view.id.clone();
-                        // A connection tool is a different interaction mode.
-                        // Its hit surface sits above every classifier compartment,
-                        // so inner title/member mouse handlers cannot swallow clicks.
                         let connection_mode = matches!(self.selected_tool, Some(ModelingTool::Relation(_)));
                         let connect_owner = cx.weak_entity();
                         let connect_target = subject.to_owned();
                         let resize_owner = cx.weak_entity(); let resize_id = view.id.clone(); let element_id = subject.to_owned();
                         cards.push(div().id(format!("mde-view-{}", view.id)).absolute()
                             .left(px(local_x * zoom + pan.0)).top(px(local_y * zoom + pan.1)).w(px(local_width * zoom)).h(px(local_height * zoom))
-                            // Selection bounds are not a symbol. Only the notation paints its fill.
                             .cursor_pointer()
                             .on_mouse_down(MouseButton::Left, move |event: &MouseDownEvent, window, cx| {
                                 let _ = drag_owner.update(cx, |item, cx| { item.start_move(drag_id.clone(), element_id.clone(), revision, event.position, cx); cx.focus_self(window); });
@@ -573,21 +533,14 @@ impl Render for MdeWorkbenchItem {
                                     let _ = resize_owner.update(cx, |item, cx| item.start_resize(resize_id.clone(), width, height, revision, event.position, cx));
                                     cx.stop_propagation();
                                 })))
-                            .when(connection_mode, |card| card.child(
-                                div()
-                                    .id(format!("mde-connection-target-{}", view.id))
-                                    .absolute().top_0().right_0().bottom_0().left_0()
-                                    .cursor_crosshair()
-                                    .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                                        let _ = connect_owner.update(cx, |item, cx| {
-                                            if let Some(ModelingTool::Relation(kind)) = item.selected_tool {
-                                                item.link_endpoint(kind, connect_target.clone(), cx);
-                                                cx.focus_self(window);
-                                            }
-                                        });
-                                        cx.stop_propagation();
-                                    }),
-                            )));
+                            .when(connection_mode, |card| card.child(div()
+                                .id(format!("mde-connection-target-{}", view.id)).absolute().top_0().right_0().bottom_0().left_0().cursor_crosshair()
+                                .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                                    let _ = connect_owner.update(cx, |item, cx| {
+                                        if let Some(ModelingTool::Relation(kind)) = item.selected_tool { item.link_endpoint(kind, connect_target.clone(), cx); cx.focus_self(window); }
+                                    });
+                                    cx.stop_propagation();
+                                }))));
                     }
                 }
             }
@@ -598,8 +551,7 @@ impl Render for MdeWorkbenchItem {
         let pan_start_owner = cx.weak_entity(); let pan_end_owner = cx.weak_entity(); let pan_out_owner = cx.weak_entity();
         let delete_owner = cx.weak_entity(); let f2_owner = cx.weak_entity(); let member_shortcut_owner = cx.weak_entity();
         let zoom_in_owner = cx.weak_entity(); let zoom_out_owner = cx.weak_entity(); let reset_owner = cx.weak_entity();
-        let cancel_relation_owner = cx.weak_entity();
-        let escape_relation_owner = cx.weak_entity();
+        let cancel_relation_owner = cx.weak_entity(); let escape_relation_owner = cx.weak_entity();
         div().id(format!("mde-workbench-{}", self.project_id().as_str())).size_full().flex().flex_col().track_focus(&self.focus_handle)
             .on_key_down(move |event: &KeyDownEvent, window, cx| {
                 if event.keystroke.key.eq_ignore_ascii_case("f2") {
@@ -610,9 +562,7 @@ impl Render for MdeWorkbenchItem {
                     let _ = member_shortcut_owner.update(cx, |item, cx| item.add_member_to_selected(kind, cx)); cx.stop_propagation();
                 } else if event.keystroke.key.eq_ignore_ascii_case("escape") {
                     let _ = escape_relation_owner.update(cx, |item, cx| {
-                        if item.editing_subject.is_none() && item.selected_tool.is_some() {
-                            item.cancel_tool(cx);
-                        }
+                        if item.editing_subject.is_none() && item.selected_tool.is_some() { item.cancel_tool(cx); }
                     });
                 } else if matches!(event.keystroke.key.as_str(), "delete" | "backspace") {
                     let _ = delete_owner.update(cx, |item, cx| { if item.editing_subject.is_none() { item.delete_selected(cx); } });
@@ -621,14 +571,9 @@ impl Render for MdeWorkbenchItem {
             }).bg(background).text_color(palette.text)
             .child(div().h(px(39.0)).flex().items_center().justify_between().px_3().border_b_1().border_color(border)
                 .child(Label::new(title)).child(div().flex().gap_2().items_center().child(Label::new(details))
-                    .when_some(relation_hint, |header, hint| header.child(
-                        div().flex().gap_1().items_center()
-                            .child(Label::new(hint))
-                            .child(ui::Button::new("mde-cancel-relation", "Cancel")
-                                .on_click(move |_,_,cx| {
-                                    let _ = cancel_relation_owner.update(cx, |item,cx| item.cancel_tool(cx));
-                                }))
-                    ))
+                    .when_some(relation_hint, |header, hint| header.child(div().flex().gap_1().items_center()
+                        .child(Label::new(hint)).child(ui::Button::new("mde-cancel-relation", "Cancel")
+                            .on_click(move |_, _, cx| { let _ = cancel_relation_owner.update(cx, |item, cx| item.cancel_tool(cx)); }))))
                     .child(ui::Button::new("mde-zoom-out", "-").on_click(move |_, _, cx| { let _ = zoom_out_owner.update(cx, |item, cx| item.set_zoom(item.zoom / 1.2, cx)); }))
                     .child(Label::new(format!("{:.0}%", zoom * 100.0)))
                     .child(ui::Button::new("mde-zoom-in", "+").on_click(move |_, _, cx| { let _ = zoom_in_owner.update(cx, |item, cx| item.set_zoom(item.zoom * 1.2, cx)); }))
@@ -662,24 +607,20 @@ impl Render for MdeWorkbenchItem {
 #[cfg(test)]
 mod relationship_interaction_tests {
     use super::*;
-
     #[test]
     fn two_clicks_connect_distinct_model_elements() {
         let mut pending = None;
         assert_eq!(choose_relation_endpoint(&mut pending, "type-list"), RelationClick::First);
         assert_eq!(pending.as_deref(), Some("type-list"));
-        assert_eq!(choose_relation_endpoint(&mut pending, "type-task"),
-            RelationClick::Connect("type-list".to_owned()));
+        assert_eq!(choose_relation_endpoint(&mut pending, "type-task"), RelationClick::Connect("type-list".to_owned()));
         assert_eq!(pending, None);
     }
-
     #[test]
     fn clicking_source_again_does_not_drop_armed_tool() {
         let mut pending = None;
         assert_eq!(choose_relation_endpoint(&mut pending, "type-list"), RelationClick::First);
         assert_eq!(choose_relation_endpoint(&mut pending, "type-list"), RelationClick::Repeat);
         assert_eq!(pending.as_deref(), Some("type-list"));
-        assert_eq!(choose_relation_endpoint(&mut pending, "type-task"),
-            RelationClick::Connect("type-list".into()));
+        assert_eq!(choose_relation_endpoint(&mut pending, "type-task"), RelationClick::Connect("type-list".into()));
     }
 }

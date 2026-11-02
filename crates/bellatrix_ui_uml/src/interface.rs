@@ -1,7 +1,7 @@
 //! Circular notation of a classifier; shared members and editing live in class.rs.
 use crate::class::{UmlClassifier, compartment, inline_field};
 use bellatrix_design_system::Palette;
-use bellatrix_mde_modeling::{ClassifierContents, interface_layout};
+use bellatrix_mde::{ClassifierContents, interface_layout};
 use gpui::{App, InteractiveElement, IntoElement, MouseButton, RenderOnce, Window, div, prelude::*, px, rgb};
 
 #[derive(IntoElement)]
@@ -32,12 +32,10 @@ impl RenderOnce for UmlInterfaceBall {
         let edit_title = classifier.edit_title;
         let stroke = rgb(if classifier.selected { palette.selection } else { palette.text });
         div().size_full().relative()
-            // A selection outline must not change the content box and move the circle.
             .when(classifier.selected, |root| root.child(div().absolute().size_full()
                 .border_1().border_color(rgb(palette.selection))))
             .child(div().id("uml-interface-ball").absolute()
-                .left(units(layout.center.x - layout.radius))
-                .top(units(layout.center.y - layout.radius))
+                .left(units(layout.center.x - layout.radius)).top(units(layout.center.y - layout.radius))
                 .w(units(layout.radius * 2.0)).h(units(layout.radius * 2.0))
                 .rounded_full().border_1().border_color(stroke).bg(rgb(palette.canvas)))
             .when_some(classifier.stereotype, |root, stereotype| root.child(
@@ -46,16 +44,14 @@ impl RenderOnce for UmlInterfaceBall {
                     .text_size(px(10.0 * scale)).text_color(rgb(palette.muted)).child(stereotype)))
             .child(div().id("uml-interface-name").absolute()
                 .left_0().right_0().top(units(layout.label_top))
-                .min_h(px(22.0 * scale)).min_w_0().px_1().flex().items_center().justify_center()
-                .cursor_pointer()
+                .min_h(px(22.0 * scale)).min_w_0().px_1().flex().items_center().justify_center().cursor_pointer()
                 .on_mouse_down(MouseButton::Left, move |event, window, cx| {
                     if event.click_count >= 2 {
                         if let Some(handler) = &edit_title { handler(window, cx); }
                         cx.stop_propagation();
                     }
                 }).child(title))
-            .child(div().absolute().left_0().right_0().top(units(layout.members_top))
-                .flex().flex_col()
+            .child(div().absolute().left_0().right_0().top(units(layout.members_top)).flex().flex_col()
                 .when(!classifier.attributes.is_empty(), |root| root.child(compartment(
                     classifier.attributes, "attribute", interactions.clone(), palette, true)))
                 .when(!classifier.operations.is_empty(), |root| root.child(compartment(

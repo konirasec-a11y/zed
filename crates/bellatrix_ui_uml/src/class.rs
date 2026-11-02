@@ -1,7 +1,7 @@
 //! Shared classifier labels, compartments and editing. The notation selects the silhouette.
 use crate::{inline_edit::UmlInlineNameEditor, interface::UmlInterfaceBall};
 use bellatrix_design_system::Palette;
-use bellatrix_mde_modeling::UmlType;
+use bellatrix_mde::UmlType;
 use gpui::{App, Entity, InteractiveElement, IntoElement, MouseButton, RenderOnce, SharedString, Window, div, prelude::*, px, rgb};
 use std::rc::Rc;
 use ui_input::InputField;
@@ -44,7 +44,6 @@ pub struct UmlClassifier {
     pub(crate) view_height: f64,
     pub(crate) view_scale: f32,
 }
-// Preserve callers of the initial classifier component without making Interface a Class.
 pub type UmlClassCard = UmlClassifier;
 
 impl UmlClassifier {
@@ -93,8 +92,7 @@ impl UmlClassifier {
         self.operations.push(MemberRow { id: Some(id.into()), title: title.into() }); self
     }
     pub fn template_parameter_with_id(mut self, id: impl Into<String>, title: impl Into<SharedString>) -> Self {
-        self.template_parameters.push(MemberRow { id: Some(id.into()), title: title.into() });
-        self
+        self.template_parameters.push(MemberRow { id: Some(id.into()), title: title.into() }); self
     }
     pub fn reception_with_id(mut self, id: impl Into<String>, title: impl Into<SharedString>) -> Self {
         self.receptions.push(MemberRow { id: Some(id.into()), title: title.into() }); self

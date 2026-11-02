@@ -1,10 +1,8 @@
-//! Engine-MDE consumes Cordis services and exposes public, typed modeling operations.
 use crate::view_edits::{ModelingMoveView, move_view};
-use bellatrix_mde_model::{ModelingSection, Project};
-use bellatrix_mde_modeling::Graph;
-use bellatrix_project::{ProjectDocument, ProjectId, ProjectReplace, ProjectReplaceRequested, ProjectService};
-use cordis::event::{QueryOutcome, responder};
-use cordis::{Context, Event, InjectSpec, Plugin, Routing, Service};
+use bellatrix_mde::{Graph, ModelingSection, Project, commands::Command};
+use bellatrix_project::{ProjectDocument, ProjectId, ProjectService};
+use cordis::event::responder;
+use cordis::{Context, Event, InjectSpec, Plugin, Service};
 use std::{convert::Infallible, io, sync::Arc};
 
 pub const MODELING_NAMESPACE: &str = "bellatrix.bellatrix-mde-modeling";
@@ -13,12 +11,13 @@ pub(crate) fn namespace_for(document: &ProjectDocument) -> &'static str {
     if document.section(MODELING_NAMESPACE).is_some() { MODELING_NAMESPACE } else { LEGACY_MODELING_NAMESPACE }
 }
 pub(crate) fn from_document(document: &ProjectDocument) -> Result<ModelingSection, String> {
-    let state = document.section(MODELING_NAMESPACE).ok_or("bellatrix-project has no Modeling section")?;
+    let state = document.section(MODELING_NAMESPACE).or_else(|| document.section(LEGACY_MODELING_NAMESPACE))
+        .ok_or("bellatrix-project has no Modeling section")?;
     serde_json::from_value(state.clone()).map_err(|error| error.to_string())
 }
 pub fn with_model(document: ProjectDocument, model: &Project) -> Result<ProjectDocument, String> {
     if document.id().as_str() != model.id || document.name() != model.name {
-        return Err("bellatrix-mde-model and platform bellatrix-project identities differ".into());
+        return Err("MDE and platform project identities differ".into());
     }
     Graph::new(model).validate().map_err(|error| error.to_string())?;
     let state = serde_json::to_value(ModelingSection::from_model(model)).map_err(|error| error.to_string())?;
@@ -60,120 +59,106 @@ impl Plugin for MdePlugin {
         )).map_err(|error| io::Error::other(error.to_string()))?;
         let creation_projects = Arc::clone(&projects);
         let _creation = ctx.on::<crate::create_element::ModelingCreateElement, _>(responder(
-            move |ctx: Context, req: crate::create_element::ModelingCreateElementRequested| {
+            move |ctx: Context, request: crate::create_element::ModelingCreateElementRequested| {
                 let projects = Arc::clone(&creation_projects);
                 async move {
-                    let result = crate::create_element::create_element(&ctx, &projects, req).await;
+                    let result = crate::create_element::create_element(&ctx, &projects, request).await;
                     Ok::<_, Infallible>(Some(result))
                 }
             },
         )).map_err(|error| io::Error::other(error.to_string()))?;
         let link_projects = Arc::clone(&projects);
         let _create_relation = ctx.on::<crate::create_relation::ModelingCreateRelation, _>(responder(
-            move |ctx: Context, req: crate::create_relation::ModelingCreateRelationRequested| {
+            move |ctx: Context, request: crate::create_relation::ModelingCreateRelationRequested| {
                 let projects = Arc::clone(&link_projects);
                 async move {
-                    let result = crate::create_relation::create_relation(&ctx, &projects, req).await;
+                    let result = crate::create_relation::create_relation(&ctx, &projects, request).await;
                     Ok::<_, Infallible>(Some(result))
                 }
             },
         )).map_err(|error| io::Error::other(error.to_string()))?;
         let delete_projects = Arc::clone(&projects);
         let _deletion = ctx.on::<crate::delete_element::ModelingDeleteElement, _>(responder(
-            move |ctx: Context, req: crate::delete_element::ModelingDeleteElementRequested| {
+            move |ctx: Context, request: crate::delete_element::ModelingDeleteElementRequested| {
                 let projects = Arc::clone(&delete_projects);
                 async move {
-                    let result = crate::delete_element::delete_element(&ctx, &projects, req).await;
+                    let result = crate::delete_element::delete_element(&ctx, &projects, request).await;
                     Ok::<_, Infallible>(Some(result))
                 }
             },
         )).map_err(|error| io::Error::other(error.to_string()))?;
         let property_projects = Arc::clone(&projects);
         let _property_edit = ctx.on::<crate::set_property::ModelingSetProperty, _>(responder(
-            move |ctx: Context, req: crate::set_property::ModelingSetPropertyRequested| {
+            move |ctx: Context, request: crate::set_property::ModelingSetPropertyRequested| {
                 let projects = Arc::clone(&property_projects);
                 async move {
-                    let result = crate::set_property::set_property(&ctx, &projects, req).await;
+                    let result = crate::set_property::set_property(&ctx, &projects, request).await;
                     Ok::<_, Infallible>(Some(result))
                 }
             },
         )).map_err(|error| io::Error::other(error.to_string()))?;
         let names_projects = Arc::clone(&projects);
         let _name_expression = ctx.on::<crate::name_expression::ModelingSetNameExpression, _>(responder(
-            move |ctx: Context, req: crate::name_expression::ModelingSetNameExpressionRequested| {
+            move |ctx: Context, request: crate::name_expression::ModelingSetNameExpressionRequested| {
                 let projects = Arc::clone(&names_projects);
                 async move {
-                    let result = crate::name_expression::set_name_expression(&ctx, &projects, req).await;
+                    let result = crate::name_expression::set_name_expression(&ctx, &projects, request).await;
                     Ok::<_, Infallible>(Some(result))
                 }
             },
         )).map_err(|error| io::Error::other(error.to_string()))?;
         let interface_projects = Arc::clone(&projects);
         let _interface_quick_edit = ctx.on::<crate::interface_quick_edit::ModelingInterfaceQuickEdit, _>(responder(
-            move |ctx: Context, req: crate::interface_quick_edit::ModelingInterfaceQuickEditRequested| {
+            move |ctx: Context, request: crate::interface_quick_edit::ModelingInterfaceQuickEditRequested| {
                 let projects = Arc::clone(&interface_projects);
                 async move {
-                    let result = crate::interface_quick_edit::execute_quick_edit(&ctx, &projects, req).await;
+                    let result = crate::interface_quick_edit::execute_quick_edit(&ctx, &projects, request).await;
                     Ok::<_, Infallible>(Some(result))
                 }
             },
         )).map_err(|error| io::Error::other(error.to_string()))?;
         let member_projects = Arc::clone(&projects);
         let _add_member = ctx.on::<crate::add_member::ModelingAddMember, _>(responder(
-            move |ctx: Context, req: crate::add_member::ModelingAddMemberRequested| {
+            move |ctx: Context, request: crate::add_member::ModelingAddMemberRequested| {
                 let projects = Arc::clone(&member_projects);
                 async move {
-                    let result = crate::add_member::add_member(&ctx, &projects, req).await;
+                    let result = crate::add_member::add_member(&ctx, &projects, request).await;
                     Ok::<_, Infallible>(Some(result))
                 }
             },
         )).map_err(|error| io::Error::other(error.to_string()))?;
         let resizing_projects = Arc::clone(&projects);
         let _resize = ctx.on::<crate::resize_view::ModelingResizeView, _>(responder(
-            move |ctx: Context, req: crate::resize_view::ModelingResizeViewRequested| {
+            move |ctx: Context, request: crate::resize_view::ModelingResizeViewRequested| {
                 let projects = Arc::clone(&resizing_projects);
                 async move {
-                    let result = crate::resize_view::resize_view(&ctx, &projects, req).await;
+                    let result = crate::resize_view::resize_view(&ctx, &projects, request).await;
                     Ok::<_, Infallible>(Some(result))
                 }
             },
         )).map_err(|error| io::Error::other(error.to_string()))?;
         let movement_projects = Arc::clone(&projects);
         let _movement = ctx.on::<ModelingMoveView, _>(responder(
-            move |ctx: Context, req: crate::view_edits::ModelingMoveViewRequested| {
+            move |ctx: Context, request: crate::view_edits::ModelingMoveViewRequested| {
                 let projects = Arc::clone(&movement_projects);
                 async move {
-                    let result = move_view(&ctx, &projects, req).await;
+                    let result = move_view(&ctx, &projects, request).await;
                     Ok::<_, Infallible>(Some(result))
                 }
             },
         )).map_err(|error| io::Error::other(error.to_string()))?;
-        let _listener = ctx.on::<ModelingRename, _>(responder(move |ctx: Context, req: ModelingRenameRequested| {
+        let _listener = ctx.on::<ModelingRename, _>(responder(move |ctx: Context, request: ModelingRenameRequested| {
             let projects = Arc::clone(&projects);
             async move {
-                let result = rename(&ctx, &projects, req).await;
+                let result = rename(&ctx, &projects, request).await;
                 Ok::<_, Infallible>(Some(result))
             }
         })).map_err(|error| io::Error::other(error.to_string()))?;
         Ok(())
     }
 }
-async fn rename(ctx: &Context, projects: &ProjectService, request: ModelingRenameRequested) -> Result<u64, String> {
-    if request.new_name.trim().is_empty() { return Err("name must not be blank".into()); }
-    let document = projects.snapshot(&request.project_id).map_err(|error| error.to_string())?;
-    if document.revision() != request.expected_revision { return Err("stale Modeling edit; reload bellatrix-project snapshot".into()); }
-    let mut section = from_document(&document)?;
-    let element = section.elements.iter_mut().find(|element| element.id == request.element_id)
-        .ok_or("bellatrix-mde-model element not found")?;
-    element.name = request.new_name;
-    Graph::new(&section.to_model(document.id().as_str(), document.name())).validate().map_err(|error| error.to_string())?;
-    let value = serde_json::to_value(section).map_err(|error| error.to_string())?;
-    match ctx.query::<ProjectReplace>(Routing::Unscoped, ProjectReplaceRequested {
-        id: request.project_id, namespace: namespace_for(&document).into(),
-        expected_revision: request.expected_revision, state: value,
-    }).await.map_err(|error| error.to_string())? {
-        QueryOutcome::Answer(Ok(document)) => Ok(document.revision()),
-        QueryOutcome::Answer(Err(error)) => Err(error.to_string()),
-        QueryOutcome::Miss => Err("ProjectService is unavailable".into()),
-    }
+async fn rename(context: &Context, projects: &ProjectService, request: ModelingRenameRequested) -> Result<u64, String> {
+    crate::mutation::execute(context, projects, request.project_id, request.expected_revision, Command::Rename {
+        element_id: request.element_id, name: request.new_name,
+    }).await
 }

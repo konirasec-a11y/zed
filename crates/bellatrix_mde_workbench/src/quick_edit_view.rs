@@ -1,8 +1,7 @@
-//! The adapter maps semantic action descriptors to UI controls; no actions are owned by a shape.
+//! Map domain action descriptors to controls; no action semantics belong to a shape.
 use crate::MdeWorkbenchItem;
-use bellatrix_mde_cordis::{ModelingMemberKind, UmlQuickCommand};
-use bellatrix_mde_model::Element;
-use bellatrix_mde_modeling::{QuickEditAvailability, QuickEditControl, QuickEditSide, quick_edit_for};
+use bellatrix_mde::{Element, UmlQuickCommand, QuickEditAvailability, QuickEditControl, QuickEditSide, quick_edit_for};
+use bellatrix_mde::commands::ModelingMemberKind;
 use bellatrix_ui_uml::{UmlQuickAction, UmlQuickEdit, UmlVisibilityPicker};
 use gpui::Entity;
 use ui::IconName;
@@ -32,12 +31,10 @@ pub(crate) fn quick_edit_for_element(element: &Element, owner: Entity<MdeWorkben
                 "uml.add-part" => IconName::BoxOpen,
                 _ => return None,
             };
-            Some((action.side, UmlQuickAction { id: action.id, label: action.title,
-                icon, row: action.row, shortcut: action.shortcut }))
+            Some((action.side, UmlQuickAction { id: action.id, label: action.title, icon, row: action.row, shortcut: action.shortcut }))
         }).collect();
     let make_actions = |side: QuickEditSide, role: &'static str| {
-        let actions = actions.iter().filter(|(candidate, _)| *candidate == side)
-            .map(|(_, action)| action.clone()).collect::<Vec<_>>();
+        let actions = actions.iter().filter(|(candidate, _)| *candidate == side).map(|(_, action)| action.clone()).collect::<Vec<_>>();
         if actions.is_empty() { return None; }
         let owner = owner.clone();
         Some(UmlQuickEdit::new(actions, move |id, _, cx| {
@@ -69,12 +66,10 @@ pub(crate) fn quick_edit_for_element(element: &Element, owner: Entity<MdeWorkben
     };
     let right = make_actions(QuickEditSide::Right, "right");
     let left = make_actions(QuickEditSide::Left, "left");
-    let visibility = descriptors.iter().any(|action| action.id == "uml.visibility"
-        && action.availability == QuickEditAvailability::Implemented).then(|| {
+    let visibility = descriptors.iter().any(|action| action.id == "uml.visibility" && action.availability == QuickEditAvailability::Implemented).then(|| {
         let current = element.properties.get("visibility").and_then(serde_json::Value::as_str).unwrap_or("public");
         UmlVisibilityPicker::new(current, move |value, _, cx| {
-            owner.update(cx, |item, cx| item.set_selected_property("properties.visibility".into(),
-                serde_json::Value::String(value.into()), cx));
+            owner.update(cx, |item, cx| item.set_selected_property("properties.visibility".into(), serde_json::Value::String(value.into()), cx));
         })
     });
     (right, left, visibility)

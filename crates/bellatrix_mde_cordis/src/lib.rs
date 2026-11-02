@@ -1,6 +1,7 @@
-//! Typed Cordis event boundary; Tokio transports requests to a headless executor.
-//! The bridge does not own UI types or know whether the requester is local/remote.
-pub use bellatrix_mde_model::ModelingSection;
+//! Cordis transport and project-revision integration for the single MDE domain.
+pub use bellatrix_mde::{ModelingSection, ModelingRelationKind, UmlQuickCommand};
+pub use bellatrix_mde::commands::{ModelingElementKind, ModelingTool};
+mod mutation;
 mod task_events;
 pub use task_events::{
     ModelingRun, ModelingRunRequested, ModelingTaskCompleted, ModelingTaskCompletedEvent,
@@ -9,15 +10,10 @@ pub use task_events::{
 mod project_integration;
 mod name_expression;
 pub use name_expression::{ModelingSetNameExpression, ModelingSetNameExpressionRequested};
-mod class_features;
 mod quick_edit_commands;
 pub use quick_edit_commands::{ModelingQuickEdit, ModelingQuickEditRequested};
-pub use bellatrix_mde_modeling::UmlQuickCommand;
 mod interface_quick_edit;
 pub use interface_quick_edit::{InterfaceQuickAction, ModelingInterfaceQuickEdit, ModelingInterfaceQuickEditRequested};
-mod class_diagram;
-pub use class_diagram::{ModelingElementKind, ModelingTool};
-pub use bellatrix_mde_modeling::ModelingRelationKind;
 mod create_relation;
 pub use create_relation::{ModelingCreateRelation, ModelingCreateRelationRequested, projected_automatic_routes};
 mod create_element;
@@ -33,7 +29,7 @@ pub use resize_view::{ModelingResizeView, ModelingResizeViewRequested};
 mod ui_bridge;
 pub use ui_bridge::{MdeUiBridge, MdeUiCommand};
 pub use create_element::{ModelingCreateElement, ModelingCreateElementRequested};
-use bellatrix_mde_modeling::Scope;
+use bellatrix_mde::Scope;
 use cordis::event::{ListenerRegistrationError, observer_sync};
 use cordis::{Context, Event, Plugin};
 pub use project_integration::{
@@ -118,8 +114,8 @@ mod tests {
         ctx.emit::<ModelingRequested>(Routing::Unscoped, ModelingCommand {
             correlation_id: 42, operation: ModelingOperation::Check { source: "todo.json".into() },
         }).await.unwrap();
-        let cmd = tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv()).await.unwrap().unwrap();
-        assert_eq!(cmd.correlation_id, 42);
+        let command = tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv()).await.unwrap().unwrap();
+        assert_eq!(command.correlation_id, 42);
         ctx.emit::<ModelingCompleted>(Routing::Unscoped, ModelingCompletion {
             correlation_id: 42, success: true, summary: "done".into(),
         }).await.unwrap();

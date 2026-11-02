@@ -6,8 +6,7 @@ edition.workspace = true
 rust-version = "1.98.1"
 
 [dependencies]
-bellatrix_mde_model = { path = "../bellatrix_mde_model" }
-bellatrix_mde_modeling = { path = "../bellatrix_mde_modeling" }
+bellatrix_mde = { path = "../bellatrix_mde" }
 bellatrix_mde_templates = { path = "../bellatrix_mde_templates" }
 toml = { workspace = true, features = ["display"] }
 serde_json.workspace = true

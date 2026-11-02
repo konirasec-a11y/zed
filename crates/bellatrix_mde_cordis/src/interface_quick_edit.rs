@@ -1,8 +1,7 @@
-//! Compatibility boundary for the original interface-only public event.
-//! Common behavior now lives in quick_edit_commands; no mutation is implemented here.
+//! Compatibility envelope for the original Interface-only public event.
 use crate::quick_edit_commands::{self, ModelingQuickEditRequested};
 use crate::project_integration::from_document;
-use bellatrix_mde_modeling::{UmlQuickCommand, UmlType};
+use bellatrix_mde::{UmlQuickCommand, UmlType};
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::{Context, Event};
 
@@ -36,19 +35,16 @@ impl Event for ModelingInterfaceQuickEdit {
     type Args = ModelingInterfaceQuickEditRequested;
     type Output = Result<u64, String>;
 }
-pub(crate) async fn execute_quick_edit(
-    context: &Context, projects: &ProjectService, request: ModelingInterfaceQuickEditRequested,
-) -> Result<u64, String> {
+pub(crate) async fn execute_quick_edit(context: &Context, projects: &ProjectService,
+    request: ModelingInterfaceQuickEditRequested) -> Result<u64, String> {
     let document = projects.snapshot(&request.project_id).map_err(|error| error.to_string())?;
     let section = from_document(&document)?;
-    let subject = section.elements.iter().find(|element| element.id == request.interface_id)
-        .ok_or("interface not found")?;
+    let subject = section.elements.iter().find(|element| element.id == request.interface_id).ok_or("interface not found")?;
     if UmlType::from_kind(&subject.kind) != Some(UmlType::Interface) {
         return Err("legacy Interface Quick Edit requires an Interface".into());
     }
     quick_edit_commands::execute_quick_edit(context, projects, ModelingQuickEditRequested {
         project_id: request.project_id, diagram_id: request.diagram_id,
-        element_id: request.interface_id, action: request.action.into(),
-        expected_revision: request.expected_revision,
+        element_id: request.interface_id, action: request.action.into(), expected_revision: request.expected_revision,
     }).await
 }
