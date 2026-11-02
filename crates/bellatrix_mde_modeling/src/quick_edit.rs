@@ -122,7 +122,7 @@ mod tests {
             (3,&["uml.add-associated-class","uml.add-aggregated-class","uml.add-composited-class"][..]),
             (4,&["uml.add-port","uml.add-part"][..]),
         ] {
-            assert_eq!(actions.iter().filter(|a|a.side==Right && a.row==row).map(|a|a.id).collect::<Vec<_>>(),ids);
+            assert_eq!(actions.iter().filter(|a|a.side==Right && a.row==row).map(|a|a.id).collect::<Vec<_>>(),ids.to_vec());
         }
     }
 }
