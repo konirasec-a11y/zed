@@ -37,6 +37,9 @@ pub(crate) async fn move_view(
     }
     let mut section = from_document(&document)?;
     let namespace = namespace_for(&document);
+    let diagram_id = section.diagrams.iter()
+        .find(|d| d.views.iter().any(|v| v.id == request.view_id))
+        .map(|d| d.id.clone()).ok_or("view not found")?;
     let view = section
         .diagrams
         .iter_mut()
@@ -44,6 +47,7 @@ pub(crate) async fn move_view(
         .find(|view| view.id == request.view_id)
         .ok_or("view not found")?;
     view.geometry.translate(request.dx, request.dy);
+    crate::create_relation::reroute(&mut section, &diagram_id);
     Graph::new(&section.to_model(document.id().as_str(), document.name()))
         .validate()
         .map_err(|e| e.to_string())?;
