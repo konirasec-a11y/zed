@@ -11,6 +11,7 @@ mod theme;
 mod hierarchy;
 mod property_editor;
 mod quick_edit_view;
+mod quick_edit_view;
 mod symbol_library;
 pub use symbol_library::MdeSymbolLibraryItem;
 pub use integration::register_mde_workspace;
@@ -27,6 +28,9 @@ use bellatrix_mde_cordis::{
 };
 use bellatrix_mde_model::Geometry;
 use bellatrix_ui_uml::UmlClassCard;
+use bellatrix_mde_modeling::quick_edit_for;
+use quick_edit_view::render_quick_edit;
+use ui_input::InputField;
 use bellatrix_project::{ProjectId, ProjectSaveRequested};
 use gpui::{
     App, Context, DragMoveEvent, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
@@ -89,6 +93,8 @@ pub struct MdeWorkbenchItem {
     source: MdeUiSource,
     focus_handle: FocusHandle,
     selected_element: Option<String>,
+    quick_edit_input: Option<Entity<InputField>>,
+    quick_edit_subject: Option<String>,
     active_diagram: Option<String>,
     selected_tool: Option<ModelingElementKind>,
     gesture: Option<CanvasGesture>,
@@ -129,6 +135,8 @@ impl MdeWorkbenchItem {
             source,
             focus_handle: cx.focus_handle(),
             selected_element: None,
+            quick_edit_input: None,
+            quick_edit_subject: None,
             active_diagram: initial_diagram,
             selected_tool: None,
             gesture: None,
@@ -504,7 +512,7 @@ impl Item for MdeWorkbenchItem {
 }
 
 impl Render for MdeWorkbenchItem {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = WorkbenchPalette::current(cx);
         let background = palette.canvas;
         let surface = palette.surface;
@@ -556,6 +564,24 @@ impl Render for MdeWorkbenchItem {
                             _ => {}
                         }
                         let is_selected = self.selected_element.as_deref() == Some(subject);
+                        // Lazy initialization: InputField needs the Zed editor
+                        // factory and a Window, neither is available from
+                        // a headless model selection event.
+                        if is_selected && !quick_edit_for(&element.kind).is_empty()
+                            && self.quick_edit_subject.as_deref() != Some(subject)
+                        {
+                            let editor = cx.new(|cx| InputField::new(window, cx, "Name"));
+                            editor.update(cx, |field, cx| {
+                                field.set_text(&element.name, window, cx);
+                            });
+                            self.quick_edit_input = Some(editor);
+                            self.quick_edit_subject = Some(subject.to_owned());
+                        }
+                        let quick_edit = if is_selected && !quick_edit_for(&element.kind).is_empty() {
+                            Some(render_quick_edit(
+                                element, cx.entity(), self.quick_edit_input.clone(), cx
+                            ))
+                        } else { None };
                         let mut class_card = UmlClassCard::new(element.name.clone())
                             .selected(is_selected);
                         for relation in &snapshot.section.relations {
@@ -595,9 +621,17 @@ impl Render for MdeWorkbenchItem {
                                     });
                                     cx.stop_propagation();
                                 })
-                                .child(
-                                    class_card
-                                )
+                                .child(class_card)
+                                .when_some(quick_edit, |card, quick_edit| {
+                                    card.child(
+                                        div()
+                                            .id(format!("mde-quick-edit-container-{}", view.id))
+                                            .absolute()
+                                            .left(px(px_w * zoom + 8.0))
+                                            .top(px(0.0))
+                                            .child(quick_edit)
+                                    )
+                                })
                                 .child(
                                     div()
                                         .id(format!("mde-resize-{}", view.id))
