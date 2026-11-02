@@ -20,6 +20,13 @@ pub struct UmlFigure {
     editor: Option<(Entity<InputField>, Action, Action)>,
 }
 impl UmlFigure {
+    /// Only non-classifier silhouettes use this component; classifiers
+    /// belong to UmlClassCard and its UML compartments.
+    pub fn supports(kind: &str) -> bool {
+        matches!(kind,
+            "uml.package" | "uml.model" | "uml.subsystem" |
+            "uml.comment" | "uml.frame" | "uml.nary_association")
+    }
     pub fn new(kind: impl Into<String>, name: impl Into<SharedString>) -> Self {
         Self { kind:kind.into(),name:name.into(),selected:false,edit:None,editor:None }
     }
