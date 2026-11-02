@@ -190,7 +190,13 @@ impl MdeWorkbenchItem {
         cx.notify();
     }
     pub fn select_diagram(&mut self, id: String, cx: &mut Context<Self>) {
-        self.active_diagram = Some(id); self.gesture = None; self.editing_subject = None; self.inline_editor = None; cx.notify();
+        self.active_diagram = Some(id);
+        self.gesture = None;
+        self.pending_relation_source = None;
+        self.selected_tool = None;
+        self.editing_subject = None;
+        self.inline_editor = None;
+        cx.notify();
     }
     pub fn select_tool(&mut self, kind: ModelingTool, cx: &mut Context<Self>) {
         if self.selected_tool == Some(kind) {
@@ -544,6 +550,7 @@ impl Render for MdeWorkbenchItem {
         let delete_owner = cx.weak_entity(); let f2_owner = cx.weak_entity(); let member_shortcut_owner = cx.weak_entity();
         let zoom_in_owner = cx.weak_entity(); let zoom_out_owner = cx.weak_entity(); let reset_owner = cx.weak_entity();
         let cancel_relation_owner = cx.weak_entity();
+        let escape_relation_owner = cx.weak_entity();
         div().id(format!("mde-workbench-{}", self.project_id().as_str())).size_full().flex().flex_col().track_focus(&self.focus_handle)
             .on_key_down(move |event: &KeyDownEvent, window, cx| {
                 if event.keystroke.key.eq_ignore_ascii_case("f2") {
@@ -552,6 +559,12 @@ impl Render for MdeWorkbenchItem {
                 } else if event.keystroke.key.eq_ignore_ascii_case("enter") && event.keystroke.modifiers.control {
                     let kind = if event.keystroke.modifiers.shift { ModelingMemberKind::Operation } else { ModelingMemberKind::Attribute };
                     let _ = member_shortcut_owner.update(cx, |item, cx| item.add_member_to_selected(kind, cx)); cx.stop_propagation();
+                } else if event.keystroke.key.eq_ignore_ascii_case("escape") {
+                    let _ = escape_relation_owner.update(cx, |item, cx| {
+                        if item.editing_subject.is_none() && item.selected_tool.is_some() {
+                            item.cancel_tool(cx);
+                        }
+                    });
                 } else if matches!(event.keystroke.key.as_str(), "delete" | "backspace") {
                     let _ = delete_owner.update(cx, |item, cx| { if item.editing_subject.is_none() { item.delete_selected(cx); } });
                     cx.stop_propagation();
