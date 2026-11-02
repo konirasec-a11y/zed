@@ -139,7 +139,7 @@ pub fn validate_structural_diagram(
                 ));
             }
         } else if let Some(element) = elements.get(subject) {
-            if matches!(view.geometry, Geometry::Path { .. }) {
+            if matches!(&view.geometry, Geometry::Path { .. }) {
                 issues.push(problem(
                     "UMLDI_EXPECTED_SHAPE", &view.id,
                     format!("element {} must have a UMLDI Shape geometry", element.id),
@@ -193,7 +193,7 @@ pub fn validate_structural_diagram(
     let mut links: HashMap<&str, Vec<&str>> = HashMap::new();
     for relation in project.relations.iter().filter(|r|
         r.kind == "uml.generalization" && subjects.contains(r.id.as_str())) {
-        links.entry(&relation.from).or_default().push(&relation.to);
+        links.entry(relation.from.as_str()).or_default().push(relation.to.as_str());
     }
     fn cycle<'a>(
         at: &'a str, graph: &HashMap<&'a str, Vec<&'a str>>,
