@@ -25,7 +25,7 @@ use bellatrix_mde_cordis::{
 };
 use bellatrix_mde_model::{Geometry, PathSegment};
 use bellatrix_mde_modeling::{UmlType, classifier_contents, interface_layout};
-use bellatrix_ui_uml::{UmlClassifier, UmlFigure, UmlRelationGlyph};
+use bellatrix_ui_uml::{UmlClassifier, UmlFigure, UmlLineSegment, UmlRelationGlyph};
 use quick_edit_view::quick_edit_for_element;
 use ui_input::InputField;
 use bellatrix_project::{ProjectId, ProjectSaveRequested};
@@ -193,15 +193,33 @@ impl MdeWorkbenchItem {
         self.active_diagram = Some(id); self.gesture = None; self.editing_subject = None; self.inline_editor = None; cx.notify();
     }
     pub fn select_tool(&mut self, kind: ModelingTool, cx: &mut Context<Self>) {
-        self.selected_tool = if self.selected_tool == Some(kind) { None } else { Some(kind) };
-        self.pending_relation_source = None; cx.notify();
+        if self.selected_tool == Some(kind) {
+            self.cancel_tool(cx);
+        } else {
+            self.arm_drag_tool(kind, cx);
+        }
+    }
+    pub fn cancel_tool(&mut self, cx: &mut Context<Self>) {
+        self.selected_tool = None;
+        self.pending_relation_source = None;
+        self.feedback = "No relationship tool selected".into();
+        cx.notify();
     }
     fn link_endpoint(&mut self, kind: ModelingRelationKind, target: String, cx: &mut Context<Self>) {
-        self.select_element(target.clone(), cx);
         let Some(source) = self.pending_relation_source.take() else {
-            self.pending_relation_source = Some(target);
-            self.feedback = format!("{}: choose target element", kind.label()); cx.notify(); return;
+            self.pending_relation_source = Some(target.clone());
+            self.select_element(target);
+            self.feedback = format!("{}: source selected. Click a second element", kind.label());
+            cx.notify();
+            return;
         };
+        if source == target {
+            self.pending_relation_source = Some(source);
+            self.feedback = format!("{}: choose another element to connect", kind.label());
+            cx.notify();
+            return;
+        }
+        self.select_element(target.clone(), cx);
         let Ok(snapshot) = self.source.snapshot() else { self.feedback = "Project snapshot unavailable".into(); cx.notify(); return; };
         let Some(diagram_id) = self.active_diagram.clone().or_else(|| snapshot.section.diagrams.first().map(|diagram| diagram.id.clone())) else {
             self.feedback = "Project has no diagram".into(); cx.notify(); return;
@@ -381,8 +399,17 @@ impl Render for MdeWorkbenchItem {
                                         _=>relation.kind.as_str(),
                                     }
                                 } else { relation.kind.as_str() };
-                                let mut glyph = UmlRelationGlyph::new(notation, width, height, place(*start), place(end)).selected(self.selected_element.as_deref() == Some(subject));
-                                if let Some(PathSegment::Cubic { control1, control2, .. }) = segments.last() { glyph = glyph.cubic(place(*control1), place(*control2)); }
+                                let local_segments = segments.iter().map(|segment| match segment {
+                                    PathSegment::Line { to } => UmlLineSegment::Line { to: place(*to) },
+                                    PathSegment::Cubic { control1, control2, to } => UmlLineSegment::Cubic {
+                                        control1: place(*control1),
+                                        control2: place(*control2),
+                                        to: place(*to),
+                                    },
+                                }).collect();
+                                let glyph = UmlRelationGlyph::new(notation, width, height, place(*start), place(end))
+                                    .segments(local_segments)
+                                    .selected(self.selected_element.as_deref() == Some(subject));
                                 let edge_owner = cx.weak_entity(); let edge_id = relation.id.clone();
                                 edges.push(div().id(format!("mde-edge-{}", view.id)).absolute()
                                     .left(px((min_x - padding) * zoom + pan.0)).top(px((min_y - padding) * zoom + pan.1)).w(px(width)).h(px(height)).cursor_pointer()
