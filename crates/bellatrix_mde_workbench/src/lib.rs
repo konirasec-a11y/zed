@@ -635,45 +635,54 @@ impl Render for MdeWorkbenchItem {
                             }
                             _ => {}
                         }
-                        // A class View owns the visible compartments; clicking a
-                        // nested Attribute/Operation selects the *member Element*
-                        // while the same class remains its visual anchor.
-                        let quick_target = self.selected_element.as_deref().and_then(|id| {
+                        // Selection and editing are different interactions:
+                        // one click selects; double-click (or F2) edits in place.
+                        // Owned member elements keep the containing class View.
+                        let selected_target = self.selected_element.as_deref().and_then(|id| {
                             if id == subject {
                                 Some(element)
                             } else if snapshot.section.relations.iter().any(|r| {
                                 r.kind == "owns" && r.from == element.id && r.to == id
                             }) {
                                 snapshot.section.elements.iter().find(|e| e.id == id)
-                            } else { None }
+                            } else {
+                                None
+                            }
                         });
-                        let is_selected = quick_target.is_some();
-                        // InputField is a Zed editor entity and needs a Window;
-                        // creating it from the GPUI selection callback is too early.
-                        if let Some(target) = quick_target
-                            && !quick_edit_for(&target.kind).is_empty()
-                            && self.quick_edit_subject.as_deref() != Some(target.id.as_str())
-                        {
-                            let editor = cx.new(|cx| InputField::new(window, cx, "Name"));
-                            editor.update(cx, |field, cx| {
-                                field.set_text(&target.name, window, cx);
-                            });
-                            self.quick_edit_input = Some(editor);
-                            self.quick_edit_subject = Some(target.id.clone());
-                        }
-                        let quick_edit = quick_target
-                            .filter(|e| !quick_edit_for(&e.kind).is_empty())
-                            .map(|selected| render_quick_edit(
-                                selected, cx.entity(), self.quick_edit_input.clone(), cx
-                            ));
-                        let member_owner = cx.weak_entity();
+                        let is_selected = selected_target.is_some();
+                        let editing = selected_target.filter(|selected| {
+                            self.editing_subject.as_deref() == Some(selected.id.as_str())
+                                && self.inline_editor.is_some()
+                        });
+                        let (quick_actions, visibility_picker) = if let Some(selected) = editing {
+                            quick_edit_for_element(selected, cx.entity())
+                        } else {
+                            (None, None)
+                        };
+                        let title_id = element.id.clone();
+                        let title_owner = cx.weak_entity();
+                        let select_owner = cx.weak_entity();
+                        let edit_owner = cx.weak_entity();
                         let mut class_card = UmlClassCard::new(element.name.clone())
+                            .class_id(element.id.clone())
                             .selected(is_selected)
+                            .on_title_edit(move |window, cx| {
+                                let id = title_id.clone();
+                                let _ = title_owner.update(cx, |item, cx| {
+                                    item.begin_inline_edit(id, window, cx);
+                                });
+                            })
                             .on_member_click(move |member_id, window, cx| {
                                 let id = member_id.to_owned();
-                                let _ = member_owner.update(cx, |item, cx| {
+                                let _ = select_owner.update(cx, |item, cx| {
                                     item.select_element(id, cx);
                                     cx.focus_self(window);
+                                });
+                            })
+                            .on_member_edit(move |member_id, window, cx| {
+                                let id = member_id.to_owned();
+                                let _ = edit_owner.update(cx, |item, cx| {
+                                    item.begin_inline_edit(id, window, cx);
                                 });
                             });
                         for relation in &snapshot.section.relations {
@@ -691,6 +700,28 @@ impl Render for MdeWorkbenchItem {
                             } else if matches!(member.kind.as_str(), "rust.function" | "uml.operation") {
                                 class_card = class_card.operation_with_id(
                                     member.id.clone(), member.name.clone()
+                                );
+                            }
+                        }
+                        if editing.is_some() {
+                            if let (Some(id), Some(field)) = (
+                                self.editing_subject.clone(), self.inline_editor.clone()
+                            ) {
+                                let accept = cx.weak_entity();
+                                let cancel = cx.weak_entity();
+                                class_card = class_card.inline_edit(
+                                    id,
+                                    field,
+                                    move |window, cx| {
+                                        let _ = accept.update(cx, |item, cx| {
+                                            item.commit_inline_edit(window, cx);
+                                        });
+                                    },
+                                    move |window, cx| {
+                                        let _ = cancel.update(cx, |item, cx| {
+                                            item.cancel_inline_edit(window, cx);
+                                        });
+                                    },
                                 );
                             }
                         }
@@ -718,14 +749,24 @@ impl Render for MdeWorkbenchItem {
                                     cx.stop_propagation();
                                 })
                                 .child(class_card)
-                                .when_some(quick_edit, |card, quick_edit| {
+                                .when_some(quick_actions, |card, actions| {
                                     card.child(
                                         div()
-                                            .id(format!("mde-quick-edit-container-{}", view.id))
+                                            .id(format!("mde-quick-actions-{}", view.id))
                                             .absolute()
-                                            .left(px(px_w * zoom + 8.0))
+                                            .left(px(px_w * zoom + 6.0))
                                             .top(px(0.0))
-                                            .child(quick_edit)
+                                            .child(actions)
+                                    )
+                                })
+                                .when_some(visibility_picker, |card, picker| {
+                                    card.child(
+                                        div()
+                                            .id(format!("mde-quick-visibility-{}", view.id))
+                                            .absolute()
+                                            .left(px(-34.0))
+                                            .top(px(0.0))
+                                            .child(picker)
                                     )
                                 })
                                 .child(
@@ -763,6 +804,7 @@ impl Render for MdeWorkbenchItem {
         let pan_end_owner = cx.weak_entity();
         let pan_out_owner = cx.weak_entity();
         let delete_owner = cx.weak_entity();
+        let f2_owner = cx.weak_entity();
         let zoom_in_owner = cx.weak_entity();
         let zoom_out_owner = cx.weak_entity();
         let reset_owner = cx.weak_entity();
@@ -773,8 +815,15 @@ impl Render for MdeWorkbenchItem {
             .flex()
             .flex_col()
             .track_focus(&self.focus_handle)
-            .on_key_down(move |event: &KeyDownEvent, _, cx| {
-                if matches!(event.keystroke.key.as_str(), "delete" | "backspace") {
+            .on_key_down(move |event: &KeyDownEvent, window, cx| {
+                if event.keystroke.key.eq_ignore_ascii_case("f2") {
+                    let _ = f2_owner.update(cx, |item, cx| {
+                        if let Some(id) = item.selected_element.clone() {
+                            item.begin_inline_edit(id, window, cx);
+                        }
+                    });
+                    cx.stop_propagation();
+                } else if matches!(event.keystroke.key.as_str(), "delete" | "backspace") {
                     let _ = delete_owner.update(cx, |item, cx| item.delete_selected(cx));
                     cx.stop_propagation();
                 }
