@@ -1,5 +1,8 @@
 # Contrato único de relações — Engine MDE
 
+Base e próximos mecanismos de tipagem/AGT:
+[MDE_GRAPH_TRANSFORMATION_ARCHITECTURE.md](MDE_GRAPH_TRANSFORMATION_ARCHITECTURE.md).
+
 Esta especificação descreve **o domínio do grafo da engine MDE**, não o host
 Zed nem um EventBus da plataforma Bellatrix. A fonte de verdade é sempre
 `ModelingSection`, persistido pelo `ProjectService` com revisão.
