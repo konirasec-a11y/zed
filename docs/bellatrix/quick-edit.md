@@ -27,8 +27,8 @@ A expressão `<< stereotype >> name` é editada na área principal do Quick Edit
 | `uml.add-provided-interface` | Add Provided Interface | Right, linha 2 | **Implementado no código:** Interface e Interface Realization |
 | `uml.add-required-interface` | Add Required Interface | Right, linha 2 | **Implementado no código:** Interface e Dependency |
 | `uml.add-associated-class` | Add Associated Class | Right, linha 3 | **Implementado no código:** Class e Association |
-| `uml.add-aggregated-class` | Add Aggregated Class | Right, linha 3 | **Implementado no código:** Class e Aggregation |
-| `uml.add-composited-class` | Add Composited Class | Right, linha 3 | **Implementado no código:** Class e Composition |
+| `uml.add-aggregated-class` | Add Aggregated Class | Right, linha 3 | **Implementado no código:** Class e Association com `end1Aggregation=shared` |
+| `uml.add-composited-class` | Add Composited Class | Right, linha 3 | **Implementado no código:** Class e Association com `end1Aggregation=composite` |
 | `uml.add-port` | Add Port | Right, linha 4 | **Implementado no código:** Port com `owns`, View e ancoragem na Class |
 | `uml.add-part` | Add Part | Right, linha 4 | **Implementado no código:** Part com `owns` e View contida na Class |
 
