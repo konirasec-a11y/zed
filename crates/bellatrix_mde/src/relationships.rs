@@ -192,6 +192,27 @@ fn route_with_lane(
                 circle: Some(layout),
             });
         }
+        let height = section
+            .elements
+            .iter()
+            .find(|element| element.id == subject)
+            .map(|element| {
+                let notation = crate::uml_notation(&element.kind);
+                let header = crate::uml_header(
+                    &element.kind,
+                    element
+                        .properties
+                        .get("stereotype")
+                        .and_then(serde_json::Value::as_str),
+                );
+                match notation {
+                    crate::UmlNotation::ClassifierRectangle | crate::UmlNotation::PackageTab => {
+                        height.max(header.minimum_height(notation))
+                    }
+                    _ => height,
+                }
+            })
+            .unwrap_or(height);
         Ok(Endpoint {
             center: Point {
                 x: left + width / 2.0,

@@ -1,5 +1,7 @@
 //! Single MDE domain: persisted objects, UML semantics, commands and validation.
 //! Adapters own transport/presentation, never another implementation of the model.
+pub const MODELING_NAMESPACE: &str = "bellatrix.mde";
+
 mod model;
 pub(crate) use model::wire;
 pub use model::*;
@@ -18,8 +20,10 @@ mod quick_edit;
 mod relationships;
 mod scope;
 mod structural_diagrams;
+mod structural_rules;
 pub mod uml;
 mod uml_geometry;
+mod uml_notation;
 mod uml_types;
 
 pub use generation::{
@@ -56,3 +60,5 @@ pub use uml_geometry::{
     interface_layout,
 };
 pub use uml_types::{UmlCapability, UmlQuickCommand, UmlType};
+
+pub use uml_notation::{UmlHeader, UmlNotation, uml_header, uml_notation};

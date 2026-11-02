@@ -208,15 +208,11 @@ impl Render for MdeLeftPanel {
             for diagram in &snapshot.section.diagrams {
                 let diagram_id = diagram.id.clone();
                 let owner = item.clone();
-                let label = match diagram.uml_di_type.as_deref() {
-                    Some(diagram_type) => {
-                        let kind =
-                            bellatrix_mde::StructuralDiagramKind::from_uml_di_type(diagram_type)
-                                .map(crate::diagram_kind_label)
-                                .unwrap_or(diagram_type);
-                        format!("{} · {kind}", diagram.name)
-                    }
-                    None => diagram.name.clone(),
+                let label = match bellatrix_mde::StructuralDiagramKind::from_uml_di_type(
+                    &diagram.uml_di_type,
+                ) {
+                    Some(kind) => format!("{} · {}", diagram.name, crate::diagram_kind_label(kind)),
+                    None => format!("{} · Unsupported: {}", diagram.name, diagram.uml_di_type),
                 };
                 diagrams.push(
                     TreeViewItem::new(diagram_id.clone(), label)
@@ -951,7 +947,7 @@ impl Render for MdeBottomPanel {
         }
         let description = match active {
             BottomTab::Diagnostics => {
-                "Read-only implemented UML checks; legacy diagrams use Class. This is not full conformance certification."
+                "Read-only implemented UML checks using the stored diagram type. This is not full conformance certification."
             }
             BottomTab::Relationships => "Select a relation to inspect its endpoints",
             BottomTab::Documentation => "Documentation is part of the MDE model",

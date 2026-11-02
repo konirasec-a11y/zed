@@ -1,4 +1,5 @@
 //! Cordis transport and project-revision integration for the single MDE domain.
+pub use bellatrix_mde::MODELING_NAMESPACE;
 pub use bellatrix_mde::commands::{ModelingElementKind, ModelingTool};
 pub use bellatrix_mde::{ModelingRelationKind, ModelingSection, UmlQuickCommand};
 mod diagrams;
@@ -41,10 +42,7 @@ use bellatrix_mde::Scope;
 use cordis::event::{ListenerRegistrationError, observer_sync};
 use cordis::{Context, Event, Plugin};
 pub use create_element::{ModelingCreateElement, ModelingCreateElementRequested};
-pub use project_integration::{
-    LEGACY_MODELING_NAMESPACE, MODELING_NAMESPACE, MdePlugin, ModelingRename,
-    ModelingRenameRequested, with_model,
-};
+pub use project_integration::{MdePlugin, ModelingRename, ModelingRenameRequested, with_model};
 use std::convert::Infallible;
 use tokio::sync::mpsc;
 pub use ui_bridge::{MdeUiBridge, MdeUiCommand};
@@ -93,7 +91,7 @@ pub struct ModelingCommand {
 }
 pub struct ModelingRequested;
 impl Event for ModelingRequested {
-    const NAME: &'static str = "bellatrix.bellatrix-mde-modeling.requested.v1";
+    const NAME: &'static str = "bellatrix.mde.requested.v1";
     type Args = ModelingCommand;
     type Output = ();
 }
@@ -105,7 +103,7 @@ pub struct ModelingCompletion {
 }
 pub struct ModelingCompleted;
 impl Event for ModelingCompleted {
-    const NAME: &'static str = "bellatrix.bellatrix-mde-modeling.completed.v1";
+    const NAME: &'static str = "bellatrix.mde.completed.v1";
     type Args = ModelingCompletion;
     type Output = ();
 }
@@ -159,7 +157,6 @@ impl Plugin for ModelingPlugin {
         Ok(())
     }
 }
-pub use project_integration::MdePlugin as ModelingProjectPlugin;
 #[cfg(test)]
 mod tests {
     use super::*;

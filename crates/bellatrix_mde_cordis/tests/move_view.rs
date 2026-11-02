@@ -1,5 +1,5 @@
-use bellatrix_mde_cordis::{MdePlugin, ModelingMoveView, ModelingMoveViewRequested, with_model};
 use bellatrix_mde::{Geometry, ModelingSection, Project};
+use bellatrix_mde_cordis::{MdePlugin, ModelingMoveView, ModelingMoveViewRequested, with_model};
 use bellatrix_project::{
     ProjectClose, ProjectCloseRequested, ProjectCreate, ProjectCreateRequested, ProjectDocument,
     ProjectId, ProjectOpen, ProjectOpenRequested, ProjectPlugin, ProjectSave, ProjectSaveRequested,
@@ -87,7 +87,7 @@ async fn view_movement_is_public_versioned_and_isolated() {
     let document = service.snapshot(&a).unwrap();
     let section: ModelingSection = serde_json::from_value(
         document
-            .section("bellatrix.bellatrix-mde-modeling")
+            .section(bellatrix_mde::MODELING_NAMESPACE)
             .unwrap()
             .clone(),
     )
@@ -173,7 +173,7 @@ async fn translated_view_roundtrips_through_public_project_save_and_open() {
     let doc = service.snapshot(&id).unwrap();
     assert_eq!(doc.revision(), 1);
     let section: ModelingSection = serde_json::from_value(
-        doc.section("bellatrix.bellatrix-mde-modeling")
+        doc.section(bellatrix_mde::MODELING_NAMESPACE)
             .unwrap()
             .clone(),
     )

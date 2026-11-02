@@ -10,14 +10,25 @@ pub struct Diagram {
     pub height: f64,
     #[serde(default)]
     pub views: Vec<View>,
-    /// Optional UMLDI metaclass name; unknown future names survive round trips.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub uml_di_type: Option<String>,
+    /// Required UMLDI metaclass name; explicit future names survive round trips.
+    #[serde(deserialize_with = "deserialize_diagram_type")]
+    pub uml_di_type: String,
     /// UMLDI diagram context, not the subjects of its contained Views.
-    /// Legacy diagrams have no explicit type or context.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub model_elements: Vec<String>,
 }
+fn deserialize_diagram_type<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<String, D::Error> {
+    let value = String::deserialize(deserializer)?;
+    if value.trim().is_empty() {
+        return Err(serde::de::Error::custom(
+            "diagram uml_di_type must not be blank",
+        ));
+    }
+    Ok(value)
+}
+
 fn default_width() -> f64 {
     1280.0
 }

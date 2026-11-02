@@ -159,7 +159,7 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
     Graph::new(&updated)
         .validate()
         .map_err(|error| error.to_string())?;
-    validation::new_generalizations(project, &updated)?;
+    validation::new_relationships(project, &updated)?;
     Ok(updated)
 }
 
@@ -365,8 +365,20 @@ fn resize_view(
     let minimum_height = owner_id
         .as_deref()
         .and_then(|id| section.elements.iter().find(|element| element.id == id))
-        .filter(|element| UmlType::from_kind(&element.kind) == Some(UmlType::Interface))
-        .map(|element| classifier_contents(section, &element.id).minimum_interface_height())
+        .map(|element| {
+            if UmlType::from_kind(&element.kind) == Some(UmlType::Interface) {
+                classifier_contents(section, &element.id).minimum_interface_height()
+            } else {
+                crate::uml_header(
+                    &element.kind,
+                    element
+                        .properties
+                        .get("stereotype")
+                        .and_then(serde_json::Value::as_str),
+                )
+                .minimum_height(crate::uml_notation(&element.kind))
+            }
+        })
         .unwrap_or(48.0);
     let view = section
         .diagrams
@@ -427,6 +439,18 @@ fn remove_element(section: &mut ModelingSection, id: &str) -> Result<(), String>
         }
         if !changed {
             break;
+        }
+    }
+    for diagram in &section.diagrams {
+        if let Some(context) = diagram
+            .model_elements
+            .iter()
+            .find(|context| deleted.contains(*context))
+        {
+            return Err(format!(
+                "UMLDI_CONTEXT_IN_USE: diagram {} references context {}; remove or update the diagram before deleting this element",
+                diagram.id, context
+            ));
         }
     }
     let incident: HashSet<_> = section
@@ -547,3 +571,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod deletion_tests;

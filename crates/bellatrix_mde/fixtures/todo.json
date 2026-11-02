@@ -298,7 +298,8 @@
           },
           "z_index": 1
         }
-      ]
+      ],
+      "uml_di_type": "UMLClassDiagram"
     },
     {
       "id": "diagram-overview",
@@ -322,7 +323,8 @@
           },
           "z_index": 1
         }
-      ]
+      ],
+      "uml_di_type": "UMLClassDiagram"
     }
   ]
 }

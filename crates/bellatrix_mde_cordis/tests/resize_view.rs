@@ -1,7 +1,7 @@
+use bellatrix_mde::{Geometry, ModelingSection, Project};
 use bellatrix_mde_cordis::{
     MdePlugin, ModelingResizeView, ModelingResizeViewRequested, with_model,
 };
-use bellatrix_mde::{Geometry, ModelingSection, Project};
 use bellatrix_project::{
     ProjectCreate, ProjectCreateRequested, ProjectDocument, ProjectId, ProjectPlugin,
     ProjectService,
@@ -33,9 +33,9 @@ async fn rectangle_resize_is_versioned_and_persisted() {
     let id = ProjectId::new(model.id.clone()).unwrap();
     let doc = ProjectDocument::new(id.clone(), model.name.clone()).unwrap();
     let doc = with_model(doc, &model).unwrap();
-    ctx.query::<ProjectCreate>(
-        Routing::Unscoped, ProjectCreateRequested { document: doc }
-    ).await.unwrap();
+    ctx.query::<ProjectCreate>(Routing::Unscoped, ProjectCreateRequested { document: doc })
+        .await
+        .unwrap();
 
     let resize = |width, height, revision| ModelingResizeViewRequested {
         project_id: id.clone(),
@@ -44,29 +44,42 @@ async fn rectangle_resize_is_versioned_and_persisted() {
         height,
         expected_revision: revision,
     };
-    let reply = ctx.query::<ModelingResizeView>(
-        Routing::Unscoped, resize(240.0, 140.0, 0)
-    ).await.unwrap();
+    let reply = ctx
+        .query::<ModelingResizeView>(Routing::Unscoped, resize(240.0, 140.0, 0))
+        .await
+        .unwrap();
     assert!(matches!(reply, QueryOutcome::Answer(Ok(1))));
 
-    let stale = ctx.query::<ModelingResizeView>(
-        Routing::Unscoped, resize(190.0, 130.0, 0)
-    ).await.unwrap();
+    let stale = ctx
+        .query::<ModelingResizeView>(Routing::Unscoped, resize(190.0, 130.0, 0))
+        .await
+        .unwrap();
     assert!(matches!(stale, QueryOutcome::Answer(Err(_))));
-    let invalid = ctx.query::<ModelingResizeView>(
-        Routing::Unscoped, resize(f64::NAN, 20.0, 1)
-    ).await.unwrap();
+    let invalid = ctx
+        .query::<ModelingResizeView>(Routing::Unscoped, resize(f64::NAN, 20.0, 1))
+        .await
+        .unwrap();
     assert!(matches!(invalid, QueryOutcome::Answer(Err(_))));
 
     let persisted = service.snapshot(&id).unwrap();
     assert_eq!(persisted.revision(), 1);
     let section: ModelingSection = serde_json::from_value(
-        persisted.section("bellatrix.bellatrix-mde-modeling").unwrap().clone()
-    ).unwrap();
-    let view = section.diagrams.iter().flat_map(|d| &d.views)
-        .find(|v| v.id == "view-task").unwrap();
-    assert!(matches!(&view.geometry, Geometry::Rect { width, height, .. }
-        if *width == 240.0 && *height == 140.0));
+        persisted
+            .section(bellatrix_mde::MODELING_NAMESPACE)
+            .unwrap()
+            .clone(),
+    )
+    .unwrap();
+    let view = section
+        .diagrams
+        .iter()
+        .flat_map(|d| &d.views)
+        .find(|v| v.id == "view-task")
+        .unwrap();
+    assert!(
+        matches!(&view.geometry, Geometry::Rect { width, height, .. }
+        if *width == 240.0 && *height == 140.0)
+    );
     mde.dispose().await.unwrap();
     project.dispose().await.unwrap();
 }

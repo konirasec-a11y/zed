@@ -4,7 +4,10 @@ use thiserror::Error;
 const MAGIC: &[u8; 4] = b"BLX1";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Format { Json, Protobuf }
+pub enum Format {
+    Json,
+    Protobuf,
+}
 
 #[derive(Debug, Error)]
 pub enum ModelIoError {
@@ -18,6 +21,8 @@ pub enum ModelIoError {
     Utf8(#[from] std::string::FromUtf8Error),
     #[error("binary file does not begin with BLX1")]
     Magic,
+    #[error("diagram uml_di_type is required and must not be blank")]
+    DiagramType,
     #[error("unsupported schema version: {0}")]
     Version(u32),
 }
@@ -47,7 +52,11 @@ pub fn decode(bytes: &[u8], format: Format) -> Result<Project, ModelIoError> {
 }
 
 fn ensure_version(version: u32) -> Result<(), ModelIoError> {
-    if version == 1 { Ok(()) } else { Err(ModelIoError::Version(version)) }
+    if version == 1 {
+        Ok(())
+    } else {
+        Err(ModelIoError::Version(version))
+    }
 }
 
 #[cfg(test)]
@@ -55,15 +64,26 @@ mod tests {
     use super::*;
     #[test]
     fn json_and_protobuf_are_equivalent() {
-        let project: Project = serde_json::from_str(include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/todo.json"))).unwrap();
+        let project: Project = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/fixtures/todo.json"
+        )))
+        .unwrap();
         let json = decode(&encode(&project, Format::Json).unwrap(), Format::Json).unwrap();
-        let binary = decode(&encode(&project, Format::Protobuf).unwrap(), Format::Protobuf).unwrap();
+        let binary = decode(
+            &encode(&project, Format::Protobuf).unwrap(),
+            Format::Protobuf,
+        )
+        .unwrap();
         assert_eq!(json, project);
         assert_eq!(binary, project);
     }
     #[test]
     fn rejects_unknown_schema() {
         let bytes = br#"{"schema_version":99,"id":"x","name":"y"}"#;
-        assert!(matches!(decode(bytes, Format::Json), Err(ModelIoError::Version(99))));
+        assert!(matches!(
+            decode(bytes, Format::Json),
+            Err(ModelIoError::Version(99))
+        ));
     }
 }

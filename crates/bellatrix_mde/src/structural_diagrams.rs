@@ -85,7 +85,7 @@ fn problem(code: &'static str, id: &str, message: impl Into<String>) -> Structur
 /// table still includes editor-specific links; it is not a UML metaclass registry.
 pub fn relationship_root_kind(relation: &Relation) -> Option<RootMetaclass> {
     Some(match relation.kind.as_str() {
-        "uml.association" | "uml.aggregation" | "uml.composition" => RootMetaclass::Relationship,
+        "uml.association" => RootMetaclass::Relationship,
         "uml.generalization"
         | "uml.dependency"
         | "uml.directed_association"
@@ -109,10 +109,9 @@ pub fn element_root_kind(kind: &str) -> RootMetaclass {
 
 /// Combines whole-model semantic diagnostics with the selected projection. The `kind`
 /// identifies the requested diagram category; it does not imply full coverage
-/// of that category's normative constraints. Legacy untyped diagrams use the
-/// requested kind; a stored type must match it. Context is distinct from Views:
-/// CompositeStructure needs one qualifying context even when legacy metadata
-/// is absent; the other six kinds prohibit context but allow contained Views.
+/// of that category's normative constraints. The required stored type must
+/// match the requested kind. Context is distinct from Views: CompositeStructure
+/// needs one qualifying context; the other six kinds prohibit context but allow Views.
 /// Unknown future type names remain serializable, but cannot masquerade as a
 /// supported structural kind when this explicit-kind validator is called.
 pub fn validate_structural_diagram(
@@ -143,9 +142,16 @@ pub fn validate_structural_diagram(
         .iter()
         .map(|element| (element.id.as_str(), element))
         .collect::<HashMap<_, _>>();
-    if let Some(stored_type) = &diagram.uml_di_type
-        && stored_type != kind.uml_di_type()
-    {
+    let stored_type = &diagram.uml_di_type;
+    if StructuralDiagramKind::from_uml_di_type(stored_type).is_none() {
+        issues.push(problem(
+            "UMLDI_UNSUPPORTED_DIAGRAM_TYPE",
+            &diagram.id,
+            format!("unsupported stored UMLDI type {stored_type}"),
+        ));
+        return issues;
+    }
+    if stored_type != kind.uml_di_type() {
         issues.push(problem(
             "UMLDI_DIAGRAM_KIND_MISMATCH",
             &diagram.id,
@@ -231,33 +237,17 @@ pub fn validate_structural_diagram(
                     ),
                 ));
             }
-        } else if let Some(element) = elements.get(subject) {
-            if matches!(&view.geometry, Geometry::Path { .. }) {
-                issues.push(problem(
-                    "UMLDI_EXPECTED_SHAPE",
-                    &view.id,
-                    format!(
-                        "element {} needs Shape geometry in the current editor projection",
-                        element.id
-                    ),
-                ));
-            }
-            if element.kind.starts_with("uml.")
-                && UmlType::from_kind(&element.kind).is_none()
-                && !matches!(
-                    element.kind.as_str(),
-                    "uml.instance_specification" | "uml.profile" | "uml.connector"
-                )
-            {
-                issues.push(problem(
-                    "UML_UNMAPPED_METACLASS",
-                    &element.id,
-                    format!(
-                        "{} has no registered UML semantic interpretation for {:?}",
-                        element.kind, kind
-                    ),
-                ));
-            }
+        } else if let Some(element) = elements.get(subject)
+            && matches!(&view.geometry, Geometry::Path { .. })
+        {
+            issues.push(problem(
+                "UMLDI_EXPECTED_SHAPE",
+                &view.id,
+                format!(
+                    "element {} needs Shape geometry in the current editor projection",
+                    element.id
+                ),
+            ));
         }
     }
     issues
@@ -274,6 +264,16 @@ pub fn validate_structural_model(project: &Project) -> Vec<StructuralDiagnostic>
         .map(|element| (element.id.as_str(), element))
         .collect::<HashMap<_, _>>();
     for relation in &project.relations {
+        if matches!(
+            relation.kind.as_str(),
+            "uml.aggregation" | "uml.composition"
+        ) {
+            issues.push(problem(
+                "UML_UNSUPPORTED_RELATIONSHIP_FORMAT", &relation.id,
+                "Unsupported old relationship format: use canonical uml.association with end1Aggregation set to shared or composite",
+            ));
+            continue;
+        }
         let Some(source) = elements.get(relation.from.as_str()) else {
             continue;
         };
@@ -364,6 +364,7 @@ pub fn validate_structural_model(project: &Project) -> Vec<StructuralDiagnostic>
             "Generalization cannot contain cycles of Classifiers",
         ));
     }
+    issues.extend(crate::structural_rules::validate(project));
     issues
 }
 
@@ -405,7 +406,7 @@ mod tests {
         );
     }
     #[test]
-    fn legacy_class_diagram_validates_without_migrating_data() {
+    fn explicitly_typed_class_diagram_validates() {
         assert!(
             validate_structural_diagram(&fixture(), "diagram-tasks", StructuralDiagramKind::Class)
                 .is_empty()
@@ -516,7 +517,7 @@ mod tests {
             ],
             "relations": [{"id": "specialization", "kind": "uml.generalization",
                 "from": "specific", "to": "general"}],
-            "diagrams": [{"id": "empty-diagram", "name": "No visible relationships"}]
+            "diagrams": [{"id": "empty-diagram", "name": "No visible relationships", "uml_di_type": "UMLClassDiagram"}]
         }))
     }
 
@@ -821,8 +822,8 @@ mod tests {
     }
 
     #[test]
-    fn stored_kind_must_match_requested_kind_but_legacy_kind_is_optional() -> serde_json::Result<()>
-    {
+    fn stored_kind_must_match_requested_kind_and_unknown_is_not_reinterpreted()
+    -> serde_json::Result<()> {
         let mut project = context_project(StructuralDiagramKind::Class, "uml.class", &[])?;
         assert!(
             validate_structural_diagram(
@@ -834,7 +835,7 @@ mod tests {
             .any(|issue| issue.code == "UMLDI_DIAGRAM_KIND_MISMATCH")
         );
         for diagram in &mut project.diagrams {
-            diagram.uml_di_type = None;
+            diagram.uml_di_type = "UMLFutureDiagram".into();
         }
         assert!(
             validate_structural_diagram(
@@ -842,8 +843,44 @@ mod tests {
                 "context-diagram",
                 StructuralDiagramKind::Package
             )
-            .is_empty()
+            .iter()
+            .any(|issue| issue.code == "UMLDI_UNSUPPORTED_DIAGRAM_TYPE")
         );
+        Ok(())
+    }
+    #[test]
+    fn obsolete_aggregation_kinds_are_rejected_but_canonical_association_ends_are_valid()
+    -> serde_json::Result<()> {
+        for (obsolete, aggregation) in [
+            ("uml.aggregation", "shared"),
+            ("uml.composition", "composite"),
+        ] {
+            let mut project = generalization_project("uml.class", "uml.class")?;
+            for relation in &mut project.relations {
+                relation.kind = obsolete.into();
+                assert_eq!(relationship_root_kind(relation), None);
+            }
+            assert!(
+                validate_structural_model(&project)
+                    .iter()
+                    .any(
+                        |diagnostic| diagnostic.code == "UML_UNSUPPORTED_RELATIONSHIP_FORMAT"
+                            && diagnostic.message.contains("uml.association")
+                            && diagnostic.message.contains("end1Aggregation")
+                    )
+            );
+            for relation in &mut project.relations {
+                relation.kind = "uml.association".into();
+                relation
+                    .properties
+                    .insert("end1Aggregation".into(), serde_json::json!(aggregation));
+                assert_eq!(
+                    relationship_root_kind(relation),
+                    Some(RootMetaclass::Relationship)
+                );
+            }
+            assert!(validate_structural_model(&project).is_empty());
+        }
         Ok(())
     }
 }

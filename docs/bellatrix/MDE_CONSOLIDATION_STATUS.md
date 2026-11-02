@@ -1,5 +1,7 @@
 # Bellatrix MDE consolidation checkpoint
 
+> Historical checkpoint: namespace compatibility statements below are superseded by the [current beta format policy](mde.md#beta-format-and-composition). Only `bellatrix.mde` is supported now.
+
 Base: `9607a1aadca8b128198c4b88192464a7bb2f6638`.
 
 The workspace now registers `bellatrix_mde` as the single persisted/modeling

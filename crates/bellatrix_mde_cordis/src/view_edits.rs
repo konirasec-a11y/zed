@@ -12,13 +12,25 @@ pub struct ModelingMoveViewRequested {
 }
 pub struct ModelingMoveView;
 impl Event for ModelingMoveView {
-    const NAME: &'static str = "bellatrix.bellatrix-mde-modeling.move-view.v1";
+    const NAME: &'static str = "bellatrix.mde.move-view.v1";
     type Args = ModelingMoveViewRequested;
     type Output = Result<u64, String>;
 }
-pub(crate) async fn move_view(context: &Context, projects: &ProjectService,
-    request: ModelingMoveViewRequested) -> Result<u64, String> {
-    crate::mutation::execute(context, projects, request.project_id, request.expected_revision, Command::MoveView {
-        view_id: request.view_id, dx: request.dx, dy: request.dy,
-    }).await
+pub(crate) async fn move_view(
+    context: &Context,
+    projects: &ProjectService,
+    request: ModelingMoveViewRequested,
+) -> Result<u64, String> {
+    crate::mutation::execute(
+        context,
+        projects,
+        request.project_id,
+        request.expected_revision,
+        Command::MoveView {
+            view_id: request.view_id,
+            dx: request.dx,
+            dy: request.dy,
+        },
+    )
+    .await
 }

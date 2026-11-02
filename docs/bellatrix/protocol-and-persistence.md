@@ -4,6 +4,8 @@
 
 ## Decision
 
+Bellatrix beta has one canonical model section, `bellatrix.mde`, and one public MDE event prefix, `bellatrix.mde.*.v1`. Old Bellatrix namespaces are unsupported and rejected explicitly; there is no fallback or migration layer. This breaking Bellatrix policy does not authorize changes to Zed native formats or protocols.
+
 **Zed is the source of truth for file/worktree I/O, text buffers, GPUI UI events, Workspace/Pane/Dock persistence and session restoration.** **Cordis-rs remains the source of truth for backend capability lifecycles and public domain events.** Engine-MDE is responsible for semantic validation and versioned model changes. Do **not** implement another file explorer, text persistence engine, UI event bus, dock/session database or RPC framework.
 
 The `proto` crate defines the **remote and collaboration wire protocol** `package zed.messages`, not the application's entire local state model or local SQLite persistence. It is not a generic replacement for the Cordis domain-event system. Keep its Zed message numbering and `reserved` fields stable.
@@ -58,7 +60,7 @@ Recommended incremental migration:
 
 1. Associate an MDE document with a real `project::ProjectPath` and `language::Buffer` belonging to Zed, so file open/save/rename/reload and local notifications use Zed's existing Project/BufferStore APIs.
 2. Parse an immutable MDE snapshot from the serialized model; validate mutations through the MDE domain/Cordis contract, with explicit conflict policy when the underlying buffer changed. Do not perform arbitrary domain mutations from an unvalidated text edit.
-3. After round-trip, external-edit, concurrent-write, dirty-state and legacy-file tests pass, retire the duplicate Bellatrix disk writer/open-file shell **only where Zed is demonstrably authoritative**. Keep semantic model identity, namespace and validation contracts independent from the UI runtime.
+3. After round-trip, external-edit, concurrent-write, dirty-state and unsupported-beta-format rejection tests pass, retire the duplicate Bellatrix disk writer/open-file shell **only where Zed is demonstrably authoritative**. Keep semantic model identity, namespace and validation contracts independent from the UI runtime.
 4. Headless MDE engines must still work without initializing GPUI/Workspace. Do not make backend Cordis Services depend on Zed UI entities; use an explicit storage adapter/interface if sharing a file representation.
 
 Do not put user project documents into Zed's workspace/session SQLite as the only authoritative copy. The current host still creates a standalone Bellatrix document from `BELLATRIX_PROJECT_FILE`, `BELLATRIX_MODEL_FILE` or a demo fixture at startup; it **does not yet select documents from the active Zed Project**. Retire that behavior only when ProjectPath/Buffer-backed document opening and domain revision tests are operational. That database is scoped to the local application's session/state.

@@ -41,6 +41,7 @@ message Diagram {
   double height = 4;
   repeated View views = 5;
   // UMLDI diagram type and context, distinct from View subjects.
+  // Presence and nonblank value are required by the model decoder.
   optional string uml_di_type = 6;
   repeated string model_elements = 7;
 }

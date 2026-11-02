@@ -1,7 +1,7 @@
-use crate::{Project, validate_structural_model};
+use crate::{Project, StructuralSeverity, validate_structural_model};
 use std::collections::HashSet;
 
-pub(super) fn new_generalizations(before: &Project, after: &Project) -> Result<(), String> {
+pub(super) fn new_relationships(before: &Project, after: &Project) -> Result<(), String> {
     let existing = before
         .relations
         .iter()
@@ -10,9 +10,7 @@ pub(super) fn new_generalizations(before: &Project, after: &Project) -> Result<(
     let added = after
         .relations
         .iter()
-        .filter(|relation| {
-            relation.kind == "uml.generalization" && !existing.contains(relation.id.as_str())
-        })
+        .filter(|relation| !existing.contains(relation.id.as_str()))
         .collect::<Vec<_>>();
     if added.is_empty() {
         return Ok(());
@@ -23,14 +21,19 @@ pub(super) fn new_generalizations(before: &Project, after: &Project) -> Result<(
         .collect::<HashSet<_>>();
     // Draft diagnostics on unrelated, existing relationships must not block edits.
     for diagnostic in validate_structural_model(after) {
-        if identifiers.contains(diagnostic.subject_id.as_str()) {
+        if diagnostic.severity == StructuralSeverity::Error
+            && identifiers.contains(diagnostic.subject_id.as_str())
+        {
             return Err(format!("{}: {}", diagnostic.code, diagnostic.message));
         }
     }
     let graph = crate::GraphIndex::new(after);
     // Use the shared graph query: a pre-existing unrelated cycle must not hide
     // a second cycle introduced by a new edge, nor block an unrelated edit.
-    for relation in added {
+    for relation in added
+        .into_iter()
+        .filter(|relation| relation.kind == "uml.generalization")
+    {
         if graph
             .shortest_path(&relation.to, &relation.from, Some("uml.generalization"))
             .map_err(|error| error.to_string())?
@@ -62,7 +65,7 @@ mod tests {
             "geometry": {"kind": "rect", "x": index as f64 * 220.0, "y": 100.0, "width": 180.0, "height": 100.0}
         })).collect::<Vec<_>>();
         serde_json::from_value(serde_json::json!({"id": "model", "name": "Draft",
-            "elements": elements, "diagrams": [{"id": "diagram", "name": "Classes", "views": views}]}))
+            "elements": elements, "diagrams": [{"id": "diagram", "name": "Classes", "uml_di_type": "UMLClassDiagram", "views": views}]}))
     }
 
     fn edge(project: &mut Project, identifier: &str, from: &str, to: &str) {
@@ -225,6 +228,98 @@ mod tests {
                 view_id: "view-a".into(),
                 dx: 10.0,
                 dy: 20.0,
+            },
+        ] {
+            assert!(apply(&model, &command, 0).is_ok());
+        }
+        Ok(())
+    }
+    #[test]
+    fn new_interface_realizations_and_associations_enforce_endpoint_semantics()
+    -> serde_json::Result<()> {
+        for (kind, source, target, error) in [
+            (
+                ModelingRelationKind::InterfaceRealization,
+                "uml.artifact",
+                "uml.interface",
+                Some("UML_INTERFACE_REALIZATION_SOURCE"),
+            ),
+            (
+                ModelingRelationKind::InterfaceRealization,
+                "uml.component",
+                "uml.interface",
+                None,
+            ),
+            (
+                ModelingRelationKind::Association,
+                "uml.package",
+                "uml.class",
+                Some("UML_ASSOCIATION_END_TYPE"),
+            ),
+            (
+                ModelingRelationKind::Association,
+                "uml.data_type",
+                "uml.class",
+                None,
+            ),
+        ] {
+            let model = project([source, target, "uml.class", "uml.class"])?;
+            let command = Command::CreateRelation {
+                diagram_id: "diagram".into(),
+                kind,
+                from: "a".into(),
+                to: "b".into(),
+            };
+            if let Some(code) = error {
+                rejected_without_mutation(&model, command, code);
+            } else {
+                assert!(apply(&model, &command, 0).is_ok(), "{source} -> {target}");
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn new_relationship_warnings_do_not_become_errors() -> serde_json::Result<()> {
+        let model = project(["uml.template", "uml.interface", "uml.class", "uml.class"])?;
+        let command = Command::CreateRelation {
+            diagram_id: "diagram".into(),
+            kind: ModelingRelationKind::InterfaceRealization,
+            from: "a".into(),
+            to: "b".into(),
+        };
+        let updated = apply(&model, &command, 0);
+        assert!(updated.is_ok(), "{updated:?}");
+        if let Ok(updated) = updated {
+            assert!(validate_structural_model(&updated).iter().any(
+                |diagnostic| diagnostic.severity == StructuralSeverity::Warning
+                    && diagnostic.code == "MDE_RELATIONSHIP_ENDPOINT_UNSUPPORTED"
+            ));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn existing_invalid_association_does_not_block_unrelated_new_relationships_or_rename()
+    -> serde_json::Result<()> {
+        let mut model = project(["uml.package", "uml.class", "uml.class", "uml.interface"])?;
+        model.relations.push(Relation {
+            id: "old-invalid-association".into(),
+            kind: "uml.association".into(),
+            from: "a".into(),
+            to: "b".into(),
+            properties: Default::default(),
+        });
+        for command in [
+            Command::CreateRelation {
+                diagram_id: "diagram".into(),
+                kind: ModelingRelationKind::InterfaceRealization,
+                from: "c".into(),
+                to: "d".into(),
+            },
+            Command::Rename {
+                element_id: "a".into(),
+                name: "Draft package".into(),
             },
         ] {
             assert!(apply(&model, &command, 0).is_ok());

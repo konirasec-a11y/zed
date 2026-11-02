@@ -205,7 +205,8 @@
           },
           "z_index": 1
         }
-      ]
+      ],
+      "uml_di_type": "UMLClassDiagram"
     }
   ]
 }

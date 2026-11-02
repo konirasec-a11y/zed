@@ -3,12 +3,12 @@
 mod class;
 mod interface;
 pub use interface::UmlInterfaceBall;
+mod figures;
 mod inline_edit;
 mod quick_edit;
-mod figures;
 mod relationship;
+pub use class::UmlClassifier;
 pub use figures::UmlFigure;
-pub use relationship::{UmlLineSegment, UmlRelationGlyph};
-pub use class::{UmlClassCard, UmlClassifier};
 pub use inline_edit::UmlInlineNameEditor;
 pub use quick_edit::{UmlQuickAction, UmlQuickEdit, UmlVisibilityPicker};
+pub use relationship::{UmlLineSegment, UmlRelationGlyph};

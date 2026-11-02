@@ -49,12 +49,11 @@ impl Event for ModelingDeleteDiagram {
     type Output = Result<u64, String>;
 }
 
-/// Stored UMLDI type is authoritative; `kind` supplies the explicit legacy fallback.
+/// Validation uses the required stored UMLDI type; callers cannot override it.
 #[derive(Clone, Debug)]
 pub struct ModelingValidateDiagramRequested {
     pub project_id: ProjectId,
     pub diagram_id: String,
-    pub kind: StructuralDiagramKind,
 }
 pub struct ModelingValidateDiagram;
 impl Event for ModelingValidateDiagram {
@@ -77,11 +76,9 @@ fn validate(
         .iter()
         .find(|diagram| diagram.id == request.diagram_id)
         .ok_or("diagram not found")?;
-    let kind = match diagram.uml_di_type.as_deref() {
-        Some(stored) => StructuralDiagramKind::from_uml_di_type(stored)
-            .ok_or_else(|| format!("unsupported UMLDI diagram type: {stored}"))?,
-        None => request.kind,
-    };
+    let stored = diagram.uml_di_type.as_str();
+    let kind = StructuralDiagramKind::from_uml_di_type(stored)
+        .ok_or_else(|| format!("unsupported UMLDI diagram type: {stored}"))?;
     Ok(validate_structural_diagram(
         &model,
         &request.diagram_id,

@@ -67,7 +67,7 @@ async fn interface_quick_edit_commands_create_real_objects_and_names() {
     let snapshot = service.snapshot(&id).unwrap();
     let section: ModelingSection = serde_json::from_value(
         snapshot
-            .section("bellatrix.bellatrix-mde-modeling")
+            .section(bellatrix_mde::MODELING_NAMESPACE)
             .unwrap()
             .clone(),
     )
@@ -101,7 +101,7 @@ async fn interface_quick_edit_commands_create_real_objects_and_names() {
     assert_eq!(snapshot.revision(), 7);
     let section: ModelingSection = serde_json::from_value(
         snapshot
-            .section("bellatrix.bellatrix-mde-modeling")
+            .section(bellatrix_mde::MODELING_NAMESPACE)
             .unwrap()
             .clone(),
     )
@@ -196,7 +196,7 @@ async fn interface_quick_edit_commands_create_real_objects_and_names() {
     assert_eq!(snapshot.revision(), 10);
     let section: ModelingSection = serde_json::from_value(
         snapshot
-            .section("bellatrix.bellatrix-mde-modeling")
+            .section(bellatrix_mde::MODELING_NAMESPACE)
             .unwrap()
             .clone(),
     )

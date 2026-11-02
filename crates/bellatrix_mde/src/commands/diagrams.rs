@@ -20,7 +20,7 @@ pub(super) fn create(
         name: name.into(),
         width: 1280.0,
         height: 720.0,
-        uml_di_type: Some(kind.uml_di_type().into()),
+        uml_di_type: kind.uml_di_type().into(),
         model_elements: model_elements.to_vec(),
         views: Vec::new(),
     });
@@ -93,7 +93,7 @@ mod tests {
                 0,
             )?;
             let diagram = updated.diagrams.last().ok_or("created diagram missing")?;
-            assert_eq!(diagram.uml_di_type.as_deref(), Some(kind.uml_di_type()));
+            assert_eq!(diagram.uml_di_type.as_str(), kind.uml_di_type());
             assert_eq!(diagram.model_elements, context);
             assert!(diagram.views.is_empty());
             assert_eq!((diagram.width, diagram.height), (1280.0, 720.0));

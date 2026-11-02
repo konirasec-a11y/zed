@@ -17,6 +17,7 @@ pub enum UmlType {
     Collaboration,
     Template,
     Package,
+    Profile,
     Model,
     Subsystem,
     Note,
@@ -83,6 +84,7 @@ impl UmlType {
             "uml.collaboration" => Self::Collaboration,
             "uml.template" => Self::Template,
             "uml.package" => Self::Package,
+            "uml.profile" => Self::Profile,
             "uml.model" => Self::Model,
             "uml.subsystem" => Self::Subsystem,
             "uml.comment" | "uml.note" => Self::Note,
@@ -118,6 +120,7 @@ impl UmlType {
             Self::Stereotype => "Stereotype",
             Self::Collaboration => "Collaboration",
             Self::Package => "Package",
+            Self::Profile => "Profile",
             Self::Model => "Model",
             Self::Note => "Comment",
             Self::Constraint => "Constraint",
@@ -132,11 +135,8 @@ impl UmlType {
     }
 
     pub fn is_classifier(self) -> bool {
-        // Preserve the legacy Template capability without inventing its UML type.
-        self == Self::Template
-            || self
-                .metaclass()
-                .is_some_and(|name| crate::uml::metamodel::conforms_to(name, "Classifier"))
+        self.metaclass()
+            .is_some_and(|name| crate::uml::metamodel::conforms_to(name, "Classifier"))
     }
 
     pub fn is_structured_classifier(self) -> bool {
@@ -157,7 +157,9 @@ impl UmlType {
 
     pub fn supports(self, capability: UmlCapability) -> bool {
         match capability {
-            UmlCapability::Annotation => !matches!(self, Self::Frame),
+            // Profile registration enables notation only; command support must
+            // be introduced deliberately with its ownership/application adapter.
+            UmlCapability::Annotation => !matches!(self, Self::Frame | Self::Profile),
             // Preserve the editor's supported commands independently of the
             // broader semantic Classifier hierarchy used by validation.
             UmlCapability::Attribute | UmlCapability::Operation => matches!(
@@ -289,6 +291,7 @@ mod tests {
             UmlType::Stereotype,
             UmlType::Collaboration,
             UmlType::Package,
+            UmlType::Profile,
             UmlType::Model,
             UmlType::Note,
             UmlType::Constraint,
@@ -324,9 +327,32 @@ mod tests {
             assert_eq!(kind.may_specialize_type(UmlType::Class), None);
             assert_eq!(UmlType::Class.may_specialize_type(kind), None);
             assert!(!kind.is_structured_classifier());
-            assert_eq!(kind.is_classifier(), kind == UmlType::Template);
+            assert!(!kind.is_classifier());
         }
         assert_eq!(UmlType::from_kind("uml.unknown"), None);
         assert!(!UmlQuickCommand::AddSubtype.accepts("uml.unknown"));
+    }
+
+    #[test]
+    fn profile_is_a_package_not_a_classifier_or_a_new_command_surface() {
+        assert_eq!(UmlType::from_kind("uml.profile"), Some(UmlType::Profile));
+        assert_eq!(UmlType::Profile.metaclass(), Some("Profile"));
+        assert!(crate::uml::metamodel::conforms_to("Profile", "Package"));
+        assert!(!UmlType::Profile.is_classifier());
+        for capability in [
+            UmlCapability::Annotation,
+            UmlCapability::Attribute,
+            UmlCapability::Operation,
+            UmlCapability::Reception,
+            UmlCapability::Specialization,
+            UmlCapability::RealizationTarget,
+            UmlCapability::TemplateParameter,
+            UmlCapability::ClassInterfaces,
+            UmlCapability::ClassAssociation,
+            UmlCapability::Port,
+            UmlCapability::Part,
+        ] {
+            assert!(!UmlType::Profile.supports(capability));
+        }
     }
 }

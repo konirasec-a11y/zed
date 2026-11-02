@@ -1,24 +1,14 @@
 use crate::view_edits::{ModelingMoveView, move_view};
-use bellatrix_mde::{Graph, ModelingSection, Project, commands::Command};
+use bellatrix_mde::{Graph, MODELING_NAMESPACE, ModelingSection, Project, commands::Command};
 use bellatrix_project::{ProjectDocument, ProjectId, ProjectService};
 use cordis::event::responder;
 use cordis::{Context, Event, InjectSpec, Plugin, Service};
 use std::{convert::Infallible, io, sync::Arc};
 
-pub const MODELING_NAMESPACE: &str = "bellatrix.bellatrix-mde-modeling";
-pub const LEGACY_MODELING_NAMESPACE: &str = "bellatrix.modeling";
-pub(crate) fn namespace_for(document: &ProjectDocument) -> &'static str {
-    if document.section(MODELING_NAMESPACE).is_some() {
-        MODELING_NAMESPACE
-    } else {
-        LEGACY_MODELING_NAMESPACE
-    }
-}
 pub(crate) fn from_document(document: &ProjectDocument) -> Result<ModelingSection, String> {
     let state = document
         .section(MODELING_NAMESPACE)
-        .or_else(|| document.section(LEGACY_MODELING_NAMESPACE))
-        .ok_or("bellatrix-project has no Modeling section")?;
+        .ok_or("unsupported or missing MDE section: expected bellatrix.mde; beta documents in other namespaces are not supported")?;
     serde_json::from_value(state.clone()).map_err(|error| error.to_string())
 }
 pub fn with_model(document: ProjectDocument, model: &Project) -> Result<ProjectDocument, String> {
@@ -43,7 +33,7 @@ pub struct ModelingRenameRequested {
 }
 pub struct ModelingRename;
 impl Event for ModelingRename {
-    const NAME: &'static str = "bellatrix.bellatrix-mde-modeling.rename.v1";
+    const NAME: &'static str = "bellatrix.mde.rename.v1";
     type Args = ModelingRenameRequested;
     type Output = Result<u64, String>;
 }
@@ -210,4 +200,26 @@ async fn rename(
         },
     )
     .await
+}
+
+#[cfg(test)]
+mod namespace_tests {
+    use super::*;
+
+    #[test]
+    fn obsolete_namespaces_are_rejected_without_creating_or_migrating_state()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for namespace in ["bellatrix.bellatrix-mde-modeling", "bellatrix.modeling"] {
+            let state = serde_json::json!({"elements": [], "relations": [], "diagrams": []});
+            let document =
+                ProjectDocument::new(ProjectId::new("old-beta-document")?, "Old beta document")?
+                    .with_section(namespace, state.clone())?;
+            assert!(
+                matches!(from_document(&document), Err(error) if error.contains("not supported"))
+            );
+            assert_eq!(document.section(namespace), Some(&state));
+            assert!(document.section(MODELING_NAMESPACE).is_none());
+        }
+        Ok(())
+    }
 }

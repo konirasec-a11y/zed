@@ -17,7 +17,7 @@ Este contrato pertence à engine MDE. Ele não redefine Bellatrix como editor UM
 
 **Comando.** `ModelingQuickEdit` recebe `element_id`, ação tipada, diagrama, projeto e revisão. O mesmo executor realiza as ações comuns. Subtipo/supertipo preservam o tipo do classificador selecionado e a direção da generalização. O evento antigo `ModelingInterfaceQuickEdit` fica apenas como adaptador de compatibilidade; não contém outra implementação das mutações.
 
-**Notação.** `UmlClassifier` compõe título, compartments, seleção e edição. A notação retangular e a notação circular usam o mesmo renderer de membros. `UmlClassCard` é apenas um alias público temporário. `UmlFigure` apresenta as notações não classificadoras. Note e Constraint usam o mesmo contorno de folha, sem se tornarem o mesmo objeto semântico.
+**Notação.** `UmlClassifier` compõe título, compartments, seleção e edição. A notação retangular e a notação circular usam o mesmo renderer de membros. `UmlFigure` apresenta as notações não classificadoras. Note e Constraint usam o mesmo contorno de folha, sem se tornarem o mesmo objeto semântico.
 
 **View.** Largura, altura, posição e zoom são a entrada da projeção. `interface_layout` é uma função pura, usada tanto pelo desenho quanto pelo roteamento. O raio não é mais uma constante de 14px independente da View. Um círculo permanece circular, limitado pela dimensão disponível e pelo espaço reservado ao nome e aos membros. O redimensionamento não remove membros nem muda seu tipo. O mínimo intrínseco é resolvido igualmente para documentos antigos e novos.
 

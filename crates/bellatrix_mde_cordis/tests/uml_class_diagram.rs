@@ -72,7 +72,7 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
     let snapshot = service.snapshot(&id).unwrap();
     let section: ModelingSection = serde_json::from_value(
         snapshot
-            .section("bellatrix.bellatrix-mde-modeling")
+            .section(bellatrix_mde::MODELING_NAMESPACE)
             .unwrap()
             .clone(),
     )
@@ -110,8 +110,8 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
     let unchanged = service.snapshot(&id).unwrap();
     assert_eq!(unchanged.revision(), revision);
     assert_eq!(
-        unchanged.section("bellatrix.bellatrix-mde-modeling"),
-        snapshot.section("bellatrix.bellatrix-mde-modeling")
+        unchanged.section(bellatrix_mde::MODELING_NAMESPACE),
+        snapshot.section(bellatrix_mde::MODELING_NAMESPACE)
     );
     let types = ModelingRelationKind::BASIC
         .iter()
@@ -138,7 +138,7 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
     let final_snapshot = service.snapshot(&id).unwrap();
     let result: ModelingSection = serde_json::from_value(
         final_snapshot
-            .section("bellatrix.bellatrix-mde-modeling")
+            .section(bellatrix_mde::MODELING_NAMESPACE)
             .unwrap()
             .clone(),
     )
@@ -197,7 +197,7 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
     let final_doc = service.snapshot(&id).unwrap();
     let section: ModelingSection = serde_json::from_value(
         final_doc
-            .section("bellatrix.bellatrix-mde-modeling")
+            .section(bellatrix_mde::MODELING_NAMESPACE)
             .unwrap()
             .clone(),
     )
@@ -245,7 +245,7 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
     let updated = service.snapshot(&id).unwrap();
     let after: ModelingSection = serde_json::from_value(
         updated
-            .section("bellatrix.bellatrix-mde-modeling")
+            .section(bellatrix_mde::MODELING_NAMESPACE)
             .unwrap()
             .clone(),
     )

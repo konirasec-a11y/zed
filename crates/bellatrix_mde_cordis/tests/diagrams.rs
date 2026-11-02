@@ -69,7 +69,7 @@ async fn diagram_lifecycle_is_revision_checked_and_preserves_semantic_model() ->
         .find(|diagram| diagram.name == "New diagram")
         .ok_or("created diagram missing")?;
     let diagram_id = diagram.id.clone();
-    assert_eq!(diagram.uml_di_type.as_deref(), Some("UMLClassDiagram"));
+    assert_eq!(diagram.uml_di_type.as_str(), "UMLClassDiagram");
     assert_eq!(section.elements, model.elements);
     assert_eq!(section.relations, model.relations);
 
@@ -176,7 +176,7 @@ async fn repeated_validation_reports_hidden_semantics_without_mutating_or_bumpin
         serde_json::from_str(include_str!("../../bellatrix_mde/fixtures/todo.json"))?;
     for diagram in &mut model.diagrams {
         if diagram.id == "diagram-tasks" {
-            diagram.uml_di_type = Some("UMLClassDiagram".into());
+            diagram.uml_di_type = "UMLClassDiagram".into();
         }
     }
     model.relations.push(bellatrix_mde::Relation {
@@ -205,7 +205,6 @@ async fn repeated_validation_reports_hidden_semantics_without_mutating_or_bumpin
                 ModelingValidateDiagramRequested {
                     project_id: id.clone(),
                     diagram_id: "diagram-tasks".into(),
-                    kind: StructuralDiagramKind::CompositeStructure,
                 },
             )
             .await?;
@@ -218,7 +217,7 @@ async fn repeated_validation_reports_hidden_semantics_without_mutating_or_bumpin
                 .iter()
                 .any(|diagnostic| diagnostic.code == "UML_GENERALIZATION_CYCLE")
         );
-        // Persisted Class type wins over the request's legacy fallback.
+        // Validation uses the persisted Class type.
         assert!(
             !diagnostics
                 .iter()
@@ -237,7 +236,6 @@ async fn repeated_validation_reports_hidden_semantics_without_mutating_or_bumpin
             ModelingValidateDiagramRequested {
                 project_id: id.clone(),
                 diagram_id: "missing".into(),
-                kind: StructuralDiagramKind::Class,
             },
         )
         .await?;

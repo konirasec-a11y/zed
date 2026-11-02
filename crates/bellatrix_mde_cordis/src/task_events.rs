@@ -22,7 +22,7 @@ pub struct ModelingRunRequested {
 }
 pub struct ModelingRun;
 impl Event for ModelingRun {
-    const NAME: &'static str = "bellatrix.bellatrix-mde-modeling.run.v1";
+    const NAME: &'static str = "bellatrix.mde.run.v1";
     type Args = ModelingRunRequested;
     type Output = Result<ModelingTaskSummary, String>;
 }
@@ -42,44 +42,82 @@ pub struct ModelingTaskCompleted {
 }
 pub struct ModelingTaskCompletedEvent;
 impl Event for ModelingTaskCompletedEvent {
-    const NAME: &'static str = "bellatrix.bellatrix-mde-modeling.task-completed.v1";
+    const NAME: &'static str = "bellatrix.mde.task-completed.v1";
     type Args = ModelingTaskCompleted;
     type Output = ();
 }
 pub fn register(context: &Context, projects: Arc<ProjectService>) -> Result<(), io::Error> {
-    let _listener = context.on::<ModelingRun, _>(responder(move |context: Context, request: ModelingRunRequested| {
-        let projects = Arc::clone(&projects);
-        async move {
-            let project_id = request.project_id.clone();
-            let correlation_id = request.correlation_id;
-            let outcome = execute(projects, request).await;
-            if let Err(error) = context.emit_parallel::<ModelingTaskCompletedEvent>(Routing::Unscoped, ModelingTaskCompleted {
-                project_id, correlation_id, outcome: outcome.clone(),
-            }).await { eprintln!("Bellatrix task observer failure: {error}"); }
-            Ok::<_, Infallible>(Some(outcome))
-        }
-    })).map_err(|error| io::Error::other(error.to_string()))?;
+    let _listener = context
+        .on::<ModelingRun, _>(responder(
+            move |context: Context, request: ModelingRunRequested| {
+                let projects = Arc::clone(&projects);
+                async move {
+                    let project_id = request.project_id.clone();
+                    let correlation_id = request.correlation_id;
+                    let outcome = execute(projects, request).await;
+                    if let Err(error) = context
+                        .emit_parallel::<ModelingTaskCompletedEvent>(
+                            Routing::Unscoped,
+                            ModelingTaskCompleted {
+                                project_id,
+                                correlation_id,
+                                outcome: outcome.clone(),
+                            },
+                        )
+                        .await
+                    {
+                        eprintln!("Bellatrix task observer failure: {error}");
+                    }
+                    Ok::<_, Infallible>(Some(outcome))
+                }
+            },
+        ))
+        .map_err(|error| io::Error::other(error.to_string()))?;
     Ok(())
 }
-async fn execute(projects: Arc<ProjectService>, request: ModelingRunRequested) -> Result<ModelingTaskSummary, String> {
-    let document = projects.snapshot(&request.project_id).map_err(|error| error.to_string())?;
+async fn execute(
+    projects: Arc<ProjectService>,
+    request: ModelingRunRequested,
+) -> Result<ModelingTaskSummary, String> {
+    let document = projects
+        .snapshot(&request.project_id)
+        .map_err(|error| error.to_string())?;
     if document.revision() != request.expected_revision {
-        return Err(format!("stale bellatrix-project revision: current is {}", document.revision()));
+        return Err(format!(
+            "stale bellatrix-project revision: current is {}",
+            document.revision()
+        ));
     }
     let section = from_document(&document)?;
     let model = section.to_model(document.id().as_str(), document.name());
     let revision = document.revision();
     tokio::task::spawn_blocking(move || {
         let plan = match request.task {
-            ModelingTaskKind::GenerateRust { scope, skeleton } => bellatrix_mde_rust_generator::plan_with_options(
-                &model, &scope, bellatrix_mde_rust_generator::GenerationOptions { skeleton }),
+            ModelingTaskKind::GenerateRust { scope, skeleton } => {
+                bellatrix_mde_rust_generator::plan_with_options(
+                    &model,
+                    &scope,
+                    bellatrix_mde_rust_generator::GenerationOptions { skeleton },
+                )
+            }
             ModelingTaskKind::ExportHtml => bellatrix_mde_html_exporter::plan(&model),
-        }.map_err(|error| error.to_string())?;
+        }
+        .map_err(|error| error.to_string())?;
         let count = plan.count();
         let destination = request.destination;
-        if request.replace_generated { publish_replace(&plan, &destination).map_err(|error| error.to_string())?; }
-        else { publish_new(&plan, &destination).map_err(|error| error.to_string())?; }
-        Ok(ModelingTaskSummary { project_id: request.project_id, correlation_id: request.correlation_id,
-            revision, artifact_count: count, destination })
-    }).await.map_err(|error| error.to_string())?
+        if request.replace_generated {
+            publish_replace(&plan, &destination).map_err(|error| error.to_string())?;
+        } else {
+            publish_new(&plan, &destination).map_err(|error| error.to_string())?;
+        }
+        Ok(ModelingTaskSummary {
+            project_id: request.project_id,
+            correlation_id: request.correlation_id,
+            revision,
+            artifact_count: count,
+            destination,
+        })
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }

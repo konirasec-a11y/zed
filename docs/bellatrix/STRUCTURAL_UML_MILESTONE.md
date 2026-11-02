@@ -20,7 +20,7 @@ existing typed Cordis bridge. No Zed core edits are required by this increment.
 | Compatible specialization | `Classifier-specialize_type`, `Classifier-maySpecializeType-spec` | Metaclass conformance uses the generated catalog |
 | Final parent | `Classifier-non_final_parents` | `isFinalSpecialization`, not a substitute `isLeaf` flag |
 | Stereotype specialization | `Stereotype-generalize` | Both directions reject non-stereotype peers |
-| Diagram metadata | Optional `uml_di_type`, default-empty `model_elements` | JSON/protobuf legacy and future-name round trips |
+| Diagram metadata | Required nonblank `uml_di_type`, explicit context | Missing/null/blank JSON and missing/blank protobuf are rejected |
 | Context of six diagram categories | UMLDI `*-no_modelElement` | Context is not the list of depicted subjects |
 | Composite Structure context | `UMLCompositeStructureDiagram-modelElement_mult/modelElement_type` | Exactly one StructuredClassifier context; instance context is explicitly unsupported |
 | Safe domain mutation | `commands::apply`, Project revision integration | New invalid generalizations roll back; unrelated drafts remain editable |
@@ -35,7 +35,7 @@ proof of complete per-element constraint coverage, rendering or editing for
 each category. The toolbox remains labelled as Class editing tools.
 
 Composite Structure context may also be an InstanceSpecification with a
-StructuredClassifier classifier under UMLDI. The compatibility model does not
+StructuredClassifier classifier under UMLDI. The current model adapter does not
 yet define a validated instance-classifier encoding: this case emits an explicit
 unsupported diagnostic, not a false conformance success. Complete Component,
 Deployment, Object and Profile editing still needs dedicated model/rule/view
@@ -43,10 +43,17 @@ acceptance. Absence of a rule must never be reported as verified conformance.
 
 ## Persistence and feedback
 
-Existing protobuf fields retain their tags; Diagram adds optional tag 6 and
-repeated tag 7. Old JSON fields default to absent type and empty context. Unknown
-future diagram type strings round-trip without reinterpretation; explicit
-structural validation refuses a mismatched type. Existing namespaces stay intact.
+The beta contract now requires a nonblank `uml_di_type`. Missing type data is
+rejected rather than inferred as Class. Protobuf field 6 keeps presence detection
+so a missing value is explicitly rejected by the decoder. `model_elements`
+represents context, not visible subjects. Explicit future type strings may be
+stored, but the current validator rejects unsupported categories.
+
+The only persisted MDE namespace is `bellatrix.mde`; old namespaces and event
+prefixes have no fallback readers, adapters or compatibility aliases. Producers,
+consumers, fixtures and tests are updated together. Old beta project documents
+must be recreated or explicitly converted outside the runtime. This intentionally
+supersedes the compatibility policy of earlier checkpoints.
 
 Validation is read-only. Domain mutations publish through the existing
 revision-checked ProjectService path. Code, model and native GUI verification
@@ -68,7 +75,7 @@ or manual CI run is required to obtain that feedback.
 
 ## Verification record — 2026-11-02
 
-- Exact copied sources of seven headless packages: **129 tests passed, zero failures**.
+- Exact copied sources of seven headless packages: **154 tests passed, zero failures**.
 - Repository `script/clippy` on the isolated domain/Cordis packages: **passed**, release/all-targets/all-features with warnings denied.
 - Rust toolchain: 1.98.1. Shared Cargo/target caches retained between runs.
 - Source fingerprint recorded by `bellatrix_headless.py`; copied sources were
@@ -81,7 +88,7 @@ or manual CI run is required to obtain that feedback.
 - Native Zed/GPUI/Windows behavior: not executed here.
 - Root Cargo.lock resolution: pending; no dependency hashes invented.
 
-The legacy class-diagram acceptance fixture attempted Class-to-Interface
+The earlier class-diagram acceptance fixture attempted Class-to-Interface
 Generalization. It now uses Class-to-Class for Generalization, keeps
 Class-to-Interface for InterfaceRealization, and explicitly checks rejection
 and rollback for the invalid Generalization. Aggregation/composition checks
@@ -95,3 +102,61 @@ python script/bellatrix_mde/bellatrix_headless.py --cache-dir <outside-repositor
 
 This command tests only the seven isolated headless packages and preserves its
 build cache. It does not replace native workspace acceptance.
+
+## Represented structural relationship rules
+
+The shared `validate_structural_model` entry point also runs
+`crates/bellatrix_mde/src/structural_rules.rs`. This is a bounded interpretation
+of the existing generic model, not full UML conformance or a new OCL runtime.
+Official references below are in `standards/uml/20161101/UML.xmi` and the OMG
+UML 2.5.1 specification.
+
+| Represented check | Normative trace | Interpretation and limits |
+| --- | --- | --- |
+| InterfaceRealization source | `InterfaceRealization-implementingClassifier`; §10.5.6.4 | Source must conform to `BehavioredClassifier`, using the generated metaclass catalog. Being merely a `Classifier` is insufficient. Target checking remains in the existing validator. |
+| Binary Association endpoint Types | `Association-ends_must_be_typed`, `TypedElement-type`; §11.8.1 | `from` and `to` represent member-end Types, not Property identities. Applies to `uml.association` and the current directed-association editor representation. Graph validation separately checks unresolved IDs. |
+| Package-owned visibility | `Package-elements_public_or_private`; §12.4.5.8 | Direct `owns` links from Package-conforming elements to PackageableElement-conforming children represent packaged elements. Present visibility must be public/private; absence/null is skipped. Does not constrain protected Class-owned features or visual nesting. |
+| Literal association multiplicities | `MultiplicityElement-lower_ge_0`, `MultiplicityElement-upper_is_unlimitedNatural`, `MultiplicityElement-upper_ge_lower`; §7.8.8.8 | Checks `sourceMultiplicity` and `targetMultiplicity` string literals: single integer, `lower..upper`, or `*` (0..*). Decimal comparison does not impose a machine-integer bound. |
+
+Errors in numeric multiplicity bounds use `UML_MULTIPLICITY_BOUNDS`.
+Absent multiplicity properties are skipped. Empty or nonliteral values produce
+`MDE_MULTIPLICITY_UNSUPPORTED` warnings, not claims that UML expressions are
+invalid: `MultiplicityElement-value_specification_constant` permits constant
+ValueSpecifications, which this validator does not evaluate. Nonstring
+multiplicity and visibility properties produce explicit MDE representation
+errors, distinct from normative diagnostics.
+
+These checks neither prohibit reflexive Associations nor impose dependency or
+aggregation acyclicity. Composite opposite-end multiplicity is deferred until
+the current diamond-side `end1Aggregation` convention has a documented mapping
+to UML Property aggregation and its opposite end. Association specialization,
+n-ary ends, Property ownership, and expression evaluation remain outside this
+slice. Focused tests are in the rule module, with positive and negative cases
+for each represented rule and unsupported-state diagnostics.
+
+Unmapped `uml.*` element adapters, including recognized editor concepts without
+normative metaclass mappings, emit `MDE_UML_METACLASS_UNSUPPORTED` warnings at
+model level. Endpoint rules likewise report unsupported mappings rather than
+inferring normative type errors. Known mapped but nonconforming metaclasses
+remain errors. Standalone non-UML kinds are not blanket-rejected.
+
+## Beta canonicalization and notation
+
+The next increment removes legacy namespace readers, compatibility reexports
+and the implicit Class-diagram fallback. `bellatrix.mde` is defined once in the
+domain. Missing/blank diagram type is a format error. The old aggregate/composite
+persisted relation kinds are rejected; their visual notations still derive from
+canonical Association properties. Template no longer pretends to be a normative
+Classifier merely for compatibility.
+
+Mandatory UML keywords and user-provided stereotype text are independent header
+fields. Component, Artifact and Stereotype reuse supported classifier rectangles;
+Profile reuses package tabs. Node/Device, InstanceSpecification and Collaboration
+are not silently drawn as Class. Shared header sizing is used by display, routing
+and resize. A stereotype text label is not a fully validated ProfileApplication.
+
+The extended validation also checks represented InterfaceRealization source
+metaclasses, Association endpoint Types, literal multiplicity bounds, and direct
+Package ownership visibility. Unsupported expressions and unresolved mappings
+produce warnings rather than false normative violations. These checks are not a
+complete implementation of Association ends or all seven diagram metamodels.

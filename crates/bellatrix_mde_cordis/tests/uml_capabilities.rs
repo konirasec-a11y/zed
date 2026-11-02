@@ -86,7 +86,7 @@ async fn common_quick_edit_is_revisioned_project_scoped_and_disposed() {
     assert_eq!(projects.snapshot(&untouched_id).unwrap().revision(), 0);
     let section: ModelingSection = serde_json::from_value(
         document
-            .section("bellatrix.bellatrix-mde-modeling")
+            .section(bellatrix_mde::MODELING_NAMESPACE)
             .unwrap()
             .clone(),
     )

@@ -9,8 +9,9 @@ mod snapshot;
 mod source;
 mod symbol_library;
 mod theme;
+pub use bellatrix_mde::MODELING_NAMESPACE;
 pub use integration::register_mde_workspace;
-pub use snapshot::{LEGACY_MODELING_NAMESPACE, MDE_NAMESPACE, MdeSnapshot, from_document};
+pub use snapshot::{MdeSnapshot, from_document};
 pub use source::MdeUiSource;
 pub use symbol_library::MdeSymbolLibraryItem;
 pub use theme::WorkbenchPalette;
@@ -140,13 +141,10 @@ fn diagram_creation_context(
 }
 
 fn diagram_validation_kind(
-    stored_type: Option<&str>,
+    stored_type: &str,
 ) -> Result<bellatrix_mde::StructuralDiagramKind, String> {
-    match stored_type {
-        Some(value) => bellatrix_mde::StructuralDiagramKind::from_uml_di_type(value)
-            .ok_or_else(|| format!("Cannot validate unsupported diagram type {value}")),
-        None => Ok(bellatrix_mde::StructuralDiagramKind::Class),
-    }
+    bellatrix_mde::StructuralDiagramKind::from_uml_di_type(stored_type)
+        .ok_or_else(|| format!("Cannot validate unsupported diagram type {stored_type}"))
 }
 
 fn canvas_model_position(
@@ -421,19 +419,15 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
-        let kind = match diagram_validation_kind(diagram.uml_di_type.as_deref()) {
-            Ok(kind) => kind,
-            Err(error) => {
-                self.feedback = error;
-                cx.notify();
-                return;
-            }
-        };
+        if let Err(error) = diagram_validation_kind(&diagram.uml_di_type) {
+            self.feedback = error;
+            cx.notify();
+            return;
+        }
         self.submit(
             MdeUiCommand::ValidateDiagram(bellatrix_mde_cordis::ModelingValidateDiagramRequested {
                 project_id: self.project_id().clone(),
                 diagram_id: diagram.id.clone(),
-                kind,
             }),
             cx,
         );
@@ -956,7 +950,6 @@ impl Render for MdeWorkbenchItem {
         };
         let mut title = format!("MDE · {}", self.project_id().as_str());
         let details: String;
-        let mut validation_label = "Validate";
         let mut cards = Vec::new();
         let mut edges = Vec::new();
         match self.source.snapshot() {
@@ -979,9 +972,6 @@ impl Render for MdeWorkbenchItem {
                     snapshot.revision
                 );
                 if let Some(diagram) = diagram {
-                    if diagram.uml_di_type.is_none() {
-                        validation_label = "Validate (legacy as Class)";
-                    }
                     title = format!("{} / {}", snapshot.name, diagram.name);
                     let auto_routes =
                         RelationshipGraph::new(&snapshot.section, &diagram.id).paths();
@@ -1140,6 +1130,22 @@ impl Render for MdeWorkbenchItem {
                             }
                             _ => {}
                         }
+                        let notation = bellatrix_mde::uml_notation(&element.kind);
+                        if matches!(
+                            notation,
+                            bellatrix_mde::UmlNotation::ClassifierRectangle
+                                | bellatrix_mde::UmlNotation::PackageTab
+                        ) {
+                            let applied = element
+                                .properties
+                                .get("stereotype")
+                                .and_then(serde_json::Value::as_str);
+                            local_height = local_height.max(
+                                bellatrix_mde::uml_header(&element.kind, applied)
+                                    .minimum_height(notation)
+                                    as f32,
+                            );
+                        }
                         let semantic_type = UmlType::from_kind(&element.kind);
                         let is_interface = semantic_type == Some(UmlType::Interface);
                         let contents = classifier_contents(&snapshot.section, &element.id);
@@ -1218,7 +1224,7 @@ impl Render for MdeWorkbenchItem {
                             .and_then(serde_json::Value::as_str)
                             .filter(|value| !value.trim().is_empty())
                         {
-                            classifier = classifier.stereotype(format!("«{value}»"));
+                            classifier = classifier.stereotype(value.to_owned());
                         }
                         for relation in &snapshot.section.relations {
                             if relation.kind != "owns" || relation.from != element.id {
@@ -1314,6 +1320,13 @@ impl Render for MdeWorkbenchItem {
                                         item.begin_inline_edit(id, window, cx)
                                     });
                                 });
+                            if let Some(value) = element
+                                .properties
+                                .get("stereotype")
+                                .and_then(serde_json::Value::as_str)
+                            {
+                                figure = figure.stereotype(value.to_owned());
+                            }
                             if editing.is_some() {
                                 if let Some(field) = self.inline_editor.clone() {
                                     let confirm = cx.weak_entity();
@@ -1334,7 +1347,11 @@ impl Render for MdeWorkbenchItem {
                                 }
                             }
                             figure.into_any_element()
-                        } else if semantic_type.is_some_and(UmlType::is_classifier) {
+                        } else if matches!(
+                            notation,
+                            bellatrix_mde::UmlNotation::ClassifierRectangle
+                                | bellatrix_mde::UmlNotation::InterfaceBall
+                        ) {
                             classifier.into_any_element()
                         } else {
                             div()
@@ -1562,7 +1579,7 @@ impl Render for MdeWorkbenchItem {
                             .items_center()
                             .child(Label::new(details))
                             .child(
-                                ui::Button::new("mde-validate-diagram", validation_label).on_click(
+                                ui::Button::new("mde-validate-diagram", "Validate").on_click(
                                     move |_, window, cx| {
                                         if let Err(error) = validate_owner
                                             .update(cx, |item, cx| item.validate_diagram(cx))
@@ -1803,14 +1820,12 @@ mod relationship_interaction_tests {
     }
 
     #[test]
-    fn validation_uses_known_metadata_or_explicit_legacy_class_fallback() {
+    fn validation_requires_known_explicit_metadata() {
         for kind in bellatrix_mde::StructuralDiagramKind::ALL {
-            assert_eq!(diagram_validation_kind(Some(kind.uml_di_type())), Ok(kind));
+            assert_eq!(diagram_validation_kind(kind.uml_di_type()), Ok(kind));
         }
-        assert_eq!(
-            diagram_validation_kind(None),
-            Ok(bellatrix_mde::StructuralDiagramKind::Class)
-        );
-        assert!(diagram_validation_kind(Some("UMLFutureDiagram")).is_err());
+        assert!(diagram_validation_kind("").is_err());
+        assert!(diagram_validation_kind("  ").is_err());
+        assert!(diagram_validation_kind("UMLFutureDiagram").is_err());
     }
 }
