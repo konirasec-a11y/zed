@@ -8,14 +8,16 @@ use std::sync::Arc;
 #[derive(IntoElement)]
 pub struct UmlRelationGlyph {
     kind:String,
+    width:f32,
+    height:f32,
     from:(f32,f32),
     to:(f32,f32),
     cubic:Option<((f32,f32),(f32,f32))>,
     selected:bool,
 }
 impl UmlRelationGlyph {
-    pub fn new(kind:impl Into<String>,from:(f32,f32),to:(f32,f32))->Self {
-        Self {kind:kind.into(),from,to,cubic:None,selected:false}
+    pub fn new(kind:impl Into<String>,width:f32,height:f32,from:(f32,f32),to:(f32,f32))->Self {
+        Self {kind:kind.into(),width:width.max(1.0),height:height.max(1.0),from,to,cubic:None,selected:false}
     }
     pub fn cubic(mut self, a:(f32,f32), b:(f32,f32))->Self {
         self.cubic=Some((a,b));self
@@ -80,8 +82,8 @@ impl RenderOnce for UmlRelationGlyph {
         }else{format!("M {x1:.2} {y1:.2} L {x2:.2} {y2:.2}")};
         let marks=marker_paths(&self.kind,self.from,self.to,&stroke,&background,self.cubic);
         let content=format!(
-            "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 1000' preserveAspectRatio='none'>             <path d='{d}' fill='none' stroke='{stroke}' stroke-width='1.6'{} />{marks}</svg>",
-            dash(&self.kind));
+            "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {:.2} {:.2}' preserveAspectRatio='none'>             <path d='{d}' fill='none' stroke='{stroke}' stroke-width='1.6'{} />{marks}</svg>",
+            self.width,self.height,dash(&self.kind));
         // The caller sets the local SVG bounds; `viewBox` is normalized here.
         div().size_full().child(svg().data(Arc::<[u8]>::from(content.into_bytes())).size_full())
     }
