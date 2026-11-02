@@ -1,7 +1,10 @@
 //! Semantic relationships own endpoint identities; notation supplies the endpoint geometry.
-use crate::{class_diagram::ModelingRelationKind, project_integration::{from_document, namespace_for}};
+use crate::project_integration::{from_document, namespace_for};
 use bellatrix_mde_model::{Geometry, ModelingSection, PathSegment, Point, Relation, Style, View};
-use bellatrix_mde_modeling::{Graph, InterfaceLayout, UmlType, classifier_contents, interface_layout};
+use bellatrix_mde_modeling::{Graph, ModelingRelationKind, relation_kind_for_creation};
+pub(crate) use bellatrix_mde_modeling::{route_relationship as route, reroute_relationships as reroute};
+#[cfg(test)]
+use bellatrix_mde_modeling::projected_relationship_paths;
 use bellatrix_project::{ProjectId, ProjectReplace, ProjectReplaceRequested, ProjectService};
 use cordis::event::QueryOutcome;
 use cordis::{Context, Event, Routing};
@@ -20,148 +23,6 @@ impl Event for ModelingCreateRelation {
     const NAME: &'static str = "bellatrix.mde.create-relation.v1";
     type Args = ModelingCreateRelationRequested;
     type Output = Result<u64, String>;
-}
-
-#[derive(Clone, Copy)]
-struct Endpoint {
-    center: Point,
-    width: f64,
-    height: f64,
-    circle: Option<InterfaceLayout>,
-}
-impl Endpoint {
-    fn anchor_toward(self, target: Point) -> Point {
-        if let Some(circle) = self.circle { return circle.anchor_toward(target); }
-        let delta_x = target.x - self.center.x;
-        let delta_y = target.y - self.center.y;
-        if delta_x.abs() < f64::EPSILON && delta_y.abs() < f64::EPSILON {
-            return Point { x: self.center.x + self.width / 2.0, y: self.center.y };
-        }
-        let horizontal = if delta_x.abs() > f64::EPSILON { self.width / 2.0 / delta_x.abs() } else { f64::MAX };
-        let vertical = if delta_y.abs() > f64::EPSILON { self.height / 2.0 / delta_y.abs() } else { f64::MAX };
-        let distance = horizontal.min(vertical);
-        Point { x: self.center.x + delta_x * distance, y: self.center.y + delta_y * distance }
-    }
-}
-
-/// Base route for a single relationship (or a hand-authored curved View).
-pub(crate) fn route(section: &ModelingSection, diagram_id: &str, from: &str, to: &str) -> Result<Geometry, String> {
-    route_with_lane(section, diagram_id, from, to, 0.0)
-}
-
-fn route_with_lane(section: &ModelingSection, diagram_id: &str, from: &str, to: &str, lane: f64) -> Result<Geometry, String> {
-    let diagram = section.diagrams.iter().find(|diagram| diagram.id == diagram_id).ok_or("diagram not found")?;
-    let endpoint = |subject: &str| -> Result<Endpoint, String> {
-        let view = diagram.views.iter().find(|view| view.subject.as_deref() == Some(subject))
-            .ok_or_else(|| format!("endpoint {subject} has no View in this diagram"))?;
-        let (left, top, width, height) = match &view.geometry {
-            Geometry::Rect { x, y, width, height } if *width > 0.0 && *height > 0.0 => (*x, *y, *width, *height),
-            _ => return Err("relationship endpoint has no valid node View".to_owned()),
-        };
-        let kind = section.elements.iter().find(|element| element.id == subject)
-            .and_then(|element| UmlType::from_kind(&element.kind));
-        if kind == Some(UmlType::Interface) {
-            let mut layout = interface_layout(width, height, classifier_contents(section, subject));
-            layout.center.x += left;
-            layout.center.y += top;
-            return Ok(Endpoint { center: layout.center, width: layout.radius * 2.0,
-                height: layout.radius * 2.0, circle: Some(layout) });
-        }
-        Ok(Endpoint { center: Point { x: left + width / 2.0, y: top + height / 2.0 }, width, height, circle: None })
-    };
-    let source = endpoint(from)?;
-    let target = endpoint(to)?;
-    if from == to {
-        let start = source.anchor_toward(Point { x: source.center.x + source.width, y: source.center.y - source.height });
-        let end = source.anchor_toward(Point { x: source.center.x + source.width, y: source.center.y + source.height });
-        return Ok(Geometry::Path { start, segments: vec![PathSegment::Cubic {
-            control1: Point { x: start.x + 62.0, y: start.y - 56.0 },
-            control2: Point { x: end.x + 62.0, y: end.y + 56.0 }, to: end,
-        }] });
-    }
-    let same_center = (source.center.x - target.center.x).abs() < f64::EPSILON
-        && (source.center.y - target.center.y).abs() < f64::EPSILON;
-    // Parallel relationships share semantic endpoints but must not occupy
-    // identical screen paths. Re-anchor each lane on the node boundaries,
-    // rather than translating a finished line outside the classifier shape.
-    let dx = target.center.x - source.center.x;
-    let dy = target.center.y - source.center.y;
-    let distance = dx.hypot(dy);
-    let offset = if distance > f64::EPSILON {
-        let direction = if from <= to { 1.0 } else { -1.0 };
-        Point { x: -dy / distance * lane * direction,
-            y: dx / distance * lane * direction }
-    } else { Point { x: 0.0, y: 0.0 } };
-    let start = source.anchor_toward(if same_center {
-        Point { x: source.center.x + source.width, y: source.center.y }
-    } else { Point { x: target.center.x + offset.x, y: target.center.y + offset.y } });
-    let to = target.anchor_toward(if same_center {
-        Point { x: target.center.x - target.width, y: target.center.y }
-    } else { Point { x: source.center.x + offset.x, y: source.center.y + offset.y } });
-    if lane.abs() < f64::EPSILON || same_center {
-        return Ok(Geometry::Path { start, segments: vec![PathSegment::Line { to }] });
-    }
-    let control1 = Point {
-        x: start.x + (to.x - start.x) / 3.0 + offset.x * 1.25,
-        y: start.y + (to.y - start.y) / 3.0 + offset.y * 1.25,
-    };
-    let control2 = Point {
-        x: start.x + (to.x - start.x) * 2.0 / 3.0 + offset.x * 1.25,
-        y: start.y + (to.y - start.y) * 2.0 / 3.0 + offset.y * 1.25,
-    };
-    Ok(Geometry::Path { start, segments: vec![
-        PathSegment::Cubic { control1, control2, to },
-    ] })
-}
-
-/// Stable slots include hand-authored diagram relationships, but those Views
-/// are never modified. Auto-routed siblings distribute across separate lanes.
-fn lane_for_relation(section: &ModelingSection, diagram_id: &str, relation: &Relation) -> f64 {
-    let Some(diagram) = section.diagrams.iter().find(|d| d.id == diagram_id) else {
-        return 0.0;
-    };
-    let peers = section.relations.iter()
-        .filter(|other| {
-            (other.from == relation.from && other.to == relation.to)
-                || (other.from == relation.to && other.to == relation.from)
-        })
-        .filter(|other| diagram.views.iter().any(|v|
-            v.subject.as_deref() == Some(other.id.as_str())
-        ))
-        .collect::<Vec<_>>();
-    if peers.len() < 2 { return 0.0; }
-    let index = peers.iter().position(|peer| peer.id == relation.id).unwrap_or(0);
-    (index as f64 - (peers.len() - 1) as f64 / 2.0) * 48.0
-}
-
-/// Read-only projection for auto-routed UML relationships. The Canvas can
-/// show separated lanes in previously saved projects without silently
-/// rewriting their ProjectDocument or incrementing the revision.
-pub fn projected_automatic_routes(
-    section: &ModelingSection, diagram_id: &str
-) -> std::collections::BTreeMap<String, Geometry> {
-    section.relations.iter()
-        .filter(|relation| relation.kind.starts_with("uml.")
-            && relation.properties.get("routing").and_then(serde_json::Value::as_str) == Some("automatic"))
-        .filter_map(|relation| route_with_lane(
-            section, diagram_id, &relation.from, &relation.to,
-            lane_for_relation(section, diagram_id, relation),
-        ).ok().map(|geometry| (relation.id.clone(), geometry)))
-        .collect()
-}
-
-/// The same projection becomes persisted geometry only during a real edit.
-pub(crate) fn reroute(section: &mut ModelingSection, diagram_id: &str) {
-    let routes = projected_automatic_routes(section, diagram_id);
-    if let Some(diagram) = section.diagrams.iter_mut().find(|diagram| diagram.id == diagram_id) {
-        for (subject, geometry) in routes {
-            if let Some(view) = diagram.views.iter_mut().find(|view|
-                view.subject.as_deref() == Some(subject.as_str())
-            ) {
-                view.geometry = geometry;
-            }
-        }
-    }
 }
 
 pub(crate) async fn create_relation(context: &Context, projects: &ProjectService,
@@ -187,17 +48,10 @@ pub(crate) async fn create_relation(context: &Context, projects: &ProjectService
     properties.insert("routing".into(), serde_json::json!("automatic"));
     // Aggregation/composition specialize the *end* of a UML Association.
     // The Toolbox and Class Quick Edit must persist the same model shape.
-    let semantic_kind = match request.kind {
-        ModelingRelationKind::Aggregation => {
-            properties.insert("end1Aggregation".into(), serde_json::json!("shared"));
-            "uml.association"
-        }
-        ModelingRelationKind::Composition => {
-            properties.insert("end1Aggregation".into(), serde_json::json!("composite"));
-            "uml.association"
-        }
-        _ => request.kind.model_kind(),
-    };
+    let (semantic_kind, aggregation) = relation_kind_for_creation(request.kind);
+    if let Some(aggregation) = aggregation {
+        properties.insert("end1Aggregation".into(), serde_json::json!(aggregation));
+    }
     section.relations.push(Relation { id: id.clone(), kind: semantic_kind.into(),
         from: request.from, to: request.to, properties });
     let diagram = section.diagrams.iter_mut().find(|diagram| diagram.id == request.diagram_id).ok_or("diagram not found")?;
@@ -269,13 +123,14 @@ mod tests {
             });
         }
         let before_projection = section.clone();
-        let projected = projected_automatic_routes(&section, &diagram_id);
+        let projected = projected_relationship_paths(&section, &diagram_id);
         assert_eq!(section, before_projection,
-            "reopening an old diagram must not persist a new project revision");
-        assert_eq!(projected.len(), 2);
+            "projection must not mutate the persisted project");
+        assert_eq!(projected.len(), 3);
         assert_ne!(projected["new-dependency"], projected["new-composition"]);
-        assert!(!projected.contains_key("ref-task"),
-            "the fixture's manual curved path must not be replaced");
+        assert!(matches!(&projected["ref-task"],
+            Geometry::Path { segments, .. } if matches!(segments.first(), Some(PathSegment::Cubic { .. })),
+            "legacy dependency retains its cubic bend while attaching to nodes"));
         reroute(&mut section, &diagram_id);
         let relation_view = |id: &str| section.diagrams[0].views.iter()
             .find(|view| view.subject.as_deref() == Some(id))
@@ -283,8 +138,11 @@ mod tests {
         let first = relation_view("new-dependency");
         let second = relation_view("new-composition");
         assert_ne!(first, second, "two connections must never paint over the same path");
-        assert_eq!(relation_view("ref-task"), original,
-            "hand-authored curves must not be modified by auto routing");
+        let Geometry::Path { segments, .. } = relation_view("ref-task") else {
+            panic!("legacy relationship remains a Path")
+        };
+        assert!(matches!(segments.first(), Some(PathSegment::Cubic { .. })));
+        assert!(matches!(original, Geometry::Path { .. }));
         assert!(matches!(first, Geometry::Path { segments, .. }
             if matches!(&segments[..], [PathSegment::Line {..}] | [PathSegment::Cubic {..}])));
         Graph::new(&section.to_model("project-todo", "Task List")).validate().unwrap();
