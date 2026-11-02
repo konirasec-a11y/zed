@@ -4,7 +4,7 @@
 //! compose the Working Diagrams/Toolbox and Explorer/Inspector stacks from
 //! docs/design/ while Zed still owns placement, focus and persistence.
 
-use crate::{MdeToolDrag, MdeWorkbenchItem, WorkbenchPalette, integration::OpenMdeWorkbench};
+use crate::{MdeToolDrag, MdeWorkbenchItem, WorkbenchPalette, hierarchy::project_hierarchy, integration::OpenMdeWorkbench};
 use bellatrix_mde_cordis::ModelingElementKind;
 use gpui::{
     Action, App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
@@ -309,20 +309,28 @@ impl Render for MdeRightPanel {
         let mut selected_name = None;
 
         if let Some(snapshot) = &snapshot {
-            for element in &snapshot.section.elements {
-                if Some(element.id.as_str()) == selected_id.as_deref() {
-                    selected_name = Some(element.name.clone());
-                }
-                let id = element.id.clone();
+            selected_name = snapshot.section.elements.iter()
+                .find(|element| Some(element.id.as_str()) == selected_id.as_deref())
+                .map(|element| element.name.clone());
+
+            // Project data is flat by design. Indentation reflects the real
+            // graph: filesystem parents, source declarations, semantic owners.
+            for row in project_hierarchy(&snapshot.section) {
+                let id = row.element_id.clone();
                 let owner = item.clone();
                 rows.push(
-                    TreeViewItem::new(id.clone(), element.name.clone())
-                        .toggle_state(selected_id.as_deref() == Some(id.as_str()))
-                        .on_click(move |_, _, cx| {
-                            owner.update(cx, |workbench, cx| {
-                                workbench.select_element(id.clone(), cx);
-                            });
-                        }),
+                    div()
+                        .id(format!("mde-explorer-row-{id}"))
+                        .pl(px(row.depth.min(15) as f32 * 14.0))
+                        .child(
+                            TreeViewItem::new(id.clone(), row.label)
+                                .toggle_state(selected_id.as_deref() == Some(id.as_str()))
+                                .on_click(move |_, _, cx| {
+                                    owner.update(cx, |workbench, cx| {
+                                        workbench.select_element(id.clone(), cx);
+                                    });
+                                }),
+                        ),
                 );
             }
         }
@@ -340,6 +348,7 @@ impl Render for MdeRightPanel {
         let name_input = self.name_input.clone();
         let save_item = item.clone();
         let save_input = self.save_input.clone();
+        let delete_item = item.clone();
 
         div()
             .id("mde-right-panel")
@@ -368,7 +377,19 @@ impl Render for MdeRightPanel {
                             .border_b_1().border_color(panel_border)
                             .child(Label::new("Model explorer")),
                     )
-                    .child(div().id("bellatrix-mde-explorer-scroll").flex_1().overflow_y_scroll().children(rows)),
+                    .child(
+                        div().id("bellatrix-mde-explorer-scroll")
+                            .flex_1().overflow_y_scroll()
+                            .child(
+                                div().px_3().py_2().text_xs()
+                                    .text_color(palette.muted)
+                                    .child(snapshot.as_ref().map_or_else(
+                                        || "Project unavailable".to_string(),
+                                        |s| format!("Project · {}", s.name),
+                                    )),
+                            )
+                            .children(rows),
+                    ),
             )
             .child(
                 div()
@@ -409,7 +430,15 @@ impl Render for MdeRightPanel {
                                         workbench.save_project(path, cx);
                                     });
                                 },
-                            )),
+                            ))
+                            .child(
+                                Button::new("mde-delete-element", "Delete selected element")
+                                    .on_click(move |_, _, cx| {
+                                        delete_item.update(cx, |workbench, cx| {
+                                            workbench.delete_selected(cx);
+                                        });
+                                    }),
+                            ),
                     ),
             )
     }
