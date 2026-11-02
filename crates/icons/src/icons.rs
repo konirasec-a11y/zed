@@ -50,6 +50,10 @@ pub enum IconName {
     BellRing,
     Binary,
     Bitbucket,
+    // Distinct visual language for Bellatrix MDE dock contributions.
+    BellatrixMdeTools,
+    BellatrixMdeInspector,
+    BellatrixMdeDetails,
     Blocks,
     Bookmark,
     BoltFilled,

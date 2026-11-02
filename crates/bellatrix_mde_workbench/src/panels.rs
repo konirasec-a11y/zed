@@ -4,7 +4,7 @@
 //! compose the Working Diagrams/Toolbox and Explorer/Inspector stacks from
 //! docs/design/ while Zed still owns placement, focus and persistence.
 
-use crate::{MdeToolDrag, MdeWorkbenchItem, WorkbenchPalette};
+use crate::{MdeToolDrag, MdeWorkbenchItem, WorkbenchPalette, integration::OpenMdeWorkbench};
 use bellatrix_mde_cordis::ModelingElementKind;
 use gpui::{
     Action, App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
@@ -81,8 +81,8 @@ impl Panel for MdeLeftPanel {
     }
     fn default_size(&self, _: &Window, _: &App) -> Pixels { px(246.0) }
     fn min_size(&self, _: &Window, _: &App) -> Option<Pixels> { Some(px(190.0)) }
-    fn icon(&self, _: &Window, _: &App) -> Option<IconName> { Some(IconName::FileTree) }
-    fn icon_tooltip(&self, _: &Window, _: &App) -> Option<&'static str> { Some("MDE Tools") }
+    fn icon(&self, _: &Window, _: &App) -> Option<IconName> { Some(IconName::BellatrixMdeTools) }
+    fn icon_tooltip(&self, _: &Window, _: &App) -> Option<&'static str> { Some("Bellatrix MDE - Working Diagrams & Toolbox (left dock)") }
     fn toggle_action(&self) -> Box<dyn Action> { Box::new(ToggleMdeLeft) }
     fn starts_open(&self, _: &Window, _: &App) -> bool { true }
     fn activation_priority(&self) -> u32 { MDE_LEFT_PRIORITY }
@@ -106,10 +106,13 @@ impl Render for MdeLeftPanel {
                 diagrams.push(
                     TreeViewItem::new(diagram_id.clone(), diagram.name.clone())
                         .toggle_state(active.as_deref() == Some(diagram_id.as_str()))
-                        .on_click(move |_, _, cx| {
+                        .on_click(move |_, window, cx| {
                             owner.update(cx, |workbench, cx| {
                                 workbench.select_diagram(diagram_id.clone(), cx);
                             });
+                            // The native Workspace owns the editor tab. Reopen it
+                            // after a user closes the Canvas; never create a second Dock.
+                            window.dispatch_action(Box::new(OpenMdeWorkbench), cx);
                         }),
                 );
             }
@@ -213,8 +216,8 @@ impl Panel for MdeRightPanel {
     }
     fn default_size(&self, _: &Window, _: &App) -> Pixels { px(292.0) }
     fn min_size(&self, _: &Window, _: &App) -> Option<Pixels> { Some(px(230.0)) }
-    fn icon(&self, _: &Window, _: &App) -> Option<IconName> { Some(IconName::ListTree) }
-    fn icon_tooltip(&self, _: &Window, _: &App) -> Option<&'static str> { Some("MDE Inspector") }
+    fn icon(&self, _: &Window, _: &App) -> Option<IconName> { Some(IconName::BellatrixMdeInspector) }
+    fn icon_tooltip(&self, _: &Window, _: &App) -> Option<&'static str> { Some("Bellatrix MDE - Model Explorer & Inspector (right dock)") }
     fn toggle_action(&self) -> Box<dyn Action> { Box::new(ToggleMdeRight) }
     fn starts_open(&self, _: &Window, _: &App) -> bool { true }
     fn activation_priority(&self) -> u32 { MDE_RIGHT_PRIORITY }
@@ -339,8 +342,8 @@ impl Panel for MdeBottomPanel {
         if self.position_is_valid(p) { self.state.position = p; cx.notify(); }
     }
     fn default_size(&self, _: &Window, _: &App) -> Pixels { px(190.0) }
-    fn icon(&self, _: &Window, _: &App) -> Option<IconName> { Some(IconName::ListTodo) }
-    fn icon_tooltip(&self, _: &Window, _: &App) -> Option<&'static str> { Some("MDE Details") }
+    fn icon(&self, _: &Window, _: &App) -> Option<IconName> { Some(IconName::BellatrixMdeDetails) }
+    fn icon_tooltip(&self, _: &Window, _: &App) -> Option<&'static str> { Some("Bellatrix MDE - Details: Relations, Markdown & Thumbnails (bottom dock)") }
     fn toggle_action(&self) -> Box<dyn Action> { Box::new(ToggleMdeBottom) }
     fn starts_open(&self, _: &Window, _: &App) -> bool { false }
     fn activation_priority(&self) -> u32 { MDE_BOTTOM_PRIORITY }
