@@ -14,6 +14,7 @@ use gpui::{
 };
 use ui::{Button, IconName, Label, TreeViewItem, prelude::*};
 use ui_input::InputField;
+use std::collections::HashSet;
 use workspace::{
     Workspace,
     dock::{DockPosition, Panel, PanelEvent},
@@ -272,6 +273,9 @@ pub struct MdeRightPanel {
     name_input: Entity<InputField>,
     save_input: Entity<InputField>,
     editing_id: Option<String>,
+    // These are presentation-only disclosure states; semantic ownership stays
+    // in the MDE graph, while Zed's Project Panel owns filesystem disclosure.
+    collapsed_elements: HashSet<String>,
 }
 
 impl MdeRightPanel {
@@ -289,6 +293,7 @@ impl MdeRightPanel {
             name_input,
             save_input,
             editing_id: None,
+            collapsed_elements: HashSet::new(),
         }
     }
 }
@@ -332,18 +337,41 @@ impl Render for MdeRightPanel {
                 .find(|element| Some(element.id.as_str()) == selected_id.as_deref())
                 .map(|element| element.name.clone());
 
-            // Project data is flat by design. Indentation reflects the real
-            // graph: filesystem parents, source declarations, semantic owners.
-            for row in project_hierarchy(&snapshot.section) {
+            // StarUML-style semantic ownership. Only MDE elements, never
+            // files/directories, appear here. Expand/collapse is local UI state.
+            let tree = project_hierarchy(&snapshot.section);
+            let mut hidden_by_depth: Option<usize> = None;
+            for (index, row) in tree.iter().enumerate() {
+                if let Some(ancestor_depth) = hidden_by_depth {
+                    if row.depth > ancestor_depth {
+                        continue;
+                    }
+                    hidden_by_depth = None;
+                }
+                let has_children = tree.get(index + 1)
+                    .is_some_and(|next| next.depth > row.depth);
+                let expanded = !self.collapsed_elements.contains(&row.element_id);
                 let id = row.element_id.clone();
                 let owner = item.clone();
+                let disclosure_id = row.element_id.clone();
+                let disclosure_panel = cx.weak_entity();
                 rows.push(
                     div()
                         .id(format!("mde-explorer-row-{id}"))
                         .pl(px(row.depth.min(15) as f32 * 14.0))
                         .child(
-                            TreeViewItem::new(id.clone(), row.label)
+                            TreeViewItem::new(id.clone(), row.label.clone())
+                                .root_item(has_children)
+                                .expanded(expanded)
                                 .toggle_state(selected_id.as_deref() == Some(id.as_str()))
+                                .on_toggle(move |_, _, cx| {
+                                    let _ = disclosure_panel.update(cx, |panel, cx| {
+                                        if !panel.collapsed_elements.insert(disclosure_id.clone()) {
+                                            panel.collapsed_elements.remove(&disclosure_id);
+                                        }
+                                        cx.notify();
+                                    });
+                                })
                                 .on_click(move |_, _, cx| {
                                     owner.update(cx, |workbench, cx| {
                                         workbench.select_element(id.clone(), cx);
@@ -351,6 +379,9 @@ impl Render for MdeRightPanel {
                                 }),
                         ),
                 );
+                if has_children && !expanded {
+                    hidden_by_depth = Some(row.depth);
+                }
             }
         }
 
@@ -404,7 +435,7 @@ impl Render for MdeRightPanel {
                                     .text_color(palette.muted)
                                     .child(snapshot.as_ref().map_or_else(
                                         || "Project unavailable".to_string(),
-                                        |s| format!("Project · {}", s.name),
+                                        |s| format!("Model · {}", s.name),
                                     )),
                             )
                             .children(rows),
