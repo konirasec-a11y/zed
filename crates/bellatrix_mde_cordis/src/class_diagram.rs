@@ -1,5 +1,6 @@
+//! UML Class Diagram node vocabulary. Relationship semantics and roles
+//! belong to bellatrix_mde_modeling::relationships, not this module.
 use bellatrix_mde_modeling::ModelingRelationKind;
-//! UML Class Diagram vocabulary. These are domain tool types; no GPUI or Zed dependency.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ModelingElementKind {
     Class, Interface, Signal, DataType, PrimitiveType, Enumeration, Frame,
