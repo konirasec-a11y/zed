@@ -20,7 +20,7 @@ pub use source::MdeUiSource;
 use bellatrix_mde_cordis::{
     MdeUiCommand, ModelingCreateElementRequested, ModelingElementKind,
     ModelingMoveViewRequested, ModelingRenameRequested, ModelingResizeViewRequested,
-    ModelingDeleteElementRequested,
+    ModelingDeleteElementRequested, ModelingSetPropertyRequested,
 };
 use bellatrix_mde_model::Geometry;
 use bellatrix_ui_uml::UmlClassCard;
@@ -217,6 +217,30 @@ impl MdeWorkbenchItem {
             );
             cx.notify();
         }
+    }
+
+    /// User-editable Inspector values are typed and revision-checked in MDE.
+    /// ProjectService remains authoritative; this is only a command proposal.
+    pub fn set_selected_property(
+        &mut self, path: String, value: serde_json::Value, cx: &mut Context<Self>
+    ) {
+        let Some(element_id) = self.selected_element.clone() else {
+            self.feedback = "Select a model element first".into();
+            cx.notify();
+            return;
+        };
+        let Ok(snapshot) = self.source.snapshot() else {
+            self.feedback = "Project snapshot unavailable".into();
+            cx.notify();
+            return;
+        };
+        self.submit(MdeUiCommand::SetProperty(ModelingSetPropertyRequested {
+            project_id: self.project_id().clone(),
+            element_id,
+            path,
+            value,
+            expected_revision: snapshot.revision,
+        }), cx);
     }
 
     pub fn delete_selected(&mut self, cx: &mut Context<Self>) {
