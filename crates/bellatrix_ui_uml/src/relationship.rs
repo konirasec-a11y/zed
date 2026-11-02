@@ -1,6 +1,7 @@
 //! Paint UML relations with native GPUI paths. SVG assets depend on the
 //! SVG element's resolved text color and can have a hitbox without painting.
 use bellatrix_design_system::Palette;
+use bellatrix_mde_modeling::{RelationshipMarker, RelationshipStyle};
 use gpui::{App, Bounds, IntoElement, PathBuilder, Pixels, RenderOnce, Window, canvas, point, prelude::*, px, rgb};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -9,36 +10,17 @@ pub enum UmlLineSegment {
     Cubic { control1: (f32, f32), control2: (f32, f32), to: (f32, f32) },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum EndMarker { None, OpenArrow, Triangle, Diamond, FilledDiamond, Containment }
-
-fn decorations(kind: &str) -> (EndMarker, EndMarker, bool) {
-    match kind {
-        "uml.generalization" => (EndMarker::None, EndMarker::Triangle, false),
-        "uml.interface_realization" | "uml.realization" =>
-            (EndMarker::None, EndMarker::Triangle, true),
-        "uml.directed_association" => (EndMarker::None, EndMarker::OpenArrow, false),
-        "uml.dependency" | "uml.template_binding" | "depends_on" =>
-            (EndMarker::None, EndMarker::OpenArrow, true),
-        "uml.aggregation" => (EndMarker::Diamond, EndMarker::None, false),
-        "uml.composition" => (EndMarker::FilledDiamond, EndMarker::None, false),
-        "uml.containment" => (EndMarker::Containment, EndMarker::None, false),
-        "uml.note_link" | "uml.constraint_link" => (EndMarker::None, EndMarker::None, true),
-        _ => (EndMarker::None, EndMarker::None, false),
-    }
-}
-
 #[derive(IntoElement)]
 pub struct UmlRelationGlyph {
-    kind: String,
+    style: RelationshipStyle,
     from: (f32, f32),
     to: (f32, f32),
     segments: Vec<UmlLineSegment>,
     selected: bool,
 }
 impl UmlRelationGlyph {
-    pub fn new(kind: impl Into<String>, _width: f32, _height: f32, from: (f32, f32), to: (f32, f32)) -> Self {
-        Self { kind: kind.into(), from, to, segments: Vec::new(), selected: false }
+    pub fn new(style: RelationshipStyle, _width: f32, _height: f32, from: (f32, f32), to: (f32, f32)) -> Self {
+        Self { style, from, to, segments: Vec::new(), selected: false }
     }
     pub fn cubic(mut self, control1: (f32, f32), control2: (f32, f32)) -> Self {
         self.segments = vec![UmlLineSegment::Cubic { control1, control2, to: self.to }];
@@ -87,7 +69,7 @@ fn polygon(
 }
 
 fn paint_marker(
-    window: &mut Window, marker: EndMarker, endpoint: (f32, f32), direction: (f32, f32),
+    window: &mut Window, marker: RelationshipMarker, endpoint: (f32, f32), direction: (f32, f32),
     bounds: Bounds<Pixels>, stroke: gpui::Rgba, background: gpui::Rgba, width: f32,
 ) {
     let (ux, uy) = direction;
@@ -96,20 +78,21 @@ fn paint_marker(
         endpoint.0 + forward * ux + side * perpendicular.0,
         endpoint.1 + forward * uy + side * perpendicular.1,
     );
+    use RelationshipMarker::*;
     match marker {
-        EndMarker::None => {}
-        EndMarker::OpenArrow => {
+        None => {}
+        OpenArrow => {
             stroke_line(window, offset(-12.0, 6.0), endpoint, bounds, stroke, width);
             stroke_line(window, endpoint, offset(-12.0, -6.0), bounds, stroke, width);
         }
-        EndMarker::Triangle => polygon(window, &[endpoint, offset(-17.0, 8.0),
+        Triangle => polygon(window, &[endpoint, offset(-17.0, 8.0),
             offset(-17.0, -8.0)], bounds, stroke, background, false, width),
-        EndMarker::Diamond | EndMarker::FilledDiamond => polygon(
+        Diamond | FilledDiamond => polygon(
             window, &[endpoint, offset(10.0, 7.0), offset(21.0, 0.0),
                 offset(10.0, -7.0)], bounds, stroke, background,
-            marker == EndMarker::FilledDiamond, width,
+            marker == FilledDiamond, width,
         ),
-        EndMarker::Containment => {
+        Containment => {
             let mut outline = PathBuilder::stroke(px(width));
             let center = point(bounds.origin.x + px(endpoint.0), bounds.origin.y + px(endpoint.1));
             let radius = px(7.0);
@@ -132,7 +115,7 @@ impl RenderOnce for UmlRelationGlyph {
         let palette = Palette::current(cx);
         let stroke = rgb(if self.selected { palette.selection } else { palette.text });
         let background = rgb(palette.canvas);
-        let (source_marker, target_marker, dashed) = decorations(&self.kind);
+        let RelationshipStyle { source_marker, target_marker, dashed } = self.style;
         let from = self.from;
         let to = self.to;
         let segments = if self.segments.is_empty() {
@@ -182,20 +165,16 @@ impl RenderOnce for UmlRelationGlyph {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bellatrix_mde_modeling::relationship_style_for_notation;
     #[test]
-    fn uml_relations_have_distinct_visible_notations() {
-        assert_eq!(decorations("uml.association"),(EndMarker::None,EndMarker::None,false));
-        assert_eq!(decorations("uml.generalization").1,EndMarker::Triangle);
-        assert_eq!(decorations("uml.interface_realization"),
-            (EndMarker::None,EndMarker::Triangle,true));
-        assert_eq!(decorations("uml.composition").0,EndMarker::FilledDiamond);
-        assert_eq!(decorations("uml.aggregation").0,EndMarker::Diamond);
-        assert_eq!(decorations("uml.dependency").1,EndMarker::OpenArrow);
-        assert!(decorations("uml.note_link").2);
-        // The todo fixture contains an existing "depends_on" curved Path.
-        // It is a semantic relation too, with dashed dependency notation.
-        assert_eq!(decorations("depends_on"),
-            (EndMarker::None, EndMarker::OpenArrow, true));
+    fn renderer_uses_graph_domain_markers_without_reinterpreting_semantics() {
+        let association = relationship_style_for_notation("uml.association");
+        let aggregation = relationship_style_for_notation("uml.aggregation");
+        let generalization = relationship_style_for_notation("uml.generalization");
+        assert_eq!(association.source_marker, RelationshipMarker::None);
+        assert_eq!(aggregation.source_marker, RelationshipMarker::Diamond);
+        assert_eq!(generalization.target_marker, RelationshipMarker::Triangle);
+        assert!(!generalization.dashed);
     }
     #[test]
     fn zero_length_edges_have_a_finite_tangent() {
