@@ -45,6 +45,7 @@ pub struct ElementInspector {
     /// Owned attributes/operations are model Elements, not strings in a form.
     pub attributes: Vec<InspectorMember>,
     pub operations: Vec<InspectorMember>,
+    pub receptions: Vec<InspectorMember>,
 }
 
 const VISIBILITY: &[&str] = &["public", "protected", "private", "package"];
@@ -166,7 +167,7 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
         return Some(ElementInspector {
             element_id:relation.id.clone(),kind:relation.kind.clone(),
             name:format!("{source} → {target}"),
-            properties,attributes:Vec::new(),operations:Vec::new(),
+            properties,attributes:Vec::new(),operations:Vec::new(),receptions:Vec::new(),
         });
     }
     let element = section.elements.iter().find(|element| element.id == id)?;
@@ -211,6 +212,7 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
 
     let mut attributes = Vec::new();
     let mut operations = Vec::new();
+    let mut receptions = Vec::new();
     for relation in &section.relations {
         if relation.kind != "owns" || relation.from != element.id {continue;}
         if let Some(member) = section.elements.iter().find(|e| e.id == relation.to) {
@@ -220,12 +222,13 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
             match member.kind.as_str() {
                 "rust.field" | "uml.attribute" => attributes.push(descriptor),
                 "rust.function" | "uml.operation" => operations.push(descriptor),
+                "uml.reception" => receptions.push(descriptor),
                 _ => {},
             }
         }
     }
     Some(ElementInspector {element_id:element.id.clone(),kind:element.kind.clone(),
-        name:element.name.clone(),properties,attributes,operations})
+        name:element.name.clone(),properties,attributes,operations,receptions})
 }
 
 /// Set one previously described, editable property. Never permit a generic
