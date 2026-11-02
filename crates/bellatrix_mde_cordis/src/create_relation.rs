@@ -45,7 +45,19 @@ pub(crate) fn route(section: &ModelingSection, diagram_id: &str, from: &str, to:
     let rect = |subject: &str| {
         let view = diagram.views.iter().find(|v| v.subject.as_deref() == Some(subject))
             .ok_or_else(|| format!("endpoint {subject} has no View in this diagram"))?;
-        rect_center(&view.geometry)
+        let (center,width,height) = rect_center(&view.geometry)?;
+        // A UML Interface is a lollipop, not a class rectangle. Anchor
+        // edges to the 28px circle at the top of its View, never the label
+        // or the empty rectangle used as the interaction bounds.
+        let kind=section.elements.iter().find(|element|element.id==subject)
+            .map(|element|element.kind.as_str());
+        if matches!(kind,Some("rust.trait"|"uml.interface")) {
+            let Geometry::Rect { x,y,width:box_width,.. } = &view.geometry else {
+                return Err("interface must have a rectangular View".into());
+            };
+            return Ok((Point{x:x+box_width/2.0,y:y+22.0},28.0,28.0));
+        }
+        Ok((center,width,height))
     };
     let (a, wa, ha) = rect(from)?;
     let (b, wb, hb) = rect(to)?;
