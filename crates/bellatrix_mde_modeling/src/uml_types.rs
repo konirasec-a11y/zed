@@ -4,16 +4,20 @@ pub enum UmlType {
     Class, Interface, Signal, DataType, PrimitiveType, Enumeration,
     AssociationClass, Template, Package, Model, Subsystem,
     Note, Constraint, Frame, NaryAssociation, Attribute, Operation, Reception,
+    TemplateParameter, Port, Part,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UmlCapability {
     Annotation, Attribute, Operation, Reception, Specialization, RealizationTarget,
+    TemplateParameter, ClassInterfaces, ClassAssociation, Port, Part,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UmlQuickCommand {
     AddNote, AddConstraint, AddReception, AddSubtype, AddSupertype, AddRealizingClass,
+    AddTemplateParameter, AddProvidedInterface, AddRequiredInterface,
+    AddAssociatedClass, AddAggregatedClass, AddCompositedClass, AddPort, AddPart,
 }
 
 impl UmlType {
@@ -37,6 +41,9 @@ impl UmlType {
             "rust.field" | "uml.attribute" => Self::Attribute,
             "rust.function" | "uml.operation" => Self::Operation,
             "uml.reception" => Self::Reception,
+            "uml.template_parameter" => Self::TemplateParameter,
+            "uml.port" => Self::Port,
+            "uml.part" => Self::Part,
             _ => return None,
         })
     }
@@ -53,6 +60,8 @@ impl UmlType {
             UmlCapability::Reception => matches!(self, Self::Class | Self::Interface | Self::AssociationClass),
             UmlCapability::Specialization => matches!(self, Self::Class | Self::Interface),
             UmlCapability::RealizationTarget => self == Self::Interface,
+            UmlCapability::TemplateParameter | UmlCapability::ClassInterfaces |
+            UmlCapability::ClassAssociation | UmlCapability::Port | UmlCapability::Part => self == Self::Class,
         }
     }
 }
@@ -64,6 +73,11 @@ impl UmlQuickCommand {
             Self::AddReception => UmlCapability::Reception,
             Self::AddSubtype | Self::AddSupertype => UmlCapability::Specialization,
             Self::AddRealizingClass => UmlCapability::RealizationTarget,
+            Self::AddTemplateParameter => UmlCapability::TemplateParameter,
+            Self::AddProvidedInterface | Self::AddRequiredInterface => UmlCapability::ClassInterfaces,
+            Self::AddAssociatedClass | Self::AddAggregatedClass | Self::AddCompositedClass => UmlCapability::ClassAssociation,
+            Self::AddPort => UmlCapability::Port,
+            Self::AddPart => UmlCapability::Part,
         }
     }
 
