@@ -1,6 +1,7 @@
 //! Native UML 2.5 declarations: behavioral/state_machines.
 #![allow(dead_code)]
 use serde::{Deserialize, Serialize};
+
 use crate::uml::structural::common_structure::VisibilityKind;
 
 // Original module: protocol_state_machine.rs
@@ -251,4 +252,96 @@ pub struct Pseudostate {
     pub kind: PseudostateKind,
     pub state_machine: Option<String>,
     pub state: Option<String>,
+}
+
+// Original module: protocol_conformance.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtocolConformance {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub general_machine: String,
+    pub specific_machine: String,
+}
+
+// Original module: final_state.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FinalState {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub element_import: Vec<String>,
+    pub package_import: Vec<String>,
+    pub owned_rule: Vec<String>,
+    pub is_leaf: String,
+    pub container: Option<String>,
+    pub submachine: Option<String>,
+    pub connection: Vec<String>,
+    pub connection_point: Vec<String>,
+    pub redefined_state: Option<String>,
+    pub state_invariant: Option<String>,
+    pub entry: Option<String>,
+    pub exit: Option<String>,
+    pub do_activity: Option<String>,
+    pub deferrable_trigger: Vec<String>,
+    pub region: Vec<String>,
+}
+
+// Original module: protocol_transition.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtocolTransition {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub element_import: Vec<String>,
+    pub package_import: Vec<String>,
+    pub owned_rule: Vec<String>,
+    pub is_leaf: String,
+    pub kind: TransitionKind,
+    pub container: String,
+    pub redefined_transition: Option<String>,
+    pub guard: Option<String>,
+    pub effect: Option<String>,
+    pub trigger: Vec<String>,
+    pub target: String,
+    pub source: String,
+    pub post_condition: Option<String>,
+    pub pre_condition: Option<String>,
+}
+
+// Original module: pseudostate_kind.rs
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PseudostateKind {
+    Initial,
+    Deephistory,
+    Shallowhistory,
+    Join,
+    Fork,
+    Junction,
+    Choice,
+    Entrypoint,
+    Exitpoint,
+    Terminate,
+}
+
+// Original module: transition_kind.rs
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TransitionKind {
+    Internal,
+    Local,
+    External,
 }
