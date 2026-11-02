@@ -26,7 +26,7 @@ use bellatrix_mde_cordis::{
     ModelingDeleteElementRequested, ModelingSetPropertyRequested,
     ModelingAddMemberRequested, ModelingMemberKind,
 };
-use bellatrix_mde_model::Geometry;
+use bellatrix_mde_model::{Geometry, PathSegment};
 use bellatrix_ui_uml::{UmlClassCard, UmlFigure, UmlRelationGlyph};
 use quick_edit_view::quick_edit_for_element;
 use ui_input::InputField;
@@ -638,6 +638,7 @@ impl Render for MdeWorkbenchItem {
         let mut title = format!("MDE · {}", self.project_id().as_str());
         let details: String;
         let mut cards = Vec::new();
+        let mut edges = Vec::new();
 
         match self.source.snapshot() {
             Ok(snapshot) => {
@@ -655,6 +656,61 @@ impl Render for MdeWorkbenchItem {
                     views.sort_by_key(|v| v.z_index);
                     for view in views {
                         let Some(subject) = view.subject.as_deref() else { continue };
+                        // Relationship Views are Paths, not box-shaped classes.
+                        // Draw them before nodes, using their own notation.
+                        if let Some(relation) = snapshot.section.relations.iter().find(|r| r.id == subject) {
+                            if let Geometry::Path { start, segments } = &view.geometry {
+                                let mut points = vec![*start];
+                                for segment in segments {
+                                    match segment {
+                                        PathSegment::Line { to } => points.push(*to),
+                                        PathSegment::Cubic { control1, control2, to } => {
+                                            points.extend([*control1, *control2, *to]);
+                                        }
+                                    }
+                                }
+                                if points.len() < 2 || points.iter().any(|p|
+                                    !p.x.is_finite() || !p.y.is_finite()) { continue }
+                                let end = *points.last().expect("at least two points");
+                                let min_x = points.iter().map(|p| p.x).fold(f64::INFINITY, f64::min) as f32;
+                                let min_y = points.iter().map(|p| p.y).fold(f64::INFINITY, f64::min) as f32;
+                                let max_x = points.iter().map(|p| p.x).fold(f64::NEG_INFINITY, f64::max) as f32;
+                                let max_y = points.iter().map(|p| p.y).fold(f64::NEG_INFINITY, f64::max) as f32;
+                                let pad = 24.0_f32;
+                                let w = (max_x - min_x + 2.0*pad).max(48.0) * zoom;
+                                let h = (max_y - min_y + 2.0*pad).max(48.0) * zoom;
+                                let place = |point: bellatrix_mde_model::Point| (
+                                    (point.x as f32 - min_x + pad) * zoom,
+                                    (point.y as f32 - min_y + pad) * zoom,
+                                );
+                                let mut glyph = UmlRelationGlyph::new(
+                                    relation.kind.clone(), w, h, place(*start), place(end)
+                                ).selected(self.selected_element.as_deref() == Some(subject));
+                                if let Some(PathSegment::Cubic { control1, control2, .. }) = segments.last() {
+                                    glyph = glyph.cubic(place(*control1), place(*control2));
+                                }
+                                let edge_owner = cx.weak_entity();
+                                let edge_id = relation.id.clone();
+                                edges.push(
+                                    div()
+                                        .id(format!("mde-edge-{}", view.id))
+                                        .absolute()
+                                        .left(px((min_x-pad)*zoom+pan.0))
+                                        .top(px((min_y-pad)*zoom+pan.1))
+                                        .w(px(w)).h(px(h))
+                                        .cursor_pointer()
+                                        .on_mouse_down(MouseButton::Left,move |_, window, cx| {
+                                            let _ = edge_owner.update(cx,|item,cx| {
+                                                item.select_element(edge_id.clone(),cx);
+                                                item.focus_self(window);
+                                            });
+                                            cx.stop_propagation();
+                                        })
+                                        .child(glyph)
+                                );
+                            }
+                            continue;
+                        }
                         let Some(element) = snapshot.section.elements.iter()
                             .find(|e| e.id == subject) else { continue };
                         let Geometry::Rect { x, y, width, height } = &view.geometry else { continue };
@@ -705,6 +761,7 @@ impl Render for MdeWorkbenchItem {
                         let select_owner = cx.weak_entity();
                         let edit_owner = cx.weak_entity();
                         let mut class_card = UmlClassCard::new(element.name.clone())
+                            .model_kind(&element.kind)
                             .class_id(element.id.clone())
                             .selected(is_selected)
                             .on_title_edit(move |window, cx| {
@@ -766,6 +823,34 @@ impl Render for MdeWorkbenchItem {
                                 );
                             }
                         }
+                        let figure: gpui::AnyElement = if UmlFigure::supports(&element.kind) {
+                            let edit_owner = cx.weak_entity();
+                            let edit_id = element.id.clone();
+                            let mut figure = UmlFigure::new(element.kind.clone(), element.name.clone())
+                                .selected(is_selected)
+                                .on_title_edit(move |window,cx| {
+                                    let id=edit_id.clone();
+                                    let _=edit_owner.update(cx,|item,cx| {
+                                        item.begin_inline_edit(id,window,cx);
+                                    });
+                                });
+                            if editing.is_some() {
+                                if let Some(field) = self.inline_editor.clone() {
+                                    let confirm=cx.weak_entity();
+                                    let cancel=cx.weak_entity();
+                                    figure=figure.inline_edit(
+                                        field,
+                                        move |window,cx| { let _=confirm.update(cx,|item,cx|
+                                            item.commit_inline_edit(window,cx)); },
+                                        move |window,cx| { let _=cancel.update(cx,|item,cx|
+                                            item.cancel_inline_edit(window,cx)); },
+                                    );
+                                }
+                            }
+                            figure.into_any_element()
+                        } else {
+                            class_card.into_any_element()
+                        };
                         let drag_owner = cx.weak_entity();
                         let drag_id = view.id.clone();
                         let resize_owner = cx.weak_entity();
@@ -789,7 +874,7 @@ impl Render for MdeWorkbenchItem {
                                     });
                                     cx.stop_propagation();
                                 })
-                                .child(class_card)
+                                .child(figure)
                                 .when_some(quick_actions, |card, actions| {
                                     card.child(
                                         div()
@@ -963,6 +1048,7 @@ impl Render for MdeWorkbenchItem {
                             item.create_element(drag.kind,x,y,cx);
                         });
                     })
+                    .children(edges)
                     .children(cards),
             )
             .child(
