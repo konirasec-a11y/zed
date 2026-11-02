@@ -25,3 +25,10 @@ compilation, UML conformance, event lifecycle correctness or GUI behavior.
 The next verification is a focused headless domain build/test, not a full
 Zed application build. Structural UML rules and diagram interaction are
 separate follow-up changes with independent tests.
+
+## Subsequent verification
+
+The first checkpoint above remains a historical static-only record. See
+[Structural UML milestone](STRUCTURAL_UML_MILESTONE.md) for the subsequent
+129 passing scoped tests and domain/Cordis Clippy verification. Native GUI
+acceptance and root lockfile resolution remain separate.

@@ -1,47 +1,58 @@
 //! Single MDE domain: persisted objects, UML semantics, commands and validation.
 //! Adapters own transport/presentation, never another implementation of the model.
 mod model;
-pub use model::*;
 pub(crate) use model::wire;
+pub use model::*;
 
+pub mod commands;
+mod generation;
 mod graph;
-mod inspector;
-mod quick_edit;
+mod hierarchy;
 mod index;
+mod inspector;
 mod ownership;
 mod path;
 mod plan;
 mod publish;
-mod scope;
-mod uml_types;
-mod uml_geometry;
+mod quick_edit;
 mod relationships;
+mod scope;
 mod structural_diagrams;
-mod generation;
-mod hierarchy;
 pub mod uml;
-pub mod commands;
+mod uml_geometry;
+mod uml_types;
 
+pub use generation::{
+    GenerationGraphError, GenerationModel, GenerationReference, GenerationUnit,
+    analyze_generation_graph,
+};
 pub use graph::{Graph, GraphError};
 pub use hierarchy::{HierarchyRow, project_hierarchy};
-pub use structural_diagrams::{
-    RootMetaclass, StructuralDiagnostic, StructuralDiagramKind,
-    StructuralSeverity, element_root_kind, relationship_root_kind, validate_structural_diagram,
-};
-pub use generation::{GenerationModel, GenerationUnit, GenerationReference, GenerationGraphError, analyze_generation_graph};
-pub use inspector::{ElementInspector, InspectorMember, InspectorProperty, PropertyEditor, inspect_element, set_inspected_property};
-pub use quick_edit::{QuickEditAction, QuickEditAvailability, QuickEditControl, QuickEditSide, quick_edit_for};
 pub use index::{GraphIndex, GraphLookupError};
+pub use inspector::{
+    ElementInspector, InspectorMember, InspectorProperty, PropertyEditor, inspect_element,
+    set_inspected_property,
+};
 pub use path::{PathError, physical_path, validate_segment};
 pub use plan::{Artifact, Diagnostic, Plan, PlanError};
 pub use publish::{publish_new, publish_replace};
-pub use scope::{Scope, ScopeError, select_elements};
-pub use uml_types::{UmlCapability, UmlQuickCommand, UmlType};
-pub use uml_geometry::{ClassifierContents, InterfaceLayout, FoldedNoteLayout, classifier_contents, interface_layout, folded_note_layout};
-pub use relationships::{
-    ModelingRelationKind, RelationshipGraph, RelationshipPresentation,
-    RelationshipMarker, RelationshipStyle, QuickRelationRule,
-    relationship_presentation, relationship_style_for_notation,
-    relation_kind_for_creation, quick_relation_rule,
-    route as route_relationship, projected_relationship_paths, reroute_relationships,
+pub use quick_edit::{
+    QuickEditAction, QuickEditAvailability, QuickEditControl, QuickEditSide, quick_edit_for,
 };
+pub use relationships::{
+    ModelingRelationKind, QuickRelationRule, RelationshipGraph, RelationshipMarker,
+    RelationshipPresentation, RelationshipStyle, projected_relationship_paths, quick_relation_rule,
+    relation_kind_for_creation, relationship_presentation, relationship_style_for_notation,
+    reroute_relationships, route as route_relationship,
+};
+pub use scope::{Scope, ScopeError, select_elements};
+pub use structural_diagrams::{
+    RootMetaclass, StructuralDiagnostic, StructuralDiagramKind, StructuralSeverity,
+    element_root_kind, relationship_root_kind, validate_structural_diagram,
+    validate_structural_model,
+};
+pub use uml_geometry::{
+    ClassifierContents, FoldedNoteLayout, InterfaceLayout, classifier_contents, folded_note_layout,
+    interface_layout,
+};
+pub use uml_types::{UmlCapability, UmlQuickCommand, UmlType};

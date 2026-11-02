@@ -8,10 +8,16 @@ use std::{convert::Infallible, io, sync::Arc};
 pub const MODELING_NAMESPACE: &str = "bellatrix.bellatrix-mde-modeling";
 pub const LEGACY_MODELING_NAMESPACE: &str = "bellatrix.modeling";
 pub(crate) fn namespace_for(document: &ProjectDocument) -> &'static str {
-    if document.section(MODELING_NAMESPACE).is_some() { MODELING_NAMESPACE } else { LEGACY_MODELING_NAMESPACE }
+    if document.section(MODELING_NAMESPACE).is_some() {
+        MODELING_NAMESPACE
+    } else {
+        LEGACY_MODELING_NAMESPACE
+    }
 }
 pub(crate) fn from_document(document: &ProjectDocument) -> Result<ModelingSection, String> {
-    let state = document.section(MODELING_NAMESPACE).or_else(|| document.section(LEGACY_MODELING_NAMESPACE))
+    let state = document
+        .section(MODELING_NAMESPACE)
+        .or_else(|| document.section(LEGACY_MODELING_NAMESPACE))
         .ok_or("bellatrix-project has no Modeling section")?;
     serde_json::from_value(state.clone()).map_err(|error| error.to_string())
 }
@@ -19,9 +25,14 @@ pub fn with_model(document: ProjectDocument, model: &Project) -> Result<ProjectD
     if document.id().as_str() != model.id || document.name() != model.name {
         return Err("MDE and platform project identities differ".into());
     }
-    Graph::new(model).validate().map_err(|error| error.to_string())?;
-    let state = serde_json::to_value(ModelingSection::from_model(model)).map_err(|error| error.to_string())?;
-    document.with_section(MODELING_NAMESPACE, state).map_err(|error| error.to_string())
+    Graph::new(model)
+        .validate()
+        .map_err(|error| error.to_string())?;
+    let state = serde_json::to_value(ModelingSection::from_model(model))
+        .map_err(|error| error.to_string())?;
+    document
+        .with_section(MODELING_NAMESPACE, state)
+        .map_err(|error| error.to_string())
 }
 #[derive(Clone)]
 pub struct ModelingRenameRequested {
@@ -42,21 +53,33 @@ impl Plugin for MdePlugin {
     type Input = ();
     type PrepareError = Infallible;
     type ApplyError = io::Error;
-    fn inject(&self) -> InjectSpec { InjectSpec::none().require(ProjectService::NAME) }
-    fn prepare(&self, (): ()) -> Result<Self::Input, Self::PrepareError> { Ok(()) }
+    fn inject(&self) -> InjectSpec {
+        InjectSpec::none().require(ProjectService::NAME)
+    }
+    fn prepare(&self, (): ()) -> Result<Self::Input, Self::PrepareError> {
+        Ok(())
+    }
     async fn apply(&self, ctx: Context, _: &Self::Input) -> Result<(), Self::ApplyError> {
-        let projects = ctx.try_service::<ProjectService>().map_err(|error| io::Error::other(error.to_string()))?;
+        let projects = ctx
+            .try_service::<ProjectService>()
+            .map_err(|error| io::Error::other(error.to_string()))?;
         crate::task_events::register(&ctx, Arc::clone(&projects))?;
+        crate::diagrams::register(&ctx, Arc::clone(&projects))?;
         let quick_projects = Arc::clone(&projects);
-        let _quick_edit = ctx.on::<crate::ModelingQuickEdit, _>(responder(
-            move |ctx: Context, request: crate::ModelingQuickEditRequested| {
-                let projects = Arc::clone(&quick_projects);
-                async move {
-                    let result = crate::quick_edit_commands::execute_quick_edit(&ctx, &projects, request).await;
-                    Ok::<_, Infallible>(Some(result))
-                }
-            },
-        )).map_err(|error| io::Error::other(error.to_string()))?;
+        let _quick_edit = ctx
+            .on::<crate::ModelingQuickEdit, _>(responder(
+                move |ctx: Context, request: crate::ModelingQuickEditRequested| {
+                    let projects = Arc::clone(&quick_projects);
+                    async move {
+                        let result = crate::quick_edit_commands::execute_quick_edit(
+                            &ctx, &projects, request,
+                        )
+                        .await;
+                        Ok::<_, Infallible>(Some(result))
+                    }
+                },
+            ))
+            .map_err(|error| io::Error::other(error.to_string()))?;
         let creation_projects = Arc::clone(&projects);
         let _creation = ctx.on::<crate::create_element::ModelingCreateElement, _>(responder(
             move |ctx: Context, request: crate::create_element::ModelingCreateElementRequested| {
@@ -88,15 +111,18 @@ impl Plugin for MdePlugin {
             },
         )).map_err(|error| io::Error::other(error.to_string()))?;
         let property_projects = Arc::clone(&projects);
-        let _property_edit = ctx.on::<crate::set_property::ModelingSetProperty, _>(responder(
-            move |ctx: Context, request: crate::set_property::ModelingSetPropertyRequested| {
-                let projects = Arc::clone(&property_projects);
-                async move {
-                    let result = crate::set_property::set_property(&ctx, &projects, request).await;
-                    Ok::<_, Infallible>(Some(result))
-                }
-            },
-        )).map_err(|error| io::Error::other(error.to_string()))?;
+        let _property_edit = ctx
+            .on::<crate::set_property::ModelingSetProperty, _>(responder(
+                move |ctx: Context, request: crate::set_property::ModelingSetPropertyRequested| {
+                    let projects = Arc::clone(&property_projects);
+                    async move {
+                        let result =
+                            crate::set_property::set_property(&ctx, &projects, request).await;
+                        Ok::<_, Infallible>(Some(result))
+                    }
+                },
+            ))
+            .map_err(|error| io::Error::other(error.to_string()))?;
         let names_projects = Arc::clone(&projects);
         let _name_expression = ctx.on::<crate::name_expression::ModelingSetNameExpression, _>(responder(
             move |ctx: Context, request: crate::name_expression::ModelingSetNameExpressionRequested| {
@@ -118,47 +144,70 @@ impl Plugin for MdePlugin {
             },
         )).map_err(|error| io::Error::other(error.to_string()))?;
         let member_projects = Arc::clone(&projects);
-        let _add_member = ctx.on::<crate::add_member::ModelingAddMember, _>(responder(
-            move |ctx: Context, request: crate::add_member::ModelingAddMemberRequested| {
-                let projects = Arc::clone(&member_projects);
-                async move {
-                    let result = crate::add_member::add_member(&ctx, &projects, request).await;
-                    Ok::<_, Infallible>(Some(result))
-                }
-            },
-        )).map_err(|error| io::Error::other(error.to_string()))?;
+        let _add_member = ctx
+            .on::<crate::add_member::ModelingAddMember, _>(responder(
+                move |ctx: Context, request: crate::add_member::ModelingAddMemberRequested| {
+                    let projects = Arc::clone(&member_projects);
+                    async move {
+                        let result = crate::add_member::add_member(&ctx, &projects, request).await;
+                        Ok::<_, Infallible>(Some(result))
+                    }
+                },
+            ))
+            .map_err(|error| io::Error::other(error.to_string()))?;
         let resizing_projects = Arc::clone(&projects);
-        let _resize = ctx.on::<crate::resize_view::ModelingResizeView, _>(responder(
-            move |ctx: Context, request: crate::resize_view::ModelingResizeViewRequested| {
-                let projects = Arc::clone(&resizing_projects);
-                async move {
-                    let result = crate::resize_view::resize_view(&ctx, &projects, request).await;
-                    Ok::<_, Infallible>(Some(result))
-                }
-            },
-        )).map_err(|error| io::Error::other(error.to_string()))?;
+        let _resize = ctx
+            .on::<crate::resize_view::ModelingResizeView, _>(responder(
+                move |ctx: Context, request: crate::resize_view::ModelingResizeViewRequested| {
+                    let projects = Arc::clone(&resizing_projects);
+                    async move {
+                        let result =
+                            crate::resize_view::resize_view(&ctx, &projects, request).await;
+                        Ok::<_, Infallible>(Some(result))
+                    }
+                },
+            ))
+            .map_err(|error| io::Error::other(error.to_string()))?;
         let movement_projects = Arc::clone(&projects);
-        let _movement = ctx.on::<ModelingMoveView, _>(responder(
-            move |ctx: Context, request: crate::view_edits::ModelingMoveViewRequested| {
-                let projects = Arc::clone(&movement_projects);
-                async move {
-                    let result = move_view(&ctx, &projects, request).await;
-                    Ok::<_, Infallible>(Some(result))
-                }
-            },
-        )).map_err(|error| io::Error::other(error.to_string()))?;
-        let _listener = ctx.on::<ModelingRename, _>(responder(move |ctx: Context, request: ModelingRenameRequested| {
-            let projects = Arc::clone(&projects);
-            async move {
-                let result = rename(&ctx, &projects, request).await;
-                Ok::<_, Infallible>(Some(result))
-            }
-        })).map_err(|error| io::Error::other(error.to_string()))?;
+        let _movement = ctx
+            .on::<ModelingMoveView, _>(responder(
+                move |ctx: Context, request: crate::view_edits::ModelingMoveViewRequested| {
+                    let projects = Arc::clone(&movement_projects);
+                    async move {
+                        let result = move_view(&ctx, &projects, request).await;
+                        Ok::<_, Infallible>(Some(result))
+                    }
+                },
+            ))
+            .map_err(|error| io::Error::other(error.to_string()))?;
+        let _listener = ctx
+            .on::<ModelingRename, _>(responder(
+                move |ctx: Context, request: ModelingRenameRequested| {
+                    let projects = Arc::clone(&projects);
+                    async move {
+                        let result = rename(&ctx, &projects, request).await;
+                        Ok::<_, Infallible>(Some(result))
+                    }
+                },
+            ))
+            .map_err(|error| io::Error::other(error.to_string()))?;
         Ok(())
     }
 }
-async fn rename(context: &Context, projects: &ProjectService, request: ModelingRenameRequested) -> Result<u64, String> {
-    crate::mutation::execute(context, projects, request.project_id, request.expected_revision, Command::Rename {
-        element_id: request.element_id, name: request.new_name,
-    }).await
+async fn rename(
+    context: &Context,
+    projects: &ProjectService,
+    request: ModelingRenameRequested,
+) -> Result<u64, String> {
+    crate::mutation::execute(
+        context,
+        projects,
+        request.project_id,
+        request.expected_revision,
+        Command::Rename {
+            element_id: request.element_id,
+            name: request.new_name,
+        },
+    )
+    .await
 }

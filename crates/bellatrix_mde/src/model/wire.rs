@@ -86,6 +86,10 @@ struct WireDiagram {
     height: f64,
     #[prost(message, repeated, tag = "5")]
     views: Vec<WireView>,
+    #[prost(string, optional, tag = "6")]
+    uml_di_type: Option<String>,
+    #[prost(string, repeated, tag = "7")]
+    model_elements: Vec<String>,
 }
 #[derive(Clone, PartialEq, Message)]
 struct WireView {
@@ -165,6 +169,8 @@ pub(super) fn encode(project: &Project) -> Result<Vec<u8>, ModelIoError> {
                 name: d.name.clone(),
                 width: d.width,
                 height: d.height,
+                uml_di_type: d.uml_di_type.clone(),
+                model_elements: d.model_elements.clone(),
                 views: d
                     .views
                     .iter()
@@ -258,6 +264,8 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Project, ModelIoError> {
                 name: d.name,
                 width: d.width,
                 height: d.height,
+                uml_di_type: d.uml_di_type,
+                model_elements: d.model_elements,
                 views: d
                     .views
                     .into_iter()
@@ -283,4 +291,64 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Project, ModelIoError> {
         relations,
         diagrams,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_json_has_no_uml_metadata_and_keeps_schema_version() -> Result<(), ModelIoError> {
+        let project: Project = serde_json::from_value(serde_json::json!({
+            "id": "project", "name": "Legacy", "diagrams": [{"id": "diagram", "name": "Legacy"}]
+        }))?;
+        assert_eq!(project.schema_version, 1);
+        for diagram in &project.diagrams {
+            assert_eq!(diagram.uml_di_type, None);
+            assert!(diagram.model_elements.is_empty());
+            let json = serde_json::to_value(diagram)?;
+            assert!(json.get("uml_di_type").is_none());
+            assert!(json.get("model_elements").is_none());
+        }
+        assert_eq!(decode(&encode(&project)?)?, project);
+        Ok(())
+    }
+
+    #[test]
+    fn original_wire_tags_decode_without_new_metadata() -> Result<(), ModelIoError> {
+        // Version 1 envelope with id/name and a Diagram containing only its
+        // original tags 1/2. No tag 6/7 exists inside this legacy Diagram.
+        let legacy = [
+            0x08, 0x01, 0x12, 0x01, b'p', 0x1a, 0x01, b'P', 0x32, 0x06, 0x0a, 0x01, b'd', 0x12,
+            0x01, b'D',
+        ];
+        let project = decode(&legacy)?;
+        assert_eq!(project.schema_version, 1);
+        assert_eq!(project.diagrams.len(), 1);
+        for diagram in &project.diagrams {
+            assert_eq!(diagram.uml_di_type, None);
+            assert!(diagram.model_elements.is_empty());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn uml_metadata_and_future_type_names_round_trip_in_json_and_wire() -> Result<(), ModelIoError>
+    {
+        for type_name in ["UMLCompositeStructureDiagram", "UMLFutureDiagram"] {
+            let project: Project = serde_json::from_value(serde_json::json!({
+                "id": "project", "name": "Typed", "diagrams": [{
+                    "id": "diagram", "name": "Typed", "uml_di_type": type_name,
+                    "model_elements": ["context"]
+                }]
+            }))?;
+            assert_eq!(project.schema_version, 1);
+            assert_eq!(decode(&encode(&project)?)?, project);
+            assert_eq!(
+                serde_json::from_slice::<Project>(&serde_json::to_vec(&project)?)?,
+                project
+            );
+        }
+        Ok(())
+    }
 }

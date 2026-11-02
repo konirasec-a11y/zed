@@ -11,7 +11,12 @@ pub struct ClassifierContents {
 }
 impl ClassifierContents {
     pub fn compartments_height(self) -> f64 {
-        let counts = [self.attributes, self.operations, self.receptions, self.template_parameters];
+        let counts = [
+            self.attributes,
+            self.operations,
+            self.receptions,
+            self.template_parameters,
+        ];
         let rows: usize = counts.iter().sum();
         let groups = counts.iter().filter(|count| **count > 0).count();
         rows as f64 * 20.0 + groups as f64 * 9.0
@@ -21,12 +26,26 @@ impl ClassifierContents {
     }
 }
 pub fn classifier_contents(section: &ModelingSection, owner: &str) -> ClassifierContents {
-    let mut contents = ClassifierContents::default();
-    contents.stereotype = section.elements.iter().find(|element| element.id == owner)
-        .and_then(|element| element.properties.get("stereotype"))
-        .and_then(serde_json::Value::as_str).is_some_and(|value| !value.trim().is_empty());
-    for relation in section.relations.iter().filter(|relation| relation.kind == "owns" && relation.from == owner) {
-        if let Some(element) = section.elements.iter().find(|element| element.id == relation.to) {
+    let mut contents = ClassifierContents {
+        stereotype: section
+            .elements
+            .iter()
+            .find(|element| element.id == owner)
+            .and_then(|element| element.properties.get("stereotype"))
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|value| !value.trim().is_empty()),
+        ..Default::default()
+    };
+    for relation in section
+        .relations
+        .iter()
+        .filter(|relation| relation.kind == "owns" && relation.from == owner)
+    {
+        if let Some(element) = section
+            .elements
+            .iter()
+            .find(|element| element.id == relation.to)
+        {
             match element.kind.as_str() {
                 "rust.field" | "uml.attribute" => contents.attributes += 1,
                 "rust.function" | "uml.operation" => contents.operations += 1,
@@ -50,8 +69,16 @@ impl InterfaceLayout {
         let delta_x = target.x - self.center.x;
         let delta_y = target.y - self.center.y;
         let length = delta_x.hypot(delta_y);
-        if length <= f64::EPSILON { return Point { x: self.center.x + self.radius, y: self.center.y }; }
-        Point { x: self.center.x + delta_x * self.radius / length, y: self.center.y + delta_y * self.radius / length }
+        if length <= f64::EPSILON {
+            return Point {
+                x: self.center.x + self.radius,
+                y: self.center.y,
+            };
+        }
+        Point {
+            x: self.center.x + delta_x * self.radius / length,
+            y: self.center.y + delta_y * self.radius / length,
+        }
     }
 }
 pub fn interface_layout(width: f64, height: f64, contents: ClassifierContents) -> InterfaceLayout {
@@ -61,13 +88,31 @@ pub fn interface_layout(width: f64, height: f64, contents: ClassifierContents) -
     let height = finite_size(height).max(contents.minimum_interface_height());
     let stereotype_height = if contents.stereotype { 14.0 } else { 0.0 };
     let reserved = 48.0 + stereotype_height + contents.compartments_height();
-    let diameter = (width - 16.0).min(height - reserved).max(1.0).min(width).min(height);
+    let diameter = (width - 16.0)
+        .min(height - reserved)
+        .max(1.0)
+        .min(width)
+        .min(height);
     let radius = diameter / 2.0;
     let top = 8.0_f64.min((height - diameter).max(0.0) / 2.0);
     let label_top = top + diameter + 4.0 + stereotype_height;
-    InterfaceLayout { center: Point { x: width / 2.0, y: top + radius }, radius, label_top, members_top: label_top + 22.0 }
+    InterfaceLayout {
+        center: Point {
+            x: width / 2.0,
+            y: top + radius,
+        },
+        radius,
+        label_top,
+        members_top: label_top + 22.0,
+    }
 }
-fn finite_size(value: f64) -> f64 { if value.is_finite() && value > 0.0 { value } else { 1.0 } }
+fn finite_size(value: f64) -> f64 {
+    if value.is_finite() && value > 0.0 {
+        value
+    } else {
+        1.0
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FoldedNoteLayout {
@@ -85,9 +130,36 @@ pub fn folded_note_layout(width: f64, height: f64) -> FoldedNoteLayout {
     let right = width - inset;
     let bottom = height - inset;
     FoldedNoteLayout {
-        outline: [Point { x: left, y: top }, Point { x: right - fold_size, y: top },
-            Point { x: right, y: top + fold_size }, Point { x: right, y: bottom }, Point { x: left, y: bottom }],
-        fold: [Point { x: right - fold_size, y: top }, Point { x: right - fold_size, y: top + fold_size }, Point { x: right, y: top + fold_size }],
+        outline: [
+            Point { x: left, y: top },
+            Point {
+                x: right - fold_size,
+                y: top,
+            },
+            Point {
+                x: right,
+                y: top + fold_size,
+            },
+            Point {
+                x: right,
+                y: bottom,
+            },
+            Point { x: left, y: bottom },
+        ],
+        fold: [
+            Point {
+                x: right - fold_size,
+                y: top,
+            },
+            Point {
+                x: right - fold_size,
+                y: top + fold_size,
+            },
+            Point {
+                x: right,
+                y: top + fold_size,
+            },
+        ],
         fold_size,
     }
 }
@@ -111,10 +183,19 @@ mod tests {
     }
     #[test]
     fn automatic_member_growth_does_not_enlarge_circle() {
-        let contents = ClassifierContents { attributes: 2, operations: 1, receptions: 1, template_parameters: 0, stereotype: true };
+        let contents = ClassifierContents {
+            attributes: 2,
+            operations: 1,
+            receptions: 1,
+            template_parameters: 0,
+            stereotype: true,
+        };
         let layout = interface_layout(120.0, contents.minimum_interface_height(), contents);
         assert_eq!(layout.radius, 14.0);
-        assert!(layout.members_top + contents.compartments_height() <= contents.minimum_interface_height());
+        assert!(
+            layout.members_top + contents.compartments_height()
+                <= contents.minimum_interface_height()
+        );
         assert_eq!(interface_layout(120.0, 48.0, contents), layout);
     }
     #[test]

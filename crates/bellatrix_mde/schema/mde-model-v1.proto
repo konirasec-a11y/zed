@@ -40,6 +40,9 @@ message Diagram {
   double width = 3;
   double height = 4;
   repeated View views = 5;
+  // UMLDI diagram type and context, distinct from View subjects.
+  optional string uml_di_type = 6;
+  repeated string model_elements = 7;
 }
 message View {
   string id = 1;

@@ -5,6 +5,8 @@ This is a repository consistency check, not a replacement for Cargo or GPUI test
 from pathlib import Path
 import re
 import tomllib
+import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 CRATES = [
@@ -87,6 +89,7 @@ def check() -> None:
     assert "bellatrix_zed_host::install(cx)" in zed_main
     assert (ROOT / "crates/bellatrix_mde/fixtures/todo.json").is_file()
     assert (ROOT / "crates/bellatrix_mde/schema/mde-model-v1.proto").is_file()
+    subprocess.run([sys.executable, str(ROOT / "script/bellatrix_mde/bellatrix_uml_catalog.py"), "--check"], check=True)
     print(f"Bellatrix Zed source contracts OK: {len(CRATES)} crates; {includes} includes")
 
 if __name__ == "__main__":
