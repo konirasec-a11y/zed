@@ -132,12 +132,12 @@ fn render_struct(
     }
     Ok(templates.render("rust/struct.rs.tera", &json!({
         "annotations": rust_annotations(element),
-        "name": element.name,
+        "name": &element.name,
         "fields": fields,
         "methods": methods,
         // Graph references are resolved by the MDE domain. A target adapter
         // can map these to imports using its own language/metamodel rules.
-        "requires": unit.requires,
+        "requires": &unit.requires,
     }))?)
 }
 
@@ -155,9 +155,9 @@ fn render_trait(
     }
     Ok(templates.render("rust/trait.rs.tera", &json!({
         "annotations": rust_annotations(element),
-        "name": element.name,
+        "name": &element.name,
         "methods": methods,
-        "requires": unit.requires,
+        "requires": &unit.requires,
     }))?)
 }
 
