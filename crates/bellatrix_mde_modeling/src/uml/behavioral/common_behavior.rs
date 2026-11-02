@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 
+
 use crate::uml::structural::common_structure::VisibilityKind;
 
 // Original module: behavior.rs
@@ -575,4 +576,20 @@ pub enum CallConcurrencyKind {
     Sequential,
     Guarded,
     Concurrent,
+}
+
+// Original module: parameter_set.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ParameterSet {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub parameter: Vec<String>,
+    pub condition: Vec<String>,
 }
