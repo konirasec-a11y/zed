@@ -463,6 +463,12 @@ impl Render for MdeRightPanel {
             for relation in relations {
                 let label = match relation.kind.as_str() {
                     "depends_on" => "dependency (project)".to_owned(),
+                    "uml.association" => match relation.properties.get("end1Aggregation")
+                        .and_then(serde_json::Value::as_str) {
+                        Some("shared") => "aggregation".to_owned(),
+                        Some("composite") => "composition".to_owned(),
+                        _ => "association".to_owned(),
+                    },
                     kind => kind.strip_prefix("uml.").unwrap_or(kind).replace('_', " "),
                 };
                 let from=snapshot.section.elements.iter().find(|e|e.id==relation.from)
