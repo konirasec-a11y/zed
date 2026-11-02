@@ -328,6 +328,23 @@ pub struct RelationshipPresentation {
     pub label: String,
     pub notation: String,
     pub style: RelationshipStyle,
+    pub source_role: &'static str,
+    pub target_role: &'static str,
+}
+impl RelationshipPresentation {
+    /// Semantic edge order remains graph `from → to`; source-end diamonds
+    /// identify the whole and target-end triangles identify the general type.
+    /// No direction is inferred from screen position.
+    pub fn describe(&self, from: &str, to: &str) -> String {
+        if self.style.source_marker == RelationshipMarker::None
+            && self.style.target_marker == RelationshipMarker::None
+            && !self.style.dashed {
+            format!("{from} —[{}]— {to}", self.label)
+        } else {
+            format!("{from} ({}) —[{}]→ {to} ({})",
+                self.source_role, self.label, self.target_role)
+        }
+    }
 }
 /// Sole mapping from semantic relationship into visible behavior.
 /// The legacy "depends_on" is a graph Dependency, not a "project" decoration.
@@ -343,10 +360,21 @@ pub fn relationship_presentation(relation: &Relation) -> RelationshipPresentatio
         other => other,
     };
     let label = notation.strip_prefix("uml.").unwrap_or(notation).replace('_', " ");
+    let (source_role, target_role) = match notation {
+        "uml.generalization" => ("subtype", "supertype"),
+        "uml.interface_realization" => ("implementer", "interface"),
+        "uml.realization" => ("implementation", "specification"),
+        "uml.dependency" | "uml.template_binding" => ("client", "supplier"),
+        "uml.aggregation" | "uml.composition" => ("whole", "part"),
+        "uml.containment" => ("container", "contained"),
+        "uml.association" => ("end1", "end2"),
+        _ => ("source", "target"),
+    };
     RelationshipPresentation {
         label,
         notation: notation.to_owned(),
         style: relationship_style_for_notation(notation),
+        source_role, target_role,
     }
 }
 /// Authoritative graph projection consumed by both Canvas and Model Explorer.
@@ -420,6 +448,14 @@ mod graph_relationship_contract_tests {
         assert_eq!(relationship_style_for_notation("uml.aggregation").source_marker, Diamond);
         assert_eq!(relationship_style_for_notation("uml.composition").source_marker, FilledDiamond);
         assert_eq!(relationship_style_for_notation("uml.association").target_marker, None);
+        let make = |kind: &str| RelationshipPresentation {
+            label: kind.into(), notation: kind.into(),
+            style: relationship_style_for_notation(kind),
+            source_role: if kind=="uml.composition" {"whole"}else{"subtype"},
+            target_role: if kind=="uml.composition" {"part"}else{"supertype"},
+        };
+        assert!(make("uml.composition").describe("A","B").contains("A (whole)"));
+        assert!(make("uml.generalization").describe("A","B").contains("B (supertype)"));
     }
     #[test]
     fn moving_class_reanchors_existing_cubic_dependency_without_losing_its_shape() {
