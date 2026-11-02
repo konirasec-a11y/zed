@@ -107,9 +107,15 @@ async fn class_specializations_use_the_same_versioned_cordis_event() {
         assert!(section.relations.iter().any(|r|
             r.kind=="owns" && r.from=="type-task" && r.to==node.id));
     }
-    for kind in ["uml.association","uml.aggregation","uml.composition",
-                 "uml.interface_realization","uml.dependency"] {
+    for kind in ["uml.association","uml.interface_realization","uml.dependency"] {
         assert!(section.relations.iter().any(|r|r.kind==kind),"{kind}");
+    }
+    let associations=section.relations.iter().filter(|r|r.kind=="uml.association").collect::<Vec<_>>();
+    assert_eq!(associations.len(),3);
+    for aggregation in ["shared","composite"] {
+        assert!(associations.iter().any(|r|
+            r.properties.get("end1Aggregation").and_then(|v|v.as_str())==Some(aggregation)
+        ),"{aggregation}");
     }
     assert_eq!(section.elements.iter().filter(|e|e.kind=="rust.trait"
         && e.id.starts_with("mde-")).count(),2);
