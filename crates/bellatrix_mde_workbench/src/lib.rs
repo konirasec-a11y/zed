@@ -563,27 +563,47 @@ impl Render for MdeWorkbenchItem {
                             }
                             _ => {}
                         }
-                        let is_selected = self.selected_element.as_deref() == Some(subject);
-                        // Lazy initialization: InputField needs the Zed editor
-                        // factory and a Window, neither is available from
-                        // a headless model selection event.
-                        if is_selected && !quick_edit_for(&element.kind).is_empty()
-                            && self.quick_edit_subject.as_deref() != Some(subject)
+                        // A class View owns the visible compartments; clicking a
+                        // nested Attribute/Operation selects the *member Element*
+                        // while the same class remains its visual anchor.
+                        let quick_target = self.selected_element.as_deref().and_then(|id| {
+                            if id == subject {
+                                Some(element)
+                            } else if snapshot.section.relations.iter().any(|r| {
+                                r.kind == "owns" && r.from == element.id && r.to == id
+                            }) {
+                                snapshot.section.elements.iter().find(|e| e.id == id)
+                            } else { None }
+                        });
+                        let is_selected = quick_target.is_some();
+                        // InputField is a Zed editor entity and needs a Window;
+                        // creating it from the GPUI selection callback is too early.
+                        if let Some(target) = quick_target
+                            && !quick_edit_for(&target.kind).is_empty()
+                            && self.quick_edit_subject.as_deref() != Some(target.id.as_str())
                         {
                             let editor = cx.new(|cx| InputField::new(window, cx, "Name"));
                             editor.update(cx, |field, cx| {
-                                field.set_text(&element.name, window, cx);
+                                field.set_text(&target.name, window, cx);
                             });
                             self.quick_edit_input = Some(editor);
-                            self.quick_edit_subject = Some(subject.to_owned());
+                            self.quick_edit_subject = Some(target.id.clone());
                         }
-                        let quick_edit = if is_selected && !quick_edit_for(&element.kind).is_empty() {
-                            Some(render_quick_edit(
-                                element, cx.entity(), self.quick_edit_input.clone(), cx
-                            ))
-                        } else { None };
+                        let quick_edit = quick_target
+                            .filter(|e| !quick_edit_for(&e.kind).is_empty())
+                            .map(|selected| render_quick_edit(
+                                selected, cx.entity(), self.quick_edit_input.clone(), cx
+                            ));
+                        let member_owner = cx.weak_entity();
                         let mut class_card = UmlClassCard::new(element.name.clone())
-                            .selected(is_selected);
+                            .selected(is_selected)
+                            .on_member_click(move |member_id, window, cx| {
+                                let id = member_id.to_owned();
+                                let _ = member_owner.update(cx, |item, cx| {
+                                    item.select_element(id, cx);
+                                    item.focus_self(window);
+                                });
+                            });
                         for relation in &snapshot.section.relations {
                             if relation.kind != "owns" || relation.from != element.id {
                                 continue;
@@ -592,10 +612,14 @@ impl Render for MdeWorkbenchItem {
                                 .find(|candidate| candidate.id == relation.to) else {
                                 continue;
                             };
-                            if member.kind == "rust.field" {
-                                class_card = class_card.attribute(member.name.clone());
-                            } else if member.kind.starts_with("rust.") {
-                                class_card = class_card.operation(member.name.clone());
+                            if matches!(member.kind.as_str(), "rust.field" | "uml.attribute") {
+                                class_card = class_card.attribute_with_id(
+                                    member.id.clone(), member.name.clone()
+                                );
+                            } else if matches!(member.kind.as_str(), "rust.function" | "uml.operation") {
+                                class_card = class_card.operation_with_id(
+                                    member.id.clone(), member.name.clone()
+                                );
                             }
                         }
                         let drag_owner = cx.weak_entity();
