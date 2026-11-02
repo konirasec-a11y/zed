@@ -28,7 +28,7 @@ use bellatrix_mde_cordis::{
 use bellatrix_mde_model::Geometry;
 use bellatrix_ui_uml::UmlClassCard;
 use bellatrix_mde_modeling::quick_edit_for;
-use quick_edit_view::render_quick_edit;
+use quick_edit_view::quick_edit_for_element;
 use ui_input::InputField;
 use bellatrix_project::{ProjectId, ProjectSaveRequested};
 use gpui::{
@@ -92,8 +92,8 @@ pub struct MdeWorkbenchItem {
     source: MdeUiSource,
     focus_handle: FocusHandle,
     selected_element: Option<String>,
-    quick_edit_input: Option<Entity<InputField>>,
-    quick_edit_subject: Option<String>,
+    inline_editor: Option<Entity<InputField>>,
+    editing_subject: Option<String>,
     active_diagram: Option<String>,
     selected_tool: Option<ModelingElementKind>,
     gesture: Option<CanvasGesture>,
@@ -134,8 +134,8 @@ impl MdeWorkbenchItem {
             source,
             focus_handle: cx.focus_handle(),
             selected_element: None,
-            quick_edit_input: None,
-            quick_edit_subject: None,
+            inline_editor: None,
+            editing_subject: None,
             active_diagram: initial_diagram,
             selected_tool: None,
             gesture: None,
@@ -171,13 +171,86 @@ impl MdeWorkbenchItem {
     pub fn select_element(&mut self, id: String, cx: &mut Context<Self>) {
         if self.selected_element.as_deref() != Some(id.as_str()) {
             self.selected_element = Some(id);
+            // A change of subject cancels the current uncommitted inline edit.
+            self.inline_editor = None;
+            self.editing_subject = None;
             cx.notify();
         }
+    }
+
+    /// Begin editing the actual name on its UML visual element. Selection
+    /// alone does not open Quick Edit. Double-click and F2 use this path.
+    fn begin_inline_edit(
+        &mut self, id: String, window: &mut Window, cx: &mut Context<Self>
+    ) {
+        let Ok(snapshot) = self.source.snapshot() else { return };
+        let Some(target) = snapshot.section.elements.iter().find(|e| e.id == id) else {
+            return;
+        };
+        if self.editing_subject.as_deref() == Some(id.as_str()) { return; }
+        let field = cx.new(|cx| {
+            InputField::new(window, cx, "Name").label_min_width(px(96.0))
+        });
+        field.update(cx, |field, cx| field.set_text(&target.name, window, cx));
+        self.select_element(id.clone(), cx);
+        self.editing_subject = Some(id);
+        self.inline_editor = Some(field.clone());
+        self.gesture = None;
+        let focus = field.read(cx).focus_handle(cx);
+        focus.focus(window, cx);
+        let text_editor = field.read(cx).editor().clone();
+        text_editor.select_all(window, cx);
+        cx.notify();
+    }
+
+    /// Enter and the inline check icon commit through the same versioned
+    /// MDE/Cordis property command as the persistent Property Editor.
+    fn commit_inline_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let (Some(id), Some(field)) = (
+            self.editing_subject.clone(), self.inline_editor.clone()
+        ) else { return };
+        let name = field.read(cx).text(cx).trim().to_owned();
+        if name.is_empty() {
+            field.update(cx, |field, cx| field.set_error(Some("Name is required"), cx));
+            return;
+        }
+        let Ok(snapshot) = self.source.snapshot() else {
+            self.feedback = "Project snapshot unavailable".into();
+            cx.notify();
+            return;
+        };
+        let Some(element) = snapshot.section.elements.iter().find(|e| e.id == id) else {
+            self.cancel_inline_edit(window, cx);
+            return;
+        };
+        let changed = element.name != name;
+        self.editing_subject = None;
+        self.inline_editor = None;
+        if changed {
+            self.submit(MdeUiCommand::SetProperty(ModelingSetPropertyRequested {
+                project_id: self.project_id().clone(),
+                element_id: id,
+                path: "name".into(),
+                value: serde_json::Value::String(name),
+                expected_revision: snapshot.revision,
+            }), cx);
+        }
+        self.focus_handle.focus(window, cx);
+        cx.notify();
+    }
+
+    fn cancel_inline_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.editing_subject = None;
+        self.inline_editor = None;
+        self.focus_handle.focus(window, cx);
+        cx.notify();
     }
 
     pub fn select_diagram(&mut self, id: String, cx: &mut Context<Self>) {
         self.active_diagram = Some(id);
         self.gesture = None;
+        self.editing_subject = None;
+        self.inline_editor = None;
         cx.notify();
     }
 
