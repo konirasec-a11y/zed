@@ -26,7 +26,7 @@ use bellatrix_project::{ProjectId, ProjectSaveRequested};
 use gpui::{
     App, Context, DragMoveEvent, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
     MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Point, Pixels, Render,
-    KeyDownEvent, ScrollEvent, ScrollDelta,
+    KeyDownEvent, ScrollEvent,
     SharedString, Task, Window, div, prelude::*, px,
 };
 use std::path::PathBuf;
@@ -366,8 +366,8 @@ impl MdeWorkbenchItem {
             CanvasGesture::Move { start, dx, dy, .. }
             | CanvasGesture::Resize { start, dx, dy, .. } => (start, dx, dy),
         };
-        *dx = f64::from(event.position.x - start.x);
-        *dy = f64::from(event.position.y - start.y);
+        *dx = f64::from(event.position.x - start.x) / f64::from(self.zoom);
+        *dy = f64::from(event.position.y - start.y) / f64::from(self.zoom);
         cx.notify();
     }
 
@@ -450,6 +450,8 @@ impl Render for MdeWorkbenchItem {
         let border = palette.border;
         let selection = palette.selection;
         let muted = palette.muted;
+        let zoom = self.zoom;
+        let pan = self.pan;
 
         let mut title = format!("MDE · {}", self.project_id().as_str());
         let details: String;
@@ -518,16 +520,17 @@ impl Render for MdeWorkbenchItem {
                             div()
                                 .id(format!("mde-view-{}", view.id))
                                 .absolute()
-                                .left(px(px_x))
-                                .top(px(px_y))
-                                .w(px(px_w))
-                                .h(px(px_h))
+                                .left(px(px_x * zoom + pan.0))
+                                .top(px(px_y * zoom + pan.1))
+                                .w(px(px_w * zoom))
+                                .h(px(px_h * zoom))
                                 .bg(surface)
                                 .cursor_pointer()
-                                .on_mouse_down(MouseButton::Left, move |event: &MouseDownEvent, _, cx| {
+                                .on_mouse_down(MouseButton::Left, move |event: &MouseDownEvent, window, cx| {
                                     let _ = drag_owner.update(cx, |item, cx| {
                                         item.start_move(drag_id.clone(), element_id.clone(),
                                             revision, event.position, cx);
+                                        cx.focus_self(window);
                                     });
                                     cx.stop_propagation();
                                 })
@@ -564,6 +567,14 @@ impl Render for MdeWorkbenchItem {
         let out_owner = cx.weak_entity();
         let dragging_owner = cx.weak_entity();
         let dropping_owner = cx.weak_entity();
+        let wheel_owner = cx.weak_entity();
+        let pan_start_owner = cx.weak_entity();
+        let pan_end_owner = cx.weak_entity();
+        let pan_out_owner = cx.weak_entity();
+        let delete_owner = cx.weak_entity();
+        let zoom_in_owner = cx.weak_entity();
+        let zoom_out_owner = cx.weak_entity();
+        let reset_owner = cx.weak_entity();
 
         div()
             .id(format!("mde-workbench-{}", self.project_id().as_str()))
@@ -571,6 +582,12 @@ impl Render for MdeWorkbenchItem {
             .flex()
             .flex_col()
             .track_focus(&self.focus_handle)
+            .on_key_down(move |event: &KeyDownEvent, _, cx| {
+                if matches!(event.keystroke.key.as_str(), "delete" | "backspace") {
+                    let _ = delete_owner.update(cx, |item, cx| item.delete_selected(cx));
+                    cx.stop_propagation();
+                }
+            })
             .bg(background)
             .text_color(palette.text)
             .child(
@@ -583,7 +600,31 @@ impl Render for MdeWorkbenchItem {
                     .border_b_1()
                     .border_color(border)
                     .child(Label::new(title))
-                    .child(Label::new(details)),
+                    .child(
+                        div()
+                            .flex().gap_2().items_center()
+                            .child(Label::new(details))
+                            .child(
+                                ui::Button::new("mde-zoom-out", "-").on_click(move |_, _, cx| {
+                                    let _ = zoom_out_owner.update(cx, |item, cx| {
+                                        item.set_zoom(item.zoom / 1.2, cx);
+                                    });
+                                }),
+                            )
+                            .child(Label::new(format!("{:.0}%", zoom * 100.0)))
+                            .child(
+                                ui::Button::new("mde-zoom-in", "+").on_click(move |_, _, cx| {
+                                    let _ = zoom_in_owner.update(cx, |item, cx| {
+                                        item.set_zoom(item.zoom * 1.2, cx);
+                                    });
+                                }),
+                            )
+                            .child(
+                                ui::Button::new("mde-reset-view", "100%").on_click(move |_, _, cx| {
+                                    let _ = reset_owner.update(cx, |item, cx| item.reset_viewport(cx));
+                                }),
+                            ),
+                    ),
             )
             .child(
                 div()
@@ -591,6 +632,20 @@ impl Render for MdeWorkbenchItem {
                     .relative()
                     .flex_1()
                     .overflow_hidden()
+                    .on_scroll(move |event: &ScrollEvent, _, cx| {
+                        let _ = wheel_owner.update(cx, |item, cx| item.scroll_viewport(event, cx));
+                        cx.stop_propagation();
+                    })
+                    .on_mouse_down(MouseButton::Middle, move |event: &MouseDownEvent, _, cx| {
+                        let _ = pan_start_owner.update(cx, |item, _| item.start_pan(event.position));
+                        cx.stop_propagation();
+                    })
+                    .on_mouse_up(MouseButton::Middle, move |_: &MouseUpEvent, _, cx| {
+                        let _ = pan_end_owner.update(cx, |item, _| item.pan_origin = None);
+                    })
+                    .on_mouse_up_out(MouseButton::Middle, move |_: &MouseUpEvent, _, cx| {
+                        let _ = pan_out_owner.update(cx, |item, _| item.pan_origin = None);
+                    })
                     .on_mouse_down(MouseButton::Left, move |_: &MouseDownEvent, _, cx| {
                         let _ = owner.update(cx, |item, cx| {
                             if let Some(kind) = item.selected_tool {
@@ -599,7 +654,10 @@ impl Render for MdeWorkbenchItem {
                         });
                     })
                     .on_mouse_move(move |event: &MouseMoveEvent, _, cx| {
-                        let _ = move_owner.update(cx, |item, cx| item.update_gesture(event, cx));
+                        let _ = move_owner.update(cx, |item, cx| {
+                            item.update_pan(event, cx);
+                            item.update_gesture(event, cx);
+                        });
                     })
                     .on_mouse_up(MouseButton::Left, move |_: &MouseUpEvent, _, cx| {
                         let _ = up_owner.update(cx, |item, cx| item.finish_gesture(cx));
@@ -611,7 +669,10 @@ impl Render for MdeWorkbenchItem {
                         let dx = f64::from(event.event.position.x - event.bounds.origin.x);
                         let dy = f64::from(event.event.position.y - event.bounds.origin.y);
                         let _ = dragging_owner.update(cx, |item, _| {
-                            item.drop_point = Some((dx,dy));
+                            item.drop_point = Some((
+                                (dx - f64::from(item.pan.0)) / f64::from(item.zoom),
+                                (dy - f64::from(item.pan.1)) / f64::from(item.zoom),
+                            ));
                         });
                     })
                     .on_drop(move |drag: &MdeToolDrag, _, cx| {
