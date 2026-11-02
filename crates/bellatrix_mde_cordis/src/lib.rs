@@ -8,6 +8,8 @@ pub use task_events::{
 };
 mod project_integration;
 mod create_element;
+mod add_member;
+pub use add_member::{ModelingAddMember, ModelingAddMemberRequested, ModelingMemberKind};
 mod view_edits;
 mod resize_view;
 mod delete_element;
