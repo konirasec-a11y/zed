@@ -9,6 +9,8 @@ pub mod panels;
 mod integration;
 mod theme;
 mod hierarchy;
+mod symbol_library;
+pub use symbol_library::MdeSymbolLibraryItem;
 pub use integration::register_mde_workspace;
 pub use theme::WorkbenchPalette;
 
