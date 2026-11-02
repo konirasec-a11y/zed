@@ -8,7 +8,8 @@ use crate::{MdeToolDrag, MdeWorkbenchItem, WorkbenchPalette, integration::OpenMd
 use bellatrix_mde_cordis::ModelingElementKind;
 use gpui::{
     Action, App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
-    InteractiveElement, StatefulInteractiveElement, Pixels, Render, Subscription, Window, actions, div, prelude::*, px,
+    InteractiveElement, StatefulInteractiveElement, MouseButton, MouseDownEvent, MouseMoveEvent,
+    MouseUpEvent, Pixels, Render, Subscription, Window, actions, div, prelude::*, px,
 };
 use ui::{Button, IconName, Label, TreeViewItem, prelude::*};
 use ui_input::InputField;
@@ -43,15 +44,44 @@ struct PanelState {
     item: Entity<MdeWorkbenchItem>,
     focus: FocusHandle,
     position: DockPosition,
+    top_height: f32,
+    split_start: Option<(Pixels, f32)>,
     _listener: Subscription,
 }
 
 impl PanelState {
-    fn new<T: 'static>(item: Entity<MdeWorkbenchItem>, position: DockPosition, cx: &mut Context<T>) -> Self {
+    fn new<T: 'static>(
+        item: Entity<MdeWorkbenchItem>,
+        position: DockPosition,
+        top_height: f32,
+        cx: &mut Context<T>,
+    ) -> Self {
         let listener = cx.observe(&item, |_, _, cx| cx.notify());
         Self {
-            item, focus: cx.focus_handle(), position, _listener: listener,
+            item,
+            focus: cx.focus_handle(),
+            position,
+            top_height,
+            split_start: None,
+            _listener: listener,
         }
+    }
+
+    fn start_split(&mut self, y: Pixels) {
+        self.split_start = Some((y, self.top_height));
+    }
+
+    fn move_split(&mut self, y: Pixels, dragging: bool) -> bool {
+        let Some((start, original)) = self.split_start else { return false };
+        if !dragging { return false; }
+        let next = (original + f32::from(y - start)).clamp(90.0, 650.0);
+        if (self.top_height - next).abs() < 0.5 { return false; }
+        self.top_height = next;
+        true
+    }
+
+    fn finish_split(&mut self) {
+        self.split_start = None;
     }
 }
 
@@ -61,7 +91,7 @@ pub struct MdeLeftPanel {
 
 impl MdeLeftPanel {
     pub fn new(item: Entity<MdeWorkbenchItem>, cx: &mut Context<Self>) -> Self {
-        Self { state: PanelState::new(item, DockPosition::Left, cx) }
+        Self { state: PanelState::new(item, DockPosition::Left, 216.0, cx) }
     }
 }
 
@@ -151,25 +181,69 @@ impl Render for MdeLeftPanel {
             .flex()
             .flex_col()
             .bg(palette.panel)
+            .on_mouse_move(cx.listener(|panel, event: &MouseMoveEvent, _, cx| {
+                if panel.state.move_split(event.position.y, event.dragging()) { cx.notify(); }
+            }))
+            .on_mouse_up(MouseButton::Left, cx.listener(|panel, _: &MouseUpEvent, _, _| {
+                panel.state.finish_split();
+            }))
+            .on_mouse_up_out(MouseButton::Left, cx.listener(|panel, _: &MouseUpEvent, _, _| {
+                panel.state.finish_split();
+            }))
             .child(
-                div().h(px(36.0)).px_3().flex().items_center()
-                    .border_b_1().border_color(palette.border)
-                    .child(Label::new("Working diagrams")),
+                div()
+                    .h(px(self.state.top_height))
+                    .flex_none()
+                    .min_h(px(90.0))
+                    .flex()
+                    .flex_col()
+                    .overflow_hidden()
+                    .child(
+                        div().h(px(36.0)).px_3().flex_none().flex().items_center()
+                            .border_b_1().border_color(palette.border)
+                            .child(Label::new("Working diagrams")),
+                    )
+                    .child(div().id("bellatrix-mde-diagrams-scroll").flex_1().overflow_y_scroll().children(diagrams)),
             )
-            .child(div().id("bellatrix-mde-diagrams-scroll").flex_1().overflow_y_scroll().children(diagrams))
+            // This splitter belongs to the panel content, not to Zed Dock
+            // placement. Each side independently retains its divider height.
             .child(
-                div().h(px(36.0)).px_3().flex().items_center()
-                    .border_y_1().border_color(palette.border)
-                    .child(Label::new("Toolbox")),
-            )
-            .child(
-                div().p_2().flex().flex_col().gap_2()
-                    .children(tool_buttons)
-                    .child(Label::new(match chosen {
-                        Some(ModelingElementKind::Class) => "Class: click canvas to place",
-                        Some(ModelingElementKind::Interface) => "Interface: click canvas to place",
-                        None => "Drag a tool onto the canvas",
+                div()
+                    .id("mde-left-stack-resizer")
+                    .h(px(6.0))
+                    .w_full()
+                    .flex_none()
+                    .cursor_ns_resize()
+                    .border_y_1()
+                    .border_color(palette.border)
+                    .on_mouse_down(MouseButton::Left, cx.listener(|panel, event: &MouseDownEvent, _, cx| {
+                        panel.state.start_split(event.position.y);
+                        cx.stop_propagation();
                     })),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_h(px(100.0))
+                    .flex()
+                    .flex_col()
+                    .overflow_hidden()
+                    .child(
+                        div().h(px(36.0)).flex_none().px_3().flex().items_center()
+                            .border_b_1().border_color(palette.border)
+                            .child(Label::new("Toolbox")),
+                    )
+                    .child(
+                        div().id("bellatrix-mde-toolbox-scroll")
+                            .flex_1().overflow_y_scroll()
+                            .p_2().flex().flex_col().gap_2()
+                            .children(tool_buttons)
+                            .child(Label::new(match chosen {
+                                Some(ModelingElementKind::Class) => "Class: click canvas to place",
+                                Some(ModelingElementKind::Interface) => "Interface: click canvas to place",
+                                None => "Drag a tool onto the canvas",
+                            })),
+                    ),
             )
     }
 }
@@ -192,7 +266,7 @@ impl MdeRightPanel {
         let name_input = cx.new(|cx| InputField::new(window, cx, "Element name"));
         let save_input = cx.new(|cx| InputField::new(window, cx, "Project file path"));
         Self {
-            state: PanelState::new(item, DockPosition::Right, cx),
+            state: PanelState::new(item, DockPosition::Right, 230.0, cx),
             name_input,
             save_input,
             editing_id: None,
@@ -274,38 +348,69 @@ impl Render for MdeRightPanel {
             .flex()
             .flex_col()
             .bg(panel_background)
+            .on_mouse_move(cx.listener(|panel, event: &MouseMoveEvent, _, cx| {
+                if panel.state.move_split(event.position.y, event.dragging()) { cx.notify(); }
+            }))
+            .on_mouse_up(MouseButton::Left, cx.listener(|panel, _: &MouseUpEvent, _, _| {
+                panel.state.finish_split();
+            }))
+            .on_mouse_up_out(MouseButton::Left, cx.listener(|panel, _: &MouseUpEvent, _, _| {
+                panel.state.finish_split();
+            }))
             .child(
-                div().h(px(36.0)).px_3().flex().items_center()
-                    .border_b_1().border_color(panel_border)
-                    .child(Label::new("Model explorer")),
-            )
-            .child(div().id("bellatrix-mde-explorer-scroll").flex_1().overflow_y_scroll().children(rows))
-            .child(
-                div().h(px(36.0)).px_3().flex().items_center()
-                    .border_y_1().border_color(panel_border)
-                    .child(Label::new("Inspector")),
+                div()
+                    .h(px(self.state.top_height))
+                    .flex_none()
+                    .min_h(px(90.0))
+                    .flex().flex_col().overflow_hidden()
+                    .child(
+                        div().h(px(36.0)).px_3().flex_none().flex().items_center()
+                            .border_b_1().border_color(panel_border)
+                            .child(Label::new("Model explorer")),
+                    )
+                    .child(div().id("bellatrix-mde-explorer-scroll").flex_1().overflow_y_scroll().children(rows)),
             )
             .child(
                 div()
-                    .p_2().flex().flex_col().gap_2()
-                    .child(self.name_input.clone())
-                    .child(Button::new("mde-inspector-rename", "Rename selected").on_click(
-                        move |_, _, cx| {
-                            let name = name_input.read(cx).text(cx);
-                            rename_item.update(cx, |workbench, cx| {
-                                workbench.rename_selected(name, cx);
-                            });
-                        },
-                    ))
-                    .child(self.save_input.clone())
-                    .child(Button::new("mde-save-project", "Save project").on_click(
-                        move |_, _, cx| {
-                            let path = save_input.read(cx).text(cx);
-                            save_item.update(cx, |workbench, cx| {
-                                workbench.save_project(path, cx);
-                            });
-                        },
-                    )),
+                    .id("mde-right-stack-resizer")
+                    .h(px(6.0)).w_full().flex_none().cursor_ns_resize()
+                    .border_y_1().border_color(panel_border)
+                    .on_mouse_down(MouseButton::Left, cx.listener(|panel, event: &MouseDownEvent, _, cx| {
+                        panel.state.start_split(event.position.y);
+                        cx.stop_propagation();
+                    })),
+            )
+            .child(
+                div()
+                    .flex_1().min_h(px(110.0)).flex().flex_col().overflow_hidden()
+                    .child(
+                        div().h(px(36.0)).flex_none().px_3().flex().items_center()
+                            .border_b_1().border_color(panel_border)
+                            .child(Label::new("Inspector")),
+                    )
+                    .child(
+                        div().id("bellatrix-mde-inspector-scroll")
+                            .flex_1().overflow_y_scroll().p_2()
+                            .flex().flex_col().gap_2()
+                            .child(self.name_input.clone())
+                            .child(Button::new("mde-inspector-rename", "Rename selected").on_click(
+                                move |_, _, cx| {
+                                    let name = name_input.read(cx).text(cx);
+                                    rename_item.update(cx, |workbench, cx| {
+                                        workbench.rename_selected(name, cx);
+                                    });
+                                },
+                            ))
+                            .child(self.save_input.clone())
+                            .child(Button::new("mde-save-project", "Save project").on_click(
+                                move |_, _, cx| {
+                                    let path = save_input.read(cx).text(cx);
+                                    save_item.update(cx, |workbench, cx| {
+                                        workbench.save_project(path, cx);
+                                    });
+                                },
+                            )),
+                    ),
             )
     }
 }
@@ -324,7 +429,7 @@ pub struct MdeBottomPanel {
 
 impl MdeBottomPanel {
     pub fn new(item: Entity<MdeWorkbenchItem>, cx: &mut Context<Self>) -> Self {
-        Self { state: PanelState::new(item, DockPosition::Bottom, cx),
+        Self { state: PanelState::new(item, DockPosition::Bottom, 0.0, cx),
             active: BottomTab::Relationships }
     }
 }
