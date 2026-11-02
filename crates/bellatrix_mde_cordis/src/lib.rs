@@ -11,6 +11,8 @@ mod create_element;
 mod view_edits;
 mod resize_view;
 mod delete_element;
+mod set_property;
+pub use set_property::{ModelingSetProperty, ModelingSetPropertyRequested};
 pub use delete_element::{ModelingDeleteElement, ModelingDeleteElementRequested};
 pub use resize_view::{ModelingResizeView, ModelingResizeViewRequested};
 mod ui_bridge;
