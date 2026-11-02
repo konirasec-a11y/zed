@@ -268,6 +268,14 @@ mod tests {
                 geometry, style: Style::default(), z_index: 5,
             });
         }
+        let before_projection = section.clone();
+        let projected = projected_automatic_routes(&section, &diagram_id);
+        assert_eq!(section, before_projection,
+            "reopening an old diagram must not persist a new project revision");
+        assert_eq!(projected.len(), 2);
+        assert_ne!(projected["new-dependency"], projected["new-composition"]);
+        assert!(!projected.contains_key("ref-task"),
+            "the fixture's manual curved path must not be replaced");
         reroute(&mut section, &diagram_id);
         let relation_view = |id: &str| section.diagrams[0].views.iter()
             .find(|view| view.subject.as_deref() == Some(id))
