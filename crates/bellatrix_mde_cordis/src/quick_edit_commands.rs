@@ -218,6 +218,66 @@ mod tests {
         }
     }
     #[test]
+    fn every_class_specialization_creates_a_semantic_result() {
+        let cases=[
+            (UmlQuickCommand::AddTemplateParameter,"uml.template_parameter",None),
+            (UmlQuickCommand::AddProvidedInterface,"rust.trait",Some("uml.interface_realization")),
+            (UmlQuickCommand::AddRequiredInterface,"rust.trait",Some("uml.dependency")),
+            (UmlQuickCommand::AddAssociatedClass,"rust.struct",Some("uml.association")),
+            (UmlQuickCommand::AddAggregatedClass,"rust.struct",Some("uml.aggregation")),
+            (UmlQuickCommand::AddCompositedClass,"rust.struct",Some("uml.composition")),
+            (UmlQuickCommand::AddPort,"uml.port",None),
+            (UmlQuickCommand::AddPart,"uml.part",None),
+        ];
+        for (action,expected_kind,relation_kind) in cases {
+            let mut section=fixture();
+            let diagram_id=section.diagrams[0].id.clone();
+            let before=section.elements.len();
+            let request=ModelingQuickEditRequested {
+                project_id:ProjectId::new("class-specializations").unwrap(),
+                diagram_id,element_id:"type-task".into(),action,expected_revision:0,
+            };
+            apply_quick_edit(&mut section,&request).unwrap();
+            assert_eq!(section.elements.len(),before+1,"{action:?}");
+            let child=section.elements.iter().find(|e|e.kind==expected_kind
+                && e.id.starts_with("mde-")).unwrap();
+            if let Some(kind)=relation_kind {
+                let edge=section.relations.iter().find(|r|r.kind==kind).unwrap();
+                assert!(edge.from==child.id || edge.to==child.id);
+                assert!(section.diagrams.iter().flat_map(|d|&d.views).any(|v|
+                    v.subject.as_deref()==Some(edge.id.as_str())));
+            } else {
+                assert!(section.relations.iter().any(|r|r.kind=="owns"
+                    && r.from=="type-task" && r.to==child.id));
+                assert_eq!(section.diagrams.iter().flat_map(|d|&d.views).any(|v|
+                    v.subject.as_deref()==Some(child.id.as_str())),
+                    action!=UmlQuickCommand::AddTemplateParameter);
+            }
+            Graph::new(&section.to_model("class-specializations","Class")).validate().unwrap();
+        }
+    }
+    #[test]
+    fn class_capability_is_not_accidentally_inherited_by_interface() {
+        let mut section=fixture();
+        section.elements.iter_mut().find(|e|e.id=="type-task").unwrap().kind="rust.trait".into();
+        for action in [
+            UmlQuickCommand::AddTemplateParameter,UmlQuickCommand::AddProvidedInterface,
+            UmlQuickCommand::AddRequiredInterface,UmlQuickCommand::AddAssociatedClass,
+            UmlQuickCommand::AddAggregatedClass,UmlQuickCommand::AddCompositedClass,
+            UmlQuickCommand::AddPort,UmlQuickCommand::AddPart,
+        ] {
+            let before=section.clone();
+            let diagram_id=section.diagrams[0].id.clone();
+            assert!(apply_quick_edit(&mut section,&ModelingQuickEditRequested {
+                project_id:ProjectId::new("class-specializations").unwrap(),
+                diagram_id,
+                element_id:"type-task".into(),action,expected_revision:0,
+            }).is_err());
+            assert_eq!(section,before,"{action:?}");
+        }
+    }
+
+    #[test]
     fn a_package_can_be_annotated_but_cannot_receive_a_reception() {
         let mut section = fixture();
         section.elements.iter_mut().find(|element| element.id == "type-task").unwrap().kind = "uml.package".into();
