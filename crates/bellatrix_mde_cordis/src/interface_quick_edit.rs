@@ -201,9 +201,18 @@ mod tests {
         ];
         let mut section=fixture();
         let diagram_id=section.diagrams.first().unwrap().id.clone();
-        let iface=section.elements.iter().find(|e|e.kind=="rust.trait")
-            .map(|e|e.id.clone());
-        if let Some(interface_id)=iface {
+        let interface_id="unit-test-interface".to_owned();
+        section.elements.push(Element {
+            id:interface_id.clone(),kind:"rust.trait".into(),name:"Contract".into(),
+            label:None,description:None,properties:Default::default(),
+            annotations:Vec::new(),implementations:Vec::new(),content:None,
+        });
+        section.diagrams[0].views.push(View {
+            id:"unit-test-interface-view".into(),subject:Some(interface_id.clone()),
+            label:None,geometry:Geometry::Rect{x:190.0,y:170.0,width:120.0,height:76.0},
+            style:Style::default(),z_index:100,
+        });
+        {
             for (i,action) in actions.iter().enumerate() {
                 let before=section.elements.len();
                 let req=ModelingInterfaceQuickEditRequested {
@@ -215,5 +224,9 @@ mod tests {
                 Graph::new(&section.to_model("test-quick","test")).validate().unwrap();
             }
         }
+        assert!(section.relations.iter().any(|r|r.kind=="uml.generalization"));
+        assert!(section.elements.iter().any(|e|e.kind=="uml.reception"));
+        assert!(section.elements.iter().any(|e|e.kind=="uml.constraint"));
+        assert!(section.elements.iter().any(|e|e.kind=="uml.note"));
     }
 }
