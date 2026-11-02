@@ -4,7 +4,7 @@
 //! to focus or reopen the MDE tab without creating a parallel window.
 
 use crate::{MdeUiSource, MdeWorkbenchItem, MdeSymbolLibraryItem, open_in_workspace, panels};
-use gpui::{App, Entity, Window, actions};
+use gpui::{App, AppContext, Entity, Window, actions};
 use std::{cell::RefCell, rc::Rc};
 use workspace::Workspace;
 
