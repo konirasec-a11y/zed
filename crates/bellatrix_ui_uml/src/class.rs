@@ -32,6 +32,7 @@ pub struct UmlClassifier {
     pub(crate) attributes: Vec<MemberRow>,
     pub(crate) operations: Vec<MemberRow>,
     pub(crate) receptions: Vec<MemberRow>,
+    pub(crate) template_parameters: Vec<MemberRow>,
     pub(crate) selected: bool,
     pub(crate) editing: Option<(String, Entity<InputField>)>,
     pub(crate) select_member: Option<ElementAction>,
@@ -50,7 +51,8 @@ impl UmlClassifier {
     pub fn new(title: impl Into<SharedString>) -> Self {
         Self {
             class_id: None, title: title.into(), stereotype: None, interface_ball: false,
-            attributes: Vec::new(), operations: Vec::new(), receptions: Vec::new(), selected: false,
+            attributes: Vec::new(), operations: Vec::new(), receptions: Vec::new(),
+            template_parameters: Vec::new(), selected: false,
             editing: None, select_member: None, edit_member: None, edit_title: None,
             confirm_edit: None, cancel_edit: None,
             view_width: 185.0, view_height: 112.0, view_scale: 1.0,
@@ -89,6 +91,10 @@ impl UmlClassifier {
     }
     pub fn operation_with_id(mut self, id: impl Into<String>, title: impl Into<SharedString>) -> Self {
         self.operations.push(MemberRow { id: Some(id.into()), title: title.into() }); self
+    }
+    pub fn template_parameter_with_id(mut self, id: impl Into<String>, title: impl Into<SharedString>) -> Self {
+        self.template_parameters.push(MemberRow { id: Some(id.into()), title: title.into() });
+        self
     }
     pub fn reception_with_id(mut self, id: impl Into<String>, title: impl Into<SharedString>) -> Self {
         self.receptions.push(MemberRow { id: Some(id.into()), title: title.into() }); self
@@ -180,6 +186,8 @@ impl RenderOnce for UmlClassifier {
                     .when_some(stereotype, |header, value| header.child(
                         div().text_size(px(10.0 * scale)).text_color(rgb(palette.muted)).child(value)))
                     .child(title)))
+            .when(!self.template_parameters.is_empty(), |element| element.child(compartment(
+                self.template_parameters, "template-parameter", interactions.clone(), palette, false)))
             .when(!self.attributes.is_empty(), |element| element.child(compartment(
                 self.attributes, "attribute", interactions.clone(), palette, false)))
             .when(!self.operations.is_empty(), |element| element.child(compartment(
