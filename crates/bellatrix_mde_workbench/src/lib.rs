@@ -69,6 +69,28 @@ pub struct MdeWorkbenchItem {
     feedback: String,
     _watch_task: Task<()>,
 }
+/// Pure two-click relationship interaction. Model identity is independent of
+/// classifier notation, and choosing an endpoint must never start a move.
+#[derive(Debug, PartialEq, Eq)]
+enum RelationClick {
+    First,
+    Repeat,
+    Connect(String),
+}
+fn choose_relation_endpoint(pending: &mut Option<String>, clicked: &str) -> RelationClick {
+    match pending.take() {
+        None => {
+            *pending = Some(clicked.to_owned());
+            RelationClick::First
+        }
+        Some(from) if from == clicked => {
+            *pending = Some(from);
+            RelationClick::Repeat
+        }
+        Some(from) => RelationClick::Connect(from),
+    }
+}
+
 impl MdeWorkbenchItem {
     pub fn new(source: MdeUiSource, cx: &mut Context<Self>) -> Self {
         let initial_diagram = source.snapshot().ok().and_then(|snapshot| snapshot.section.diagrams.first().map(|diagram| diagram.id.clone()));
@@ -212,19 +234,20 @@ impl MdeWorkbenchItem {
         cx.notify();
     }
     fn link_endpoint(&mut self, kind: ModelingRelationKind, target: String, cx: &mut Context<Self>) {
-        let Some(source) = self.pending_relation_source.take() else {
-            self.pending_relation_source = Some(target.clone());
-            self.select_element(target, cx);
-            self.feedback = format!("{}: source selected. Click a second element", kind.label());
-            cx.notify();
-            return;
+        let from = match choose_relation_endpoint(&mut self.pending_relation_source, &target) {
+            RelationClick::First => {
+                self.select_element(target, cx);
+                self.feedback = format!("{}: source selected. Click a second element", kind.label());
+                cx.notify();
+                return;
+            }
+            RelationClick::Repeat => {
+                self.feedback = format!("{}: choose another element to connect", kind.label());
+                cx.notify();
+                return;
+            }
+            RelationClick::Connect(from) => from,
         };
-        if source == target {
-            self.pending_relation_source = Some(source);
-            self.feedback = format!("{}: choose another element to connect", kind.label());
-            cx.notify();
-            return;
-        }
         self.select_element(target.clone(), cx);
         let Ok(snapshot) = self.source.snapshot() else { self.feedback = "Project snapshot unavailable".into(); cx.notify(); return; };
         let Some(diagram_id) = self.active_diagram.clone().or_else(|| snapshot.section.diagrams.first().map(|diagram| diagram.id.clone())) else {
@@ -628,5 +651,30 @@ impl Render for MdeWorkbenchItem {
                 }).children(edges).children(cards))
             .child(div().h(px(25.0)).px_2().flex().items_center().border_t_1().border_color(border)
                 .text_color(muted).child(Label::new(self.feedback.clone())))
+    }
+}
+
+#[cfg(test)]
+mod relationship_interaction_tests {
+    use super::*;
+
+    #[test]
+    fn two_clicks_connect_distinct_model_elements() {
+        let mut pending = None;
+        assert_eq!(choose_relation_endpoint(&mut pending, "type-list"), RelationClick::First);
+        assert_eq!(pending.as_deref(), Some("type-list"));
+        assert_eq!(choose_relation_endpoint(&mut pending, "type-task"),
+            RelationClick::Connect("type-list".to_owned()));
+        assert_eq!(pending, None);
+    }
+
+    #[test]
+    fn clicking_source_again_does_not_drop_armed_tool() {
+        let mut pending = None;
+        assert_eq!(choose_relation_endpoint(&mut pending, "type-list"), RelationClick::First);
+        assert_eq!(choose_relation_endpoint(&mut pending, "type-list"), RelationClick::Repeat);
+        assert_eq!(pending.as_deref(), Some("type-list"));
+        assert_eq!(choose_relation_endpoint(&mut pending, "type-task"),
+            RelationClick::Connect("type-list".into()));
     }
 }
