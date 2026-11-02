@@ -11,9 +11,15 @@ mod scope;
 mod uml_types;
 mod uml_geometry;
 mod relationships;
+mod structural_diagrams;
 mod generation;
 
 pub use graph::{Graph, GraphError};
+pub use structural_diagrams::{
+    RootMetaclass, StructuralDiagnostic, StructuralDiagramKind,
+    StructuralSeverity, element_root_kind, relationship_root_kind,
+    validate_structural_diagram,
+};
 pub use generation::{
     GenerationModel, GenerationUnit, GenerationReference, GenerationGraphError,
     analyze_generation_graph,
