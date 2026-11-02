@@ -66,7 +66,7 @@ fn marker_paths(kind:&str, from:(f32,f32),to:(f32,f32),stroke:&str,background:&s
     }
 }
 fn dash(kind:&str)->&'static str {
-    if matches!(kind,"uml.dependency"|"uml.interface_realization"|"uml.template_binding"|"uml.realization") {
+    if matches!(kind,"uml.dependency"|"uml.interface_realization"|"uml.template_binding"|"uml.realization"|"uml.note_link"|"uml.constraint_link") {
         " stroke-dasharray='6 5'"
     }else{""}
 }
