@@ -458,7 +458,7 @@ impl Render for MdeRightPanel {
                     .child("Relationships"));
             }
             for relation in relations {
-                let label = relationship_presentation(relation).label;
+                let presentation = relationship_presentation(relation);
                 let from=snapshot.section.elements.iter().find(|e|e.id==relation.from)
                     .map_or(relation.from.as_str(),|e|e.name.as_str());
                 let to=snapshot.section.elements.iter().find(|e|e.id==relation.to)
@@ -468,7 +468,7 @@ impl Render for MdeRightPanel {
                 rows.push(
                     div().id(format!("mde-explorer-relation-{id}")).pl(px(14.0))
                         .child(
-                            TreeViewItem::new(id.clone(),format!("{from} —[{label}]→ {to}"))
+                            TreeViewItem::new(id.clone(),presentation.describe(from, to))
                                 .toggle_state(selected_id.as_deref()==Some(id.as_str()))
                                 .on_click(move |_,_,cx| {
                                     owner.update(cx,|workbench,cx|workbench.select_element(id.clone(),cx));
