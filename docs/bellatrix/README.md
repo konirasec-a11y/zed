@@ -1,5 +1,9 @@
 # Bellatrix — plataforma componível sobre Zed e Cordis-rs
 
+**Metamodelos e transformação de grafos (M2M→M2T):**
+[MDE_GRAPH_TRANSFORMATION_ARCHITECTURE.md](MDE_GRAPH_TRANSFORMATION_ARCHITECTURE.md).
+**Contrato único das relações UML:** [GRAPH_RELATIONSHIPS.md](GRAPH_RELATIONSHIPS.md).
+
 **Fonte de verdade para missão, composibilidade, SDK e referências de design:** [PLATFORM_VISION.md](PLATFORM_VISION.md). Bellatrix é uma plataforma generalista para DevSecOps, computação científica e aplicações criadas pelos usuários; MDE é uma engine core, não a plataforma.
 
 Bellatrix is implemented directly within the **Zed fork**. Zed owns the GPUI runtime, editor, workspace, docking, layouts, project worktrees and the `zed.messages` protocol. Bellatrix extends the Zed application with its own bounded backend domains.
