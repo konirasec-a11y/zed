@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 
 
+
 use crate::uml::behavioral::activities::ObjectNodeOrderingKind;
 use crate::uml::structural::common_structure::VisibilityKind;
 
@@ -1476,4 +1477,269 @@ pub struct UnmarshallAction {
     pub result: Vec<String>,
     pub unmarshall_type: String,
     pub object: String,
+}
+
+// Original module: reduce_action.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReduceAction {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub handler: Vec<String>,
+    pub local_precondition: Vec<String>,
+    pub local_postcondition: Vec<String>,
+    pub reducer: String,
+    pub result: String,
+    pub collection: String,
+    pub is_ordered: String,
+}
+
+// Original module: sequence_node.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SequenceNode {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub handler: Vec<String>,
+    pub local_precondition: Vec<String>,
+    pub local_postcondition: Vec<String>,
+    pub element_import: Vec<String>,
+    pub package_import: Vec<String>,
+    pub owned_rule: Vec<String>,
+    pub in_activity: Option<String>,
+    pub variable: Vec<String>,
+    pub edge: Vec<String>,
+    pub must_isolate: String,
+    pub node: Vec<String>,
+    pub executable_node: Vec<String>,
+}
+
+// Original module: conditional_node.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConditionalNode {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub handler: Vec<String>,
+    pub local_precondition: Vec<String>,
+    pub local_postcondition: Vec<String>,
+    pub element_import: Vec<String>,
+    pub package_import: Vec<String>,
+    pub owned_rule: Vec<String>,
+    pub in_activity: Option<String>,
+    pub variable: Vec<String>,
+    pub edge: Vec<String>,
+    pub must_isolate: String,
+    pub node: Vec<String>,
+    pub is_determinate: String,
+    pub is_assured: String,
+    pub clause: Vec<String>,
+    pub result: Vec<String>,
+}
+
+// Original module: clause.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Clause {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub test: Vec<String>,
+    pub body: Vec<String>,
+    pub predecessor_clause: Vec<String>,
+    pub successor_clause: Vec<String>,
+    pub decider: String,
+    pub body_output: Vec<String>,
+}
+
+// Original module: loop_node.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoopNode {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub handler: Vec<String>,
+    pub local_precondition: Vec<String>,
+    pub local_postcondition: Vec<String>,
+    pub element_import: Vec<String>,
+    pub package_import: Vec<String>,
+    pub owned_rule: Vec<String>,
+    pub in_activity: Option<String>,
+    pub variable: Vec<String>,
+    pub edge: Vec<String>,
+    pub must_isolate: String,
+    pub node: Vec<String>,
+    pub is_tested_first: String,
+    pub body_part: Vec<String>,
+    pub setup_part: Vec<String>,
+    pub decider: String,
+    pub test: Vec<String>,
+    pub result: Vec<String>,
+    pub loop_variable: Vec<String>,
+    pub body_output: Vec<String>,
+    pub loop_variable_input: Vec<String>,
+}
+
+// Original module: expansion_node.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExpansionNode {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub type_: Option<String>,
+    pub ordering: ObjectNodeOrderingKind,
+    pub is_control_type: String,
+    pub upper_bound: String,
+    pub in_state: Vec<String>,
+    pub selection: Option<String>,
+    pub region_as_output: Option<String>,
+    pub region_as_input: Option<String>,
+}
+
+// Original module: expansion_region.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExpansionRegion {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub handler: Vec<String>,
+    pub local_precondition: Vec<String>,
+    pub local_postcondition: Vec<String>,
+    pub element_import: Vec<String>,
+    pub package_import: Vec<String>,
+    pub owned_rule: Vec<String>,
+    pub in_activity: Option<String>,
+    pub variable: Vec<String>,
+    pub edge: Vec<String>,
+    pub must_isolate: String,
+    pub node: Vec<String>,
+    pub mode: ExpansionKind,
+    pub input_element: Vec<String>,
+    pub output_element: Vec<String>,
+}
+
+// Original module: expansion_kind.rs
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ExpansionKind {
+    Parallel,
+    Iterative,
+    Stream,
+}
+
+// Original module: structured_activity_node.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StructuredActivityNode {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub handler: Vec<String>,
+    pub local_precondition: Vec<String>,
+    pub local_postcondition: Vec<String>,
+    pub element_import: Vec<String>,
+    pub package_import: Vec<String>,
+    pub owned_rule: Vec<String>,
+    pub in_activity: Option<String>,
+    pub variable: Vec<String>,
+    pub edge: Vec<String>,
+    pub must_isolate: String,
+    pub node: Vec<String>,
 }
