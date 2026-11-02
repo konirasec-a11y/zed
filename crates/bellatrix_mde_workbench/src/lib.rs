@@ -17,6 +17,7 @@ pub use source::MdeUiSource;
 
 use bellatrix_mde_cordis::{
     MdeUiCommand, ModelingCreateElementRequested, ModelingCreateRelationRequested,
+    projected_automatic_routes,
     ModelingElementKind, ModelingRelationKind, ModelingTool,
     ModelingMoveViewRequested, ModelingRenameRequested, ModelingResizeViewRequested,
     ModelingDeleteElementRequested, ModelingSetPropertyRequested,
@@ -415,12 +416,16 @@ impl Render for MdeWorkbenchItem {
                 details = format!("{} elements · {} relations · rev {}", snapshot.section.elements.len(), snapshot.section.relations.len(), snapshot.revision);
                 if let Some(diagram) = diagram {
                     title = format!("{} / {}", snapshot.name, diagram.name);
+                    // Auto routes are a visual projection. Recompute old
+                    // persisted overlapping lines without mutating the model.
+                    let auto_routes = projected_automatic_routes(&snapshot.section, &diagram.id);
                     let mut views = diagram.views.iter().collect::<Vec<_>>();
                     views.sort_by_key(|view| view.z_index);
                     for view in views {
                         let Some(subject) = view.subject.as_deref() else { continue };
                         if let Some(relation) = snapshot.section.relations.iter().find(|relation| relation.id == subject) {
-                            if let Geometry::Path { start, segments } = &view.geometry {
+                            let geometry = auto_routes.get(subject).unwrap_or(&view.geometry);
+                            if let Geometry::Path { start, segments } = geometry {
                                 let mut points = vec![*start];
                                 for segment in segments {
                                     match segment { PathSegment::Line { to } => points.push(*to), PathSegment::Cubic { control1, control2, to } => points.extend([*control1, *control2, *to]) }
