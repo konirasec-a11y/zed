@@ -624,22 +624,19 @@ impl Dock {
         }
     }
 
-    pub(crate) fn add_panel<T: Panel>(
+    /// Move a panel when its semantic position changes. Zed built-in panels
+    /// change their position via SettingsStore; embedded engines can change
+    /// their own Panel state and notify its GPUI Entity. Both paths use the
+    /// same native Dock transfer, size restoration and workspace persistence.
+    fn relocate_panel_if_needed<T: Panel>(
         &mut self,
-        panel: Entity<T>,
-        workspace: WeakEntity<Workspace>,
+        panel: &Entity<T>,
+        workspace: &WeakEntity<Workspace>,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> usize {
-        let subscriptions = [
-            cx.observe(&panel, |_, _, cx| cx.notify()),
-            cx.observe_global_in::<SettingsStore>(window, {
-                let workspace = workspace.clone();
-                let panel = panel.clone();
-
-                move |this, window, cx| {
+    ) {
                     let new_position = panel.read(cx).position(window, cx);
-                    if new_position == this.position {
+                    if new_position == self.position {
                         return;
                     }
 
@@ -658,7 +655,7 @@ impl Dock {
                     };
 
                     let panel_id = Entity::entity_id(&panel);
-                    let was_visible = this.is_open()
+                    let was_visible = self.is_open()
                         && this
                             .visible_panel()
                             .is_some_and(|active_panel| active_panel.panel_id() == panel_id);
@@ -669,7 +666,7 @@ impl Dock {
                         .map(|entry| entry.size_state)
                         .unwrap_or_default();
 
-                    let previous_axis = this.position.axis();
+                    let previous_axis = self.position.axis();
                     let next_axis = new_position.axis();
                     let size_state = if previous_axis == next_axis {
                         size_state
@@ -677,7 +674,7 @@ impl Dock {
                         PanelSizeState::default()
                     };
 
-                    if !this.remove_panel(&panel, window, cx) {
+                    if !self.remove_panel(panel, window, cx) {
                         // Panel was already moved from this dock
                         return;
                     }
@@ -699,6 +696,31 @@ impl Dock {
                             workspace.serialize_workspace(window, cx);
                         })
                         .ok();
+
+    }
+
+    pub(crate) fn add_panel<T: Panel>(
+        &mut self,
+        panel: Entity<T>,
+        workspace: WeakEntity<Workspace>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> usize {
+        let subscriptions = [
+            // Keep ordinary panel redraws working AND react to position
+            // changes from a Panel without a Zed settings-file provider.
+            cx.observe_in(&panel, window, {
+                let workspace = workspace.clone();
+                move |this, panel, window, cx| {
+                    this.relocate_panel_if_needed(panel, &workspace, window, cx);
+                    cx.notify();
+                }
+            }),
+            cx.observe_global_in::<SettingsStore>(window, {
+                let workspace = workspace.clone();
+                let panel = panel.clone();
+                move |this, window, cx| {
+                    this.relocate_panel_if_needed(&panel, &workspace, window, cx);
                 }
             }),
             {
