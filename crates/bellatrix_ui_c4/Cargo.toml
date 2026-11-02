@@ -1,5 +1,5 @@
 [package]
-name = "bellatrix_components_c4"
+name = "bellatrix_ui_c4"
 version = "0.1.0"
 edition = "2024"
 description = "Reusable C4 diagram entity primitives: Bellatrix Design reusable GPUI components"

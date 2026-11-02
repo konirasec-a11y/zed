@@ -1,5 +1,5 @@
 [package]
-name = "bellatrix_components_panels"
+name = "bellatrix_ui_panels"
 version = "0.1.0"
 edition = "2024"
 description = "Reusable dock panel content, property rows and empty states: Bellatrix Design reusable GPUI components"

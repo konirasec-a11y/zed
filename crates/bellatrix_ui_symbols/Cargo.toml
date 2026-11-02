@@ -1,5 +1,5 @@
 [package]
-name = "bellatrix_components_symbols"
+name = "bellatrix_ui_symbols"
 version = "0.1.0"
 edition = "2024"
 description = "Shared UML, C4, mindmap and flowchart symbol vocabulary and SVG glyphs"

@@ -1,5 +1,5 @@
 [package]
-name = "bellatrix_components_flow"
+name = "bellatrix_ui_flow"
 version = "0.1.0"
 edition = "2024"
 description = "Reusable flowchart node components: Bellatrix Design reusable GPUI components"

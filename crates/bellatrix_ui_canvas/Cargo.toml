@@ -1,5 +1,5 @@
 [package]
-name = "bellatrix_components_canvas"
+name = "bellatrix_ui_canvas"
 version = "0.1.0"
 edition = "2024"
 description = "Generic diagram canvas viewport without domain model: Bellatrix Design reusable GPUI components"

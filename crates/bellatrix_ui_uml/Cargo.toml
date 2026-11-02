@@ -1,5 +1,5 @@
 [package]
-name = "bellatrix_components_uml"
+name = "bellatrix_ui_uml"
 version = "0.1.0"
 edition = "2024"
 description = "Reusable UML presentation on Zed GPUI, independent from MDE model storage"

@@ -19,7 +19,7 @@ use bellatrix_mde_cordis::{
     ModelingMoveViewRequested, ModelingRenameRequested, ModelingResizeViewRequested,
 };
 use bellatrix_mde_model::Geometry;
-use bellatrix_components_uml::UmlClassCard;
+use bellatrix_ui_uml::UmlClassCard;
 use bellatrix_project::{ProjectId, ProjectSaveRequested};
 use gpui::{
     App, Context, DragMoveEvent, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,

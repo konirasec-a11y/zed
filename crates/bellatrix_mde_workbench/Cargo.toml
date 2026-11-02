@@ -16,7 +16,7 @@ ui.workspace = true
 workspace.workspace = true
 serde_json.workspace = true
 bellatrix_design_system = { path = "../bellatrix_design_system" }
-bellatrix_components_uml = { path = "../bellatrix_ui_uml" }
+bellatrix_ui_uml = { path = "../bellatrix_ui_uml" }
 
 # Zed d94f32a1 locks Merman's prerelease crates as a matched family.
 # Without these exact constraints, Cargo may select 0.8.0 stable companions

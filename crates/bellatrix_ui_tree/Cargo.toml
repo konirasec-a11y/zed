@@ -1,5 +1,5 @@
 [package]
-name = "bellatrix_components_tree"
+name = "bellatrix_ui_tree"
 version = "0.1.0"
 edition = "2024"
 description = "Reusable read-only tree pane presentation for workspaces"
