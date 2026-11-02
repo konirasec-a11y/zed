@@ -1,4 +1,6 @@
-# Bellatrix on Zed
+# Bellatrix — plataforma componível sobre Zed e Cordis-rs
+
+**Fonte de verdade para missão, composibilidade, SDK e referências de design:** [PLATFORM_VISION.md](PLATFORM_VISION.md). Bellatrix é uma plataforma generalista para DevSecOps, computação científica e aplicações criadas pelos usuários; MDE é uma engine core, não a plataforma.
 
 Bellatrix is implemented directly within the **Zed fork**. Zed owns the GPUI runtime, editor, workspace, docking, layouts, project worktrees and the `zed.messages` protocol. Bellatrix extends the Zed application with its own bounded backend domains.
 
@@ -6,7 +8,7 @@ Bellatrix is implemented directly within the **Zed fork**. Zed owns the GPUI run
 
 - `crates/bellatrix_project`: ProjectDocument, identities, revision control and persisted Bellatrix domain sections. It **does not replace** the Zed `project` crate.
 - `crates/bellatrix_mde_{model,modeling,cordis,rust_generator,html_exporter,cli}`: headless Model-Driven Engineering domain and its typed Cordis events/services.
-- `crates/bellatrix_mde_workbench`: native Zed Workspace Item, Dock Panels, Canvas, Toolbox, Inspector, and a typed bridge to MDE; opened on demand through the `bellatrix_mde::OpenMdeWorkbench` action.
+- `crates/bellatrix_mde_workbench`: native Zed Workspace Item, Dock Panels, Canvas, Toolbox, Inspector, and a typed bridge to MDE; shown as a native Workspace Item with a focus/reopen action (`bellatrix_mde::OpenMdeWorkbench`).
 - `crates/bellatrix_zed_host`: installs Project/MDE Cordis plugins inside the existing Zed initialization; no separate GUI event loop.
 - `crates/bellatrix_design_system` and `crates/bellatrix_ui_*`: presentation and symbol vocabulary on Zed's pinned GPUI.
 - `crates/bellatrix_mde_model/fixtures` and `schema`: MDE fixtures and its versioned wire format, separate from Zed RPC/proto.
@@ -27,7 +29,7 @@ cargo check -p zed
 cargo run -p zed
 ```
 
-Use Zed's command palette action `bellatrix_mde::OpenMdeWorkbench` to open or refocus the MDE Workbench in the current Zed Workspace. It no longer inserts a tab or Dock panels into unrelated windows automatically. Set `BELLATRIX_PROJECT_FILE` to load a persisted Bellatrix project or `BELLATRIX_MODEL_FILE` for an MDE JSON model. If neither is supplied, the MDE host uses `crates/bellatrix_mde_model/fixtures/todo.json`. Zed's own Workspace and project flows remain available.
+O Zed registra o Workbench MDE como Item e contribuições de Dock nativos; a ação `bellatrix_mde::OpenMdeWorkbench` o reabre ou foca. Sua inicialização é parte da instalação de capacidades do fork, não um segundo runtime de GUI. Set `BELLATRIX_PROJECT_FILE` to load a persisted Bellatrix project or `BELLATRIX_MODEL_FILE` for an MDE JSON model. If neither is supplied, the MDE host uses `crates/bellatrix_mde_model/fixtures/todo.json`. Zed's own Workspace and project flows remain available.
 
 ## Compatibility
 
