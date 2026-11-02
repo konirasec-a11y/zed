@@ -37,7 +37,10 @@ impl TreePane {
 impl RenderOnce for TreePane {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let p = Palette::current(cx);
+        // Zed GPUI exposes scrolling on StatefulInteractiveElement; .id()
+        // promotes a plain Div to Stateful<Div> before overflow_y_scroll().
         div()
+            .id("bellatrix-tree-scroll")
             .size_full()
             .flex()
             .flex_col()
