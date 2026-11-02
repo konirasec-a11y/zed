@@ -4,11 +4,58 @@
 
 Referência de comportamento: arquivos fornecidos pelo mantenedor em `starUml.zip`, especialmente `src/ui/quickedit-manager.js`, `extensions/essential/uml/quickedits/uml.json`, `extensions/essential/uml/metamodel.json` e classes de Views. A implementação é nativa GPUI/Zed e não copia código, CSS ou assets StarUML.
 
+## Escopo atual de Diagrama de Classes
+
+Este documento é do **plugin/engine MDE**, não da identidade visual global
+do Bellatrix. Referências normativas da experiência MDE:
+
+- React: `crates/bellatrix_design_system/docs/design/`.
+- Comportamento: `crates/bellatrix_design_system/docs/ref/staruml/`
+  (Classes Basic, Classes Advanced, Packages e Annotations).
+- Filosofia da plataforma: [PLATFORM_VISION.md](PLATFORM_VISION.md).
+
+O catálogo contém 24 ferramentas com comandos próprios (14 tipos de nós e
+10 tipos de relação). Class e Interface permanecem com os tipos legados
+`rust.struct` e `rust.trait` para compatibilidade. As outras formas usam
+tipos UML específicos. O ProjectService continua revisionando as mudanças.
+
+| Grupo | Elementos |
+| --- | --- |
+| Nós básicos | Class, Interface |
+| Nós avançados | Signal, DataType, PrimitiveType, Enumeration, Frame, N-ary Association, Association Class, Template |
+| Pacotes e anotação | Package, Model, Subsystem, Comment |
+| Relações básicas | Association, Directed Association, Aggregation, Composition, Dependency, Generalization, Interface Realization |
+| Relações avançadas | Template Binding, Realization |
+| Relação de pacote | Containment |
+
+No Canvas, os nós compartilham a identidade do tema Zed, **não uma
+silhueta genérica**: classifiers usam compartments e estereótipos;
+packages/model/subsystem usam aba; frame é uma moldura; comment tem dobra;
+N-ary Association usa losango; conectores possuem linhas/setas/triângulos/
+diamantes conforme o tipo UML. Relações são `Relation` + `View(Path)`,
+não `Element` com geometria de classe.
+
+A Toolbox agrupa cada ferramenta por tipo. Soltar nós cria Elements + Views
+com `expected_revision`. Para conectores, escolher a ferramenta e clicar
+em **origem e destino** cria a Relation; não inventar relação de ownership
+ao soltar fisicamente uma figura sobre outra. Relações são inspecionáveis
+e seus multiplicities, roles e navigability são propriedades editáveis.
+
+**Limitações que ainda requerem validação/evolução:** interação nativa em
+Windows, roteamento ortogonal/múltiplos bends, edição direta dos endpoints,
+Association Class com linha pontilhada vinculada a uma Association,
+multiplicity labels posicionados nos extremos e metamodelo UML completo.
+A presença das ferramentas não constitui certificação UML integral.
+Os testes Cargo/GPUI e casos de uso devem ser aprovados antes de declarar
+editor de classes homologado.
+
 ## Responsabilidades
 
 | Módulo | Papel e tipo de estado |
 | --- | --- |
-| `crates/bellatrix_ui_uml/src/class.rs` | View de Class/Interface, título, compartimentos e alvos de clique para Class, Attribute e Operation; não conhece Cordis |
+| `crates/bellatrix_ui_uml/src/class.rs` | Classifiers UML (Class, Interface, Enumeration etc.): estereótipos, título, compartimentos, membros e edição |
+| `crates/bellatrix_ui_uml/src/figures.rs` | Package, Model, Subsystem, Comment, Frame e N-ary Association com silhuetas distintas |
+| `crates/bellatrix_ui_uml/src/relationship.rs` | Apresentação SVG de relações UML e decoração de extremidades; não conhece Cordis |
 | `crates/bellatrix_ui_uml/src/inline_edit.rs` | Input Zed posicionado **no lugar do nome**; Enter confirma, Escape cancela; ícones mínimos de aceitar/cancelar |
 | `crates/bellatrix_ui_uml/src/quick_edit.rs` | Ações contextuais em botões **somente ícones**, tooltip, acessibilidade e controle de visibilidade via menu nativo Zed |
 | `crates/bellatrix_mde_modeling/src/quick_edit.rs` | Descritores tipados por `Element.kind`, disponibilidade e comando de cada ação; sem GPUI |
