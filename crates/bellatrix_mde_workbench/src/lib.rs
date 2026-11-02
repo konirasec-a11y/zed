@@ -11,7 +11,6 @@ mod theme;
 mod hierarchy;
 mod property_editor;
 mod quick_edit_view;
-mod quick_edit_view;
 mod symbol_library;
 pub use symbol_library::MdeSymbolLibraryItem;
 pub use integration::register_mde_workspace;
@@ -601,7 +600,7 @@ impl Render for MdeWorkbenchItem {
                                 let id = member_id.to_owned();
                                 let _ = member_owner.update(cx, |item, cx| {
                                     item.select_element(id, cx);
-                                    item.focus_self(window);
+                                    cx.focus_self(window);
                                 });
                             });
                         for relation in &snapshot.section.relations {
