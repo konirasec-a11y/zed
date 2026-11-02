@@ -73,12 +73,17 @@ impl RenderOnce for UmlFigure {
                 let stereotype=match self.kind.as_str() {
                     "uml.model" => Some("«model»"),"uml.subsystem"=>Some("«subsystem»"),_=>None,
                 };
-                base.flex().flex_col()
-                    // Tab silhouette plus a large empty contents compartment.
-                    .child(div().w(px(87.0)).h(px(16.0)).flex_none()
-                        .border_r_1().border_b_1().border_color(border)
-                        .bg(rgb(p.panel_alt)))
-                    .child(div().w_full().px_2().py_1().flex().flex_col()
+                // UML package: raised folder tab followed by a separate box.
+                // Unlike a classifier it has no attribute/operation compartments.
+                div().size_full().relative()
+                    .child(div().absolute().left(px(0.0)).top(px(16.0))
+                        .right(px(0.0)).bottom(px(0.0))
+                        .border_1().border_color(border).bg(rgb(p.panel)))
+                    .child(div().absolute().left(px(0.0)).top(px(0.0))
+                        .w(px(87.0)).h(px(17.0))
+                        .border_1().border_color(border).bg(rgb(p.panel_alt)))
+                    .child(div().absolute().left(px(11.0)).top(px(25.0))
+                        .flex().flex_col()
                         .when_some(stereotype,|this,s|this.child(
                             div().text_size(px(10.0)).text_color(rgb(p.muted)).child(s)))
                         .child(title_area))
@@ -94,17 +99,21 @@ impl RenderOnce for UmlFigure {
             }
             "uml.comment" => {
                 const FOLD:&[u8]=br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 2H16L22 8V22H4Z M16 2V8H22" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>"#;
-                base.flex().flex_col().p_2().gap_2()
-                    .child(div().w(px(22.0)).h(px(22.0))
-                        .child(svg().data(FOLD).w_full().h_full().text_color(rgb(p.muted))))
-                    .child(title_area)
+                // A note is one folded-corner sheet, not a class rectangle
+                // carrying a note icon in one of its compartments.
+                div().size_full().relative()
+                    .child(svg().data(FOLD).size_full().text_color(border))
+                    .child(div().absolute().left(px(12.0)).top(px(14.0))
+                        .right(px(14.0)).child(title_area))
                     .into_any_element()
             }
             "uml.nary_association" => {
                 const DIAMOND:&[u8]=br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><polygon points="50,4 96,50 50,96 4,50" fill="none" stroke="currentColor" stroke-width="3"/></svg>"#;
-                base.bg(rgb(p.canvas)).flex().flex_col().items_center().justify_center()
-                    .child(svg().data(DIAMOND).w(px(44.0)).h(px(44.0))
-                        .text_color(rgb(p.text)))
+                // An N-ary Association is a diamond node; it must not inherit
+                // the rectangular classifier border, even when selected.
+                div().size_full().flex().flex_col().items_center().justify_center()
+                    .child(svg().data(DIAMOND).w(px(55.0)).h(px(55.0))
+                        .text_color(if self.selected {rgb(p.selection)} else {rgb(p.text)}))
                     .child(div().text_xs().text_color(rgb(p.muted)).child(title_area))
                     .into_any_element()
             }
