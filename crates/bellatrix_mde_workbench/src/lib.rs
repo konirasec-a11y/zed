@@ -702,7 +702,7 @@ impl Render for MdeWorkbenchItem {
                                         .on_mouse_down(MouseButton::Left,move |_, window, cx| {
                                             let _ = edge_owner.update(cx,|item,cx| {
                                                 item.select_element(edge_id.clone(),cx);
-                                                item.focus_self(window);
+                                                cx.focus_self(window);
                                             });
                                             cx.stop_propagation();
                                         })
