@@ -146,7 +146,7 @@ fn compartment(
     let line = rgb(p.border);
     div()
         .w_full().flex().flex_col()
-        .px_2().py_1().gap_0p5()
+        .px_2().py_1().gap_1()
         .when(with_border, |el| el.border_t_1().border_color(line))
         .children(rows.into_iter().enumerate().map(move |(index, member)| {
             let selected = select.clone();
