@@ -27,7 +27,6 @@ use bellatrix_mde_cordis::{
 };
 use bellatrix_mde_model::Geometry;
 use bellatrix_ui_uml::UmlClassCard;
-use bellatrix_mde_modeling::quick_edit_for;
 use quick_edit_view::quick_edit_for_element;
 use ui_input::InputField;
 use bellatrix_project::{ProjectId, ProjectSaveRequested};
