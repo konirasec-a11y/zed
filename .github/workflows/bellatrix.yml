@@ -60,6 +60,13 @@ jobs:
             cargo +1.98.1 test -p $package
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
+      - name: Test native Zed icon assets and Bellatrix Dock priorities
+        shell: pwsh
+        run: |
+          cargo +1.98.1 test -p icons test_all_icons_exist
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo +1.98.1 test -p bellatrix_mde_workbench bellatrix_panel_priorities_do_not_collide_with_zed_or_each_other
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Check Bellatrix Workbench warnings
         shell: pwsh
         run: cargo +1.98.1 clippy -p bellatrix_mde_workbench --all-targets -- -D warnings
