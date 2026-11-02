@@ -1,6 +1,7 @@
 //! Native UML 2.5 declarations: behavioral/activities.
 #![allow(dead_code)]
 use serde::{Deserialize, Serialize};
+
 use crate::uml::structural::common_structure::VisibilityKind;
 
 // Original module: activity.rs
@@ -213,4 +214,217 @@ pub struct ObjectNode {
     pub upper_bound: String,
     pub in_state: Vec<String>,
     pub selection: Option<String>,
+}
+
+// Original module: control_node.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ControlNode {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+}
+
+// Original module: control_flow.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ControlFlow {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub source: String,
+    pub target: String,
+    pub redefined_edge: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub guard: String,
+    pub weight: String,
+    pub interrupts: Option<String>,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+}
+
+// Original module: initial_node.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InitialNode {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+}
+
+// Original module: activity_parameter_node.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivityParameterNode {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub type_: Option<String>,
+    pub ordering: ObjectNodeOrderingKind,
+    pub is_control_type: String,
+    pub upper_bound: String,
+    pub in_state: Vec<String>,
+    pub selection: Option<String>,
+    pub parameter: String,
+}
+
+// Original module: fork_node.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForkNode {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+}
+
+// Original module: flow_final_node.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FlowFinalNode {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+}
+
+// Original module: final_node.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FinalNode {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+}
+
+// Original module: central_buffer_node.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CentralBufferNode {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
+    pub type_: Option<String>,
+    pub ordering: ObjectNodeOrderingKind,
+    pub is_control_type: String,
+    pub upper_bound: String,
+    pub in_state: Vec<String>,
+    pub selection: Option<String>,
+}
+
+// Original module: merge_node.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeNode {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub in_structured_node: Option<String>,
+    pub activity: Option<String>,
+    pub outgoing: Vec<String>,
+    pub incoming: Vec<String>,
+    pub in_partition: Vec<String>,
+    pub in_interruptible_region: Vec<String>,
+    pub redefined_node: Vec<String>,
 }
