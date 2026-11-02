@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="520" viewBox="0 0 1100 520" role="img" aria-labelledby="title desc">
+<title id="title">Contrato Inspector MDE e fluxo de atualização</title>
+<desc id="desc">Diagrama conceitual original: composição de descritores base e especializados, seleção e persistência.</desc>
+<rect width="1100" height="520" fill="#181b20"/>
+<text x="36" y="46" font-family="sans-serif" fill="#f0f2f4" font-size="24" font-weight="bold">Inspeção de elementos: composição, não herança de structs</text>
+<text x="36" y="71" font-family="sans-serif" fill="#a6b2c2" font-size="13">Contratos do contexto MDE independentes do GPUI e do Project Panel do Zed</text>
+<g font-family="sans-serif" font-size="14">
+<rect x="30" y="112" width="236" height="135" rx="7" fill="#25354a" stroke="#6e9ad1"/>
+<text x="48" y="142" font-weight="bold" fill="#f4f8fd">Element (base)</text>
+<text x="48" y="166" fill="#bed0e5">id · kind · name · label</text><text x="48" y="192" fill="#bed0e5">description · properties</text><text x="48" y="218" fill="#bed0e5">annotations · implementations</text>
+<rect x="322" y="112" width="236" height="135" rx="7" fill="#263e36" stroke="#69b99a"/>
+<text x="340" y="142" font-weight="bold" fill="#f4f8fd">Class (specialized)</text>
+<text x="340" y="166" fill="#b4e4cf">stereotype · visibility</text><text x="340" y="192" fill="#b4e4cf">isAbstract · isLeaf</text><text x="340" y="218" fill="#b4e4cf">isActive · finalSpecialization</text>
+<rect x="614" y="112" width="227" height="135" rx="7" fill="#333047" stroke="#b7a1df"/>
+<text x="632" y="142" font-weight="bold" fill="#f4f8fd">Owned members</text>
+<text x="632" y="172" fill="#d6c9ef">attributes : Vec&lt;ElementRef&gt;</text><text x="632" y="201" fill="#d6c9ef">operations : Vec&lt;ElementRef&gt;</text><text x="632" y="227" fill="#d6c9ef">relation kind = owns</text>
+<path d="M267 179H318M559 179H610" stroke="#a6bbd0" stroke-width="2"/>
+<path d="M305 173l12 6-12 6M599 173l12 6-12 6" fill="none" stroke="#a6bbd0" stroke-width="2"/>
+<rect x="866" y="112" width="205" height="135" rx="7" fill="#423629" stroke="#d8b575"/>
+<text x="886" y="142" font-weight="bold" fill="#f9f3e9">Typed editors</text>
+<text x="886" y="171" fill="#efdcb9">Text · Multiline · Bool</text><text x="886" y="199" fill="#efdcb9">Enum · Number · Ref</text><text x="886" y="226" fill="#efdcb9">Collections · Read-only</text>
+<path d="M842 179H862" stroke="#d9c89e" stroke-width="2"/>
+<g font-family="sans-serif">
+<rect x="32" y="309" width="205" height="94" rx="7" fill="#242a30" stroke="#7892ad"/>
+<text x="52" y="340" font-size="16" font-weight="bold" fill="#f0f2f4">Zed GPUI</text><text x="52" y="372" font-size="13" fill="#bbc9d7">Canvas / Model Explorer</text>
+<rect x="293" y="309" width="236" height="94" rx="7" fill="#242a30" stroke="#7892ad"/>
+<text x="314" y="339" font-size="16" font-weight="bold" fill="#f0f2f4">Inspector Projection</text>
+<text x="314" y="372" font-size="13" fill="#bbc9d7">Selected element + descriptors</text>
+<rect x="588" y="309" width="207" height="94" rx="7" fill="#263e36" stroke="#69b99a"/>
+<text x="608" y="339" font-size="16" font-weight="bold" fill="#f0f2f4">Cordis · SetProperty</text>
+<text x="608" y="372" font-size="13" fill="#b4e4cf">Validate &amp; version</text>
+<rect x="850" y="309" width="220" height="94" rx="7" fill="#263e36" stroke="#69b99a"/>
+<text x="867" y="339" font-size="16" font-weight="bold" fill="#f0f2f4">ProjectService</text><text x="867" y="372" font-size="13" fill="#b4e4cf">Revision + state event</text>
+<path d="M237 356H287M529 356H582M795 356H845" stroke="#9fc7e7" stroke-width="2"/>
+</g>
+<text x="35" y="467" font-family="sans-serif" font-size="13" fill="#a8bacb">Projeto salva dados semânticos. GPUI mantém somente seleção, foco, formulários e gestos temporários.</text>
+</svg>
