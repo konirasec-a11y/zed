@@ -44,7 +44,7 @@ impl RenderOnce for UmlInlineNameEditor {
             .gap_1()
             .capture_key_down(move |event: &KeyDownEvent, window, cx| {
                 match event.keystroke.key.as_str() {
-                    "enter" => {
+                    "enter" if !event.keystroke.modifiers.control => {
                         confirm_key(window, cx);
                         cx.stop_propagation();
                     }
