@@ -4,7 +4,8 @@ mod declarations;
 mod files;
 
 use bellatrix_mde_model::Project;
-use bellatrix_mde_modeling::{Graph, Plan, Scope, select_elements};
+use bellatrix_mde_modeling::{Graph, Plan, Scope, analyze_generation_graph, select_elements};
+use bellatrix_mde_templates::TemplatePack;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct GenerationOptions {
@@ -16,23 +17,82 @@ pub fn plan(project: &Project, scope: &Scope) -> Result<Plan, Box<dyn std::error
     plan_with_options(project, scope, GenerationOptions::default())
 }
 
+/// Built-in Rust template pack. Third-party engines can provide independent
+/// packs or override individual target templates without changing graph rules.
+pub fn default_templates() -> Result<TemplatePack, Box<dyn std::error::Error>> {
+    Ok(TemplatePack::embedded([
+        ("rust/struct.rs.tera", include_str!("../templates/struct.rs.tera")),
+        ("rust/trait.rs.tera", include_str!("../templates/trait.rs.tera")),
+        ("rust/function.rs.tera", include_str!("../templates/function.rs.tera")),
+        ("rust/signature.rs.tera", include_str!("../templates/signature.rs.tera")),
+        ("rust/raw_item.rs.tera", include_str!("../templates/raw_item.rs.tera")),
+        ("rust/Cargo.toml.tera", include_str!("../templates/Cargo.toml.tera")),
+    ])?)
+}
+
 pub fn plan_with_options(
     project: &Project,
     scope: &Scope,
     options: GenerationOptions,
 ) -> Result<Plan, Box<dyn std::error::Error>> {
+    let templates = default_templates()?;
+    plan_with_templates(project, scope, options, &templates)
+}
+
+/// Four separate stages: validate and select the source graph; build an
+/// in-memory generation model with petgraph; render text with Tera; return
+/// an immutable Plan for explicit, ownership-checked publication.
+pub fn plan_with_templates(
+    project: &Project,
+    scope: &Scope,
+    options: GenerationOptions,
+    templates: &TemplatePack,
+) -> Result<Plan, Box<dyn std::error::Error>> {
     Graph::new(project).validate()?;
     let selected = select_elements(project, scope)?;
+    let generation_model = analyze_generation_graph(project, &selected)?;
     let mut result = Plan::new();
     files::plan_files(project, &selected, &mut result)?;
-    cargo::plan_manifests(project, &selected, &mut result)?;
-    declarations::plan_rust(project, &selected, &mut result, options.skeleton)?;
+    cargo::plan_manifests(project, &selected, &mut result, templates)?;
+    declarations::plan_rust(
+        project, &generation_model, &selected, templates,
+        &mut result, options.skeleton,
+    )?;
     Ok(result)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn tera_is_active_and_can_be_replaced_per_target_without_graph_mutation() {
+        let project: Project =
+            serde_json::from_str(include_str!("../../bellatrix_mde_model/fixtures/todo.json")).unwrap();
+        let baseline = plan(&project, &Scope::Project).unwrap();
+        let mut templates = default_templates().unwrap();
+        assert!(templates.contains("rust/struct.rs.tera"));
+        templates.override_template("rust/struct.rs.tera",
+            "{{ annotations }}pub struct {{ name }} { {% for field in fields %}{{ field }} {% endfor %}}"
+        ).unwrap();
+        let changed = plan_with_templates(&project, &Scope::Project,
+            GenerationOptions::default(), &templates).unwrap();
+        let src = |plan: &Plan| String::from_utf8(
+            plan.artifacts().find(|a|a.path.to_string_lossy().ends_with("task.rs"))
+                .unwrap().contents.as_ref().unwrap().clone()
+        ).unwrap();
+        assert_ne!(src(&baseline), src(&changed));
+        assert!(src(&changed).contains("pub struct TaskList"));
+        assert_eq!(project.relations.iter().filter(|r|r.kind=="depends_on").count(), 1);
+    }
+    #[test]
+    fn invalid_target_template_aborts_before_publication() {
+        let project: Project =
+            serde_json::from_str(include_str!("../../bellatrix_mde_model/fixtures/todo.json")).unwrap();
+        let pack = TemplatePack::embedded([("rust/struct.rs.tera", "{{ name }}")]).unwrap();
+        assert!(plan_with_templates(&project, &Scope::Project,
+            GenerationOptions::default(), &pack).is_err());
+    }
+
     #[test]
     fn fixture_has_real_rust_and_arbitrary_assets() {
         let project: Project =
