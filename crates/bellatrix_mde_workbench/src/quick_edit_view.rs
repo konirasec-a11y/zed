@@ -2,10 +2,10 @@
 //! visuals. All icon layouts and controls are in bellatrix_ui_uml; only this
 //! adapter knows the selected MDE type and its Cordis command.
 use crate::MdeWorkbenchItem;
-use bellatrix_mde_cordis::ModelingMemberKind;
+use bellatrix_mde_cordis::{ModelingMemberKind, InterfaceQuickAction};
 use bellatrix_mde_model::Element;
 use bellatrix_mde_modeling::{
-    QuickEditAvailability, QuickEditControl, quick_edit_for,
+    QuickEditAvailability, QuickEditControl, QuickEditSide, quick_edit_for,
 };
 use bellatrix_ui_uml::{UmlQuickAction, UmlQuickEdit, UmlVisibilityPicker};
 use gpui::Entity;
@@ -16,9 +16,9 @@ use ui::IconName;
 pub(crate) fn quick_edit_for_element(
     element: &Element,
     owner: Entity<MdeWorkbenchItem>,
-) -> (Option<UmlQuickEdit>, Option<UmlVisibilityPicker>) {
+) -> (Option<UmlQuickEdit>, Option<UmlQuickEdit>, Option<UmlVisibilityPicker>) {
     let descriptors = quick_edit_for(&element.kind);
-    let actions: Vec<UmlQuickAction> = descriptors.iter()
+    let actions: Vec<(QuickEditSide, UmlQuickAction)> = descriptors.iter()
         .filter(|action| {
             action.availability == QuickEditAvailability::Implemented
                 && action.control == QuickEditControl::Button
@@ -27,28 +27,55 @@ pub(crate) fn quick_edit_for_element(
             let icon = match action.id {
                 "uml.add-attribute" => IconName::SquarePlus,
                 "uml.add-operation" => IconName::Code,
+                "uml.add-reception" => IconName::Bell,
+                "uml.add-note" => IconName::Notepad,
+                "uml.add-constraint" => IconName::Warning,
+                "uml.add-subinterface" => IconName::ArrowDown,
+                "uml.add-superinterface" => IconName::ArrowUp,
+                "uml.add-realizing-class" => IconName::GitBranchPlus,
                 _ => return None,
             };
-            Some(UmlQuickAction {
+            Some((action.side, UmlQuickAction {
                 id: action.id,
                 label: action.title,
                 icon,
-            })
+                row: action.row,
+            }))
         })
         .collect();
-    let controls = if actions.is_empty() {
-        None
-    } else {
-        let owner = owner.clone();
-        Some(UmlQuickEdit::new(actions, move |id, _window, cx| {
-            let kind = match id {
-                "uml.add-attribute" => ModelingMemberKind::Attribute,
-                "uml.add-operation" => ModelingMemberKind::Operation,
-                _ => return,
-            };
-            owner.update(cx, |item, cx| item.add_member_to_selected(kind, cx));
-        }))
+    let make_actions = |side: QuickEditSide, role: &'static str| {
+        let side_actions = actions.iter().filter(|(s,_)| *s == side)
+            .map(|(_,action)| action.clone()).collect::<Vec<_>>();
+        if side_actions.is_empty() {return None;}
+        let owner=owner.clone();
+        Some(UmlQuickEdit::new(side_actions, move |id, _window, cx| {
+            match id {
+                "uml.add-attribute" => {
+                    owner.update(cx, |item, cx|
+                        item.add_member_to_selected(ModelingMemberKind::Attribute, cx));
+                }
+                "uml.add-operation" => {
+                    owner.update(cx, |item, cx|
+                        item.add_member_to_selected(ModelingMemberKind::Operation, cx));
+                }
+                id => {
+                    let action=match id {
+                        "uml.add-note" => InterfaceQuickAction::AddNote,
+                        "uml.add-constraint" => InterfaceQuickAction::AddConstraint,
+                        "uml.add-reception" => InterfaceQuickAction::AddReception,
+                        "uml.add-subinterface" => InterfaceQuickAction::AddSubinterface,
+                        "uml.add-superinterface" => InterfaceQuickAction::AddSuperinterface,
+                        "uml.add-realizing-class" => InterfaceQuickAction::AddRealizingClass,
+                        _ => return,
+                    };
+                    owner.update(cx, |item, cx|
+                        item.run_interface_quick_action(action, cx));
+                }
+            }
+        }).side(role))
     };
+    let right=make_actions(QuickEditSide::Right,"right");
+    let left=make_actions(QuickEditSide::Left,"left");
 
     let visibility = descriptors.iter().any(|action|
         action.id == "uml.visibility"
@@ -68,5 +95,5 @@ pub(crate) fn quick_edit_for_element(
         })
     });
 
-    (controls, visibility)
+    (right, left, visibility)
 }
