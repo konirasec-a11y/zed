@@ -4,12 +4,13 @@
 //! compose the Working Diagrams/Toolbox and Explorer/Inspector stacks from
 //! docs/design/ while Zed still owns placement, focus and persistence.
 
-use crate::{MdeToolDrag, MdeWorkbenchItem, WorkbenchPalette, hierarchy::project_hierarchy, integration::OpenMdeWorkbench};
+use crate::{MdeToolDrag, MdeWorkbenchItem, WorkbenchPalette, hierarchy::project_hierarchy, integration::{OpenMdeWorkbench, OpenMdeSymbols}};
 use bellatrix_mde_cordis::ModelingElementKind;
+use bellatrix_ui_symbols::{glyph, ShapeKind};
 use gpui::{
     Action, App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
     InteractiveElement, StatefulInteractiveElement, MouseButton, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, Pixels, Render, Subscription, Window, actions, div, prelude::*, px,
+    MouseUpEvent, Pixels, Render, Subscription, Window, actions, div, svg, prelude::*, px,
 };
 use ui::{Button, IconName, Label, TreeViewItem, prelude::*};
 use ui_input::InputField;
@@ -155,22 +156,34 @@ impl Render for MdeLeftPanel {
         let mut tool_buttons = Vec::new();
         for (id, name, kind) in tools {
             let click_item = item.clone();
+            let glyph_bytes = glyph(match kind {
+                ModelingElementKind::Class => ShapeKind::Class,
+                ModelingElementKind::Interface => ShapeKind::Interface,
+            });
+            // A real drag source, not a Button nested inside a draggable div.
+            // Zed/GPUI dispatches the MdeToolDrag payload to the Canvas.
             tool_buttons.push(
                 div()
                     .id(format!("mde-tool-drag-{id}"))
+                    .w_full()
+                    .h(px(34.0))
+                    .flex().items_center().gap_2().px_2()
+                    .border_1().border_color(palette.border)
+                    .rounded_sm()
+                    .cursor_grab()
                     .on_drag(MdeToolDrag {
                         project_id: project.clone(), kind,
                     }, |drag: &MdeToolDrag, _, _, cx| {
                         cx.new(|_| drag.clone())
                     })
-                    .child(
-                        Button::new(format!("mde-tool-{id}"), name)
-                            .on_click(move |_, _, cx| {
-                                click_item.update(cx, |workbench, cx| {
-                                    workbench.select_tool(kind, cx);
-                                });
-                            }),
-                    ),
+                    .on_click(move |_, _, cx| {
+                        click_item.update(cx, |workbench, cx| {
+                            workbench.select_tool(kind, cx);
+                        });
+                    })
+                    .child(svg().data(glyph_bytes).w(px(18.0)).h(px(18.0))
+                        .text_color(palette.muted))
+                    .child(Label::new(name)),
             );
         }
 
@@ -241,8 +254,14 @@ impl Render for MdeLeftPanel {
                             .child(Label::new(match chosen {
                                 Some(ModelingElementKind::Class) => "Class: click canvas to place",
                                 Some(ModelingElementKind::Interface) => "Interface: click canvas to place",
-                                None => "Drag a tool onto the canvas",
-                            })),
+                                None => "Drag Class / Interface onto the canvas",
+                            }))
+                            .child(
+                                Button::new("bellatrix-open-symbol-library", "Browse symbol library")
+                                    .on_click(move |_, window, cx| {
+                                        window.dispatch_action(Box::new(OpenMdeSymbols), cx);
+                                    }),
+                            ),
                     ),
             )
     }
