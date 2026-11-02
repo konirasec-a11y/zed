@@ -1,5 +1,6 @@
 use bellatrix_mde_model::{Element, Project};
 use bellatrix_mde_modeling::{Plan, physical_path};
+use bellatrix_mde_templates::TemplatePack;
 use serde_json::Value as Json;
 use std::collections::HashSet;
 use toml::{Table, Value};
@@ -8,6 +9,7 @@ pub fn plan_manifests(
     project: &Project,
     selected: &HashSet<String>,
     plan: &mut Plan,
+    templates: &TemplatePack,
 ) -> Result<(), Box<dyn std::error::Error>> {
     for element in &project.elements {
         if !selected.contains(&element.id) {
@@ -20,7 +22,9 @@ pub fn plan_manifests(
                 let path = directory.join("Cargo.toml");
                 plan.file(
                     path,
-                    toml::to_string_pretty(&table)?.into_bytes(),
+                    templates.render("rust/Cargo.toml.tera",
+                        &serde_json::json!({"manifest": toml::to_string_pretty(&table)?}))?
+                        .into_bytes(),
                     &element.id,
                 )?;
             }
