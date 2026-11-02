@@ -1,0 +1,9 @@
+{{ annotations }}pub struct {{ name }} {
+{% for field in fields %}    {{ field }}
+{% endfor %}}
+{% if methods %}
+
+impl {{ name }} {
+{% for method in methods %}{{ method }}
+{% endfor %}}
+{% endif %}
