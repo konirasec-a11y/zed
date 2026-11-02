@@ -1,43 +1,37 @@
-# Engine-MDE — criação de aplicações Low-Code/No-Code baseada em MDE
+# Bellatrix MDE on Zed
 
-**Engine-MDE** é uma engine de criação de aplicações da plataforma Bellatrix.
-Usa modelos semânticos, diagramas e geração de artefatos para permitir autoria
-progressiva de aplicações, inclusive fluxos Low-Code/No-Code. **Modeling é uma
-capacidade interna, não a identidade da engine.**
+**Bellatrix** is a multipurpose platform organized around spatial/temporal composability. Model-Driven Engineering is one bounded backend context of Bellatrix, rather than a new editor framework.
 
-## Capacidade e responsabilidades
+The Zed fork supplies the application lifecycle, Workspace, Dock, project worktrees, code editor and UI conventions. The MDE engine contributes its own model validation, diagram semantics, commands and generators through Cordis-rs. Its persistent ProjectDocument is not a replacement for Zed's `project::Project`.
 
-- `bellatrix-mde-model`: `Project`, `Element`, `Relation`, `Diagram`, `View` e suas representações.
-- `bellatrix-mde-modeling`: grafo, validação, escopo, planejamento e publicação de artefatos.
-- `bellatrix-mde-rust-generator`: geração de projetos e código Rust.
-- `bellatrix-mde-html-exporter`: documentação HTML e SVG sem dependência de GPUI.
-- `bellatrix-mde-cordis`: `Plugin`, `InjectSpec` e eventos tipados para integração ao backend Bellatrix.
-- `bellatrix-mde-cli`: interface headless; a engine não depende do Desktop.
-- `fixtures/`, `schema/`, `scripts/`: validação da engine.
+## Crates and ownership
 
-`../../platform/bellatrix-project` pertence à plataforma; não à engine. O namespace
-persistido `bellatrix.modeling` é preservado **por compatibilidade de documentos**.
-Descarregar a engine remove contribuições do runtime Cordis, nunca o trabalho
-persistido do usuário.
+| Crate | Responsibility |
+| --- | --- |
+| `bellatrix_project` | Domain document storage, identities and revisions |
+| `bellatrix_mde_model` | Elements, diagrams, views and MDE wire schema |
+| `bellatrix_mde_modeling` | Graph/index, planning, validation and publication |
+| `bellatrix_mde_cordis` | Typed Cordis events, Service injection and lifecycle |
+| `bellatrix_mde_rust_generator` | Generated Rust artifacts |
+| `bellatrix_mde_html_exporter` | Generated HTML/SVG documentation |
+| `bellatrix_mde_cli` | Optional headless commands, not part of Zed's GUI shell |
+| `bellatrix_mde_workbench` | Zed Workspace Item and Dock Panels |
 
-## CLI headless
+The model fixtures and schema live at `crates/bellatrix_mde_model/{fixtures,schema}/`.
 
 ```powershell
-cargo run -p bellatrix-mde-cli -- check engines/mde/fixtures/todo.json
-cargo run -p bellatrix-mde-cli -- analyze engines/mde/fixtures/todo.json
-cargo run -p bellatrix-mde-cli -- generate engines/mde/fixtures/todo.json --output generated-application
-cargo run -p bellatrix-mde-cli -- export engines/mde/fixtures/todo.json --format html --output generated-docs
+cargo run -p bellatrix_mde_cli -- check crates/bellatrix_mde_model/fixtures/todo.json
+cargo run -p bellatrix_mde_cli -- analyze crates/bellatrix_mde_model/fixtures/todo.json
+cargo run -p bellatrix_mde_cli -- generate crates/bellatrix_mde_model/fixtures/todo.json --output generated-application
+cargo run -p bellatrix_mde_cli -- export crates/bellatrix_mde_model/fixtures/todo.json --format html --output generated-docs
 ```
 
-Modelagem, geração, exportação e compilação são operações distintas. O modelo
-pode ser parcial sem produzir implementações fictícias.
+For an end-to-end backend smoke run, use `script/bellatrix_mde/smoke.ps1` on Windows.
 
-Os contratos arquiteturais e o glossário ubíquo estão em `../../ARCHITECTURE.md`.
-As antigas especificações em `docs/history/specs/` são referências históricas,
-não a ordem de implementação.
+## Compatibility and composition
 
-**Validação:** `scripts/verify-project.ps1` executa os gates do workspace.
+Existing documents preserve their section namespaces. The current MDE namespace is `bellatrix.bellatrix-mde-modeling`, and older `bellatrix.modeling` documents remain readable through the migration boundary. Renaming Rust folders or crates must not silently rewrite persisted documents.
 
-## Engine de referência para o SDK
+The Cordis runtime provides public events, services, coeffects and lifecycle management; no second event bus or `EngineManager` belongs in Bellatrix. Unloading the engine must release runtime resources while preserving user-authored project data.
 
-A Engine-MDE moderniza o StarUML como estudo de referência comportamental e amplia o seu papel com a criação de aplicações MDE Low-Code/No-Code. É o primeiro caso real para validar o futuro SDK Bellatrix: integração Cordis, eventos públicos, projetos e contribuições de interface. Os eventos do domínio são visíveis a qualquer engine interessada através do runtime Cordis; não existem buses privados por engine. Os nomes versionados atuais permanecem compatíveis até migração formal.
+The MDE Canvas is a Zed `workspace::Item`; its Toolbox, Inspector and related panes are Zed `workspace::dock::Panel` contributors. Use Zed's layout, shortcuts and UX patterns. StarUML remains a behavior study for MDE only; proprietary source must not be copied.

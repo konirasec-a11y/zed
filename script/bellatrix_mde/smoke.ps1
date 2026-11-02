@@ -1,17 +1,26 @@
-# Run from anywhere in the integrated Bellatrix source tree.
+# Test Bellatrix MDE end-to-end from the Zed fork root.
 $ErrorActionPreference = 'Stop'
-$root = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path
-Set-Location $root
-function Run-Cargo { param([string[]]$Args)
-    & cargo @Args
-    if ($LASTEXITCODE -ne 0) { throw "cargo $($Args -join ' ') failed" }
+$root = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+Push-Location $root
+try {
+    $fixture = 'crates/bellatrix_mde_model/fixtures/todo.json'
+    function Run-Cargo {
+        param([string[]]$CargoArgs)
+        & cargo +1.98.1 @CargoArgs
+        if ($LASTEXITCODE -ne 0) { throw "Cargo command failed: $($CargoArgs -join ' ')" }
+    }
+    Run-Cargo -CargoArgs @('test', '-p', 'bellatrix_mde_cordis')
+    Run-Cargo -CargoArgs @('run', '-p', 'bellatrix_mde_cli', '--', 'check', $fixture)
+    Run-Cargo -CargoArgs @('run', '-p', 'bellatrix_mde_cli', '--', 'analyze', $fixture)
+    $output = Join-Path $env:TEMP ("bellatrix-mde-" + [Guid]::NewGuid().ToString('N'))
+    Run-Cargo -CargoArgs @('run', '-p', 'bellatrix_mde_cli', '--', 'generate', $fixture, '--output', (Join-Path $output 'rust'))
+    Run-Cargo -CargoArgs @('check', '--manifest-path', (Join-Path $output 'rust/Cargo.toml'))
+    Run-Cargo -CargoArgs @('run', '-p', 'bellatrix_mde_cli', '--', 'export', $fixture, '--output', (Join-Path $output 'html'))
+    if (-not (Test-Path (Join-Path $output 'html/index.html'))) {
+        throw 'MDE HTML index was not generated'
+    }
+    Write-Host "Bellatrix MDE smoke artifacts: $output"
 }
-Run-Cargo -Args @('test','-p','bellatrix-mde-cordis')
-Run-Cargo -Args @('run','-p','bellatrix-mde-cli','--','check','engines/mde/fixtures/todo.json')
-Run-Cargo -Args @('run','-p','bellatrix-mde-cli','--','analyze','engines/mde/fixtures/todo.json')
-$out = Join-Path $env:TEMP ("bellatrix-smoke-" + [Guid]::NewGuid().ToString('N'))
-Run-Cargo -Args @('run','-p','bellatrix-mde-cli','--','generate','engines/mde/fixtures/todo.json','--output',(Join-Path $out 'todo'))
-Run-Cargo -Args @('check','--manifest-path',(Join-Path $out 'todo/Cargo.toml'))
-Run-Cargo -Args @('run','-p','bellatrix-mde-cli','--','export','engines/mde/fixtures/todo.json','--output',(Join-Path $out 'html'))
-if (!(Test-Path (Join-Path $out 'html/index.html'))) { throw 'HTML index not emitted' }
-Write-Host "Engine-MDE smoke generated output: $out"
+finally {
+    Pop-Location
+}

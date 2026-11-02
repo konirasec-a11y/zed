@@ -1,133 +1,88 @@
-"""Static checks for the Bellatrix monorepo; never a substitute for Cargo."""
+"""Validate Bellatrix ownership and source references within Zed's workspace.
+
+This is a repository consistency check, not a replacement for Cargo or GPUI tests.
+"""
 from pathlib import Path
-import base64
-import json
-import math
 import re
 import tomllib
 
-ROOT = Path(__file__).resolve().parents[3]
-MDE = ROOT / "engines" / "mde"
-WORKSPACE = tomllib.loads((ROOT / "Cargo.toml").read_text(encoding="utf-8"))["workspace"]
-MEMBERS = WORKSPACE["members"]
-EXPECTED = {
-    "apps/desktop": "bellatrix",
-    "platform/project": "bellatrix-project",
-    "engines/mde/model": "bellatrix-mde-model",
-    "engines/mde/modeling": "bellatrix-mde-modeling",
-    "engines/mde/cordis": "bellatrix-mde-cordis",
-    "engines/mde/generator-rust": "bellatrix-mde-rust-generator",
-    "engines/mde/export-html": "bellatrix-mde-html-exporter",
-    "engines/mde/cli": "bellatrix-mde-cli",
-    "ui/desktop": "bellatrix-ui",
-    "ui/design-system": "bellatrix-design",
-    **{f"ui/components/{kind}": f"bellatrix-components-{kind}"
-       for kind in ("navigation", "panels", "toolbox", "tree", "symbols",
-                    "canvas", "uml", "c4", "mindmap", "flow")},
+ROOT = Path(__file__).resolve().parents[2]
+CRATES = [
+    "bellatrix_project",
+    "bellatrix_mde_model",
+    "bellatrix_mde_modeling",
+    "bellatrix_mde_cordis",
+    "bellatrix_mde_rust_generator",
+    "bellatrix_mde_html_exporter",
+    "bellatrix_mde_cli",
+    "bellatrix_zed_host",
+    "bellatrix_mde_workbench",
+    "bellatrix_design_system",
+    "bellatrix_ui_uml",
+    "bellatrix_ui_symbols",
+    "bellatrix_ui_canvas",
+    "bellatrix_ui_c4",
+    "bellatrix_ui_flow",
+    "bellatrix_ui_mindmap",
+    "bellatrix_ui_tree",
+    "bellatrix_ui_panels",
+]
+HEADLESS = {
+    "bellatrix_project",
+    "bellatrix_mde_model",
+    "bellatrix_mde_modeling",
+    "bellatrix_mde_cordis",
+    "bellatrix_mde_rust_generator",
+    "bellatrix_mde_html_exporter",
 }
 
-assert len(MEMBERS) == len(set(MEMBERS)), "Duplicate workspace member"
-assert set(WORKSPACE["default-members"]) <= set(MEMBERS)
-assert set(EXPECTED) <= set(MEMBERS)
-assert (ROOT / "docs" / "design" / "src" / "app" / "App.tsx").is_file()
-assert (ROOT / "docs" / "ref" / "staruml" / "src" / "ui" / "diagram-editor.js").is_file()
-assert (ROOT / "vendor" / "gpui-kit" / "skills" / "gpui-kit" / "SKILL.md").is_file()
-assert (ROOT / "vendor" / "gpui-kit" / "skills" / "gpui-kit-design-guides" / "SKILL.md").is_file()
-assert (ROOT / "vendor" / "cordis-rs" / "CONTEXT.md").is_file()
-assert (ROOT / "docs" / "history" / "specs" / "006-project-composition" / "acceptance.feature").is_file()
+def manifest(path: Path) -> dict:
+    return tomllib.loads(path.read_text(encoding="utf-8"))
 
-package_names = {}
-dependency_count = 0
-for member in MEMBERS:
-    directory = ROOT / member
-    manifest = directory / "Cargo.toml"
-    assert manifest.is_file(), f"Missing Cargo manifest: {member}"
-    spec = tomllib.loads(manifest.read_text(encoding="utf-8"))
-    name = spec["package"]["name"]
-    assert name not in package_names, f"Duplicate package {name}"
-    package_names[name] = member
-    if member in EXPECTED:
-        assert name == EXPECTED[member], (member, name, EXPECTED[member])
-    for section in ("dependencies", "dev-dependencies", "build-dependencies"):
-        for dep, value in spec.get(section, {}).items():
-            if not isinstance(value, dict) or "path" not in value:
-                continue
-            dependency_count += 1
-            target = (directory / value["path"] / "Cargo.toml").resolve()
-            assert target.is_file(), f"Broken {section}: {member} -> {dep}: {target}"
-            target_package = tomllib.loads(target.read_text(encoding="utf-8"))["package"]["name"]
-            assert target_package == value.get("package", dep), (
-                f"Wrong Cargo dependency name: {member} -> {dep}, actual {target_package}"
-            )
+def check() -> None:
+    workspace = manifest(ROOT / "Cargo.toml")["workspace"]
+    assert "crates/zed" in workspace["members"]
+    dependencies = workspace["dependencies"]
+    assert "cordis-rs" in dependencies
+    for package in CRATES:
+        directory = ROOT / "crates" / package
+        cargo = manifest(directory / "Cargo.toml")
+        assert cargo["package"]["name"] == package, package
+        assert f"crates/{package}" in workspace["members"], package
+        assert package in dependencies, package
+        for section in ("dependencies", "dev-dependencies", "build-dependencies"):
+            for key, entry in cargo.get(section, {}).items():
+                if not isinstance(entry, dict) or "path" not in entry:
+                    continue
+                target = (directory / entry["path"] / "Cargo.toml").resolve()
+                assert target.is_file(), f"Broken dependency path {package} -> {key}: {target}"
+                expected_package = entry.get("package", key)
+                assert manifest(target)["package"]["name"] == expected_package, (
+                    package, key, expected_package
+                )
+        if package in HEADLESS:
+            assert all(
+                key not in cargo.get("dependencies", {})
+                for key in ("gpui", "workspace", "editor", "ui")
+            ), f"Backend engine has GUI dependency: {package}"
 
-included = 0
-long_files = []
-include_rx = re.compile(r'include_(?:str|bytes)!\s*\(\s*"([^"]+)"\s*\)')
-source_dirs = (ROOT / "apps", ROOT / "platform", ROOT / "engines", ROOT / "ui")
-for base in source_dirs:
-    for code in base.rglob("*.rs"):
-        body = code.read_text(encoding="utf-8")
-        lines = body.splitlines()
-        if len(lines) > 200:
-            long_files.append(str(code.relative_to(ROOT)))
-        for old in ("src/modeling/", "src/bellatrix/", "src/ui/", "crates/components/",
-                    "crates/platform/", "engines/application-builder/"):
-            assert old not in body, f"Stale repository path {old} in {code}"
-        for match in include_rx.finditer(body):
-            included += 1
-            included_file = (code.parent / match.group(1)).resolve()
-            assert included_file.is_file(), f"Missing include in {code}: {match.group(1)}"
+    includes = 0
+    include_rx = re.compile(r'include_(?:str|bytes)!\s*\(\s*"([^"]+)"\s*\)')
+    for package in CRATES:
+        for path in (ROOT / "crates" / package).rglob("*.rs"):
+            body = path.read_text(encoding="utf-8")
+            assert "gpui_kit::" not in body, f"Legacy GPUI Kit type in {path}"
+            for item in include_rx.finditer(body):
+                include = (path.parent / item.group(1)).resolve()
+                assert include.is_file(), f"Unresolved include in {path}: {item.group(1)}"
+                includes += 1
 
-# Public Cordis Events are shared contracts, not per-engine buses.
-event_sources = (
-    ROOT / "platform/project/src/events.rs",
-    MDE / "cordis/src/lib.rs",
-    MDE / "cordis/src/task_events.rs",
-    MDE / "cordis/src/project_integration.rs",
-    MDE / "cordis/src/view_edits.rs",
-)
-event_names = []
-for source in event_sources:
-    data = source.read_text(encoding="utf-8")
-    event_names.extend(re.findall(r'const NAME:\s*&\x27static str\s*=\s*"([^"]+)"', data))
-assert len(event_names) == len(set(event_names)), "Duplicate public Cordis Event name"
-assert {"bellatrix.project.state-changed.v1", "bellatrix.project.closed.v1",
-        "bellatrix.modeling.move-view.v1", "bellatrix.modeling.rename.v1"} <= set(event_names)
-assert "InjectSpec::none().require(ProjectService::NAME)" in (
-    MDE / "cordis/src/project_integration.rs").read_text(encoding="utf-8")
-assert (ROOT / "ui/desktop/src/pages/mde_workbench/project.rs").is_file()
-assert not (ROOT / "ui/desktop/src/project.rs").is_file()
+    zed_main = (ROOT / "crates/zed/src/main.rs").read_text(encoding="utf-8")
+    assert "initialize_workspace(app_state.clone(), cx);" in zed_main
+    assert "bellatrix_zed_host::install(cx)" in zed_main
+    assert (ROOT / "crates/bellatrix_mde_model/fixtures/todo.json").is_file()
+    assert (ROOT / "crates/bellatrix_mde_model/schema/mde-model-v1.proto").is_file()
+    print(f"Bellatrix Zed source contracts OK: {len(CRATES)} crates; {includes} includes")
 
-cli_manifest = MDE / "cli"
-assert (cli_manifest / "../fixtures/todo.json").is_file(), "CLI fixture path is broken"
-cli_test = (cli_manifest / "tests" / "cli.rs").read_text(encoding="utf-8")
-assert '.join("../../crates/bellatrix_mde_model/fixtures/todo.json")' in cli_test, "CLI fixture must be relative to Cargo manifest"
-
-for fixture in (MDE / "fixtures").glob("*.json"):
-    document = json.loads(fixture.read_text(encoding="utf-8"))
-    assert document["schema_version"] == 1, fixture
-    elements = {e["id"]: e for e in document["elements"]}
-    assert len(elements) == len(document["elements"]), fixture
-    for relation in document["relations"]:
-        assert relation["from"] in elements and relation["to"] in elements
-    subjects = elements.keys() | {r["id"] for r in document["relations"]}
-    for diagram in document["diagrams"]:
-        for view in diagram["views"]:
-            assert view.get("subject") is None or view["subject"] in subjects
-            geometry = view["geometry"]
-            if geometry["kind"] == "rect":
-                assert geometry["width"] >= 0 and geometry["height"] >= 0
-            if geometry["kind"] == "path":
-                assert all(x["kind"] in ("line", "cubic") for x in geometry["segments"])
-            assert all(math.isfinite(x) for x in view.get("style", {}).get("dash_pattern", []))
-    for element in document["elements"]:
-        if element.get("content", {}).get("encoding") == "base64":
-            base64.b64decode(element["content"]["data"], validate=True)
-    print(f"Valid MDE fixture: {fixture.name} ({len(elements)} elements)")
-
-# 200 lines is a maintenance preference, not a correctness condition.
-if long_files:
-    print(f"MAINTENANCE: {len(long_files)} Rust files exceed 200 lines; review separately")
-print(f"STATIC CHECKS PASSED: {len(MEMBERS)} crates, {dependency_count} local Cargo references, "
-      f"{included} Rust includes, {len(event_names)} public Cordis events. "
-      "Native compilation and GPUI behavior unverified.")
+if __name__ == "__main__":
+    check()

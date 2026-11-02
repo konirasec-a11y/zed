@@ -1,74 +1,27 @@
-# Engine-MDE — Zed-native Workbench
+# Bellatrix MDE Workbench
 
-This crate now implements a Zed Workspace Item plus Zed Dock Panels **inside the
-Zed fork**, using Zed's native workspace dependencies. The UI
-does not import GPUI Kit and does not create a second Dock or event bus.
+`bellatrix_mde_workbench` contributes a native `workspace::Item` and Zed Dock `Panel` implementations to the application in this fork. Zed owns the editor, Workspace, GPUI lifecycle, focus, layout, themes and status bar. Bellatrix supplies model commands and transient Canvas interaction.
 
-## What is implemented
+## Integration
 
-- Zed `workspace::item::Item` with view selection and diagram switching.
-- GPUI mouse movement preview, move and rectangle resize on mouse release.
-- Zed Toolbox with click-to-select and native GPUI drag-and-drop onto the Canvas.
-- Zed Dock Panels for Working Diagrams/Toolbox, Explorer/Inspector and bottom
-  auxiliary tabs. Left/right Panels internally compose the simultaneous stacks
-  required by the React v3 design; Zed owns placement and focus.
-- Class/Interface creation, rename, move, resize and save requests cross the
-  typed `MdeUiBridge` (owned by the host) into Cordis responders and the
-  versioned `ProjectService`. All persistent changes go through MDE validation.
-- Project snapshots observe existing and legacy namespaces without rewriting
-  saved projects, and reject stale edits.
-- Dark and Light semantic colors follow `docs/design/src/styles/tokens.css`
-  and the current Zed theme appearance.
+The built-in `bellatrix_zed_host` is installed directly in `crates/zed/src/main.rs` after `initialize_workspace(app_state.clone(), cx)`. No separate GPUI runtime, third-party overlay or `scripts/enable_zed_desktop.py` is required.
 
-## Application integration contract
+The host owns the Cordis Project/MDE plugins and a `MdeUiBridge`. `register_mde_workspace` observes new Zed Workspaces, creates the MDE `Item`, and adds its Dock `Panel` contributions. The bridge relays user operations as typed Cordis commands and observes project revision changes.
 
-The Zed-based Bellatrix launcher, after installing its Zed services
-and Cordis Project/MDE plugins, calls:
+Implemented operation paths include Class/Interface creation, rename, view move/resize, project save and a drag-and-drop Toolbox. These use the MDE graph validation and versioned `bellatrix_project` service, rather than writing model data in the GUI.
 
-```rust
-// On the Tokio host thread, while Project/MDE plugins are active:
-let bridge = bellatrix_mde_cordis::MdeUiBridge::start(&context, project_id)?;
-let source = bellatrix_mde_workbench::MdeUiSource::from_bridge(
-    projects.clone(), &bridge,
-);
-// Keep the bridge handle alive until after the window is closed.
+## UI conventions
 
-// During the Zed GPUI App initialization, after editor::init:
-bellatrix_mde_workbench::register_mde_workspace(cx, source);
-```
+Follow the Zed Workspace and Editor UX. Use existing Zed UI components and docks. Do not implement a second Dock manager, another theme system or a parallel project tree. Bellatrix presentation components in `crates/bellatrix_ui_*` provide MDE-specific symbols and diagrams without owning backend state.
 
-This registers the workbench in each newly created Zed Workspace via
-`App::observe_new`, adds it as an Item and registers the panels with
-`Workspace::add_panel`. `editor::init` is required first because Zed
-`ui_input::InputField` uses its editor factory.
-
-**The Zed-based launcher is wired to this hook** through the reproducible
-`scripts/enable_zed_desktop.py` overlay and `apps/zed-host`.
-Do not claim the native UI has passed end-to-end acceptance until the
-Windows build and interaction tests complete.
-
-## Reference and design contract
-
-- React: `docs/design/src/styles/tokens.css`,
-  `docs/design/docs/{DESIGN_SYSTEM,GPUI_PORT_MAP,UX_ACCEPTANCE}.md`.
-- StarUML: `docs/ref/staruml/src/ui/diagram-editor.js`, **behavioral
-  reference only**; copyright notices prohibit copying source.
-- Zed: `crates/workspace/src/{item,dock,workspace}.rs`,
-  `crates/ui`, `crates/ui_input` and
-  `crates/gpui/examples/drag_drop.rs`.
-- Composition: Cordis-rs is the only backend lifecycle and public-event
-  infrastructure. UI subscription state is ephemeral.
-
-## Windows validation
+## Validation
 
 ```powershell
-rustup toolchain install 1.98.1 --profile minimal --component rustfmt,clippy
-cargo +1.98.1 check -p bellatrix-mde-cordis
-cargo +1.98.1 test -p bellatrix-mde-cordis
-cargo +1.98.1 check -p bellatrix-mde-workbench
-cargo +1.98.1 test -p bellatrix-mde-workbench
-cargo +1.98.1 clippy -p bellatrix-mde-workbench --all-targets -- -D warnings
+cargo check -p bellatrix_mde_workbench -p bellatrix_zed_host
+cargo test -p bellatrix_mde_cordis
+cargo clippy -p bellatrix_mde_workbench --all-targets -- -D warnings
+cargo check -p zed
+cargo run -p zed
 ```
 
-The new UI packages are GPL-3.0-or-later as indicated in Zed's Cargo
-manifests. Review distribution obligations before release.
+The native code must still pass Windows build and interaction tests before the new Workbench is considered fully validated.
