@@ -128,6 +128,9 @@ pub(crate) fn render_inspector(
         ("Attributes", &inspector.attributes),
         ("Operations", &inspector.operations),
         ("Receptions", &inspector.receptions),
+        ("Template parameters", &inspector.template_parameters),
+        ("Ports", &inspector.ports),
+        ("Parts", &inspector.parts),
     ] {
         children.push(section_title(title));
         if members.is_empty() {
