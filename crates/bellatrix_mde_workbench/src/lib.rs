@@ -8,6 +8,7 @@ mod source;
 pub mod panels;
 mod integration;
 mod theme;
+mod hierarchy;
 pub use integration::register_mde_workspace;
 pub use theme::WorkbenchPalette;
 
@@ -17,6 +18,7 @@ pub use source::MdeUiSource;
 use bellatrix_mde_cordis::{
     MdeUiCommand, ModelingCreateElementRequested, ModelingElementKind,
     ModelingMoveViewRequested, ModelingRenameRequested, ModelingResizeViewRequested,
+    ModelingDeleteElementRequested,
 };
 use bellatrix_mde_model::Geometry;
 use bellatrix_ui_uml::UmlClassCard;
@@ -24,6 +26,7 @@ use bellatrix_project::{ProjectId, ProjectSaveRequested};
 use gpui::{
     App, Context, DragMoveEvent, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
     MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Point, Pixels, Render,
+    KeyDownEvent, ScrollEvent, ScrollDelta,
     SharedString, Task, Window, div, prelude::*, px,
 };
 use std::path::PathBuf;
@@ -85,6 +88,10 @@ pub struct MdeWorkbenchItem {
     selected_tool: Option<ModelingElementKind>,
     gesture: Option<CanvasGesture>,
     drop_point: Option<(f64, f64)>,
+    // Viewport is strictly transient UI state, never part of ProjectDocument.
+    zoom: f32,
+    pan: (f32, f32),
+    pan_origin: Option<(Point<Pixels>, (f32, f32))>,
     feedback: String,
     _watch_task: Task<()>,
 }
@@ -121,6 +128,9 @@ impl MdeWorkbenchItem {
             selected_tool: None,
             gesture: None,
             drop_point: None,
+            zoom: 1.0,
+            pan: (0.0, 0.0),
+            pan_origin: None,
             feedback: String::new(),
             _watch_task: task,
         }
@@ -161,6 +171,71 @@ impl MdeWorkbenchItem {
 
     pub fn select_tool(&mut self, kind: ModelingElementKind, cx: &mut Context<Self>) {
         self.selected_tool = if self.selected_tool == Some(kind) { None } else { Some(kind) };
+        cx.notify();
+    }
+
+
+    pub fn set_zoom(&mut self, value: f32, cx: &mut Context<Self>) {
+        self.zoom = value.clamp(0.25, 3.0);
+        cx.notify();
+    }
+
+    pub fn reset_viewport(&mut self, cx: &mut Context<Self>) {
+        self.zoom = 1.0;
+        self.pan = (0.0, 0.0);
+        self.pan_origin = None;
+        cx.notify();
+    }
+
+    fn scroll_viewport(&mut self, event: &ScrollEvent, cx: &mut Context<Self>) {
+        let delta = event.delta.pixel_delta(px(20.0));
+        let dx = f32::from(delta.x);
+        let dy = f32::from(delta.y);
+        if event.modifiers.control {
+            self.set_zoom(self.zoom * if dy > 0.0 { 1.12 } else { 1.0 / 1.12 }, cx);
+        } else {
+            // Wheel and two-finger trackpad movement scroll the virtual canvas
+            // without changing the persisted geometry of its elements.
+            self.pan.0 += dx;
+            self.pan.1 += dy;
+            cx.notify();
+        }
+    }
+
+    fn start_pan(&mut self, position: Point<Pixels>) {
+        self.pan_origin = Some((position, self.pan));
+    }
+
+    fn update_pan(&mut self, event: &MouseMoveEvent, cx: &mut Context<Self>) {
+        if event.pressed_button != Some(MouseButton::Middle) { return; }
+        if let Some((position, (x, y))) = &self.pan_origin {
+            self.pan = (
+                *x + f32::from(event.position.x - position.x),
+                *y + f32::from(event.position.y - position.y),
+            );
+            cx.notify();
+        }
+    }
+
+    pub fn delete_selected(&mut self, cx: &mut Context<Self>) {
+        let Some(element_id) = self.selected_element.clone() else {
+            self.feedback = "Select an element to delete".into();
+            cx.notify();
+            return;
+        };
+        let Ok(snapshot) = self.source.snapshot() else {
+            self.feedback = "Project snapshot unavailable".into();
+            cx.notify();
+            return;
+        };
+        // All semantic deletes are versioned Cordis requests and preserve
+        // unrelated models, filesystem nodes and user-created documents.
+        self.submit(MdeUiCommand::DeleteElement(ModelingDeleteElementRequested {
+            project_id: self.project_id().clone(),
+            element_id,
+            expected_revision: snapshot.revision,
+        }), cx);
+        self.selected_element = None;
         cx.notify();
     }
 
