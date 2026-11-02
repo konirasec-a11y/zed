@@ -362,6 +362,14 @@ impl Render for MdeWorkbenchItem {
         let muted = palette.muted;
         let zoom = self.zoom;
         let pan = self.pan;
+        let relation_hint = match self.selected_tool {
+            Some(ModelingTool::Relation(kind)) => Some(if self.pending_relation_source.is_some() {
+                format!("{}: click destination", kind.label())
+            } else {
+                format!("{}: click source", kind.label())
+            }),
+            _ => None,
+        };
         let mut title = format!("MDE · {}", self.project_id().as_str());
         let details: String;
         let mut cards = Vec::new();
@@ -535,6 +543,7 @@ impl Render for MdeWorkbenchItem {
         let pan_start_owner = cx.weak_entity(); let pan_end_owner = cx.weak_entity(); let pan_out_owner = cx.weak_entity();
         let delete_owner = cx.weak_entity(); let f2_owner = cx.weak_entity(); let member_shortcut_owner = cx.weak_entity();
         let zoom_in_owner = cx.weak_entity(); let zoom_out_owner = cx.weak_entity(); let reset_owner = cx.weak_entity();
+        let cancel_relation_owner = cx.weak_entity();
         div().id(format!("mde-workbench-{}", self.project_id().as_str())).size_full().flex().flex_col().track_focus(&self.focus_handle)
             .on_key_down(move |event: &KeyDownEvent, window, cx| {
                 if event.keystroke.key.eq_ignore_ascii_case("f2") {
@@ -550,6 +559,14 @@ impl Render for MdeWorkbenchItem {
             }).bg(background).text_color(palette.text)
             .child(div().h(px(39.0)).flex().items_center().justify_between().px_3().border_b_1().border_color(border)
                 .child(Label::new(title)).child(div().flex().gap_2().items_center().child(Label::new(details))
+                    .when_some(relation_hint, |header, hint| header.child(
+                        div().flex().gap_1().items_center()
+                            .child(Label::new(hint))
+                            .child(ui::Button::new("mde-cancel-relation", "Cancel")
+                                .on_click(move |_,_,cx| {
+                                    let _ = cancel_relation_owner.update(cx, |item,cx| item.cancel_tool(cx));
+                                }))
+                    ))
                     .child(ui::Button::new("mde-zoom-out", "-").on_click(move |_, _, cx| { let _ = zoom_out_owner.update(cx, |item, cx| item.set_zoom(item.zoom / 1.2, cx)); }))
                     .child(Label::new(format!("{:.0}%", zoom * 100.0)))
                     .child(ui::Button::new("mde-zoom-in", "+").on_click(move |_, _, cx| { let _ = zoom_in_owner.update(cx, |item, cx| item.set_zoom(item.zoom * 1.2, cx)); }))
