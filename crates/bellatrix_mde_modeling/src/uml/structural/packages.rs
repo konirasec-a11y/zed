@@ -1,6 +1,7 @@
 //! Native UML 2.5 declarations: structural/packages.
 #![allow(dead_code)]
 use serde::{Deserialize, Serialize};
+use crate::uml::structural::classifiers::AggregationKind;
 use crate::uml::structural::common_structure::VisibilityKind;
 
 // Original module: package.rs
@@ -200,4 +201,93 @@ pub struct Extension {
     pub member_end: Vec<String>,
     pub is_derived: String,
     pub navigable_owned_end: Vec<String>,
+}
+
+// Original module: extension_end.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtensionEnd {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub is_static: String,
+    pub type_: Option<String>,
+    pub is_ordered: String,
+    pub is_unique: String,
+    pub upper_value: Option<String>,
+    pub lower_value: Option<String>,
+    pub is_read_only: String,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub deployment: Vec<String>,
+    pub template_binding: Vec<String>,
+    pub owned_template_signature: Option<String>,
+    pub datatype: Option<String>,
+    pub is_derived: String,
+    pub is_derived_union: String,
+    pub aggregation: AggregationKind,
+    pub redefined_property: Vec<String>,
+    pub owning_association: Option<String>,
+    pub default_value: Option<String>,
+    pub subsetted_property: Vec<String>,
+    pub association: Option<String>,
+    pub qualifier: Vec<String>,
+    pub association_end: Option<String>,
+}
+
+// Original module: image.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Image {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub content: Option<String>,
+    pub location: Option<String>,
+    pub format: Option<String>,
+}
+
+// Original module: profile_application.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileApplication {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub applied_profile: String,
+    pub is_strict: String,
+    pub applying_package: String,
+}
+
+// Original module: model.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Model {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub element_import: Vec<String>,
+    pub package_import: Vec<String>,
+    pub owned_rule: Vec<String>,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub template_binding: Vec<String>,
+    pub owned_template_signature: Option<String>,
+    pub package_merge: Vec<String>,
+    pub packaged_element: Vec<String>,
+    pub profile_application: Vec<String>,
+    pub viewpoint: Option<String>,
 }
