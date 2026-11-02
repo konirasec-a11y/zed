@@ -142,6 +142,28 @@ pub(crate) async fn create_relation(context: &Context, projects: &ProjectService
 mod tests {
     use super::*;
     #[test]
+    fn relationship_tool_routes_between_two_visible_class_views() {
+        let model = serde_json::from_str(
+            include_str!("../../bellatrix_mde_model/fixtures/todo.json")
+        ).unwrap();
+        let section = ModelingSection::from_model(&model);
+        let diagram_id = section.diagrams[0].id.clone();
+        let geometry = route(&section, &diagram_id, "type-list", "type-task").unwrap();
+        let Geometry::Path { start, segments } = geometry else {
+            panic!("a UML relationship must be represented as a Path");
+        };
+        assert!(!segments.is_empty());
+        let end = match segments.last().unwrap() {
+            PathSegment::Line { to } | PathSegment::Cubic { to, .. } => *to,
+        };
+        assert!(start.x.is_finite() && start.y.is_finite());
+        assert!(end.x.is_finite() && end.y.is_finite());
+        assert!(start.x.hypot(start.y) > 0.0);
+        assert!(start.x != end.x || start.y != end.y,
+            "two different classes must not produce an invisible zero-length edge");
+    }
+
+    #[test]
     fn resized_interface_anchors_use_its_actual_circle() {
         let model = serde_json::from_str(include_str!("../../bellatrix_mde_model/fixtures/todo.json")).unwrap();
         let mut section = ModelingSection::from_model(&model);
