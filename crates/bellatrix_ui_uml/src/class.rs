@@ -220,11 +220,11 @@ fn compartment(
 }
 
 impl RenderOnce for UmlClassCard {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         if self.interface_ball {
             // StarUML Interface lollipop: this is a distinct visual component,
             // not a class rectangle decorated with «interface» text.
-            return UmlInterfaceBall::new(self).render(window, cx).into_any_element();
+            return UmlInterfaceBall::new(self).into_any_element();
         }
         let palette = Palette::current(cx);
         let line = rgb(if self.selected { palette.selection } else { palette.border });
