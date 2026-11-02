@@ -1,5 +1,6 @@
-//! Model Explorer projection from MDE containment edges, not source order.
-//! The flat list in the project format does not determine tree hierarchy.
+//! Semantic Model Explorer projection. The Zed Project Panel already owns
+//! files and folders; MDE shows only the domain elements and their ownership.
+//! StarUML's Model Explorer similarly follows element child/ownership links.
 use bellatrix_mde_model::{Element, ModelingSection};
 use std::collections::{HashMap, HashSet};
 
@@ -11,55 +12,50 @@ pub struct HierarchyRow {
     pub depth: usize,
 }
 
+fn semantic(element: &Element) -> bool {
+    !element.kind.starts_with("fs.") && !element.kind.starts_with("cargo.")
+}
+
 fn rank(element: &Element) -> u8 {
     match element.kind.as_str() {
-        "cargo.workspace" | "cargo.package" => 0,
-        "fs.directory" => 1,
-        "fs.file" => 2,
-        "rust.struct" | "rust.trait" | "rust.enum" => 3,
-        "rust.field" | "rust.function" => 4,
-        _ => 5,
+        "uml.model" | "uml.package" | "rust.module" => 0,
+        "rust.struct" | "rust.trait" | "rust.enum" | "uml.class" | "uml.interface" => 1,
+        "rust.field" | "rust.function" | "uml.attribute" | "uml.operation" => 2,
+        _ => 3,
     }
 }
 
-/// Render a validated graph as a stable tree. Priority is semantic ownership,
-/// then declaration, then physical filesystem containment. An element appears
-/// at most once, including when referenced by multiple relationships.
+/// Only semantic ownership defines tree hierarchy. `declares` and
+/// `physical_parent` belong to Zed's filesystem-oriented Project Panel,
+/// not to the Modeling Explorer.
 pub fn project_hierarchy(section: &ModelingSection) -> Vec<HierarchyRow> {
     let elements: HashMap<&str, &Element> = section.elements.iter()
-        .map(|element| (element.id.as_str(), element)).collect();
-    let mut parents: HashMap<&str, (&str, u8)> = HashMap::new();
-    for relation in &section.relations {
-        let priority = match relation.kind.as_str() {
-            "owns" => 0,
-            "declares" => 1,
-            "physical_parent" => 2,
-            _ => continue,
-        };
-        if !elements.contains_key(relation.from.as_str()) || !elements.contains_key(relation.to.as_str()) {
-            continue;
-        }
-        let to = relation.to.as_str();
-        if parents.get(to).is_none_or(|(_, p)| priority < *p) {
-            parents.insert(to, (relation.from.as_str(), priority));
-        }
-    }
+        .filter(|element| semantic(element))
+        .map(|element| (element.id.as_str(), element))
+        .collect();
+    let parents: HashMap<&str, &str> = section.relations.iter()
+        .filter(|relation| relation.kind == "owns")
+        .filter(|relation| elements.contains_key(relation.from.as_str())
+            && elements.contains_key(relation.to.as_str()))
+        .map(|relation| (relation.to.as_str(), relation.from.as_str()))
+        .collect();
 
     let mut children: HashMap<&str, Vec<&Element>> = HashMap::new();
     let mut roots: Vec<&Element> = Vec::new();
-    for element in &section.elements {
-        if let Some((parent, _)) = parents.get(element.id.as_str()) {
+    for element in elements.values() {
+        if let Some(parent) = parents.get(element.id.as_str()) {
             children.entry(parent).or_default().push(element);
         } else {
             roots.push(element);
         }
     }
-    let sort_children = |items: &mut Vec<&Element>| {
+    let sort = |items: &mut Vec<&Element>| {
         items.sort_by(|a, b| rank(a).cmp(&rank(b))
-            .then_with(|| a.name.to_ascii_lowercase().cmp(&b.name.to_ascii_lowercase())));
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+            .then_with(|| a.id.cmp(&b.id)));
     };
-    sort_children(&mut roots);
-    for siblings in children.values_mut() { sort_children(siblings); }
+    sort(&mut roots);
+    for siblings in children.values_mut() { sort(siblings); }
 
     fn visit(
         element: &Element, depth: usize, children: &HashMap<&str, Vec<&Element>>,
@@ -76,11 +72,11 @@ pub fn project_hierarchy(section: &ModelingSection) -> Vec<HierarchyRow> {
             for child in child_list { visit(child, depth + 1, children, seen, result); }
         }
     }
-    let mut result = Vec::with_capacity(section.elements.len());
+    let mut result = Vec::with_capacity(elements.len());
     let mut seen = HashSet::new();
     for root in roots { visit(root, 0, &children, &mut seen, &mut result); }
-    // Defensively show invalid/orphaned nodes rather than hiding model data.
-    for element in &section.elements {
+    // Preserve visibility even for malformed/incomplete ownership data.
+    for element in elements.values() {
         if !seen.contains(&element.id) { visit(element, 0, &children, &mut seen, &mut result); }
     }
     result
@@ -89,20 +85,32 @@ pub fn project_hierarchy(section: &ModelingSection) -> Vec<HierarchyRow> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
-    fn shows_physical_files_declarations_and_owned_members_in_a_tree() {
+    fn models_only_semantic_nodes_with_owned_members() {
         let model = serde_json::from_str(
             include_str!("../../bellatrix_mde_model/fixtures/todo.json")
         ).unwrap();
         let section = ModelingSection::from_model(&model);
         let tree = project_hierarchy(&section);
         let row = |id: &str| tree.iter().find(|r| r.element_id == id).unwrap();
-        assert_eq!(row("dir-src").depth, 0);
-        assert_eq!(row("file-task").depth, row("dir-src").depth + 1);
-        assert_eq!(row("type-task").depth, row("file-task").depth + 1);
+        assert_eq!(row("type-task").depth, 0);
         assert_eq!(row("field-title").depth, row("type-task").depth + 1);
-        assert!(tree.iter().position(|r| r.element_id == "dir-src").unwrap()
-            < tree.iter().position(|r| r.element_id == "file-task").unwrap());
-        assert_eq!(tree.len(), section.elements.len());
+        assert_eq!(row("fn-complete").depth, row("type-list").depth + 1);
+        assert!(tree.iter().position(|r| r.element_id == "type-task").unwrap()
+            < tree.iter().position(|r| r.element_id == "field-title").unwrap());
+        assert!(tree.iter().all(|row| !row.kind.starts_with("fs.") && !row.kind.starts_with("cargo.")));
+        assert!(!tree.iter().any(|row| row.element_id == "file-task" || row.element_id == "dir-src"));
+        assert_eq!(tree.len(), 7);
+    }
+
+    #[test]
+    fn empty_semantic_model_does_not_expose_files_or_cargo_metadata() {
+        let mut model: bellatrix_mde_model::Project = serde_json::from_str(
+            include_str!("../../bellatrix_mde_model/fixtures/todo.json")
+        ).unwrap();
+        model.elements.retain(|e| !semantic(e));
+        let section = ModelingSection::from_model(&model);
+        assert!(project_hierarchy(&section).is_empty());
     }
 }
