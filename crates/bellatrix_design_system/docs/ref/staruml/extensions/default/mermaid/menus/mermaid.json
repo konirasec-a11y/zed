@@ -1,0 +1,53 @@
+{
+  "menu": [
+    {
+      "id": "tools",
+      "submenu": [
+        {
+          "label": "Generate Diagram by Mermaid...",
+          "id": "tools.mermaid",
+          "command": "mermaid:show-mermaid-dialog"
+        }
+      ]
+    }
+  ],
+  "context-menu": {
+    "mermaid-example-dropdown": [
+      {
+        "label": "Class Diagram",
+        "id": "mermaid.class-diagram",
+        "command": "mermaid:example-class-diagram"
+      },
+      {
+        "label": "Sequence Diagram",
+        "id": "mermaid.sequence-diagram",
+        "command": "mermaid:example-sequence-diagram"
+      },
+      {
+        "label": "State Diagram",
+        "id": "mermaid.state-diagram",
+        "command": "mermaid:example-state-diagram"
+      },
+      {
+        "label": "Flowchart",
+        "id": "mermaid.flowchart",
+        "command": "mermaid:example-flowchart"
+      },
+      {
+        "label": "Entity Relationship Diagram",
+        "id": "mermaid.er-diagram",
+        "command": "mermaid:example-er-diagram"
+      },
+      {
+        "label": "Requirement Diagram",
+        "id": "mermaid.requirement-diagram",
+        "command": "mermaid:example-requirement-diagram"
+      },
+      {
+        "label": "Mindmap",
+        "id": "mermaid.mindmap",
+        "command": "mermaid:example-mindmap"
+      }
+    ]
+  }
+}

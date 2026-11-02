@@ -1,0 +1,26 @@
+{
+	"_type": "Project",
+	"_id": "AAAAAAFF+h6SjaM2Hec=",
+	"name": "Untitled",
+	"ownedElements": [
+		{
+			"_type": "GCPModel",
+			"_id": "AAAAAAGXWNsfaRiDIYM=",
+			"_parent": {
+				"$ref": "AAAAAAFF+h6SjaM2Hec="
+			},
+			"name": "GCP Architecture",
+			"ownedElements": [
+				{
+					"_type": "GCPDiagram",
+					"_id": "AAAAAAGXWNsfahiEf/E=",
+					"_parent": {
+						"$ref": "AAAAAAGXWNsfaRiDIYM="
+					},
+					"name": "Main",
+					"defaultDiagram": true
+				}
+			]
+		}
+	]
+}

@@ -1,0 +1,18 @@
+/* responsive view */
+@media (max-width:1200px) {
+  .gallery-header {
+    padding: 27px 26px 21px;
+  }
+  .gallery-scroll,.system-scroll {
+    padding: 20px 24px 35px;
+  }
+  .symbol-grid {
+    grid-template-columns: repeat(auto-fill,minmax(112px,1fr));
+  }
+  .token-grid {
+    grid-template-columns: repeat(4,minmax(0,1fr));
+  }
+  .mapping-grid {
+    grid-template-columns: 1fr;
+  }
+}

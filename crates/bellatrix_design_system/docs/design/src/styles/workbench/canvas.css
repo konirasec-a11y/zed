@@ -1,0 +1,66 @@
+.workspace-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; width: 100%; }
+.document-tabs { display: flex; align-items: center; flex: 0 0 35px; min-height: 35px;
+  background: var(--surface-1); border-bottom: 1px solid var(--border); }
+.doc-tab-area { display: flex; align-items: center; overflow-x: auto; overflow-y: hidden;
+  height: 100%; width: 100%; scrollbar-width: none; }
+.doc-tab-area::-webkit-scrollbar { display: none; }
+.doc-tab { display: inline-flex; align-items: center; gap: 8px; padding: 0 14px;
+  min-width: 0; max-width: 189px; height: 100%; flex-shrink: 0;
+  position: relative; border: 0; border-right: 1px solid var(--border-faint);
+  background: transparent; color: var(--muted); font-size: 11px; text-align: left; white-space: nowrap; }
+.doc-tab span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.doc-tab svg { flex-shrink: 0; }
+.doc-tab.active { background: var(--app-bg); color: var(--text-strong); }
+.doc-tab.active svg { color: var(--accent); }
+.doc-tab.active:after { content: ''; position: absolute; bottom: 0; left: 0; right: 0;
+  height: 2px; background: var(--accent); }
+.doc-tab:hover:not(.active) { background: var(--surface-2); }
+.canvas-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 0 10px 0 16px; height: 35px; flex: 0 0 35px;
+  border-bottom: 1px solid var(--border); background: var(--surface-1); }
+.canvas-path { display: inline-flex; align-items: center; gap: 8px; min-width: 0;
+  color: var(--muted); white-space: nowrap; font-size: 11px; }
+.canvas-path strong { color: var(--text); font-size: 11px; font-weight: 550;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.canvas-path-sep { color: var(--muted-deep); }
+.canvas-toolbar-controls { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.tool-divider { height: 16px; width: 1px; background: var(--border); margin: 0 5px; }
+.canvas-surface { position: relative; flex: 1; min-height: 0; overflow: hidden;
+  background: var(--canvas); }
+.canvas-grid-overlay { position: absolute; inset: 0; pointer-events: none;
+  background-image: linear-gradient(to right, var(--canvas-grid) 1px, transparent 1px),
+                    linear-gradient(to bottom, var(--canvas-grid) 1px, transparent 1px);
+  background-size: 24px 24px; }
+.canvas-grid-overlay:after { content: ''; position: absolute; inset: 0; pointer-events: none;
+  background-image: linear-gradient(to right, var(--canvas-grid-strong) 1px, transparent 1px),
+                    linear-gradient(to bottom, var(--canvas-grid-strong) 1px, transparent 1px);
+  background-size: 120px 120px; opacity: .55; }
+.canvas-content { position: absolute; inset: 20px 14px 35px; display: flex;
+  align-items: center; justify-content: center; min-width: 0; }
+.specimen-diagram { display: block; width: 100%; height: 100%; max-width: 1080px;
+  max-height: 690px; overflow: visible; }
+.diagram-type { font-size: 10px; color: var(--muted); }
+.zoom-indicator { position: absolute; right: 17px; bottom: 13px;
+  border: 1px solid var(--canvas-grid-strong); background: var(--paper-white);
+  padding: 5px 8px; border-radius: 3px; color: var(--diagram-muted);
+  font-size: 10px; user-select: none; }
+.minimap { width: 141px; height: 101px; position: absolute; right: 17px; bottom: 46px;
+  border: 1px solid var(--canvas-grid-strong); background: var(--paper-white);
+  box-shadow: 0 3px 12px var(--shadow); border-radius: 3px; overflow: hidden; }
+.minimap-top { display: flex; align-items: center; justify-content: space-between; height: 24px;
+  padding: 0 8px; border-bottom: 1px solid var(--canvas-grid-strong);
+  color: var(--diagram-muted); font-size: 9px; font-weight: 600; letter-spacing: .4px; }
+.minimap-preview { position: relative; height: 75px; background-image:
+  linear-gradient(to right, var(--canvas-grid) 1px,transparent 1px),
+  linear-gradient(to bottom, var(--canvas-grid) 1px,transparent 1px); background-size: 10px 10px; }
+.mini-box { position: absolute; width: 27px; height: 12px; border: 1px solid var(--diagram-edge); background: var(--diagram-header); }
+.mini-box.a { left: 12px; top: 13px; }
+.mini-box.b { left: 51px; top: 13px; }
+.mini-box.c { left: 88px; top: 13px; }
+.mini-box.d { left: 48px; top: 42px; }
+.minimap-viewport { position: absolute; inset: 5px; border: 1px solid var(--selection);
+  background: color-mix(in srgb, var(--selection) 4%, transparent); }
+@media(max-width: 1180px) {
+  .doc-tab { max-width: 155px; padding: 0 10px; }
+  .canvas-path>span:first-child, .canvas-path-sep { display: none; }
+}

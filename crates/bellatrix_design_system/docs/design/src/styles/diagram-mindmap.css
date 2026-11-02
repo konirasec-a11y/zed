@@ -1,0 +1,93 @@
+/* mindmap diagram notation */
+.mind-edges path {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.mind-edges path.child-edge {
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
+
+.mind-blue {
+  stroke: #6a96ba;
+}
+
+.mind-amber {
+  stroke: #b8a071;
+}
+
+.mind-teal {
+  stroke: #8194aa;
+}
+
+.mind-violet {
+  stroke: #9b92bb;
+}
+
+.mind-rose {
+  stroke: #c3959c;
+}
+
+.mind-topic > rect:first-child {
+  fill: var(--paper-white);
+  stroke: var(--diagram-border);
+  stroke-width: 1.15;
+  filter: drop-shadow(0 2px 2px rgba(20,30,45,.03));
+}
+
+.mind-topic .mind-accent {
+  fill: #738b9b;
+  stroke: none;
+}
+
+.mind-topic-title {
+  font-size: 16px;
+  font-weight: 690;
+  fill: var(--diagram-text);
+}
+
+.mind-topic-sub {
+  font-size: 12px;
+  fill: var(--diagram-muted);
+}
+
+.mind-root > rect:first-child {
+  fill: var(--diagram-header);
+  stroke: var(--diagram-border);
+  stroke-width: 1.6;
+}
+
+.mind-root .mind-accent {
+  fill: var(--selection);
+}
+
+.mind-root .mind-topic-title {
+  font-size: 20px;
+}
+
+.mind-blue .mind-accent {
+  fill: #6a96ba;
+}
+
+.mind-amber .mind-accent {
+  fill: #b8a071;
+}
+
+.mind-teal .mind-accent {
+  fill: #8194aa;
+}
+
+.mind-violet .mind-accent {
+  fill: #9b92bb;
+}
+
+.mind-rose .mind-accent {
+  fill: #c3959c;
+}
+
+.mind-caption {
+  fill: var(--diagram-muted);
+  font-size: 11px;
+}

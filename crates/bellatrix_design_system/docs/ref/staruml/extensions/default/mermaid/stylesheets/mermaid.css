@@ -1,0 +1,26 @@
+.mermaid-dialog .dialog-body {
+  min-width: 520px;
+}
+.mermaid-dialog .dialog-body textarea {
+}
+
+.mermaid-dialog .dialog-body .CodeMirror {
+  width: 520px;
+  border-radius: 4px;
+  padding: 6px;
+  border: 1px solid #636668;
+}
+
+.mermaid-dialog button.example-dropdown {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+  border: none;
+  padding: 0px;
+}
+
+.mermaid-dialog button.example-dropdown:hover {
+  background: transparent;
+  padding: 0px;
+  border: none;
+}

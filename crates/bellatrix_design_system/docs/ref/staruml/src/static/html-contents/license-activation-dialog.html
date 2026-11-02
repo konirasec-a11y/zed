@@ -1,0 +1,66 @@
+<div class="license-activation-dialog dialog modal" data-title="License Activation">
+  <div class="dialog-body">    
+    <div class="trial-not-expired" style="display: flex; flex-direction: column; gap: 0.5rem; text-align: center;">
+      <div class="text-normal">You're using in trial mode.</div>
+      <div class="text-normal">
+        You have <span class="trial-days-left">0</span> days left in your trial period.
+      </div>
+    </div>
+
+    <div class="trial-expired" style="text-align: center;">
+      <div>
+        Your trial period has expired.
+      </div>
+    </div>
+
+    <div class="license-activated" style="display: flex; flex-direction: column; gap: .5rem;">
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <div style="opacity: 0.6;">Status</div>
+        <div class="active-status"></div>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <div style="opacity: 0.6;">Product</div>
+        <div class="product-display-name"></div>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <div style="opacity: 0.6;">License Holder</div>
+        <div class="license-holder-name"></div>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <div style="opacity: 0.6;">Device ID</div>
+        <div class="device-id font-mono"></div>
+      </div>
+    </div>
+
+    <div class="license-not-activated" style="display: flex; align-items: center; gap: .5rem;">
+      <input type='text' class='k-input k-textbox license-key' placeholder="Enter your license key" style="border-radius: 1em;"/>
+      <button class="activate-button k-button primary">
+        Activate
+      </button>
+    </div>
+
+    <div style="display: flex; align-items: center; justify-content: space-between;">
+      <div>
+        <a href="#" class="copy-device-id-button">Copy Device ID</a>
+      </div>
+      <div>
+        <a href="#" class="license-manager-button">License Manager</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="trial-not-expired dialog-footer">
+    <button class="buy-button k-button outline left">Buy Now</button>
+    <button class="k-button dialog-button primary" data-button-id="cancel">Continue</button>
+  </div>
+
+  <div class="trial-expired dialog-footer">
+    <button class="buy-button k-button outline left">Buy Now</button>
+    <button class="k-button dialog-button outline">Viewer mode</button>
+  </div>
+
+  <div class="license-activated dialog-footer">
+    <button class="deactivate-button k-button outline left buy-now">Deactivate</button>
+    <button class="k-button dialog-button primary" data-button-id="cancel">Close</button>
+  </div>
+</div>

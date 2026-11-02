@@ -1,0 +1,5 @@
+/* Semantic notation styles by diagram family. */
+@import url("./diagram-core.css");
+@import url("./diagram-c4.css");
+@import url("./diagram-mindmap.css");
+@import url("./diagram-flowchart.css");

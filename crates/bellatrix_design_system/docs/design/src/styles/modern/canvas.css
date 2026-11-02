@@ -1,0 +1,38 @@
+/* Diagram workspace: grid and selection belong to canvas, not app chrome. */
+.document-tabs {height:39px;min-height:39px;flex:0 0 39px;background:var(--surface-1);}
+.doc-tab {max-width:194px;padding:0 16px;gap:9px;font-size:12px;border-right:1px solid var(--border-faint);}
+.doc-tab.active {background:var(--app-bg);font-weight:575;}
+.doc-tab.active:after {height:2px;}
+.doc-tab.active svg {color:var(--accent);}
+.document-tab-overflow {height:100%;width:39px;flex:0 0 39px;display:grid;place-items:center;color:var(--muted-deep);border-left:1px solid var(--border-faint);}
+.canvas-toolbar {height:39px;flex:0 0 39px;padding:0 10px 0 17px;gap:10px;}
+.canvas-path {gap:9px;font-size:12px;}
+.canvas-path strong {font-size:12px;color:var(--text-strong);font-weight:540;}
+.canvas-path>svg {color:var(--muted-deep);flex-shrink:0;}
+.canvas-type-label {margin-left:6px;color:var(--muted-deep);border-left:1px solid var(--border);padding-left:12px;}
+.canvas-toolbar-controls {gap:3px;}
+.canvas-toolbar-controls .tool-divider {margin:0 7px;}
+.canvas-tool-pair {height:29px;padding:2px;display:flex;align-items:center;gap:1px;border:1px solid var(--border-soft);border-radius:5px;background:var(--surface-2);}
+.canvas-tool-pair button {height:24px;width:27px;display:grid;place-items:center;background:transparent;border:0;border-radius:4px;color:var(--muted);}
+.canvas-tool-pair button.selected {background:var(--surface-1);color:var(--text-strong);box-shadow:0 1px 3px var(--shadow);}
+.canvas-tool-pair button:hover:not(.selected) {color:var(--text-strong);}
+.canvas-surface {background:var(--canvas);}
+.canvas-grid-overlay {background-size:22px 22px;opacity:.88;}
+.canvas-grid-overlay:after {background-size:110px 110px;opacity:.4;}
+.canvas-content {inset:20px 12px 18px;}
+.specimen-diagram {max-width:1060px;max-height:660px;}
+.canvas-badge-bg,.canvas-badge-label {display:none;}
+.canvas-selection-toolbar {opacity:0;transition:opacity .14s ease;}
+.canvas-content:hover .canvas-selection-toolbar {opacity:1;}
+.diagram-node .node-fill {filter:none;}
+.zoom-indicator {display:none;}
+.minimap {border-radius:5px;box-shadow:0 8px 22px var(--shadow);}
+
+
+.c4-node .c4-box-strip {fill:var(--diagram-border);}
+.c4-node.c4-external .c4-box-strip {fill:var(--muted-deep);}
+@media(max-width:1160px) {
+ .doc-tab {max-width:158px;padding:0 11px;}
+ .canvas-type-label {display:none;}
+}
+@media(max-width:780px) {.canvas-path>span:first-child,.canvas-path>svg {display:none;}.document-tab-overflow {display:none;}}

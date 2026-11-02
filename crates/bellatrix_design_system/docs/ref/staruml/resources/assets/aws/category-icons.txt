@@ -1,0 +1,1 @@
+Category icons are placed in "service-icons".

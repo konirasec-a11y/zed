@@ -1,0 +1,33 @@
+.left-sidebar { grid-column: 2; border-right: 1px solid var(--border); }
+.right-inspector { grid-column: 6; border-left: 1px solid var(--border); }
+.left-sidebar,.right-inspector { display: flex; flex-direction: column; min-width: 0;
+  min-height: 0; overflow: hidden; background: var(--surface-1); }
+.left-project-panel,.explorer-panel { display: flex; flex-direction: column; min-height: 33px; overflow: hidden; }
+.toolbox-panel,.inspector-panel { display: flex; flex-direction: column; min-height: 0; flex: 1; overflow: hidden; }
+.toolbox-panel.dock-closed,.inspector-panel.dock-closed { flex: 0 0 33px; }
+.dock-panel-header { height: 33px; min-height: 33px; display: flex; justify-content: space-between;
+  align-items: center; background: var(--surface-1); border-bottom: 1px solid var(--border-soft); }
+.dock-panel-toggle { height: 100%; flex: 1; display: flex; gap: 7px; align-items: center;
+  padding: 0 10px; color: var(--text); font-size: 11px; font-weight: 600;
+  text-align: left; border: 0; background: transparent; min-width: 0; }
+.dock-panel-toggle span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dock-panel-toggle svg { flex-shrink: 0; color: var(--muted-deep); }
+.dock-panel-toggle:hover { background: var(--surface-2); }
+.dock-panel-actions { flex: 0 0 auto; display: flex; padding: 0 6px; }
+.header-icon { border: 0; background: transparent; display: grid; place-items: center;
+  width: 24px; height: 23px; border-radius: 3px; color: var(--muted); }
+.header-icon:hover { color: var(--text-strong); background: var(--surface-3); }
+.resize-handle { z-index: 7; flex: 0 0 5px; position: relative; background: var(--surface-1);
+  outline: none; touch-action: none; user-select: none; }
+.resize-handle:before { content: ''; position: absolute; background: var(--border); pointer-events: none; }
+.resize-horizontal { width: 5px; cursor: col-resize; }
+.resize-horizontal:before { width: 1px; top: 0; bottom: 0; left: 2px; }
+.resize-vertical { height: 5px; cursor: row-resize; }
+.resize-vertical:before { height: 1px; left: 0; right: 0; top: 2px; }
+.resize-handle:hover:before,.resize-handle:focus-visible:before { background: var(--accent); }
+.resize-handle:hover { background: var(--accent-tint); }
+.resize-handle:focus-visible { outline: 1px solid var(--accent); }
+.layout-split-left { grid-column: 3; }
+.layout-split-right { grid-column: 5; }
+.is-resizing, .is-resizing * { user-select: none !important; cursor: inherit; }
+.left-project-content { overflow-y: auto; flex: 1; min-height: 0; }

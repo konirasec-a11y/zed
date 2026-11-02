@@ -1,0 +1,14 @@
+<div class="about-dialog dialog modal" data-title="About">
+    <div class="dialog-body" style="text-align: center; display: flex; flex-direction: column; gap: 0.5rem;">
+        <div>
+            <img src="{{metadata.config.app_icon}}">
+        </div>
+        <div>
+            {{metadata.name}} <span style="opacity: 0.7;">v{{metadata.version}}</span>
+        </div>
+        <div><a href="#" class="thirdparty">Thirdparty softwares</a></div>
+    </div>
+    <div class="dialog-footer" style="text-align: center; margin-top: 4px;">
+        <button class="k-button dialog-button primary" data-button-id="close">{{Strings.CLOSE}}</button>
+    </div>
+</div>

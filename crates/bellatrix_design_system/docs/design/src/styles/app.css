@@ -1,0 +1,12 @@
+/* Workbench components. Shared notation specimens live in diagrams.css. */
+@import url("./workbench/shell.css");
+@import url("./workbench/docking.css");
+@import url("./workbench/toolbox.css");
+@import url("./workbench/inspector.css");
+@import url("./workbench/canvas.css");
+@import url("./workbench/auxiliary.css");
+/* Latest StarUML screenshot modernization. Overrides legacy layout surfaces. */
+@import url('./modern/shell.css');
+@import url('./modern/panels.css');
+@import url('./modern/canvas.css');
+@import url('./modern/auxiliary.css');

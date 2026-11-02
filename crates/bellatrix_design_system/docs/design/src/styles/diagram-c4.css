@@ -1,0 +1,92 @@
+/* c4 diagram notation */
+.c4-boundary {
+  fill: color-mix(in srgb,var(--diagram-edge) 3%,transparent);
+  stroke: var(--diagram-edge);
+  stroke-width: 1.7;
+  stroke-dasharray: 9 6;
+}
+
+.boundary-title {
+  font-size: 13px;
+  fill: var(--diagram-text);
+  font-weight: 740;
+  letter-spacing: .9px;
+}
+
+.boundary-subtitle {
+  font-size: 12px;
+  fill: var(--diagram-muted);
+}
+
+.c4-node .c4-box {
+  fill: var(--paper-white);
+  stroke: var(--diagram-border);
+  stroke-width: 1.5;
+}
+
+.c4-node .c4-box-strip {
+  fill: #7591b2;
+}
+
+.c4-node.c4-external .c4-box {
+  stroke-dasharray: 5 4;
+}
+
+.c4-node.c4-external .c4-box-strip {
+  fill: #abb2bd;
+}
+
+.c4-role {
+  font-size: 10px;
+  letter-spacing: 1px;
+  font-weight: 730;
+  fill: var(--diagram-muted);
+}
+
+.c4-title {
+  font-size: 16px;
+  font-weight: 690;
+  fill: var(--diagram-text);
+}
+
+.c4-subtitle {
+  font-size: 12px;
+  fill: var(--diagram-muted);
+}
+
+.c4-database {
+  fill: none;
+  stroke: var(--diagram-edge);
+  stroke-width: 1.5;
+}
+
+.c4-person {
+  fill: none;
+  stroke: var(--diagram-edge);
+  stroke-width: 2;
+}
+
+.c4-person text {
+  stroke: none;
+}
+
+.c4-links path {
+  stroke: var(--diagram-edge);
+  stroke-width: 1.6;
+  fill: none;
+}
+
+.c4-edge-label text {
+  fill: var(--diagram-muted);
+  font-size: 12px;
+}
+
+.diagram-mini-action rect {
+  fill: var(--paper-white);
+  stroke: var(--canvas-grid-strong);
+}
+
+.diagram-mini-action text {
+  font-size: 12px;
+  fill: var(--diagram-text);
+}

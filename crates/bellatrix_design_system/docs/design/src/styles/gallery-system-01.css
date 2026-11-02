@@ -1,0 +1,168 @@
+/* gallery-system / 01 */
+.system-scroll {
+  padding-top: 26px;
+}
+.system-intro {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 17px 18px;
+  margin-bottom: 24px;
+}
+.system-intro .eyebrow {
+  color: var(--muted-deep);
+  font-size: 9px;
+}
+.current-theme-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 11px;
+}
+.current-theme-line strong {
+  color: var(--text-strong);
+  font-size: 14px;
+}
+.current-theme-line>span:last-child {
+  color: var(--muted);
+  font-size: 11px;
+  margin-left: auto;
+  text-align: right;
+}
+.scheme-visual {
+  display: block;
+  width: 29px;
+  height: 29px;
+  background: var(--canvas);
+  border: 7px solid var(--surface-3);
+  outline: 1px solid var(--border);
+  border-radius: 3px;
+}
+.system-section {
+  margin-bottom: 29px;
+}
+.system-section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 13px;
+}
+.system-section-heading h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 690;
+}
+.system-section-heading>span {
+  color: var(--muted-deep);
+  font-size: 10px;
+}
+.token-grid {
+  display: grid;
+  grid-template-columns: repeat(5,minmax(0,1fr));
+  gap: 8px;
+}
+.token-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  min-width: 0;
+  background: var(--surface-2);
+}
+.token-swatch {
+  display: block;
+  height: 38px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+.token-card code {
+  font: 10px ui-monospace,SFMono-Regular,Consolas,monospace;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.primitives-example {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  padding: 20px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+}
+.primitives-example button {
+  height: 30px;
+  padding: 0 13px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+.example-primary {
+  background: var(--accent);
+  color: var(--app-bg);
+  font-weight: 650;
+  border: 1px solid var(--accent);
+}
+.example-secondary {
+  background: var(--surface-3);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.example-quiet {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid transparent;
+}
+.demo-chip {
+  font-size: 10px;
+  background: var(--active);
+  color: var(--accent);
+  padding: 6px 10px;
+  border: 1px solid var(--active-outline);
+  border-radius: 3px;
+}
+.demo-outline {
+  font-size: 10px;
+  color: var(--muted);
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+.field-examples {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  margin-top: 11px;
+}
+.field-examples>div {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+.field-examples small {
+  font-size: 9px;
+  color: var(--muted-deep);
+  font-weight: 650;
+  letter-spacing: .6px;
+}
+.field-examples>div>span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 10px;
+  color: var(--text);
+  font-size: 11px;
+}

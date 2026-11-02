@@ -1,0 +1,86 @@
+{
+  "menu": [
+    {
+      "id": "file.new-from-template",
+      "submenu": [
+        {
+          "label": "Azure Architecture",
+          "command": "azure:new-from-template",
+          "command-arg": "templates/AzureArchitecture.mdj"
+        }
+      ]
+    },
+    {
+      "id": "model.add-diagram",
+      "submenu": [
+        {
+          "label": "Azure Architecture Diagram",
+          "id": "azure.diagram",
+          "command": "factory:create-diagram",
+          "command-arg": { "id": "AzureDiagram" }
+        }
+      ]
+    },
+    {
+      "id": "model.add",
+      "submenu": [
+        {
+          "label": "Azure Model",
+          "id": "azure.model",
+          "command": "factory:create-model",
+          "command-arg": { "id": "AzureModel" }
+        }
+      ]
+    }
+  ],
+  "context-menu": {
+    "diagram-canvas": [
+      {
+        "id": "model.add-diagram",
+        "submenu": [
+          {
+            "label": "Azure Architecture Diagram",
+            "id": "azure.diagram",
+            "command": "factory:create-diagram",
+            "command-arg": { "id": "AzureDiagram" }
+          }
+        ]
+      },
+      {
+        "id": "model.add",
+        "submenu": [
+          {
+            "label": "Azure Model",
+            "id": "azure.model",
+            "command": "factory:create-model",
+            "command-arg": { "id": "AzureModel" }
+          }
+        ]
+      }
+    ],
+    "model-explorer": [
+      {
+        "id": "model.add-diagram",
+        "submenu": [
+          {
+            "label": "Azure Architecture Diagram",
+            "id": "azure.diagram",
+            "command": "factory:create-diagram",
+            "command-arg": { "id": "AzureDiagram" }
+          }
+        ]
+      },
+      {
+        "id": "model.add",
+        "submenu": [
+          {
+            "label": "Azure Model",
+            "id": "azure.model",
+            "command": "factory:create-model",
+            "command-arg": { "id": "AzureModel" }
+          }
+        ]
+      }
+    ]
+  }
+}

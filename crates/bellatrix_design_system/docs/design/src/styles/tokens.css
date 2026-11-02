@@ -1,0 +1,43 @@
+/* StarUML workbench study — semantic tokens only, independent from browser DOM. */
+:root {
+  font-family: Inter, 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --font-xs: 10px; --font-sm: 11px; --font-base: 12px; --font-md: 13px;
+  --font-lg: 14px; --font-xl: 20px;
+  --radius-sm: 4px; --radius-md: 6px;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s6: 24px;
+}
+[data-theme='dark'] {
+  color-scheme: dark;
+  --app-bg: #1b1d20; --rail: #1e2023;
+  --surface-1: #222427; --surface-2: #292b30; --surface-3: #34373c;
+  --border: #373b41; --border-soft: #30343a; --border-faint: #292d32;
+  --text: #c8cbd1; --text-strong: #f0f1f3;
+  --muted: #9ba0a9; --muted-deep: #828994;
+  --accent: #88b1fa; --accent-tint: #29374b;
+  --active: #2c3749; --active-outline: #6d9de7;
+  --canvas: #24272c; --canvas-grid: #2b3036; --canvas-grid-strong: #343a42;
+  --paper-white: #323841; --diagram-text: #e9edf3;
+  --diagram-edge: #a4b0bf; --diagram-border: #8a97a7;
+  --diagram-header: #3c444f; --diagram-muted: #b9c2ce;
+  --selection: #83b5ff; --input-bg: #1f2124;
+  --shadow: rgba(0,0,0,.34);
+}
+[data-theme='light'] {
+  color-scheme: light;
+  --app-bg: #f7f8fa; --rail: #f7f8fa;
+  --surface-1: #fdfdfd; --surface-2: #f3f5f7; --surface-3: #e9edf1;
+  --border: #dee2e7; --border-soft: #eaecf0; --border-faint: #f1f2f4;
+  --text: #4c535d; --text-strong: #20262e;
+  --muted: #697380; --muted-deep: #89929e;
+  --accent: #3974cf; --accent-tint: #e7f0fe;
+  --active: #e7effa; --active-outline: #3974cf;
+  --canvas: #fafbfc; --canvas-grid: #f0f2f5; --canvas-grid-strong: #e6e9ed;
+  --paper-white: #ffffff; --diagram-text: #293544;
+  --diagram-edge: #7a8897; --diagram-border: #788797;
+  --diagram-header: #f1f4f7; --diagram-muted: #637286;
+  --selection: #3a7fe2; --input-bg: #fff;
+  --shadow: rgba(31,41,55,.10);
+}

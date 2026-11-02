@@ -1,0 +1,102 @@
+{
+  "components": [
+    {
+      "id": "azure.set-name",
+      "type": "input",
+      "hint": "name",
+      "property": "name",
+      "command": "engine:set-property"
+    },
+    {
+      "id": "azure.set-icon",
+      "type": "button",
+      "icon": "icon-tool-azure-icon",
+      "hint": "Azure Icon",
+      "command": "azure:set-icon"
+    },
+    {
+      "id": "azure.set-dashed",
+      "type": "dropdown",
+      "hint": "Dashed",
+      "property": "dashed",
+      "dropdown-width": 130,
+      "items": [
+        { "icon": "icon-tool-azure-solid", "text": "solid", "value": false },
+        { "icon": "icon-tool-azure-dashed", "text": "dashed", "value": true }
+      ],
+      "command": "engine:set-property"
+    },
+    {
+      "id": "azure.set-rounded",
+      "type": "dropdown",
+      "hint": "Rounded",
+      "property": "rounded",
+      "dropdown-width": 150,
+      "items": [
+        { "icon": "icon-tool-azure-rect", "text": "rect", "value": false },
+        { "icon": "icon-tool-azure-rounded", "text": "rounded", "value": true }
+      ],
+      "command": "engine:set-property"
+    }
+  ],
+  "quickedits": [
+    {
+      "id": "azure.group",
+      "targets": ["AzureGroupView"],
+      "area": {
+        "x1": "nameLabel.left",
+        "y1": "nameLabel.top",
+        "x2": "nameLabel.right",
+        "y2": "nameLabel.bottom"
+      },
+      "components": [
+        { "id": "azure.set-name", "section": "main" },
+        { "id": "uml.add-note", "section": "left" },
+        { "id": "azure.set-dashed", "section": "right" },
+        { "id": "azure.set-rounded", "section": "right" }
+      ]
+    },
+    {
+      "id": "azure.service",
+      "targets": ["AzureServiceView", "AzureServiceView.nameLabel"],
+      "area": {
+        "x1": "nameLabel.left",
+        "y1": "nameLabel.top",
+        "x2": "nameLabel.right",
+        "y2": "nameLabel.bottom"
+      },
+      "components": [
+        { "id": "azure.set-name", "section": "main" },
+        { "id": "uml.add-note", "section": "left" },
+        { "id": "azure.set-icon", "section": "right" }
+      ]
+    },
+    {
+      "id": "azure.callout",
+      "targets": ["AzureCalloutView"],
+      "area": {
+        "x1": "nameLabel.left",
+        "y1": "nameLabel.top",
+        "x2": "nameLabel.right",
+        "y2": "nameLabel.bottom"
+      },
+      "components": [{ "id": "azure.set-name", "section": "main" }]
+    },
+    {
+      "id": "azure.arrow",
+      "targets": ["AzureConnectorView"],
+      "area": {
+        "x1": "nameLabel.left",
+        "y1": "nameLabel.top",
+        "x2": "nameLabel.left",
+        "y2": "nameLabel.bottom",
+        "x2-margin": 70
+      },
+      "components": [
+        { "id": "azure.set-name", "section": "main" },
+        { "id": "uml.add-note", "section": "left" },
+        { "id": "azure.set-dashed", "section": "right" }
+      ]
+    }
+  ]
+}

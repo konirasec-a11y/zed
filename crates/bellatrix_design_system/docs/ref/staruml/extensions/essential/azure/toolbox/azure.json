@@ -1,0 +1,34 @@
+[
+  {
+    "label": "Azure",
+    "id": "azure.elements",
+    "diagram-types": ["AzureDiagram"],
+    "auto-expands": ["AzureDiagram"],
+    "items": [
+      {
+        "label": "Azure Group",
+        "id": "AzureGroup",
+        "icon": "icon-AzureGroup",
+        "rubberband": "rect"
+      },
+      {
+        "label": "Azure Service",
+        "id": "AzureService",
+        "icon": "icon-AzureService",
+        "rubberband": "rect"
+      },
+      {
+        "label": "Azure Callout",
+        "id": "AzureCallout",
+        "icon": "icon-AzureCallout",
+        "rubberband": "rect"
+      },
+      {
+        "label": "Azure Connector",
+        "id": "AzureConnector",
+        "icon": "icon-AzureConnector",
+        "rubberband": "line"
+      }
+    ]
+  }
+]

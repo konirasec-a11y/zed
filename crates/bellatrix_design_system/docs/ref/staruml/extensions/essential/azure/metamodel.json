@@ -1,0 +1,135 @@
+{
+  "AzureElement": {
+    "kind": "class",
+    "super": "ExtensibleModel",
+    "attributes": [
+      {
+        "name": "icon",
+        "kind": "prim",
+        "type": "String",
+        "visible": false,
+        "default": ""
+      }
+    ]
+  },
+  "AzureModel": {
+    "kind": "class",
+    "super": "AzureElement",
+    "ordering": 1100
+  },
+  "AzureDiagram": {
+    "kind": "class",
+    "super": "Diagram",
+    "views": [
+      "UMLCustomTextView",
+      "ShapeView",
+      "UMLNoteLinkView",
+      "AzureGroupView",
+      "AzureServiceView",
+      "AzureCalloutView",
+      "AzureConnectorView"
+    ]
+  },
+  "AzureGroup": {
+    "kind": "class",
+    "super": "AzureElement",
+    "view": "AzureGroupView",
+    "attributes": [
+      {
+        "name": "dashed",
+        "kind": "prim",
+        "type": "Boolean",
+        "visible": true,
+        "default": false
+      },
+      {
+        "name": "rounded",
+        "kind": "prim",
+        "type": "Boolean",
+        "visible": true,
+        "default": false
+      }
+    ],
+    "ordering": 1201
+  },
+  "AzureService": {
+    "kind": "class",
+    "super": "AzureElement",
+    "view": "AzureServiceView",
+    "ordering": 1204
+  },
+  "AzureCallout": {
+    "kind": "class",
+    "super": "AzureElement",
+    "view": "AzureCalloutView",
+    "ordering": 1207
+  },
+  "AzureConnector": {
+    "kind": "class",
+    "super": "DirectedRelationship",
+    "view": "AzureConnectorView",
+    "attributes": [
+      {
+        "name": "dashed",
+        "kind": "prim",
+        "type": "Boolean",
+        "visible": true,
+        "default": false
+      }
+    ],
+    "ordering": 1208
+  },
+  "AzureGeneralNodeView": {
+    "kind": "class",
+    "super": "NodeView",
+    "attributes": [
+      {
+        "name": "nameLabel",
+        "kind": "ref",
+        "type": "LabelView",
+        "embedded": "subViews"
+      },
+      { "name": "wordWrap", "kind": "prim", "type": "Boolean", "default": true }
+    ]
+  },
+  "AzureIconNodeView": {
+    "kind": "class",
+    "super": "NodeView",
+    "attributes": [
+      {
+        "name": "nameLabel",
+        "kind": "ref",
+        "type": "NodeLabelView",
+        "embedded": "subViews"
+      }
+    ]
+  },
+  "AzureGeneralEdgeView": {
+    "kind": "class",
+    "super": "EdgeView",
+    "attributes": [
+      {
+        "name": "nameLabel",
+        "kind": "ref",
+        "type": "EdgeLabelView",
+        "embedded": "subViews"
+      }
+    ]
+  },
+  "AzureGroupView": {
+    "kind": "class",
+    "super": "AzureGeneralNodeView"
+  },
+  "AzureServiceView": {
+    "kind": "class",
+    "super": "AzureIconNodeView"
+  },
+  "AzureCalloutView": {
+    "kind": "class",
+    "super": "AzureGeneralNodeView"
+  },
+  "AzureConnectorView": {
+    "kind": "class",
+    "super": "AzureGeneralEdgeView"
+  }
+}

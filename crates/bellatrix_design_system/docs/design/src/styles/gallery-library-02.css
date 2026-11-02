@@ -1,0 +1,72 @@
+/* gallery-library / 02 */
+.symbol-name {
+  font-size: 10.5px;
+  font-weight: 590;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.symbol-identifier {
+  font-size: 9px;
+  color: var(--muted-deep);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.gallery-disclaimer {
+  font-size: 10px;
+  color: var(--muted-deep);
+  border-top: 1px solid var(--border-soft);
+  padding-top: 14px;
+  line-height: 1.5;
+}
+.diagram-types-details {
+  margin: 10px 0 18px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: 4px;
+}
+.diagram-types-details summary {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 13px;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 11px;
+  list-style: none;
+}
+.diagram-types-details summary::-webkit-details-marker {
+  display: none;
+}
+.diagram-types-details summary>svg:first-child {
+  color: var(--accent);
+}
+.diagram-types-details summary>svg:last-child {
+  margin-left: 0;
+  color: var(--muted-deep);
+}
+.diagram-types-details[open] summary>svg:last-child {
+  transform: rotate(180deg);
+}
+.type-count {
+  color: var(--muted-deep);
+  font-size: 10px;
+  margin-left: auto;
+}
+.diagram-type-grid {
+  display: grid;
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  gap: 6px;
+  padding: 13px;
+  border-top: 1px solid var(--border-soft);
+}
+.diagram-type-grid span {
+  font-size: 10px;
+  color: var(--muted);
+  padding: 7px 9px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-soft);
+  border-radius: 3px;
+}

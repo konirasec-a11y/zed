@@ -2148,6 +2148,199 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a8241f3ebb85c056b509d4327ad0358fbbba6ffb340bf388f26350aeda225b1"
 
 [[package]]
+name = "bellatrix_design_system"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "ui",
+]
+
+[[package]]
+name = "bellatrix_mde_cli"
+version = "0.1.0"
+dependencies = [
+ "bellatrix_mde_cordis",
+ "bellatrix_mde_html_exporter",
+ "bellatrix_mde_model",
+ "bellatrix_mde_modeling",
+ "bellatrix_mde_rust_generator",
+ "clap",
+ "cordis-rs",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "bellatrix_mde_cordis"
+version = "0.1.0"
+dependencies = [
+ "bellatrix_mde_html_exporter",
+ "bellatrix_mde_model",
+ "bellatrix_mde_modeling",
+ "bellatrix_mde_rust_generator",
+ "bellatrix_project",
+ "cordis-rs",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "bellatrix_mde_html_exporter"
+version = "0.1.0"
+dependencies = [
+ "bellatrix_mde_model",
+ "bellatrix_mde_modeling",
+ "serde_json",
+]
+
+[[package]]
+name = "bellatrix_mde_model"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "prost",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
+]
+
+[[package]]
+name = "bellatrix_mde_modeling"
+version = "0.1.0"
+dependencies = [
+ "bellatrix_mde_model",
+ "petgraph",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
+]
+
+[[package]]
+name = "bellatrix_mde_rust_generator"
+version = "0.1.0"
+dependencies = [
+ "bellatrix_mde_model",
+ "bellatrix_mde_modeling",
+ "serde_json",
+ "toml 0.9.8",
+]
+
+[[package]]
+name = "bellatrix_mde_workbench"
+version = "0.1.0"
+dependencies = [
+ "bellatrix_design_system",
+ "bellatrix_mde_cordis",
+ "bellatrix_mde_model",
+ "bellatrix_mde_modeling",
+ "bellatrix_project",
+ "bellatrix_ui_symbols",
+ "bellatrix_ui_uml",
+ "dugong",
+ "gpui",
+ "manatee",
+ "merman-core",
+ "merman-render",
+ "serde_json",
+ "tokio",
+ "ui",
+ "ui_input",
+ "workspace",
+]
+
+[[package]]
+name = "bellatrix_project"
+version = "0.1.0"
+dependencies = [
+ "cordis-rs",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
+ "tokio",
+]
+
+[[package]]
+name = "bellatrix_ui_c4"
+version = "0.1.0"
+dependencies = [
+ "bellatrix_design_system",
+ "gpui",
+]
+
+[[package]]
+name = "bellatrix_ui_canvas"
+version = "0.1.0"
+dependencies = [
+ "bellatrix_design_system",
+ "gpui",
+]
+
+[[package]]
+name = "bellatrix_ui_flow"
+version = "0.1.0"
+dependencies = [
+ "bellatrix_design_system",
+ "gpui",
+]
+
+[[package]]
+name = "bellatrix_ui_mindmap"
+version = "0.1.0"
+dependencies = [
+ "bellatrix_design_system",
+ "gpui",
+]
+
+[[package]]
+name = "bellatrix_ui_panels"
+version = "0.1.0"
+dependencies = [
+ "bellatrix_design_system",
+ "gpui",
+]
+
+[[package]]
+name = "bellatrix_ui_symbols"
+version = "0.1.0"
+dependencies = [
+ "bellatrix_design_system",
+ "gpui",
+]
+
+[[package]]
+name = "bellatrix_ui_tree"
+version = "0.1.0"
+dependencies = [
+ "bellatrix_design_system",
+ "gpui",
+]
+
+[[package]]
+name = "bellatrix_ui_uml"
+version = "0.1.0"
+dependencies = [
+ "bellatrix_design_system",
+ "gpui",
+ "ui",
+ "ui_input",
+]
+
+[[package]]
+name = "bellatrix_zed_host"
+version = "0.1.0"
+dependencies = [
+ "bellatrix_mde_cordis",
+ "bellatrix_mde_model",
+ "bellatrix_mde_workbench",
+ "bellatrix_project",
+ "cordis-rs",
+ "gpui",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "bench_metrics"
 version = "0.1.0"
 dependencies = [
@@ -3699,6 +3892,25 @@ dependencies = [
  "ui",
  "util",
  "workspace",
+]
+
+[[package]]
+name = "cordis-core"
+version = "0.6.1"
+source = "git+https://github.com/dshbox/cordis-rs?rev=cd540033487f62c1b574bffd39befb717afb8a35#cd540033487f62c1b574bffd39befb717afb8a35"
+dependencies = [
+ "futures 0.3.34",
+ "parking_lot",
+ "thiserror 2.0.17",
+ "tokio",
+]
+
+[[package]]
+name = "cordis-rs"
+version = "0.11.1"
+source = "git+https://github.com/dshbox/cordis-rs?rev=cd540033487f62c1b574bffd39befb717afb8a35#cd540033487f62c1b574bffd39befb717afb8a35"
+dependencies = [
+ "cordis-core",
 ]
 
 [[package]]
@@ -13223,6 +13435,7 @@ dependencies = [
  "fixedbitset",
  "hashbrown 0.15.5",
  "indexmap 2.14.0",
+ "serde",
 ]
 
 [[package]]
@@ -22398,6 +22611,7 @@ dependencies = [
  "audio",
  "auto_update",
  "auto_update_ui",
+ "bellatrix_zed_host",
  "breadcrumbs",
  "call",
  "call_hierarchy",

@@ -1,0 +1,11 @@
+* { box-sizing: border-box; }
+html, body, #root { margin: 0; height: 100%; width: 100%; min-width: 850px; }
+body { font-family: Inter, "Segoe UI", Arial, sans-serif; font-size: 12px; line-height: 1.4; }
+button,input,select,textarea { font-family: inherit; font-size: inherit; }
+button { cursor: pointer; }
+button:disabled { opacity: .4; cursor: default; }
+input:focus-visible,button:focus-visible,select:focus-visible { outline: 2px solid var(--accent); }
+::selection { background: var(--accent-tint); color: var(--text-strong); }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--border); border: 2px solid var(--surface-1); border-radius: 8px; }
+::-webkit-scrollbar-track { background: transparent; }

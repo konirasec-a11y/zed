@@ -1,0 +1,52 @@
+/* flowchart diagram notation */
+.flow-node-fill {
+  fill: var(--paper-white);
+  stroke: var(--diagram-border);
+  stroke-width: 1.6;
+}
+
+.flow-terminal {
+  fill: var(--diagram-header);
+}
+
+.flow-node-title {
+  font-size: 15px;
+  font-weight: 680;
+  fill: var(--diagram-text);
+}
+
+.flow-arrows path {
+  stroke: var(--diagram-edge);
+  stroke-width: 1.8;
+  fill: none;
+  marker-end: url(#flow-arrow);
+}
+
+.flow-edge-label text {
+  font-size: 13px;
+  fill: var(--diagram-muted);
+  font-weight: 650;
+}
+
+.flow-note rect {
+  fill: var(--paper-white);
+  stroke: var(--canvas-grid-strong);
+  stroke-width: 1;
+}
+
+.flow-note text:first-of-type {
+  font-size: 15px;
+  font-weight: 650;
+  fill: var(--diagram-text);
+}
+
+.flow-note text:not(:first-of-type) {
+  font-size: 12px;
+  fill: var(--diagram-muted);
+}
+
+.flow-note path {
+  stroke: var(--diagram-edge);
+  stroke-width: 1;
+  fill: none;
+}

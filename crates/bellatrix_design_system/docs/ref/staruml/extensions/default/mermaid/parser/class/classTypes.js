@@ -1,0 +1,107 @@
+const { parseGenericTypes, sanitizeText } = require("../common.js");
+
+const visibilityValues = ["#", "+", "~", "-", ""];
+
+/**
+ * Parses and stores class diagram member variables/methods.
+ *
+ */
+class ClassMember {
+  constructor(input, memberType) {
+    this.memberType = memberType;
+    this.visibility = "";
+    this.classifier = "";
+    this.text = "";
+    const sanitizedInput = sanitizeText(input);
+    this.parseMember(sanitizedInput);
+  }
+  getDisplayDetails() {
+    let displayText = this.visibility + parseGenericTypes(this.id);
+    if (this.memberType === "method") {
+      displayText += `(${parseGenericTypes(this.parameters.trim())})`;
+      if (this.returnType) {
+        displayText += " : " + parseGenericTypes(this.returnType);
+      }
+    }
+    displayText = displayText.trim();
+    const cssStyle = this.parseClassifier();
+    return {
+      displayText,
+      cssStyle,
+    };
+  }
+  parseMember(input) {
+    let potentialClassifier = "";
+    if (this.memberType === "method") {
+      const methodRegEx = /([#+~-])?(.+)\((.*)\)([\s$*])?(.*)([$*])?/;
+      const match = methodRegEx.exec(input);
+      if (match) {
+        const detectedVisibility = match[1] ? match[1].trim() : "";
+        if (visibilityValues.includes(detectedVisibility)) {
+          this.visibility = detectedVisibility;
+        }
+        this.id = match[2];
+        this.parameters = match[3] ? match[3].trim() : "";
+        potentialClassifier = match[4] ? match[4].trim() : "";
+        this.returnType = match[5] ? match[5].trim() : "";
+        if (potentialClassifier === "") {
+          const lastChar = this.returnType.substring(
+            this.returnType.length - 1
+          );
+          if (/[$*]/.exec(lastChar)) {
+            potentialClassifier = lastChar;
+            this.returnType = this.returnType.substring(
+              0,
+              this.returnType.length - 1
+            );
+          }
+        }
+      }
+    } else {
+      const length = input.length;
+      const firstChar = input.substring(0, 1);
+      const lastChar = input.substring(length - 1);
+      if (visibilityValues.includes(firstChar)) {
+        this.visibility = firstChar;
+      }
+      if (/[$*]/.exec(lastChar)) {
+        potentialClassifier = lastChar;
+      }
+      this.id = input.substring(
+        this.visibility === "" ? 0 : 1,
+        potentialClassifier === "" ? length : length - 1
+      );
+    }
+    this.classifier = potentialClassifier;
+    // Preserve one space only
+    this.id = this.id.startsWith(" ") ? " " + this.id.trim() : this.id.trim();
+    const combinedText = `${
+      this.visibility ? "\\" + this.visibility : ""
+    }${parseGenericTypes(this.id)}${
+      this.memberType === "method"
+        ? `(${parseGenericTypes(this.parameters)})${
+            this.returnType ? " : " + parseGenericTypes(this.returnType) : ""
+          }`
+        : ""
+    }`;
+    this.text = combinedText.replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+    if (this.text.startsWith("\\&lt;")) {
+      this.text = this.text.replace("\\&lt;", "~");
+    }
+  }
+  parseClassifier() {
+    switch (this.classifier) {
+      case "*":
+        return "font-style:italic;";
+      case "$":
+        return "text-decoration:underline;";
+      default:
+        return "";
+    }
+  }
+}
+
+module.exports = {
+  visibilityValues,
+  ClassMember,
+};
