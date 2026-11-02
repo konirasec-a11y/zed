@@ -10,7 +10,6 @@ use gpui::{
     App, Entity, InteractiveElement, IntoElement, MouseButton, RenderOnce,
     Window, div, prelude::*, px, rgb,
 };
-use std::rc::Rc;
 use ui_input::InputField;
 
 #[derive(IntoElement)]
