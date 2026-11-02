@@ -33,7 +33,7 @@ use quick_edit_view::render_quick_edit;
 use ui_input::InputField;
 use bellatrix_project::{ProjectId, ProjectSaveRequested};
 use gpui::{
-    App, Context, DragMoveEvent, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
+    App, AppContext, Context, DragMoveEvent, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
     MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Point, Pixels, Render,
     KeyDownEvent, ScrollEvent,
     SharedString, Task, Window, div, prelude::*, px,
