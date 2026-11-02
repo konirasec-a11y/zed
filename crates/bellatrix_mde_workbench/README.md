@@ -1,7 +1,7 @@
 # Engine-MDE — Zed-native Workbench
 
 This crate now implements a Zed Workspace Item plus Zed Dock Panels **inside the
-Bellatrix repository**, using the pinned `vendor/zed` dependencies. The UI
+Zed fork**, using Zed's native workspace dependencies. The UI
 does not import GPUI Kit and does not create a second Dock or event bus.
 
 ## What is implemented
@@ -53,16 +53,15 @@ Windows build and interaction tests complete.
   `docs/design/docs/{DESIGN_SYSTEM,GPUI_PORT_MAP,UX_ACCEPTANCE}.md`.
 - StarUML: `docs/ref/staruml/src/ui/diagram-editor.js`, **behavioral
   reference only**; copyright notices prohibit copying source.
-- Zed: `vendor/zed/crates/workspace/src/{item,dock,workspace}.rs`,
-  `vendor/zed/crates/ui`, `vendor/zed/crates/ui_input` and
-  `vendor/zed/crates/gpui/examples/drag_drop.rs`.
+- Zed: `crates/workspace/src/{item,dock,workspace}.rs`,
+  `crates/ui`, `crates/ui_input` and
+  `crates/gpui/examples/drag_drop.rs`.
 - Composition: Cordis-rs is the only backend lifecycle and public-event
   infrastructure. UI subscription state is ephemeral.
 
 ## Windows validation
 
 ```powershell
-git submodule update --init --recursive
 rustup toolchain install 1.98.1 --profile minimal --component rustfmt,clippy
 cargo +1.98.1 check -p bellatrix-mde-cordis
 cargo +1.98.1 test -p bellatrix-mde-cordis
