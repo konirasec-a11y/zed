@@ -49,6 +49,51 @@ A presença das ferramentas não constitui certificação UML integral.
 Os testes Cargo/GPUI e casos de uso devem ser aprovados antes de declarar
 editor de classes homologado.
 
+## Interface — notação circular e Quick Edit obrigatório
+
+Para **Interface**, a referência é o `UMLInterfaceView` do StarUML (lollipop:
+**círculo + nome abaixo**, com compartments de atributos, operações e recepções
+quando houver membros). Não desenhar uma Interface como um retângulo de classe
+apenas acrescentando o texto `«interface»`.
+
+Fontes originais **somente para estudo/comportamento**, sem copiar código:
+`crates/bellatrix_design_system/docs/ref/staruml/extensions/essential/uml/quickedits/uml.json`
+(definição `uml.interface`),
+`.../uml/uml-commands.js` (handlers `handleAddSubInterface`,
+`handleAddSuperInterface`, `handleAddRealizingClass`, `handleAddNote`,
+`handleAddConstraint`),
+`.../uml/grammars/uml-name.pegjs` (expressão de nome).
+
+| Quick Edit da Interface | Comportamento exigido |
+| --- | --- |
+| `uml.name-expression` | Campo **no próprio nome**. Aceita `<< stereotype >> [+/#/-/~] name`; Enter confirma via Cordis, Esc cancela |
+| `uml.visibility` | Ícone/menu nativo: `public`, `protected`, `private`, `package` |
+| `uml.add-note` | Cria Note com sua View e NoteLink para a Interface |
+| `uml.add-constraint` | Cria Constraint de propriedade semântica e View com link para a Interface |
+| `uml.add-attribute` | Cria membro Attribute com relação `owns` |
+| `uml.add-operation` | Cria membro Operation com relação `owns` |
+| `uml.add-reception` | Cria membro Reception tipado e mostra seu compartment |
+| `uml.add-subinterface` | Cria uma nova Interface abaixo e Generalization **sub → selecionada** |
+| `uml.add-superinterface` | Cria uma nova Interface acima e Generalization **selecionada → super** |
+| `uml.add-realizing-class` | Cria Class e Interface Realization **classe → interface** |
+
+**Layout do Quick Edit:** visibilidade no alto à esquerda; Note/Constraint à
+esquerda na segunda linha; Attribute, Operation, Reception na primeira linha à
+direita; Sub-Interface, Super-Interface e Realizing Class na segunda linha à
+direita. Apenas ícones com tooltips e rótulos acessíveis, sem criar um painel
+textual. As ações aparecem ao entrar na edição do elemento, não na seleção
+simples. A relação/entidade é criada em **uma só operação versionada**
+`ProjectReplace`; se a validação falhar, não pode sobrar um nó órfão.
+
+O modelo mantém a View de Interface com espaço para o nome e os membros;
+as relações se prendem à circunferência do lollipop, não ao retângulo
+invisível usado para hit testing. Todas as alterações são ordens tipadas
+encaminhadas ao Cordis/ProjectService e não alterações locais em GPUI.
+
+Testes: `bellatrix_mde_cordis/tests/interface_quick_edit.rs` verifica as
+seis ações de criação, mais Name Expression, Attribute, Operation,
+relacionamentos reais e rejeição de revisões obsoletas.
+
 ## Responsabilidades
 
 | Módulo | Papel e tipo de estado |
