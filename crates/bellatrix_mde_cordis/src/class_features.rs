@@ -179,6 +179,8 @@ pub(crate) fn insert_feature(
                 }
             }
         }
+    }
+    if matches!(action,UmlQuickCommand::AddPort | UmlQuickCommand::AddPart) {
         reposition_ports(section,diagram_id,owner_id);
     }
     Ok(())
@@ -190,6 +192,53 @@ mod tests {
         let model=serde_json::from_str(include_str!("../../bellatrix_mde_model/fixtures/todo.json")).unwrap();
         ModelingSection::from_model(&model)
     }
+    #[test]
+    fn contained_views_follow_class_move_and_port_reanchors_on_resize() {
+        let mut section=fixture();
+        let diagram_id=section.diagrams[0].id.clone();
+        insert_feature(&mut section,&diagram_id,"type-task",UmlQuickCommand::AddPort,0).unwrap();
+        insert_feature(&mut section,&diagram_id,"type-task",UmlQuickCommand::AddPart,1).unwrap();
+        let children=contained_ids(&section,"type-task");
+        assert_eq!(children.len(),2);
+        let before=section.diagrams[0].views.iter()
+            .filter(|view|view.subject.as_ref().is_some_and(|id|children.contains(id)))
+            .map(|view|(view.id.clone(),view.geometry.clone())).collect::<Vec<_>>();
+        for view in &mut section.diagrams[0].views {
+            if view.subject.as_deref()==Some("type-task") {
+                view.geometry.translate(35.0,20.0);
+            }
+        }
+        translate_contained_views(&mut section,&diagram_id,"type-task",35.0,20.0);
+        for (id,old) in before {
+            let actual=&section.diagrams[0].views.iter().find(|view|view.id==id).unwrap().geometry;
+            let (Geometry::Rect{x:old_x,y:old_y,..},Geometry::Rect{x,y,..})=(old,actual) else {
+                panic!("contained feature must remain a rectangle")
+            };
+            assert!((x-old_x-35.0).abs()<1e-9);
+            assert!((y-old_y-20.0).abs()<1e-9);
+        }
+        let part_bound=class_minimum_bounds(&section,&diagram_id,"type-task").unwrap();
+        assert!(part_bound.0>80.0);
+        assert!(part_bound.1>48.0);
+        for view in &mut section.diagrams[0].views {
+            if view.subject.as_deref()==Some("type-task") {
+                if let Geometry::Rect{width,..}=&mut view.geometry {*width+=90.0;}
+            }
+        }
+        reposition_ports(&mut section,&diagram_id,"type-task");
+        let class_x=section.diagrams[0].views.iter()
+            .find(|v|v.subject.as_deref()==Some("type-task"))
+            .and_then(|v|match v.geometry {
+                Geometry::Rect{x,width,..}=>Some(x+width),_=>None
+            }).unwrap();
+        let port_id=section.elements.iter().find(|e|e.kind=="uml.port").unwrap().id.as_str();
+        let port_x=section.diagrams[0].views.iter().find(|v|
+            v.subject.as_deref()==Some(port_id)).and_then(|v|match v.geometry {
+                Geometry::Rect{x,width,..}=>Some(x+width/2.0),_=>None
+            }).unwrap();
+        assert!((port_x-class_x).abs()<1e-9);
+    }
+
     #[test]
     fn template_port_part_are_owned_and_visually_distinct() {
         let mut section=fixture();
