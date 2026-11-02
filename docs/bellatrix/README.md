@@ -2,7 +2,7 @@
 
 Bellatrix is implemented directly within the **Zed fork**. Zed owns the GPUI runtime, editor, workspace, docking, layouts, project worktrees and the `zed.messages` protocol. Bellatrix extends the Zed application with its own bounded backend domains.
 
-**Engine-MDE Inspector:** [especificação com diagramas e critérios mínimos](inspector.md). O Inspector reflete o elemento selecionado; o Property Editor constrói controles tipados e o Project Panel do Zed continua responsável por arquivos.\n\n## Runtime boundaries
+**Quick Edit contextual:** [opções de cada elemento e estado de implementação](quick-edit.md) — contrato prioritário derivado da referência HTML/JSON StarUML.\n\n**Engine-MDE Inspector:** [especificação com diagramas e critérios mínimos](inspector.md). O Inspector reflete o elemento selecionado; o Property Editor constrói controles tipados e o Project Panel do Zed continua responsável por arquivos.\n\n## Runtime boundaries
 
 - `crates/bellatrix_project`: ProjectDocument, identities, revision control and persisted Bellatrix domain sections. It **does not replace** the Zed `project` crate.
 - `crates/bellatrix_mde_{model,modeling,cordis,rust_generator,html_exporter,cli}`: headless Model-Driven Engineering domain and its typed Cordis events/services.
