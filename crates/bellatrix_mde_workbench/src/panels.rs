@@ -5,7 +5,7 @@
 //! docs/design/ while Zed still owns placement, focus and persistence.
 
 use crate::{MdeToolDrag, MdeWorkbenchItem, WorkbenchPalette, hierarchy::project_hierarchy, integration::{OpenMdeWorkbench, OpenMdeSymbols}, property_editor::render_inspector};
-use bellatrix_mde_cordis::ModelingElementKind;
+use bellatrix_mde_cordis::{ModelingElementKind, ModelingRelationKind, ModelingTool};
 use bellatrix_mde_modeling::{inspect_element, PropertyEditor};
 use bellatrix_ui_symbols::{glyph, ShapeKind};
 use gpui::{
@@ -88,6 +88,34 @@ impl PanelState {
     }
 }
 
+fn tool_glyph(tool: ModelingTool) -> ShapeKind {
+    match tool {
+        ModelingTool::Element(kind) => match kind {
+            ModelingElementKind::Class | ModelingElementKind::Template
+                | ModelingElementKind::AssociationClass => ShapeKind::Class,
+            ModelingElementKind::Interface => ShapeKind::Interface,
+            ModelingElementKind::Enumeration => ShapeKind::Enum,
+            ModelingElementKind::Package | ModelingElementKind::Model
+                | ModelingElementKind::Subsystem => ShapeKind::Package,
+            ModelingElementKind::Comment => ShapeKind::Note,
+            ModelingElementKind::Frame => ShapeKind::Boundary,
+            ModelingElementKind::NaryAssociation => ShapeKind::Aggregate,
+            ModelingElementKind::Signal | ModelingElementKind::DataType
+                | ModelingElementKind::PrimitiveType => ShapeKind::Class,
+        },
+        ModelingTool::Relation(kind) => match kind {
+            ModelingRelationKind::Association | ModelingRelationKind::DirectedAssociation
+                | ModelingRelationKind::Containment => ShapeKind::Association,
+            ModelingRelationKind::Aggregation => ShapeKind::Aggregate,
+            ModelingRelationKind::Composition => ShapeKind::Composition,
+            ModelingRelationKind::Generalization
+                | ModelingRelationKind::InterfaceRealization => ShapeKind::Inheritance,
+            ModelingRelationKind::Dependency | ModelingRelationKind::Realization
+                | ModelingRelationKind::TemplateBinding => ShapeKind::Dependency,
+        },
+    }
+}
+
 pub struct MdeLeftPanel {
     state: PanelState,
 }
@@ -151,42 +179,53 @@ impl Render for MdeLeftPanel {
             }
         }
 
-        let tools = [
-            ("class", "Class", ModelingElementKind::Class),
-            ("interface", "Interface", ModelingElementKind::Interface),
+        // StarUML Class Diagram toolbox: basic classifiers and relations,
+        // advanced classifiers/connectors, packages and comment. A symbol
+        // appears only if it has a typed backend command (not a fake button).
+        let tool_groups: [(&str, Vec<ModelingTool>); 6] = [
+            ("CLASSES (BASIC)", ModelingElementKind::BASIC.iter().copied()
+                .map(ModelingTool::Element).collect()),
+            ("RELATIONSHIPS (BASIC)", ModelingRelationKind::BASIC.iter().copied()
+                .map(ModelingTool::Relation).collect()),
+            ("CLASSES (ADVANCED)", ModelingElementKind::ADVANCED.iter().copied()
+                .map(ModelingTool::Element).collect()),
+            ("RELATIONSHIPS (ADVANCED)", ModelingRelationKind::ADVANCED.iter().copied()
+                .map(ModelingTool::Relation).collect()),
+            ("PACKAGES", ModelingElementKind::PACKAGES.iter().copied()
+                .map(ModelingTool::Element).chain(
+                    ModelingRelationKind::PACKAGES.iter().copied().map(ModelingTool::Relation)
+                ).collect()),
+            ("ANNOTATIONS", ModelingElementKind::ANNOTATIONS.iter().copied()
+                .map(ModelingTool::Element).collect()),
         ];
-        let mut tool_buttons = Vec::new();
-        for (id, name, kind) in tools {
-            let click_item = item.clone();
-            let glyph_bytes = glyph(match kind {
-                ModelingElementKind::Class => ShapeKind::Class,
-                ModelingElementKind::Interface => ShapeKind::Interface,
-            });
-            // A real drag source, not a Button nested inside a draggable div.
-            // Zed/GPUI dispatches the MdeToolDrag payload to the Canvas.
+        let mut tool_buttons: Vec<gpui::AnyElement> = Vec::new();
+        for (group_index,(group_name,tools)) in tool_groups.into_iter().enumerate() {
             tool_buttons.push(
-                div()
-                    .id(format!("mde-tool-drag-{id}"))
-                    .w_full()
-                    .h(px(34.0))
-                    .flex().items_center().gap_2().px_2()
-                    .border_1().border_color(palette.border)
-                    .rounded_sm()
-                    .cursor_grab()
-                    .on_drag(MdeToolDrag {
-                        project_id: project.clone(), kind,
-                    }, |drag: &MdeToolDrag, _, _, cx| {
-                        cx.new(|_| drag.clone())
-                    })
-                    .on_click(move |_, _, cx| {
-                        click_item.update(cx, |workbench, cx| {
-                            workbench.select_tool(kind, cx);
-                        });
-                    })
-                    .child(svg().data(glyph_bytes).w(px(18.0)).h(px(18.0))
-                        .text_color(palette.muted))
-                    .child(Label::new(name)),
+                div().id(format!("mde-tool-group-{group_index}"))
+                    .pt_2().text_xs().text_color(palette.muted)
+                    .child(group_name).into_any_element()
             );
+            for (index,tool) in tools.into_iter().enumerate() {
+                let click_item = item.clone();
+                let glyph_bytes = glyph(tool_glyph(tool));
+                tool_buttons.push(
+                    div()
+                        .id(format!("mde-tool-{group_index}-{index}"))
+                        .w_full().h(px(34.0)).flex().items_center().gap_2().px_2()
+                        .border_1().border_color(palette.border).rounded_sm()
+                        .cursor_grab()
+                        .on_drag(MdeToolDrag {
+                            project_id: project.clone(), kind:tool,
+                        }, |drag: &MdeToolDrag, _, _, cx| cx.new(|_| drag.clone()))
+                        .on_click(move |_, _, cx| {
+                            click_item.update(cx, |workbench, cx| workbench.select_tool(tool, cx));
+                        })
+                        .child(svg().data(glyph_bytes).w(px(18.0)).h(px(18.0))
+                            .text_color(palette.muted))
+                        .child(Label::new(tool.label()))
+                        .into_any_element()
+                );
+            }
         }
 
         div()
@@ -254,9 +293,11 @@ impl Render for MdeLeftPanel {
                             .p_2().flex().flex_col().gap_2()
                             .children(tool_buttons)
                             .child(Label::new(match chosen {
-                                Some(ModelingElementKind::Class) => "Class: click canvas to place",
-                                Some(ModelingElementKind::Interface) => "Interface: click canvas to place",
-                                None => "Drag Class / Interface onto the canvas",
+                                Some(ModelingTool::Element(kind)) =>
+                                    format!("{}: drag to canvas or click empty space",kind.label()),
+                                Some(ModelingTool::Relation(kind)) =>
+                                    format!("{}: click source, then target",kind.label()),
+                                None => "Drag shapes; click endpoints to connect".into(),
                             }))
                             .child(
                                 Button::new("bellatrix-open-symbol-library", "Browse symbol library")
