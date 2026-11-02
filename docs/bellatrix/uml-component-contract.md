@@ -35,6 +35,30 @@ Este contrato pertence à engine MDE. Ele não redefine Bellatrix como editor UM
 
 Esses contratos não constituem uma prova formal em teoria das categorias. São fronteiras e invariantes executáveis que evitam confundir a representação visual com o tipo representado. A implementação usa composição explícita em vez de copiar o comportamento de Interface para cada forma.
 
+## Especialização de Class: Quick Edit completo
+
+Referência comportamental: `crates/bellatrix_design_system/docs/ref/staruml/extensions/essential/uml/quickedits/uml.json` (bloco `uml.class`) e `uml-commands.js` (os handlers originais); referência visual da engine: `crates/bellatrix_design_system/docs/design/`. O comportamento é reimplementado em Rust, não copiado do Electron.
+
+As **17 entradas** de Class são compostas a partir dos tipos/capacidades; não há outro `ClassEngine` concorrendo com o executor comum. A base contém `Name Expression`, `Visibility`, `Add Note`, `Add Constraint`, `Add Attribute`, `Add Operation`, `Add Reception`. As especializações de Class são:
+
+| Faixa à direita | Ação | Efeito na engine |
+| --- | --- | --- |
+| Linha 1 | Add Template Parameter | `uml.template_parameter` com `owns` para Class; compartimento de parâmetros |
+| Linha 2 | Add Sub-Class / Add Super-Class | Class + Generalization com direção correspondente |
+| Linha 2 | Add Provided Interface | Interface + `uml.interface_realization` (Class → Interface) |
+| Linha 2 | Add Required Interface | Interface + `uml.dependency` (Class → Interface) |
+| Linha 3 | Add Associated Class | Class + `uml.association` |
+| Linha 3 | Add Aggregated Class | Class + `uml.aggregation`; diamante na Class de origem |
+| Linha 3 | Add Composited Class | Class + `uml.composition`; diamante preenchido na Class de origem |
+| Linha 4 | Add Port | `uml.port` com `owns` e View pequena ancorada na borda de Class |
+| Linha 4 | Add Part | `uml.part` com `owns` e View retangular contida na Class |
+
+A UI usa **quatro fileiras à direita**, em vez de comprimir todas as especializações na segunda linha. Note/Constraint e Visibility permanecem à esquerda. Os `IconButton` usam tooltips, rótulos acessíveis e despacham as ações tipadas correspondentes.
+
+O fluxo `GPUI → MdeUiCommand::QuickEdit → Cordis → MdePlugin → ProjectReplace` aplica as operações em **uma revisão do projeto**, sem elementos órfãos se houver erro. `UmlQuickCommand::accepts` bloqueia ações Class-only quando a seleção é Interface ou Package. Ports e Parts são identidades semânticas próprias, não atributos convertidos em caixas. A movimentação da Class transporta essas Views; o redimensionamento preserva Parts e reposiciona Ports na borda. Se a validação de domínio rejeitar uma ação, nenhuma alteração parcial é persistida.
+
+**Limite atual de fidelidade:** a persistência registra os tipos e relações especificados, mas ainda é necessário validar visualmente o layout completo, a aparência dos templates e os detalhes de notação de ports/parts no Windows. Não afirmar equivalência integral ao StarUML até validar os comportamentos com o mantenedor.
+
 ## Validação local
 
 ```powershell
@@ -46,4 +70,4 @@ cargo +1.98.1 run -p zed
 
 Comparar antes/depois ao redimensionar uma Interface vazia e outra com membros. Repetir com zoom diferente; criar Note/Constraint a partir de Class, Interface e Package; confirmar os links e a persistência. O código e os testes adicionados ainda exigem compilação e validação visual local.
 
-Ações especializadas ainda pendentes (por exemplo, portas, partes e interfaces requeridas/providas pelo Quick Edit de Class) permanecem indisponíveis; não devem aparecer como botões com implementação fictícia. Nenhum PR ou execução de CI deve ser aberto para substituir essa validação local.
+As ações específicas de Class estão expostas; ações de outros tipos UML que ainda não possuem contrato de domínio permanecem indisponíveis. Nenhum PR ou execução de CI deve ser aberto para substituir essa validação local.
