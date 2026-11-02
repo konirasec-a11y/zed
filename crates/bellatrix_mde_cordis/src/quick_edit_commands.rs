@@ -60,6 +60,14 @@ fn apply_to_candidate(section: &mut ModelingSection, request: &ModelingQuickEdit
     if !request.action.accepts(&kind) {
         return Err(format!("{kind} does not support {:?}", request.action));
     }
+    if matches!(request.action,
+        UmlQuickCommand::AddTemplateParameter | UmlQuickCommand::AddPort | UmlQuickCommand::AddPart
+    ) {
+        return crate::class_features::insert_feature(
+            section, &request.diagram_id, &request.element_id, request.action,
+            request.expected_revision,
+        );
+    }
     if request.action == UmlQuickCommand::AddReception {
         add_member::append_member(section, &request.element_id,
             add_member::ModelingMemberKind::Reception, request.expected_revision)?;
@@ -85,6 +93,13 @@ fn apply_to_candidate(section: &mut ModelingSection, request: &ModelingQuickEdit
             (subtype_kind, if interface { "Interface" } else { "Class" }, offset, size, "uml.generalization", below)
         }
         UmlQuickCommand::AddRealizingClass => ("rust.struct", "Class", (width + 65.0, height + 50.0), (185.0, 112.0), "uml.interface_realization", true),
+        UmlQuickCommand::AddProvidedInterface => ("rust.trait", "Interface", (width + 55.0, -75.0), (120.0, 76.0), "uml.interface_realization", false),
+        UmlQuickCommand::AddRequiredInterface => ("rust.trait", "Interface", (width + 55.0, height + 10.0), (120.0, 76.0), "uml.dependency", false),
+        UmlQuickCommand::AddAssociatedClass => ("rust.struct", "Class", (width + 80.0, 0.0), (185.0, 112.0), "uml.association", false),
+        UmlQuickCommand::AddAggregatedClass => ("rust.struct", "Class", (width + 80.0, 0.0), (185.0, 112.0), "uml.aggregation", false),
+        UmlQuickCommand::AddCompositedClass => ("rust.struct", "Class", (width + 80.0, 0.0), (185.0, 112.0), "uml.composition", false),
+        UmlQuickCommand::AddTemplateParameter | UmlQuickCommand::AddPort | UmlQuickCommand::AddPart =>
+            return Err("contained features must use Class specialization".into()),
         UmlQuickCommand::AddReception => return Err("reception must use the member command".into()),
     };
     let new_id = fresh_id(section, "node", request.expected_revision)?;
