@@ -12,7 +12,7 @@ use bellatrix_mde_modeling::{
 };
 use gpui::{
     AnyElement, App, Entity, IntoElement, MouseButton, StatefulInteractiveElement,
-    Window, div, prelude::*, px,
+    div, prelude::*, px,
 };
 use serde_json::Value;
 use ui::{Button, Label, prelude::*};
