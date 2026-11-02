@@ -6,7 +6,7 @@
 
 The built-in `bellatrix_zed_host` is installed directly in `crates/zed/src/main.rs` after `initialize_workspace(app_state.clone(), cx)`. No separate GPUI runtime, third-party overlay or `scripts/enable_zed_desktop.py` is required.
 
-The host owns the Cordis Project/MDE plugins and a `MdeUiBridge`. `register_mde_workspace` observes new Zed Workspaces, creates the MDE `Item`, and adds its Dock `Panel` contributions. The bridge relays user operations as typed Cordis commands and observes project revision changes.
+The host owns the Cordis Project/MDE plugins and a `MdeUiBridge`. `register_mde_workspace` observes new Zed Workspaces **to register `bellatrix_mde::OpenMdeWorkbench` only**. Invoking that native action from the Zed command palette opens the MDE `Item` and its Dock `Panel` contributions; invoking it again refocuses the existing Item without adding another one. This preserves Zed's ordinary project/window UX. The bridge relays user operations as typed Cordis commands and observes model revision changes. The interim host still loads a single model from a file or demo fixture; adopting Zed `ProjectPath`/BufferStore and `SerializableItem` is the next step, not yet complete.
 
 Implemented operation paths include Class/Interface creation, rename, view move/resize, project save and a drag-and-drop Toolbox. These use the MDE graph validation and versioned `bellatrix_project` service, rather than writing model data in the GUI.
 
