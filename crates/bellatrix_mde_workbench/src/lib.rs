@@ -904,7 +904,10 @@ impl Render for MdeWorkbenchItem {
                         let figure: gpui::AnyElement = if UmlFigure::supports(&element.kind) {
                             let edit_owner = cx.weak_entity();
                             let edit_id = element.id.clone();
-                            let mut figure = UmlFigure::new(element.kind.clone(), element.name.clone())
+                            let figure_label = if element.kind == "uml.constraint" {
+                                format!("{{{}}}", element.name)
+                            } else { element.name.clone() };
+                            let mut figure = UmlFigure::new(element.kind.clone(), figure_label)
                                 .selected(is_selected)
                                 .on_title_edit(move |window,cx| {
                                     let id=edit_id.clone();
