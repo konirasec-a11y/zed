@@ -101,6 +101,14 @@ persistência Bellatrix são implementações próprias, tipadas e testadas.
 Até esses testes passarem, usar os termos **engine** e **contribuição integrada**
 para Zed/MDE, não afirmar "plataforma de plugins de terceiros concluída".
 
+## Arquitetura científica da Engine-MDE
+
+**Obrigatório para as próximas etapas:** [MDE_GRAPH_TRANSFORMATION_ARCHITECTURE.md](MDE_GRAPH_TRANSFORMATION_ARCHITECTURE.md)
+define ASGs tipados/atribuídos, transformação M2M antes de M2T,
+regras algébricas, rastreabilidade entre modelos e critérios de aceitação.
+O [contrato de relações](GRAPH_RELATIONSHIPS.md) é o primeiro corte
+concreto dessa separação entre grafo e notação.
+
 ## Escopo de implementação em andamento
 
 A primeira engine MDE inclui diagrama UML de classes como caso real para
