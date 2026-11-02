@@ -81,6 +81,18 @@ impl Plugin for MdePlugin {
                 },
             ))
             .map_err(|e| io::Error::other(e.to_string()))?;
+        let link_projects = Arc::clone(&projects);
+        let _create_relation = ctx
+            .on::<crate::create_relation::ModelingCreateRelation, _>(responder(
+                move |ctx: Context, req: crate::create_relation::ModelingCreateRelationRequested| {
+                    let projects = Arc::clone(&link_projects);
+                    async move {
+                        let result = crate::create_relation::create_relation(&ctx, &projects, req).await;
+                        Ok::<_, Infallible>(Some(result))
+                    }
+                },
+            ))
+            .map_err(|e| io::Error::other(e.to_string()))?;
         let delete_projects = Arc::clone(&projects);
         let _deletion = ctx
             .on::<crate::delete_element::ModelingDeleteElement, _>(responder(
