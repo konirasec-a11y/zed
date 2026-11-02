@@ -4,7 +4,7 @@ use bellatrix_mde_cordis::{
     MdePlugin, ModelingCreateElement, ModelingCreateElementRequested,
     ModelingCreateRelation, ModelingCreateRelationRequested,
     ModelingElementKind, ModelingRelationKind, ModelingDeleteElement,
-    ModelingDeleteElementRequested, with_model,
+    ModelingDeleteElementRequested, ModelingMoveView, ModelingMoveViewRequested, with_model,
 };
 use bellatrix_mde_model::{Geometry, ModelingSection, Project};
 use bellatrix_project::{
@@ -15,7 +15,7 @@ use cordis::{Context, Plugin, PreparedPlugin, Routing};
 use std::sync::Arc;
 
 #[tokio::test]
-async fn complete_class_diagram_toolset_is_revisioned_and_isolated() {
+async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
     let cx=Context::new();
     let service=Arc::new(ProjectService::new());
     let provider=ProjectPlugin::new(Arc::clone(&service));
@@ -88,8 +88,8 @@ async fn complete_class_diagram_toolset_is_revisioned_and_isolated() {
     for kind in connector_ids {
         let relation=result.relations.iter().find(|r|r.kind==kind).unwrap();
         assert!(result.diagrams.iter().flat_map(|d| &d.views)
-            .any(|v| v.subject.as_deref()==Some(&relation.id)
-                && matches!(v.geometry,Geometry::Path{..})));
+            .any(|v| v.subject.as_deref()==Some(relation.id.as_str())
+                && matches!(&v.geometry,Geometry::Path{..})));
     }
     // Deleting a connector must not cascade through its endpoint classes.
     let target=result.relations.iter().find(|r|r.kind=="uml.aggregation").unwrap().id.clone();
@@ -104,6 +104,25 @@ async fn complete_class_diagram_toolset_is_revisioned_and_isolated() {
     ).unwrap();
     assert!(section.elements.iter().any(|e|e.id==class));
     assert!(section.elements.iter().any(|e|e.id==interface));
+    let class_view=section.diagrams.iter().flat_map(|d|&d.views)
+        .find(|v|v.subject.as_deref()==Some(class.as_str())).unwrap().id.clone();
+    let edge_id=section.relations.iter().find(|r|r.kind=="uml.generalization").unwrap().id.clone();
+    let previous=section.diagrams.iter().flat_map(|d|&d.views)
+        .find(|v|v.subject.as_deref()==Some(edge_id.as_str())).unwrap().geometry.clone();
+    assert!(matches!(
+        cx.query::<ModelingMoveView>(Routing::Unscoped,ModelingMoveViewRequested{
+            project_id:id.clone(),view_id:class_view,dx:45.0,dy:25.0,
+            expected_revision:25,
+        }).await.unwrap(),QueryOutcome::Answer(Ok(26))
+    ));
+    let updated=service.snapshot(&id).unwrap();
+    let after:ModelingSection=serde_json::from_value(
+        updated.section("bellatrix.bellatrix-mde-modeling").unwrap().clone()
+    ).unwrap();
+    let rerouted=after.diagrams.iter().flat_map(|d|&d.views)
+        .find(|v|v.subject.as_deref()==Some(edge_id.as_str())).unwrap();
+    assert_ne!(previous,rerouted.geometry,"auto-routed UML connector must follow its node");
+    assert_eq!(updated.revision(),26);
     plugin.dispose().await.unwrap();
     provider.dispose().await.unwrap();
 }
