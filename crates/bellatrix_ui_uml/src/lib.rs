@@ -2,6 +2,8 @@
 //! Domain Elements/Relations remain in bellatrix_mde_model; this crate owns
 //! only presentation, hit targets, inline editing and contextual icon controls.
 mod class;
+mod interface;
+pub use interface::UmlInterfaceBall;
 mod inline_edit;
 mod quick_edit;
 mod figures;
