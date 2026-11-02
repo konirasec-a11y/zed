@@ -34,4 +34,4 @@ Existing documents preserve their section namespaces. The current MDE namespace 
 
 The Cordis runtime provides public events, services, coeffects and lifecycle management; no second event bus or `EngineManager` belongs in Bellatrix. Unloading the engine must release runtime resources while preserving user-authored project data.
 
-The MDE Canvas is a Zed `workspace::Item`; its Toolbox, Inspector and related panes are Zed `workspace::dock::Panel` contributors. Use Zed's layout, shortcuts and UX patterns. StarUML remains a behavior study for MDE only; proprietary source must not be copied.
+**Inspector / Property Editor:** [contrato normativo ilustrado](inspector.md) — descritores de elementos base/especializados, navegação de atributos/operações e edição tipada pelo Cordis. O Property Editor não é o Project Panel do Zed.\n\nThe MDE Canvas is a Zed `workspace::Item`; its Toolbox, Inspector and related panes are Zed `workspace::dock::Panel` contributors. Use Zed's layout, shortcuts and UX patterns. StarUML remains a behavior study for MDE only; proprietary source must not be copied.
