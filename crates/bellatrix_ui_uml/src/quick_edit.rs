@@ -46,12 +46,11 @@ impl UmlQuickEdit {
 
 impl RenderOnce for UmlQuickEdit {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        // Mirror the reference 25px Quick Edit grid. Buttons are glyph-only
-        // and arranged in two rows around the currently edited classifier.
-        let mut upper = Vec::new();
-        let mut lower = Vec::new();
+        // Preserve the source Quick Edit row indices: Class has four rows,
+        // Interface has two. Never collapse specialized rows onto one strip.
+        let mut rows: [Vec<gpui::AnyElement>; 4] = std::array::from_fn(|_| Vec::new());
         for action in self.actions {
-            let handler=self.handler.clone();
+            let handler = self.handler.clone();
             let button=IconButton::new(format!("uml-action-{}",action.id),action.icon)
                 .shape(IconButtonShape::Square)
                 .aria_label(action.label)
@@ -63,16 +62,17 @@ impl RenderOnce for UmlQuickEdit {
                     handler(action.id,window,cx);
                     cx.stop_propagation();
                 }).into_any_element();
-            if action.row<=1 {upper.push(button);} else {lower.push(button);}
+            let row=usize::from(action.row.saturating_sub(1)).min(3);
+            rows[row].push(button);
         }
         div().id(format!("bellatrix-uml-quick-actions-{}",self.side))
             .flex().flex_col().gap_1()
             .on_mouse_down(MouseButton::Left,|_,_,cx|cx.stop_propagation())
-            .when(!upper.is_empty(),|el|el.child(
-                div().flex().gap_1().children(upper)
-            ))
-            .when(!lower.is_empty(),|el|el.child(
-                div().flex().gap_1().children(lower)
+            .children(rows.into_iter().enumerate().filter_map(|(index,buttons)|
+                (!buttons.is_empty()).then(|| {
+                    div().id(format!("bellatrix-quick-row-{index}")).flex().gap_1()
+                        .children(buttons)
+                })
             ))
     }
 }
