@@ -166,6 +166,9 @@ fn apply_to_candidate(section: &mut ModelingSection, request: &ModelingQuickEdit
             properties: Default::default(),
         });
     }
+    // Quick Edit creates the same domain Relations as Toolbox. Its line must
+    // participate in sibling-lane routing instead of remaining superimposed.
+    create_relation::reroute(section, &request.diagram_id);
     Ok(())
 }
 
