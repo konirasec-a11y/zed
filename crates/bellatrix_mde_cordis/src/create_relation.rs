@@ -134,17 +134,30 @@ fn lane_for_relation(section: &ModelingSection, diagram_id: &str, relation: &Rel
     (index as f64 - (peers.len() - 1) as f64 / 2.0) * 48.0
 }
 
-pub(crate) fn reroute(section: &mut ModelingSection, diagram_id: &str) {
-    let routes = section.relations.iter()
+/// Read-only projection for auto-routed UML relationships. The Canvas can
+/// show separated lanes in previously saved projects without silently
+/// rewriting their ProjectDocument or incrementing the revision.
+pub fn projected_automatic_routes(
+    section: &ModelingSection, diagram_id: &str
+) -> std::collections::BTreeMap<String, Geometry> {
+    section.relations.iter()
         .filter(|relation| relation.kind.starts_with("uml.")
             && relation.properties.get("routing").and_then(serde_json::Value::as_str) == Some("automatic"))
         .filter_map(|relation| route_with_lane(
             section, diagram_id, &relation.from, &relation.to,
             lane_for_relation(section, diagram_id, relation),
-        ).ok().map(|geometry| (relation.id.clone(), geometry))).collect::<Vec<_>>();
+        ).ok().map(|geometry| (relation.id.clone(), geometry)))
+        .collect()
+}
+
+/// The same projection becomes persisted geometry only during a real edit.
+pub(crate) fn reroute(section: &mut ModelingSection, diagram_id: &str) {
+    let routes = projected_automatic_routes(section, diagram_id);
     if let Some(diagram) = section.diagrams.iter_mut().find(|diagram| diagram.id == diagram_id) {
         for (subject, geometry) in routes {
-            if let Some(view) = diagram.views.iter_mut().find(|view| view.subject.as_deref() == Some(subject.as_str())) {
+            if let Some(view) = diagram.views.iter_mut().find(|view|
+                view.subject.as_deref() == Some(subject.as_str())
+            ) {
                 view.geometry = geometry;
             }
         }
