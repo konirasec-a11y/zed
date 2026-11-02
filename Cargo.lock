@@ -2156,13 +2156,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "bellatrix_mde"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "petgraph",
+ "prost",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
+]
+
+[[package]]
 name = "bellatrix_mde_cli"
 version = "0.1.0"
 dependencies = [
+ "bellatrix_mde",
  "bellatrix_mde_cordis",
  "bellatrix_mde_html_exporter",
- "bellatrix_mde_model",
- "bellatrix_mde_modeling",
  "bellatrix_mde_rust_generator",
  "clap",
  "cordis-rs",
@@ -2174,9 +2185,8 @@ dependencies = [
 name = "bellatrix_mde_cordis"
 version = "0.1.0"
 dependencies = [
+ "bellatrix_mde",
  "bellatrix_mde_html_exporter",
- "bellatrix_mde_model",
- "bellatrix_mde_modeling",
  "bellatrix_mde_rust_generator",
  "bellatrix_project",
  "cordis-rs",
@@ -2189,41 +2199,27 @@ dependencies = [
 name = "bellatrix_mde_html_exporter"
 version = "0.1.0"
 dependencies = [
- "bellatrix_mde_model",
- "bellatrix_mde_modeling",
+ "bellatrix_mde",
  "serde_json",
-]
-
-[[package]]
-name = "bellatrix_mde_model"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "prost",
- "serde",
- "serde_json",
- "thiserror 2.0.17",
-]
-
-[[package]]
-name = "bellatrix_mde_modeling"
-version = "0.1.0"
-dependencies = [
- "bellatrix_mde_model",
- "petgraph",
- "serde",
- "serde_json",
- "thiserror 2.0.17",
 ]
 
 [[package]]
 name = "bellatrix_mde_rust_generator"
 version = "0.1.0"
 dependencies = [
- "bellatrix_mde_model",
- "bellatrix_mde_modeling",
+ "bellatrix_mde",
+ "bellatrix_mde_templates",
  "serde_json",
  "toml 0.9.8",
+]
+
+[[package]]
+name = "bellatrix_mde_templates"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tera",
 ]
 
 [[package]]
@@ -2231,9 +2227,8 @@ name = "bellatrix_mde_workbench"
 version = "0.1.0"
 dependencies = [
  "bellatrix_design_system",
+ "bellatrix_mde",
  "bellatrix_mde_cordis",
- "bellatrix_mde_model",
- "bellatrix_mde_modeling",
  "bellatrix_project",
  "bellatrix_ui_symbols",
  "bellatrix_ui_uml",
@@ -2321,7 +2316,9 @@ name = "bellatrix_ui_uml"
 version = "0.1.0"
 dependencies = [
  "bellatrix_design_system",
+ "bellatrix_mde",
  "gpui",
+ "log",
  "ui",
  "ui_input",
 ]
@@ -2330,8 +2327,8 @@ dependencies = [
 name = "bellatrix_zed_host"
 version = "0.1.0"
 dependencies = [
+ "bellatrix_mde",
  "bellatrix_mde_cordis",
- "bellatrix_mde_model",
  "bellatrix_mde_workbench",
  "bellatrix_project",
  "cordis-rs",
@@ -18132,6 +18129,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5fed54709c5b3a53d09bb1c113ea4f5ceafd1e772ddcb0030a82e1d56c087b08"
 dependencies = [
  "new_debug_unreachable",
+]
+
+[[package]]
+name = "tera"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "61e0cadeeb54426080b4c5395d59769ce8293f542cc25511c167c742b2175809"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
