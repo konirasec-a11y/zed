@@ -2,7 +2,7 @@
 //! Semantic edges/ordering belong to bellatrix_mde_modeling. Tera handles
 //! text only; publishing the resulting Plan is a separate explicit operation.
 use bellatrix_mde_model::{Element, Project};
-use bellatrix_mde_modeling::{GenerationModel, Plan, physical_path};
+use bellatrix_mde_modeling::{GenerationModel, GenerationUnit, Plan, physical_path};
 use bellatrix_mde_templates::TemplatePack;
 use serde_json::json;
 use std::{
@@ -41,8 +41,8 @@ pub fn plan_rust(
         }
         let path = declaration_file(project, element)?;
         let rendered = match element.kind.as_str() {
-            "rust.struct" => Some(render_struct(project, element, selected, templates, plan, skeleton)?),
-            "rust.trait" => Some(render_trait(project, element, selected, templates, plan)?),
+            "rust.struct" => Some(render_struct(project, element, unit, selected, templates, plan, skeleton)?),
+            "rust.trait" => Some(render_trait(project, element, unit, selected, templates, plan)?),
             "rust.item" => render_item(element, templates, plan)?,
             _ => render_function(element, false, templates, plan, skeleton)?,
         };
@@ -108,7 +108,7 @@ fn rust_annotations(element: &Element) -> String {
 }
 
 fn render_struct(
-    project: &Project, element: &Element, selected: &HashSet<String>,
+    project: &Project, element: &Element, unit: &GenerationUnit, selected: &HashSet<String>,
     templates: &TemplatePack, plan: &mut Plan, skeleton: bool,
 ) -> GenResult<String> {
     let mut fields = Vec::new();
@@ -135,11 +135,14 @@ fn render_struct(
         "name": element.name,
         "fields": fields,
         "methods": methods,
+        // Graph references are resolved by the MDE domain. A target adapter
+        // can map these to imports using its own language/metamodel rules.
+        "requires": unit.requires,
     }))?)
 }
 
 fn render_trait(
-    project: &Project, element: &Element, selected: &HashSet<String>,
+    project: &Project, element: &Element, unit: &GenerationUnit, selected: &HashSet<String>,
     templates: &TemplatePack, plan: &mut Plan,
 ) -> GenResult<String> {
     let mut methods = Vec::new();
@@ -154,6 +157,7 @@ fn render_trait(
         "annotations": rust_annotations(element),
         "name": element.name,
         "methods": methods,
+        "requires": unit.requires,
     }))?)
 }
 
