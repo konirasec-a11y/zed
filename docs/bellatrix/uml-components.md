@@ -100,6 +100,26 @@ Uma ligação não é um `Element` renderizado como caixa. A engine persiste
 uma `Relation { kind, from, to, properties }` e uma `View` de
 `Geometry::Path`, no mesmo `ProjectReplace(expected_revision)`.
 
+**Relações existentes e paralelas:** o fixture `todo.json` contém
+`ref-task` (`depends_on`), cujo caminho é uma curva manual, anterior às
+ferramentas UML; ele deve aparecer no Model Explorer e no Inspector como
+relação do projeto, apesar de não começar com `uml.`. A notação da curva
+é Dependency tracejada. Quando várias relações ligam o mesmo par de
+elementos (inclusive em sentidos opostos), o algoritmo separa os
+caminhos automáticos em **lanes** com ancoragens independentes nas bordas,
+e não desenha Dependency e Composition no mesmo traço. Os paths manuais
+não são alterados. Ao reabrir um projeto existente, o Canvas projeta
+as rotas automáticas separadas **sem regravar a geometria persistida**;
+uma edição posterior sincroniza os caminhos via `ProjectReplace`.
+
+**Tipo e símbolo:** o Quick Edit e a Toolbox compartilham a semântica
+`uml.association`; Aggregation e Composition são definidos pela
+propriedade `end1Aggregation=shared|composite`. O renderer desenha,
+respectivamente, o diamante vazio ou preenchido; também preserva
+compatibilidade com relações antigas do tipo `uml.aggregation` e
+`uml.composition`. O Explorer deve mostrar os rótulos
+“aggregation”/“composition”, não chamar ambas apenas de “association”.
+
 - **Renderização:** `crates/bellatrix_ui_uml/src/relationship.rs` usa
   `gpui::canvas`, `PathBuilder::stroke/fill` e `window.paint_path`, com
   cores semânticas do tema Zed. **Não** depender de SVG dinâmico sem cor
