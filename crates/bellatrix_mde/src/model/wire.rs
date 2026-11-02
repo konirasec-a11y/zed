@@ -1,5 +1,5 @@
 //! A typed protobuf envelope. Extensible properties and geometry retain JSON values.
-use crate::io::ModelIoError;
+use super::io::ModelIoError;
 use crate::{Annotation, Diagram, Element, FileContent, Implementation, Project, Relation, View};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use prost::Message;
