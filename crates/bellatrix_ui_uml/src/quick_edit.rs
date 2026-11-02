@@ -19,6 +19,7 @@ pub struct UmlQuickAction {
     pub label: &'static str,
     pub icon: IconName,
     pub row: u8,
+    pub shortcut: Option<&'static str>,
 }
 
 /// A small set of *available* icon buttons beside an active UML element.
@@ -54,7 +55,10 @@ impl RenderOnce for UmlQuickEdit {
             let button=IconButton::new(format!("uml-action-{}",action.id),action.icon)
                 .shape(IconButtonShape::Square)
                 .aria_label(action.label)
-                .tooltip(Tooltip::text(action.label))
+                .tooltip(Tooltip::text(match action.shortcut {
+                    Some(keys)=>format!("{} ({keys})",action.label),
+                    None=>action.label.into(),
+                }))
                 .on_click(move |_,window,cx| {
                     handler(action.id,window,cx);
                     cx.stop_propagation();
