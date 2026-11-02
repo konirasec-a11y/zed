@@ -4,7 +4,7 @@
 use crate::{
     ModelingCreateElement, ModelingCreateElementRequested, ModelingMoveView,
     ModelingMoveViewRequested, ModelingRename, ModelingRenameRequested,
-    ModelingResizeView, ModelingResizeViewRequested,
+    ModelingResizeView, ModelingResizeViewRequested, ModelingDeleteElement, ModelingDeleteElementRequested,
 };
 use bellatrix_project::{
     ProjectId, ProjectSave, ProjectSaveRequested, ProjectStateChanged, ProjectStateChangedEvent,
@@ -20,6 +20,7 @@ pub enum MdeUiCommand {
     MoveView(ModelingMoveViewRequested),
     ResizeView(ModelingResizeViewRequested),
     Rename(ModelingRenameRequested),
+    DeleteElement(ModelingDeleteElementRequested),
     SaveProject(ProjectSaveRequested),
 }
 
@@ -68,6 +69,10 @@ impl MdeUiBridge {
                     MdeUiCommand::Rename(request) => {
                         describe("Element renamed", cordis
                             .query::<ModelingRename>(Routing::Unscoped, request).await)
+                    }
+                    MdeUiCommand::DeleteElement(request) => {
+                        describe("Element deleted", cordis
+                            .query::<ModelingDeleteElement>(Routing::Unscoped, request).await)
                     }
                     MdeUiCommand::SaveProject(request) => {
                         describe("Project saved", cordis
