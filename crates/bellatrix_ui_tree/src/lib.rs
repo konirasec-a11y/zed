@@ -1,6 +1,6 @@
 //! A tree-like presentation from owner-provided rows; not a bellatrix-mde-modeling tree schema.
 use bellatrix_design_system::Palette;
-use gpui::InteractiveElement;
+use gpui::StatefulInteractiveElement;
 use gpui::{App, IntoElement, RenderOnce, SharedString, Window, div, prelude::*, px};
 
 #[derive(Clone)]
