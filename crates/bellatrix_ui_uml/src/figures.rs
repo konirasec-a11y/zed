@@ -25,7 +25,8 @@ impl UmlFigure {
     pub fn supports(kind: &str) -> bool {
         matches!(kind,
             "uml.package" | "uml.model" | "uml.subsystem" |
-            "uml.comment" | "uml.frame" | "uml.nary_association")
+            "uml.comment" | "uml.note" | "uml.constraint" |
+            "uml.frame" | "uml.nary_association")
     }
     pub fn new(kind: impl Into<String>, name: impl Into<SharedString>) -> Self {
         Self { kind:kind.into(),name:name.into(),selected:false,edit:None,editor:None }
@@ -97,7 +98,7 @@ impl RenderOnce for UmlFigure {
                         .child(title_area))
                     .into_any_element()
             }
-            "uml.comment" => {
+            "uml.comment" | "uml.note" | "uml.constraint" => {
                 const FOLD:&[u8]=br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 2H16L22 8V22H4Z M16 2V8H22" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>"#;
                 // A note is one folded-corner sheet, not a class rectangle
                 // carrying a note icon in one of its compartments.
