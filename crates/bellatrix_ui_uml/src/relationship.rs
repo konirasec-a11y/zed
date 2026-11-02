@@ -18,7 +18,7 @@ fn decorations(kind: &str) -> (EndMarker, EndMarker, bool) {
         "uml.interface_realization" | "uml.realization" =>
             (EndMarker::None, EndMarker::Triangle, true),
         "uml.directed_association" => (EndMarker::None, EndMarker::OpenArrow, false),
-        "uml.dependency" | "uml.template_binding" =>
+        "uml.dependency" | "uml.template_binding" | "depends_on" =>
             (EndMarker::None, EndMarker::OpenArrow, true),
         "uml.aggregation" => (EndMarker::Diamond, EndMarker::None, false),
         "uml.composition" => (EndMarker::FilledDiamond, EndMarker::None, false),
@@ -192,6 +192,10 @@ mod tests {
         assert_eq!(decorations("uml.aggregation").0,EndMarker::Diamond);
         assert_eq!(decorations("uml.dependency").1,EndMarker::OpenArrow);
         assert!(decorations("uml.note_link").2);
+        // The todo fixture contains an existing "depends_on" curved Path.
+        // It is a semantic relation too, with dashed dependency notation.
+        assert_eq!(decorations("depends_on"),
+            (EndMarker::None, EndMarker::OpenArrow, true));
     }
     #[test]
     fn zero_length_edges_have_a_finite_tangent() {
