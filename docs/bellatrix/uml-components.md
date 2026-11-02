@@ -94,6 +94,40 @@ Testes: `bellatrix_mde_cordis/tests/interface_quick_edit.rs` verifica as
 seis ações de criação, mais Name Expression, Attribute, Operation,
 relacionamentos reais e rejeição de revisões obsoletas.
 
+## Ligações UML — desenho e interação no Canvas
+
+Uma ligação não é um `Element` renderizado como caixa. A engine persiste
+uma `Relation { kind, from, to, properties }` e uma `View` de
+`Geometry::Path`, no mesmo `ProjectReplace(expected_revision)`.
+
+- **Renderização:** `crates/bellatrix_ui_uml/src/relationship.rs` usa
+  `gpui::canvas`, `PathBuilder::stroke/fill` e `window.paint_path`, com
+  cores semânticas do tema Zed. **Não** depender de SVG dinâmico sem cor
+  de texto resolvida, pois ele pode registrar hitbox sem pintar o traço.
+- **Notação:** Association é linha contínua; Directed Association tem seta;
+  Dependency e Interface Realization são tracejadas; Generalization e
+  Interface Realization terminam em triângulo vazado; Aggregation e
+  Composition usam diamantes na extremidade do agregado/todo.
+  A associação especializada usa `end1Aggregation` para diferenciar
+  `shared` e `composite`, preservando o tipo semântico `uml.association`.
+- **Trajetória:** todos os segmentos `Line` e `Cubic` da View são
+  projetados com pan/zoom; o Canvas não reduz uma polilinha à última ponta.
+  O roteamento inicial e a atualização após mover/redimensionar um nó
+  pertencem ao backend MDE.
+- **Interação Toolbox:** selecionar uma ferramenta `ModelingTool::Relation`
+  arma o modo de ligação e destaca o item na Toolbox. O primeiro clique
+  em um nó registra a origem; o segundo clique registra o destino e
+  envia `ModelingCreateRelationRequested` via bridge Cordis. O modo pode
+  ser cancelado sem alterar o projeto. A ação contextual Quick Edit é
+  apenas outro caminho para o mesmo domínio, não o único meio de criar relações.
+- **Validação:** testar Association entre `TaskList` e `Task`, escolher
+  e alterar os demais tipos de conexão, confirmar a linha visível e
+  selecionável, criar múltiplas ligações, movimentar as duas classes,
+  conferir origem/destino no Inspector, persistência e reabertura.
+
+Esta implementação ainda precisa ser compilada e aprovada visualmente pelo
+mantenedor. Não abrir PR nem disparar CI como substituto dessa validação.
+
 ## Responsabilidades
 
 | Módulo | Papel e tipo de estado |
