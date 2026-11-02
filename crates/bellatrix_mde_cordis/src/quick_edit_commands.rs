@@ -1,5 +1,6 @@
 //! Shared UML edits; the selected semantic type chooses the permitted specialization.
 use crate::{add_member, create_relation, project_integration::{from_document, namespace_for}};
+use bellatrix_mde_modeling::quick_relation_rule;
 use bellatrix_mde_model::{Element, Geometry, ModelingSection, Relation, Style, View};
 use bellatrix_mde_modeling::{Graph, UmlQuickCommand, UmlType};
 use bellatrix_project::{ProjectId, ProjectReplace, ProjectReplaceRequested, ProjectService};
@@ -82,26 +83,38 @@ fn apply_to_candidate(section: &mut ModelingSection, request: &ModelingQuickEdit
         _ => return Err("Quick Edit requires a node View".into()),
     };
     let subtype_kind = kind.as_str();
-    let (child_kind, prefix, offset, child_size, relation_kind, child_is_source) = match request.action {
-        UmlQuickCommand::AddNote => ("uml.note", "Note", (width + 48.0, -16.0), (136.0, 78.0), "uml.note_link", false),
-        UmlQuickCommand::AddConstraint => ("uml.constraint", "Constraint", (-180.0, -32.0), (134.0, 76.0), "uml.constraint_link", true),
+    // Contextual gesture decides which new type and placement to create.
+    // The graph layer, not this command adapter, defines edge direction,
+    // semantic kind and aggregation role for every action.
+    let (child_kind, prefix, offset, child_size) = match request.action {
+        UmlQuickCommand::AddNote =>
+            ("uml.note", "Note", (width + 48.0, -16.0), (136.0, 78.0)),
+        UmlQuickCommand::AddConstraint =>
+            ("uml.constraint", "Constraint", (-180.0, -32.0), (134.0, 76.0)),
         UmlQuickCommand::AddSubtype | UmlQuickCommand::AddSupertype => {
             let interface = subject_type == UmlType::Interface;
             let size = if interface { (120.0, 76.0) } else { (185.0, 112.0) };
             let below = request.action == UmlQuickCommand::AddSubtype;
-            let offset = if below { (0.0, height + 90.0) } else { (0.0, -size.1 - 90.0) };
-            (subtype_kind, if interface { "Interface" } else { "Class" }, offset, size, "uml.generalization", below)
+            let offset = if below { (0.0, height + 90.0) }
+                else { (0.0, -size.1 - 90.0) };
+            (subtype_kind, if interface { "Interface" } else { "Class" }, offset, size)
         }
-        UmlQuickCommand::AddRealizingClass => ("rust.struct", "Class", (width + 65.0, height + 50.0), (185.0, 112.0), "uml.interface_realization", true),
-        UmlQuickCommand::AddProvidedInterface => ("rust.trait", "Interface", (width + 55.0, -75.0), (120.0, 76.0), "uml.interface_realization", false),
-        UmlQuickCommand::AddRequiredInterface => ("rust.trait", "Interface", (width + 55.0, height + 10.0), (120.0, 76.0), "uml.dependency", false),
-        UmlQuickCommand::AddAssociatedClass => ("rust.struct", "Class", (width + 80.0, 0.0), (185.0, 112.0), "uml.association", false),
-        UmlQuickCommand::AddAggregatedClass => ("rust.struct", "Class", (width + 80.0, 0.0), (185.0, 112.0), "uml.association", false),
-        UmlQuickCommand::AddCompositedClass => ("rust.struct", "Class", (width + 80.0, 0.0), (185.0, 112.0), "uml.association", false),
-        UmlQuickCommand::AddTemplateParameter | UmlQuickCommand::AddPort | UmlQuickCommand::AddPart =>
+        UmlQuickCommand::AddRealizingClass =>
+            ("rust.struct", "Class", (width + 65.0, height + 50.0), (185.0, 112.0)),
+        UmlQuickCommand::AddProvidedInterface =>
+            ("rust.trait", "Interface", (width + 55.0, -75.0), (120.0, 76.0)),
+        UmlQuickCommand::AddRequiredInterface =>
+            ("rust.trait", "Interface", (width + 55.0, height + 10.0), (120.0, 76.0)),
+        UmlQuickCommand::AddAssociatedClass | UmlQuickCommand::AddAggregatedClass
+            | UmlQuickCommand::AddCompositedClass =>
+            ("rust.struct", "Class", (width + 80.0, 0.0), (185.0, 112.0)),
+        UmlQuickCommand::AddTemplateParameter | UmlQuickCommand::AddPort
+            | UmlQuickCommand::AddPart =>
             return Err("contained features must use Class specialization".into()),
-        UmlQuickCommand::AddReception => return Err("reception must use the member command".into()),
+        UmlQuickCommand::AddReception => return Err("reception must use member command".into()),
     };
+    let relation_rule = quick_relation_rule(request.action)
+        .ok_or("Quick Edit action does not create a graph relationship")?;
     let new_id = fresh_id(section, "node", request.expected_revision)?;
     let new_view_id = fresh_id(section, "view", request.expected_revision)?;
     let relation_id = fresh_id(section, "relation", request.expected_revision)?;
@@ -135,25 +148,17 @@ fn apply_to_candidate(section: &mut ModelingSection, request: &ModelingQuickEdit
             geometry: Geometry::Rect { x: child_x, y: child_y, width: child_size.0, height: child_size.1 },
             style: Style::default(), z_index,
         });
-    let (source, target) = if child_is_source {
+    let (source, target) = if relation_rule.child_is_source {
         (new_id.as_str(), request.element_id.as_str())
     } else { (request.element_id.as_str(), new_id.as_str()) };
     let geometry = create_relation::route(section, &request.diagram_id, source, target)?;
     let mut properties = std::collections::BTreeMap::new();
     properties.insert("routing".into(), serde_json::json!("automatic"));
-    // UML aggregation is a property of Association end1, not a separate
-    // semantic relationship class. The renderer chooses its diamond.
-    match request.action {
-        UmlQuickCommand::AddAggregatedClass => {
-            properties.insert("end1Aggregation".into(),serde_json::json!("shared"));
-        }
-        UmlQuickCommand::AddCompositedClass => {
-            properties.insert("end1Aggregation".into(),serde_json::json!("composite"));
-        }
-        _ => {}
+    if let Some(aggregation) = relation_rule.aggregation {
+        properties.insert("end1Aggregation".into(), serde_json::json!(aggregation));
     }
     section.relations.push(Relation {
-        id: relation_id.clone(), kind: relation_kind.into(), from: source.into(), to: target.into(), properties,
+        id: relation_id.clone(), kind: relation_rule.kind.into(), from: source.into(), to: target.into(), properties,
     });
     section.diagrams.iter_mut().find(|diagram| diagram.id == request.diagram_id)
         .ok_or("diagram not found")?.views.push(View {
