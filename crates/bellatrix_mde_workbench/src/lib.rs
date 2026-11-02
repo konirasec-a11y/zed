@@ -588,7 +588,7 @@ impl Render for MdeWorkbenchItem {
                                         });
                                         cx.stop_propagation();
                                     }),
-                            ));
+                            )));
                     }
                 }
             }
