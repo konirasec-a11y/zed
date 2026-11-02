@@ -1,10 +1,12 @@
 # Inspector MDE: contrato de objeto, metamodelo e edição de propriedades
 
+> **Prioridade de implantação:** [Quick Edit contextual por tipo de elemento](quick-edit.md) — ações, grupos, atalhos e comandos do HTML/JSON StarUML fornecido pelo mantenedor. O Inspector e seu Property Editor são superfícies **complementares**, não substituem o Quick Edit. Nenhum SVG autoral substitui os controles reais.
+
+![Ações contextuais por Class View — referência das opções do StarUML](quick-edit-class.svg)
+
 **Estado:** especificação normativa mínima da Engine-MDE. A projeção tipada e a primeira implementação de edição escalar foram publicadas no fork; não considerar homologada até passar nos testes Rust e na validação UX no Zed. O desenho de referência vem das capturas StarUML compartilhadas pelo mantenedor, do protótipo React Bellatrix e do código de referência StarUML. As ilustrações abaixo foram produzidas para documentar o contrato, sem copiar código proprietário.
 
-![Referência visual do Inspector: seleção de Class1, árvore de modelo e campos tipados](inspector-reference.svg)
-
-![Composição de descritores e fluxo de edição MDE → Cordis → ProjectService](inspector-contract.svg)
+Ilustrações complementares (secundárias ao Quick Edit): [Inspector e propriedades](inspector-reference.svg), [fluxo entre MDE, Cordis e persistência](inspector-contract.svg). A segunda ilustração foi corrigida para ser um SVG bem-formado.
 
 ## 1. Definição obrigatória
 
