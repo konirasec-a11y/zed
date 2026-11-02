@@ -1,8 +1,7 @@
-//! Register MDE as a standard Zed Workspace action, not an automatic window.
+//! Present Bellatrix MDE automatically as a native Zed Workspace Item.
 //!
-//! The Workspace owns tabs, docks, focus and session lifecycle. An MDE document
-//! is only shown when the user explicitly activates it. This file does not
-//! modify Zed core or create any competing app/project event infrastructure.
+//! Zed owns tabs, docks and focus. The native action remains available
+//! to focus or reopen the MDE tab without creating a parallel window.
 
 use crate::{MdeUiSource, MdeWorkbenchItem, open_in_workspace, panels};
 use gpui::{App, Window, actions};
@@ -10,10 +9,9 @@ use workspace::Workspace;
 
 actions!(bellatrix_mde, [OpenMdeWorkbench]);
 
-/// Install an opt-in action on each native Zed Workspace.
+/// Register the native action and attach the initial MDE Item and Dock panels.
 ///
-/// Opening twice focuses the existing tab instead of creating another MDE
-/// document or duplicating the Zed Dock panels.
+/// Opening the action again focuses the existing item without duplicates.
 pub fn register_mde_workspace(cx: &mut App, source: MdeUiSource) {
     cx.observe_new(move |workspace: &mut Workspace, window: Option<&mut Window>, cx| {
         let action_source = source.clone();
