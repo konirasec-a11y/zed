@@ -304,7 +304,7 @@ impl Render for MdeLeftPanel {
                                 Some(ModelingTool::Element(kind)) =>
                                     format!("{}: drag to canvas or click empty space",kind.label()),
                                 Some(ModelingTool::Relation(kind)) =>
-                                    format!("{} selected: click the first element, then the second",kind.label()),
+                                    format!("{}: {}",kind.label(),kind.endpoint_instruction()),
                                 None => "Choose a Relationship tool to connect two classes".into(),
                             }))
                             .when(matches!(chosen,Some(ModelingTool::Relation(_))), |toolbox| {
