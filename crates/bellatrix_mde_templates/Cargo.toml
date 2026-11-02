@@ -9,3 +9,6 @@ description = "Target-neutral Tera text rendering for Bellatrix MDE generation p
 [dependencies]
 tera.workspace = true
 serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
