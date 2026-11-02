@@ -14,23 +14,23 @@ A expressão `<< stereotype >> name` é editada na área principal do Quick Edit
 
 | ID lógico StarUML | Comando/ação no HTML | Posição | Situação Bellatrix |
 |---|---|---|---|
-| `uml.name-expression` | Entrada `<< stereotype >> name` | Main | **Parcial:** edição do nome; parser completo de expressão pendente |
+| `uml.name-expression` | Entrada `<< stereotype >> name` | Main | **Implementado no código:** parser de estereótipo, visibilidade e nome; falta validação visual local |
 | `uml.visibility` | Menu Visibility: **public, protected, private, package** | Left, linha 1 | **Implementado:** propriedade tipada com validação |
-| `uml.add-note` | Add Note | Left, linha 2 | Contrato pendente |
-| `uml.add-constraint` | Add Constraint | Left, linha 2 | Contrato pendente |
+| `uml.add-note` | Add Note | Left, linha 2 | **Implementado:** Note, View e NoteLink versionados |
+| `uml.add-constraint` | Add Constraint | Left, linha 2 | **Implementado:** Constraint, View e ConstraintLink versionados |
 | `uml.add-attribute` | Add Attribute — `Ctrl+Enter` | Right, linha 1 | **Implementado:** cria `Element` e vínculo `owns` via Cordis |
 | `uml.add-operation` | Add Operation — `Ctrl+Shift+Enter` | Right, linha 1 | **Implementado:** cria `Element` e vínculo `owns` via Cordis |
-| `uml.add-template-parameter` | Add Template Parameter | Right, linha 1 | Contrato pendente |
-| `uml.add-reception` | Add Reception | Right, linha 1 | Contrato pendente |
-| `uml.add-subclass` | Add Sub-Class | Right, linha 2 | Contrato pendente |
-| `uml.add-superclass` | Add Super-Class | Right, linha 2 | Contrato pendente |
-| `uml.add-provided-interface` | Add Provided Interface | Right, linha 2 | Contrato pendente |
-| `uml.add-required-interface` | Add Required Interface | Right, linha 2 | Contrato pendente |
-| `uml.add-associated-class` | Add Associated Class | Right, linha 3 | Contrato pendente |
-| `uml.add-aggregated-class` | Add Aggregated Class | Right, linha 3 | Contrato pendente |
-| `uml.add-composited-class` | Add Composited Class | Right, linha 3 | Contrato pendente |
-| `uml.add-port` | Add Port | Right, linha 4 | Contrato pendente |
-| `uml.add-part` | Add Part | Right, linha 4 | Contrato pendente |
+| `uml.add-template-parameter` | Add Template Parameter | Right, linha 1 | **Implementado no código:** elemento próprio, `owns`, compartimento de parâmetro |
+| `uml.add-reception` | Add Reception | Right, linha 1 | **Implementado:** membro Reception e `owns` |
+| `uml.add-subclass` | Add Sub-Class | Right, linha 2 | **Implementado:** Class derivada e Generalization |
+| `uml.add-superclass` | Add Super-Class | Right, linha 2 | **Implementado:** Class base e Generalization inversa |
+| `uml.add-provided-interface` | Add Provided Interface | Right, linha 2 | **Implementado no código:** Interface e Interface Realization |
+| `uml.add-required-interface` | Add Required Interface | Right, linha 2 | **Implementado no código:** Interface e Dependency |
+| `uml.add-associated-class` | Add Associated Class | Right, linha 3 | **Implementado no código:** Class e Association |
+| `uml.add-aggregated-class` | Add Aggregated Class | Right, linha 3 | **Implementado no código:** Class e Aggregation |
+| `uml.add-composited-class` | Add Composited Class | Right, linha 3 | **Implementado no código:** Class e Composition |
+| `uml.add-port` | Add Port | Right, linha 4 | **Implementado no código:** Port com `owns`, View e ancoragem na Class |
+| `uml.add-part` | Add Part | Right, linha 4 | **Implementado no código:** Part com `owns` e View contida na Class |
 
 Também constam no JSON atalhos de navegação de membros em compartimentos, `uml.open-up-compartment-item` e `uml.open-down-compartment-item`; não são botões novos no HTML capturado e não devem ser inventados visualmente.
 
@@ -63,9 +63,9 @@ Element + View selecionados
 
 - Contrato puro atual: `crates/bellatrix_mde_modeling/src/quick_edit.rs` (`QuickEditAction`, `QuickEditControl`, `QuickEditSide`, `QuickEditAvailability`).
 - Adapter GPUI: `crates/bellatrix_mde_workbench/src/quick_edit_view.rs` e o `MdeWorkbenchItem` que ancora ações junto à View selecionada.
-- Mutação suportada: `crates/bellatrix_mde_cordis/src/add_member.rs`, `ModelingAddMemberRequested`, `ModelingAddMember`, `MdeUiCommand::AddMember`.
+- Mutações tipadas: `add_member.rs` para membros comuns, `quick_edit_commands.rs` para transações compartilhadas, `class_features.rs` para Template Parameter/Port/Part; `MdeUiCommand::QuickEdit` publica os eventos ao Cordis.
 - Visibilidade e nome: `ModelingSetPropertyRequested` com schema do Inspector; usa `ProjectService`, sem estado de domínio no GPUI.
-- **Ações pendentes:** metadados existem como referência, porém aparecem **não clicáveis**, até termos tipos semânticos, validação, comandos, relações e comportamento implementados. Não confundir catálogo registrado com funcionalidade entregue.
+- **Estado:** as 17 opções do Quick Edit de Class possuem descritores, handlers tipados e mutações persistidas no código desta branch. A validação local de compilação e comportamento visual ainda é necessária. Ações especializadas de outros tipos continuam indisponíveis quando não possuem contrato de domínio.
 
 ## 3. Mínimo funcional progressivo — com aceite
 
