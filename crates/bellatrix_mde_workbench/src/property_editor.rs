@@ -86,7 +86,7 @@ fn property_row(
             });
             DropdownMenu::new(format!("mde-inspector-choice-{path}"),
                 display(&property.value), menu)
-                .full_width()
+                .full_width(true)
                 .into_any_element()
         },
         _ => div().text_color(palette.muted)
