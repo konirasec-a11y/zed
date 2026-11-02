@@ -120,7 +120,9 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
     // UML connections are Relations, not fake Elements that inherit Class
     // properties. The Inspector handles their endpoint roles and attributes.
     if let Some(relation) = section.relations.iter().find(|relation| relation.id == id
-        && relation.kind.starts_with("uml.")) {
+        && (relation.kind.starts_with("uml.") || section.diagrams.iter().any(|diagram|
+            diagram.views.iter().any(|view| view.subject.as_deref() == Some(id))
+        ))) {
         let source = section.elements.iter().find(|e|e.id==relation.from)
             .map(|e|e.name.as_str()).unwrap_or(relation.from.as_str());
         let target = section.elements.iter().find(|e|e.id==relation.to)
@@ -267,7 +269,10 @@ pub fn set_inspected_property(
         },
         _ => {},
     }
-    if let Some(relation) = section.relations.iter_mut().find(|r| r.id==id && r.kind.starts_with("uml.")) {
+    let diagram_relation = section.diagrams.iter().any(|diagram|
+        diagram.views.iter().any(|view| view.subject.as_deref() == Some(id)));
+    if let Some(relation) = section.relations.iter_mut().find(|r|
+        r.id == id && (r.kind.starts_with("uml.") || diagram_relation)) {
         let key=path.strip_prefix("properties.").ok_or("relationship identity is read-only")?;
         relation.properties.insert(key.into(),value);
         return Ok(());
