@@ -10,6 +10,7 @@ mod publish;
 mod scope;
 mod uml_types;
 mod uml_geometry;
+mod relationships;
 
 pub use graph::{Graph, GraphError};
 pub use inspector::{ElementInspector, InspectorMember, InspectorProperty, PropertyEditor, inspect_element, set_inspected_property};
@@ -21,3 +22,9 @@ pub use publish::{publish_new, publish_replace};
 pub use scope::{Scope, ScopeError, select_elements};
 pub use uml_types::{UmlCapability, UmlQuickCommand, UmlType};
 pub use uml_geometry::{ClassifierContents, InterfaceLayout, FoldedNoteLayout, classifier_contents, interface_layout, folded_note_layout};
+
+pub use relationships::{
+    ModelingRelationKind, RelationshipGraph, RelationshipPresentation,
+    relationship_presentation, relation_kind_for_creation,
+    route as route_relationship, projected_relationship_paths, reroute_relationships,
+};
