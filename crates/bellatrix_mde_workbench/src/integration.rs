@@ -3,18 +3,29 @@
 //! Zed owns tabs, docks and focus. The native action remains available
 //! to focus or reopen the MDE tab without creating a parallel window.
 
-use crate::{MdeUiSource, MdeWorkbenchItem, open_in_workspace, panels};
+use crate::{MdeUiSource, MdeWorkbenchItem, MdeSymbolLibraryItem, open_in_workspace, panels};
 use gpui::{App, Entity, Window, actions};
 use std::{cell::RefCell, rc::Rc};
 use workspace::Workspace;
 
-actions!(bellatrix_mde, [OpenMdeWorkbench]);
+actions!(bellatrix_mde, [OpenMdeWorkbench, OpenMdeSymbols]);
 
 /// Register the native action and attach the initial MDE Item and Dock panels.
 ///
 /// Opening the action again focuses the existing item without duplicates.
 pub fn register_mde_workspace(cx: &mut App, source: MdeUiSource) {
     cx.observe_new(move |workspace: &mut Workspace, window: Option<&mut Window>, cx| {
+        // The full Bellatrix catalog is a native Zed Item. The Workbench
+        // remains focused on supported Class and Interface editing gestures.
+        workspace.register_action(|workspace, _: &OpenMdeSymbols, window, cx| {
+            if let Some(item) = workspace.item_of_type::<MdeSymbolLibraryItem>(cx) {
+                workspace.activate_item(&item, true, true, window, cx);
+            } else {
+                let item = cx.new(MdeSymbolLibraryItem::new);
+                workspace.add_item_to_active_pane(Box::new(item), None, true, window, cx);
+            }
+        });
+
         // Panels retain the MDE Item when its center tab closes. Reuse that
         // Entity on reopening so selection survives and Dock panels are not
         // registered twice under the same panel keys.
