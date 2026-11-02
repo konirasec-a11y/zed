@@ -46,6 +46,9 @@ pub struct ElementInspector {
     pub attributes: Vec<InspectorMember>,
     pub operations: Vec<InspectorMember>,
     pub receptions: Vec<InspectorMember>,
+    pub template_parameters: Vec<InspectorMember>,
+    pub ports: Vec<InspectorMember>,
+    pub parts: Vec<InspectorMember>,
 }
 
 const VISIBILITY: &[&str] = &["public", "protected", "private", "package"];
@@ -168,6 +171,7 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
             element_id:relation.id.clone(),kind:relation.kind.clone(),
             name:format!("{source} → {target}"),
             properties,attributes:Vec::new(),operations:Vec::new(),receptions:Vec::new(),
+            template_parameters:Vec::new(),ports:Vec::new(),parts:Vec::new(),
         });
     }
     let element = section.elements.iter().find(|element| element.id == id)?;
@@ -213,6 +217,9 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
     let mut attributes = Vec::new();
     let mut operations = Vec::new();
     let mut receptions = Vec::new();
+    let mut template_parameters=Vec::new();
+    let mut ports=Vec::new();
+    let mut parts=Vec::new();
     for relation in &section.relations {
         if relation.kind != "owns" || relation.from != element.id {continue;}
         if let Some(member) = section.elements.iter().find(|e| e.id == relation.to) {
@@ -223,12 +230,16 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
                 "rust.field" | "uml.attribute" => attributes.push(descriptor),
                 "rust.function" | "uml.operation" => operations.push(descriptor),
                 "uml.reception" => receptions.push(descriptor),
+                "uml.template_parameter" => template_parameters.push(descriptor),
+                "uml.port" => ports.push(descriptor),
+                "uml.part" => parts.push(descriptor),
                 _ => {},
             }
         }
     }
     Some(ElementInspector {element_id:element.id.clone(),kind:element.kind.clone(),
-        name:element.name.clone(),properties,attributes,operations,receptions})
+        name:element.name.clone(),properties,attributes,operations,receptions,
+        template_parameters,ports,parts})
 }
 
 /// Set one previously described, editable property. Never permit a generic
