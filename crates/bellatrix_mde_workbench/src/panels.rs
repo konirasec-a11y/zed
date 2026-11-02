@@ -213,6 +213,8 @@ impl Render for MdeLeftPanel {
                         .id(format!("mde-tool-{group_index}-{index}"))
                         .w_full().h(px(34.0)).flex().items_center().gap_2().px_2()
                         .border_1().border_color(palette.border).rounded_sm()
+                        .when(chosen == Some(tool), |entry| entry
+                            .border_color(palette.selection).bg(palette.surface))
                         .cursor_grab()
                         .on_drag(MdeToolDrag {
                             project_id: project.clone(), kind:tool,
@@ -296,9 +298,18 @@ impl Render for MdeLeftPanel {
                                 Some(ModelingTool::Element(kind)) =>
                                     format!("{}: drag to canvas or click empty space",kind.label()),
                                 Some(ModelingTool::Relation(kind)) =>
-                                    format!("{}: click source, then target",kind.label()),
-                                None => "Drag shapes; click endpoints to connect".into(),
+                                    format!("{} selected: click the first element, then the second",kind.label()),
+                                None => "Choose a Relationship tool to connect two classes".into(),
                             }))
+                            .when(matches!(chosen,Some(ModelingTool::Relation(_))), |toolbox| {
+                                let owner=item.clone();
+                                toolbox.child(
+                                    Button::new("mde-cancel-toolbox-connection", "Cancel connection")
+                                        .on_click(move |_,_,cx| {
+                                            owner.update(cx,|workbench,cx|workbench.cancel_tool(cx));
+                                        })
+                                )
+                            })
                             .child(
                                 Button::new("bellatrix-open-symbol-library", "Browse symbol library")
                                     .on_click(move |_, window, cx| {
