@@ -172,7 +172,20 @@ pub(crate) async fn create_relation(context: &Context, projects: &ProjectService
     };
     let mut properties = std::collections::BTreeMap::new();
     properties.insert("routing".into(), serde_json::json!("automatic"));
-    section.relations.push(Relation { id: id.clone(), kind: request.kind.model_kind().into(),
+    // Aggregation/composition specialize the *end* of a UML Association.
+    // The Toolbox and Class Quick Edit must persist the same model shape.
+    let semantic_kind = match request.kind {
+        ModelingRelationKind::Aggregation => {
+            properties.insert("end1Aggregation".into(), serde_json::json!("shared"));
+            "uml.association"
+        }
+        ModelingRelationKind::Composition => {
+            properties.insert("end1Aggregation".into(), serde_json::json!("composite"));
+            "uml.association"
+        }
+        _ => request.kind.model_kind(),
+    };
+    section.relations.push(Relation { id: id.clone(), kind: semantic_kind.into(),
         from: request.from, to: request.to, properties });
     let diagram = section.diagrams.iter_mut().find(|diagram| diagram.id == request.diagram_id).ok_or("diagram not found")?;
     let z_index = diagram.views.iter().map(|view| view.z_index).max().unwrap_or(0)
