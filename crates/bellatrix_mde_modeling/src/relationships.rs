@@ -422,6 +422,55 @@ mod graph_relationship_contract_tests {
         assert_eq!(relationship_style_for_notation("uml.association").target_marker, None);
     }
     #[test]
+    fn moving_class_reanchors_existing_cubic_dependency_without_losing_its_shape() {
+        let project = serde_json::from_str(
+            include_str!("../../bellatrix_mde_model/fixtures/todo.json")
+        ).unwrap();
+        let mut section = ModelingSection::from_model(&project);
+        let diagram_id = "diagram-tasks";
+        let original_view = section.diagrams[0].views.iter()
+            .find(|view| view.subject.as_deref() == Some("ref-task")).unwrap().geometry.clone();
+        let original_start = match &original_view {
+            Geometry::Path { start, .. } => *start,
+            _ => panic!("fixture dependency must be a curve"),
+        };
+        let changed_node = section.diagrams[0].views.iter_mut()
+            .find(|view| view.subject.as_deref() == Some("type-list")).unwrap();
+        changed_node.geometry.translate(0.0, -80.0);
+        let saved_before = section.clone();
+        let projection = RelationshipGraph::new(&section, diagram_id).paths();
+        assert_eq!(section, saved_before, "rendering is a pure graph projection");
+        let Geometry::Path { start, segments } = &projection["ref-task"] else {
+            panic!("legacy dependency must remain a Path");
+        };
+        assert_ne!(*start, original_start, "source endpoint must follow the moved Class");
+        assert!(matches!(segments.first(), Some(PathSegment::Cubic { .. })),
+            "manually shaped curve should retain its cubic bend");
+        reroute_relationships(&mut section, diagram_id);
+        assert_eq!(section.diagrams[0].views.iter()
+            .find(|view| view.subject.as_deref() == Some("ref-task")).unwrap().geometry,
+            projection["ref-task"],
+            "persisted geometry follows the same graph contract as the renderer");
+        crate::Graph::new(&section.to_model("project-todo","Todo")).validate().unwrap();
+    }
+
+    #[test]
+    fn model_explorer_and_canvas_query_identical_visible_edges() {
+        let project = serde_json::from_str(
+            include_str!("../../bellatrix_mde_model/fixtures/todo.json")
+        ).unwrap();
+        let section = ModelingSection::from_model(&project);
+        let graph = RelationshipGraph::new(&section, "diagram-tasks");
+        let ids = graph.visible_relations().iter().map(|r|r.id.as_str()).collect::<Vec<_>>();
+        let projected = graph.paths();
+        assert_eq!(ids, vec!["ref-task"]);
+        assert_eq!(projected.keys().map(String::as_str).collect::<Vec<_>>(), ids);
+        let presentation = relationship_presentation(graph.visible_relations()[0]);
+        assert_eq!(presentation.label, "dependency");
+        assert_eq!(presentation.style.target_marker, RelationshipMarker::OpenArrow);
+    }
+
+    #[test]
     fn quick_edit_composes_same_endpoints_without_reversing_roles() {
         use crate::UmlQuickCommand as A;
         assert_eq!(quick_relation_rule(A::AddSubtype).unwrap(), QuickRelationRule {
