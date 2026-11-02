@@ -7,6 +7,10 @@ pub use task_events::{
     ModelingTaskKind, ModelingTaskSummary,
 };
 mod project_integration;
+mod class_diagram;
+pub use class_diagram::{ModelingElementKind, ModelingRelationKind, ModelingTool};
+mod create_relation;
+pub use create_relation::{ModelingCreateRelation, ModelingCreateRelationRequested};
 mod create_element;
 mod add_member;
 pub use add_member::{ModelingAddMember, ModelingAddMemberRequested, ModelingMemberKind};
@@ -19,7 +23,7 @@ pub use delete_element::{ModelingDeleteElement, ModelingDeleteElementRequested};
 pub use resize_view::{ModelingResizeView, ModelingResizeViewRequested};
 mod ui_bridge;
 pub use ui_bridge::{MdeUiBridge, MdeUiCommand};
-pub use create_element::{ModelingCreateElement, ModelingCreateElementRequested, ModelingElementKind};
+pub use create_element::{ModelingCreateElement, ModelingCreateElementRequested};
 use bellatrix_mde_modeling::Scope;
 use cordis::event::{ListenerRegistrationError, observer_sync};
 use cordis::{Context, Event, Plugin};
