@@ -40,6 +40,7 @@ pub(crate) fn quick_edit_for_element(
                 label: action.title,
                 icon,
                 row: action.row,
+                shortcut: action.shortcut,
             }))
         })
         .collect();
