@@ -117,6 +117,18 @@ impl Plugin for MdePlugin {
                 },
             ))
             .map_err(|e| io::Error::other(e.to_string()))?;
+        let names_projects = Arc::clone(&projects);
+        let _name_expression = ctx
+            .on::<crate::name_expression::ModelingSetNameExpression, _>(responder(
+                move |ctx: Context, req: crate::name_expression::ModelingSetNameExpressionRequested| {
+                    let projects = Arc::clone(&names_projects);
+                    async move {
+                        let result = crate::name_expression::set_name_expression(&ctx, &projects, req).await;
+                        Ok::<_, Infallible>(Some(result))
+                    }
+                },
+            ))
+            .map_err(|e| io::Error::other(e.to_string()))?;
         let interface_projects = Arc::clone(&projects);
         let _interface_quick_edit = ctx
             .on::<crate::interface_quick_edit::ModelingInterfaceQuickEdit, _>(responder(
