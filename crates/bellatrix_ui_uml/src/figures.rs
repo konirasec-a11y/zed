@@ -20,7 +20,8 @@ pub struct UmlFigure {
 impl UmlFigure {
     pub fn supports(kind: &str) -> bool {
         matches!(UmlType::from_kind(kind), Some(UmlType::Package | UmlType::Model |
-            UmlType::Subsystem | UmlType::Note | UmlType::Constraint | UmlType::Frame | UmlType::NaryAssociation))
+            UmlType::Subsystem | UmlType::Note | UmlType::Constraint | UmlType::Frame |
+            UmlType::NaryAssociation | UmlType::Port | UmlType::Part))
     }
     pub fn new(kind: impl Into<String>, name: impl Into<SharedString>) -> Self {
         Self { kind: kind.into(), name: name.into(), selected: false, scale: 1.0, edit: None, editor: None }
@@ -112,6 +113,15 @@ impl RenderOnce for UmlFigure {
                             div().text_size(px(10.0 * scale)).text_color(rgb(palette.muted)).child(label)))
                         .child(title_area)).into_any_element()
             }
+            Some(UmlType::Port) => div().size_full()
+                .border_1().border_color(border).bg(rgb(palette.panel_alt))
+                .child(div().size_full().flex().items_center().justify_center()
+                    .text_size(px(8.0 * scale)).child(title_area)).into_any_element(),
+            Some(UmlType::Part) => div().size_full().flex().flex_col()
+                .border_1().border_color(border).bg(rgb(palette.panel))
+                .child(div().w_full().h(px(20.0 * scale)).px_1()
+                    .border_b_1().border_color(border).flex().items_center()
+                    .child(title_area)).into_any_element(),
             Some(UmlType::Frame) => div().size_full().relative().border_1().border_color(border)
                 .child(div().w(px(142.0 * scale)).h(px(30.0 * scale))
                     .border_r_1().border_b_1().border_color(border).px_2().flex().items_center()
