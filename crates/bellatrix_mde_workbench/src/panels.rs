@@ -6,7 +6,7 @@
 
 use crate::{MdeToolDrag, MdeWorkbenchItem, WorkbenchPalette, hierarchy::project_hierarchy, integration::{OpenMdeWorkbench, OpenMdeSymbols}, property_editor::render_inspector};
 use bellatrix_mde_cordis::{ModelingElementKind, ModelingRelationKind, ModelingTool};
-use bellatrix_mde_modeling::{inspect_element, PropertyEditor};
+use bellatrix_mde_modeling::{inspect_element, PropertyEditor, RelationshipGraph, relationship_presentation};
 use bellatrix_ui_symbols::{glyph, ShapeKind};
 use gpui::{
     Action, App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
@@ -389,6 +389,7 @@ impl Render for MdeRightPanel {
         let panel_border = palette.border;
         let item = self.state.item.clone();
         let selected_id = item.read(cx).selected_element().map(str::to_owned);
+        let active_diagram = item.read(cx).active_diagram().map(str::to_owned);
         let snapshot = item.read(cx).source().snapshot().ok();
         let inspection = snapshot.as_ref().and_then(|snapshot| selected_id.as_deref()
             .and_then(|id| inspect_element(&snapshot.section, id)));
@@ -447,30 +448,17 @@ impl Render for MdeRightPanel {
             // Legacy/project-specific relationships are first-class model
             // relations too. If they have a Path View, show them in Explorer;
             // filtering only "uml." hid the fixture's depends_on curve.
-            let relations = snapshot.section.relations.iter()
-                .filter(|relation| relation.kind.starts_with("uml.")
-                    || snapshot.section.diagrams.iter().any(|diagram|
-                        diagram.views.iter().any(|view|
-                            view.subject.as_deref() == Some(relation.id.as_str())
-                        )
-                    )
-                ).collect::<Vec<_>>();
+            let relations = active_diagram.as_deref()
+                .or_else(|| snapshot.section.diagrams.first().map(|diagram| diagram.id.as_str()))
+                .map(|id| RelationshipGraph::new(&snapshot.section, id).visible_relations())
+                .unwrap_or_default();
             if !relations.is_empty() {
                 rows.push(div().id("mde-relationships-heading").p_2()
                     .text_size(px(11.0)).text_color(palette.muted)
                     .child("Relationships"));
             }
             for relation in relations {
-                let label = match relation.kind.as_str() {
-                    "depends_on" => "dependency (project)".to_owned(),
-                    "uml.association" => match relation.properties.get("end1Aggregation")
-                        .and_then(serde_json::Value::as_str) {
-                        Some("shared") => "aggregation".to_owned(),
-                        Some("composite") => "composition".to_owned(),
-                        _ => "association".to_owned(),
-                    },
-                    kind => kind.strip_prefix("uml.").unwrap_or(kind).replace('_', " "),
-                };
+                let label = relationship_presentation(relation).label;
                 let from=snapshot.section.elements.iter().find(|e|e.id==relation.from)
                     .map_or(relation.from.as_str(),|e|e.name.as_str());
                 let to=snapshot.section.elements.iter().find(|e|e.id==relation.to)
