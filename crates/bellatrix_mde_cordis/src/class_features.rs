@@ -117,7 +117,7 @@ pub(crate) fn insert_feature(
     let (kind,prefix,shape)=match action {
         UmlQuickCommand::AddTemplateParameter=>("uml.template_parameter","TemplateParameter",None),
         UmlQuickCommand::AddPort=>("uml.port","Port",Some((16.0,16.0))),
-        UmlQuickCommand::AddPart=>("uml.part","Part",Some((86.0,44.0))),
+        UmlQuickCommand::AddPart=>("uml.part","Part",Some((86.0,48.0))),
         _=>return Err("not a contained Class specialization".into()),
     };
     let previous=section.relations.iter()
