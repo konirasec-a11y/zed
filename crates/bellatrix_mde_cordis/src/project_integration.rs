@@ -81,6 +81,18 @@ impl Plugin for MdePlugin {
                 },
             ))
             .map_err(|e| io::Error::other(e.to_string()))?;
+        let delete_projects = Arc::clone(&projects);
+        let _deletion = ctx
+            .on::<crate::delete_element::ModelingDeleteElement, _>(responder(
+                move |ctx: Context, req: crate::delete_element::ModelingDeleteElementRequested| {
+                    let projects = Arc::clone(&delete_projects);
+                    async move {
+                        let result = crate::delete_element::delete_element(&ctx, &projects, req).await;
+                        Ok::<_, Infallible>(Some(result))
+                    }
+                },
+            ))
+            .map_err(|e| io::Error::other(e.to_string()))?;
         let resizing_projects = Arc::clone(&projects);
         let _resize = ctx
             .on::<crate::resize_view::ModelingResizeView, _>(responder(
