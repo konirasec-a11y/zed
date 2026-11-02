@@ -55,6 +55,24 @@ impl UmlClassCard {
 
     /// Classifier notation: Interface, Enumeration, DataType, Signal, etc.
     /// This label affects only presentation, never the semantic Element.kind.
+    /// UML Class Diagram classifiers share compartments, not semantics.
+    /// The stereotype makes Interface/Enumeration/Signal/DataType/Template
+    /// visually different from a plain Class without changing stored kind.
+    pub fn model_kind(mut self, kind: &str) -> Self {
+        let label = match kind {
+            "rust.trait" | "uml.interface" => Some("«interface»"),
+            "uml.enumeration" => Some("«enumeration»"),
+            "uml.data_type" => Some("«dataType»"),
+            "uml.primitive_type" => Some("«primitive»"),
+            "uml.signal" => Some("«signal»"),
+            "uml.association_class" => Some("«associationClass»"),
+            "uml.template" => Some("«template»"),
+            _ => None,
+        };
+        if let Some(label) = label { self.stereotype = Some(label.into()); }
+        self
+    }
+
     pub fn stereotype(mut self, value: impl Into<SharedString>) -> Self {
         self.stereotype = Some(value.into());
         self
