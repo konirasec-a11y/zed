@@ -10,6 +10,8 @@ mod project_integration;
 mod create_element;
 mod view_edits;
 mod resize_view;
+mod delete_element;
+pub use delete_element::{ModelingDeleteElement, ModelingDeleteElementRequested};
 pub use resize_view::{ModelingResizeView, ModelingResizeViewRequested};
 mod ui_bridge;
 pub use ui_bridge::{MdeUiBridge, MdeUiCommand};
