@@ -93,6 +93,18 @@ impl Plugin for MdePlugin {
                 },
             ))
             .map_err(|e| io::Error::other(e.to_string()))?;
+        let property_projects = Arc::clone(&projects);
+        let _property_edit = ctx
+            .on::<crate::set_property::ModelingSetProperty, _>(responder(
+                move |ctx: Context, req: crate::set_property::ModelingSetPropertyRequested| {
+                    let projects = Arc::clone(&property_projects);
+                    async move {
+                        let result = crate::set_property::set_property(&ctx, &projects, req).await;
+                        Ok::<_, Infallible>(Some(result))
+                    }
+                },
+            ))
+            .map_err(|e| io::Error::other(e.to_string()))?;
         let resizing_projects = Arc::clone(&projects);
         let _resize = ctx
             .on::<crate::resize_view::ModelingResizeView, _>(responder(
