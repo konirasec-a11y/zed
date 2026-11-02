@@ -23,6 +23,7 @@ struct MemberRow {
 pub struct UmlClassCard {
     class_id: Option<String>,
     title: SharedString,
+    stereotype: Option<SharedString>,
     attributes: Vec<MemberRow>,
     operations: Vec<MemberRow>,
     selected: bool,
@@ -39,6 +40,7 @@ impl UmlClassCard {
         Self {
             class_id: None,
             title: title.into(),
+            stereotype: None,
             attributes: Vec::new(),
             operations: Vec::new(),
             selected: false,
@@ -49,6 +51,13 @@ impl UmlClassCard {
             confirm_edit: None,
             cancel_edit: None,
         }
+    }
+
+    /// Classifier notation: Interface, Enumeration, DataType, Signal, etc.
+    /// This label affects only presentation, never the semantic Element.kind.
+    pub fn stereotype(mut self, value: impl Into<SharedString>) -> Self {
+        self.stereotype = Some(value.into());
+        self
     }
 
     pub fn class_id(mut self, id: impl Into<String>) -> Self {
@@ -193,6 +202,7 @@ impl RenderOnce for UmlClassCard {
             None => div().child(self.title).into_any_element(),
         };
         let edit_title = self.edit_title.clone();
+        let stereotype = self.stereotype.clone();
         div()
             .size_full()
             .flex().flex_col()
@@ -203,7 +213,7 @@ impl RenderOnce for UmlClassCard {
             .child(
                 div()
                     .id("uml-class-title")
-                    .h(px(34.0)).w_full().flex_none()
+                    .h(px(if stereotype.is_some() { 49.0 } else { 34.0 })).w_full().flex_none()
                     .px_1()
                     .flex().items_center().justify_center()
                     .bg(rgb(palette.panel_alt))
@@ -217,7 +227,17 @@ impl RenderOnce for UmlClassCard {
                             cx.stop_propagation();
                         }
                     })
-                    .child(title),
+                    .child(
+                        div()
+                            .flex().flex_col().items_center().justify_center()
+                            .when_some(stereotype, |header, value| {
+                                header.child(
+                                    div().text_size(px(10.0)).text_color(rgb(palette.muted))
+                                        .child(value)
+                                )
+                            })
+                            .child(title),
+                    ),
             )
             .when(!self.attributes.is_empty(), |el| {
                 el.child(compartment(
