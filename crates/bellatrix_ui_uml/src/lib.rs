@@ -4,6 +4,10 @@
 mod class;
 mod inline_edit;
 mod quick_edit;
+mod figures;
+mod relationship;
+pub use figures::UmlFigure;
+pub use relationship::UmlRelationGlyph;
 
 pub use class::UmlClassCard;
 pub use inline_edit::UmlInlineNameEditor;
