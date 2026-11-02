@@ -6,11 +6,12 @@ pub struct ClassifierContents {
     pub attributes: usize,
     pub operations: usize,
     pub receptions: usize,
+    pub template_parameters: usize,
     pub stereotype: bool,
 }
 impl ClassifierContents {
     pub fn compartments_height(self) -> f64 {
-        let counts = [self.attributes, self.operations, self.receptions];
+        let counts = [self.attributes, self.operations, self.receptions, self.template_parameters];
         let rows: usize = counts.iter().sum();
         let groups = counts.iter().filter(|count| **count > 0).count();
         rows as f64 * 20.0 + groups as f64 * 9.0
@@ -30,6 +31,7 @@ pub fn classifier_contents(section: &ModelingSection, owner: &str) -> Classifier
                 "rust.field" | "uml.attribute" => contents.attributes += 1,
                 "rust.function" | "uml.operation" => contents.operations += 1,
                 "uml.reception" => contents.receptions += 1,
+                "uml.template_parameter" => contents.template_parameters += 1,
                 _ => {}
             }
         }
@@ -109,7 +111,7 @@ mod tests {
     }
     #[test]
     fn automatic_member_growth_does_not_enlarge_circle() {
-        let contents = ClassifierContents { attributes: 2, operations: 1, receptions: 1, stereotype: true };
+        let contents = ClassifierContents { attributes: 2, operations: 1, receptions: 1, template_parameters: 0, stereotype: true };
         let layout = interface_layout(120.0, contents.minimum_interface_height(), contents);
         assert_eq!(layout.radius, 14.0);
         assert!(layout.members_top + contents.compartments_height() <= contents.minimum_interface_height());
