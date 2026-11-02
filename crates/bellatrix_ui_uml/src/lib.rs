@@ -1,6 +1,5 @@
 //! UML visual elements and in-place editors for the native Zed GPUI runtime.
-//! Domain Elements/Relations remain in bellatrix_mde_model; this crate owns
-//! only presentation, hit targets, inline editing and contextual icon controls.
+//! Geometry and capability contracts are headless; this crate only renders them.
 mod class;
 mod interface;
 pub use interface::UmlInterfaceBall;
@@ -10,7 +9,6 @@ mod figures;
 mod relationship;
 pub use figures::UmlFigure;
 pub use relationship::UmlRelationGlyph;
-
-pub use class::UmlClassCard;
+pub use class::{UmlClassCard, UmlClassifier};
 pub use inline_edit::UmlInlineNameEditor;
 pub use quick_edit::{UmlQuickAction, UmlQuickEdit, UmlVisibilityPicker};

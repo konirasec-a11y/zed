@@ -1,14 +1,11 @@
-//! Specialized UML shapes. These are Views, not semantic Elements or Cordis commands.
-//! The class/interface/enum classifier notation remains in `class.rs`.
+//! Non-classifier notations share editing, but not the classifier silhouette.
 use crate::inline_edit::UmlInlineNameEditor;
 use bellatrix_design_system::Palette;
-use gpui::{
-    App, Entity, InteractiveElement, IntoElement, MouseButton, RenderOnce,
-    SharedString, Window, div, prelude::*, px, rgb, svg,
-};
+use bellatrix_mde_modeling::{UmlType, folded_note_layout};
+use gpui::{App, Bounds, Entity, InteractiveElement, IntoElement, MouseButton, PathBuilder,
+    Pixels, RenderOnce, SharedString, Window, canvas, div, point, prelude::*, px, rgb, svg};
 use std::rc::Rc;
 use ui_input::InputField;
-
 type Action = Rc<dyn Fn(&mut Window, &mut App)>;
 
 #[derive(IntoElement)]
@@ -16,110 +13,120 @@ pub struct UmlFigure {
     kind: String,
     name: SharedString,
     selected: bool,
+    scale: f32,
     edit: Option<Action>,
     editor: Option<(Entity<InputField>, Action, Action)>,
 }
 impl UmlFigure {
-    /// Only non-classifier silhouettes use this component; classifiers
-    /// belong to UmlClassCard and its UML compartments.
     pub fn supports(kind: &str) -> bool {
-        matches!(kind,
-            "uml.package" | "uml.model" | "uml.subsystem" |
-            "uml.comment" | "uml.note" | "uml.constraint" |
-            "uml.frame" | "uml.nary_association")
+        matches!(UmlType::from_kind(kind), Some(UmlType::Package | UmlType::Model |
+            UmlType::Subsystem | UmlType::Note | UmlType::Constraint | UmlType::Frame | UmlType::NaryAssociation))
     }
     pub fn new(kind: impl Into<String>, name: impl Into<SharedString>) -> Self {
-        Self { kind:kind.into(),name:name.into(),selected:false,edit:None,editor:None }
+        Self { kind: kind.into(), name: name.into(), selected: false, scale: 1.0, edit: None, editor: None }
     }
-    pub fn selected(mut self,selected:bool)->Self { self.selected=selected;self }
-    pub fn on_title_edit(mut self,handler:impl Fn(&mut Window,&mut App)+'static)->Self {
-        self.edit=Some(Rc::new(handler));self
-    }
-    pub fn inline_edit(
-        mut self,field:Entity<InputField>,
-        confirm:impl Fn(&mut Window,&mut App)+'static,
-        cancel:impl Fn(&mut Window,&mut App)+'static,
-    )->Self {
-        self.editor=Some((field,Rc::new(confirm),Rc::new(cancel)));
+    pub fn selected(mut self, value: bool) -> Self { self.selected = value; self }
+    pub fn view_scale(mut self, scale: f32) -> Self {
+        if scale.is_finite() && scale > 0.0 { self.scale = scale; }
         self
     }
+    pub fn on_title_edit(mut self, handler: impl Fn(&mut Window, &mut App) + 'static) -> Self {
+        self.edit = Some(Rc::new(handler)); self
+    }
+    pub fn inline_edit(mut self, field: Entity<InputField>,
+        confirm: impl Fn(&mut Window, &mut App) + 'static,
+        cancel: impl Fn(&mut Window, &mut App) + 'static) -> Self {
+        self.editor = Some((field, Rc::new(confirm), Rc::new(cancel))); self
+    }
 }
+
+fn paint_folded_paper(bounds: Bounds<Pixels>, scale: f32, palette: Palette, selected: bool, window: &mut Window) {
+    let layout = folded_note_layout(f64::from(bounds.size.width) / f64::from(scale),
+        f64::from(bounds.size.height) / f64::from(scale));
+    let outline = layout.outline.map(|position| point(
+        bounds.origin.x + px(position.x as f32 * scale),
+        bounds.origin.y + px(position.y as f32 * scale)));
+    let fold = layout.fold.map(|position| point(
+        bounds.origin.x + px(position.x as f32 * scale),
+        bounds.origin.y + px(position.y as f32 * scale)));
+    let stroke = rgb(if selected { palette.selection } else { palette.text });
+    let mut fill = PathBuilder::fill();
+    fill.add_polygon(&outline, true);
+    match fill.build() {
+        Ok(path) => window.paint_path(path, rgb(palette.panel)),
+        Err(error) => log::error!("UML paper fill: {error}"),
+    }
+    let mut border = PathBuilder::stroke(px(scale));
+    border.add_polygon(&outline, true);
+    border.add_polygon(&fold, false);
+    match border.build() {
+        Ok(path) => window.paint_path(path, stroke),
+        Err(error) => log::error!("UML paper outline: {error}"),
+    }
+}
+
 impl RenderOnce for UmlFigure {
-    fn render(self,_:&mut Window,cx:&mut App)->impl IntoElement {
-        let p=Palette::current(cx);
-        let border=rgb(if self.selected {p.selection} else {p.border});
-        let title:gpui::AnyElement=if let Some((field,confirm,cancel))=self.editor {
-            UmlInlineNameEditor::new(
-                field,move |w,cx| confirm(w,cx),move |w,cx| cancel(w,cx)
-            ).into_any_element()
-        } else {
-            div().child(self.name).into_any_element()
-        };
-        let edit=self.edit.clone();
-        let title_area = div()
-            .id("uml-figure-title")
-            .text_size(px(12.0)).text_color(rgb(p.text))
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let palette = Palette::current(cx);
+        let scale = self.scale;
+        let selected = self.selected;
+        let border = rgb(if selected { palette.selection } else { palette.border });
+        let title: gpui::AnyElement = if let Some((field, confirm, cancel)) = self.editor {
+            UmlInlineNameEditor::new(field, move |window, cx| confirm(window, cx),
+                move |window, cx| cancel(window, cx)).into_any_element()
+        } else { div().child(self.name).into_any_element() };
+        let edit = self.edit;
+        let title_area = div().id("uml-figure-title").min_w_0()
+            .text_size(px(12.0 * scale)).text_color(rgb(palette.text))
             .font_weight(gpui::FontWeight::SEMIBOLD)
-            .on_mouse_down(MouseButton::Left,move |event,window,cx| {
-                if event.click_count>=2 {
-                    if let Some(callback)=&edit { callback(window,cx); }
+            .on_mouse_down(MouseButton::Left, move |event, window, cx| {
+                if event.click_count >= 2 {
+                    if let Some(handler) = &edit { handler(window, cx); }
                     cx.stop_propagation();
                 }
-            })
-            .child(title);
-        let base=div().size_full().relative()
-            .border_1().border_color(border).bg(rgb(p.panel)).overflow_hidden();
-        match self.kind.as_str() {
-            "uml.package" | "uml.model" | "uml.subsystem" => {
-                let stereotype=match self.kind.as_str() {
-                    "uml.model" => Some("«model»"),"uml.subsystem"=>Some("«subsystem»"),_=>None,
+            }).child(title);
+        match UmlType::from_kind(&self.kind) {
+            Some(UmlType::Note | UmlType::Constraint) => {
+                // The paper is the shape itself, not a square SVG icon behind a rectangular label.
+                div().size_full().relative()
+                    .child(canvas(move |_, _, _| (), move |bounds, (), window, _| {
+                        paint_folded_paper(bounds, scale, palette, selected, window);
+                    }).absolute().size_full())
+                    .child(div().absolute().left(px(10.0 * scale)).top(px(10.0 * scale))
+                        .right(px(24.0 * scale)).bottom(px(8.0 * scale))
+                        .overflow_hidden().child(title_area))
+                    .into_any_element()
+            }
+            Some(kind @ (UmlType::Package | UmlType::Model | UmlType::Subsystem)) => {
+                let stereotype = match kind {
+                    UmlType::Model => Some("«model»"), UmlType::Subsystem => Some("«subsystem»"), _ => None,
                 };
-                // UML package: raised folder tab followed by a separate box.
-                // Unlike a classifier it has no attribute/operation compartments.
                 div().size_full().relative()
-                    .child(div().absolute().left(px(0.0)).top(px(16.0))
-                        .right(px(0.0)).bottom(px(0.0))
-                        .border_1().border_color(border).bg(rgb(p.panel)))
-                    .child(div().absolute().left(px(0.0)).top(px(0.0))
-                        .w(px(87.0)).h(px(17.0))
-                        .border_1().border_color(border).bg(rgb(p.panel_alt)))
-                    .child(div().absolute().left(px(11.0)).top(px(25.0))
-                        .flex().flex_col()
-                        .when_some(stereotype,|this,s|this.child(
-                            div().text_size(px(10.0)).text_color(rgb(p.muted)).child(s)))
-                        .child(title_area))
-                    .into_any_element()
+                    .child(div().absolute().left_0().top(px(16.0 * scale)).right_0().bottom_0()
+                        .border_1().border_color(border).bg(rgb(palette.panel)))
+                    .child(div().absolute().left_0().top_0().w(px(87.0 * scale)).h(px(17.0 * scale))
+                        .border_1().border_color(border).bg(rgb(palette.panel_alt)))
+                    .child(div().absolute().left(px(11.0 * scale)).top(px(25.0 * scale)).right(px(8.0 * scale))
+                        .flex().flex_col().overflow_hidden()
+                        .when_some(stereotype, |element, label| element.child(
+                            div().text_size(px(10.0 * scale)).text_color(rgb(palette.muted)).child(label)))
+                        .child(title_area)).into_any_element()
             }
-            "uml.frame" => {
-                base.flex().flex_col().bg(rgb(p.canvas))
-                    .child(div().w(px(142.0)).h(px(30.0)).flex_none()
-                        .border_r_1().border_b_1().border_color(border)
-                        .px_2().flex().items_center().bg(rgb(p.panel_alt))
-                        .child(title_area))
-                    .into_any_element()
-            }
-            "uml.comment" | "uml.note" | "uml.constraint" => {
-                const FOLD:&[u8]=br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 2H16L22 8V22H4Z M16 2V8H22" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>"#;
-                // A note is one folded-corner sheet, not a class rectangle
-                // carrying a note icon in one of its compartments.
+            Some(UmlType::Frame) => div().size_full().relative().border_1().border_color(border)
+                .child(div().w(px(142.0 * scale)).h(px(30.0 * scale))
+                    .border_r_1().border_b_1().border_color(border).px_2().flex().items_center()
+                    .bg(rgb(palette.panel_alt)).child(title_area)).into_any_element(),
+            Some(UmlType::NaryAssociation) => {
+                const DIAMOND: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><polygon points="50,4 96,50 50,96 4,50" fill="none" stroke="currentColor" stroke-width="3"/></svg>"#;
                 div().size_full().relative()
-                    .child(svg().data(FOLD).size_full().text_color(border))
-                    .child(div().absolute().left(px(12.0)).top(px(14.0))
-                        .right(px(14.0)).child(title_area))
-                    .into_any_element()
+                    .child(div().absolute().top_0().left_0().right_0().bottom(px(22.0 * scale))
+                        .child(svg().data(DIAMOND).size_full().text_color(
+                            rgb(if selected { palette.selection } else { palette.text }))))
+                    .child(div().absolute().left_0().right_0().bottom_0().h(px(22.0 * scale))
+                        .flex().justify_center().items_center().child(title_area)).into_any_element()
             }
-            "uml.nary_association" => {
-                const DIAMOND:&[u8]=br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><polygon points="50,4 96,50 50,96 4,50" fill="none" stroke="currentColor" stroke-width="3"/></svg>"#;
-                // An N-ary Association is a diamond node; it must not inherit
-                // the rectangular classifier border, even when selected.
-                div().size_full().flex().flex_col().items_center().justify_center()
-                    .child(svg().data(DIAMOND).w(px(55.0)).h(px(55.0))
-                        .text_color(if self.selected {rgb(p.selection)} else {rgb(p.text)}))
-                    .child(div().text_xs().text_color(rgb(p.muted)).child(title_area))
-                    .into_any_element()
-            }
-            _ => base.flex().items_center().justify_center()
-                .child(title_area).into_any_element(),
+            _ => div().size_full().border_1().border_color(border)
+                .flex().items_center().justify_center().child(title_area).into_any_element(),
         }
     }
 }
