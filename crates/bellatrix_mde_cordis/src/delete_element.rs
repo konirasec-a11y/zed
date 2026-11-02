@@ -3,7 +3,7 @@
 //! and other elements remain. All incident edges and diagram views are removed.
 use crate::project_integration::{from_document, namespace_for};
 use bellatrix_mde_model::ModelingSection;
-use bellatrix_mde_modeling::Graph;
+use bellatrix_mde_modeling::{Graph, RelationshipGraph};
 use bellatrix_project::{ProjectId, ProjectReplace, ProjectReplaceRequested, ProjectService};
 use cordis::event::QueryOutcome;
 use cordis::{Context, Event, Routing};
@@ -25,12 +25,20 @@ impl Event for ModelingDeleteElement {
 
 /// The ownership closure is based only on semantic `owns` edges.
 fn remove_element(section: &mut ModelingSection, id: &str) -> Result<(), String> {
-    // UML connectors are first-class Relation objects; deleting one does not
-    // delete either classifier. Never delete a structural `owns` edge alone.
-    if section.relations.iter().any(|r| r.id == id && r.kind.starts_with("uml.")) {
+    // Only diagram-visible relationships are directly deletable. "owns",
+    // "declares" and "physical_parent" remain structural graph edges.
+    // The graph query is shared with the Canvas and Model Explorer, so legacy
+    // dependencies and typed UML connections have identical behavior.
+    if section.relations.iter().any(|r| r.id == id) {
+        if !section.diagrams.iter().any(|diagram|
+            RelationshipGraph::new(section, &diagram.id)
+                .visible_relations().iter().any(|relation| relation.id == id)
+        ) {
+            return Err("structural relationship cannot be deleted directly".into());
+        }
         section.relations.retain(|r| r.id != id);
-        for d in &mut section.diagrams {
-            d.views.retain(|v| v.subject.as_deref() != Some(id));
+        for diagram in &mut section.diagrams {
+            diagram.views.retain(|view| view.subject.as_deref() != Some(id));
         }
         return Ok(());
     }
