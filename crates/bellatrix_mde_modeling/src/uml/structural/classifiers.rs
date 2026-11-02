@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 use serde::{Deserialize, Serialize};
 
+
 use crate::uml::behavioral::common_behavior::CallConcurrencyKind;
 use crate::uml::structural::common_structure::VisibilityKind;
 
@@ -430,4 +431,204 @@ pub struct ConnectorEnd {
     pub lower_value: Option<String>,
     pub part_with_port: Option<String>,
     pub role: String,
+}
+
+// Original module: connector_kind.rs
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ConnectorKind {
+    Assembly,
+    Delegation,
+}
+
+// Original module: encapsulated_classifier.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EncapsulatedClassifier {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub element_import: Vec<String>,
+    pub package_import: Vec<String>,
+    pub owned_rule: Vec<String>,
+    pub is_leaf: String,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub template_binding: Vec<String>,
+    pub owned_template_signature: Option<String>,
+    pub is_abstract: String,
+    pub generalization: Vec<String>,
+    pub powertype_extent: Vec<String>,
+    pub redefined_classifier: Vec<String>,
+    pub substitution: Vec<String>,
+    pub representation: Option<String>,
+    pub collaboration_use: Vec<String>,
+    pub owned_use_case: Vec<String>,
+    pub use_case: Vec<String>,
+    pub owned_attribute: Vec<String>,
+    pub owned_connector: Vec<String>,
+}
+
+// Original module: structured_classifier.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StructuredClassifier {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub element_import: Vec<String>,
+    pub package_import: Vec<String>,
+    pub owned_rule: Vec<String>,
+    pub is_leaf: String,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub template_binding: Vec<String>,
+    pub owned_template_signature: Option<String>,
+    pub is_abstract: String,
+    pub generalization: Vec<String>,
+    pub powertype_extent: Vec<String>,
+    pub redefined_classifier: Vec<String>,
+    pub substitution: Vec<String>,
+    pub representation: Option<String>,
+    pub collaboration_use: Vec<String>,
+    pub owned_use_case: Vec<String>,
+    pub use_case: Vec<String>,
+    pub owned_attribute: Vec<String>,
+    pub owned_connector: Vec<String>,
+}
+
+// Original module: property.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Property {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub is_static: String,
+    pub type_: Option<String>,
+    pub is_ordered: String,
+    pub is_unique: String,
+    pub upper_value: Option<String>,
+    pub lower_value: Option<String>,
+    pub is_read_only: String,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub deployment: Vec<String>,
+    pub template_binding: Vec<String>,
+    pub owned_template_signature: Option<String>,
+    pub datatype: Option<String>,
+    pub is_derived: String,
+    pub is_derived_union: String,
+    pub aggregation: AggregationKind,
+    pub redefined_property: Vec<String>,
+    pub owning_association: Option<String>,
+    pub default_value: Option<String>,
+    pub subsetted_property: Vec<String>,
+    pub association: Option<String>,
+    pub qualifier: Vec<String>,
+    pub association_end: Option<String>,
+}
+
+// Original module: multiplicity_element.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MultiplicityElement {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub is_ordered: String,
+    pub is_unique: String,
+    pub upper_value: Option<String>,
+    pub lower_value: Option<String>,
+}
+
+// Original module: operation.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Operation {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub element_import: Vec<String>,
+    pub package_import: Vec<String>,
+    pub owned_rule: Vec<String>,
+    pub is_leaf: String,
+    pub is_static: String,
+    pub owned_parameter: Vec<String>,
+    pub is_abstract: String,
+    pub method: Vec<String>,
+    pub concurrency: CallConcurrencyKind,
+    pub raised_exception: Vec<String>,
+    pub owned_parameter_set: Vec<String>,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub template_binding: Vec<String>,
+    pub owned_template_signature: Option<String>,
+    pub interface: Option<String>,
+    pub class: Option<String>,
+    pub is_query: String,
+    pub precondition: Vec<String>,
+    pub postcondition: Vec<String>,
+    pub redefined_operation: Vec<String>,
+    pub datatype: Option<String>,
+    pub body_condition: Option<String>,
+}
+
+// Original module: templateable_element.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TemplateableElement {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub template_binding: Vec<String>,
+    pub owned_template_signature: Option<String>,
+}
+
+// Original module: template_binding.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TemplateBinding {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub signature: String,
+    pub parameter_substitution: Vec<String>,
+    pub bound_element: String,
+}
+
+// Original module: template_signature.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TemplateSignature {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub parameter: Vec<String>,
+    pub owned_parameter: Vec<String>,
+    pub template: String,
 }
