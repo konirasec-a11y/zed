@@ -24,6 +24,8 @@ use bellatrix_mde_cordis::{
     ModelingElementKind, ModelingRelationKind, ModelingTool,
     ModelingMoveViewRequested, ModelingRenameRequested, ModelingResizeViewRequested,
     ModelingDeleteElementRequested, ModelingSetPropertyRequested,
+    InterfaceQuickAction, ModelingInterfaceQuickEditRequested,
+    ModelingSetNameExpressionRequested,
     ModelingAddMemberRequested, ModelingMemberKind,
 };
 use bellatrix_mde_model::{Geometry, PathSegment};
@@ -177,6 +179,55 @@ impl MdeWorkbenchItem {
         }
     }
 
+    fn name_expression_text(element: &bellatrix_mde_model::Element) -> String {
+        let stereotype = element.properties.get("stereotype")
+            .and_then(serde_json::Value::as_str)
+            .filter(|value|!value.trim().is_empty())
+            .map_or_else(String::new,|value|format!("<< {value} >> "));
+        let visibility = element.properties.get("visibility")
+            .and_then(serde_json::Value::as_str)
+            .and_then(|value|match value {
+                "protected"=>Some("# "),"private"=>Some("- "),
+                "package"=>Some("~ "),_=>None,
+            }).unwrap_or("");
+        format!("{stereotype}{visibility}{}",element.name)
+    }
+
+    pub(crate) fn run_interface_quick_action(
+        &mut self,action:InterfaceQuickAction,cx:&mut Context<Self>
+    ) {
+        let Some(interface_id)=self.selected_element.clone() else {
+            self.feedback="Select an Interface to edit".into();
+            cx.notify();
+            return;
+        };
+        let Ok(snapshot)=self.source.snapshot() else {
+            self.feedback="Project snapshot unavailable".into();
+            cx.notify();
+            return;
+        };
+        let Some(element)=snapshot.section.elements.iter().find(|e|e.id==interface_id) else {
+            self.feedback="Interface was removed from the model".into();
+            cx.notify();
+            return;
+        };
+        if !matches!(element.kind.as_str(),"rust.trait"|"uml.interface") {
+            self.feedback="This action requires an Interface".into();
+            cx.notify();
+            return;
+        }
+        let Some(diagram_id)=self.active_diagram.clone().or_else(||
+            snapshot.section.diagrams.first().map(|d|d.id.clone())) else {
+            self.feedback="No active UML diagram".into();
+            cx.notify();
+            return;
+        };
+        self.submit(MdeUiCommand::InterfaceQuickEdit(ModelingInterfaceQuickEditRequested {
+            project_id:self.project_id().clone(),
+            interface_id,diagram_id,action,expected_revision:snapshot.revision,
+        }),cx);
+    }
+
     /// Begin editing the actual name on its UML visual element. Selection
     /// alone does not open Quick Edit. Double-click and F2 use this path.
     fn begin_inline_edit(
@@ -190,7 +241,8 @@ impl MdeWorkbenchItem {
         let field = cx.new(|cx| {
             InputField::new(window, cx, "Name").label_min_width(px(96.0))
         });
-        field.update(cx, |field, cx| field.set_text(&target.name, window, cx));
+        let display = Self::name_expression_text(target);
+        field.update(cx, |field, cx| field.set_text(&display, window, cx));
         self.select_element(id.clone(), cx);
         self.editing_subject = Some(id);
         self.inline_editor = Some(field.clone());
@@ -222,17 +274,32 @@ impl MdeWorkbenchItem {
             self.cancel_inline_edit(window, cx);
             return;
         };
-        let changed = element.name != name;
+        let classifier = matches!(element.kind.as_str(),
+            "rust.struct" | "rust.trait" | "uml.class" | "uml.interface" |
+            "uml.enumeration" | "uml.signal" | "uml.data_type" |
+            "uml.primitive_type" | "uml.association_class" | "uml.template");
+        let changed = name != if classifier {
+            Self::name_expression_text(element)
+        } else { element.name.clone() };
         self.editing_subject = None;
         self.inline_editor = None;
         if changed {
-            self.submit(MdeUiCommand::SetProperty(ModelingSetPropertyRequested {
-                project_id: self.project_id().clone(),
-                element_id: id,
-                path: "name".into(),
-                value: serde_json::Value::String(name),
-                expected_revision: snapshot.revision,
-            }), cx);
+            if classifier {
+                self.submit(MdeUiCommand::SetNameExpression(ModelingSetNameExpressionRequested {
+                    project_id: self.project_id().clone(),
+                    element_id: id,
+                    expression: name,
+                    expected_revision: snapshot.revision,
+                }), cx);
+            } else {
+                self.submit(MdeUiCommand::SetProperty(ModelingSetPropertyRequested {
+                    project_id: self.project_id().clone(),
+                    element_id: id,
+                    path: "name".into(),
+                    value: serde_json::Value::String(name),
+                    expected_revision: snapshot.revision,
+                }), cx);
+            }
         }
         self.focus_handle.focus(window, cx);
         cx.notify();
