@@ -45,6 +45,22 @@ fn fresh_id(section: &ModelingSection, label: &str, revision: u64) -> Result<Str
         i=i.checked_add(1).ok_or("identifier overflow")?;
     }
 }
+/// Owning a new UML member enlarges the interface lollipop compartments,
+/// without changing its identity or any unrelated classifier View.
+pub(crate) fn grow_interface_views(section: &mut ModelingSection, interface_id: &str) {
+    let members=section.relations.iter().filter(|r|r.kind=="owns" && r.from==interface_id)
+        .filter(|r|section.elements.iter().any(|e|e.id==r.to && matches!(e.kind.as_str(),
+            "rust.field" | "rust.function" | "uml.attribute" | "uml.operation" | "uml.reception"
+        ))).count();
+    let minimum=76.0+members as f64*23.0;
+    for view in section.diagrams.iter_mut().flat_map(|d|&mut d.views)
+        .filter(|v|v.subject.as_deref()==Some(interface_id)) {
+        if let Geometry::Rect{height,..}=&mut view.geometry {
+            *height=(*height).max(minimum);
+        }
+    }
+}
+
 fn unique_name(section:&ModelingSection, prefix:&str)->String {
     let existing=section.elements.iter().map(|e|e.name.as_str()).collect::<Vec<_>>();
     (1_u64..).map(|n|format!("{prefix}{n}"))
@@ -103,6 +119,7 @@ pub(crate) fn apply_quick_edit(
     if link=="owns" {
         let owns_id=fresh_id(section,"owns",req.expected_revision)?;
         insert_relation(section,owns_id,"owns",&req.interface_id,&new_id);
+        grow_interface_views(section,&req.interface_id);
         return Ok(());
     }
     let diagram=section.diagrams.iter_mut().find(|d|d.id==req.diagram_id)
