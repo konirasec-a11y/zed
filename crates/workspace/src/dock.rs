@@ -1721,7 +1721,9 @@ pub mod test {
 
         fn set_position(&mut self, position: DockPosition, _: &mut Window, cx: &mut Context<Self>) {
             self.position = position;
-            cx.update_global::<SettingsStore, _>(|_, _| {});
+            // Exercise the native Entity-observer relocation path; a panel
+            // must not require an unrelated SettingsStore mutation to move.
+            cx.notify();
         }
 
         fn default_size(&self, _window: &Window, _: &App) -> Pixels {
