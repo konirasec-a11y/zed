@@ -119,6 +119,17 @@ A normalização de relações do editor está em
 [GRAPH_RELATIONSHIPS.md](GRAPH_RELATIONSHIPS.md). Atributos de notação
 e direções source/target ficam no modelo, não nos `IconButton`s.
 
+## Renderização Tera 2.4.0 já integrada ao gerador Rust
+
+A primeira etapa **M2T** utiliza o crate `bellatrix_mde_templates`
+para interpolação textual a partir de `GenerationModel` e dos dados
+resolvidos pelo adaptador Rust. Consulte
+[TERA_GENERATION_PIPELINE.md](TERA_GENERATION_PIPELINE.md).
+Essa integração é incremental: o metamodelo de destino com `TargetGraph`
+e o `TraceGraph` da transformação M2M ainda precisam ser formalizados,
+implementados e testados; não confundir o plano de geração atual
+com uma implementação algébrica DPO/SPO/TGG concluída.
+
 ## Evolução prática, por critérios de aceitação
 
 1. **Grafo tipado do metamodelo:** declarar `VertexType`,
