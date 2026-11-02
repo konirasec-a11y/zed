@@ -32,7 +32,7 @@ use gpui::{
     SharedString, Task, Window, div, prelude::*, px,
 };
 use std::path::PathBuf;
-use ui::Label;
+use ui::{Clickable, Label};
 use workspace::{Workspace, item::Item};
 
 #[derive(Clone)]
