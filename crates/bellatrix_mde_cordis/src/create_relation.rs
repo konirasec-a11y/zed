@@ -218,6 +218,45 @@ mod tests {
     }
 
     #[test]
+    fn different_relations_between_same_nodes_occupy_different_lanes() {
+        let model = serde_json::from_str(
+            include_str!("../../bellatrix_mde_model/fixtures/todo.json")
+        ).unwrap();
+        let mut section = ModelingSection::from_model(&model);
+        let diagram_id = section.diagrams[0].id.clone();
+        let original = section.diagrams[0].views.iter()
+            .find(|view| view.subject.as_deref() == Some("ref-task"))
+            .unwrap().geometry.clone();
+        for (id, kind) in [("new-dependency", "uml.dependency"),
+                           ("new-composition", "uml.composition")] {
+            let mut properties = std::collections::BTreeMap::new();
+            properties.insert("routing".into(), serde_json::json!("automatic"));
+            section.relations.push(Relation {
+                id: id.into(), kind: kind.into(),
+                from: "type-list".into(), to: "type-task".into(),
+                properties,
+            });
+            let geometry = route(&section, &diagram_id, "type-list", "type-task").unwrap();
+            section.diagrams[0].views.push(View {
+                id: format!("view-{id}"), subject: Some(id.into()), label: None,
+                geometry, style: Style::default(), z_index: 5,
+            });
+        }
+        reroute(&mut section, &diagram_id);
+        let relation_view = |id: &str| section.diagrams[0].views.iter()
+            .find(|view| view.subject.as_deref() == Some(id))
+            .unwrap().geometry.clone();
+        let first = relation_view("new-dependency");
+        let second = relation_view("new-composition");
+        assert_ne!(first, second, "two connections must never paint over the same path");
+        assert_eq!(relation_view("ref-task"), original,
+            "hand-authored curves must not be modified by auto routing");
+        assert!(matches!(first, Geometry::Path { segments, .. }
+            if matches!(&segments[..], [PathSegment::Line {..}] | [PathSegment::Cubic {..}])));
+        Graph::new(&section.to_model("project-todo", "Task List")).validate().unwrap();
+    }
+
+    #[test]
     fn resized_interface_anchors_use_its_actual_circle() {
         let model = serde_json::from_str(include_str!("../../bellatrix_mde_model/fixtures/todo.json")).unwrap();
         let mut section = ModelingSection::from_model(&model);
