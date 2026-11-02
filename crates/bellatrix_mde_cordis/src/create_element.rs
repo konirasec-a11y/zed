@@ -7,27 +7,7 @@ use bellatrix_project::{ProjectId, ProjectReplace, ProjectReplaceRequested, Proj
 use cordis::event::QueryOutcome;
 use cordis::{Context, Event, Routing};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ModelingElementKind {
-    Class,
-    Interface,
-}
-
-impl ModelingElementKind {
-    fn model_kind(self) -> &'static str {
-        match self {
-            Self::Class => "rust.struct",
-            Self::Interface => "rust.trait",
-        }
-    }
-
-    fn default_name(self) -> &'static str {
-        match self {
-            Self::Class => "NewClass",
-            Self::Interface => "NewInterface",
-        }
-    }
-}
+use crate::class_diagram::ModelingElementKind;
 
 #[derive(Clone, Debug)]
 pub struct ModelingCreateElementRequested {
@@ -98,7 +78,7 @@ pub(crate) async fn create_element(
         id: view_id,
         subject: Some(element_id.clone()),
         label: None,
-        geometry: Geometry::Rect { x: request.x, y: request.y, width: 180.0, height: 112.0 },
+        geometry: { let (width,height)=request.kind.initial_size(); Geometry::Rect { x: request.x, y: request.y, width, height } },
         style: Style::default(),
         z_index,
     });
