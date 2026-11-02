@@ -254,7 +254,7 @@ impl MdeWorkbenchItem {
             self.feedback = "Project has no diagram".into(); cx.notify(); return;
         };
         self.submit(MdeUiCommand::CreateRelation(ModelingCreateRelationRequested {
-            project_id: self.project_id().clone(), diagram_id, kind, from: source, to: target, expected_revision: snapshot.revision,
+            project_id: self.project_id().clone(), diagram_id, kind, from, to: target, expected_revision: snapshot.revision,
         }), cx);
         self.selected_tool = None; cx.notify();
     }
@@ -389,7 +389,7 @@ impl Item for MdeWorkbenchItem {
 }
 
 impl Render for MdeWorkbenchItem {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = WorkbenchPalette::current(cx);
         let background = palette.canvas;
         let border = palette.border;
