@@ -40,13 +40,13 @@ A successfully saved **file** (`BufferSaved`) is not by itself proof that a sema
 
 ## Concrete gap in the current fork
 
-`crates/bellatrix_mde_workbench/src/lib.rs` implements `workspace::Item` and `EventEmitter<()>` for `MdeWorkbenchItem`, but **not** `workspace::SerializableItem`. `crates/bellatrix_mde_workbench/src/integration.rs` currently uses `cx.observe_new` to insert a new MDE Item and Panels into every new Workspace. As a result, MDE tab/diagram/selection restoration **does not currently use** Zed's standard Item/session mechanism.
+`crates/bellatrix_mde_workbench/src/lib.rs` implements `workspace::Item` and `EventEmitter<()>` for `MdeWorkbenchItem`, but **not** `workspace::SerializableItem`. The integration now registers the native `bellatrix_mde::OpenMdeWorkbench` Workspace action via `cx.observe_new` instead of inserting MDE Items and Panels into every Zed window. Reopening the action focuses an existing MDE tab. This removes the automatic-UI duplication, **but** MDE tab/diagram/selection restoration **still does not use** Zed's standard Item/session mechanism.
 
 Do not invent an alternate session database to fix this. Follow `crates/editor/src/items.rs` and `crates/editor/src/persistence.rs`:
 
 - Register `MdeWorkbenchItem` as `SerializableItem` through `workspace::register_serializable_item`.
 - Persist only a **reference to a model document and transient UI state** (active diagram, selected element, current viewport) under Zed's per-Workspace Item lifecycle, using an existing `db::Domain` pattern if a table is needed.
-- `deserialize` must resolve the correct Bellatrix document and only open an Item for that document; avoid unconditional duplicate Items in every Workspace.
+- `deserialize` must resolve the correct Bellatrix document within the real Zed Project/worktree and open exactly that Item, rather than the synthetic startup fixture; avoid duplicate Items per model. The interim `OpenMdeWorkbench` action is deliberately user-activated, not auto-mounted.
 - Let the Zed Dock persist panel sizes, visibility, arrangement and focus. Do **not** serialize these again in Bellatrix.
 - Preserve old `.bellatrix` document formats and namespaces; session rows are not canonical model storage.
 
@@ -61,7 +61,7 @@ Recommended incremental migration:
 3. After round-trip, external-edit, concurrent-write, dirty-state and legacy-file tests pass, retire the duplicate Bellatrix disk writer/open-file shell **only where Zed is demonstrably authoritative**. Keep semantic model identity, namespace and validation contracts independent from the UI runtime.
 4. Headless MDE engines must still work without initializing GPUI/Workspace. Do not make backend Cordis Services depend on Zed UI entities; use an explicit storage adapter/interface if sharing a file representation.
 
-Do not put user project documents into Zed's workspace/session SQLite as the only authoritative copy. That database is scoped to the local application's session/state.
+Do not put user project documents into Zed's workspace/session SQLite as the only authoritative copy. The current host still creates a standalone Bellatrix document from `BELLATRIX_PROJECT_FILE`, `BELLATRIX_MODEL_FILE` or a demo fixture at startup; it **does not yet select documents from the active Zed Project**. Retire that behavior only when ProjectPath/Buffer-backed document opening and domain revision tests are operational. That database is scoped to the local application's session/state.
 
 ## When a new `mde.proto` would be justified
 
