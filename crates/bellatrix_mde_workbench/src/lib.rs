@@ -802,6 +802,7 @@ impl Render for MdeWorkbenchItem {
                         // Selection and editing are different interactions:
                         // one click selects; double-click (or F2) edits in place.
                         // Owned member elements keep the containing class View.
+                        let is_interface = matches!(element.kind.as_str(), "rust.trait" | "uml.interface");
                         let selected_target = self.selected_element.as_deref().and_then(|id| {
                             if id == subject {
                                 Some(element)
@@ -941,7 +942,7 @@ impl Render for MdeWorkbenchItem {
                                 .top(px(px_y * zoom + pan.1))
                                 .w(px(px_w * zoom))
                                 .h(px(px_h * zoom))
-                                .bg(surface)
+                                .when(!is_interface, |card| card.bg(surface))
                                 .cursor_pointer()
                                 .on_mouse_down(MouseButton::Left, move |event: &MouseDownEvent, window, cx| {
                                     let _ = drag_owner.update(cx, |item, cx| {
@@ -982,14 +983,14 @@ impl Render for MdeWorkbenchItem {
                                             .child(picker)
                                     )
                                 })
-                                .child(
+                                .when(is_selected, |card| card.child(
                                     div()
                                         .id(format!("mde-resize-{}", view.id))
                                         .absolute()
                                         .bottom(px(0.0))
                                         .right(px(0.0))
-                                        .w(px(14.0))
-                                        .h(px(14.0))
+                                        .w(px(10.0))
+                                        .h(px(10.0))
                                         .bg(selection)
                                         .on_mouse_down(MouseButton::Left, move |event: &MouseDownEvent, _, cx| {
                                             let _ = resize_owner.update(cx, |item, cx| {
@@ -998,7 +999,7 @@ impl Render for MdeWorkbenchItem {
                                             });
                                             cx.stop_propagation();
                                         }),
-                                ),
+                                )),
                         );
                     }
                 }
