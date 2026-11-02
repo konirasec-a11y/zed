@@ -1,7 +1,7 @@
 //! UML classifier view: class/interface heading and owned member compartments.
 //! Supports selection and inline editing but delegates all semantic actions,
 //! validation and persistence to the host.
-use crate::inline_edit::UmlInlineNameEditor;
+use crate::{inline_edit::UmlInlineNameEditor, interface::UmlInterfaceBall};
 use bellatrix_design_system::Palette;
 use gpui::{
     App, Entity, InteractiveElement, IntoElement, MouseButton, RenderOnce,
@@ -10,29 +10,31 @@ use gpui::{
 use std::rc::Rc;
 use ui_input::InputField;
 
-type ElementAction = Rc<dyn Fn(&str, &mut Window, &mut App)>;
-type Action = Rc<dyn Fn(&mut Window, &mut App)>;
+pub(crate) type ElementAction = Rc<dyn Fn(&str, &mut Window, &mut App)>;
+pub(crate) type Action = Rc<dyn Fn(&mut Window, &mut App)>;
 
 #[derive(Clone)]
-struct MemberRow {
-    id: Option<String>,
-    title: SharedString,
+pub(crate) struct MemberRow {
+    pub(crate) id: Option<String>,
+    pub(crate) title: SharedString,
 }
 
 #[derive(IntoElement)]
 pub struct UmlClassCard {
-    class_id: Option<String>,
-    title: SharedString,
-    stereotype: Option<SharedString>,
-    attributes: Vec<MemberRow>,
-    operations: Vec<MemberRow>,
-    selected: bool,
-    editing: Option<(String, Entity<InputField>)>,
-    select_member: Option<ElementAction>,
-    edit_member: Option<ElementAction>,
-    edit_title: Option<Action>,
-    confirm_edit: Option<Action>,
-    cancel_edit: Option<Action>,
+    pub(crate) class_id: Option<String>,
+    pub(crate) title: SharedString,
+    pub(crate) stereotype: Option<SharedString>,
+    pub(crate) interface_ball: bool,
+    pub(crate) attributes: Vec<MemberRow>,
+    pub(crate) operations: Vec<MemberRow>,
+    pub(crate) receptions: Vec<MemberRow>,
+    pub(crate) selected: bool,
+    pub(crate) editing: Option<(String, Entity<InputField>)>,
+    pub(crate) select_member: Option<ElementAction>,
+    pub(crate) edit_member: Option<ElementAction>,
+    pub(crate) edit_title: Option<Action>,
+    pub(crate) confirm_edit: Option<Action>,
+    pub(crate) cancel_edit: Option<Action>,
 }
 
 impl UmlClassCard {
@@ -41,8 +43,10 @@ impl UmlClassCard {
             class_id: None,
             title: title.into(),
             stereotype: None,
+            interface_ball: false,
             attributes: Vec::new(),
             operations: Vec::new(),
+            receptions: Vec::new(),
             selected: false,
             editing: None,
             select_member: None,
@@ -69,7 +73,10 @@ impl UmlClassCard {
             "uml.template" => Some("«template»"),
             _ => None,
         };
-        if let Some(label) = label { self.stereotype = Some(label.into()); }
+        self.interface_ball = matches!(kind, "rust.trait" | "uml.interface");
+        if let Some(label) = label {
+            if !self.interface_ball { self.stereotype = Some(label.into()); }
+        }
         self
     }
 
@@ -88,6 +95,12 @@ impl UmlClassCard {
     }
     pub fn operation(mut self, value: impl Into<SharedString>) -> Self {
         self.operations.push(MemberRow { id: None, title: value.into() });
+        self
+    }
+    pub fn reception_with_id(
+        mut self, id: impl Into<String>, title: impl Into<SharedString>,
+    ) -> Self {
+        self.receptions.push(MemberRow { id: Some(id.into()), title: title.into() });
         self
     }
     pub fn attribute_with_id(
@@ -207,7 +220,12 @@ fn compartment(
 }
 
 impl RenderOnce for UmlClassCard {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        if self.interface_ball {
+            // StarUML Interface lollipop: this is a distinct visual component,
+            // not a class rectangle decorated with «interface» text.
+            return UmlInterfaceBall::new(self).render(window, cx).into_any_element();
+        }
         let palette = Palette::current(cx);
         let line = rgb(if self.selected { palette.selection } else { palette.border });
         let title_editor = self.editing.as_ref().and_then(|(subject, field)| {
@@ -266,10 +284,18 @@ impl RenderOnce for UmlClassCard {
             })
             .when(!self.operations.is_empty(), |el| {
                 el.child(compartment(
-                    self.operations, "operation", self.editing,
+                    self.operations, "operation", self.editing.clone(),
+                    self.select_member.clone(), self.edit_member.clone(),
+                    self.confirm_edit.clone(), self.cancel_edit.clone(), palette, true,
+                ))
+            })
+            .when(!self.receptions.is_empty(), |el| {
+                el.child(compartment(
+                    self.receptions, "reception", self.editing,
                     self.select_member, self.edit_member,
                     self.confirm_edit, self.cancel_edit, palette, true,
                 ))
             })
+            .into_any_element()
     }
 }
