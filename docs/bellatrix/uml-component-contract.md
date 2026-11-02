@@ -48,8 +48,8 @@ As **17 entradas** de Class são compostas a partir dos tipos/capacidades; não 
 | Linha 2 | Add Provided Interface | Interface + `uml.interface_realization` (Class → Interface) |
 | Linha 2 | Add Required Interface | Interface + `uml.dependency` (Class → Interface) |
 | Linha 3 | Add Associated Class | Class + `uml.association` |
-| Linha 3 | Add Aggregated Class | Class + `uml.aggregation`; diamante na Class de origem |
-| Linha 3 | Add Composited Class | Class + `uml.composition`; diamante preenchido na Class de origem |
+| Linha 3 | Add Aggregated Class | Class + `uml.association` com `end1Aggregation=shared`; diamante vazio na origem |
+| Linha 3 | Add Composited Class | Class + `uml.association` com `end1Aggregation=composite`; diamante preenchido na origem |
 | Linha 4 | Add Port | `uml.port` com `owns` e View pequena ancorada na borda de Class |
 | Linha 4 | Add Part | `uml.part` com `owns` e View retangular contida na Class |
 
