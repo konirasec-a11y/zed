@@ -4,8 +4,9 @@
 //! compose the Working Diagrams/Toolbox and Explorer/Inspector stacks from
 //! docs/design/ while Zed still owns placement, focus and persistence.
 
-use crate::{MdeToolDrag, MdeWorkbenchItem, WorkbenchPalette, hierarchy::project_hierarchy, integration::{OpenMdeWorkbench, OpenMdeSymbols}};
+use crate::{MdeToolDrag, MdeWorkbenchItem, WorkbenchPalette, hierarchy::project_hierarchy, integration::{OpenMdeWorkbench, OpenMdeSymbols}, property_editor::render_inspector};
 use bellatrix_mde_cordis::ModelingElementKind;
+use bellatrix_mde_modeling::{inspect_element, PropertyEditor};
 use bellatrix_ui_symbols::{glyph, ShapeKind};
 use gpui::{
     Action, App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
@@ -14,7 +15,7 @@ use gpui::{
 };
 use ui::{Button, IconName, Label, TreeViewItem, prelude::*};
 use ui_input::InputField;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use workspace::{
     Workspace,
     dock::{DockPosition, Panel, PanelEvent},
@@ -273,6 +274,7 @@ pub struct MdeRightPanel {
     name_input: Entity<InputField>,
     save_input: Entity<InputField>,
     editing_id: Option<String>,
+    property_inputs: HashMap<String, Entity<InputField>>,
     // These are presentation-only disclosure states; semantic ownership stays
     // in the MDE graph, while Zed's Project Panel owns filesystem disclosure.
     collapsed_elements: HashSet<String>,
@@ -293,6 +295,7 @@ impl MdeRightPanel {
             name_input,
             save_input,
             editing_id: None,
+            property_inputs: HashMap::new(),
             collapsed_elements: HashSet::new(),
         }
     }
@@ -329,14 +332,11 @@ impl Render for MdeRightPanel {
         let item = self.state.item.clone();
         let selected_id = item.read(cx).selected_element().map(str::to_owned);
         let snapshot = item.read(cx).source().snapshot().ok();
+        let inspection = snapshot.as_ref().and_then(|snapshot| selected_id.as_deref()
+            .and_then(|id| inspect_element(&snapshot.section, id)));
         let mut rows = Vec::new();
-        let mut selected_name = None;
 
         if let Some(snapshot) = &snapshot {
-            selected_name = snapshot.section.elements.iter()
-                .find(|element| Some(element.id.as_str()) == selected_id.as_deref())
-                .map(|element| element.name.clone());
-
             // StarUML-style semantic ownership. Only MDE elements, never
             // files/directories, appear here. Expand/collapse is local UI state.
             let tree = project_hierarchy(&snapshot.section);
@@ -385,17 +385,35 @@ impl Render for MdeRightPanel {
             }
         }
 
-        // Do not overwrite the user's in-progress input during render.
-        // Only initialize the name field when the selected item actually changes.
+        // Inputs belong to the selected object, not to a fixed Inspector form.
+        // Rebuild on selection changes; avoid resetting in-progress typing
+        // on every render. The domain's descriptors define these controls.
         if self.editing_id != selected_id {
             self.editing_id = selected_id.clone();
-            if let Some(name) = selected_name {
-                self.name_input.update(cx, |input, cx| input.set_text(&name, window, cx));
+            self.property_inputs.clear();
+            if let Some(inspection) = &inspection {
+                for prop in &inspection.properties {
+                    if !prop.editable || !matches!(prop.editor,
+                        PropertyEditor::Text | PropertyEditor::Multiline | PropertyEditor::Number
+                    ) {
+                        continue;
+                    }
+                    let editor = if prop.path == "name" {
+                        self.name_input.clone()
+                    } else {
+                        cx.new(|cx| InputField::new(window, cx, &prop.label))
+                    };
+                    let text = prop.value.as_str()
+                        .map_or_else(|| prop.value.to_string(), str::to_owned);
+                    editor.update(cx, |field, cx| field.set_text(&text, window, cx));
+                    self.property_inputs.insert(prop.path.clone(), editor);
+                }
             }
         }
 
-        let rename_item = item.clone();
-        let name_input = self.name_input.clone();
+        let inspector_rows = render_inspector(
+            inspection.as_ref(), item.clone(), &self.property_inputs, window, cx
+        );
         let save_item = item.clone();
         let save_input = self.save_input.clone();
         let delete_item = item.clone();
@@ -457,30 +475,13 @@ impl Render for MdeRightPanel {
                     .child(
                         div().h(px(36.0)).flex_none().px_3().flex().items_center()
                             .border_b_1().border_color(panel_border)
-                            .child(Label::new("Inspector")),
+                            .child(Label::new("Property Editor · Inspector")),
                     )
                     .child(
                         div().id("bellatrix-mde-inspector-scroll")
                             .flex_1().overflow_y_scroll().p_2()
                             .flex().flex_col().gap_2()
-                            .child(self.name_input.clone())
-                            .child(Button::new("mde-inspector-rename", "Rename selected").on_click(
-                                move |_, _, cx| {
-                                    let name = name_input.read(cx).text(cx);
-                                    rename_item.update(cx, |workbench, cx| {
-                                        workbench.rename_selected(name, cx);
-                                    });
-                                },
-                            ))
-                            .child(self.save_input.clone())
-                            .child(Button::new("mde-save-project", "Save project").on_click(
-                                move |_, _, cx| {
-                                    let path = save_input.read(cx).text(cx);
-                                    save_item.update(cx, |workbench, cx| {
-                                        workbench.save_project(path, cx);
-                                    });
-                                },
-                            ))
+                            .children(inspector_rows)
                             .child(
                                 Button::new("mde-delete-element", "Delete selected element")
                                     .on_click(move |_, _, cx| {
@@ -489,6 +490,23 @@ impl Render for MdeRightPanel {
                                         });
                                     }),
                             ),
+                    )
+                    // Project persistence is a separate platform concern,
+                    // never a property of the currently selected Element.
+                    .child(
+                        div().w_full().flex_none().p_2()
+                            .border_t_1().border_color(panel_border)
+                            .flex().flex_col().gap_1()
+                            .child(Label::new("Project persistence"))
+                            .child(self.save_input.clone())
+                            .child(Button::new("mde-save-project", "Save project").on_click(
+                                move |_, _, cx| {
+                                    let path = save_input.read(cx).text(cx);
+                                    save_item.update(cx, |workbench, cx| {
+                                        workbench.save_project(path, cx);
+                                    });
+                                },
+                            )),
                     ),
             )
     }
