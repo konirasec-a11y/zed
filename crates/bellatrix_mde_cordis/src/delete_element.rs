@@ -25,6 +25,15 @@ impl Event for ModelingDeleteElement {
 
 /// The ownership closure is based only on semantic `owns` edges.
 fn remove_element(section: &mut ModelingSection, id: &str) -> Result<(), String> {
+    // UML connectors are first-class Relation objects; deleting one does not
+    // delete either classifier. Never delete a structural `owns` edge alone.
+    if section.relations.iter().any(|r| r.id == id && r.kind.starts_with("uml.")) {
+        section.relations.retain(|r| r.id != id);
+        for d in &mut section.diagrams {
+            d.views.retain(|v| v.subject.as_deref() != Some(id));
+        }
+        return Ok(());
+    }
     if !section.elements.iter().any(|element| element.id == id) {
         return Err("element not found".into());
     }
