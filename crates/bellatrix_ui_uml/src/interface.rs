@@ -76,6 +76,7 @@ impl RenderOnce for UmlInterfaceBall {
                 .child(card.title).into_any_element(),
         };
         let edit_title=card.edit_title.clone();
+        let stereotype=card.stereotype.clone();
         let selected=card.selected;
         let body=div().size_full().flex().flex_col().items_center()
             .when(selected,|e|e.border_1().border_color(rgb(p.selection)))
@@ -85,6 +86,10 @@ impl RenderOnce for UmlInterfaceBall {
                         .id("uml-interface-ball")
                         .w(px(28.0)).h(px(28.0)).rounded_full()
                         .border_1().border_color(circle_stroke).bg(rgb(p.canvas)))
+                    .when_some(stereotype,|header,stereotype|header.child(
+                        div().text_size(px(10.0)).text_color(rgb(p.muted))
+                            .child(stereotype)
+                    ))
                     .child(
                         div().id("uml-interface-name")
                             .w_full().min_h(px(22.0))
