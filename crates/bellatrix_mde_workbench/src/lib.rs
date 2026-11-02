@@ -799,6 +799,10 @@ impl Render for MdeWorkbenchItem {
                                 class_card = class_card.operation_with_id(
                                     member.id.clone(), member.name.clone()
                                 );
+                            } else if member.kind == "uml.reception" {
+                                class_card = class_card.reception_with_id(
+                                    member.id.clone(), member.name.clone()
+                                );
                             }
                         }
                         if editing.is_some() {
