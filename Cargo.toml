@@ -21,6 +21,24 @@ members = [
     "crates/auto_update_ui",
     "crates/aws_http_client",
     "crates/bedrock",
+    "crates/bellatrix_project",
+    "crates/bellatrix_mde_model",
+    "crates/bellatrix_mde_modeling",
+    "crates/bellatrix_mde_cordis",
+    "crates/bellatrix_mde_rust_generator",
+    "crates/bellatrix_mde_html_exporter",
+    "crates/bellatrix_mde_cli",
+    "crates/bellatrix_zed_host",
+    "crates/bellatrix_mde_workbench",
+    "crates/bellatrix_design_system",
+    "crates/bellatrix_ui_uml",
+    "crates/bellatrix_ui_symbols",
+    "crates/bellatrix_ui_canvas",
+    "crates/bellatrix_ui_c4",
+    "crates/bellatrix_ui_flow",
+    "crates/bellatrix_ui_mindmap",
+    "crates/bellatrix_ui_tree",
+    "crates/bellatrix_ui_panels",
     "crates/bench_metrics",
     "crates/benchmarks",
     "crates/breadcrumbs",
@@ -278,6 +296,29 @@ publish = false
 edition = "2024"
 
 [workspace.dependencies]
+
+# Bellatrix bounded contexts and native Zed Workspace contributions.
+bellatrix_project = { path = "crates/bellatrix_project" }
+bellatrix_mde_model = { path = "crates/bellatrix_mde_model" }
+bellatrix_mde_modeling = { path = "crates/bellatrix_mde_modeling" }
+bellatrix_mde_cordis = { path = "crates/bellatrix_mde_cordis" }
+bellatrix_mde_rust_generator = { path = "crates/bellatrix_mde_rust_generator" }
+bellatrix_mde_html_exporter = { path = "crates/bellatrix_mde_html_exporter" }
+bellatrix_mde_cli = { path = "crates/bellatrix_mde_cli" }
+bellatrix_zed_host = { path = "crates/bellatrix_zed_host" }
+bellatrix_mde_workbench = { path = "crates/bellatrix_mde_workbench" }
+bellatrix_design_system = { path = "crates/bellatrix_design_system" }
+bellatrix_ui_uml = { path = "crates/bellatrix_ui_uml" }
+bellatrix_ui_symbols = { path = "crates/bellatrix_ui_symbols" }
+bellatrix_ui_canvas = { path = "crates/bellatrix_ui_canvas" }
+bellatrix_ui_c4 = { path = "crates/bellatrix_ui_c4" }
+bellatrix_ui_flow = { path = "crates/bellatrix_ui_flow" }
+bellatrix_ui_mindmap = { path = "crates/bellatrix_ui_mindmap" }
+bellatrix_ui_tree = { path = "crates/bellatrix_ui_tree" }
+bellatrix_ui_panels = { path = "crates/bellatrix_ui_panels" }
+# Cordis is the sole lifecycle/composition runtime for Bellatrix engines.
+cordis-rs = { git = "https://github.com/dshbox/cordis-rs", rev = "cd540033487f62c1b574bffd39befb717afb8a35" }
+petgraph = "0.8.3"
 
 #
 # Workspace member crates
@@ -893,7 +934,7 @@ schemars = { version = "1.0", default-features = false, features = ["std", "inde
 sea-orm = { version = "=1.1.10", default-features = false }
 seccompiler = "0.5"
 semver = { version = "1.0", features = ["serde"] }
-serde = { version = "1.0", features = ["rc"] }
+serde = { version = "1.0", features = ["rc", "derive"] }
 serde_json = { version = "1.0.144", features = ["preserve_order", "raw_value"] }
 serde_json_lenient = { version = "0.2", features = [
     "preserve_order",
@@ -935,7 +976,7 @@ time = { version = "0.3", features = [
     "local-offset",
 ] }
 tiny_http = "0.12"
-tokio = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "time"] }
 tokio-rustls = { version = "0.26", default-features = false }
 toml = { version = "0.9", default-features = false, features = ["std", "serde", "parse"] }
 toml_edit = { version = "0.22", default-features = false, features = ["parse"] }

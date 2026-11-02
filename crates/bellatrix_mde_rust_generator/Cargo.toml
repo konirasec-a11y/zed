@@ -1,0 +1,11 @@
+[package]
+name = "bellatrix_mde_rust_generator"
+version = "0.1.0"
+edition.workspace = true
+rust-version = "1.98.1"
+
+[dependencies]
+bellatrix_mde_model = { path = "../bellatrix_mde_model" }
+bellatrix_mde_modeling = { path = "../bellatrix_mde_modeling" }
+toml.workspace = true
+serde_json.workspace = true

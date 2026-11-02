@@ -1,0 +1,51 @@
+syntax = "proto3";
+// Engine-MDE's model wire representation (not the Platform ProjectDocument).
+// Preserve package bellatrix.v1 and existing field numbers for compatibility.
+package bellatrix.v1;
+
+// Documented wire contract. Rust currently derives prost::Message directly,
+// so users do not need protoc during the first development milestone.
+message Project {
+  uint32 version = 1;
+  string id = 2;
+  string name = 3;
+  repeated Element elements = 4;
+  repeated Relation relations = 5;
+  repeated Diagram diagrams = 6;
+}
+message Element {
+  string id = 1;
+  string kind = 2;
+  string name = 3;
+  optional string label = 4;
+  optional string description = 5;
+  bytes properties_json = 6;
+  repeated Annotation annotations = 7;
+  repeated Implementation implementations = 8;
+  optional Content content = 9;
+}
+message Annotation { string language = 1; string source = 2; }
+message Implementation { string language = 1; string source = 2; }
+message Content { bool text = 1; bytes bytes = 2; }
+message Relation {
+  string id = 1;
+  string kind = 2;
+  string from = 3;
+  string to = 4;
+  bytes properties_json = 5;
+}
+message Diagram {
+  string id = 1;
+  string name = 2;
+  double width = 3;
+  double height = 4;
+  repeated View views = 5;
+}
+message View {
+  string id = 1;
+  optional string subject = 2;
+  optional string label = 3;
+  bytes geometry_json = 4;
+  bytes style_json = 5;
+  sint32 z_index = 6;
+}

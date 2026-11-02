@@ -1,0 +1,9 @@
+[package]
+name = "bellatrix_components_symbols"
+version = "0.1.0"
+edition = "2024"
+description = "Shared UML, C4, mindmap and flowchart symbol vocabulary and SVG glyphs"
+
+[dependencies]
+gpui.workspace = true
+bellatrix_design_system = { path = "../bellatrix_design_system" }

@@ -1,0 +1,131 @@
+use crate::ProjectError;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::BTreeMap;
+
+fn schema_version() -> u32 {
+    1
+}
+
+/// Project identity outlives its path, its window and any engine generation.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ProjectId(String);
+
+impl ProjectId {
+    pub fn new(id: impl Into<String>) -> Result<Self, ProjectError> {
+        let id = id.into();
+        if id.is_empty()
+            || id.len() > 128
+            || !id
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+        {
+            return Err(ProjectError::InvalidId);
+        }
+        Ok(Self(id))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// Persistent platform envelope. Engine sections are opaque to the platform.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectDocument {
+    #[serde(default = "schema_version")]
+    schema_version: u32,
+    id: ProjectId,
+    name: String,
+    #[serde(default)]
+    revision: u64,
+    #[serde(default)]
+    sections: BTreeMap<String, Value>,
+}
+
+impl ProjectDocument {
+    pub fn new(id: ProjectId, name: impl Into<String>) -> Result<Self, ProjectError> {
+        let doc = Self {
+            schema_version: schema_version(),
+            id,
+            name: name.into(),
+            revision: 0,
+            sections: BTreeMap::new(),
+        };
+        doc.validate()?;
+        Ok(doc)
+    }
+
+    pub fn id(&self) -> &ProjectId {
+        &self.id
+    }
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+    pub fn section(&self, namespace: &str) -> Option<&Value> {
+        self.sections.get(namespace)
+    }
+    pub fn sections(&self) -> &BTreeMap<String, Value> {
+        &self.sections
+    }
+
+    /// Construct an *unopened* document for import. Live edits use Cordis requests.
+    pub fn with_section(
+        mut self,
+        namespace: impl Into<String>,
+        value: Value,
+    ) -> Result<Self, ProjectError> {
+        let namespace = namespace.into();
+        validate_namespace(&namespace)?;
+        self.sections.insert(namespace, value);
+        Ok(self)
+    }
+
+    pub(crate) fn validate(&self) -> Result<(), ProjectError> {
+        ProjectId::new(self.id.as_str())?;
+        if self.schema_version != schema_version() {
+            return Err(ProjectError::Schema(self.schema_version));
+        }
+        if self.name.trim().is_empty() {
+            return Err(ProjectError::EmptyName);
+        }
+        for namespace in self.sections.keys() {
+            validate_namespace(namespace)?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn replace(
+        &mut self,
+        namespace: String,
+        value: Value,
+    ) -> Result<bool, ProjectError> {
+        validate_namespace(&namespace)?;
+        if self.sections.get(&namespace) == Some(&value) {
+            return Ok(false);
+        }
+        self.revision = self
+            .revision
+            .checked_add(1)
+            .ok_or(ProjectError::RevisionOverflow)?;
+        self.sections.insert(namespace, value);
+        Ok(true)
+    }
+}
+
+fn validate_namespace(value: &str) -> Result<(), ProjectError> {
+    if value.is_empty()
+        || value.len() > 160
+        || !value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_'))
+    {
+        return Err(ProjectError::InvalidNamespace);
+    }
+    Ok(())
+}

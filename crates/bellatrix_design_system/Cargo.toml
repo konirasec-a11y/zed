@@ -1,0 +1,9 @@
+[package]
+name = "bellatrix_design_system"
+version = "0.1.0"
+edition = "2024"
+description = "Shared semantic themes and icon contracts for native Zed GPUI Bellatrix components"
+
+[dependencies]
+gpui.workspace = true
+ui.workspace = true

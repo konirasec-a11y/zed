@@ -1,0 +1,9 @@
+[package]
+name = "bellatrix_components_tree"
+version = "0.1.0"
+edition = "2024"
+description = "Reusable read-only tree pane presentation for workspaces"
+
+[dependencies]
+gpui.workspace = true
+bellatrix_design_system = { path = "../bellatrix_design_system" }

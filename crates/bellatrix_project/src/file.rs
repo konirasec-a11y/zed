@@ -1,0 +1,54 @@
+use crate::{ProjectDocument, ProjectError};
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+pub(crate) fn load(path: &Path) -> Result<ProjectDocument, ProjectError> {
+    let doc: ProjectDocument = serde_json::from_slice(&fs::read(path)?)?;
+    doc.validate()?;
+    Ok(doc)
+}
+
+pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), ProjectError> {
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    // Never silently create unrelated parent directories while saving a bellatrix-project.
+    if !parent.is_dir() {
+        return Err(ProjectError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "bellatrix-project parent directory does not exist",
+        )));
+    }
+    let (temporary, mut file) = create_temporary(parent)?;
+    let outcome = (|| -> std::io::Result<()> {
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        drop(file);
+        fs::rename(&temporary, path)
+    })();
+    if outcome.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    outcome.map_err(ProjectError::Io)
+}
+
+fn create_temporary(parent: &Path) -> Result<(PathBuf, std::fs::File), ProjectError> {
+    for _ in 0..32 {
+        let id = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let path = parent.join(format!(".bellatrix-{}-{id}.tmp", std::process::id()));
+        match OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(file) => return Ok((path, file)),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e.into()),
+        }
+    }
+    Err(ProjectError::Io(std::io::Error::new(
+        std::io::ErrorKind::AlreadyExists,
+        "could not allocate a temporary bellatrix-project file",
+    )))
+}

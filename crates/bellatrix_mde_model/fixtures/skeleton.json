@@ -1,0 +1,211 @@
+{
+  "schema_version": 1,
+  "id": "project-skeleton",
+  "name": "Task List Skeleton",
+  "elements": [
+    {
+      "id": "pkg",
+      "kind": "cargo.package",
+      "name": "task_list",
+      "properties": {
+        "version": "0.1.0",
+        "edition": "2024",
+        "publish": false,
+        "lib": {
+          "path": "domain.rs"
+        }
+      }
+    },
+    {
+      "id": "domain-file",
+      "kind": "fs.file",
+      "name": "domain.rs"
+    },
+    {
+      "id": "type-task",
+      "kind": "rust.struct",
+      "name": "Task",
+      "description": "A simple task"
+    },
+    {
+      "id": "field-title",
+      "kind": "rust.field",
+      "name": "title",
+      "properties": {
+        "declaration": "pub title: String"
+      }
+    },
+    {
+      "id": "fn-complete",
+      "kind": "rust.function",
+      "name": "complete",
+      "properties": {
+        "signature": "pub fn complete(&mut self)"
+      }
+    },
+    {
+      "id": "item-status",
+      "kind": "rust.item",
+      "name": "Status",
+      "properties": {
+        "source": "#[derive(Debug)]\npub enum Status { Pending, Complete }"
+      }
+    },
+    {
+      "id": "cargo-dir",
+      "kind": "fs.directory",
+      "name": ".cargo"
+    },
+    {
+      "id": "config-file",
+      "kind": "fs.file",
+      "name": "config.toml",
+      "content": {
+        "encoding": "text",
+        "data": "[build]\ntarget-dir = \"target\"\n"
+      }
+    },
+    {
+      "id": "clippy-file",
+      "kind": "fs.file",
+      "name": "clippy.toml",
+      "content": {
+        "encoding": "text",
+        "data": "too-many-arguments-threshold = 6\n"
+      }
+    },
+    {
+      "id": "assets-dir",
+      "kind": "fs.directory",
+      "name": "images"
+    },
+    {
+      "id": "binary-file",
+      "kind": "fs.file",
+      "name": "icon.bin",
+      "content": {
+        "encoding": "base64",
+        "data": "AAEA/4E="
+      }
+    }
+  ],
+  "relations": [
+    {
+      "id": "has-struct",
+      "kind": "declares",
+      "from": "domain-file",
+      "to": "type-task"
+    },
+    {
+      "id": "has-enum",
+      "kind": "declares",
+      "from": "domain-file",
+      "to": "item-status"
+    },
+    {
+      "id": "owns-field",
+      "kind": "owns",
+      "from": "type-task",
+      "to": "field-title"
+    },
+    {
+      "id": "owns-operation",
+      "kind": "owns",
+      "from": "type-task",
+      "to": "fn-complete"
+    },
+    {
+      "id": "cargo-config",
+      "kind": "physical_parent",
+      "from": "cargo-dir",
+      "to": "config-file"
+    },
+    {
+      "id": "assets-icon",
+      "kind": "physical_parent",
+      "from": "assets-dir",
+      "to": "binary-file"
+    }
+  ],
+  "diagrams": [
+    {
+      "id": "diagram-class",
+      "name": "Task structure",
+      "width": 700,
+      "height": 400,
+      "views": [
+        {
+          "id": "task-view",
+          "subject": "type-task",
+          "geometry": {
+            "kind": "rect",
+            "x": 80,
+            "y": 88,
+            "width": 230,
+            "height": 120
+          },
+          "style": {
+            "stroke": "#92a5bb",
+            "fill": "#323943",
+            "corner_radius": 4,
+            "text_color": "#eeeeee"
+          },
+          "z_index": 2
+        },
+        {
+          "id": "status-view",
+          "subject": "item-status",
+          "geometry": {
+            "kind": "ellipse",
+            "cx": 490,
+            "cy": 150,
+            "rx": 100,
+            "ry": 42
+          },
+          "style": {
+            "stroke": "#7b90a9",
+            "fill": "#454953",
+            "dash_pattern": [
+              3,
+              5
+            ]
+          },
+          "z_index": 2
+        },
+        {
+          "id": "link-view",
+          "label": "status",
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 310,
+              "y": 147
+            },
+            "segments": [
+              {
+                "kind": "cubic",
+                "control1": {
+                  "x": 370,
+                  "y": 90
+                },
+                "control2": {
+                  "x": 405,
+                  "y": 215
+                },
+                "to": {
+                  "x": 390,
+                  "y": 150
+                }
+              }
+            ]
+          },
+          "style": {
+            "stroke": "#8896af",
+            "stroke_width": 2
+          },
+          "z_index": 1
+        }
+      ]
+    }
+  ]
+}
