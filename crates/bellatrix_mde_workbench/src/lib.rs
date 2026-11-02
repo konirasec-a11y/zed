@@ -267,7 +267,8 @@ impl MdeWorkbenchItem {
         self.selected_tool = Some(tool);
         self.pending_relation_source = None;
         self.feedback = match tool {
-            ModelingTool::Relation(kind) => format!("{}: click source, then target", kind.label()),
+            ModelingTool::Relation(kind) =>
+                format!("{}: {}", kind.label(), kind.endpoint_instruction()),
             ModelingTool::Element(kind) => format!("{}: click canvas to place", kind.label()),
         }; cx.notify();
     }
@@ -399,9 +400,9 @@ impl Render for MdeWorkbenchItem {
         let pan = self.pan;
         let relation_hint = match self.selected_tool {
             Some(ModelingTool::Relation(kind)) => Some(if self.pending_relation_source.is_some() {
-                format!("{}: click destination", kind.label())
+                format!("{}: click second element (target)", kind.label())
             } else {
-                format!("{}: click source", kind.label())
+                format!("{}: {}", kind.label(), kind.endpoint_instruction())
             }),
             _ => None,
         };
