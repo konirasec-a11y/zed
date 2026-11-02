@@ -865,17 +865,28 @@ impl Render for MdeWorkbenchItem {
                                 .find(|candidate| candidate.id == relation.to) else {
                                 continue;
                             };
+                            let text = if is_interface {
+                                let visibility=member.properties.get("visibility")
+                                    .and_then(serde_json::Value::as_str).unwrap_or("public");
+                                let prefix=match visibility {
+                                    "private"=>"-","protected"=>"#","package"=>"~",_=>"+",
+                                };
+                                let suffix=if matches!(member.kind.as_str(),
+                                    "rust.function"|"uml.operation"|"uml.reception")
+                                    && !member.name.ends_with(')') { "()" } else { "" };
+                                format!("{prefix}{}{suffix}",member.name)
+                            } else { member.name.clone() };
                             if matches!(member.kind.as_str(), "rust.field" | "uml.attribute") {
                                 class_card = class_card.attribute_with_id(
-                                    member.id.clone(), member.name.clone()
+                                    member.id.clone(), text
                                 );
                             } else if matches!(member.kind.as_str(), "rust.function" | "uml.operation") {
                                 class_card = class_card.operation_with_id(
-                                    member.id.clone(), member.name.clone()
+                                    member.id.clone(), text
                                 );
                             } else if member.kind == "uml.reception" {
                                 class_card = class_card.reception_with_id(
-                                    member.id.clone(), member.name.clone()
+                                    member.id.clone(), text
                                 );
                             }
                         }
