@@ -1,6 +1,7 @@
 //! Native UML types: structural/values; see docs/bellatrix/standards/uml/RUML_IMPORT_MANIFEST.json.
 #![allow(dead_code)]
 use serde::{Deserialize, Serialize};
+
 use crate::uml::structural::common_structure::VisibilityKind;
 
 // Upstream: value_specification.rs
@@ -151,4 +152,111 @@ pub struct LiteralBoolean {
     pub template_parameter: Option<String>,
     pub type_: Option<String>,
     pub value: String,
+}
+
+// Upstream: literal_null.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LiteralNull {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub type_: Option<String>,
+}
+
+// Upstream: literal_unlimited_natural.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LiteralUnlimitedNatural {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub type_: Option<String>,
+    pub value: String,
+}
+
+// Upstream: instance_value.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstanceValue {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub type_: Option<String>,
+    pub instance: String,
+}
+
+// Upstream: instance_specification.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstanceSpecification {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub deployment: Vec<String>,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub classifier: Vec<String>,
+    pub slot: Vec<String>,
+    pub specification: Option<String>,
+}
+
+// Upstream: slot.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Slot {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub defining_feature: String,
+    pub value: Vec<String>,
+    pub owning_instance: String,
+}
+
+// Upstream: enumeration_literal.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnumerationLiteral {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub deployment: Vec<String>,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub classifier: Vec<String>,
+    pub slot: Vec<String>,
+    pub specification: Option<String>,
+    pub enumeration: Option<String>,
 }
