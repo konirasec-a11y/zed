@@ -117,6 +117,18 @@ impl Plugin for MdePlugin {
                 },
             ))
             .map_err(|e| io::Error::other(e.to_string()))?;
+        let interface_projects = Arc::clone(&projects);
+        let _interface_quick_edit = ctx
+            .on::<crate::interface_quick_edit::ModelingInterfaceQuickEdit, _>(responder(
+                move |ctx: Context, req: crate::interface_quick_edit::ModelingInterfaceQuickEditRequested| {
+                    let projects = Arc::clone(&interface_projects);
+                    async move {
+                        let result = crate::interface_quick_edit::execute_quick_edit(&ctx, &projects, req).await;
+                        Ok::<_, Infallible>(Some(result))
+                    }
+                },
+            ))
+            .map_err(|e| io::Error::other(e.to_string()))?;
         let member_projects = Arc::clone(&projects);
         let _add_member = ctx
             .on::<crate::add_member::ModelingAddMember, _>(responder(
