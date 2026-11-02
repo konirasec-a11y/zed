@@ -3,7 +3,7 @@
 //! preview, not a second Dock and not a substitute for domain commands.
 use bellatrix_ui_symbols::{Family, SymbolGallery};
 use gpui::{App, Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, SharedString, Window, div, prelude::*, px};
-use ui::Button;
+use ui::{Button, Clickable};
 use workspace::item::Item;
 
 pub struct MdeSymbolLibraryItem {
