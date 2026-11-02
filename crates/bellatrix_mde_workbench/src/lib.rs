@@ -1014,7 +1014,7 @@ impl Render for MdeWorkbenchItem {
                     })
                     .on_mouse_down(MouseButton::Left, move |_: &MouseDownEvent, _, cx| {
                         let _ = owner.update(cx, |item, cx| {
-                            if let Some(kind) = item.selected_tool {
+                            if let Some(ModelingTool::Element(kind)) = item.selected_tool {
                                 item.create_in_next_slot(kind, cx);
                             }
                         });
@@ -1045,7 +1045,11 @@ impl Render for MdeWorkbenchItem {
                         let _ = dropping_owner.update(cx, |item, cx| {
                             if &drag.project_id != item.project_id() { return; }
                             let (x,y) = item.drop_point.take().unwrap_or((40.0,40.0));
-                            item.create_element(drag.kind,x,y,cx);
+                            match drag.kind {
+                                ModelingTool::Element(kind) => item.create_element(kind,x,y,cx),
+                                ModelingTool::Relation(kind) =>
+                                    item.arm_drag_tool(ModelingTool::Relation(kind),cx),
+                            }
                         });
                     })
                     .children(edges)
