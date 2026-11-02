@@ -94,6 +94,27 @@ mod tests {
     }
 
     #[test]
+    fn code_generation_uses_graph_order_and_valid_toml_without_mutating_source() {
+        let project: Project =
+            serde_json::from_str(include_str!("../../bellatrix_mde_model/fixtures/todo.json")).unwrap();
+        let original = project.clone();
+        let result = plan(&project, &Scope::Project).unwrap();
+        let file = |path: &str| String::from_utf8(
+            result.artifacts().find(|a| a.path.to_string_lossy()==path)
+                .unwrap().contents.as_ref().unwrap().clone()
+        ).unwrap();
+        let rust = file("src/task.rs");
+        assert!(rust.find("pub struct Task {").unwrap()
+            < rust.find("pub struct TaskList {").unwrap());
+        assert!(rust.contains("pub fn add("));
+        assert!(rust.contains("pub tasks: Vec<Task>"));
+        let manifest = file("Cargo.toml");
+        let toml: toml::Table = toml::from_str(&manifest).unwrap();
+        assert_eq!(toml["package"]["name"].as_str(), Some("todo_example"));
+        assert_eq!(project, original, "analysis and Tera rendering are pure");
+    }
+
+    #[test]
     fn fixture_has_real_rust_and_arbitrary_assets() {
         let project: Project =
             serde_json::from_str(include_str!("../../bellatrix_mde_model/fixtures/todo.json")).unwrap();
