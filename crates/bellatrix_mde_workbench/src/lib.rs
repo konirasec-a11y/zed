@@ -214,7 +214,7 @@ impl MdeWorkbenchItem {
     fn link_endpoint(&mut self, kind: ModelingRelationKind, target: String, cx: &mut Context<Self>) {
         let Some(source) = self.pending_relation_source.take() else {
             self.pending_relation_source = Some(target.clone());
-            self.select_element(target);
+            self.select_element(target, cx);
             self.feedback = format!("{}: source selected. Click a second element", kind.label());
             cx.notify();
             return;
@@ -518,6 +518,12 @@ impl Render for MdeWorkbenchItem {
                         } else if semantic_type.is_some_and(UmlType::is_classifier) { classifier.into_any_element() }
                         else { div().size_full().border_1().border_color(border).child(Label::new(format!("Unsupported notation: {}", element.kind))).into_any_element() };
                         let drag_owner = cx.weak_entity(); let drag_id = view.id.clone();
+                        // A connection tool is a different interaction mode.
+                        // Its hit surface sits above every classifier compartment,
+                        // so inner title/member mouse handlers cannot swallow clicks.
+                        let connection_mode = matches!(self.selected_tool, Some(ModelingTool::Relation(_)));
+                        let connect_owner = cx.weak_entity();
+                        let connect_target = subject.to_owned();
                         let resize_owner = cx.weak_entity(); let resize_id = view.id.clone(); let element_id = subject.to_owned();
                         cards.push(div().id(format!("mde-view-{}", view.id)).absolute()
                             .left(px(local_x * zoom + pan.0)).top(px(local_y * zoom + pan.1)).w(px(local_width * zoom)).h(px(local_height * zoom))
@@ -533,12 +539,27 @@ impl Render for MdeWorkbenchItem {
                                 .left(px(-78.0)).top(px(quick_top + 28.0)).child(actions)))
                             .when_some(visibility_picker, |card, picker| card.child(div().id(format!("mde-quick-visibility-{}", view.id)).absolute()
                                 .left(px(-34.0)).top(px(quick_top)).child(picker)))
-                            .when(is_selected && semantic_type != Some(UmlType::Port), |card| card.child(div().id(format!("mde-resize-{}", view.id)).absolute().bottom_0().right_0()
+                            .when(is_selected && !connection_mode && semantic_type != Some(UmlType::Port), |card| card.child(div().id(format!("mde-resize-{}", view.id)).absolute().bottom_0().right_0()
                                 .w(px(10.0)).h(px(10.0)).bg(selection)
                                 .on_mouse_down(MouseButton::Left, move |event: &MouseDownEvent, _, cx| {
                                     let _ = resize_owner.update(cx, |item, cx| item.start_resize(resize_id.clone(), width, height, revision, event.position, cx));
                                     cx.stop_propagation();
-                                }))));
+                                })))
+                            .when(connection_mode, |card| card.child(
+                                div()
+                                    .id(format!("mde-connection-target-{}", view.id))
+                                    .absolute().top_0().right_0().bottom_0().left_0()
+                                    .cursor_crosshair()
+                                    .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                                        let _ = connect_owner.update(cx, |item, cx| {
+                                            if let Some(ModelingTool::Relation(kind)) = item.selected_tool {
+                                                item.link_endpoint(kind, connect_target.clone(), cx);
+                                                cx.focus_self(window);
+                                            }
+                                        });
+                                        cx.stop_propagation();
+                                    }),
+                            ));
                     }
                 }
             }
