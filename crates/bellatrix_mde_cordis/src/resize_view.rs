@@ -43,6 +43,9 @@ pub(crate) async fn resize_view(
     }
     let namespace = namespace_for(&document);
     let mut section = from_document(&document)?;
+    let diagram_id = section.diagrams.iter()
+        .find(|d| d.views.iter().any(|v| v.id == request.view_id))
+        .map(|d| d.id.clone()).ok_or("view not found")?;
     let view = section.diagrams.iter_mut().flat_map(|diagram| &mut diagram.views)
         .find(|view| view.id == request.view_id).ok_or("view not found")?;
     match &mut view.geometry {
@@ -52,6 +55,7 @@ pub(crate) async fn resize_view(
         }
         _ => return Err("only rectangle views can be resized with this command".into()),
     }
+    crate::create_relation::reroute(&mut section, &diagram_id);
     Graph::new(&section.to_model(document.id().as_str(), document.name()))
         .validate().map_err(|error| error.to_string())?;
     let state = serde_json::to_value(section).map_err(|error| error.to_string())?;
