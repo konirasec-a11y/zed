@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 
 
+
 use crate::uml::behavioral::common_behavior::CallConcurrencyKind;
 use crate::uml::structural::common_structure::VisibilityKind;
 
@@ -793,4 +794,226 @@ pub struct InterfaceRealization {
     pub mapping: Option<String>,
     pub contract: String,
     pub implementing_classifier: String,
+}
+
+// Original module: port.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Port {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub is_leaf: String,
+    pub is_static: String,
+    pub type_: Option<String>,
+    pub is_ordered: String,
+    pub is_unique: String,
+    pub upper_value: Option<String>,
+    pub lower_value: Option<String>,
+    pub is_read_only: String,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub deployment: Vec<String>,
+    pub template_binding: Vec<String>,
+    pub owned_template_signature: Option<String>,
+    pub datatype: Option<String>,
+    pub is_derived: String,
+    pub is_derived_union: String,
+    pub aggregation: AggregationKind,
+    pub redefined_property: Vec<String>,
+    pub owning_association: Option<String>,
+    pub default_value: Option<String>,
+    pub subsetted_property: Vec<String>,
+    pub association: Option<String>,
+    pub qualifier: Vec<String>,
+    pub association_end: Option<String>,
+    pub is_behavior: String,
+    pub is_service: String,
+    pub redefined_port: Vec<String>,
+    pub protocol: Option<String>,
+}
+
+// Original module: behaviored_classifier.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BehavioredClassifier {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub element_import: Vec<String>,
+    pub package_import: Vec<String>,
+    pub owned_rule: Vec<String>,
+    pub is_leaf: String,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub template_binding: Vec<String>,
+    pub owned_template_signature: Option<String>,
+    pub is_abstract: String,
+    pub generalization: Vec<String>,
+    pub powertype_extent: Vec<String>,
+    pub redefined_classifier: Vec<String>,
+    pub substitution: Vec<String>,
+    pub representation: Option<String>,
+    pub collaboration_use: Vec<String>,
+    pub owned_use_case: Vec<String>,
+    pub use_case: Vec<String>,
+    pub owned_behavior: Vec<String>,
+    pub classifier_behavior: Option<String>,
+    pub interface_realization: Vec<String>,
+    pub owned_trigger: Vec<String>,
+}
+
+// Original module: parameter.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Parameter {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub type_: Option<String>,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub is_ordered: String,
+    pub is_unique: String,
+    pub upper_value: Option<String>,
+    pub lower_value: Option<String>,
+    pub parameter_set: Vec<String>,
+    pub direction: ParameterDirectionKind,
+    pub default_value: Option<String>,
+    pub is_exception: String,
+    pub is_stream: String,
+    pub effect: Option<ParameterEffectKind>,
+}
+
+// Original module: parameter_direction_kind.rs
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ParameterDirectionKind {
+    In,
+    Inout,
+    Out,
+    Return,
+}
+
+// Original module: parameter_effect_kind.rs
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ParameterEffectKind {
+    Create,
+    Read,
+    Update,
+    Delete,
+}
+
+// Original module: data_type.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DataType {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub element_import: Vec<String>,
+    pub package_import: Vec<String>,
+    pub owned_rule: Vec<String>,
+    pub is_leaf: String,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub template_binding: Vec<String>,
+    pub owned_template_signature: Option<String>,
+    pub is_abstract: String,
+    pub generalization: Vec<String>,
+    pub powertype_extent: Vec<String>,
+    pub redefined_classifier: Vec<String>,
+    pub substitution: Vec<String>,
+    pub representation: Option<String>,
+    pub collaboration_use: Vec<String>,
+    pub owned_use_case: Vec<String>,
+    pub use_case: Vec<String>,
+    pub owned_attribute: Vec<String>,
+    pub owned_operation: Vec<String>,
+}
+
+// Original module: primitive_type.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrimitiveType {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub element_import: Vec<String>,
+    pub package_import: Vec<String>,
+    pub owned_rule: Vec<String>,
+    pub is_leaf: String,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub template_binding: Vec<String>,
+    pub owned_template_signature: Option<String>,
+    pub is_abstract: String,
+    pub generalization: Vec<String>,
+    pub powertype_extent: Vec<String>,
+    pub redefined_classifier: Vec<String>,
+    pub substitution: Vec<String>,
+    pub representation: Option<String>,
+    pub collaboration_use: Vec<String>,
+    pub owned_use_case: Vec<String>,
+    pub use_case: Vec<String>,
+    pub owned_attribute: Vec<String>,
+    pub owned_operation: Vec<String>,
+}
+
+// Original module: enumeration.rs
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Enumeration {
+    /// Unique identifier for this instance
+    pub id: String,
+    pub e_annotations: Vec<String>,
+    pub owned_comment: Vec<String>,
+    pub name: Option<String>,
+    pub visibility: Option<VisibilityKind>,
+    pub client_dependency: Vec<String>,
+    pub name_expression: Option<String>,
+    pub element_import: Vec<String>,
+    pub package_import: Vec<String>,
+    pub owned_rule: Vec<String>,
+    pub is_leaf: String,
+    pub owning_template_parameter: Option<String>,
+    pub template_parameter: Option<String>,
+    pub template_binding: Vec<String>,
+    pub owned_template_signature: Option<String>,
+    pub is_abstract: String,
+    pub generalization: Vec<String>,
+    pub powertype_extent: Vec<String>,
+    pub redefined_classifier: Vec<String>,
+    pub substitution: Vec<String>,
+    pub representation: Option<String>,
+    pub collaboration_use: Vec<String>,
+    pub owned_use_case: Vec<String>,
+    pub use_case: Vec<String>,
+    pub owned_attribute: Vec<String>,
+    pub owned_operation: Vec<String>,
+    pub owned_literal: Vec<String>,
 }
