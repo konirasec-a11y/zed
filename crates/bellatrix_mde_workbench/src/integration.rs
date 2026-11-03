@@ -1,4 +1,4 @@
-//! Present Bellatrix MDE automatically as a native Zed Workspace Item.
+//! Open Bellatrix MDE on request as a native Zed Workspace Item.
 //!
 //! Zed owns tabs, docks and focus. The native action remains available
 //! to focus or reopen the MDE tab without creating a parallel window.
@@ -43,7 +43,7 @@ impl Drop for SavePathPromptGuard {
     }
 }
 
-/// Register the native action and attach the initial MDE Item and Dock panels.
+/// Register native actions without changing Workspace tabs, docks or focus.
 ///
 /// Opening the action again focuses the existing item without duplicates.
 pub fn register_mde_workspace(cx: &mut App, source: MdeUiSource) {
@@ -62,7 +62,7 @@ pub fn register_mde_workspace(cx: &mut App, source: MdeUiSource) {
     ]);
 
     cx.observe_new(
-        move |workspace: &mut Workspace, window: Option<&mut Window>, cx| {
+        move |workspace: &mut Workspace, _window: Option<&mut Window>, _cx| {
             // The full Bellatrix catalog is a native Zed Item. The Workbench
             // remains focused on supported Class and Interface editing gestures.
             workspace.register_action(|workspace, _: &OpenMdeSymbols, window, cx| {
@@ -167,24 +167,6 @@ pub fn register_mde_workspace(cx: &mut App, source: MdeUiSource) {
                 panels::attach_panels(workspace, item.clone(), window, cx);
                 *action_item.borrow_mut() = Some(item);
             });
-
-            // Registering an action does not execute it. Open Bellatrix on every
-            // native Workspace, including freshly created and restored workspaces.
-            // Defer until GPUI finishes constructing this Workspace entity;
-            // mutating panes or docks from the observe_new callback is too early.
-            if let Some(window) = window {
-                let startup_source = source.clone();
-                let startup_item = Rc::clone(&cached_item);
-                cx.defer_in(window, move |workspace, window, cx| {
-                    if let Some(item) = workspace.item_of_type::<MdeWorkbenchItem>(cx) {
-                        *startup_item.borrow_mut() = Some(item);
-                    } else {
-                        let item = open_in_workspace(workspace, startup_source, window, cx);
-                        panels::attach_panels(workspace, item.clone(), window, cx);
-                        *startup_item.borrow_mut() = Some(item);
-                    }
-                });
-            }
         },
     )
     .detach();
