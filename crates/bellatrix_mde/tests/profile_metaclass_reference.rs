@@ -132,3 +132,104 @@ fn given_unadapted_import_object_then_no_role_is_inferred_from_ownership() -> Re
     assert!(has(&model,UNKNOWN)? && !has(&model,ERROR)?);
     Ok(())
 }
+
+#[test]
+fn given_import_owned_by_another_profile_then_role_membership_is_invalid() -> Result {
+    for reverse in [false, true] {
+        let mut model = document()?;
+        model.elements.push(serde_json::from_value(json!({
+            "id":"other-profile", "kind":"uml.profile", "name":"Other Profile",
+            "properties":{"metaclassReference":[{"$ref":"import"}]}
+        }))?);
+        model.relations.push(serde_json::from_value(json!({
+            "id":"owns-other-profile", "kind":"owns", "from":"root", "to":"other-profile"
+        }))?);
+        model.relations.iter_mut().find(|relation| relation.id == "import")
+            .ok_or("import")?.from = "other-profile".into();
+        let mut imports = vec![json!({"$ref":"import"}), json!({"href":"external.uml#Import"})];
+        if reverse {
+            imports.reverse();
+            model.relations.reverse();
+        }
+        author(&mut model, "profile", "metaclassReference", json!(imports));
+        for format in [Format::Json, Format::Protobuf] {
+            let reopened = decode(&encode(&model, format)?, format)?;
+            assert!(has(&reopened, ERROR)? && !has(&reopened, UNKNOWN)?);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn given_valid_non_classifier_imported_element_then_classifier_filter_excludes_it() -> Result {
+    let mut model = document()?;
+    // Package is a valid PackageableElement endpoint, but neither OCL conjunct
+    // includes it in the imported Classifier set.
+    model.relations.iter_mut().find(|relation| relation.id == "import")
+        .ok_or("import")?.to = "base".into();
+    generalize(&mut model, "local", "imported")?;
+    for format in [Format::Json, Format::Protobuf] {
+        let reopened = decode(&encode(&model, format)?, format)?;
+        assert!(!has(&reopened, ERROR)? && !has(&reopened, UNKNOWN)?);
+    }
+    Ok(())
+}
+
+#[test]
+fn given_classifier_in_nested_package_then_profile_scope_is_not_recursive() -> Result {
+    for owner in ["profile", "base"] {
+        for reverse in [false, true] {
+            let mut model = document()?;
+            model.elements.push(serde_json::from_value(json!({
+                "id":"nested", "kind":"uml.package", "name":"Nested"
+            }))?);
+            model.relations.push(serde_json::from_value(json!({
+                "id":"owns-nested", "kind":"owns", "from":owner, "to":"nested"
+            }))?);
+            model.relations.iter_mut().find(|relation| relation.id == "owns-local")
+                .ok_or("owns-local")?.from = "nested".into();
+            let (from, to) = if reverse { ("imported", "local") } else { ("local", "imported") };
+            generalize(&mut model, from, "middle")?;
+            generalize(&mut model, "middle", to)?;
+            // collect(namespace)->includes(self) tests the immediate namespace;
+            // packagedElement likewise excludes Classifiers inside nested Packages.
+            for format in [Format::Json, Format::Protobuf] {
+                let reopened = decode(&encode(&model, format)?, format)?;
+                assert!(!has(&reopened, ERROR)? && !has(&reopened, UNKNOWN)?);
+            }
+            model.relations.iter_mut().find(|relation| relation.id == "owns-local")
+                .ok_or("owns-local")?.from = "profile".into();
+            assert!(has(&model, ERROR)? && !has(&model, UNKNOWN)?);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn given_ancestry_cycle_and_external_branch_then_invalid_wins_in_both_orders() -> Result {
+    for classifier in ["local", "imported"] {
+        for reverse in [false, true] {
+            let mut model = document()?;
+            author(&mut model, classifier, "general", json!([{"href":"external.uml#General"}]));
+            assert!(has(&model, UNKNOWN)? && !has(&model, ERROR)?);
+            generalize(&mut model, classifier, "middle")?;
+            generalize(&mut model, "middle", classifier)?;
+            if reverse {
+                model.elements.reverse();
+                model.relations.reverse();
+            }
+            for format in [Format::Json, Format::Protobuf] {
+                let reopened = decode(&encode(&model, format)?, format)?;
+                assert!(has(&reopened, ERROR)? && !has(&reopened, UNKNOWN)?);
+                let response: Value = serde_json::from_str(&validate_uml_model(
+                    &json!({"api_version":1,"model":reopened}).to_string(),
+                )?)?;
+                assert!(response["diagnostics"].as_array().ok_or("diagnostics")?.iter().any(|issue|
+                    issue["subject_id"] == "profile" && issue["code"] == ERROR
+                    && issue["message"].as_str().is_some_and(|message| message.contains("cycle in UML generalization"))
+                ));
+            }
+        }
+    }
+    Ok(())
+}
