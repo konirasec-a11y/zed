@@ -2,6 +2,25 @@
 
 `bellatrix_mde_workbench` contributes a native `workspace::Item` and Zed Dock `Panel` implementations to the application in this fork. Zed owns the editor, Workspace, GPUI lifecycle, focus, layout, themes and status bar. Bellatrix supplies model commands and transient Canvas interaction.
 
+## Source boundaries
+
+- `src/lib.rs` is the public facade; existing public imports remain available.
+- `src/UI/workbench.rs` owns the GPUI item, gestures, entities, focus and rendering.
+  The other `src/UI/` modules own widgets, canvases, panels, native document and
+  Workspace integration, and the lifecycle-owned source adapter. Panel children
+  live in `src/UI/panels/`.
+- `src/view-model/` contains renderer-independent inspector/style drafts,
+  snapshots and document guards. These files do not depend on GPUI. The UI
+  composes them through explicit module paths; they do not own another model.
+- Persisted data and commands remain in `bellatrix_mde`, with its `KERNEL/` and
+  `view-model/` source boundaries. The workbench is the native UI adapter, not
+  another kernel.
+
+The private `ui` module keeps widget implementation and state together, while
+root reexports preserve the crate API. The pure view-model files still belong
+to this GPUI-dependent crate; this layout does not provide a separately
+compilable view-model package or claim that every MDE dependency is one-way.
+
 ## Integration
 
 The built-in `bellatrix_zed_host` is installed directly in `crates/zed/src/main.rs` after `initialize_workspace(app_state.clone(), cx)`. No separate GPUI runtime, third-party overlay or `scripts/enable_zed_desktop.py` is required.

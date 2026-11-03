@@ -240,7 +240,7 @@ impl Render for MdeLeftPanel {
                 let diagram_id = diagram.id.clone();
                 let owner = item.clone();
                 let diagram_kind = bellatrix_mde::StructuralDiagramKind::from_diagram(diagram)
-                    .map(crate::diagram_kind_label)
+                    .map(crate::ui::diagram_kind_label)
                     .unwrap_or("Unsupported diagram");
                 diagrams.push(
                     div()
@@ -284,7 +284,7 @@ impl Render for MdeLeftPanel {
                 .into_iter()
                 .fold(menu, |menu, kind| {
                     let owner = create_item.clone();
-                    let label = crate::diagram_kind_label(kind).to_owned();
+                    let label = crate::ui::diagram_kind_label(kind).to_owned();
                     menu.entry(label, None, move |window, cx| {
                         if owner.read(cx).source().is_read_only() {
                             return;

@@ -1,6 +1,6 @@
-use crate::property_editor::compact_row;
-use crate::style_drafts::{FIELDS, StyleEditState, StyleSubmission, field_error, style_value};
-use crate::{MdeWorkbenchItem, panels::MdeRightPanel};
+use crate::ui::property_editor::compact_row;
+use crate::ui::style_drafts::{FIELDS, StyleEditState, StyleSubmission, field_error, style_value};
+use crate::ui::{MdeWorkbenchItem, panels::MdeRightPanel};
 use bellatrix_mde::{RelationshipRouting, View, commands::ViewOrder};
 use bellatrix_mde_cordis::{
     MdeUiCommand, ModelingReorderViewRequested, ModelingSetViewRoutingRequested,
@@ -166,7 +166,7 @@ pub(crate) fn reconcile_style_inputs(
                                 if let Some(draft) = panel.style_drafts.get_mut(&key) {
                                     draft.capture_inputs(Some(field), cx);
                                 }
-                                crate::property_editor::flush_property_edits(panel, &item, cx);
+                                crate::ui::property_editor::flush_property_edits(panel, &item, cx);
                                 flush_style_edits(panel, &item, cx);
                                 cx.notify();
                             }) {
@@ -200,7 +200,7 @@ pub(crate) fn reconcile_style_inputs(
         let item = item.clone();
         cx.defer(move |cx| {
             if let Err(error) = owner.update(cx, |panel, cx| {
-                crate::property_editor::flush_property_edits(panel, &item, cx);
+                crate::ui::property_editor::flush_property_edits(panel, &item, cx);
                 flush_style_edits(panel, &item, cx);
             }) {
                 eprintln!("MDE style synchronization failed: {error}");
@@ -224,7 +224,7 @@ pub(crate) fn flush_style_edits(
     if !panel.is_bound_to(item)
         || item.read(cx).source().is_read_only()
         || style_command_pending(panel)
-        || crate::property_editor::property_command_pending(panel)
+        || crate::ui::property_editor::property_command_pending(panel)
     {
         return;
     }
@@ -303,7 +303,7 @@ pub(crate) fn flush_style_edits(
             if let Some(draft) = panel.style_drafts.get_mut(&key) {
                 draft.acknowledge(&completion, cx);
             }
-            crate::property_editor::flush_property_edits(panel, &item, cx);
+            crate::ui::property_editor::flush_property_edits(panel, &item, cx);
             flush_style_edits(panel, &item, cx);
             cx.notify();
         }) {

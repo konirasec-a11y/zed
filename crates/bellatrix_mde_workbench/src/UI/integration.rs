@@ -3,8 +3,8 @@
 //! Zed owns tabs, docks and focus. The native action remains available
 //! to focus or reopen the MDE tab without creating a parallel window.
 
-use crate::status_entry::{MdeStatusEntry, status_button_enabled};
-use crate::{MdeSymbolLibraryItem, MdeUiSource, MdeWorkbenchItem, open_in_workspace, panels};
+use crate::ui::status_entry::{MdeStatusEntry, status_button_enabled};
+use crate::ui::{MdeSymbolLibraryItem, MdeUiSource, MdeWorkbenchItem, open_in_workspace, panels};
 use bellatrix_mde_cordis::MdeUiCommand;
 use bellatrix_project::ProjectSaveRequested;
 use gpui::{App, AppContext, Entity, Window, actions};
@@ -50,7 +50,7 @@ impl Drop for SavePathPromptGuard {
 pub fn register_mde_workspace(
     cx: &mut App,
     source: MdeUiSource,
-    importer: crate::NativeDocumentImporter,
+    importer: crate::ui::NativeDocumentImporter,
 ) {
     let auto_open_configured_source = std::env::var_os("BELLATRIX_PROJECT_FILE").is_some()
         || std::env::var_os("BELLATRIX_MODEL_FILE").is_some();
@@ -74,7 +74,7 @@ pub fn register_mde_workspace(
         move |workspace: &mut Workspace, mut window: Option<&mut Window>, cx| {
             let source = source.for_workspace();
             source.set_preview_context(Some("No active MDE document".into()));
-            crate::native_document::register_preview_action(workspace, importer.clone(), source.clone());
+            crate::ui::native_document::register_preview_action(workspace, importer.clone(), source.clone());
             // The full Bellatrix catalog is a native Zed Item. The Workbench
             // remains focused on supported Class and Interface editing gestures.
             workspace.register_action(|workspace, _: &OpenMdeSymbols, window, cx| {
@@ -95,8 +95,8 @@ pub fn register_mde_workspace(
             if let Some(window) = window.as_deref_mut() {
             cx.subscribe_in(&cx.entity(), window, move |workspace, _, event: &workspace::Event, window, cx| {
                 if matches!(event, workspace::Event::ActiveItemChanged | workspace::Event::ItemRemoved { .. }) {
-                    let item = crate::native_document::active_workbench(workspace, cx);
-                    let inactive_context = crate::native_document::active_preview_label(workspace, cx)
+                    let item = crate::ui::native_document::active_workbench(workspace, cx);
+                    let inactive_context = crate::ui::native_document::active_preview_label(workspace, cx)
                         .or_else(|| item.is_none().then(|| "No active MDE document".to_owned()));
                     if presentation_source.set_preview_context(inactive_context) {
                         if let Some(item) = observed_item.borrow().clone() {
@@ -110,7 +110,7 @@ pub fn register_mde_workspace(
             let save_item = Rc::clone(&cached_item);
             let save_prompt_pending = Rc::new(Cell::new(false));
             workspace.register_action(move |workspace, _: &SaveMdeProjectAs, window, cx| {
-                if crate::native_document::preview_is_active(workspace, cx) {
+                if crate::ui::native_document::preview_is_active(workspace, cx) {
                     workspace.show_error("The active MDE preview is read-only. Save source edits through the native editor.", cx);
                     return;
                 }

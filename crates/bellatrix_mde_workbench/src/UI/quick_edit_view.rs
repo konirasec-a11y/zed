@@ -1,5 +1,5 @@
 //! Map domain action descriptors to controls; no action semantics belong to a shape.
-use crate::MdeWorkbenchItem;
+use crate::ui::MdeWorkbenchItem;
 use bellatrix_mde::commands::ModelingMemberKind;
 use bellatrix_mde::{
     Element, QuickEditAction, QuickEditAvailability, QuickEditControl, QuickEditSide,

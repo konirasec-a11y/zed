@@ -1,5 +1,5 @@
 //! Native Zed controls driven by the single MDE inspector schema.
-use crate::{
+use crate::ui::{
     MdeWorkbenchItem, WorkbenchPalette,
     inspector_drafts::{DraftKey, DraftState},
     panels::{MdeRightPanel, element_glyph},
@@ -147,7 +147,7 @@ pub(crate) fn reconcile_inputs(
         cx.defer(move |cx| {
             if let Err(error) = owner.update(cx, |panel, cx| {
                 flush_property_edits(panel, &item, cx);
-                crate::style_editor::flush_style_edits(panel, &item, cx);
+                crate::ui::style_editor::flush_style_edits(panel, &item, cx);
             }) {
                 eprintln!("MDE property queue refresh failed: {error}");
             }
@@ -322,7 +322,7 @@ pub(crate) fn flush_property_edits(
     item: &Entity<MdeWorkbenchItem>,
     cx: &mut Context<MdeRightPanel>,
 ) {
-    if property_command_pending(panel) || crate::style_editor::style_command_pending(panel) {
+    if property_command_pending(panel) || crate::ui::style_editor::style_command_pending(panel) {
         return;
     }
     let project = item.read(cx).project_id().clone();
@@ -453,7 +453,7 @@ pub(crate) fn flush_property_edits(
                             }
                         }
                         flush_property_edits(panel, &item, cx);
-                        crate::style_editor::flush_style_edits(panel, &item, cx);
+                        crate::ui::style_editor::flush_style_edits(panel, &item, cx);
                         cx.notify();
                     }) {
                         eprintln!("MDE property completion refresh failed: {error}");
@@ -909,7 +909,7 @@ pub(crate) fn render_inspector(
                                     return;
                                 }
                                 if property_command_pending(panel)
-                                    || crate::style_editor::style_command_pending(panel)
+                                    || crate::ui::style_editor::style_command_pending(panel)
                                     || panel.property_drafts.iter().any(|(key, draft)| {
                                         key.project == project.as_str() && draft.state.queued
                                     })
