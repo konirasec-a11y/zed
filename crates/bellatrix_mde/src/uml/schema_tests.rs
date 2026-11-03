@@ -272,6 +272,53 @@ fn fixture() -> serde_json::Result<Project> {
     )
 }
 
+fn assert_legacy_contract_warnings(
+    diagnostics: Vec<crate::StructuralDiagnostic>,
+    type_warning: &str,
+) {
+    assert!(
+        diagnostics
+            .iter()
+            .all(|issue| issue.severity == crate::StructuralSeverity::Warning),
+        "{diagnostics:?}"
+    );
+    let mut actual = diagnostics
+        .iter()
+        .map(|issue| {
+            (
+                issue.subject_id.as_str(),
+                issue.code,
+                issue.message.as_str(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let mut expected = vec![
+        (
+            "attribute",
+            "MDE_PROPERTY_CONTRACT_UNVERIFIED",
+            "Property-defaultValue: text declaration is not a resolved UML reference",
+        ),
+        (
+            "attribute",
+            "MDE_PROPERTY_CONTRACT_UNVERIFIED",
+            type_warning,
+        ),
+        (
+            "operation",
+            "MDE_PROPERTY_CONTRACT_UNVERIFIED",
+            "Operation-isOrdered: a stored value does not establish its UML derivation",
+        ),
+        (
+            "operation",
+            "MDE_PROPERTY_CONTRACT_UNVERIFIED",
+            "Operation-type: a stored value does not establish its UML derivation",
+        ),
+    ];
+    actual.sort_unstable();
+    expected.sort_unstable();
+    assert_eq!(actual, expected);
+}
+
 fn edit(project: &Project, id: &str, key: &str, value: Value) -> Result<Project, String> {
     commands::apply(
         project,
@@ -562,10 +609,9 @@ fn generated_contracts_drive_canonical_inspection_commands_validation_and_roundt
     for format in [Format::Json, Format::Protobuf] {
         let decoded = crate::decode(&crate::encode(&changed, format)?, format)?;
         assert_eq!(decoded, changed);
-        assert!(
-            super::super::root::Model::from_project(&decoded)
-                .validate()
-                .is_empty()
+        assert_legacy_contract_warnings(
+            super::super::root::Model::from_project(&decoded).validate(),
+            "typeText: no normative property or registered extension contract",
         );
         assert_eq!(
             decoded
@@ -589,8 +635,14 @@ fn generated_contracts_drive_canonical_inspection_commands_validation_and_roundt
             .iter()
             .any(|issue| issue.subject_id == "class" && issue.code == "UML_PROPERTY_VALUE")
     );
-    assert!(crate::validate_structural_model(&changed).is_empty());
-    assert!(crate::validate_structural_model(&original).is_empty());
+    assert_legacy_contract_warnings(
+        crate::validate_structural_model(&changed),
+        "typeText: no normative property or registered extension contract",
+    );
+    assert_legacy_contract_warnings(
+        crate::validate_structural_model(&original),
+        "TypedElement-type: text declaration is not a resolved UML reference",
+    );
     assert_eq!(
         original
             .element("attribute")
@@ -632,10 +684,9 @@ fn unbounded_scalar_edits_preserve_exact_values_and_reject_invalid_typed_literal
     for format in [Format::Json, Format::Protobuf] {
         let decoded = crate::decode(&crate::encode(&edited, format)?, format)?;
         assert_eq!(decoded, edited);
-        assert!(
-            super::super::root::Model::from_project(&decoded)
-                .validate()
-                .is_empty()
+        assert_legacy_contract_warnings(
+            super::super::root::Model::from_project(&decoded).validate(),
+            "TypedElement-type: text declaration is not a resolved UML reference",
         );
         assert_eq!(
             decoded

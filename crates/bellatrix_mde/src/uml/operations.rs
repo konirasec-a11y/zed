@@ -343,9 +343,158 @@ fn validate_parameter_relations(
     }
 }
 
+fn reception_reference<'a>(
+    references: &ReferenceIndex<'a>,
+    owner: ElementRef<'a>,
+    property_name: &str,
+) -> Result<Option<ElementRef<'a>>, QueryError> {
+    let descriptor = schema::uml_property(
+        owner.metaclass().ok_or_else(|| QueryError::unsupported(owner.id(), "unresolved metaclass"))?,
+        property_name,
+    ).map_err(|error| QueryError::unsupported(owner.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(owner.id(), "missing reference contract"))?;
+    let value = owner.properties().get(property_name).unwrap_or(&Value::Null);
+    match super::property_contracts::check_value(references, owner, descriptor, value) {
+        super::property_contracts::PropertyOutcome::Satisfied => {}
+        super::property_contracts::PropertyOutcome::Violation(message) =>
+            return Err(QueryError::invalid(owner.id(), message)),
+        super::property_contracts::PropertyOutcome::Unverified(message) =>
+            return Err(QueryError::unsupported(owner.id(), message)),
+    }
+    references.validate(descriptor, value)
+        .map_err(|error| QueryError::invalid(owner.id(), error))
+}
+
+fn signal_owned_attributes<'a>(
+    references: &ReferenceIndex<'a>,
+    signal: ElementRef<'a>,
+) -> Result<Vec<ElementRef<'a>>, QueryError> {
+    let explicit = if let Some(value) = signal.properties().get("ownedAttribute") {
+        let descriptor = schema::uml_property("Signal", "ownedAttribute")
+            .map_err(|error| QueryError::unsupported(signal.id(), error.to_string()))?
+            .ok_or_else(|| QueryError::unsupported(signal.id(), "missing Signal::ownedAttribute contract"))?;
+        match super::property_contracts::check_value(references, signal, descriptor, value) {
+            super::property_contracts::PropertyOutcome::Satisfied => {}
+            super::property_contracts::PropertyOutcome::Violation(message) =>
+                return Err(QueryError::invalid(signal.id(), message)),
+            super::property_contracts::PropertyOutcome::Unverified(message) =>
+                return Err(QueryError::unsupported(signal.id(), message)),
+        }
+        Some(references.validate_many(descriptor, value)
+            .map_err(|error| QueryError::invalid(signal.id(), error))?)
+    } else { None };
+    let mut attributes = Vec::new();
+    for child in references.explicit_owned_elements(signal.id())
+        .map_err(|error| QueryError::invalid(signal.id(), error))?
+    {
+        if classifiers::contributes_to_owned_union(signal, child, "Signal-ownedAttribute")? {
+            attributes.push(child);
+        }
+    }
+    if let Some(explicit) = explicit {
+        if explicit.len() != attributes.len()
+            || attributes.iter().any(|attribute| !explicit.iter().any(|item| item.id() == attribute.id()))
+        {
+            return Err(QueryError::invalid(signal.id(),
+                "Signal::ownedAttribute must match its canonically owned attributes"));
+        }
+        return Ok(explicit);
+    }
+    Ok(attributes)
+}
+
+fn reception_bounds_match(
+    references: &ReferenceIndex<'_>,
+    parameter: ElementRef<'_>,
+    attribute: ElementRef<'_>,
+    upper: bool,
+) -> Result<bool, QueryError> {
+    let result = if upper {
+        value_specifications::upper_bound(references, parameter).and_then(|parameter_bound|
+            value_specifications::upper_bound(references, attribute)
+                .map(|attribute_bound| parameter_bound == attribute_bound))
+    } else {
+        value_specifications::lower_bound(references, parameter).and_then(|parameter_bound|
+            value_specifications::lower_bound(references, attribute)
+                .map(|attribute_bound| parameter_bound == attribute_bound))
+    };
+    result.map_err(|error| match error {
+        EvaluationError::Invalid { message, .. } => QueryError::invalid(parameter.id(), message),
+        EvaluationError::Unsupported { message, .. } => QueryError::unsupported(parameter.id(), message),
+    })
+}
+
+fn reception_structure(
+    references: &ReferenceIndex<'_>,
+    reception: ElementRef<'_>,
+    signal: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let parameters = checked_owned_parameters(references, reception.id())?;
+    let attributes = signal_owned_attributes(references, signal)?;
+    if parameters.len() != attributes.len() { return Ok(false); }
+    super::feature_compatibility::require_all(parameters.into_iter().zip(attributes).map(
+        |(parameter, attribute)| {
+            let parameter = ElementRef::Object(parameter);
+            super::feature_compatibility::require_all([
+                schema::read_effective_scalar(parameter, "direction")
+                    .map(|direction| direction == "in")
+                    .map_err(|error| QueryError::invalid(parameter.id(), error)),
+                Ok(parameter.named().and_then(|named| named.name())
+                    == attribute.named().and_then(|named| named.name())),
+                reception_reference(references, parameter, "type").and_then(|parameter_type|
+                    reception_reference(references, attribute, "type")
+                        .map(|attribute_type| parameter_type.map(ElementRef::id) == attribute_type.map(ElementRef::id))),
+                reception_bounds_match(references, parameter, attribute, false),
+                reception_bounds_match(references, parameter, attribute, true),
+            ])
+        },
+    ))
+}
+
+fn validate_reception(
+    references: &ReferenceIndex<'_>,
+    reception: ElementRef<'_>,
+    issues: &mut Vec<StructuralDiagnostic>,
+) {
+    // The editor creates receptions before a Signal is selected. Preserve the
+    // existing omitted-reference draft policy without treating it as conformance.
+    if !reception.properties().contains_key("signal") {
+        issues.push(StructuralDiagnostic {
+            severity: StructuralSeverity::Warning,
+            code: "MDE_RECEPTION_SIGNAL_INCOMPLETE",
+            subject_id: reception.id().into(),
+            message: "Reception is incomplete: signal has not been selected; same_name_as_signal and same_structure_as_signal are not evaluated, and UML conformance is not established".into(),
+        });
+        return;
+    }
+    let signal = reception_reference(references, reception, "signal")
+        .and_then(|signal| signal.ok_or_else(|| QueryError::invalid(reception.id(), "Reception requires a Signal")));
+    for (rule, result) in [
+        ("Reception-same_name_as_signal", signal.clone().map(|signal|
+            reception.named().and_then(|named| named.name()) == signal.named().and_then(|named| named.name()))),
+        ("Reception-same_structure_as_signal", signal.and_then(|signal|
+            reception_structure(references, reception, signal))),
+    ] {
+        let (severity, code, message) = match result {
+            Ok(true) => continue,
+            Ok(false) => (StructuralSeverity::Error, "UML_RECEPTION_CONSTRAINT", rule.to_owned()),
+            Err(QueryError::Invalid { message, .. }) =>
+                (StructuralSeverity::Error, "UML_RECEPTION_CONSTRAINT", format!("{rule}: {message}")),
+            Err(QueryError::Unsupported { message, .. }) =>
+                (StructuralSeverity::Warning, "MDE_RECEPTION_CONSTRAINT_UNVERIFIED", format!("{rule}: {message}")),
+        };
+        issues.push(StructuralDiagnostic {
+            severity, code, subject_id: reception.id().into(), message,
+        });
+    }
+}
+
 pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     for element in references.model().elements() {
+        if element.conforms_to("Reception") {
+            validate_reception(references, element, &mut issues);
+        }
         if (element.conforms_to("BehavioralFeature") || element.conforms_to("Behavior"))
             && element.properties().contains_key("ownedParameter")
             && let Err(error) = checked_owned_parameters(references, element.id())

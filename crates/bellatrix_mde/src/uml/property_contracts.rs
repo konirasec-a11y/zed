@@ -199,9 +199,14 @@ fn endpoint_value(element: ElementRef<'_>, property: &PropertyDescriptor) -> Opt
 fn constraint_specification<'a>(
     references: &ReferenceIndex<'a>,
     constraint: ElementRef<'a>,
-) -> Result<ElementRef<'a>, String> {
+) -> Result<Option<ElementRef<'a>>, String> {
     let specifications = references.explicit_owned_elements(constraint.id())?
         .into_iter().filter(|child| child.conforms_to("ValueSpecification")).collect::<Vec<_>>();
+    if specifications.is_empty() && !constraint.properties().contains_key("specification") {
+        // The editor can retain an unfinished Constraint without inventing an
+        // expression. An explicit null or malformed reference is still invalid.
+        return Ok(None);
+    }
     let [specification] = specifications.as_slice() else {
         return Err("Constraint::specification requires exactly one owned ValueSpecification".into());
     };
@@ -210,7 +215,7 @@ fn constraint_specification<'a>(
             return Err("Constraint::specification must identify its canonical owned ValueSpecification".into());
         }
     }
-    Ok(*specification)
+    Ok(Some(*specification))
 }
 
 fn required_role<'a>(
@@ -236,7 +241,7 @@ fn required_role<'a>(
                 .map(|element| json!({"$ref": element.id()})).collect())))
         }
         "Constraint-specification" => constraint_specification(references, element)
-            .map(|specification| Some(json!({"$ref": specification.id()}))),
+            .map(|specification| specification.map(|specification| json!({"$ref": specification.id()}))),
         "Slot-owningInstance" => references.model().owner(element)
             .map(|owner| Some(owner.map_or(Value::Null, |owner| json!({"$ref": owner.id()})))),
         "Slot-definingFeature" | "Association-memberEnd" =>
@@ -421,7 +426,9 @@ fn validate_value_rules<'a>(
                 .diagnostic(element, "Constraint-not_apply_to_self", "UML_CONSTRAINT_NOT_SELF"));
         }
         match constraint_specification(references, element) {
-            Ok(specification) => match value_specifications::evaluate(references, specification.id()) {
+            Ok(None) => issues.extend(Unverified("Constraint draft has no authored specification; Boolean semantics and side effects are unverified".into())
+                .diagnostic(element, "Constraint-specification", "UML_CONSTRAINT_SPECIFICATION")),
+            Ok(Some(specification)) => match value_specifications::evaluate(references, specification.id()) {
                 // false is still a Boolean expression, not a metamodel type error.
                 Ok(LiteralValue::Boolean(_)) => {}
                 Ok(_) => issues.extend(Violation("specification must evaluate to a Boolean".into())

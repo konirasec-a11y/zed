@@ -397,6 +397,7 @@ impl MdeWorkbenchItem {
         self.selected_view = Some(view_id.clone());
         self.editing_subject = Some(view_id);
         self.inline_editor = Some(field.clone());
+        self.inline_draft = None;
         self.gesture = None;
         field.read(cx).focus_handle(cx).focus(window, cx);
         field.read(cx).editor().clone().select_all(window, cx);

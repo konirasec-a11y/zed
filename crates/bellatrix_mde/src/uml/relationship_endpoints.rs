@@ -183,6 +183,9 @@ pub fn related_elements<'a>(references: &ReferenceIndex<'a>, id: &str)
     } else if subject.conforms_to("Association")
         && (subject.properties().contains_key("memberEnd") || matches!(subject, ElementRef::Object(_)))
     {
+        if !subject.properties().contains_key("memberEnd") {
+            return Err(unsupported(id, "Association memberEnd identities are not materialized; related Elements are unverified"));
+        }
         associations::end_types(references, id).map_err(|error| invalid(id, error))?
     } else if let ElementRef::Relationship(relation) = subject {
         unique([

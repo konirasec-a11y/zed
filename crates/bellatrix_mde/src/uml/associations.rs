@@ -940,6 +940,26 @@ pub(crate) fn materialize_new(before: &Project, after: &mut ModelingSection) -> 
         .map(|relation| relation.id.clone())
         .collect::<Vec<_>>();
     for id in added {
+        let relation = after.relations.iter_mut().find(|relation| relation.id == id)
+            .ok_or("new Association disappeared")?;
+        if !relation.properties.contains_key("memberEnd") {
+            // Newly authored ends need distinguishable names in their Namespace.
+            // Migration of existing authored records deliberately does not invent names.
+            for role in ["sourceRole", "targetRole"] {
+                if relation.properties.contains_key(role) { continue; }
+                let mut sequence = 1_u64;
+                loop {
+                    let name = format!("end{sequence}");
+                    if !["sourceRole", "targetRole"].iter().any(|role|
+                        relation.properties.get(*role).and_then(Value::as_str) == Some(name.as_str()))
+                    {
+                        relation.properties.insert(role.into(), json!(name));
+                        break;
+                    }
+                    sequence = sequence.checked_add(1).ok_or("Association role name overflow")?;
+                }
+            }
+        }
         migrate(after, &before.id, &id)?;
     }
     Ok(())

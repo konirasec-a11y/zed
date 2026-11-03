@@ -99,6 +99,7 @@ pub struct MdeWorkbenchItem {
     selected_element: Option<String>,
     selected_view: Option<String>,
     inline_editor: Option<Entity<InputField>>,
+    inline_draft: Option<inspector_drafts::DraftState>,
     editing_subject: Option<String>,
     draft_label_revision: Option<u64>,
     draft_label_pending: bool,
@@ -272,6 +273,7 @@ impl MdeWorkbenchItem {
             selected_element: None,
             selected_view: None,
             inline_editor: None,
+            inline_draft: None,
             editing_subject: None,
             draft_label_revision: None,
             draft_label_pending: false,
@@ -312,6 +314,7 @@ impl MdeWorkbenchItem {
         if self.selected_element.as_deref() != Some(id.as_str()) {
             self.selected_element = Some(id);
             self.inline_editor = None;
+            self.inline_draft = None;
             self.editing_subject = None;
             cx.notify();
         }
@@ -518,6 +521,7 @@ impl MdeWorkbenchItem {
         self.select_element(id.clone(), cx);
         self.editing_subject = Some(id);
         self.inline_editor = Some(field.clone());
+        self.inline_draft = Some(inspector_drafts::DraftState::new(display, snapshot.revision));
         self.gesture = None;
         field.read(cx).focus_handle(cx).focus(window, cx);
         let text_editor = field.read(cx).editor().clone();
@@ -549,24 +553,38 @@ impl MdeWorkbenchItem {
         };
         let classifier = UmlType::from_kind(&element.kind).is_some_and(UmlType::is_classifier);
         let comment = UmlType::from_kind(&element.kind) == Some(UmlType::Note);
-        let name = if comment {
-            text.to_string()
+        let canonical = if comment {
+            bellatrix_mde::element_display_label(element)
+        } else if classifier {
+            Self::name_expression_text(element)
         } else {
-            text.trim().to_owned()
+            bellatrix_mde::template_parametered_element(&snapshot.section, element)
+                .unwrap_or(element)
+                .name
+                .clone()
         };
-        let changed = name
-            != if comment {
-                bellatrix_mde::element_display_label(element)
-            } else if classifier {
-                Self::name_expression_text(element)
-            } else {
-                bellatrix_mde::template_parametered_element(&snapshot.section, element)
-                    .unwrap_or(element)
-                    .name
-                    .clone()
-            };
+        let Some(draft) = self.inline_draft.as_mut() else {
+            self.feedback = "Edit baseline unavailable; cancel and reopen the editor".into();
+            cx.notify();
+            return;
+        };
+        let reconciled = match draft.reconcile_for_commit(&text, &canonical, snapshot.revision) {
+            Ok(text) => text,
+            Err(error) => {
+                self.feedback = error;
+                cx.notify();
+                return;
+            }
+        };
+        let name = if comment {
+            reconciled
+        } else {
+            reconciled.trim().to_owned()
+        };
+        let changed = name != canonical;
         self.editing_subject = None;
         self.inline_editor = None;
+        self.inline_draft = None;
         if changed {
             if classifier {
                 self.submit(
@@ -597,6 +615,7 @@ impl MdeWorkbenchItem {
     fn cancel_inline_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.editing_subject = None;
         self.inline_editor = None;
+        self.inline_draft = None;
         self.focus_handle.focus(window, cx);
         cx.notify();
     }
@@ -648,6 +667,7 @@ impl MdeWorkbenchItem {
         self.selected_tool = None;
         self.editing_subject = None;
         self.inline_editor = None;
+        self.inline_draft = None;
         cx.notify();
     }
     pub fn select_tool(&mut self, kind: ModelingTool, cx: &mut Context<Self>) {
@@ -672,6 +692,7 @@ impl MdeWorkbenchItem {
         }
         self.gesture = None;
         self.inline_editor = None;
+        self.inline_draft = None;
         self.editing_subject = None;
         self.selected_tool = Some(tool);
         self.pending_relation_source = None;

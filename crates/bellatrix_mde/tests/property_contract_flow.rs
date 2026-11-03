@@ -120,6 +120,28 @@ fn structural_document_flow_edits_inspects_rejects_bad_references_and_reopens_dr
 #[test]
 fn constraint_authoring_flow_keeps_identity_ownership_boolean_contract_and_recovery() {
     let project = document();
+    let mut draft = project.clone();
+    draft.elements.iter_mut().find(|element| element.id == "condition").expect("Constraint")
+        .properties.remove("specification");
+    draft.elements.retain(|element| element.id != "literal");
+    draft.relations.retain(|relation| relation.to != "literal");
+    let diagnostics = Model::from_project(&draft).validate();
+    assert!(diagnostics.iter().any(|diagnostic| diagnostic.subject_id == "condition"
+        && diagnostic.code == "MDE_PROPERTY_CONTRACT_UNVERIFIED"
+        && diagnostic.severity == StructuralSeverity::Warning
+        && diagnostic.message.contains("Constraint draft has no authored specification")));
+    assert!(!diagnostics.iter().any(|diagnostic| diagnostic.subject_id == "condition"
+        && diagnostic.severity == StructuralSeverity::Error));
+    for value in [Value::Null, json!({"$ref":"missing"}), json!(false)] {
+        let invalid = external_edit(&draft, "condition", "specification", value);
+        assert!(has_error(&invalid, "condition", "Constraint-specification"));
+    }
+    for format in [Format::Json, Format::Protobuf] {
+        let reopened = decode(&encode(&draft, format).expect("save incomplete Constraint"), format)
+            .expect("reopen incomplete Constraint");
+        assert_eq!(draft, reopened);
+        assert_eq!(Model::from_project(&reopened).validate(), diagnostics);
+    }
     let self_constrained = external_edit(&project, "condition", "constrainedElement",
         json!([{"$ref":"condition"}]));
     assert!(has_error(&self_constrained, "condition", "Constraint-not_apply_to_self"));

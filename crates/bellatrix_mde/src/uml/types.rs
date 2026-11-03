@@ -265,6 +265,15 @@ fn literal_notation(
     }
 }
 
+pub fn literal_lower_bound(
+    properties: &std::collections::BTreeMap<String, Value>,
+) -> Result<Integer, MultiplicityError> {
+    literal_notation(properties)?.map_or(Ok(1.into()), |text| {
+        split_multiplicity_notation(text).0.parse()
+            .map_err(|_| MultiplicityError::UnsupportedValueSpecification)
+    })
+}
+
 pub fn literal_upper_bound(
     properties: &std::collections::BTreeMap<String, Value>,
 ) -> Result<UnlimitedNatural, MultiplicityError> {

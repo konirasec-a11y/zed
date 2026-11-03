@@ -605,10 +605,14 @@ fn set_inspected_property_inner(
         .ok_or("property is not declared")?;
     if !field.editable { return Err("property is read-only".into()); }
     let optional_null = value.is_null() && path.strip_prefix("properties.").is_some_and(|key| {
-        crate::uml::root::Model::from_section(section).element(id)
-            .and_then(|element| element.metaclass())
-            .and_then(|metaclass| crate::uml::schema::uml_property(metaclass, key).ok().flatten())
-            .is_some_and(|descriptor| crate::uml::schema::validate_scalar(descriptor, &value) == Ok(Ok(())))
+        references.element(id).ok().is_some_and(|element| {
+            element.metaclass()
+                .and_then(|metaclass| crate::uml::schema::uml_property(metaclass, key).ok().flatten())
+                .is_some_and(|descriptor| matches!(
+                    crate::uml::property_contracts::check_value(&references, element, descriptor, &value),
+                    crate::uml::property_contracts::PropertyOutcome::Satisfied,
+                ))
+        })
     });
     match field.editor {
         _ if optional_null => {},

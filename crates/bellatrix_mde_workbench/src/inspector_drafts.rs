@@ -51,6 +51,22 @@ impl DraftState {
         }
     }
 
+    pub fn reconcile_for_commit(
+        &mut self,
+        text: &str,
+        canonical: &str,
+        revision: u64,
+    ) -> Result<String, String> {
+        if revision < self.revision {
+            return Err("The model snapshot is out of date; try again when it refreshes".into());
+        }
+        let reconciled = self.reconcile(text, canonical, revision);
+        if self.conflict {
+            return Err("This value changed elsewhere. Your text was preserved; cancel and reopen the editor to use the latest value".into());
+        }
+        Ok(reconciled)
+    }
+
     pub fn reload(&mut self, canonical: &str, revision: u64) {
         self.baseline = canonical.to_owned();
         self.revision = revision;
@@ -69,6 +85,44 @@ impl DraftState {
 #[cfg(test)]
 mod tests {
     use super::DraftState;
+
+    #[test]
+    fn inline_commit_does_not_restore_an_untouched_stale_value() {
+        let mut draft = DraftState::new("Original".into(), 1);
+        assert_eq!(
+            draft.reconcile_for_commit("Original", "Renamed", 2),
+            Ok("Renamed".into())
+        );
+        assert!(!draft.conflict);
+    }
+
+    #[test]
+    fn inline_commit_preserves_conflicting_text_without_rebasing_it() {
+        let mut draft = DraftState::new("Original".into(), 1);
+        assert!(draft.reconcile_for_commit("My edit", "Remote edit", 2).is_err());
+        assert!(draft.conflict);
+        assert_eq!(draft.baseline, "Original");
+        assert_eq!(draft.revision, 1);
+        assert!(draft.reconcile_for_commit("My edit", "Remote edit", 3).is_err());
+        assert_eq!(
+            draft.reconcile_for_commit("Remote edit", "Remote edit", 3),
+            Ok("Remote edit".into())
+        );
+        assert!(!draft.conflict);
+    }
+
+    #[test]
+    fn inline_commit_accepts_unrelated_changes_but_rejects_older_snapshots() {
+        let mut draft = DraftState::new("Original".into(), 2);
+        assert!(draft.reconcile_for_commit("My edit", "Original", 1).is_err());
+        assert_eq!(draft.revision, 2);
+        assert_eq!(
+            draft.reconcile_for_commit("My edit", "Original", 3),
+            Ok("My edit".into())
+        );
+        assert_eq!(draft.revision, 3);
+        assert!(!draft.conflict);
+    }
 
     #[test]
     fn realtime_editing_preserves_newer_input_through_receipts_and_conflicts() {

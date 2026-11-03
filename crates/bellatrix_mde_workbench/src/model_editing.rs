@@ -184,6 +184,7 @@ impl MdeWorkbenchItem {
         self.selected_element = None;
         self.selected_view = None;
         self.inline_editor = None;
+        self.inline_draft = None;
         self.editing_subject = None;
         self.gesture = None;
         cx.notify();
@@ -202,6 +203,7 @@ impl MdeWorkbenchItem {
             {
                 self.selected_view = None;
                 self.inline_editor = None;
+                self.inline_draft = None;
                 self.editing_subject = None;
             }
         }

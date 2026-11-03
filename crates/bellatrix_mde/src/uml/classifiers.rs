@@ -394,6 +394,15 @@ impl<'index, 'model> Queries<'index, 'model> {
             .map_err(|error| QueryError::invalid(id, error))?;
         let descriptors = properties(element)?;
         for property in descriptors {
+            if element.conforms_to("Association") && property.name == "navigableOwnedEnd"
+                && element.properties().get(property.name).is_some_and(populated)
+            {
+                // This subset selects existing owned ends; it contributes no
+                // additional members beyond the canonical ownership projection.
+                super::associations::navigable_owned_ends(self.references, id)
+                    .map_err(|error| QueryError::unsupported(id, error))?;
+                continue;
+            }
             let member = contributes(property, "Namespace-ownedMember")
                 .map_err(|error| QueryError::unsupported(id, error))?;
             let feature = contributes(property, "Classifier-feature")

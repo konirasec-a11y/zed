@@ -8,7 +8,7 @@ use super::{
     schema,
     types::{
         Integer, MultiplicityError, MultiplicityRange, UnlimitedNatural, literal_multiplicity,
-        literal_upper_bound,
+        literal_lower_bound, literal_upper_bound,
     },
 };
 use serde_json::Value;
@@ -311,6 +311,28 @@ fn evaluate_upper_bound(
             _ => Err(EvaluationError::invalid(target.id(), "MultiplicityElement::upper_is_unlimitedNatural requires a non-null unlimitedValue()")),
         }
     })
+}
+
+/// UML lowerBound() does not depend on whether upperValue can be evaluated.
+pub fn lower_bound(
+    references: &ReferenceIndex<'_>,
+    element: ElementRef<'_>,
+) -> Result<Integer, EvaluationError> {
+    if !element.conforms_to("MultiplicityElement") {
+        return Err(EvaluationError::invalid(element.id(), "a MultiplicityElement is required"));
+    }
+    if has_bound_references(element) {
+        return bound(references, element, "lowerValue")?.map_or(Ok(1.into()), |target| {
+            match evaluate(references, target.id())? {
+                LiteralValue::Integer(value) => Ok(value),
+                _ => Err(EvaluationError::invalid(target.id(),
+                    "MultiplicityElement::lower_is_integer requires a non-null integerValue()")),
+            }
+        });
+    }
+    require_assigned_values(references, element)?;
+    literal_lower_bound(element.properties())
+        .map_err(|error| classify_multiplicity_error(element.id(), error))
 }
 
 /// UML upperBound() is independent of lowerValue evaluation. Overall interval
