@@ -45,21 +45,34 @@ fn read<'a>(
     property: &PropertyDescriptor,
     value: &Value,
 ) -> Result<Vec<ElementRef<'a>>, ElementGraphError> {
-    if property.property_type.resolution != schema::ReferenceResolution::Exact
-        || value.get("href").is_some()
-        || value.as_array().is_some_and(|values|
-            values.iter().any(|value| value.get("href").is_some()))
-    {
+    if property.property_type.resolution != schema::ReferenceResolution::Exact {
         return Err(unsupported(subject.id(), format!(
             "{} requires resolved local Element references", property.id.fragment,
         )));
     }
-    if matches!(property.upper, "0" | "1") {
+    let result = if matches!(property.upper, "0" | "1") {
         references.validate(property, value)
             .map(|value| value.into_iter().collect())
     } else {
         references.validate_many(property, value)
-    }.map_err(|error| invalid(subject.id(), error))
+    };
+    result.map_err(|error| {
+        // ReferenceIndex's string error cannot distinguish an unsupported
+        // endpoint adapter from a proven type violation. Check the complete
+        // collection so an unknown endpoint cannot hide a malformed neighbor.
+        let contract = PropertyDescriptor {
+            is_derived: false,
+            aggregation: schema::Aggregation::None,
+            ..*property
+        };
+        match super::property_contracts::check_value(references, subject, &contract, value) {
+            super::property_contracts::PropertyOutcome::Unverified(message) =>
+                unsupported(subject.id(), message),
+            super::property_contracts::PropertyOutcome::Violation(message) =>
+                invalid(subject.id(), message),
+            super::property_contracts::PropertyOutcome::Satisfied => invalid(subject.id(), error),
+        }
+    })
 }
 
 fn unique<'a>(values: impl IntoIterator<Item = ElementRef<'a>>) -> Vec<ElementRef<'a>> {
@@ -228,4 +241,101 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
         }
     }
     issues
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Project, uml::root::Model};
+
+    fn project(source_kind: &str, properties: Value) -> serde_json::Result<Project> {
+        serde_json::from_value(json!({
+            "id": "project", "name": "Endpoints",
+            "elements": [
+                {"id": "source", "name": "Source", "kind": source_kind},
+                {"id": "target", "name": "Target", "kind": "uml.interface"},
+                {"id": "invalid", "name": "Comment", "kind": "uml.comment"}
+            ],
+            "relations": [{"id": "edge", "kind": "uml.interface_realization",
+                "from": "source", "to": "target", "properties": properties}]
+        }))
+    }
+
+    #[test]
+    fn unknown_endpoint_adapter_is_unverified_not_invalid() -> serde_json::Result<()> {
+        let project = project("uml.template", json!({}))?;
+        let references = ReferenceIndex::new(Model::from_project(&project));
+        assert!(matches!(clients(&references, "edge"),
+            Err(ElementGraphError::Unsupported { .. })));
+        assert!(super::validate(&references).iter().all(|issue|
+            issue.severity == StructuralSeverity::Warning));
+        Ok(())
+    }
+
+    #[test]
+    fn unverified_endpoint_does_not_hide_invalid_collection_members() -> serde_json::Result<()> {
+        for invalid in [json!({"$ref": "invalid"}), json!({"$ref": "missing"}), Value::Null] {
+            let project = project("uml.template", json!({
+                "client": [{"$ref": "source"}, invalid]
+            }))?;
+            let references = ReferenceIndex::new(Model::from_project(&project));
+            assert!(matches!(clients(&references, "edge"),
+                Err(ElementGraphError::Invalid { .. })));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn external_endpoint_does_not_hide_violations_in_either_order() -> serde_json::Result<()> {
+        let external = json!({"href": "external.uml#Classifier"});
+        for invalid in [json!({"$ref": "invalid"}), json!({"$ref": "missing"}), Value::Null] {
+            for values in [json!([external, invalid]), json!([invalid, external])] {
+                let project = project("uml.class", json!({"client": values}))?;
+                let references = ReferenceIndex::new(Model::from_project(&project));
+                assert!(matches!(clients(&references, "edge"),
+                    Err(ElementGraphError::Invalid { .. })));
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn unresolved_endpoints_do_not_hide_duplicate_references() -> serde_json::Result<()> {
+        let external = json!({"href": "external.uml#Classifier"});
+        let local = json!({"$ref": "target"});
+        let unknown = json!({"$ref": "source"});
+        for values in [
+            json!([external, local, local]), json!([local, local, external]),
+            json!([unknown, local, local]), json!([local, local, unknown]),
+            json!([external, external]), json!([unknown, unknown]),
+        ] {
+            let project = project("uml.template", json!({"client": values}))?;
+            let references = ReferenceIndex::new(Model::from_project(&project));
+            assert!(matches!(clients(&references, "edge"),
+                Err(ElementGraphError::Invalid { .. })));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn external_endpoint_without_proven_violation_stays_unverified() -> serde_json::Result<()> {
+        let project = project("uml.class", json!({
+            "client": [{"href": "external.uml#Classifier"}, {"$ref": "source"}]
+        }))?;
+        let references = ReferenceIndex::new(Model::from_project(&project));
+        assert!(matches!(clients(&references, "edge"),
+            Err(ElementGraphError::Unsupported { .. })));
+        Ok(())
+    }
+
+    #[test]
+    fn interface_realization_source_keeps_specialized_error_code() -> serde_json::Result<()> {
+        let project = project("uml.artifact", json!({}))?;
+        let references = ReferenceIndex::new(Model::from_project(&project));
+        assert!(super::super::property_contracts::validate(&references).iter().any(|issue|
+            issue.code == "UML_INTERFACE_REALIZATION_SOURCE"
+                && issue.subject_id == "edge"
+                && issue.severity == StructuralSeverity::Error));
+        Ok(())
+    }
 }

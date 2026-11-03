@@ -32,7 +32,10 @@ impl PropertyOutcome {
     {
         let (severity, code, message) = match self {
             Self::Satisfied => return None,
-            Self::Violation(message) => (StructuralSeverity::Error, code, message),
+            Self::Violation(message) => (StructuralSeverity::Error,
+                if property == "InterfaceRealization-implementingClassifier" {
+                    "UML_INTERFACE_REALIZATION_SOURCE"
+                } else { code }, message),
             Self::Unverified(message) => (
                 StructuralSeverity::Warning, "MDE_PROPERTY_CONTRACT_UNVERIFIED", message,
             ),
@@ -97,6 +100,7 @@ pub fn check_value(
         Err(error) => return Unverified(error.to_string()),
     };
     let mut seen = HashSet::new();
+    let mut external_references = HashSet::new();
     let mut unverified = None;
     // An unresolved member cannot hide a violation proved by another member.
     for (position, value) in values.iter().enumerate() {
@@ -121,6 +125,12 @@ pub fn check_value(
                 continue;
             }
             if value.as_object().is_some_and(|object| object.contains_key("href")) {
+                if property.is_unique
+                    && let Some(href) = value.get("href").and_then(Value::as_str)
+                    && !external_references.insert(href)
+                {
+                    return Violation(format!("duplicate external reference at index {position}; isUnique is true"));
+                }
                 unverified.get_or_insert_with(|| "external model reference has no loaded document resolver".into());
                 continue;
             }
