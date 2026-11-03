@@ -350,6 +350,73 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
     assert!(!ids(&result.all_attributes).contains(&public.as_str()));
     assert!(ids(&result.all_features).contains(&own_operation.as_str()));
 
+    for (id, key, value) in [
+        (&own_attribute, "type", json!({"$ref": left})),
+        (&public, "type", json!({"$ref": ancestor})),
+        (&public, "multiplicity", json!("0..3")),
+        (&own_attribute, "multiplicity", json!("1..2")),
+        (&own_attribute, "aggregation", json!("composite")),
+        (&public, "aggregation", json!("composite")),
+    ] {
+        apply(
+            &mut project,
+            Command::SetProperty {
+                element_id: id.clone(),
+                path: format!("properties.{key}"),
+                value,
+            },
+        )?;
+    }
+    redefine(&mut project, &own_attribute, &[&public])?;
+    assert!(
+        !validate_structural_model(&project)
+            .iter()
+            .any(|issue| issue.subject_id == own_attribute
+                && issue.code == "UML_REDEFINITION_CONSISTENCY_UNSUPPORTED")
+    );
+    for (id, key, value) in [
+        (&own_attribute, "multiplicity", json!("0..4")),
+        (&own_attribute, "aggregation", json!("none")),
+        (&public, "type", json!({"$ref": leaf})),
+    ] {
+        let mut incompatible = project.clone();
+        incompatible
+            .elements
+            .iter_mut()
+            .find(|element| &element.id == id)
+            .ok_or("Property")?
+            .properties
+            .insert(key.into(), value);
+        let before = encode(&incompatible, Format::Json)?;
+        let error = redefine(&mut incompatible, &own_attribute, &[&public])
+            .err()
+            .ok_or("incompatible Property redefinition accepted")?;
+        assert!(error.contains("inconsistent"), "{error}");
+        assert_eq!(encode(&incompatible, Format::Json)?, before);
+        assert!(
+            validate_structural_model(&incompatible)
+                .iter()
+                .any(|issue| issue.subject_id == own_attribute
+                    && issue.severity == bellatrix_mde::StructuralSeverity::Error)
+        );
+    }
+    let mut unevaluated = project.clone();
+    unevaluated
+        .elements
+        .iter_mut()
+        .find(|element| element.id == own_attribute)
+        .ok_or("Property")?
+        .properties
+        .insert("multiplicity".into(), json!("limit..*"));
+    redefine(&mut unevaluated, &own_attribute, &[&public])?;
+    assert!(
+        validate_structural_model(&unevaluated)
+            .iter()
+            .any(|issue| issue.subject_id == own_attribute
+                && issue.code == "UML_REDEFINITION_CONSISTENCY_UNSUPPORTED"
+                && issue.severity == bellatrix_mde::StructuralSeverity::Warning)
+    );
+
     for (member_id, targets, expected) in [
         (
             &own_attribute,
@@ -617,6 +684,7 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
     );
     assert_eq!(encode(&project, Format::Json)?, before);
 
+    redefine(&mut project, &own_attribute, &[&public])?;
     let expected = ids(&query(&project, &leaf)?.members)
         .into_iter()
         .map(str::to_owned)

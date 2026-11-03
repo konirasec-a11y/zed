@@ -706,6 +706,23 @@ fn redefinitions<'a>(
                     format!("{id} isLeaf prohibits redefinition"),
                 ));
             }
+            if element.conforms_to("Property") {
+                match super::feature_compatibility::compare_property_consistency(
+                    references, element, target,
+                ) {
+                    Ok(true) | Err(QueryError::Unsupported { .. }) => {}
+                    Ok(false) => {
+                        return Err(QueryError::invalid(
+                            element.id(),
+                            format!(
+                                "Property redefinition of {} is inconsistent: Type conformance, multiplicity containment or composite preservation failed",
+                                target.id()
+                            ),
+                        ));
+                    }
+                    Err(error) => return Err(error),
+                }
+            }
             targets.push(target);
         }
     }
@@ -731,7 +748,8 @@ pub fn query<'a>(
     Queries::new(references).evaluate(namespace_id)
 }
 
-pub(crate) fn redefinition_consistency_warning(
+pub(crate) fn redefinition_consistency_diagnostic(
+    references: &ReferenceIndex<'_>,
     element: ElementRef<'_>,
 ) -> Option<StructuralDiagnostic> {
     let key = if element.conforms_to("Property") {
@@ -741,11 +759,27 @@ pub(crate) fn redefinition_consistency_warning(
     } else {
         return None;
     };
-    element.properties().get(key).filter(|value| populated(value)).map(|_| StructuralDiagnostic {
+    if !element.properties().get(key).is_some_and(populated) {
+        return None;
+    }
+    let message = if element.conforms_to("Property") {
+        let targets = match redefinitions(references, element) {
+            Ok(targets) => targets,
+            Err(error) => return Some(error.diagnostic()),
+        };
+        let unsupported = targets.into_iter().find_map(|target| {
+            super::feature_compatibility::compare_property_consistency(references, element, target)
+                .err()
+        });
+        unsupported?.to_string()
+    } else {
+        "Operation signature and pre/postcondition redefinition consistency is not evaluated".into()
+    };
+    Some(StructuralDiagnostic {
         severity: StructuralSeverity::Warning,
         code: "UML_REDEFINITION_CONSISTENCY_UNSUPPORTED",
         subject_id: element.id().into(),
-        message: "Membership filtering is supported; complete Property/Operation type, multiplicity and signature redefinition consistency is not evaluated".into(),
+        message,
     })
 }
 
@@ -771,7 +805,8 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
                             )
                         })?;
                     queries.evaluate(owner.id())?;
-                    if let Some(warning) = redefinition_consistency_warning(element) {
+                    if let Some(warning) = redefinition_consistency_diagnostic(references, element)
+                    {
                         issues.push(warning);
                     }
                 }

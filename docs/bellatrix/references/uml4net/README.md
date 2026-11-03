@@ -163,12 +163,11 @@ classifier explicitly redefines it; no extra global suppression rule is added.
 
 `Command::SetRedefinedElements` checks reference shape, target metaclass,
 uniqueness, self-redefinition, `isLeaf`, and the supported ancestor/owned-feature
-context before committing. It does not implement all Property or Operation
-`isConsistentWith` constraints: full type/multiplicity compatibility, operation
-signature and pre/postcondition conformance remain outside this slice. Every
-nonempty supported redefinition list therefore retains an explicit
+context before committing. Property consistency now uses the bounded comparisons described below.
+Operation signature and pre/postcondition conformance remain outside this slice.
+Unsupported Type/bound evaluation and Operation redefinitions retain an explicit
 `UML_REDEFINITION_CONSISTENCY_UNSUPPORTED` capability warning; successful
-membership computation does not certify redefinition consistency. The
+membership computation alone does not certify full redefinition semantics. The
 query results are consumed by model/command validation and read-only derived
 rows in the existing Inspector. The integration flow creates a diamond and
 members through commands, changes visibility, redefines and clears
@@ -274,7 +273,8 @@ excluded. When that ambiguity is present and the receiving Classifier has not
 explicitly resolved it, the slottable query returns Unsupported. Ordinary
 Namespace members remain queryable and the Inspector shows the separate
 slottable-query reason. This is a capability warning, not a new UML constraint.
-Complete Property/Operation redefinition consistency remains unevaluated.
+Property consistency uses the bounded comparisons below; full Operation
+redefinition consistency remains unevaluated.
 
 The existing `graph_rules.rs` Slot feature flow now moves a Slot for a private
 inherited attribute, changes direct redefinition, diagnoses ambiguous ancestry
@@ -301,3 +301,40 @@ slots, duplicate identities and cycles fail closed instead of returning a
 partial result. Multi-client dependency representations remain unsupported.
 The existing root graph and template-signature flows exercise ordinary queries,
 exposed parameters and serialization; they do not imply complete Kernel support.
+
+
+## Bounded Property redefinition consistency
+
+`uml/feature_compatibility.rs` newly implements the official
+`Property-isConsistentWith` composition (§9.9.17.7); it does not claim to adapt a
+Property consistency implementation from uml4net, whose pinned Property
+extensions do not implement that operation. It reuses the already-attributed
+Classifier conformance and Property composite queries, the shared ReferenceIndex,
+and the existing arbitrary-precision multiplicity interval adapter. The reusable
+TypedElement and MultiplicityElement comparisons can also serve Parameters.
+
+For a redefinition context established by the Classifier query, the redefining
+Type must conform to the redefined Type, its multiplicity interval must be
+contained in the original interval, and a composite Property must remain
+composite. Infinity uses UnlimitedNatural rather than a machine-number sentinel.
+The XMI and PDF upper-bound clause accidentally repeat the lower-bound
+comparison; the implementation follows their explicit interval-containment
+prose rather than requiring equal lower bounds and ignoring upper bounds.
+
+Missing Types, authored Type strings, external Types and unevaluated bounds
+return Unsupported. Owned ValueSpecifications are not treated as absent bounds
+or silently replaced with 1; their unresolved role/evaluation remains explicit.
+Malformed references and invalid literal intervals are errors. A proven false
+condition establishes incompatibility even if another condition is unknown.
+`Type::conformsTo` retains its normative false default; Classifier conformance
+uses canonical user-model ancestry, never metaclass equality or name matching.
+
+The existing redefinition command rejects known incompatibility atomically.
+Loaded graphs, member queries and Inspector diagnostics use the same comparison;
+unknown cases remain storable with capability warnings. A fully resolved,
+compatible Property no longer receives the blanket unsupported-consistency
+warning. This does not implement Property subsetting, qualifiers, all template
+contexts or complete Operation signature consistency. The existing hierarchy
+feature flow now mutates compatible Types/bounds/aggregation, rejects each
+incompatibility, preserves unknown bounds and reopens the canonical graph.
+No new test functions were introduced.

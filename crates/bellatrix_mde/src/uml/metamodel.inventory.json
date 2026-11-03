@@ -1049,11 +1049,15 @@
     },
     {
       "file": "crates/bellatrix_mde/src/uml/classifiers.rs",
-      "scope": "Generated ownership subsets, direct/inherited Namespace members and Classifier features/attributes, direct redefinition filtering and slottable-feature unions. Complete redefinition consistency and ambiguous ownership/ancestor redefinition cases remain explicit unsupported capabilities."
+      "scope": "Generated ownership subsets, direct/inherited Namespace members and Classifier features/attributes, direct redefinition filtering and slottable-feature unions. Bounded Property consistency is shared with feature_compatibility; Operation consistency and ambiguous ownership/ancestor redefinition cases remain explicit unsupported capabilities."
     },
     {
       "file": "crates/bellatrix_mde/src/uml/classifier_hierarchy.rs",
       "scope": "User-model Classifier ancestry and conformance over canonical Generalization edges, separate from metaclass conformance; cycle detection, identity deduplication and topological ordering shared by Namespace inheritance."
+    },
+    {
+      "file": "crates/bellatrix_mde/src/uml/feature_compatibility.rs",
+      "scope": "Reusable TypedElement Type conformance and MultiplicityElement interval containment; Property redefinition consistency additionally preserves composite aggregation. Missing/legacy/external Types and unevaluated ValueSpecifications remain explicit unsupported outcomes; no general OCL interpreter or full Operation consistency is claimed."
     },
     {
       "file": "crates/bellatrix_mde/src/uml/namespace_imports.rs",

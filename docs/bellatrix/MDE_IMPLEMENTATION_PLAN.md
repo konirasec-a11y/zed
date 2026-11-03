@@ -82,6 +82,15 @@ comando manual. O front envia o snapshot ao motor UML, apresenta diagnósticos
 e associa resultados à revisão; regras não implementadas permanecem como
 não verificadas. A validação e suas regras pertencem ao motor.
 
+**Fronteira do motor e composição:** a engine recebe em memória o grafo, a
+configuração e os dados de templates já resolvidos; não conhece caminhos
+físicos e não acessa arquivos. Mapear metaclasses, nós e relações para funções
+de transformação reutilizáveis, com dependências explícitas, ordenação
+determinística e diagnósticos para ciclos de execução ou mapeamentos ausentes.
+Ciclos legítimos do modelo UML não são automaticamente ciclos de execução.
+A saída é um grafo/plano em memória; adaptadores externos resolvem destinos,
+carregam templates de diretório ou SQLite e materializam os arquivos com Rust.
+
 ## 1. Fixar a base e consolidar as especificações
 
 Auditar o resultado real da consolidação existente antes de acrescentar

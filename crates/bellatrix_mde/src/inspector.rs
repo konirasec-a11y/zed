@@ -211,9 +211,9 @@ pub(crate) fn append_namespace_properties(
     properties: &mut Vec<InspectorProperty>,
 ) {
     let Ok(element) = references.element(id) else { return; };
-    if let Some(warning) = crate::uml::classifiers::redefinition_consistency_warning(element) {
+    if let Some(warning) = crate::uml::classifiers::redefinition_consistency_diagnostic(references, element) {
         properties.push(InspectorProperty {
-            path: "uml.redefinition.status".into(), label: "Redefinition consistency not evaluated".into(),
+            path: "uml.redefinition.status".into(), label: "Redefinition consistency status".into(),
             group: "UML members", editor: PropertyEditor::ReadOnly, value: json!(warning.message), editable: false,
         });
     }
