@@ -394,7 +394,17 @@ fn validate_association(
             Err(error) => return Err(format!("Unsupported AssociationClass-cannot_be_defined: {error}")),
         }
     }
-    if association.metaclass() != Some("Association") {
+    if association.conforms_to("CommunicationPath") {
+        match communication_path_association_ends(references, association) {
+            Ok(true) => {}
+            Ok(false) => return Err("CommunicationPath-association_ends: end Types must be DeploymentTargets".into()),
+            Err(classifiers::QueryError::Invalid { message, .. }) => return Err(format!("CommunicationPath-association_ends: {message}")),
+            Err(error) => return Err(format!("Unsupported CommunicationPath-association_ends: {error}")),
+        }
+    }
+    // CommunicationPath has one own constraint and no own properties/operations
+    // in UML.xmi; all inherited Association checks have already run above.
+    if !matches!(association.metaclass(), Some("Association" | "CommunicationPath")) {
         return Err(format!(
             "Unsupported {} constraints: inherited Association rules were checked, but specialized metaclass contracts are not implemented",
             association.metaclass().unwrap_or("Association subtype"),
@@ -493,6 +503,60 @@ fn association_class_cannot_be_defined(
     super::feature_compatibility::require_all(checks)
 }
 
+// This checks the quantified constraint using local evidence without claiming
+// that unresolved memberEnd or Type references form a complete endType set.
+fn communication_path_association_ends(
+    references: &ReferenceIndex<'_>,
+    association: ElementRef<'_>,
+) -> Result<bool, classifiers::QueryError> {
+    use classifiers::QueryError;
+    use super::property_contracts::{check_value, PropertyOutcome};
+    let property = schema::uml_property("Association", "memberEnd")
+        .map_err(|error| QueryError::unsupported(association.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(association.id(), "missing memberEnd contract"))?;
+    let value = association.properties().get("memberEnd")
+        .ok_or_else(|| QueryError::unsupported(association.id(), "memberEnd identities are not materialized"))?;
+    let mut checks = Vec::new();
+    match check_value(references, association, property, value) {
+        PropertyOutcome::Satisfied => {}
+        PropertyOutcome::Violation(message) => return Err(QueryError::invalid(association.id(), message)),
+        PropertyOutcome::Unverified(message) => checks.push(Err(QueryError::unsupported(association.id(), message))),
+    }
+    let values = value.as_array().ok_or_else(|| QueryError::invalid(association.id(), "memberEnd must be a collection"))?;
+    let member = schema::PropertyDescriptor { lower: "1", upper: "1", ..*property };
+    for value in values {
+        checks.push((|| {
+            match check_value(references, association, &member, value) {
+                PropertyOutcome::Satisfied => {}
+                PropertyOutcome::Violation(message) => return Err(QueryError::invalid(association.id(), message)),
+                PropertyOutcome::Unverified(message) => return Err(QueryError::unsupported(association.id(), message)),
+            }
+            let end = references.validate(&member, value)
+                .map_err(|error| QueryError::invalid(association.id(), error))?
+                .ok_or_else(|| QueryError::invalid(association.id(), "memberEnd cannot be absent"))?;
+            // endType excludes absent optional Types. The inherited rule
+            // Association-ends_must_be_typed independently rejects untyped ends.
+            let Some(value) = end.properties().get("type").filter(|value| !value.is_null()) else {
+                return Ok(true);
+            };
+            let metaclass = end.metaclass().ok_or_else(|| QueryError::unsupported(end.id(), "memberEnd metaclass is unresolved"))?;
+            let property = schema::uml_property(metaclass, "type")
+                .map_err(|error| QueryError::unsupported(end.id(), error.to_string()))?
+                .ok_or_else(|| QueryError::unsupported(end.id(), "missing Type contract"))?;
+            match check_value(references, end, property, value) {
+                PropertyOutcome::Satisfied => {}
+                PropertyOutcome::Violation(message) => return Err(QueryError::invalid(end.id(), message)),
+                PropertyOutcome::Unverified(message) => return Err(QueryError::unsupported(end.id(), message)),
+            }
+            let target = references.validate(property, value)
+                .map_err(|error| QueryError::invalid(end.id(), error))?
+                .ok_or_else(|| QueryError::invalid(end.id(), "nonempty Type did not resolve"))?;
+            Ok(target.conforms_to("DeploymentTarget"))
+        })());
+    }
+    super::feature_compatibility::require_all(checks)
+}
+
 pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     let mut membership = BTreeMap::<&str, &str>::new();
@@ -517,6 +581,21 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
                     message:format!("AssociationClass-cannot_be_defined: {message}") });
             }
         }
+        if association.conforms_to("CommunicationPath") {
+            let outcome = match communication_path_association_ends(references, association) {
+                Ok(true) => None,
+                Ok(false) => Some((StructuralSeverity::Error, "UML_COMMUNICATION_PATH_ASSOCIATION_ENDS",
+                    "end Types must be DeploymentTargets".to_owned())),
+                Err(classifiers::QueryError::Invalid { message, .. }) => Some((StructuralSeverity::Error,
+                    "MDE_COMMUNICATION_PATH_ASSOCIATION_ENDS_INVALID", message)),
+                Err(classifiers::QueryError::Unsupported { message, .. }) => Some((StructuralSeverity::Warning,
+                    "MDE_COMMUNICATION_PATH_ASSOCIATION_ENDS_UNVERIFIED", message)),
+            };
+            if let Some((severity, code, message)) = outcome {
+                issues.push(StructuralDiagnostic { severity, code, subject_id: association.id().into(),
+                    message: format!("CommunicationPath-association_ends: {message}") });
+            }
+        }
         if !association.properties().contains_key("memberEnd") {
             issues.push(StructuralDiagnostic {
                 severity: StructuralSeverity::Warning,
@@ -530,6 +609,7 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
         // gate uses the same rule, but global output reports it only once.
         if let Err(message) = validate_association(references, association)
             && !message.contains("AssociationClass-cannot_be_defined:")
+            && !message.contains("CommunicationPath-association_ends:")
         {
             if message.starts_with("Unsupported ") {
                 issues.push(StructuralDiagnostic {

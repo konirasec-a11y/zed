@@ -242,3 +242,27 @@ Permanecem fora deste incremento `Connector-roles`/`StructuredClassifier::allRol
 as demais invariantes de ConnectorEnd, derivação de kind, adapter binário de
 Connector e criação/edição visual. Esta regra não significa suporte completo a
 Composite Structure ou Connectors.
+
+## Atualização focada: CommunicationPath::association_ends — 2026-11-03
+
+A regra `CommunicationPath-association_ends` (UML.xmi:12038–12050) verifica
+`endType->forAll(oclIsKindOf(DeploymentTarget))` sobre os memberEnd/Types
+canônicos, sem usar cache de endType ou endpoints visuais como prova.
+Referências malformadas prevalecem sobre violações conhecidas, que prevalecem
+sobre desconhecidos; a consulta completa `end_types` não retorna conjuntos
+parciais. Types ausentes não contribuem ao conjunto derivado, mas continuam
+rejeitados pela regra herdada `Association::ends_must_be_typed`.
+
+CommunicationPath declara uma única constraint própria e nenhuma propriedade
+ou operação própria no XMI. Seu fallback genérico de subtipo foi retirado após
+as verificações herdadas; outros subtipos mantêm seus limites. O aviso legado
+`MDE_UML_METACLASS_UNSUPPORTED` permanece na camada de adapters: esta entrega
+cobre objetos/memberEnd canônicos, sem criação de ferramenta visual. A
+classificação dos diagnósticos herdados de Association não foi alterada.
+
+Código em `semantics/associations.rs`; sete BDD/API em
+`tests/communication_path.rs` cobrem tipos Node/Device/ExecutionEnvironment,
+n-ário, externos/malformados, Unknown/Invalid, JSON/Protobuf e rejeição atômica
+com reparo por comando. Gate **15/15**: CommunicationPath 7, AssociationClass 4,
+association kernel 2 e specialization 2. Log `/tmp/communication-path-gate.log`.
+Sem alteração de UI ou geração.
