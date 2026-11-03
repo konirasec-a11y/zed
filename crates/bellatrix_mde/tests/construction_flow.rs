@@ -1,4 +1,7 @@
-use bellatrix_mde::{Operation, OperationGraph, OperationGraphError, python_construction_script};
+use bellatrix_mde::{
+    InputPort, Operation, OperationDefinition, OperationGraph, OperationGraphError, OperationValue,
+    OperationValues, Plan, PortType, python_construction_script,
+};
 use std::{
     fs,
     process::Command,
@@ -7,8 +10,42 @@ use std::{
 
 #[test]
 fn construction_script_builds_the_rendered_project() -> Result<(), Box<dyn std::error::Error>> {
+    fn combine(
+        _: &str,
+        inputs: &OperationValues,
+        _: &OperationValues,
+        _: &mut Plan,
+    ) -> Result<OperationValue, OperationGraphError> {
+        match (inputs.get("left"), inputs.get("right")) {
+            (Some(OperationValue::Content(left)), Some(OperationValue::Content(right)))
+                if left == right =>
+            {
+                Ok(OperationValue::Content(left.clone()))
+            }
+            _ => Err(OperationGraphError::InvalidArguments(
+                "expected matching content".into(),
+            )),
+        }
+    }
     fn graph(reverse: bool) -> Result<OperationGraph, Box<dyn std::error::Error>> {
         let mut graph = OperationGraph::new();
+        graph.register(OperationDefinition {
+            kind: "combine".into(),
+            version: 1,
+            inputs: vec![
+                InputPort {
+                    name: "left".into(),
+                    port_type: PortType::Content,
+                },
+                InputPort {
+                    name: "right".into(),
+                    port_type: PortType::Content,
+                },
+            ],
+            output: PortType::Content,
+            execute: combine,
+        })?;
+        graph.add_registered("combined", "combine", 1, OperationValues::new())?;
         let mut nodes = vec![
             ("root", Operation::RootDirectory),
             ("src", Operation::Directory { name: "src".into() }),
@@ -55,7 +92,9 @@ fn construction_script_builds_the_rendered_project() -> Result<(), Box<dyn std::
             ("src", "main", "directory"),
             ("source", "main", "content"),
             ("root", "readme_file", "directory"),
-            ("readme", "readme_file", "content"),
+            ("readme", "combined", "left"),
+            ("readme", "combined", "right"),
+            ("combined", "readme_file", "content"),
         ] {
             graph.connect(source, target, port)?;
         }

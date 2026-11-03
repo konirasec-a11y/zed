@@ -53,7 +53,7 @@ pub use inspector::{
     ElementInspector, InspectorMember, InspectorProperty, InspectorReferenceChoice, PropertyEditor,
     inspect_element, set_inspected_property,
 };
-pub use operation_graph::{Operation, OperationGraph, OperationGraphError, PortType};
+pub use operation_graph::{InputPort, Operation, OperationDefinition, OperationGraph, OperationGraphError, OperationImplementation, OperationValue, OperationValues, PortType};
 pub use path::{PathError, physical_path, validate_segment};
 pub use plan::{Artifact, Diagnostic, Plan, PlanError};
 pub use presentation::{
