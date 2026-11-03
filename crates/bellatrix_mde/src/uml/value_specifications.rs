@@ -41,10 +41,11 @@ impl EvaluationError {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum LiteralValue {
     Integer(Integer),
     UnlimitedNatural(UnlimitedNatural),
+    Real(f64),
     Boolean(bool),
     String(Option<String>),
     Null,
@@ -65,6 +66,15 @@ pub fn evaluate(
     references: &ReferenceIndex<'_>,
     id: &str,
 ) -> Result<LiteralValue, EvaluationError> {
+    evaluate_literal(references, id)?.ok_or_else(|| {
+        EvaluationError::unsupported(id, "nonliteral ValueSpecification evaluation is not implemented")
+    })
+}
+
+fn evaluate_literal(
+    references: &ReferenceIndex<'_>,
+    id: &str,
+) -> Result<Option<LiteralValue>, EvaluationError> {
     let element = resolve(references, id)?;
     if !element.conforms_to("ValueSpecification") {
         return Err(EvaluationError::invalid(
@@ -76,16 +86,13 @@ pub fn evaluate(
         .metaclass()
         .ok_or_else(|| EvaluationError::unsupported(id, "missing metaclass"))?;
     if metaclass == "LiteralNull" {
-        return Ok(LiteralValue::Null);
+        return Ok(Some(LiteralValue::Null));
     }
     if !matches!(
         metaclass,
-        "LiteralInteger" | "LiteralUnlimitedNatural" | "LiteralBoolean" | "LiteralString"
+        "LiteralInteger" | "LiteralUnlimitedNatural" | "LiteralReal" | "LiteralBoolean" | "LiteralString"
     ) {
-        return Err(EvaluationError::unsupported(
-            id,
-            format!("{metaclass} evaluation is not implemented"),
-        ));
+        return Ok(None);
     }
     let descriptor = schema::uml_property(metaclass, "value")
         .map_err(|error| EvaluationError::unsupported(id, error.to_string()))?
@@ -105,7 +112,7 @@ pub fn evaluate(
         Value::Number(value) => value.to_string(),
         _ => String::new(),
     };
-    match metaclass {
+    let literal = match metaclass {
         "LiteralInteger" => decimal().parse().map(LiteralValue::Integer).map_err(
             |error: super::types::LiteralValueError| {
                 EvaluationError::invalid(id, error.to_string())
@@ -117,6 +124,10 @@ pub fn evaluate(
             .map_err(|error: super::types::LiteralValueError| {
                 EvaluationError::invalid(id, error.to_string())
             }),
+        "LiteralReal" => value
+            .as_f64()
+            .map(LiteralValue::Real)
+            .ok_or_else(|| EvaluationError::invalid(id, "Real value required")),
         "LiteralBoolean" => value
             .as_bool()
             .map(LiteralValue::Boolean)
@@ -126,7 +137,76 @@ pub fn evaluate(
             id,
             "literal query not implemented",
         )),
-    }
+    }?;
+    Ok(Some(literal))
+}
+
+/// A malformed literal is an error, not an expression whose computation is unsupported.
+pub fn is_computable(
+    references: &ReferenceIndex<'_>,
+    id: &str,
+) -> Result<bool, EvaluationError> {
+    Ok(evaluate_literal(references, id)?.is_some())
+}
+
+/// UML's base queries return null/false for nonliteral ValueSpecifications.
+/// Use is_computable() or evaluate() to distinguish that result from a literal
+/// with no value of the requested type; malformed literals still return errors.
+pub fn integer_value(
+    references: &ReferenceIndex<'_>,
+    id: &str,
+) -> Result<Option<Integer>, EvaluationError> {
+    Ok(match evaluate_literal(references, id)? {
+        Some(LiteralValue::Integer(value)) => Some(value),
+        _ => None,
+    })
+}
+
+pub fn unlimited_value(
+    references: &ReferenceIndex<'_>,
+    id: &str,
+) -> Result<Option<UnlimitedNatural>, EvaluationError> {
+    Ok(match evaluate_literal(references, id)? {
+        Some(LiteralValue::UnlimitedNatural(value)) => Some(value),
+        _ => None,
+    })
+}
+
+pub fn real_value(
+    references: &ReferenceIndex<'_>,
+    id: &str,
+) -> Result<Option<f64>, EvaluationError> {
+    Ok(match evaluate_literal(references, id)? {
+        Some(LiteralValue::Real(value)) => Some(value),
+        _ => None,
+    })
+}
+
+pub fn boolean_value(
+    references: &ReferenceIndex<'_>,
+    id: &str,
+) -> Result<Option<bool>, EvaluationError> {
+    Ok(match evaluate_literal(references, id)? {
+        Some(LiteralValue::Boolean(value)) => Some(value),
+        _ => None,
+    })
+}
+
+pub fn string_value(
+    references: &ReferenceIndex<'_>,
+    id: &str,
+) -> Result<Option<String>, EvaluationError> {
+    Ok(match evaluate_literal(references, id)? {
+        Some(LiteralValue::String(value)) => value,
+        _ => None,
+    })
+}
+
+pub fn is_null(
+    references: &ReferenceIndex<'_>,
+    id: &str,
+) -> Result<bool, EvaluationError> {
+    Ok(matches!(evaluate_literal(references, id)?, Some(LiteralValue::Null)))
 }
 
 pub fn has_bound_references(element: ElementRef<'_>) -> bool {
