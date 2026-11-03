@@ -454,12 +454,25 @@ impl ModelingElementKind {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ModelingTool {
+    ProvidedInterface,
+    RequiredInterface,
     Element(ModelingElementKind),
     Relation(ModelingRelationKind),
 }
 impl ModelingTool {
+    pub const INTERFACE_FORMS: &'static [Self] =
+        &[Self::ProvidedInterface, Self::RequiredInterface];
+    pub fn resolve_interface_presentation(self) -> Option<&'static str> {
+        match self {
+            Self::ProvidedInterface => Some("provided"),
+            Self::RequiredInterface => Some("required"),
+            _ => None,
+        }
+    }
     pub fn label(self) -> &'static str {
         match self {
+            Self::ProvidedInterface => "Provided interface · visual",
+            Self::RequiredInterface => "Required interface · visual",
             Self::Element(kind) => kind.label(),
             Self::Relation(kind) => kind.label(),
         }

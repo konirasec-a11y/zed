@@ -308,6 +308,35 @@ fn paint_marker(
             marker == FilledTriangle,
             width,
         ),
+        OpenArrowAndCircle | FilledTriangleAndCircle => {
+            paint_marker(
+                window,
+                FilledCircle,
+                endpoint,
+                inward_direction,
+                bounds,
+                stroke,
+                background,
+                width,
+                scale,
+            );
+            let arrow = if marker == FilledTriangleAndCircle {
+                FilledTriangle
+            } else {
+                OpenArrow
+            };
+            paint_marker(
+                window,
+                arrow,
+                offset(5.0, 0.0),
+                inward_direction,
+                bounds,
+                stroke,
+                background,
+                width,
+                scale,
+            );
+        }
         FilledCircle => {
             let points = (0..32)
                 .map(|step| {
@@ -463,13 +492,22 @@ impl RenderOnce for UmlRelationGlyph {
                 if let Ok(path) = builder.build() {
                     window.paint_path(path, stroke);
                 }
+                let resolve_link_marker = |marker| {
+                    if !communication_message {
+                        return marker;
+                    }
+                    match marker {
+                        RelationshipMarker::FilledCircle
+                        | RelationshipMarker::OpenArrowAndCircle
+                        | RelationshipMarker::FilledTriangleAndCircle => {
+                            RelationshipMarker::FilledCircle
+                        }
+                        _ => RelationshipMarker::None,
+                    }
+                };
                 paint_marker(
                     window,
-                    if communication_message {
-                        RelationshipMarker::None
-                    } else {
-                        source_marker
-                    },
+                    resolve_link_marker(source_marker),
                     from,
                     initial_tangent,
                     bounds,
@@ -480,11 +518,7 @@ impl RenderOnce for UmlRelationGlyph {
                 );
                 paint_marker(
                     window,
-                    if communication_message {
-                        RelationshipMarker::None
-                    } else {
-                        target_marker
-                    },
+                    resolve_link_marker(target_marker),
                     last,
                     (-final_tangent.0, -final_tangent.1),
                     bounds,

@@ -10,6 +10,8 @@ pub enum ModelingRelationKind {
     MessageSynchronous,
     MessageAsynchronous,
     MessageReply,
+    MessageFound,
+    MessageLost,
     GeneralOrdering,
     AssociationClassAttachment,
     Association,
@@ -39,17 +41,26 @@ impl ModelingRelationKind {
         Self::MessageSynchronous,
         Self::MessageAsynchronous,
         Self::MessageReply,
+        Self::MessageFound,
+        Self::MessageLost,
         Self::GeneralOrdering,
     ];
     pub fn resolve_message_sort(self) -> Option<&'static str> {
         match self {
-            Self::MessageSynchronous => Some("synchCall"),
+            Self::MessageSynchronous | Self::MessageFound | Self::MessageLost => Some("synchCall"),
             Self::MessageAsynchronous => Some("asynchCall"),
             Self::MessageReply => Some("reply"),
             _ => None,
         }
     }
 
+    pub fn resolve_message_kind(self) -> Option<&'static str> {
+        match self {
+            Self::MessageFound => Some("found"),
+            Self::MessageLost => Some("lost"),
+            _ => None,
+        }
+    }
     pub fn uses_occurrence_anchors(self) -> bool {
         self.resolve_message_sort().is_some() || self == Self::GeneralOrdering
     }
@@ -101,6 +112,8 @@ impl ModelingRelationKind {
             Self::MessageSynchronous => "Synchronous message",
             Self::MessageAsynchronous => "Asynchronous message",
             Self::MessageReply => "Reply message",
+            Self::MessageFound => "Found message · visual",
+            Self::MessageLost => "Lost message · visual",
             Self::GeneralOrdering => "General ordering · visual",
             Self::AssociationClassAttachment => "Association-class attachment",
             Self::Association => "Association",
@@ -134,9 +147,11 @@ impl ModelingRelationKind {
             Self::Connector => "uml.connector",
             Self::NoteLink => "uml.note_link",
             Self::ConstraintLink => "uml.constraint_link",
-            Self::MessageSynchronous | Self::MessageAsynchronous | Self::MessageReply => {
-                "uml.message"
-            }
+            Self::MessageSynchronous
+            | Self::MessageAsynchronous
+            | Self::MessageReply
+            | Self::MessageFound
+            | Self::MessageLost => "uml.message",
             Self::GeneralOrdering => "uml.general_ordering",
             Self::AssociationClassAttachment => "view.association_class_attachment",
             Self::Association => "uml.association",
@@ -174,6 +189,8 @@ impl ModelingRelationKind {
             Self::MessageSynchronous | Self::MessageAsynchronous | Self::MessageReply => {
                 "click the source lifeline at send position, then the target at receive position"
             }
+            Self::MessageFound => "click an empty send position, then the receiving Lifeline",
+            Self::MessageLost => "click the sending Lifeline, then an empty receive position",
             Self::GeneralOrdering => {
                 "click the before occurrence position, then the after position (visual only)"
             }
@@ -220,6 +237,8 @@ impl ModelingRelationKind {
                 | Self::MessageSynchronous
                 | Self::MessageAsynchronous
                 | Self::MessageReply
+                | Self::MessageFound
+                | Self::MessageLost
                 | Self::GeneralOrdering
         )
     }

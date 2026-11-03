@@ -96,25 +96,29 @@ pub fn reroute_visual_drafts(diagram: &mut Diagram) {
         let view = &mut diagram.views[index];
         let Some(draft) = &mut view.draft else { continue };
         let Some(attachments) = &view.endpoints else { continue };
-        let Some(source) = attachments
-            .source_view_id
-            .as_ref()
-            .and_then(|id| endpoints.get(id))
-        else {
-            continue;
+        let source = match &attachments.source_view_id {
+            Some(identifier) => match endpoints.get(identifier) {
+                Some(endpoint) => Some(*endpoint),
+                None => continue,
+            },
+            None => None,
         };
-        let Some(target) = attachments
-            .target_view_id
-            .as_ref()
-            .and_then(|id| endpoints.get(id))
-        else {
-            continue;
+        let target = match &attachments.target_view_id {
+            Some(identifier) => match endpoints.get(identifier) {
+                Some(endpoint) => Some(*endpoint),
+                None => continue,
+            },
+            None => None,
         };
+        if source.is_none() && target.is_none() {
+            continue;
+        }
         if let Geometry::Path { start, segments } = &mut view.geometry {
-            let source_anchor = resolve_authored_anchor(&draft.properties, "source_anchor", *source);
-            let target_anchor = resolve_authored_anchor(&draft.properties, "target_anchor", *target);
+            let source_anchor = source.and_then(|endpoint| resolve_authored_anchor(&draft.properties, "source_anchor", endpoint));
+            let target_anchor = target.and_then(|endpoint| resolve_authored_anchor(&draft.properties, "target_anchor", endpoint));
             let distinct_anchors = source_anchor.zip(target_anchor).is_some_and(|(source, target)| source != target);
-            if attachments.source_view_id == attachments.target_view_id
+            if let Some(source) = source
+                && attachments.source_view_id == attachments.target_view_id
                 && !(draft.notation_kind == "uml.general_ordering" && distinct_anchors)
                 && (segments.is_empty() || matches!(segments.as_slice(), [PathSegment::Line { .. }]))
             {
@@ -128,21 +132,29 @@ pub fn reroute_visual_drafts(diagram: &mut Diagram) {
                 draft.properties.insert("self_loop".into(), serde_json::Value::Bool(true));
             }
             if segments.is_empty() {
+                let Some(target) = target else { continue };
                 segments.push(PathSegment::Line { to: target.center });
             }
+            let source_position = source.map_or(*start, |endpoint| endpoint.center);
+            let target_position = target.map(|endpoint| endpoint.center).or_else(|| {
+                segments.last().map(|segment| match segment {
+                    PathSegment::Line { to } | PathSegment::Cubic { to, .. } => *to,
+                })
+            });
+            let Some(target_position) = target_position else { continue };
             let first_direction = match segments.first() {
                 Some(PathSegment::Line { to }) if segments.len() > 1 => *to,
                 Some(PathSegment::Cubic { control1, .. }) => *control1,
-                _ => target.center,
+                _ => target_position,
             };
             let last_direction = if segments.len() > 1 {
                 match &segments[segments.len() - 2] {
                     PathSegment::Line { to } | PathSegment::Cubic { to, .. } => *to,
                 }
             } else {
-                source.center
+                source_position
             };
-            let self_loop_offset = if attachments.source_view_id == attachments.target_view_id && draft
+            let self_loop_offset = if source.is_some() && attachments.source_view_id == attachments.target_view_id && draft
                 .properties
                 .get("self_loop")
                 .or_else(|| draft.properties.get("self_message"))
@@ -160,17 +172,19 @@ pub fn reroute_visual_drafts(diagram: &mut Diagram) {
                 x: endpoint.center.x + endpoint.width.max(64.0),
                 y: endpoint.center.y + vertical * endpoint.height.max(32.0),
             };
-            *start = resolve_authored_anchor(&draft.properties, "source_anchor", *source)
-                .unwrap_or_else(|| source.anchor_toward(if self_loop_offset.is_some() {
-                    loop_direction(*source, -0.25)
+            if let Some(source) = source {
+                *start = source_anchor.unwrap_or_else(|| source.anchor_toward(if self_loop_offset.is_some() {
+                    loop_direction(source, -0.25)
                 } else { first_direction }));
-            if let Some(segment) = segments.last_mut() {
+            }
+            if let Some(target) = target
+                && let Some(segment) = segments.last_mut()
+            {
                 match segment {
                     PathSegment::Line { to } | PathSegment::Cubic { to, .. } => {
-                        *to = resolve_authored_anchor(&draft.properties, "target_anchor", *target)
-                            .unwrap_or_else(|| target.anchor_toward(if self_loop_offset.is_some() {
-                                loop_direction(*target, 0.25)
-                            } else { last_direction }))
+                        *to = target_anchor.unwrap_or_else(|| target.anchor_toward(if self_loop_offset.is_some() {
+                            loop_direction(target, 0.25)
+                        } else { last_direction }));
                     }
                 }
             }

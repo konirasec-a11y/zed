@@ -2,6 +2,8 @@ use super::*;
 
 fn tool_glyph(tool: ModelingTool) -> ShapeKind {
     match tool {
+        ModelingTool::ProvidedInterface => ShapeKind::ProvidedInterface,
+        ModelingTool::RequiredInterface => ShapeKind::RequiredInterface,
         ModelingTool::Element(kind) => match kind {
             ModelingElementKind::Port => ShapeKind::Port,
             ModelingElementKind::Part => ShapeKind::Class,
@@ -81,6 +83,8 @@ fn tool_glyph(tool: ModelingTool) -> ShapeKind {
             ModelingRelationKind::MessageSynchronous => ShapeKind::SynchronousMessage,
             ModelingRelationKind::MessageAsynchronous => ShapeKind::Message,
             ModelingRelationKind::MessageReply => ShapeKind::ReplyMessage,
+            ModelingRelationKind::MessageFound => ShapeKind::FoundMessage,
+            ModelingRelationKind::MessageLost => ShapeKind::LostMessage,
             ModelingRelationKind::GeneralOrdering => ShapeKind::GeneralOrdering,
 
             ModelingRelationKind::Extension => ShapeKind::Extension,
@@ -426,6 +430,10 @@ impl Render for MdeLeftPanel {
                     .collect(),
             ),
             (
+                "Interface forms · visual",
+                ModelingTool::INTERFACE_FORMS.to_vec(),
+            ),
+            (
                 "Annotations",
                 ModelingElementKind::ANNOTATIONS
                     .iter()
@@ -739,15 +747,12 @@ impl Render for MdeLeftPanel {
                                             .text_color(palette.muted)
                                             .whitespace_normal()
                                             .child(match tool {
-                                                ModelingTool::Element(kind) => format!(
-                                                    "{}: drag to canvas or click empty space",
-                                                    kind.label()
-                                                ),
                                                 ModelingTool::Relation(kind) => format!(
                                                     "{}: {}",
                                                     kind.label(),
                                                     kind.endpoint_instruction()
                                                 ),
+                                                _ => format!("{}: drag to canvas or click empty space", tool.label()),
                                             }),
                                     )
                                 })
@@ -823,7 +828,7 @@ fn tool_entry(
                 }),
         )
         .child(Label::new(tool.label()));
-    if matches!(tool, ModelingTool::Element(_)) {
+    if !matches!(tool, ModelingTool::Relation(_)) {
         entry
             .cursor_grab()
             .on_drag(

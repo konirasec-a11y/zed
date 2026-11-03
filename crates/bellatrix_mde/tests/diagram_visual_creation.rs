@@ -736,6 +736,49 @@ fn exercise_visual_drafts() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(notation.middle_marker, bellatrix_mde::RelationshipMarker::FilledTriangle);
     assert_eq!(connected.elements, before.elements);
     assert_eq!(connected.relations, before.relations);
+    let mut connected = connected;
+    for tool in bellatrix_mde::commands::ModelingTool::INTERFACE_FORMS {
+        let presentation = tool.resolve_interface_presentation().ok_or("missing Interface role")?;
+        connected = apply(&connected, &Command::CreateVisualDraft {
+            diagram_id: "diagram-tasks".into(), notation_kind: "uml.interface".into(),
+            label: Some(tool.label().into()), geometry: Geometry::Rect { x: 420.0, y: 220.0, width: 112.0, height: 68.0 },
+            properties: serde_json::from_value(serde_json::json!({"interface_presentation":presentation}))?,
+            parent_view_id: None, source_view_id: None, target_view_id: None,
+        }, 7)?;
+        let placed = connected.diagrams.iter().flat_map(|diagram| &diagram.views)
+            .find(|view| view.draft.as_ref().is_some_and(|draft| draft.properties.get("interface_presentation").and_then(serde_json::Value::as_str) == Some(presentation)))
+            .ok_or("Interface tool did not materialize a View")?;
+        assert!(placed.subject.is_none());
+        assert!(bellatrix_mde::visual_components(&bellatrix_mde::ModelingSection::from_model(&connected)).iter()
+            .any(|view| view.view_id == placed.id));
+    }
+    assert_eq!(connected.elements, before.elements);
+    assert_eq!(connected.relations, before.relations);
+    for tool in [ModelingRelationKind::MessageFound, ModelingRelationKind::MessageLost] {
+        let found = tool == ModelingRelationKind::MessageFound;
+        let free = bellatrix_mde::Point { x: 700.0, y: 120.0 };
+        connected = apply(&connected, &Command::CreateVisualDraft {
+            diagram_id: "diagram-tasks".into(), notation_kind: tool.model_kind().into(), label: Some(tool.label().into()),
+            geometry: Geometry::Path { start: if found { free } else { bellatrix_mde::Point { x: 200.0, y: 120.0 } },
+                segments: vec![bellatrix_mde::PathSegment::Line { to: if found { bellatrix_mde::Point { x: 200.0, y: 120.0 } } else { free } }] },
+            properties: serde_json::from_value(serde_json::json!({"messageKind":tool.resolve_message_kind(),"messageSort":"synchCall"}))?,
+            parent_view_id: None, source_view_id: (!found).then(|| "view-task".into()), target_view_id: found.then(|| "view-task".into()),
+        }, 8)?;
+        let message = connected.diagrams.iter().flat_map(|diagram| &diagram.views)
+            .find(|view| view.label.as_deref() == Some(tool.label())).ok_or("missing partial message View")?;
+        let message_id = message.id.clone();
+        let before_geometry = message.geometry.clone();
+        let draft = message.draft.as_ref().ok_or("missing message metadata")?;
+        let style = bellatrix_mde::resolve_relationship_style(&draft.notation_kind, &draft.properties);
+        assert_eq!(if found { style.source_marker } else { style.target_marker }, if found { bellatrix_mde::RelationshipMarker::FilledCircle } else { bellatrix_mde::RelationshipMarker::FilledTriangleAndCircle });
+        connected = apply(&connected, &Command::MoveView { view_id: "view-task".into(), dx: 30.0, dy: 15.0 }, 9)?;
+        let message = connected.diagrams.iter().flat_map(|diagram| &diagram.views)
+            .find(|view| view.id == message_id).ok_or("missing moved partial message")?;
+        let Geometry::Path { start, segments } = &message.geometry else { return Err("missing partial message path".into()); };
+        let Some(bellatrix_mde::PathSegment::Line { to }) = segments.last() else { return Err("missing free endpoint".into()); };
+        assert_eq!(if found { *start } else { *to }, free);
+        assert_ne!(message.geometry, before_geometry);
+    }
     let removed = apply(
         &connected,
         &Command::RemoveView {

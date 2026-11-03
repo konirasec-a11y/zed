@@ -46,8 +46,16 @@ impl MdeWorkbenchItem {
                 width,
                 height,
             } => {
-                let figure = if UmlFigure::supports(&draft.notation_kind) {
+                let interface_presentation = draft
+                    .properties
+                    .get("interface_presentation")
+                    .and_then(serde_json::Value::as_str)
+                    .filter(|value| matches!(*value, "provided" | "required"));
+                let figure = if UmlFigure::supports(&draft.notation_kind)
+                    || (draft.notation_kind == "uml.interface" && interface_presentation.is_some())
+                {
                     UmlFigure::new(draft.notation_kind.clone(), label)
+                        .interface_presentation(interface_presentation)
                         .diagram_presentation(diagram)
                         .timing_presentation(view.timing.as_ref())
                         .composite_role(

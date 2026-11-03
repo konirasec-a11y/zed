@@ -903,12 +903,12 @@ impl Render for MdeWorkbenchItem {
                             return;
                         };
                         if let Err(error) = owner.update(cx, |item, cx| {
-                            if let Some(ModelingTool::Element(kind)) = item.selected_tool {
+                            if let Some(tool) = item.selected_tool {
                                 let position =
                                     (f64::from(event.position.x), f64::from(event.position.y));
                                 let (x, y) =
                                     canvas_model_position(position, origin, item.pan, item.zoom);
-                                item.create_element(kind, x, y, cx);
+                                item.click_modeling_tool(tool, x, y, cx);
                             }
                         }) {
                             eprintln!("MDE canvas placement failed: {error}");
@@ -946,18 +946,15 @@ impl Render for MdeWorkbenchItem {
                         }
                     })
                     .on_drop(move |drag: &MdeToolDrag, _, cx| {
-                        let _ = dropping_owner.update(cx, |item, cx| {
+                        if let Err(error) = dropping_owner.update(cx, |item, cx| {
                             if &drag.project_id != item.project_id() {
                                 return;
                             }
                             let (x, y) = item.drop_point.take().unwrap_or((40.0, 40.0));
-                            match drag.kind {
-                                ModelingTool::Element(kind) => item.create_element(kind, x, y, cx),
-                                ModelingTool::Relation(kind) => {
-                                    item.arm_drag_tool(ModelingTool::Relation(kind), cx)
-                                }
-                            }
-                        });
+                            item.place_modeling_tool(drag.kind, x, y, cx);
+                        }) {
+                            eprintln!("MDE tool drop failed: {error}");
+                        }
                     })
                     .child(
                         gpui::canvas(

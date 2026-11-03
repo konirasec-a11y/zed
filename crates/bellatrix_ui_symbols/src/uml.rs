@@ -439,12 +439,12 @@ pub(super) static UML: &[SymbolGroup] = &[
             Symbol {
                 id: "uml-components-4",
                 label: "Provided interface",
-                kind: ShapeKind::Interface,
+                kind: ShapeKind::ProvidedInterface,
             },
             Symbol {
                 id: "uml-components-5",
                 label: "Required interface",
-                kind: ShapeKind::Interface,
+                kind: ShapeKind::RequiredInterface,
             },
             Symbol {
                 id: "uml-components-6",

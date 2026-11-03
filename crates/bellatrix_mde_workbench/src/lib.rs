@@ -688,6 +688,7 @@ impl MdeWorkbenchItem {
                 kind.label()
             ),
             ModelingTool::Element(kind) => format!("{}: click canvas to place", kind.label()),
+            ModelingTool::ProvidedInterface | ModelingTool::RequiredInterface => format!("{}: click canvas to place", tool.label()),
         };
         cx.notify();
     }

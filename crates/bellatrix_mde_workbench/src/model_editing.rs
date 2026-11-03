@@ -214,6 +214,94 @@ impl MdeWorkbenchItem {
         };
         cx.notify();
     }
+    pub(super) fn click_modeling_tool(
+        &mut self,
+        tool: ModelingTool,
+        x: f64,
+        y: f64,
+        cx: &mut Context<Self>,
+    ) {
+        if let ModelingTool::Relation(kind) = tool {
+            self.connect_free_message_endpoint(kind, bellatrix_mde::Point { x, y }, cx);
+        } else {
+            self.place_modeling_tool(tool, x, y, cx);
+        }
+    }
+    pub(super) fn place_modeling_tool(
+        &mut self,
+        tool: ModelingTool,
+        x: f64,
+        y: f64,
+        cx: &mut Context<Self>,
+    ) {
+        match tool {
+            ModelingTool::Element(kind) => self.create_element(kind, x, y, cx),
+            ModelingTool::Relation(_) => self.arm_drag_tool(tool, cx),
+            ModelingTool::ProvidedInterface | ModelingTool::RequiredInterface => {
+                self.create_interface_view(tool, x, y, cx);
+            }
+        }
+    }
+    fn create_interface_view(
+        &mut self,
+        tool: ModelingTool,
+        x: f64,
+        y: f64,
+        cx: &mut Context<Self>,
+    ) {
+        if self.source.is_read_only() {
+            return;
+        }
+        let Some(presentation) = tool.resolve_interface_presentation() else {
+            return;
+        };
+        let snapshot = match self.source.snapshot() {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                self.feedback = error;
+                cx.notify();
+                return;
+            }
+        };
+        let Some(diagram) = snapshot
+            .section
+            .diagrams
+            .iter()
+            .find(|diagram| Some(diagram.id.as_str()) == self.active_diagram.as_deref())
+        else {
+            self.feedback = "Select a diagram to place the Interface presentation".into();
+            cx.notify();
+            return;
+        };
+        self.submit(
+            MdeUiCommand::CreateVisualDraft(
+                bellatrix_mde_cordis::ModelingCreateVisualDraftRequested {
+                    project_id: self.project_id().clone(),
+                    diagram_id: diagram.id.clone(),
+                    notation_kind: "uml.interface".into(),
+                    label: Some("Interface".into()),
+                    geometry: Geometry::Rect {
+                        x,
+                        y,
+                        width: 112.0,
+                        height: 68.0,
+                    },
+                    properties: std::collections::BTreeMap::from([(
+                        "interface_presentation".into(),
+                        serde_json::json!(presentation),
+                    )]),
+                    parent_view_id: None,
+                    source_view_id: None,
+                    target_view_id: None,
+                    expected_revision: snapshot.revision,
+                },
+            ),
+            cx,
+        );
+        self.selected_tool = None;
+        cx.notify();
+    }
+
     pub fn create_element(
         &mut self,
         kind: ModelingElementKind,
@@ -354,5 +442,4 @@ impl MdeWorkbenchItem {
         }
         self.focus_handle.focus(window, cx);
     }
-
 }

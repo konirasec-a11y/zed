@@ -10,6 +10,8 @@ pub enum RelationshipMarker {
     FilledDiamond,
     FilledTriangle,
     FilledCircle,
+    OpenArrowAndCircle,
+    FilledTriangleAndCircle,
     Containment,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -245,6 +247,20 @@ pub fn resolve_relationship_style(
             }
             "asynchCall" | "asynchSignal" | "deleteMessage" => {
                 style.target_marker = RelationshipMarker::OpenArrow
+            }
+            _ => {}
+        }
+        match properties
+            .get("messageKind")
+            .and_then(serde_json::Value::as_str)
+        {
+            Some("found") => style.source_marker = RelationshipMarker::FilledCircle,
+            Some("lost") => {
+                style.target_marker = if style.target_marker == RelationshipMarker::FilledTriangle {
+                    RelationshipMarker::FilledTriangleAndCircle
+                } else {
+                    RelationshipMarker::OpenArrowAndCircle
+                };
             }
             _ => {}
         }

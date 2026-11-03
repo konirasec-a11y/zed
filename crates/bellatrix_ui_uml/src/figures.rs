@@ -3,6 +3,7 @@ use crate::figure_geometry::{paint_folded_paper, paint_notation};
 use crate::{
     class::{MemberInteractions, MemberRow, UmlClassifier, ViewAppearance, template_signature},
     inline_edit::UmlInlineNameEditor,
+    interface_presentation::{InterfaceFigure, InterfacePresentation},
     timing::TimingLifeline,
 };
 use bellatrix_design_system::Palette;
@@ -20,6 +21,7 @@ pub struct UmlFigure {
     kind: String,
     pseudostate_kind: Option<String>,
     interaction_presentation: Option<String>,
+    interface_presentation: Option<InterfacePresentation>,
     context_frame_kind: Option<&'static str>,
     timing_presentation: Option<bellatrix_mde::TimingPresentation>,
     name: SharedString,
@@ -79,6 +81,7 @@ impl UmlFigure {
             kind: kind.into(),
             pseudostate_kind: None,
             interaction_presentation: None,
+            interface_presentation: None,
             context_frame_kind: None,
             timing_presentation: None,
             name: name.into(),
@@ -103,6 +106,10 @@ impl UmlFigure {
     }
     pub fn composite_role(mut self, composite: bool) -> Self {
         self.composite_role = composite;
+        self
+    }
+    pub fn interface_presentation(mut self, presentation: Option<&str>) -> Self {
+        self.interface_presentation = presentation.and_then(InterfacePresentation::parse);
         self
     }
     pub fn interaction_operator(mut self, operator: Option<&str>) -> Self {
@@ -339,6 +346,22 @@ impl RenderOnce for UmlFigure {
                 |element| element.underline(),
             )
             .child(title);
+        if let Some(presentation) = self
+            .interface_presentation
+            .filter(|_| self.kind == "uml.interface")
+        {
+            return InterfaceFigure {
+                presentation,
+                title: title_area.into_any_element(),
+                stereotype: applied_stereotype,
+                appearance,
+                palette,
+                selected,
+                scale,
+                height: self.view_height,
+            }
+            .render();
+        }
         if self.kind == "uml.lifeline" && self.interaction_presentation.as_deref() == Some("timing")
         {
             return TimingLifeline {

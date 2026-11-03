@@ -4,6 +4,7 @@ mod class;
 mod figure_geometry;
 mod figures;
 mod inline_edit;
+mod interface_presentation;
 mod quick_edit;
 mod relationship;
 mod timing;

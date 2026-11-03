@@ -12,6 +12,8 @@ pub enum Family {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum ShapeKind {
+    FoundMessage,
+    LostMessage,
     GeneralOrdering,
     SynchronousMessage,
     ReplyMessage,
@@ -62,6 +64,8 @@ pub enum ShapeKind {
     Inheritance,
     Input,
     Interface,
+    ProvidedInterface,
+    RequiredInterface,
     Lifeline,
     Message,
     Note,
@@ -105,6 +109,8 @@ pub fn count(family: Family) -> usize {
 
 pub fn glyph(kind: ShapeKind) -> &'static [u8] {
     match kind {
+        ShapeKind::FoundMessage => include_bytes!("../assets/found-message.svg"),
+        ShapeKind::LostMessage => include_bytes!("../assets/lost-message.svg"),
         ShapeKind::GeneralOrdering => include_bytes!("../assets/general-ordering.svg"),
         ShapeKind::InputPin => include_bytes!("../assets/input-pin.svg"),
         ShapeKind::OutputPin => include_bytes!("../assets/output-pin.svg"),
@@ -155,6 +161,8 @@ pub fn glyph(kind: ShapeKind) -> &'static [u8] {
         ShapeKind::Inheritance => include_bytes!("../assets/inheritance.svg"),
         ShapeKind::Input => include_bytes!("../assets/input.svg"),
         ShapeKind::Interface => include_bytes!("../assets/interface.svg"),
+        ShapeKind::ProvidedInterface => include_bytes!("../assets/provided-interface.svg"),
+        ShapeKind::RequiredInterface => include_bytes!("../assets/required-interface.svg"),
         ShapeKind::Lifeline => include_bytes!("../assets/lifeline.svg"),
         ShapeKind::SynchronousMessage => include_bytes!("../assets/synchronous-message.svg"),
         ShapeKind::ReplyMessage => include_bytes!("../assets/reply-message.svg"),
