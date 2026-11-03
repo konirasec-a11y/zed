@@ -7,25 +7,25 @@ pub enum ViewOrder {
     SendBackward,
 }
 
-#[path = "commands/association_ends.rs"]
+#[path = "association_ends.rs"]
 mod association_ends;
-#[path = "commands/diagrams.rs"]
+#[path = "diagrams.rs"]
 mod diagrams;
-#[path = "commands/features.rs"]
+#[path = "features.rs"]
 mod features;
-#[path = "commands/kinds.rs"]
+#[path = "kinds.rs"]
 mod kinds;
-#[path = "commands/members.rs"]
+#[path = "members.rs"]
 mod members;
-#[path = "commands/name_expression.rs"]
+#[path = "name_expression.rs"]
 mod name_expression;
-#[path = "commands/quick_edit.rs"]
+#[path = "quick_edit.rs"]
 mod quick_edit;
-#[path = "commands/validation.rs"]
+#[path = "validation.rs"]
 mod validation;
-#[path = "commands/view_style.rs"]
+#[path = "view_style.rs"]
 mod view_style;
-#[path = "commands/views.rs"]
+#[path = "views.rs"]
 mod views;
 
 pub use association_ends::{AssociationEndDraft, AssociationEndEdit, AssociationEndOwner, RemovedAssociationEnd};
@@ -850,7 +850,7 @@ mod tests {
     use super::*;
     use crate::commands::apply;
     fn fixture() -> Project {
-        serde_json::from_str(include_str!("../../fixtures/todo.json")).unwrap()
+        serde_json::from_str(include_str!("../../../fixtures/todo.json")).unwrap()
     }
     #[test]
     fn routing_policy_failure_keeps_the_source_transaction_unchanged() {
@@ -970,13 +970,13 @@ mod tests {
 }
 
 #[cfg(test)]
-#[path = "commands/deletion_tests.rs"]
+#[path = "deletion_tests.rs"]
 mod deletion_tests;
 
 #[cfg(test)]
-#[path = "commands/placement_tests.rs"]
+#[path = "placement_tests.rs"]
 mod placement_tests;
 
 #[cfg(test)]
-#[path = "commands/structural_creation_tests.rs"]
+#[path = "structural_creation_tests.rs"]
 mod structural_creation_tests;

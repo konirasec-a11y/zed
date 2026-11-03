@@ -344,7 +344,7 @@ mod tests {
 
     #[test]
     fn inspector_changes_immediately_drive_classifier_presentation() {
-        let project = serde_json::from_str(include_str!("../../fixtures/todo.json")).expect("fixture");
+        let project = serde_json::from_str(include_str!("../../../fixtures/todo.json")).expect("fixture");
         let mut section = crate::ModelingSection::from_model(&project);
         let options = ClassifierPresentationOptions {
             show_active_class_sides: true,
@@ -533,7 +533,7 @@ mod tests {
 
     #[test]
     fn hierarchy_and_inspector_share_identity_after_rename() {
-        let project = serde_json::from_str(include_str!("../../fixtures/todo.json")).expect("fixture");
+        let project = serde_json::from_str(include_str!("../../../fixtures/todo.json")).expect("fixture");
         let mut section = crate::ModelingSection::from_model(&project);
         let member = section
             .elements

@@ -23,8 +23,8 @@ python3 script/bellatrix_mde/bellatrix_uml_catalog.py
 python3 script/bellatrix_mde/bellatrix_uml_catalog.py --check
 ```
 
-The generated files are `crates/bellatrix_mde/src/KERNEL/uml/metamodel.rs` and
-`crates/bellatrix_mde/src/KERNEL/uml/metamodel.inventory.json`. Do not edit
+The generated files are `crates/bellatrix_mde/src/KERNEL/uml/metamodel/metamodel.rs` and
+`crates/bellatrix_mde/src/KERNEL/uml/metamodel/metamodel.inventory.json`. Do not edit
 these files manually or use a formatter as a substitute for generation. The
 extractor locates its inputs relative to its own repository location, so it
 also works from another working directory. To inspect a separate output:
@@ -121,7 +121,7 @@ values are resolved by type. No Integer is narrowed to a machine-sized type.
 
 ## Executable Rust consumers
 
-`crates/bellatrix_mde/src/KERNEL/uml/schema.rs` is handwritten and separate from the
+`crates/bellatrix_mde/src/KERNEL/uml/metamodel/schema.rs` is handwritten and separate from the
 extractor. It provides source-qualified conformance and inherited-property
 queries, follows explicit redefinition edges, resolves effective defaults,
 and reports ambiguous or incomplete lookup. It also exposes source documentation,

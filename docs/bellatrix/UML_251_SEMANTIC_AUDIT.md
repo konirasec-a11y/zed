@@ -24,7 +24,7 @@ O projeto tem uma base real de identidade, ownership, criação de membros, hera
 
 ### 1. Identidade e separação entre objeto e apresentação: correto no recorte
 
-- `Element.id`, `kind`, `name` e `label` são distintos; relações e Views referenciam IDs. O grafo rejeita IDs vazios/duplicados e referências inexistentes. Renomear não reescreve IDs. Evidências: `crates/bellatrix_mde/src/KERNEL/model/graph.rs:6–22,53–60`; `src/graph.rs:34–56,78–96`; `src/commands.rs:209–230`; `src/presentation.rs:102–130`.
+- `Element.id`, `kind`, `name` e `label` são distintos; relações e Views referenciam IDs. O grafo rejeita IDs vazios/duplicados e referências inexistentes. Renomear não reescreve IDs. Evidências: `crates/bellatrix_mde/src/model/graph.rs:6–22,53–60`; `src/graph.rs:34–56,78–96`; `src/commands.rs:209–230`; `src/presentation.rs:102–130`.
 - Isso é compatível com separar o Element do nome opcional de NamedElement (§7.8.6; §7.8.9.5). A sintaxe particular dos IDs é uma decisão Bellatrix, não uma exigência UML.
 - Limite: a identidade normativa de Relationship também é Element (§7.8.15.3), mas o DTO separa `elements` e `relations`; endpoints e `owns` só podem apontar para `elements` (`graph.rs:46–56`). Não há integração geral de relações como membros/ownedElements de Namespaces.
 
@@ -152,7 +152,7 @@ As conclusões acima são a auditoria da base indicada, não uma alegação de q
 cada lacuna continua inalterada após as correções. O incremento seguinte liga
 contratos Rust de Element, NamedElement, Namespace, Relationship e
 DirectedRelationship, além de CommentRef, aos registros canônicos existentes
-em `crates/bellatrix_mde/src/KERNEL/uml/root.rs`. Inspector, hierarquia e comandos usam
+em `crates/bellatrix_mde/src/KERNEL/uml/semantics/root.rs`. Inspector, hierarquia e comandos usam
 esses contratos. O root Model possui referência persistida; owner, namespace e
 qualifiedName são derivados, não cópias independentes mantidas pela UI.
 A mutação rejeita violações novas do recorte implementado, sem bloquear a

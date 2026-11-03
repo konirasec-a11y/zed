@@ -61,10 +61,10 @@ Os defaults tipados não alteram o documento ao abrir o Inspector. Editar um cam
 
 ### Projeto de API já publicado
 
-- `crates/bellatrix_mde/src/view-model/inspector.rs`: `InspectorProperty`, `PropertyEditor`, `ElementInspector`, `inspect_element(section, id)`.
-- `crates/bellatrix_mde/src/KERNEL/inspector_edit.rs`: `set_inspected_property(section, id, path, value)`; os contratos compartilhados de edição ficam em `KERNEL/property_edit.rs`.
+- `crates/bellatrix_mde/src/view-model/inspector/inspector.rs`: `InspectorProperty`, `PropertyEditor`, `ElementInspector`, `inspect_element(section, id)`.
+- `crates/bellatrix_mde/src/application/edits/inspector_edit.rs`: `set_inspected_property(section, id, path, value)`; os contratos compartilhados de edição ficam em `application/edits/property_edit.rs`.
 - `crates/bellatrix_mde_cordis/src/set_property.rs`: `ModelingSetPropertyRequested`, evento `bellatrix.mde.set-property.v1`, validação e `ProjectReplace` com revisão esperada.
-- `crates/bellatrix_mde_workbench/src/property_editor.rs`: Zed GPUI consome os descritores e escolhe controles; a edição usa `MdeUiBridge` e não modifica `ModelingSection` diretamente.
+- `crates/bellatrix_mde_workbench/src/UI/property_editor.rs`: Zed GPUI consome os descritores e escolhe controles; a edição usa `MdeUiBridge` e não modifica `ModelingSection` diretamente.
 
 ## 3. Contrato de seleção e persistência
 

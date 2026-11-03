@@ -32,12 +32,12 @@ Legenda: **Correto no recorte** = implementação conferida apenas para a regra 
 
 ### Evidências transversais da matriz
 
-- Sete identidades: `crates/bellatrix_mde/src/KERNEL/structural_diagrams.rs:9–43`; criação de diagramas vazios `commands/diagrams.rs:6–36`; menu real `crates/bellatrix_mde_workbench/src/panels.rs:321–405`. O menu de diagramas não muda o conjunto de ferramentas para implementar sete editores especializados.
+- Sete identidades: `crates/bellatrix_mde/src/KERNEL/uml/validation/structural_diagrams.rs:9–43`; criação de diagramas vazios `commands/diagrams.rs:6–36`; menu real `crates/bellatrix_mde_workbench/src/UI/panels.rs:321–405`. O menu de diagramas não muda o conjunto de ferramentas para implementar sete editores especializados.
 - Contexto: `structural_diagrams.rs:165–207`. Conferido com UML 2.5.1 §§B.7.6.3, B.7.10.3, B.7.11.3, B.7.12.3, B.7.26.3, B.7.27.3, B.7.28.3. XMI: `UMLDI.xmi:101–114,182–233,247–290`. O `modelElement` do diagrama é contexto, não a lista de elementos desenhados. Correto não impor um contexto Package ao Class diagram.
 - A taxonomia do Anexo A, pp.683–685, permite misturar tipos de elementos. A ausência de filtros rígidos por diagrama **não é, por si, erro UML**.
 - Factory/paleta real: `commands/kinds.rs:4–39,60–79`, somente 16 variantes. Não contém InstanceSpecification, Slot, Node, Device, ExecutionEnvironment, DeploymentSpecification, Profile, Stereotype ou Collaboration. Port/Part são Quick Edit, não itens dessa enumeração.
 - Tipos de relacionamento criáveis: `relationships.rs:7–57`. Não contém Connector, ComponentRealization, PackageImport, ElementImport, PackageMerge, Deployment, Manifestation, CommunicationPath, Extension ou ProfileApplication.
-- Mapeamento semântico não é renderer: `uml_types.rs:72–143`; notações reais `uml_notation.rs:18–42`. Node, Device, ExecutionEnvironment, Collaboration e InstanceSpecification terminam em Unsupported. A UI exibe explicitamente “Unsupported notation” em `bellatrix_mde_workbench/src/lib.rs:1707–1722`.
+- Mapeamento semântico não é renderer: `uml_types.rs:72–143`; notações reais `uml_notation.rs:18–42`. Node, Device, ExecutionEnvironment, Collaboration e InstanceSpecification terminam em Unsupported. A UI exibe explicitamente “Unsupported notation” em `bellatrix_mde_workbench/src/UI/workbench.rs:1707–1722`.
 - Mesmo uma notação registrada não garante colocação: `commands/views.rs:45–77` copia uma View existente, mas, na ausência dela, exige uma factory de `ModelingElementKind`; Profile/Stereotype não possuem tal factory.
 - Inspector real: `inspector.rs:69–113,182–216`. Há schemas limitados e edição de escalares existentes. Collections/objetos desconhecidos ficam read-only. Um saco JSON não fornece os seletores de referências, associação inversa, ownership, cardinalidades e validação que faltam.
 

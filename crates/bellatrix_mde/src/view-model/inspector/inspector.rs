@@ -526,12 +526,12 @@ mod tests {
     use crate::set_inspected_property;
     use crate::property_edit::VISIBILITY;
     fn fixture() -> ModelingSection {
-        let model: crate::Project = serde_json::from_str(include_str!("../../fixtures/todo.json")).unwrap();
+        let model: crate::Project = serde_json::from_str(include_str!("../../../fixtures/todo.json")).unwrap();
         ModelingSection::from_model(&model)
     }
     #[test]
     fn projected_editors_use_the_domain_edit_contract() {
-        let project: crate::Project = serde_json::from_str(include_str!("../../fixtures/todo.json")).expect("fixture");
+        let project: crate::Project = serde_json::from_str(include_str!("../../../fixtures/todo.json")).expect("fixture");
         let section = ModelingSection::from_model(&project);
         for id in section.elements.iter().map(|element| element.id.as_str())
             .chain(section.relations.iter().map(|relation| relation.id.as_str())) {

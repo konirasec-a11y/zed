@@ -76,7 +76,7 @@ mod tests {
     use super::*;
     #[test]
     fn models_only_semantic_nodes_with_owned_members() {
-        let model = serde_json::from_str(include_str!("../../fixtures/todo.json")).unwrap();
+        let model = serde_json::from_str(include_str!("../../../fixtures/todo.json")).unwrap();
         let section = ModelingSection::from_model(&model);
         let tree = project_hierarchy(&section);
         let row = |id: &str| tree.iter().find(|row| row.element_id == id).unwrap();
@@ -90,7 +90,7 @@ mod tests {
     }
     #[test]
     fn empty_semantic_model_does_not_expose_files_or_cargo_metadata() {
-        let mut model: crate::Project = serde_json::from_str(include_str!("../../fixtures/todo.json")).unwrap();
+        let mut model: crate::Project = serde_json::from_str(include_str!("../../../fixtures/todo.json")).unwrap();
         model.elements.retain(|element| !semantic(&element.kind));
         model.relations.clear();
         assert!(project_hierarchy(&ModelingSection::from_model(&model)).is_empty());

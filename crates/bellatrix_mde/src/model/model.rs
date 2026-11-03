@@ -1,14 +1,14 @@
-#[path = "model/diagram.rs"]
+#[path = "diagram.rs"]
 mod diagram;
-#[path = "model/graph.rs"]
+#[path = "graph.rs"]
 mod graph;
-#[path = "model/io.rs"]
+#[path = "../persistence/io.rs"]
 mod io;
-#[path = "model/project.rs"]
+#[path = "project.rs"]
 mod project;
-#[path = "model/section.rs"]
+#[path = "section.rs"]
 mod section;
-#[path = "model/wire.rs"]
+#[path = "../persistence/wire.rs"]
 pub(crate) mod wire;
 
 pub use diagram::{

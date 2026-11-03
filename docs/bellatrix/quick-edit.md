@@ -61,8 +61,8 @@ Element + View selecionados
       → ProjectStateChangedEvent → Canvas, Model Explorer, Property Editor
 ```
 
-- Contrato puro atual: `crates/bellatrix_mde/src/view-model/quick_edit.rs` (`QuickEditAction`, `QuickEditControl`, `QuickEditSide`, `QuickEditAvailability`).
-- Adapter GPUI: `crates/bellatrix_mde_workbench/src/quick_edit_view.rs` e o `MdeWorkbenchItem` que ancora ações junto à View selecionada.
+- Contrato puro atual: `crates/bellatrix_mde/src/view-model/authoring/quick_edit.rs` (`QuickEditAction`, `QuickEditControl`, `QuickEditSide`, `QuickEditAvailability`).
+- Adapter GPUI: `crates/bellatrix_mde_workbench/src/UI/quick_edit_view.rs` e o `MdeWorkbenchItem` que ancora ações junto à View selecionada.
 - Mutações tipadas: `add_member.rs` para membros comuns, `quick_edit_commands.rs` para transações compartilhadas, `class_features.rs` para Template Parameter/Port/Part; `MdeUiCommand::QuickEdit` publica os eventos ao Cordis.
 - Visibilidade e nome: `ModelingSetPropertyRequested` com schema do Inspector; usa `ProjectService`, sem estado de domínio no GPUI.
 - **Estado:** as 17 opções do Quick Edit de Class possuem descritores, handlers tipados e mutações persistidas no código desta branch. A validação local de compilação e comportamento visual ainda é necessária. Ações especializadas de outros tipos continuam indisponíveis quando não possuem contrato de domínio.

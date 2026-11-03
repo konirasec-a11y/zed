@@ -42,7 +42,7 @@ A successfully saved **file** (`BufferSaved`) is not by itself proof that a sema
 
 ## Concrete gap in the current fork
 
-`crates/bellatrix_mde_workbench/src/lib.rs` implements `workspace::Item` and `EventEmitter<()>` for `MdeWorkbenchItem`, but **not** `workspace::SerializableItem`. The integration now registers the native `bellatrix_mde::OpenMdeWorkbench` Workspace action via `cx.observe_new` instead of inserting MDE Items and Panels into every Zed window. Reopening the action focuses an existing MDE tab. This removes the automatic-UI duplication, **but** MDE tab/diagram/selection restoration **still does not use** Zed's standard Item/session mechanism.
+`crates/bellatrix_mde_workbench/src/UI/workbench.rs` implements `workspace::Item` and `EventEmitter<()>` for `MdeWorkbenchItem`, but **not** `workspace::SerializableItem`. The integration now registers the native `bellatrix_mde::OpenMdeWorkbench` Workspace action via `cx.observe_new` instead of inserting MDE Items and Panels into every Zed window. Reopening the action focuses an existing MDE tab. This removes the automatic-UI duplication, **but** MDE tab/diagram/selection restoration **still does not use** Zed's standard Item/session mechanism.
 
 Do not invent an alternate session database to fix this. Follow `crates/editor/src/items.rs` and `crates/editor/src/persistence.rs`:
 

@@ -1,59 +1,70 @@
-# MDE source boundaries
+# MDE source responsibilities
 
-`src/mde.rs` is the public facade. Its explicit module paths preserve the existing
-Rust API while placing implementations beside their actual responsibilities.
-This is a source organization boundary, not a new runtime, model copy, or crate.
+`src/mde.rs` preserves the public Rust API through explicit module paths and
+reexports. The directories describe responsibilities, not separate runtimes or
+copies of the model.
 
-- `src/KERNEL/` owns the persisted model and wire format, semantic UML contracts,
-  graph queries, validation, commands, generation, publication, and execution
-  traces. `KERNEL/inspector_edit.rs` applies validated Inspector edits.
-- `src/view-model/` owns renderer-independent projections and authoring intent:
-  Inspector descriptors, hierarchy rows, labels, notation, geometry, relationship
-  routing, Quick Edit definitions, and the visual-component inventory. It has no
-  GPUI dependency and does not own a second persisted model.
-- GPUI views remain in the workbench and `bellatrix_ui_*` crates. In the workbench,
-  `src/view-model/` contains only draft state, snapshots, and document guards;
-  rendering, focus, widgets, and GPUI entities remain outside that folder.
+- `KERNEL/graph/`: graph integrity, indexing and graph-scope queries.
+- `KERNEL/uml/metamodel/`: normative catalog, schema descriptors, primitive types
+  and their tests/inventory.
+- `KERNEL/uml/semantics/`: canonical UML identities, ownership, references,
+  classifiers, properties, associations, operations, values and template rules.
+- `KERNEL/uml/validation/`: structural-model and diagram conformance checks.
+- `model/`: persisted document data types: elements, relations, diagrams,
+  projects and sections. These are data, not the validation kernel.
+- `persistence/`: JSON/Protobuf encoding, decoding and wire representation.
+- `application/commands/`: transactional command execution, authoring workflows,
+  revision-sensitive identifiers and command validation. `application/commands.rs`
+  composes the executor with the presentation services.
+- `application/edits/`: property-edit contracts, Inspector mutations and Explorer
+  placement. Editor-specific contracts are not normative UML validation rules.
+- `application/diagram/`: the bounded geometry-query contract consumed by the
+  command executor.
+- `generation/`: generation graph analysis, typed-operation execution, output
+  plans, artifact paths and construction-script production.
+- `publishing/`: staged output publication and generated-file ownership checks.
+- `observability/`: execution events and explicitly traced entry points.
+- `view-model/`: renderer-independent projections grouped by `inspector/`,
+  `hierarchy/`, `notation/`, `diagram/` and `authoring/`. These do not depend on GPUI.
+
+GPUI rendering, controls, focus and entities belong to the workbench/UI crates,
+not to this crate's kernel or view-model. Workbench draft state and snapshots
+remain distinct from its native UI implementation.
 
 ## Similar names with different contexts
 
-- `KERNEL/model/graph.rs` defines persisted elements and relations;
-  `KERNEL/graph.rs` operates on the graph. Neither is a diagram renderer.
-- `KERNEL/uml/` implements metamodel and semantic contracts;
-  `view-model/uml_notation.rs` and `uml_geometry.rs` project their visual form.
-- `KERNEL/commands/quick_edit.rs` executes edits;
-  `view-model/quick_edit.rs` describes contextual controls and available actions.
-- `KERNEL/uml/associations.rs` owns Association semantics;
-  `view-model/relationships.rs` projects diagram paths, anchors, and routing.
+- `model/graph.rs` defines stored elements and relations;
+  `KERNEL/graph/graph.rs` validates the graph and `index.rs` queries it.
+- `KERNEL/uml/semantics/associations.rs` defines Association contracts;
+  `view-model/diagram/relationships.rs` computes diagram paths and anchors.
   Its `RelationshipGraph` is a diagram projection, not another semantic graph.
-- `view-model/hierarchy.rs` creates read-only model rows;
-  the workbench's `hierarchy.rs` builds the native UI tree from those projections.
-- `KERNEL/templates.rs` owns template identities and validation;
-  `view-model/template_presentation.rs` formats their labels.
-- `view-model/inspector.rs` exposes fields and choices;
-  `KERNEL/inspector_edit.rs` validates and applies the chosen change.
+- `application/commands/quick_edit.rs` executes authoring actions;
+  `view-model/authoring/quick_edit.rs` describes contextual controls.
+- `KERNEL/uml/semantics/templates.rs` resolves and validates template identities;
+  `view-model/notation/template_presentation.rs` formats their labels.
+- `view-model/inspector/inspector.rs` projects fields and choices;
+  `application/edits/property_edit.rs` provides shared edit contracts and
+  `application/edits/inspector_edit.rs` applies a validated edit.
+- `view-model/hierarchy/hierarchy.rs` produces read-only rows;
+  `application/edits/explorer_placement.rs` changes document organization.
+- `generation/operation_graph.rs` schedules typed generation operations;
+  it is not the persisted UML relationship graph.
 
-Commands still consume shared authoring/geometry projections, and Inspector
-editing consumes field descriptors. The facade preserves those existing
-cross-module dependencies; folder placement does not claim a fully one-way
-kernel/view-model dependency graph. Persisted `View`, geometry, and style types
-remain in `KERNEL/model/diagram.rs` because they are part of the document format,
-while layout and notation algorithms live in `view-model/`.
+## Geometry boundary and remaining coupling
 
-The generated metamodel and inventory retain their generator:
-`script/bellatrix_mde/bellatrix_uml_catalog.py`. Moving the source does not make a
-handwritten copy of the normative catalog.
+For `SetViewRouting`, the view-model receives an immutable document snapshot and
+returns only path geometry and endpoint View identities. The application checks
+the target, path shape and endpoint identities/diagram scope before applying the
+patch to one View in the existing transaction. The geometry provider cannot
+mutate the document. Other authoring commands still combine semantic operations
+and diagram layout; their application location makes that composition explicit.
 
-## Routing boundary
+Two semantic modules still have presentation coupling to extract:
+`KERNEL/uml/semantics/associations.rs` reroutes diagrams when binary projected
+endpoints change, and `KERNEL/uml/semantics/root.rs` delegates display labels to
+the presentation formatter. The source organization does not claim those edges
+have been removed or that separate Cargo packages enforce the boundary.
 
-`view-model/commands.rs` preserves the public command entry point and supplies
-renderer-independent geometry projections. `KERNEL/diagram_operations.rs`
-defines an immutable routing query and a typed result containing only geometry
-and endpoint View identities. `KERNEL/commands/view_style.rs` checks the target,
-Path shape and endpoint identity/diagram scope, then applies that result inside
-the existing command transaction. The geometry provider cannot mutate the model.
-
-This boundary currently covers `SetViewRouting`. Move/resize, creation, feature
-layout and Association endpoint synchronization still call presentation helpers
-from kernel command code. Their extraction is pending; the routing checkpoint
-does not establish complete kernel/view-model isolation.
+The normative catalog remains generated by
+`script/bellatrix_mde/bellatrix_uml_catalog.py`; its target and inventory paths
+follow this layout. No handwritten catalog copy is introduced.

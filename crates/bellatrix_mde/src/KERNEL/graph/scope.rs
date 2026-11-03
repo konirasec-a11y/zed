@@ -41,7 +41,7 @@ mod tests {
     #[test]
     fn scope_follows_owned_members_but_not_dependencies() {
         let project: Project =
-            serde_json::from_str(include_str!("../../fixtures/todo.json")).unwrap();
+            serde_json::from_str(include_str!("../../../fixtures/todo.json")).unwrap();
         let selected =
             select_elements(&project, &Scope::Elements(vec!["type-list".into()])).unwrap();
         assert!(selected.contains("type-list"));

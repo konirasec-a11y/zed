@@ -2,79 +2,79 @@
 //! Adapters own transport/presentation, never another implementation of the model.
 pub const MODELING_NAMESPACE: &str = "bellatrix.mde";
 
-#[path = "KERNEL/model.rs"]
+#[path = "model/model.rs"]
 mod model;
 pub(crate) use model::wire;
 pub use model::*;
 
-#[path = "KERNEL/commands.rs"]
-mod kernel_commands;
-#[path = "view-model/commands.rs"]
+#[path = "application/commands/executor.rs"]
+mod command_executor;
+#[path = "application/commands.rs"]
 pub mod commands;
-#[path = "KERNEL/diagram_operations.rs"]
+#[path = "application/diagram/operations.rs"]
 mod diagram_operations;
-#[path = "view-model/diagram_operations.rs"]
+#[path = "view-model/diagram/diagram_operations.rs"]
 mod diagram_operation_policy;
-#[path = "KERNEL/construction_script.rs"]
+#[path = "generation/construction_script.rs"]
 mod construction_script;
-#[path = "KERNEL/execution_trace.rs"]
+#[path = "observability/execution_trace.rs"]
 mod execution_trace;
 pub use execution_trace::{ExecutionEvent, ExecutionTrace, TraceOutcome, TracePhase, execution_trace_jsonl, validate_structural_diagram_traced, validate_structural_model_traced};
-#[path = "KERNEL/generation.rs"]
+#[path = "generation/generation_graph.rs"]
 mod generation;
-#[path = "KERNEL/graph.rs"]
+#[path = "KERNEL/graph/graph.rs"]
 mod graph;
-#[path = "view-model/hierarchy.rs"]
+#[path = "view-model/hierarchy/hierarchy.rs"]
 mod hierarchy;
-#[path = "view-model/visual_consistency.rs"]
+#[path = "view-model/hierarchy/visual_consistency.rs"]
 mod visual_consistency;
 pub use visual_consistency::{VisualComponent, visual_components};
-#[path = "KERNEL/index.rs"]
+#[path = "KERNEL/graph/index.rs"]
 mod index;
-#[path = "view-model/inspector.rs"]
+#[path = "view-model/inspector/inspector.rs"]
 mod inspector;
-#[path = "KERNEL/operation_graph.rs"]
+#[path = "generation/operation_graph.rs"]
 mod operation_graph;
-#[path = "KERNEL/ownership.rs"]
+#[path = "publishing/ownership.rs"]
 mod ownership;
-#[path = "KERNEL/path.rs"]
+#[path = "generation/path.rs"]
 mod path;
-#[path = "KERNEL/plan.rs"]
+#[path = "generation/plan.rs"]
 mod plan;
-#[path = "view-model/presentation.rs"]
+#[path = "view-model/notation/presentation.rs"]
 mod presentation;
-#[path = "view-model/instance_presentation.rs"]
+#[path = "view-model/notation/instance_presentation.rs"]
 mod instance_presentation;
-#[path = "view-model/interaction_presentation.rs"]
+#[path = "view-model/notation/interaction_presentation.rs"]
 mod interaction_presentation;
 pub use interaction_presentation::format_operand_guard;
 pub use instance_presentation::{format_instance_heading, collect_instance_slot_labels};
-#[path = "KERNEL/publish.rs"]
+#[path = "publishing/publish.rs"]
 mod publish;
-#[path = "view-model/quick_edit.rs"]
+#[path = "view-model/authoring/quick_edit.rs"]
 mod quick_edit;
-#[path = "view-model/relationships.rs"]
+#[path = "view-model/diagram/relationships.rs"]
 mod relationships;
-#[path = "view-model/relationship_tools.rs"]
+#[path = "view-model/authoring/relationship_tools.rs"]
 mod relationship_tools;
-#[path = "view-model/relationship_notation.rs"]
+#[path = "view-model/notation/relationship_notation.rs"]
 mod relationship_notation;
 pub use relationship_notation::{format_relationship_label, resolve_relationship_style};
-#[path = "KERNEL/scope.rs"]
+#[path = "KERNEL/graph/scope.rs"]
 mod scope;
-#[path = "KERNEL/structural_diagrams.rs"]
+#[path = "KERNEL/uml/validation/structural_diagrams.rs"]
 mod structural_diagrams;
-#[path = "KERNEL/structural_rules.rs"]
+#[path = "KERNEL/uml/validation/structural_rules.rs"]
 mod structural_rules;
-#[path = "KERNEL/templates.rs"]
+#[path = "KERNEL/uml/semantics/templates.rs"]
 mod templates;
-#[path = "KERNEL/uml.rs"]
+#[path = "KERNEL/uml/uml.rs"]
 pub mod uml;
-#[path = "view-model/uml_geometry.rs"]
+#[path = "view-model/diagram/uml_geometry.rs"]
 mod uml_geometry;
-#[path = "view-model/uml_notation.rs"]
+#[path = "view-model/notation/uml_notation.rs"]
 mod uml_notation;
-#[path = "KERNEL/uml_types.rs"]
+#[path = "KERNEL/uml/capabilities.rs"]
 mod uml_types;
 pub use templates::{
     template_parametered_element, template_parameters,
@@ -125,20 +125,20 @@ pub use uml_types::{UmlCapability, UmlQuickCreate, UmlType};
 
 pub use uml_notation::{UmlHeader, UmlNotation, resolve_element_notation, resolve_pseudostate_notation, uml_header, uml_notation};
 
-#[path = "view-model/visual_draft_routing.rs"]
+#[path = "view-model/diagram/visual_draft_routing.rs"]
 mod visual_draft_routing;
 pub use visual_draft_routing::{reroute_visual_drafts, resolve_visual_center};
 
-#[path = "KERNEL/inspector_edit.rs"]
+#[path = "application/edits/inspector_edit.rs"]
 mod inspector_edit;
 pub use inspector_edit::set_inspected_property;
-#[path = "view-model/template_presentation.rs"]
+#[path = "view-model/notation/template_presentation.rs"]
 mod template_presentation;
 
-#[path = "KERNEL/property_edit.rs"]
+#[path = "application/edits/property_edit.rs"]
 mod property_edit;
 pub use template_presentation::{template_parameter_label, template_parameter_label_with_references};
 
-#[path = "KERNEL/explorer_placement.rs"]
+#[path = "application/edits/explorer_placement.rs"]
 mod explorer_placement;
 pub use explorer_placement::explorer_parent_map;
