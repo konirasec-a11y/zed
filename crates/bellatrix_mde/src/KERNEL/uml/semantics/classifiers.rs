@@ -1043,6 +1043,21 @@ fn validate_feature_rules(
                 .map(|owned_attribute| !owned_attribute)
         })());
     }
+    if element.conforms_to("BehavioredClassifier") {
+        report("BehavioredClassifier-class_behavior", (|| {
+            let Some(value) = element.properties().get("classifierBehavior") else {
+                return Ok(false);
+            };
+            if !role_present(references, element, "classifierBehavior")? { return Ok(false); }
+            let Some(id) = reference_id(value)
+                .map_err(|error| QueryError::invalid(element.id(), error))? else {
+                return Ok(false);
+            };
+            let behavior = references.element(id)
+                .map_err(|error| QueryError::invalid(element.id(), error))?;
+            role_present(references, behavior, "specification")
+        })());
+    }
     if element.conforms_to("Class") {
         report("Class-passive_class", (|| {
             if schema::read_effective_boolean(element, "isActive")
@@ -1223,4 +1238,46 @@ pub(crate) fn set_redefined_elements(
     query(&references, owner.id()).map_err(|error| error.to_string())?;
     *section = candidate;
     Ok(())
+}
+
+#[cfg(test)]
+mod class_behavior_gate_tests {
+    use super::*;
+
+    #[test]
+    fn class_behavior_gate_rejects_new_violation_and_accepts_repaired_draft()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let valid: crate::Project = serde_json::from_value(json!({
+            "id":"project", "name":"Class behavior gate", "root_model":"root",
+            "elements":[
+                {"id":"root", "kind":"uml.model", "name":"Root"},
+                {"id":"class", "kind":"uml.class", "name":"Class", "properties":{"isActive":true,"ownedBehavior":[{"$ref":"behavior"}],"classifierBehavior":null}},
+                {"id":"behavior", "kind":"uml.opaque_behavior", "name":"Behavior", "properties":{"specification":{"$ref":"operation"}}},
+                {"id":"operation", "kind":"uml.operation", "name":"Operation"}
+            ],
+            "relations":[
+                {"id":"root-class", "kind":"owns", "from":"root", "to":"class"},
+                {"id":"class-behavior", "kind":"owns", "from":"class", "to":"behavior"},
+                {"id":"class-operation", "kind":"owns", "from":"class", "to":"operation"}
+            ]
+        }))?;
+        let before = crate::encode(&valid, crate::Format::Json)?;
+        let mut candidate = valid.clone();
+        candidate
+            .elements
+            .iter_mut()
+            .find(|element| element.id == "class")
+            .ok_or("classifier")?
+            .properties
+            .insert("classifierBehavior".into(), json!({"$ref":"behavior"}));
+        let error = super::super::root::validate_changes(&valid, &candidate)
+            .expect_err("classifier behavior cannot have a specification");
+        assert!(
+            error.contains("BehavioredClassifier-class_behavior: violated"),
+            "{error}"
+        );
+        assert_eq!(crate::encode(&valid, crate::Format::Json)?, before);
+        super::super::root::validate_changes(&candidate, &valid)?;
+        Ok(())
+    }
 }
