@@ -87,6 +87,11 @@ Operation::at_most_one_return e as duas implicações de flags de derived_union
 têm evidência publicada em `a6ea98a11bb7f973bba08962003a34077d05a32b`
 (E67/E68). O gate amplo associado não está verde: 857 aprovados e três
 falhas reproduzidas no commit anterior, em diagram_visual_creation/indexing.
+MultiplicityElement::value_specification_constant e
+value_specification_no_side_effects têm recorte publicado em
+`01d1b1e28776168bd6ddd3fc081533704d931bab` (E69): ausência/literais,
+com expressões não literais ainda não verificadas. O gate amplo deste
+incremento também não está verde: 862 aprovados e três falhas.
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -202,7 +207,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E68 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E69 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -1048,7 +1053,9 @@ de execução nova. E12–E68 possuem os gates delimitados nas seções seguinte
   `MDE_MULTIPLICITY_UNSUPPORTED`; Parameter usa `UML_PARAMETER_MULTIPLICITY` e
   `MDE_PARAMETER_MULTIPLICITY_UNSUPPORTED`. Não são quatro novos códigos.
   Expressões opacas/não avaliáveis permanecem não verificadas; não se provam
-  constância nem ausência de efeitos colaterais, cujas linhas continuam A.
+  constância nem ausência de efeitos colaterais. Essas duas linhas recebem
+  posteriormente o recorte explícito de ausência/literais em E69; expressões
+  não literais continuam não verificadas.
   Não certifica interpretação geral de ValueSpecification, autoria visual ou
   todos os contratos de multiplicidade das metaclasses especializadas.
 
@@ -1079,6 +1086,53 @@ de execução nova. E12–E68 possuem os gates delimitados nas seções seguinte
   Validar os valores dessas flags não calcula a união derivada, seus membros
   ou seus valores, nem prova a semântica geral de subsetting. Não certifica
   Extension inteira: non_owned_end/metaclassEnd permanece U01/E28 Unsupported.
+
+- **E69**: `semantics/value_specifications.rs`,
+  `bound_expression_guarantees`, `bound` e `validate`;
+  `multiplicity_element_invariants.rs`, dezenove testes no alvo completo.
+  As obrigações value_specification_constant e
+  value_specification_no_side_effects vêm de descrições normativas sem corpo
+  OCL no XMI. Não se inventa uma fórmula. Como o antecedente normativo exige
+  ValueSpecification não literal, ausência de limite ou alvo que conforma a
+  LiteralSpecification satisfaz o recorte de forma vacuamente verdadeira.
+  Isso não valida o tipo ou valor numérico do literal: as quatro invariantes
+  de limites de E66 continuam independentes, inclusive para LiteralNull.
+  Para expressão não literal, constância e ausência de efeitos colaterais
+  permanecem Unknown/Unsupported, mesmo que seu texto pareça uma constante.
+  Não há avaliação geral de expressões nem prova de pureza.
+  Referências externas e metaclasses desconhecidas permanecem não verificadas;
+  referência malformada, alvo conhecido incompatível ou ownership inválido
+  permanece Invalid. Um limite inválido não é ocultado por outro desconhecido,
+  em nenhuma ordem. Cada obrigação tem diagnóstico explícito:
+  `MDE_MULTIPLICITY_CONSTANT_INVALID`/`MDE_MULTIPLICITY_CONSTANT_UNVERIFIED` e
+  `MDE_MULTIPLICITY_NO_SIDE_EFFECTS_INVALID`/
+  `MDE_MULTIPLICITY_NO_SIDE_EFFECTS_UNVERIFIED`.
+
+### Evidência publicada de constância e ausência de efeitos em multiplicidades
+
+Commit inspecionado: `01d1b1e28776168bd6ddd3fc081533704d931bab`.
+As duas linhas passam a **P/E69**, exclusivamente no recorte de ausência ou
+LiteralSpecification. Para não literais, ambas continuam não verificadas.
+O log focado `/tmp/multiplicity-guarantees-final.log` registra **19/19
+aprovados** em multiplicity_element_invariants. O alvo reúne testes anteriores
+das quatro invariantes numéricas e cinco testes adicionais das obrigações
+textuais; a contagem não representa dezenove novas obrigações.
+Inclui herança por Parameter/ExtensionEnd, defaults, literais, expressões
+opacas, precedência de Invalid diante de Unknown e reparo de drafts.
+Não certifica Extension inteira nem semântica geral de ValueSpecification.
+
+O gate amplo `/tmp/multiplicity-guarantees-full-final.log` registra **862
+aprovados e 3 falhas**, portanto **não está verde**. As falhas são
+`fourteen_presentations_preserve_normative_diagram_identity_and_context` e
+`behavior_nodes_use_canonical_composite_owners_and_transactional_commands`
+em diagram_visual_creation, e
+`uml_root_namespace_edit_and_reopen_flow_preserves_canonical_identity`
+em indexing, os mesmos casos registrados no gate de E67/E68 e reproduzidos
+na base histórica ali identificada. Isso não equivale a uma nova reprodução
+na base deste incremento nem transforma o gate amplo em aprovação.
+Gates anteriores à publicação, sem rerun no SHA publicado nem execução nova
+por esta matriz. Não certifica suíte integral, UI, geração, interchange ou
+conformidade UML completa.
 
 ### Evidência publicada de retornos de Operation e flags de união derivada
 
@@ -1980,13 +2034,13 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `MultiplicityElement-value_specification_no_side_effects`
 
-- Metaclass: `MultiplicityElement`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `MultiplicityElement`. Estado: **P**. Evidência: E69; commit `01d1b1e28776168bd6ddd3fc081533704d931bab`; ausência/literais, não literais Unknown.
 - Corpo OCL: ausente nesta constraint do XMI; não inventar fórmula.
 - Descrição normativa do XMI: If a non-literal ValueSpecification is used for lowerValue or upperValue, then evaluating that specification must not have side effects.
 
 #### `MultiplicityElement-value_specification_constant`
 
-- Metaclass: `MultiplicityElement`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `MultiplicityElement`. Estado: **P**. Evidência: E69; commit `01d1b1e28776168bd6ddd3fc081533704d931bab`; ausência/literais, não literais Unknown.
 - Corpo OCL: ausente nesta constraint do XMI; não inventar fórmula.
 - Descrição normativa do XMI: If a non-literal ValueSpecification is used for lowerValue or upperValue, then that specification must be a constant expression.
 

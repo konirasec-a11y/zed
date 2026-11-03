@@ -22,7 +22,7 @@ fn create(
             y: 100.0,
         },
         0,
-    )
+    ).map_err(|error| format!("create {kind:?}: {error}"))
 }
 
 fn connect(
@@ -40,7 +40,7 @@ fn connect(
             to: to.into(),
         },
         0,
-    )
+    ).map_err(|error| format!("connect {kind:?}: {error}"))
 }
 
 #[test]
@@ -273,6 +273,11 @@ fn behavior_nodes_use_canonical_composite_owners_and_transactional_commands()
                 semantic_model.owner(relationship)?.map(|owner| owner.id()),
                 Some(owner_id.as_str())
             );
+            if matches!(kind, ModelingRelationKind::Deployment | ModelingRelationKind::Manifestation) {
+                assert_eq!(edge.properties.get("visibility"), Some(&serde_json::Value::Null));
+                let named = relationship.named().ok_or("missing NamedElement")?;
+                assert!(semantic_model.namespace(named)?.is_none());
+            }
             let presentation = bellatrix_mde::relationship_presentation(edge);
             assert_eq!(presentation.style.line_mode, bellatrix_mde::LineMode::Dashed);
             assert!(
@@ -551,6 +556,17 @@ fn exercise_visual_drafts() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(canonical_path(&canonical), canonical_path(&unselected_moved));
     let selected_moved = apply(&canonical, &Command::MoveView { view_id: source_copy.clone(), dx: 70.0, dy: 20.0 }, 55)?;
     assert_ne!(canonical_path(&canonical), canonical_path(&selected_moved));
+    // Two unnamed Associations collide in their owning Namespace. Preserve the
+    // fallback check, then distinguish the first relation for the endpoint test.
+    let conflicting = apply(&canonical, &make_link(&target_copy, &source_copy, Some(&target_subject), Some(source_subject)), 56)?;
+    let conflict = conflicting.diagrams.iter().find(|diagram| diagram.id == "diagram-tasks")
+        .and_then(|diagram| diagram.views.last()).and_then(|view| view.draft.as_ref()).ok_or("expected conflicting relation draft")?;
+    assert!(conflict.properties.get("semantic_creation_diagnostic").and_then(serde_json::Value::as_str)
+        .is_some_and(|message| message.starts_with("UML_NAMESPACE_MEMBERS_DISTINGUISHABLE:")));
+    assert_eq!(conflicting.relations, canonical.relations);
+    let canonical = apply(&canonical, &Command::SetProperty {
+        element_id: relation_id.clone(), path: "properties.name".into(), value: serde_json::json!("Forward association"),
+    }, 56)?;
     let canonical_reverse = apply(&canonical, &make_link(&target_copy, &source_copy, Some(&target_subject), Some(source_subject)), 56)?;
     let reverse_view = canonical_reverse.diagrams.iter().find(|diagram| diagram.id == "diagram-tasks").and_then(|diagram| diagram.views.last()).ok_or("reverse canonical edge missing")?;
     assert!(reverse_view.draft.is_none());

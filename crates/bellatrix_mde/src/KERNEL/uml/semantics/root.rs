@@ -666,6 +666,27 @@ fn fresh_id(section: &ModelingSection, project_id: &str, prefix: &str) -> Result
 
 fn ownership_property(owner: ElementRef<'_>, child: ElementRef<'_>) -> Option<&'static str> {
     let roles = super::classifiers::ownership_roles(owner, child).ok()?;
+    // A unique composite target type does not establish connection-point kind.
+    // StateMachine::connection_points and State::entry_or_exit require these kinds.
+    if child.conforms_to("Pseudostate")
+        && (owner.conforms_to("State") || owner.conforms_to("StateMachine"))
+        && !child.properties().get("kind").and_then(Value::as_str)
+            .is_some_and(|kind| matches!(kind, "entryPoint" | "exitPoint"))
+    {
+        return None;
+    }
+    if child.conforms_to("Pin") && !owner.conforms_to("Action") {
+        return None;
+    }
+    if child.conforms_to("InteractionOperand") && !owner.conforms_to("CombinedFragment") {
+        return None;
+    }
+    if child.conforms_to("Pseudostate") && child.properties().get("kind").and_then(Value::as_str)
+        .is_some_and(|kind| matches!(kind, "entryPoint" | "exitPoint"))
+        && !(owner.conforms_to("State") || owner.conforms_to("StateMachine"))
+    {
+        return None;
+    }
     if roles.is_resolved && let Some(property) = roles.properties.first() {
         return Some(property.name);
     }
@@ -919,4 +940,60 @@ pub(crate) fn reparent(
             .retain(|relation| relation.kind != "owns" || relation.to != element_id);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod ownership_tests {
+    use super::*;
+
+    #[test]
+    fn specialized_ownership_preserves_action_roles_and_explicit_references() -> Result<(), Box<dyn std::error::Error>> {
+        for (owner_kind, child_kind, role) in [
+            ("uml.call_behavior_action", "uml.input_pin", "argument"),
+            ("uml.call_behavior_action", "uml.output_pin", "result"),
+            ("uml.call_operation_action", "uml.input_pin", "argument"),
+            ("uml.call_operation_action", "uml.output_pin", "result"),
+            ("uml.combined_fragment", "uml.interaction_operand", "operand"),
+        ] {
+            let child: ElementRecord = serde_json::from_value(serde_json::json!({
+                "id": "child", "kind": child_kind, "name": "Child"
+            }))?;
+            let mut owner: ElementRecord = serde_json::from_value(serde_json::json!({
+                "id": "owner", "kind": owner_kind, "name": "Owner"
+            }))?;
+            owner.properties.insert(role.into(), serde_json::json!([{"$ref": "child"}]));
+            assert_eq!(ownership_property(ElementRef::Object(&owner), ElementRef::Object(&child)), Some(role), "{owner_kind} / {child_kind}");
+            owner.properties.insert(role.into(), serde_json::json!(42));
+            assert_eq!(ownership_property(ElementRef::Object(&owner), ElementRef::Object(&child)), None, "malformed explicit role");
+            owner.kind = "uml.activity".into();
+            owner.properties.clear();
+            assert_eq!(ownership_property(ElementRef::Object(&owner), ElementRef::Object(&child)), None, "Activity is not a valid owner");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn connection_point_ownership_requires_entry_or_exit_kind() -> Result<(), Box<dyn std::error::Error>> {
+        for owner_kind in ["uml.state_machine", "uml.state"] {
+            let owner: ElementRecord = serde_json::from_value(serde_json::json!({
+                "id": "owner", "kind": owner_kind, "name": "Owner"
+            }))?;
+            for properties in [serde_json::json!({}), serde_json::json!({"kind": null}), serde_json::json!({"kind": 1}), serde_json::json!({"kind": "unknown"})] {
+                let child: ElementRecord = serde_json::from_value(serde_json::json!({
+                    "id": "child", "kind": "uml.pseudostate", "name": "Child", "properties": properties
+                }))?;
+                assert_eq!(ownership_property(ElementRef::Object(&owner), ElementRef::Object(&child)), None);
+            }
+            for kind in ["initial", "choice", "junction", "fork", "join", "shallowHistory", "deepHistory", "terminate", "entryPoint", "exitPoint"] {
+                let child: ElementRecord = serde_json::from_value(serde_json::json!({
+                    "id": "child", "kind": "uml.pseudostate", "name": "Child",
+                    "properties": {"kind": kind}
+                }))?;
+                assert_eq!(ownership_property(ElementRef::Object(&owner), ElementRef::Object(&child)),
+                    matches!(kind, "entryPoint" | "exitPoint").then_some("connectionPoint"),
+                    "{owner_kind} / {kind}");
+            }
+        }
+        Ok(())
+    }
 }
