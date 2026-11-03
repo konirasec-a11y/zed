@@ -514,3 +514,40 @@ The existing public Association lifecycle now imports a specialization,
 redefines an owned end, rejects a context-breaking reparent and a generalization
 cycle atomically, and reopens JSON/Protobuf while checking inherited Features and
 derived Inspector context. No new test function or isolated unit test was added.
+
+
+## Classifier specialization type and final parents
+
+The canonical Generalization reader in `uml/classifier_hierarchy.rs` now
+consumes the official `Classifier-specialize_type`,
+`Classifier-maySpecializeType` and `Classifier-non_final_parents` contracts
+(UML 2.5.1 §§9.9.4.7–8). This composition is new; the pinned uml4net Classifier
+extensions provided the already-attributed ancestry patterns, not these
+validation rules.
+
+`maySpecializeType` uses the exact default OCL
+`self.oclIsKindOf(c.oclType())`: the specializing Classifier's metaclass must
+conform to the parent's metaclass. This is intentionally separate from
+user-model `Classifier::conformsTo` and its Generalization closure. For example,
+a Component may specialize a Class; a Component cannot use Generalization to
+specialize an Interface. The pinned UML XMI declares no specialized override of
+this predicate. Unresolved metaclass metadata yields an Unsupported query
+result rather than an invented type policy.
+
+Each parent must also have `isFinalSpecialization = false`, using its generated
+Boolean/default contract. A final Classifier may itself inherit from another
+Classifier; finality only prevents it from being a parent. The existing scalar
+reader was moved from the Operation adapter into `schema.rs` and is shared by
+Classifier checks, Operation return properties and Operation signature
+comparison. No duplicate defaults or second validation graph were introduced.
+
+Invalid specialization edges are diagnosed before ancestry is used by
+Namespace inheritance, Type conformance, redefinition or Slot eligibility.
+Existing semantic command validation therefore rejects a known-invalid edit
+atomically; this adds no diagram-placement gate or filesystem/network access.
+GeneralizationSet/powertype semantics remain outside these two bounded rules.
+
+The existing Classifier/Slot workflow rejects making an existing parent final,
+keeps inherited Slots usable on a final Component specializing a Class, imports
+and diagnoses an incompatible Interface parent, repairs the model, and reopens
+JSON/Protobuf. No new test function or isolated unit test was added.

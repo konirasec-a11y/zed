@@ -470,6 +470,33 @@ pub fn effective_default(
     Ok(result)
 }
 
+/// Read an authored scalar or its generated inherited default, applying the same
+/// representation/type contract for every consumer. This does not evaluate UML rules.
+pub fn read_effective_scalar(element: ElementRef<'_>, key: &str) -> Result<Value, String> {
+    let metaclass = element.metaclass().ok_or("UML metaclass is missing")?;
+    let descriptor = uml_property(metaclass, key)
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| format!("{metaclass}::{key} contract is missing"))?;
+    let value = if let Some(value) = element.properties().get(key) {
+        value.clone()
+    } else {
+        effective_default(descriptor)
+            .map_err(|error| error.to_string())?
+            .and_then(|default| default.scalar_json())
+            .ok_or_else(|| format!("{metaclass}::{key} has no value or generated default"))?
+    };
+    validate_scalar(descriptor, &value)
+        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())?;
+    Ok(value)
+}
+
+pub fn read_effective_boolean(element: ElementRef<'_>, key: &str) -> Result<bool, String> {
+    read_effective_scalar(element, key)?
+        .as_bool()
+        .ok_or_else(|| format!("{key} requires a Boolean"))
+}
+
 impl DefaultValue {
     pub fn scalar_json(self) -> Option<Value> {
         Some(match self {

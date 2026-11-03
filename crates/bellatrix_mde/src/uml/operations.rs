@@ -36,35 +36,10 @@ pub fn owned_parameters<'a>(
 }
 
 pub fn direction(parameter: &Element) -> Result<String, String> {
-    effective_scalar(ElementRef::Object(parameter), "direction")?
+    schema::read_effective_scalar(ElementRef::Object(parameter), "direction")?
         .as_str()
         .map(str::to_owned)
         .ok_or("invalid Parameter::direction".into())
-}
-
-fn effective_scalar(element: ElementRef<'_>, key: &str) -> Result<Value, String> {
-    let metaclass = element.metaclass().ok_or("UML metaclass is missing")?;
-    let descriptor = schema::uml_property(metaclass, key)
-        .map_err(|error| error.to_string())?
-        .ok_or_else(|| format!("{metaclass}::{key} contract is missing"))?;
-    let value = if let Some(value) = element.properties().get(key) {
-        value.clone()
-    } else {
-        schema::effective_default(descriptor)
-            .map_err(|error| error.to_string())?
-            .and_then(|default| default.scalar_json())
-            .ok_or_else(|| format!("{metaclass}::{key} has no value or generated default"))?
-    };
-    schema::validate_scalar(descriptor, &value)
-        .map_err(|error| error.to_string())?
-        .map_err(|error| error.to_string())?;
-    Ok(value)
-}
-
-pub(crate) fn effective_boolean(element: ElementRef<'_>, key: &str) -> Result<bool, String> {
-    effective_scalar(element, key)?
-        .as_bool()
-        .ok_or_else(|| format!("{key} requires a Boolean"))
 }
 
 pub fn return_parameter<'a>(
@@ -135,8 +110,8 @@ pub fn return_properties(
         });
     };
     Ok(ReturnProperties {
-        is_ordered: effective_boolean(ElementRef::Object(parameter), "isOrdered")?,
-        is_unique: effective_boolean(ElementRef::Object(parameter), "isUnique")?,
+        is_ordered: schema::read_effective_boolean(ElementRef::Object(parameter), "isOrdered")?,
+        is_unique: schema::read_effective_boolean(ElementRef::Object(parameter), "isUnique")?,
         multiplicity: value_specifications::multiplicity(references, ElementRef::Object(parameter))
             .map(Some),
     })
@@ -153,7 +128,7 @@ fn validate_body_condition(
     else {
         return Ok(());
     };
-    if !effective_boolean(operation, "isQuery")? {
+    if !schema::read_effective_boolean(operation, "isQuery")? {
         return Err(
             "Operation::only_body_for_query requires isQuery when bodyCondition is specified"
                 .into(),

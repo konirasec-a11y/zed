@@ -10,6 +10,7 @@ use super::{
     operations,
     references::{ReferenceIndex, reference_id},
     root::ElementRef,
+    schema,
 };
 use serde_json::Value;
 
@@ -30,9 +31,9 @@ fn compare_parameter_signature(
         .map_err(|error| QueryError::invalid(general.id(), error))?;
     let mut checks = vec![Ok(specific_direction == general_direction)];
     for key in ["isOrdered", "isUnique"] {
-        let specific_value = operations::effective_boolean(specific, key)
+        let specific_value = schema::read_effective_boolean(specific, key)
             .map_err(|error| QueryError::invalid(specific.id(), error))?;
-        let general_value = operations::effective_boolean(general, key)
+        let general_value = schema::read_effective_boolean(general, key)
             .map_err(|error| QueryError::invalid(general.id(), error))?;
         checks.push(Ok(specific_value == general_value));
     }

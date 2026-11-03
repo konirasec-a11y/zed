@@ -1013,7 +1013,7 @@
   "executable_consumers": [
     {
       "file": "crates/bellatrix_mde/src/uml/schema.rs",
-      "scope": "Source-qualified inheritance/redefinition queries, inherited defaults, explicitly supplied scalar type and null/cardinality checks; metadata reads for operations/specifications/documentation."
+      "scope": "Source-qualified inheritance/redefinition queries, inherited defaults, shared authored/default scalar readers, explicitly supplied scalar type and null/cardinality checks; metadata reads for operations/specifications/documentation."
     },
     {
       "file": "crates/bellatrix_mde/src/uml/root.rs",
@@ -1069,7 +1069,7 @@
     },
     {
       "file": "crates/bellatrix_mde/src/uml/classifier_hierarchy.rs",
-      "scope": "User-model Classifier ancestry and conformance over canonical Generalization edges, separate from metaclass conformance; cycle detection, identity deduplication and topological ordering shared by Namespace inheritance."
+      "scope": "User-model Classifier ancestry and conformance over canonical Generalization edges, separate from metaclass conformance; cycle detection, identity deduplication and topological ordering shared by Namespace inheritance. Canonical Generalization edges enforce the official metaclass-based maySpecializeType and non-final-parent rules before ancestry consumers use them."
     },
     {
       "file": "crates/bellatrix_mde/src/uml/feature_compatibility.rs",

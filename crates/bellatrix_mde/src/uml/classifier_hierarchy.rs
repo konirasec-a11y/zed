@@ -2,10 +2,38 @@
 // Copyright 2019-2026 Starion Group S.A.
 // Ancestry/conformance patterns adapted from the pinned uml4net ClassifierExtensions.
 // UML 2.5.1 Classifier::allParents and conformsTo govern this user-model query;
-// this is not schema::conforms_to, which compares immutable metaclass descriptors.
+// ancestry differs from immutable metaclass conformance. may_specialize_type below
+// intentionally uses metaclasses, as required by its separate normative predicate.
 
-use super::{classifiers::QueryError, references::ReferenceIndex, root::ElementRef};
+use super::{classifiers::QueryError, references::ReferenceIndex, root::ElementRef, schema};
 use std::collections::{HashMap, HashSet, VecDeque};
+
+/// UML Classifier::maySpecializeType default body: self.oclIsKindOf(c.oclType()).
+/// Unlike user-model conformsTo(), this compares the classifiers' metaclasses.
+/// The pinned UML metamodel declares no specialized override of this operation.
+pub fn may_specialize_type(
+    specific: ElementRef<'_>,
+    general: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let descriptor = |element: ElementRef<'_>| {
+        element
+            .metaclass()
+            .and_then(schema::uml_classifier)
+            .ok_or_else(|| {
+                QueryError::unsupported(element.id(), "Classifier metaclass is not resolved")
+            })
+    };
+    let specific_metaclass = descriptor(specific)?;
+    let general_metaclass = descriptor(general)?;
+    if !specific.conforms_to("Classifier") || !general.conforms_to("Classifier") {
+        return Err(QueryError::invalid(
+            specific.id(),
+            "specialization requires Classifiers",
+        ));
+    }
+    schema::conforms_to(specific_metaclass.id, general_metaclass.id)
+        .map_err(|error| QueryError::unsupported(specific.id(), error.to_string()))
+}
 
 #[derive(Clone, Debug)]
 pub struct ClassifierAncestry<'a> {
@@ -95,6 +123,19 @@ impl<'index, 'model> HierarchyQueries<'index, 'model> {
                         &relation.id,
                         "generalization endpoints must be Classifiers",
                     ));
+                }
+                if !may_specialize_type(classifier, parent)? {
+                    return Err(QueryError::invalid(&relation.id, format!(
+                        "Classifier::specialize_type: {} cannot specialize {} because its metaclass does not conform to the parent's metaclass",
+                        classifier.id(), parent.id(),
+                    )));
+                }
+                if schema::read_effective_boolean(parent, "isFinalSpecialization")
+                    .map_err(|error| QueryError::invalid(parent.id(), error))?
+                {
+                    return Err(QueryError::invalid(&relation.id, format!(
+                        "Classifier::non_final_parents: parent {} is final", parent.id(),
+                    )));
                 }
                 Ok(parent)
             })

@@ -422,6 +422,69 @@ fn slot_owner_transition_uses_one_canonical_edge_through_commands_and_roundtrips
             .iter()
             .any(|feature| feature.id() == "other-feature")
     );
+    // A final leaf still inherits and supplies Slots, but an existing parent
+    // cannot become final while this Generalization remains.
+    reject(
+        &inherited,
+        Command::SetProperty {
+            element_id: "other-class".into(),
+            path: "properties.isFinalSpecialization".into(),
+            value: json!(true),
+        },
+        "non_final_parents",
+    )?;
+    let mut final_component = commands::apply(
+        &inherited,
+        &Command::SetProperty {
+            element_id: "class".into(),
+            path: "properties.isFinalSpecialization".into(),
+            value: json!(true),
+        },
+        7,
+    )?;
+    // Reopen a Component specialization of a Class: compatible metaclass kinds
+    // are broader than identity equality, while instance ancestry is unchanged.
+    final_component
+        .elements
+        .iter_mut()
+        .find(|element| element.id == "class")
+        .ok_or("specific")?
+        .kind = "uml.component".into();
+    final_component = commands::apply(&final_component, &assign(Some("second")), 7)?;
+    assert_eq!(owner_of(&final_component)?, "second");
+    let mut incompatible_kind = final_component.clone();
+    incompatible_kind
+        .elements
+        .iter_mut()
+        .find(|element| element.id == "other-class")
+        .ok_or("parent")?
+        .kind = "uml.interface".into();
+    reject(&incompatible_kind, assign(Some("first")), "specialize_type")?;
+    assert!(
+        validate_structural_model(&incompatible_kind)
+            .iter()
+            .any(|issue| issue.subject_id == "inherits"
+                && issue.message.contains("specialize_type")
+                && issue.severity == StructuralSeverity::Error)
+    );
+    incompatible_kind
+        .elements
+        .iter_mut()
+        .find(|element| element.id == "other-class")
+        .ok_or("parent")?
+        .kind = "uml.class".into();
+    let repaired_kind = commands::apply(&incompatible_kind, &assign(Some("first")), 7)?;
+    for format in [Format::Json, Format::Protobuf] {
+        let reopened = decode(&encode(&repaired_kind, format)?, format)?;
+        let moved = commands::apply(&reopened, &assign(Some("second")), 7)?;
+        assert_eq!(owner_of(&moved)?, "second");
+        assert!(
+            validate_structural_model(&moved)
+                .iter()
+                .all(|issue| issue.severity != StructuralSeverity::Error)
+        );
+    }
+
     for format in [Format::Json, Format::Protobuf] {
         let reopened = decode(&encode(&inherited, format)?, format)?;
         let transferred = commands::apply(&reopened, &assign(Some("second")), 7)?;
