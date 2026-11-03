@@ -4,10 +4,13 @@
 
 Levantamento de 2026-11-03 sobre o commit
 `08f187df53340c6120bdbd2e09b088ee448dd2a7`. Esta é uma matriz inicial de
-obrigações normativas, não um certificado de conformidade. O lote 1 está em
-andamento em paralelo; suas alterações locais não foram usadas para promover
-estados desta matriz. Não foi executado nenhum teste, build de UI ou geração
-de aplicação para elaborar este documento. Não há percentual de cobertura.
+obrigações normativas, não um certificado de conformidade. Atualização do lote 1:
+o commit `62465b699f9ff9e8bd6da5a6aa2cdc1d73c13d53` publica Port::encapsulated_owner
+e as duas invariantes diretas de Component. Essas três linhas foram atualizadas
+com evidência específica; Enumeration e BehavioredClassifier continuam pendentes.
+Nenhum teste novo foi iniciado para elaborar este documento: os resultados
+abaixo foram conferidos em logs de gates já executados. Não há percentual de
+cobertura, build de UI ou geração de aplicação nesta auditoria.
 
 Este documento complementa, sem substituir, [a auditoria semântica](UML_251_SEMANTIC_AUDIT.md)
 e [a auditoria estrutural](UML_251_STRUCTURAL_AUDIT.md). Evidências históricas de
@@ -119,7 +122,8 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
-`crates/bellatrix_mde/tests/`. São pontos de inspeção, não relatórios de execução.
+`crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
+de execução nova. E12/E13 possuem os gates delimitados na seção seguinte.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -162,6 +166,40 @@ Os caminhos de código nesta lista começam em
 - **U01**: `semantics/associations.rs`, final de `validate_association`:
   regras herdadas são verificadas, mas metaclasses especializadas retornam
   Unsupported. `association_specialization_flow.rs` testa a fronteira.
+
+- **E12**: `semantics/classifiers.rs`, `validate_feature_rules` e
+  `contributes_to_owned_union`; `port_ownership.rs`, quatro testes.
+  Owner canônico e papel ownedAttribute definem a projeção de ownedPort.
+  Referências externas preservam não verificado, sem ocultar membro local
+  comprovado ou erro de coleção. Owner ausente satisfaz a igualdade null=null;
+  a regra independente Element::mustBeOwned continua aplicável ao modelo completo.
+- **E13**: `semantics/components.rs`, `validate`, `has_owned_role`,
+  `has_nesting_class` e `has_forbidden_packaged_elements`, chamado pelo passe
+  compartilhado `root.rs::validate_contracts`; `component_constraints.rs`,
+  nove testes. A contribuição ao papel nestedClassifier é distinta de
+  packagedElement, mesmo quando o owner também conforma a Class. Coleções e
+  owners não resolvidos preservam não verificado; consequente vazio pode decidir
+  a implicação verdadeira sem resolver o antecedente. Erros estruturais continuam
+  diagnosticados independentemente do resultado lógico.
+
+### Evidência executada do incremento publicado
+
+Commit de implementação: `62465b699f9ff9e8bd6da5a6aa2cdc1d73c13d53`.
+Foram lidos os logs locais do ambiente de trabalho, sem executar novamente os
+comandos. São referências de investigação, não artefatos versionados duráveis:
+
+- `/tmp/structural-owner-component-gate.log`: **33/33 aprovados**, distribuídos
+  em Port ownership 4, aggregation 3, defaultValue 6, API 4,
+  ownership/namespace 4, inherited capabilities 5 e Component constraints 7.
+- `/tmp/component-constraints-final.log`: **9/9 Component aprovados** depois
+  das ampliações posteriores de testes e decisão trivalente.
+
+O primeiro gate antecede as ampliações finais de Component; não é um gate de
+33 testes repetido sobre o SHA final. O segundo comprova o alvo Component final,
+sem converter os gates em suíte integral ou conformidade UML. As três linhas
+ficam P: contratos executados no recorte canônico suportado, com fronteiras
+não verificadas preservadas. O estado publicado não elimina a necessidade de
+fechar as demais obrigações e seus testes individuais.
 
 ## Inventário por xmi:id
 
@@ -623,12 +661,12 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `Component-no_nested_classifiers`
 
-- Metaclass: `Component`. Estado: **L1**. Evidência: lote 1; não promover antes do gate final.
+- Metaclass: `Component`. Estado: **P**. Evidência: E13; commit `62465b699f9ff9e8bd6da5a6aa2cdc1d73c13d53`.
 - OCL publicado: `nestedClassifier->isEmpty()`.
 
 #### `Component-no_packaged_elements`
 
-- Metaclass: `Component`. Estado: **L1**. Evidência: lote 1; não promover antes do gate final.
+- Metaclass: `Component`. Estado: **P**. Evidência: E13; commit `62465b699f9ff9e8bd6da5a6aa2cdc1d73c13d53`.
 - OCL publicado: `nestingClass <> null implies packagedElement->isEmpty()`.
 
 #### `Connector-types`
@@ -673,7 +711,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `Port-encapsulated_owner`
 
-- Metaclass: `Port`. Estado: **L1**. Evidência: lote 1; não promover antes do gate final.
+- Metaclass: `Port`. Estado: **P**. Evidência: E12; commit `62465b699f9ff9e8bd6da5a6aa2cdc1d73c13d53`.
 - OCL publicado: `owner = encapsulatedClassifier`.
 
 ### Packages: 14 invariantes diretas
@@ -841,7 +879,11 @@ operações necessários à prova, sem somá-los como invariantes extras. Verifi
 multiplicidades, subsets, redefines e uniões derivadas separadamente. Não usar
 contagem de testes nem de descritores como cobertura normativa.
 
-### Lote 1: ownership e predicados locais, em andamento
+### Lote 1: ownership e predicados locais, fechamento parcial publicado
+
+Port e as duas regras de Component já têm implementação e gates descritos em
+E12/E13. Os itens abaixo registram o contrato e o trabalho restante; itens 4 e 5
+continuam pendentes. Não tratar este lote inteiro como concluído.
 
 1. `Port-encapsulated_owner`: derivar encapsulatedClassifier a partir do owner
    e dos papéis canônicos; não confiar numa cópia armazenada da inversa.
