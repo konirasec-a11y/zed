@@ -84,6 +84,23 @@ def check() -> None:
                 assert include.is_file(), f"Unresolved include in {path}: {item.group(1)}"
                 includes += 1
 
+    # RightClickMenu inserts an auto-height layout node: size_full on its trigger
+    # alone collapses figures to their title or zero when children are absolute.
+    workbench = (ROOT / "crates/bellatrix_mde_workbench/src/lib.rs").read_text(encoding="utf-8")
+    figure_trigger = re.search(
+        r'ui::right_click_menu\(format!\("mde-view-menu-.*?\.trigger\(move \|_, _, _\| \{(.*?)\}\)',
+        workbench,
+        re.DOTALL,
+    )
+    assert figure_trigger, "Diagram figure menu trigger must have explicit layout"
+    trigger = figure_trigger.group(1)
+    assert ".w(px(local_width * zoom))" in trigger
+    assert ".h(px(local_height * zoom))" in trigger
+    assert ".child(figure)" in trigger
+    for filename in ["class.rs", "figures.rs", "interface.rs"]:
+        renderer = (ROOT / "crates/bellatrix_ui_uml/src" / filename).read_text(encoding="utf-8")
+        assert "palette.diagram_outline(" in renderer, filename
+
     zed_main = (ROOT / "crates/zed/src/main.rs").read_text(encoding="utf-8")
     assert "initialize_workspace(app_state.clone(), cx);" in zed_main
     assert "bellatrix_zed_host::install(cx).log_err();" in zed_main

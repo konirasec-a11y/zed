@@ -97,11 +97,7 @@ fn paint_folded_paper(
             bounds.origin.y + px(position.y as f32 * scale),
         )
     });
-    let stroke = rgb(if selected {
-        palette.selection
-    } else {
-        palette.text
-    });
+    let stroke = rgb(palette.diagram_outline(selected));
     let mut fill = PathBuilder::fill();
     fill.add_polygon(&outline, true);
     match fill.build() {
@@ -121,11 +117,7 @@ impl RenderOnce for UmlFigure {
         let palette = Palette::current(cx);
         let scale = self.scale;
         let selected = self.selected;
-        let border = rgb(if selected {
-            palette.selection
-        } else {
-            palette.border
-        });
+        let border = rgb(palette.diagram_outline(selected));
         let title: gpui::AnyElement = if let Some((field, confirm, cancel)) = self.editor {
             UmlInlineNameEditor::new(
                 field,
@@ -300,11 +292,12 @@ impl RenderOnce for UmlFigure {
                             .left_0()
                             .right_0()
                             .bottom(px(22.0 * scale))
-                            .child(svg().data(DIAMOND).size_full().text_color(rgb(if selected {
-                                palette.selection
-                            } else {
-                                palette.text
-                            }))),
+                            .child(
+                                svg()
+                                    .data(DIAMOND)
+                                    .size_full()
+                                    .text_color(rgb(palette.diagram_outline(selected))),
+                            ),
                     )
                     .child(
                         div()

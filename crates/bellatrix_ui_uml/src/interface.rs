@@ -47,11 +47,7 @@ impl RenderOnce for UmlInterfaceBall {
                 .into_any_element(),
         };
         let edit_title = classifier.edit_title;
-        let stroke = rgb(if classifier.selected {
-            palette.selection
-        } else {
-            palette.text
-        });
+        let stroke = rgb(palette.diagram_outline(classifier.selected));
         div()
             .size_full()
             .relative()

@@ -291,11 +291,7 @@ impl RenderOnce for UmlClassifier {
             return UmlInterfaceBall::new(self).into_any_element();
         }
         let palette = Palette::current(cx);
-        let line = rgb(if self.selected {
-            palette.selection
-        } else {
-            palette.border
-        });
+        let line = rgb(palette.diagram_outline(self.selected));
         let interactions = self.member_interactions();
         let scale = self.view_scale;
         let title_editor = self.editing.as_ref().and_then(|(subject, field)| {

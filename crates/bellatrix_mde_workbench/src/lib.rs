@@ -1608,7 +1608,14 @@ impl Render for MdeWorkbenchItem {
                                 )
                                 .child(
                                     ui::right_click_menu(format!("mde-view-menu-{}", view.id))
-                                        .trigger(move |_, _, _| figure)
+                                        .trigger(move |_, _, _| {
+                                            // The menu's auto-height layout cannot resolve the
+                                            // figure's percentage height from the outer card.
+                                            div()
+                                                .w(px(local_width * zoom))
+                                                .h(px(local_height * zoom))
+                                                .child(figure)
+                                        })
                                         .menu(move |window, cx| {
                                             Self::view_context_menu(
                                                 menu_owner.clone(),

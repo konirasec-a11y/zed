@@ -52,6 +52,15 @@ impl Palette {
         }
     }
 
+    /// Diagram silhouettes need foreground contrast, unlike subtle UI separators.
+    pub const fn diagram_outline(self, selected: bool) -> u32 {
+        if selected {
+            self.selection
+        } else {
+            self.text
+        }
+    }
+
     pub const fn for_mode(mode: ThemeMode) -> Self {
         match mode {
             ThemeMode::Dark => Self {
@@ -164,6 +173,34 @@ mod tests {
             assert_ne!(p.accent, p.selected);
             assert_ne!(p.selection, p.selected);
         }
+    }
+
+    #[test]
+    fn diagram_outlines_contrast_with_canvas_and_fills() {
+        for mode in [ThemeMode::Dark, ThemeMode::Light] {
+            let palette = Palette::for_mode(mode);
+            for selected in [false, true] {
+                let outline = luminance(palette.diagram_outline(selected));
+                for background in [palette.canvas, palette.panel, palette.panel_alt] {
+                    let background = luminance(background);
+                    let ratio = (outline.max(background) + 0.05) / (outline.min(background) + 0.05);
+                    assert!(ratio >= 3.0, "{mode:?}, selected={selected}: {ratio}");
+                }
+            }
+            assert_eq!(palette.diagram_outline(false), palette.text);
+            assert_eq!(palette.diagram_outline(true), palette.selection);
+        }
+    }
+
+    #[test]
+    fn diagram_outlines_follow_theme_foreground_and_selection() {
+        let palette = Palette {
+            text: 0x123456,
+            selection: 0xabcdef,
+            ..Palette::for_mode(ThemeMode::Dark)
+        };
+        assert_eq!(palette.diagram_outline(false), 0x123456);
+        assert_eq!(palette.diagram_outline(true), 0xabcdef);
     }
 
     #[test]
