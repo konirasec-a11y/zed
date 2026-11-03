@@ -97,6 +97,8 @@ pub fn check_value(
         Err(error) => return Unverified(error.to_string()),
     };
     let mut seen = HashSet::new();
+    let mut unverified = None;
+    // An unresolved member cannot hide a violation proved by another member.
     for (position, value) in values.iter().enumerate() {
         if value.is_null() {
             return Violation(format!("value[{position}] cannot be null"));
@@ -105,17 +107,22 @@ pub fn check_value(
             match schema::validate_scalar(&member, value) {
                 Ok(Ok(())) => {}
                 Ok(Err(error)) => return Violation(format!("value[{position}]: {error}")),
-                Err(error) => return Unverified(error.to_string()),
+                Err(error) => {
+                    unverified.get_or_insert_with(|| error.to_string());
+                    continue;
+                }
             }
             scalar_identity(kind, value)
         } else {
             // Historical free-form declarations must remain editable as drafts,
             // but they are not resolved to Type identities by matching names.
             if schema::uses_legacy_text_adapter(&member, value) {
-                return Unverified("text declaration is not a resolved UML reference".into());
+                unverified.get_or_insert_with(|| "text declaration is not a resolved UML reference".into());
+                continue;
             }
             if value.as_object().is_some_and(|object| object.contains_key("href")) {
-                return Unverified("external model reference has no loaded document resolver".into());
+                unverified.get_or_insert_with(|| "external model reference has no loaded document resolver".into());
+                continue;
             }
             let id = match reference_id(value) {
                 Ok(Some(id)) => id,
@@ -126,16 +133,21 @@ pub fn check_value(
                 Ok(target) => target,
                 Err(error) => return Violation(error),
             };
-            let Some(required) = property.property_type.target.and_then(schema::classifier) else {
-                return Unverified("normative reference Type is unresolved".into());
-            };
-            let Some(actual) = target.metaclass().and_then(schema::uml_classifier) else {
-                return Unverified(format!("{id} has no supported UML metaclass"));
-            };
-            match schema::conforms_to(actual.id, required.id) {
-                Ok(true) => {}
-                Ok(false) => return Violation(format!("{id} must conform to UML {}", required.name)),
-                Err(error) => return Unverified(error.to_string()),
+            match (
+                property.property_type.target.and_then(schema::classifier),
+                target.metaclass().and_then(schema::uml_classifier),
+            ) {
+                (Some(required), Some(actual)) => match schema::conforms_to(actual.id, required.id) {
+                    Ok(true) => {}
+                    Ok(false) => return Violation(format!("{id} must conform to UML {}", required.name)),
+                    Err(error) => { unverified.get_or_insert_with(|| error.to_string()); }
+                },
+                (None, _) => {
+                    unverified.get_or_insert_with(|| "normative reference Type is unresolved".into());
+                }
+                (_, None) => {
+                    unverified.get_or_insert_with(|| format!("{id} has no supported UML metaclass"));
+                }
             }
             if property.aggregation == Aggregation::Composite {
                 match references.model().owner(target) {
@@ -152,7 +164,7 @@ pub fn check_value(
             return Violation(format!("duplicate value at index {position}; isUnique is true"));
         }
     }
-    Satisfied
+    unverified.map_or(Satisfied, Unverified)
 }
 
 fn scalar_identity(kind: ScalarKind, value: &Value) -> String {
