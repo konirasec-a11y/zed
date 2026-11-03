@@ -69,6 +69,9 @@ têm recortes publicados em `4da8a8c77c50c0b8876d22eff794f5b8200b16d7`
 Stereotype::base_property_upper_bound e Classifier::maps_to_generalization_set
 têm recortes publicados em `497f200eb443bdbaaf6ea6cd14ac0630c5ed6390`
 (E56/E57).
+RedefinableTemplateSignature::redefines_parents e Property::subsetted_property_names
+têm recortes publicados em `9b71a3146ce4c7e28b8734439e9fd0c9a60cf6ef`
+(E58/E59).
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -184,7 +187,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E57 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E59 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -852,6 +855,66 @@ de execução nova. E12–E57 possuem os gates delimitados nas seções seguinte
   `MDE_CLASSIFIER_POWERTYPE_EXTENT_UNVERIFIED`. É o recorte do snapshot local,
   não resolução geral de modelos externos, isCovering/isDisjoint ou
   certificação integral de GeneralizationSet.
+
+- **E58**: `semantics/templates.rs`, `signature_redefines_parents` e
+  `validate_bindings`; `template_signature_redefines_parents.rs`, catorze
+  testes. Deriva classifier do owner canônico e exige as assinaturas dos
+  ancestrais estritos em closure(extendedSignature), incluindo caminhos
+  transitivos. classifier/template e ownedTemplateSignature armazenados não
+  substituem ownership; contradições comprovadas e multiplicidade inválida
+  são erros. Ancestral sem assinatura e ancestralidade vazia satisfazem por
+  vacuidade, sem ocultar extendedSignature malformado. Closure com ciclo
+  termina por identidades visitadas; isso não certifica outras restrições de
+  ciclos de templates. Ciclos de herança de Classifier continuam inválidos.
+  Ramo externo da closure não prova ausência de assinatura requerida; witness
+  local pode provar inclusão, mas ancestralidade incompleta permanece unknown
+  onde necessário. Ausência local comprovada vence outro ramo desconhecido;
+  metaclasse de filho não resolvida não vira falsa contradição de inversa.
+  Diagnósticos: `UML_TEMPLATE_SIGNATURE_REDEFINES_PARENTS`,
+  `MDE_TEMPLATE_SIGNATURE_REDEFINES_PARENTS_INVALID` e
+  `MDE_TEMPLATE_SIGNATURE_REDEFINES_PARENTS_UNVERIFIED`. Não certifica
+  compatibilidade completa, merge de parâmetros ou todas as regras herdadas.
+
+- **E59**: `semantics/property_subsetting.rs`, `subsetted_property_names` e
+  `validate`; `property_subsetted_names.rs`, sete testes. O predicado dedicado
+  compara nomes de Properties resolvidas, independentemente de tipo, contexto
+  ou upper bound. Comparação sensível a maiúsculas; dois nomes ausentes são
+  iguais, não nomes inventados. Coleção omitida/vazia satisfaz por vacuidade;
+  null, duplicatas e referências inválidas continuam erros de contrato.
+  Igualdade local conhecida decide violação com vizinho externo em ambas as
+  ordens. Metaclasse local desconhecida mantém Unknown, sem transformar texto
+  de editor em nome UML nem assumir null. Aplica-se também às especializações
+  de Property. Diagnósticos: `UML_PROPERTY_SUBSETTED_PROPERTY_NAMES`,
+  `MDE_PROPERTY_SUBSETTED_PROPERTY_NAMES_INVALID` e
+  `MDE_PROPERTY_SUBSETTED_PROPERTY_NAMES_UNVERIFIED`.
+  O agregado legado `subsetting_diagnostic` continua ativo e usa
+  `resolve_subsetted_properties`/`validate_many`: pode emitir erro
+  `UML_PROPERTY_SUBSETTING` para metaclasse local desconhecida enquanto o
+  predicado dedicado preserva Unknown. Essa inconsistência não foi corrigida
+  neste incremento; o gate focado não prova coerência do relatório agregado
+  nem fechamento integral dos contratos de subsetting.
+
+### Evidência publicada de ancestrais de assinatura e nomes de subsets
+
+Commit inspecionado: `9b71a3146ce4c7e28b8734439e9fd0c9a60cf6ef`.
+Logs finais lidos:
+
+- `/tmp/signature-redefines-parents.log`: **48/48 aprovados**,
+  template_signature_redefines_parents 14, named_element_qualified_name 13 e
+  template_signatures 21.
+- `/tmp/property-subsetted-names-related-gate.log`: **174/174 aprovados**,
+  161 lib e 13 integrações (property_subsetted_names 7, graph_rules 2 e
+  kernel_api_validation 4).
+
+As duas linhas ficam **P/E58–E59**. Os testes de assinatura incluem fechamento
+transitivo/diamante/ciclo, referências externas, projeções contraditórias,
+reparo de snapshot e revalidação sem cache persistente. Os de nomes incluem
+modelos com/sem raiz, roundtrip, vacuidade, Unknown e precedência de
+malformados/igualdade local. Permanece a inconsistência do agregado legado
+explicitada em E59. Gates anteriores à publicação, sem rerun no SHA publicado
+nem execução nova por esta matriz; repetições do gate focado de nomes não são
+somadas como cobertura. Não certificam suíte integral, UI, geração,
+interchange ou conformidade UML completa.
 
 ### Evidência publicada de bases de Stereotype e powertypeExtent
 
@@ -1881,7 +1944,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `Property-subsetted_property_names`
 
-- Metaclass: `Property`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `Property`. Estado: **P**. Evidência: E59; commit `9b71a3146ce4c7e28b8734439e9fd0c9a60cf6ef`.
 - OCL publicado: `subsettedProperty->forAll(sp | sp.name <> name)`.
 
 #### `Property-type_of_opposite_end`
@@ -1911,7 +1974,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `RedefinableTemplateSignature-redefines_parents`
 
-- Metaclass: `RedefinableTemplateSignature`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `RedefinableTemplateSignature`. Estado: **P**. Evidência: E58; commit `9b71a3146ce4c7e28b8734439e9fd0c9a60cf6ef`.
 - OCL publicado: `classifier.allParents()->forAll(c | c.ownedTemplateSignature->notEmpty() implies self->closure(extendedSignature)->includes(c.ownedTemplateSignature))`.
 
 ### SimpleClassifiers: 5 invariantes diretas

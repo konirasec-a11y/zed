@@ -17,6 +17,12 @@ pub fn resolve_feature_type<'a>(
     references: &ReferenceIndex<'a>,
     element: ElementRef<'a>,
 ) -> Result<ElementRef<'a>, QueryError> {
+    if element.metaclass().is_none() {
+        return Err(QueryError::unsupported(
+            element.id(),
+            "TypedElement metaclass is unresolved",
+        ));
+    }
     if !element.conforms_to("TypedElement") {
         return Err(QueryError::invalid(
             element.id(),
@@ -36,13 +42,24 @@ pub fn resolve_feature_type<'a>(
         ));
     }
     let value = element.properties().get("type").unwrap_or(&Value::Null);
-    if value.is_string() || external_reference_href(value)
-        .map_err(|error| QueryError::invalid(element.id(), error))?.is_some()
+    if value.is_string()
+        || external_reference_href(value)
+            .map_err(|error| QueryError::invalid(element.id(), error))?
+            .is_some()
     {
         return Err(QueryError::unsupported(
             element.id(),
             "authored Type text and external Types cannot establish local Type conformance",
         ));
+    }
+    match super::property_contracts::check_value(references, element, descriptor, value) {
+        super::property_contracts::PropertyOutcome::Satisfied => {}
+        super::property_contracts::PropertyOutcome::Violation(message) => {
+            return Err(QueryError::invalid(element.id(), message));
+        }
+        super::property_contracts::PropertyOutcome::Unverified(message) => {
+            return Err(QueryError::unsupported(element.id(), message));
+        }
     }
     references
         .validate(descriptor, value)
@@ -60,11 +77,14 @@ pub fn compare_type_conformance(
     specific: ElementRef<'_>,
     general: ElementRef<'_>,
 ) -> Result<bool, QueryError> {
-    compare_resolved_types(
-        references,
-        resolve_feature_type(references, specific)?,
-        resolve_feature_type(references, general)?,
-    )
+    let specific = resolve_feature_type(references, specific);
+    let general = resolve_feature_type(references, general);
+    for result in [&specific, &general] {
+        if let Err(error @ QueryError::Invalid { .. }) = result {
+            return Err(error.clone());
+        }
+    }
+    compare_resolved_types(references, specific?, general?)
 }
 
 /// User-model Type conformance, not schema/metaclass conformance.
@@ -73,10 +93,19 @@ pub fn compare_resolved_types(
     specific: ElementRef<'_>,
     general: ElementRef<'_>,
 ) -> Result<bool, QueryError> {
-    if !specific.conforms_to("Type") || !general.conforms_to("Type") {
+    if [specific, general]
+        .iter()
+        .any(|element| element.metaclass().is_some() && !element.conforms_to("Type"))
+    {
         return Err(QueryError::invalid(
             specific.id(),
             "conformance comparison requires Types",
+        ));
+    }
+    if specific.metaclass().is_none() || general.metaclass().is_none() {
+        return Err(QueryError::unsupported(
+            specific.id(),
+            "Type metaclass is unresolved",
         ));
     }
     if specific.conforms_to("Classifier") {

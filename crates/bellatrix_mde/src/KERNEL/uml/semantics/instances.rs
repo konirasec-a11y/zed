@@ -268,6 +268,111 @@ fn validate_assignment_with<'a>(
     ))
 }
 
+fn instance_reference_evidence<'a>(
+    references: &ReferenceIndex<'a>,
+    owner: ElementRef<'a>,
+    metaclass: &str,
+    property: &str,
+    value: &Value,
+) -> Result<(Vec<ElementRef<'a>>, bool), QueryError> {
+    let descriptor = schema::uml_property(metaclass, property)
+        .map_err(|error| QueryError::unsupported(owner.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(owner.id(), "instance property contract is unavailable"))?;
+    match super::property_contracts::check_value(references, owner, descriptor, value) {
+        super::property_contracts::PropertyOutcome::Violation(message) => return Err(QueryError::invalid(owner.id(), message)),
+        _ => {}
+    }
+    let values = if matches!(descriptor.upper, "0" | "1") {
+        std::slice::from_ref(value)
+    } else {
+        value.as_array().ok_or_else(|| QueryError::invalid(owner.id(), "reference collection must be an array"))?
+    };
+    let mut known = Vec::new();
+    let mut unknown = false;
+    for value in values {
+        if super::references::external_reference_href(value)
+            .map_err(|error| QueryError::invalid(owner.id(), error))?.is_some()
+        {
+            unknown = true;
+        } else if let Some(id) = reference_id(value).map_err(|error| QueryError::invalid(owner.id(), error))? {
+            let target = references.element(id).map_err(|error| QueryError::invalid(owner.id(), error))?;
+            unknown |= target.metaclass().is_none();
+            known.push(target);
+        }
+    }
+    Ok((known, unknown))
+}
+
+fn slottable_membership(
+    references: &ReferenceIndex<'_>, classifier: ElementRef<'_>, feature_id: &str,
+) -> Result<bool, QueryError> {
+    let complete = classifiers::query(references, classifier.id()).and_then(|query| {
+        query.classifier.ok_or_else(|| QueryError::unsupported(classifier.id(), "Classifier query is unresolved"))?
+            .all_slottable_features
+    });
+    match complete {
+        Ok(features) => Ok(features.iter().any(|feature| feature.id() == feature_id)),
+        Err(error @ QueryError::Invalid { .. }) => Err(error),
+        Err(error) => match classifiers::has_feature(references, classifier.id(), feature_id) {
+            // A known StructuralFeature in allFeatures is also in member and
+            // therefore allSlottableFeatures. Do not infer the converse.
+            Ok(true) => Ok(true),
+            Err(error @ QueryError::Invalid { .. }) => Err(error),
+            _ => Err(error),
+        },
+    }
+}
+
+fn instance_structural_feature(
+    references: &ReferenceIndex<'_>, instance: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let instance = references.element(instance.id())
+        .map_err(|error| QueryError::invalid(instance.id(), error))?;
+    let classifier_value = instance.properties().get("classifier").cloned().unwrap_or_else(|| serde_json::json!([]));
+    let (classifiers, unknown_classifier) = instance_reference_evidence(references, instance, "InstanceSpecification", "classifier", &classifier_value)?;
+    let children = references.explicit_owned_elements(instance.id())
+        .map_err(|error| QueryError::invalid(instance.id(), error))?;
+    let slots = children.iter().copied().filter(|child| child.conforms_to("Slot")).collect::<Vec<_>>();
+    let mut unknown_slot = children.iter().any(|child| child.metaclass().is_none());
+    if let Some(value) = instance.properties().get("slot") {
+        let (authored, unknown) = instance_reference_evidence(references, instance, "InstanceSpecification", "slot", value)?;
+        unknown_slot |= unknown;
+        let authored_ids = authored.iter().map(|slot| slot.id()).collect::<HashSet<_>>();
+        if !unknown && slots.iter().any(|slot| !authored_ids.contains(slot.id())) {
+            return Err(QueryError::invalid(instance.id(), "slot projection omits canonical owned Slots"));
+        }
+    }
+    let mut counts = std::collections::BTreeMap::<String, usize>::new();
+    let mut unknown_feature = false;
+    for slot in &slots {
+        let value = slot.properties().get("definingFeature").unwrap_or(&Value::Null);
+        let (features, unknown) = instance_reference_evidence(references, *slot, "Slot", "definingFeature", value)?;
+        unknown_feature |= unknown;
+        for feature in features {
+            *counts.entry(feature.id().to_owned()).or_default() += 1;
+        }
+    }
+    // The rule counts Slots only, not their values. Known singleton collections
+    // and an empty classifier collection satisfy the quantification directly.
+    if classifiers.is_empty() && !unknown_classifier
+        || slots.len() <= 1 && !unknown_slot
+        || !unknown_slot && !unknown_feature && counts.values().all(|count| *count <= 1)
+    {
+        return Ok(true);
+    }
+    let mut checks = Vec::new();
+    if unknown_slot || unknown_feature || unknown_classifier {
+        checks.push(Err(QueryError::unsupported(instance.id(), "unresolved Slot, definingFeature or classifier may affect duplicate feature counts")));
+    }
+    for (feature_id, count) in counts {
+        if count <= 1 { continue; }
+        for classifier in &classifiers {
+            checks.push(slottable_membership(references, *classifier, &feature_id).map(|member| !member));
+        }
+    }
+    super::feature_compatibility::require_all(checks)
+}
+
 pub(crate) fn validate<'a>(
     model: Model<'a>,
     references: &ReferenceIndex<'a>,
@@ -292,6 +397,18 @@ pub(crate) fn validate<'a>(
                 })
         })
         .collect();
+    for instance in model.elements().filter_map(InstanceSpecificationRef::from_element) {
+        let outcome = match instance_structural_feature(references, instance.0) {
+            Ok(true) => None,
+            Ok(false) => Some((StructuralSeverity::Error, "UML_INSTANCE_STRUCTURAL_FEATURE", "each slottable feature may define at most one owned Slot".to_owned())),
+            Err(QueryError::Invalid { message, .. }) => Some((StructuralSeverity::Error, "MDE_INSTANCE_STRUCTURAL_FEATURE_INVALID", message)),
+            Err(QueryError::Unsupported { message, .. }) => Some((StructuralSeverity::Warning, "MDE_INSTANCE_STRUCTURAL_FEATURE_UNVERIFIED", message)),
+        };
+        if let Some((severity, code, message)) = outcome {
+            issues.push(StructuralDiagnostic { severity, code, subject_id: instance.id().into(),
+                message: format!("InstanceSpecification-structural_feature: {message}") });
+        }
+    }
     issues.extend(
         model
             .elements()
