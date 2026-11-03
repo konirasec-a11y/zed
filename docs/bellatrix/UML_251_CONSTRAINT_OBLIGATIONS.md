@@ -43,6 +43,8 @@ GeneralizationSet::generalization_same_classifier e StringExpression::operands
 têm recortes publicados em `b28872967fda3c9701e05c2f77fc772918f7a1fc` (E34/E35).
 Powertype de GeneralizationSet e cardinalidade de TimeConstraint/DurationConstraint
 têm recortes publicados em `76f4563735961a4e514d98be8f6e6593669840a7` (E36/E37).
+TemplateBinding::parameter_substitution_formal e DurationConstraint::first_event_multiplicity
+têm recortes publicados em `0fbaa23586648af57205b52e883795810674af77` (E38/E39).
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -158,7 +160,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E37 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E39 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -539,6 +541,61 @@ de execução nova. E12–E37 possuem os gates delimitados nas seções seguinte
   prova violação mesmo com identidade externa. Não infere constrainedElement
   de ownership, inversas ou campos visuais.
 
+- **E38**: `semantics/templates.rs`, `template_reference_evidence`,
+  `binding_formals` e `validate_bindings`, integrado ao passe comum em root.rs;
+  `template_binding_formal.rs`, treze testes. Cada formal das substituições
+  precisa pertencer por identidade a signature.parameter. Projeções precisam
+  estar materializadas; ownership, endpoint ou inversa não inventam lista
+  completa. Signature local armazenada deve concordar com o target canônico
+  do TemplateBinding relacional, mesmo com metaclasse desconhecida. Inclusão
+  local conhecida pode ser provada ao lado de membro externo; exclusão exige
+  lista completa. Metaclasse indefinida não elimina identidade conhecida,
+  enquanto o contrato de propriedades mantém sua incerteza de tipo separada.
+  Substituições comprovadamente vazias tornam o forAll verdadeiro sem resolver
+  signature. Malformados continuam erros ao lado de unknown/exclusão conhecida.
+  Diagnósticos: `UML_TEMPLATE_BINDING_FORMAL`,
+  `MDE_TEMPLATE_BINDING_FORMAL_INVALID` e `MDE_TEMPLATE_BINDING_FORMAL_UNVERIFIED`.
+
+- **E39**: `semantics/value_specifications.rs`,
+  `duration_first_event_multiplicity` e `validate`; `duration_first_event.rs`,
+  sete testes. Exige dois firstEvent quando constrainedElement tem tamanho 2,
+  e zero nos demais casos. Papéis ausentes são tratados como coleções vazias
+  para essa regra; a cardinalidade independente de DurationConstraint continua
+  aplicável. Valida as duas coleções, incluindo forma booleana e unicidade de
+  firstEvent, sem confundir null/escalar com vazio. Contagem incorreta é decisiva
+  diante de referência externa; contagem correta não resolve referências
+  desconhecidas nem oculta malformados. Diagnósticos:
+  `UML_DURATION_CONSTRAINT_FIRST_EVENT` e
+  `MDE_DURATION_CONSTRAINT_FIRST_EVENT_UNVERIFIED`.
+
+### Evidência publicada de TemplateBinding e DurationConstraint::firstEvent
+
+Commit inspecionado: `0fbaa23586648af57205b52e883795810674af77`.
+Logs finais lidos:
+
+- `/tmp/template-binding-gate-final.log`: **45/45 aprovados**,
+  operation_template_default 11, template_binding_formal 13 e
+  template_signatures 21.
+- `/tmp/duration-first-event-final.log`: **183/183 aprovados**,
+  160 testes lib e 23 integrações (duration_first_event 7,
+  string_expression_operands 8 e time_constraint_cardinality 8).
+
+TemplateBinding cobre rooted/draft, inclusão/exclusão por identidade, projeções
+não materializadas, referências externas, metaclasses desconhecidas, contradição
+com target canônico, malformados em ambas as ordens, reabertura e reparo de
+snapshot. DurationConstraint cobre condições de cardinalidade, formas
+booleanas, duplicatas, referência externa e exclusão atômica que preserva o
+modelo. A edição direta de firstEvent continua **read-only no adapter**;
+rejeição sem mutação não é evidência de autoria suportada dessa propriedade.
+
+As linhas ficam **P/E38–E39**. Não certificam one_parameter_substitution,
+validade dos argumentos actual, todas as projeções de templates, firstEvent de
+DurationObservation ou avaliação temporal em runtime. Os gates precedem a
+publicação, não são reruns sobre o SHA remoto nem execução nova pela matriz.
+Lib completa com integrações selecionadas não significa suíte integral;
+não somar novamente alvos repetidos como cobertura normativa. UI, geração e
+autoria integral continuam eixos separados.
+
 ### Evidência publicada de powertype e cardinalidade temporal
 
 Commit inspecionado: `76f4563735961a4e514d98be8f6e6593669840a7`.
@@ -559,8 +616,9 @@ unknowns, vazio explícito e reparo de snapshot. Cardinalidade cobre ausência,
 tamanhos válidos/inválidos, null/escalar, duplicatas, metaclasse local indefinida,
 referências externas, roundtrip e rejeição atômica ao excluir o único elemento.
 As três linhas ficam **P/E36–E37**. Não certificam Classifier::maps_to_generalization_set,
-isCovering/isDisjoint, DurationConstraint::first_event_multiplicity, avaliação
-de intervalos, observações ou semântica temporal em runtime.
+isCovering/isDisjoint ou avaliação de intervalos;
+DurationConstraint::first_event_multiplicity tem recorte posterior em E39.
+Esses gates não certificam observações ou semântica temporal em runtime.
 
 Gates executados antes da publicação, sem rerun no SHA remoto e sem novos testes
 pela matriz. A suíte lib mais integrações selecionadas não cobre todos os alvos;
@@ -1095,7 +1153,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `TemplateBinding-parameter_substitution_formal`
 
-- Metaclass: `TemplateBinding`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `TemplateBinding`. Estado: **P**. Evidência: E38; commit `0fbaa23586648af57205b52e883795810674af77`.
 - OCL publicado: `parameterSubstitution->forAll(b | signature.parameter->includes(b.formal))`.
 
 #### `TemplateBinding-one_parameter_substitution`
@@ -1603,7 +1661,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `DurationConstraint-first_event_multiplicity`
 
-- Metaclass: `DurationConstraint`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `DurationConstraint`. Estado: **P**. Evidência: E39; commit `0fbaa23586648af57205b52e883795810674af77`.
 - OCL publicado: `if (constrainedElement->size() = 2) then (firstEvent->size() = 2) else (firstEvent->size() = 0) endif`.
 
 #### `DurationConstraint-has_one_or_two_constrainedElements`

@@ -162,6 +162,7 @@ fn issue(code: &'static str, subject: &str, message: &str) -> StructuralDiagnost
 struct TemplateReferenceEvidence<'a> {
     known: Vec<crate::uml::root::ElementRef<'a>>,
     unknown: bool,
+    cardinality: Option<usize>,
 }
 
 fn template_reference_evidence<'a>(
@@ -227,7 +228,136 @@ fn template_reference_evidence<'a>(
             );
         }
     }
-    Ok(TemplateReferenceEvidence { known, unknown })
+    Ok(TemplateReferenceEvidence {
+        known,
+        unknown,
+        cardinality: Some(values.len()),
+    })
+}
+
+fn binding_signature_parameters<'a>(
+    references: &crate::uml::references::ReferenceIndex<'a>,
+    binding: crate::uml::root::ElementRef<'a>,
+) -> Result<TemplateReferenceEvidence<'a>, crate::uml::classifiers::QueryError> {
+    use crate::uml::classifiers::QueryError;
+    let unknown = || {
+        QueryError::unsupported(
+            binding.id(),
+            "TemplateBinding signature is not fully resolved",
+        )
+    };
+    let signature = template_reference_evidence(references, binding, "signature")?;
+    let signature = signature.known.first().copied().ok_or_else(unknown)?;
+    // A local target contradiction is decidable before metaclass resolution.
+    if let crate::uml::root::ElementRef::Relationship(relation) = binding
+        && signature.id() != relation.to
+    {
+        return Err(QueryError::invalid(
+            binding.id(),
+            "signature projection contradicts the canonical TemplateBinding target",
+        ));
+    }
+    if !signature.conforms_to("TemplateSignature") {
+        return Err(unknown());
+    }
+    template_reference_evidence(references, signature, "parameter")
+}
+
+fn binding_unique_substitutions(
+    references: &crate::uml::references::ReferenceIndex<'_>,
+    binding: crate::uml::root::ElementRef<'_>,
+) -> Result<bool, crate::uml::classifiers::QueryError> {
+    use crate::uml::classifiers::QueryError;
+    let unknown = || {
+        QueryError::unsupported(
+            binding.id(),
+            "TemplateBinding substitution counts are not fully resolved",
+        )
+    };
+    let substitutions =
+        match template_reference_evidence(references, binding, "parameterSubstitution") {
+            Ok(substitutions) => substitutions,
+            Err(error @ QueryError::Invalid { .. }) => return Err(error),
+            Err(QueryError::Unsupported { .. }) => TemplateReferenceEvidence {
+                known: Vec::new(),
+                unknown: true,
+                cardinality: None,
+            },
+        };
+    let parameters = match binding_signature_parameters(references, binding) {
+        Ok(parameters) => Some(parameters),
+        Err(error @ QueryError::Invalid { .. }) => return Err(error),
+        Err(QueryError::Unsupported { .. }) => None,
+    };
+    let mut unknown_count = substitutions
+        .cardinality
+        .map(|size| size - substitutions.known.len());
+    let mut counts = std::collections::HashMap::new();
+    for substitution in substitutions.known {
+        if !substitution.conforms_to("TemplateParameterSubstitution") {
+            if let Some(count) = &mut unknown_count {
+                *count += 1;
+            }
+            continue;
+        }
+        match template_reference_evidence(references, substitution, "formal") {
+            Err(error @ QueryError::Invalid { .. }) => return Err(error),
+            Err(QueryError::Unsupported { .. }) => {
+                if let Some(count) = &mut unknown_count {
+                    *count += 1;
+                }
+            }
+            Ok(formals) => {
+                if formals.unknown {
+                    if let Some(count) = &mut unknown_count {
+                        *count += 1;
+                    }
+                }
+                for formal in formals.known {
+                    *counts.entry(formal.id()).or_insert(0usize) += 1;
+                }
+            }
+        }
+    }
+    // Each unresolved substitution can add at most one to a formal's count.
+    // None means an unmaterialized collection, not a known empty collection.
+    let at_most_one =
+        |known: usize| known <= 1 && unknown_count.is_some_and(|unknown| unknown <= 1 - known);
+    let greatest_count = counts.values().copied().max().unwrap_or(0);
+    if at_most_one(greatest_count) {
+        return Ok(true);
+    }
+    let Some(parameters) = parameters else {
+        return Err(unknown());
+    };
+    let mut checks = Vec::new();
+    for parameter in &parameters.known {
+        let count = counts.get(parameter.id()).copied().unwrap_or(0);
+        if count > 1 {
+            checks.push(Ok(false));
+        } else if at_most_one(count) {
+            checks.push(Ok(true));
+        } else {
+            checks.push(Err(unknown()));
+        }
+    }
+    if parameters.unknown {
+        let greatest_unlisted_count = counts
+            .iter()
+            .filter(|(id, _)| {
+                !parameters
+                    .known
+                    .iter()
+                    .any(|parameter| parameter.id() == **id)
+            })
+            .map(|(_, count)| *count)
+            .max()
+            .unwrap_or(0);
+        if !at_most_one(greatest_unlisted_count) {
+            checks.push(Err(unknown()));
+        }
+    }
+    crate::uml::feature_compatibility::require_all(checks)
 }
 
 fn binding_formals(
@@ -256,33 +386,14 @@ fn binding_formals(
             TemplateReferenceEvidence {
                 known: Vec::new(),
                 unknown: true,
+                cardinality: None,
             }
         }
     };
     if substitutions.unknown {
         checks.push(Err(unknown()));
     }
-    let parameters = (|| {
-        let signature = template_reference_evidence(references, binding, "signature")?;
-        if signature.unknown {
-            checks.push(Err(unknown()));
-        }
-        let signature = signature.known.first().copied().ok_or_else(unknown)?;
-        // Relationship endpoints are canonical; an authored local signature
-        // cannot silently replace a different target even if its type is unknown.
-        if let crate::uml::root::ElementRef::Relationship(relation) = binding
-            && signature.id() != relation.to
-        {
-            return Err(QueryError::invalid(
-                binding.id(),
-                "signature projection contradicts the canonical TemplateBinding target",
-            ));
-        }
-        if !signature.conforms_to("TemplateSignature") {
-            return Err(unknown());
-        }
-        template_reference_evidence(references, signature, "parameter")
-    })();
+    let parameters = binding_signature_parameters(references, binding);
     let parameters = match parameters {
         Ok(parameters) => Some(parameters),
         Err(error) => {
@@ -332,6 +443,33 @@ pub(crate) fn validate_bindings(
         .elements()
         .filter(|element| element.conforms_to("TemplateBinding"))
     {
+        let unique = match binding_unique_substitutions(references, binding) {
+            Ok(true) => None,
+            Ok(false) => Some((
+                StructuralSeverity::Error,
+                "UML_TEMPLATE_BINDING_UNIQUE_SUBSTITUTION",
+                "A target signature formal may have at most one substitution in this binding"
+                    .to_owned(),
+            )),
+            Err(QueryError::Invalid { message, .. }) => Some((
+                StructuralSeverity::Error,
+                "MDE_TEMPLATE_BINDING_UNIQUE_SUBSTITUTION_INVALID",
+                message,
+            )),
+            Err(QueryError::Unsupported { message, .. }) => Some((
+                StructuralSeverity::Warning,
+                "MDE_TEMPLATE_BINDING_UNIQUE_SUBSTITUTION_UNVERIFIED",
+                message,
+            )),
+        };
+        if let Some((severity, code, message)) = unique {
+            issues.push(StructuralDiagnostic {
+                severity,
+                code,
+                subject_id: binding.id().into(),
+                message: format!("TemplateBinding-one_parameter_substitution: {message}"),
+            });
+        }
         let outcome = match binding_formals(references, binding) {
             Ok(true) => continue,
             Ok(false) => (
