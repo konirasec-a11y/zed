@@ -301,6 +301,10 @@ mod tests {
                     .find(|element| element.id == "type-task")
                     .unwrap()
                     .kind = subject_kind.into();
+                if matches!(subject_kind, "rust.struct" | "uml.class") {
+                    original.elements.iter_mut().find(|element| element.id == "type-task")
+                        .unwrap().properties.insert("isActive".into(), true.into());
+                }
                 let project = crate::commands::apply(&original, &command(action), 0).unwrap();
                 assert_eq!(project.elements.len(), original.elements.len() + 1 + usize::from(project.root_model.is_some() && original.root_model.is_none()));
                 Graph::new(&project).validate().unwrap();

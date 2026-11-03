@@ -32,6 +32,8 @@ async fn common_quick_edit_is_revisioned_project_scoped_and_disposed() {
             serde_json::from_str(include_str!("../../bellatrix_mde/fixtures/todo.json")).unwrap();
         model.id = name.into();
         model.name = name.into();
+        model.elements.iter_mut().find(|element| element.id == "type-task")
+            .expect("classifier").properties.insert("isActive".into(), true.into());
         active_diagram = model.diagrams[0].id.clone();
         let document = with_model(
             ProjectDocument::new(ProjectId::new(name).unwrap(), name).unwrap(),

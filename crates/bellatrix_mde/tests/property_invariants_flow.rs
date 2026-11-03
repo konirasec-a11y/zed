@@ -206,3 +206,112 @@ fn qualifier_references_retain_type_identity_uniqueness_and_composite_checks() {
     })).expect("ambiguous Association membership"));
     assert!(has_error(&ambiguous, "left", QUALIFIER_RULE));
 }
+
+#[test]
+fn classifier_feature_rules_reject_edits_preserve_drafts_and_reopen() {
+    let mut project: Project = serde_json::from_value(json!({
+        "id":"feature-rules", "name":"Feature rules", "root_model":"root",
+        "elements":[
+            {"id":"root","kind":"uml.model","name":"Root"},
+            {"id":"class","kind":"uml.class","name":"Active","properties":{"isActive":true}},
+            {"id":"interface","kind":"uml.interface","name":"Contract"},
+            {"id":"operation","kind":"uml.operation","name":"execute","properties":{"visibility":"public"}},
+            {"id":"reception","kind":"uml.reception","name":"Receive","properties":{"visibility":"public"}},
+            {"id":"behavior","kind":"uml.opaque_behavior","name":"Implement",
+             "properties":{"specification":{"$ref":"operation"}}}
+        ],
+        "relations":[
+            {"id":"own-class","kind":"owns","from":"root","to":"class"},
+            {"id":"own-interface","kind":"owns","from":"root","to":"interface"},
+            {"id":"own-operation","kind":"owns","from":"interface","to":"operation"},
+            {"id":"own-reception","kind":"owns","from":"class","to":"reception"},
+            {"id":"own-behavior","kind":"owns","from":"class","to":"behavior"}
+        ]
+    })).expect("authored classifier document");
+    let cases = [
+        ("class", "isActive", json!(false), "Class-passive_class"),
+        ("operation", "isAbstract", json!(true), "BehavioralFeature-abstract_no_method"),
+        ("operation", "visibility", json!("private"), "Interface-visibility"),
+    ];
+    for (subject, property, value, rule) in cases {
+        let snapshot = encode(&project, Format::Json).expect("before edit");
+        let error = edit(&project, subject, property, value.clone()).expect_err("invalid semantic edit");
+        assert!(error.contains(rule), "{error}");
+        assert_eq!(encode(&project, Format::Json).expect("after rejection"), snapshot);
+        let mut draft = project.clone();
+        author(&mut draft, subject, property, value);
+        let diagnostic_subject = if rule == "Interface-visibility" { "interface" } else { subject };
+        assert!(has_error(&draft, diagnostic_subject, rule));
+        for format in [Format::Json, Format::Protobuf] {
+            let reopened = decode(&encode(&draft, format).expect("save draft"), format).expect("reopen draft");
+            assert_eq!(reopened, draft);
+            assert!(has_error(&reopened, diagnostic_subject, rule));
+        }
+    }
+    // The default false value has the same semantics as an explicit false.
+    project.elements.iter_mut().find(|element| element.id == "class").expect("class")
+        .properties.remove("isActive");
+    assert!(has_error(&project, "class", "Class-passive_class"));
+    project = edit(&project, "class", "isActive", json!(true)).expect("repair passive draft");
+    assert!(!has_error(&project, "class", "Class-passive_class"));
+
+    let mut behavior_only = project.clone();
+    behavior_only.relations.retain(|relation| relation.to != "reception");
+    behavior_only.elements.retain(|element| element.id != "reception");
+    author(&mut behavior_only, "class", "classifierBehavior", json!({"$ref":"behavior"}));
+    assert!(edit(&behavior_only, "class", "isActive", json!(false)).is_err());
+    author(&mut behavior_only, "class", "classifierBehavior", Value::Null);
+    let passive = edit(&behavior_only, "class", "isActive", json!(false)).expect("passive without classifier behavior");
+    assert!(!has_error(&passive, "class", "Class-passive_class"));
+    assert!(edit(&project, "operation", "visibility", Value::Null).is_err());
+
+    // No behavioral execution is needed to enforce the references. A method
+    // stored on the Operation and the inverse specification both count.
+    project.elements.iter_mut().find(|element| element.id == "behavior").expect("behavior")
+        .properties.remove("specification");
+    author(&mut project, "operation", "method", json!([{"$ref":"behavior"}]));
+    assert!(edit(&project, "operation", "isAbstract", json!(true)).is_err());
+    for methods in [
+        json!([{"$ref":"behavior"}, {"href":"other.uml#method"}]),
+        json!([{"href":"other.uml#method"}, {"$ref":"behavior"}]),
+    ] {
+        let mut mixed = project.clone();
+        author(&mut mixed, "operation", "method", methods);
+        let before = encode(&mixed, Format::Json).expect("mixed draft snapshot");
+        let error = edit(&mixed, "operation", "isAbstract", json!(true))
+            .expect_err("known method proves the abstract constraint violation");
+        assert!(error.contains("BehavioralFeature-abstract_no_method"), "{error}");
+        assert_eq!(encode(&mixed, Format::Json).expect("unchanged mixed draft"), before);
+        author(&mut mixed, "operation", "isAbstract", json!(true));
+        for format in [Format::Json, Format::Protobuf] {
+            let reopened = decode(&encode(&mixed, format).expect("save mixed draft"), format)
+                .expect("reopen mixed draft");
+            assert!(has_error(&reopened, "operation", "BehavioralFeature-abstract_no_method"));
+        }
+    }
+    author(&mut project, "operation", "method", json!([]));
+    project = edit(&project, "operation", "isAbstract", json!(true)).expect("abstract without method");
+    assert!(!has_error(&project, "operation", "BehavioralFeature-abstract_no_method"));
+
+    for (subject, property, value, rule) in [
+        ("operation", "method", json!([{"href":"other.uml#method"}]), "BehavioralFeature-abstract_no_method"),
+        ("class", "classifierBehavior", json!({"href":"other.uml#behavior"}), "Class-passive_class"),
+        ("interface", "ownedOperation", json!([{"href":"other.uml#operation"}]), "Interface-visibility"),
+    ] {
+        let mut draft = project.clone();
+        if subject == "class" {
+            draft.relations.retain(|relation| relation.to != "reception");
+            draft.elements.retain(|element| element.id != "reception");
+            author(&mut draft, "class", "isActive", json!(false));
+        }
+        if subject == "interface" {
+            draft.relations.retain(|relation| relation.to != "operation");
+            draft.elements.retain(|element| element.id != "operation");
+        }
+        author(&mut draft, subject, property, value);
+        let issues = Model::from_project(&draft).validate();
+        assert!(issues.iter().any(|issue| issue.subject_id == subject
+            && issue.severity == StructuralSeverity::Warning && issue.message.contains(rule)), "{issues:?}");
+        assert!(!has_error(&draft, subject, rule));
+    }
+}

@@ -31,7 +31,11 @@ fn inherited_members_use_the_same_contract_in_commands_and_quick_edit() {
         ("uml.package", false, false, false, false, false),
         ("uml.model", false, false, false, false, false),
     ] {
-        let original = project(kind);
+        let mut original = project(kind);
+        if receptions {
+            original.elements.iter_mut().find(|element| element.id == "type-task")
+                .expect("classifier").properties.insert("isActive".into(), true.into());
+        }
         let before = original.clone();
         let semantic_type = UmlType::from_kind(kind).expect("type");
         for (member, capability, action, supported) in [

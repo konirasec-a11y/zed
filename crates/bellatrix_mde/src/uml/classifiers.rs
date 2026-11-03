@@ -890,10 +890,145 @@ pub(crate) fn redefinition_consistency_diagnostic(
     })
 }
 
+// UML 2.5.1 Class-passive_class, BehavioralFeature-abstract_no_method and
+// Interface-visibility constrain existing roles; they do not execute Behaviors.
+fn role_present(
+    references: &ReferenceIndex<'_>,
+    element: ElementRef<'_>,
+    name: &str,
+) -> Result<bool, QueryError> {
+    let Some(value) = element.properties().get(name) else { return Ok(false); };
+    let descriptor = schema::uml_property(element.metaclass().ok_or_else(||
+        QueryError::unsupported(element.id(), "missing metaclass"))?, name)
+        .map_err(|error| QueryError::unsupported(element.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(element.id(), "missing role contract"))?;
+    match super::property_contracts::check_value(references, element, descriptor, value) {
+        super::property_contracts::PropertyOutcome::Satisfied => Ok(populated(value)),
+        super::property_contracts::PropertyOutcome::Violation(error) =>
+            Err(QueryError::invalid(element.id(), error)),
+        super::property_contracts::PropertyOutcome::Unverified(error) => {
+            // Existence needs only one checked member, unlike verification of
+            // the whole collection. An unresolved neighbor cannot erase it.
+            let member = PropertyDescriptor { lower: "1", upper: "1", ..*descriptor };
+            if value.as_array().is_some_and(|values| values.iter().any(|value|
+                reference_id(value).ok().flatten().is_some()
+                    && matches!(super::property_contracts::check_value(
+                        references, element, &member, value,
+                    ), super::property_contracts::PropertyOutcome::Satisfied)))
+            {
+                Ok(true)
+            } else {
+                Err(QueryError::unsupported(element.id(), error))
+            }
+        }
+    }
+}
+
+fn any_present(results: impl IntoIterator<Item = Result<bool, QueryError>>)
+    -> Result<bool, QueryError>
+{
+    let mut unresolved = None;
+    for result in results {
+        match result {
+            Ok(true) => return Ok(true),
+            Ok(false) => {}
+            Err(error) => { unresolved.get_or_insert(error); }
+        }
+    }
+    unresolved.map_or(Ok(false), Err)
+}
+
+fn validate_feature_rules(
+    references: &ReferenceIndex<'_>,
+    element: ElementRef<'_>,
+    issues: &mut Vec<StructuralDiagnostic>,
+) {
+    let mut report = |rule: &'static str, result: Result<bool, QueryError>| {
+        let (severity, message) = match result {
+            Ok(false) => return,
+            Ok(true) => (StructuralSeverity::Error, format!("{rule}: violated")),
+            Err(QueryError::Invalid { message, .. }) =>
+                (StructuralSeverity::Error, format!("{rule}: {message}")),
+            Err(QueryError::Unsupported { message, .. }) =>
+                (StructuralSeverity::Warning, format!("{rule}: {message}")),
+        };
+        issues.push(StructuralDiagnostic {
+            severity,
+            code: if severity == StructuralSeverity::Error {
+                "UML_FEATURE_CONSTRAINT"
+            } else { "MDE_FEATURE_CONSTRAINT_UNVERIFIED" },
+            subject_id: element.id().into(), message,
+        });
+    };
+    if element.conforms_to("Class") {
+        report("Class-passive_class", (|| {
+            if schema::read_effective_boolean(element, "isActive")
+                .map_err(|error| QueryError::invalid(element.id(), error))? { return Ok(false); }
+            let receptions = references.explicit_owned_elements(element.id())
+                .map_err(|error| QueryError::invalid(element.id(), error))?
+                .into_iter().filter(|child| child.conforms_to("Reception"))
+                .map(|child| contributes_to_owned_union(element, child, "Class-ownedReception"));
+            any_present(receptions.chain([
+                role_present(references, element, "ownedReception"),
+                role_present(references, element, "classifierBehavior"),
+            ]))
+        })());
+    }
+    if element.conforms_to("BehavioralFeature") {
+        report("BehavioralFeature-abstract_no_method", (|| {
+            if !schema::read_effective_boolean(element, "isAbstract")
+                .map_err(|error| QueryError::invalid(element.id(), error))? { return Ok(false); }
+            let specification = schema::uml_property("Behavior", "specification")
+                .map_err(|error| QueryError::unsupported(element.id(), error.to_string()))?
+                .ok_or_else(|| QueryError::unsupported(element.id(), "missing Behavior specification"))?;
+            any_present([
+                role_present(references, element, "method"),
+                references.has_reference_source(specification, element.id())
+                    .map_err(|error| QueryError::unsupported(element.id(), error)),
+            ])
+        })());
+    }
+    if element.conforms_to("Interface") {
+        report("Interface-visibility", (|| {
+            let owned = references.explicit_owned_elements(element.id())
+                .map_err(|error| QueryError::invalid(element.id(), error))?;
+            let mut checks = Vec::new();
+            for child in owned.into_iter().filter(|child| child.conforms_to("Feature")) {
+                checks.push(contributes_to_owned_union(element, child, "Classifier-feature")
+                    .and_then(|feature| if feature {
+                        visibility(child).map(|visibility| visibility != Some(VisibilityKind::Public))
+                    } else { Ok(false) }));
+            }
+            // A stored feature union or external composite role is not evidence
+            // that the complete set of Interface Features has been inspected.
+            for property in properties(element)? {
+                if contributes(property, "Classifier-feature")
+                    .map_err(|error| QueryError::unsupported(element.id(), error))?
+                    && element.properties().get(property.name).is_some_and(populated)
+                {
+                    if let Some(value) = element.properties().get(property.name) {
+                        checks.push(match super::property_contracts::check_value(
+                            references, element, property, value,
+                        ) {
+                            super::property_contracts::PropertyOutcome::Satisfied => Ok(false),
+                            super::property_contracts::PropertyOutcome::Violation(error) =>
+                                Err(QueryError::invalid(element.id(), error)),
+                            super::property_contracts::PropertyOutcome::Unverified(error) =>
+                                Err(QueryError::unsupported(element.id(), error)),
+                        });
+                    }
+                }
+            }
+            any_present(checks)
+        })());
+    }
+}
+
 pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut queries = Queries::new(references);
     let mut issues = Vec::new();
     for element in references.model().elements() {
+        validate_feature_rules(references, element, &mut issues);
         let result = (|| {
             if element.conforms_to("ElementImport") || element.conforms_to("PackageImport") {
                 super::namespace_imports::validate_import_record(references, element)?;
