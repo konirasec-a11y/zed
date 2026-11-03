@@ -1185,10 +1185,126 @@ fn validate_feature_rules(
     }
 }
 
+fn generalization_set_same_classifier(
+    references: &ReferenceIndex<'_>,
+    set: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    use super::property_contracts::{PropertyOutcome, check_value};
+    let descriptor = schema::uml_property("GeneralizationSet", "generalization")
+        .map_err(|error| QueryError::unsupported(set.id(), error.to_string()))?
+        .ok_or_else(|| {
+            QueryError::unsupported(
+                set.id(),
+                "missing GeneralizationSet::generalization contract",
+            )
+        })?;
+    let value = set.properties().get("generalization").ok_or_else(|| {
+        QueryError::unsupported(set.id(), "GeneralizationSet membership is not materialized")
+    })?;
+    let mut checks = Vec::new();
+    match check_value(references, set, descriptor, value) {
+        PropertyOutcome::Satisfied => {}
+        PropertyOutcome::Violation(message) => return Err(QueryError::invalid(set.id(), message)),
+        PropertyOutcome::Unverified(message) => {
+            checks.push(Err(QueryError::unsupported(set.id(), message)))
+        }
+    }
+    let values = value
+        .as_array()
+        .ok_or_else(|| QueryError::invalid(set.id(), "generalization must be a collection"))?;
+    let mut generals = HashSet::new();
+    for value in values {
+        if external_reference_href(value)
+            .map_err(|error| QueryError::invalid(set.id(), error))?
+            .is_some()
+        {
+            continue;
+        }
+        let id = reference_id(value)
+            .map_err(|error| QueryError::invalid(set.id(), error))?
+            .ok_or_else(|| {
+                QueryError::invalid(set.id(), "Generalization member cannot be absent")
+            })?;
+        let generalization = references
+            .element(id)
+            .map_err(|error| QueryError::invalid(set.id(), error))?;
+        let ElementRef::Relationship(relation) = generalization else {
+            checks.push(Err(QueryError::unsupported(
+                id,
+                "Generalization objects require a canonical relationship adapter",
+            )));
+            continue;
+        };
+        if !generalization.conforms_to("Generalization") {
+            continue;
+        }
+        if let Some(value) = generalization.properties().get("general") {
+            let descriptor = schema::uml_property("Generalization", "general")
+                .map_err(|error| QueryError::unsupported(id, error.to_string()))?
+                .ok_or_else(|| {
+                    QueryError::unsupported(id, "missing Generalization::general contract")
+                })?;
+            match check_value(references, generalization, descriptor, value) {
+                PropertyOutcome::Violation(message) => {
+                    return Err(QueryError::invalid(id, message));
+                }
+                PropertyOutcome::Unverified(message) => {
+                    checks.push(Err(QueryError::unsupported(id, message)))
+                }
+                PropertyOutcome::Satisfied => {}
+            }
+            // A local identity can contradict the canonical endpoint even when
+            // its metaclass is unresolved. External references provide no such ID.
+            if external_reference_href(value)
+                .map_err(|error| QueryError::invalid(id, error))?.is_none()
+                && reference_id(value).map_err(|error| QueryError::invalid(id, error))?
+                    != Some(relation.to.as_str())
+            {
+                return Err(QueryError::invalid(id,
+                    "general projection contradicts the canonical Generalization target"));
+            }
+        }
+        let general = references
+            .element(&relation.to)
+            .map_err(|error| QueryError::invalid(id, error))?;
+        if general.metaclass().is_none() {
+            checks.push(Err(QueryError::unsupported(
+                id,
+                "general Classifier metaclass is unresolved",
+            )));
+        } else if !general.conforms_to("Classifier") {
+            return Err(QueryError::invalid(
+                id,
+                "Generalization::general must be a Classifier",
+            ));
+        }
+        // Identity is known even when the Classifier's metaclass is unresolved.
+        // Two distinct local generals already falsify the cardinality bound.
+        generals.insert(general.id());
+    }
+    checks.push(Ok(generals.len() <= 1));
+    super::feature_compatibility::require_all(checks)
+}
+
 pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut queries = Queries::new(references);
     let mut issues = super::classifier_hierarchy::validate_substitutions(references);
     for element in references.model().elements() {
+        if element.conforms_to("GeneralizationSet") {
+            let outcome = match generalization_set_same_classifier(references, element) {
+                Ok(true) => None,
+                Ok(false) => Some((StructuralSeverity::Error, "UML_GENERALIZATION_SET_SAME_CLASSIFIER",
+                    "Generalizations in a GeneralizationSet must share one general Classifier".to_owned())),
+                Err(QueryError::Invalid { message, .. }) => Some((StructuralSeverity::Error,
+                    "MDE_GENERALIZATION_SET_SAME_CLASSIFIER_INVALID", message)),
+                Err(QueryError::Unsupported { message, .. }) => Some((StructuralSeverity::Warning,
+                    "MDE_GENERALIZATION_SET_SAME_CLASSIFIER_UNVERIFIED", message)),
+            };
+            if let Some((severity, code, message)) = outcome {
+                issues.push(StructuralDiagnostic { severity, code, subject_id: element.id().into(),
+                    message: format!("GeneralizationSet-generalization_same_classifier: {message}") });
+            }
+        }
         validate_feature_rules(references, element, &mut issues);
         let result = (|| {
             if element.conforms_to("ElementImport") || element.conforms_to("PackageImport") {

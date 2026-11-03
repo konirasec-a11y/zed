@@ -422,10 +422,58 @@ pub fn multiplicity(
         .map_err(|error| EvaluationError::invalid(element.id(), error.to_string()))
 }
 
+fn string_expression_operands(
+    references: &ReferenceIndex<'_>,
+    expression: ElementRef<'_>,
+) -> Result<bool, super::classifiers::QueryError> {
+    use super::{classifiers::{self, QueryError}, property_contracts::{self, PropertyOutcome}};
+    let mut checks = Vec::new();
+    let literal_string = |operand: ElementRef<'_>| {
+        if operand.metaclass().is_none() {
+            Err(QueryError::unsupported(operand.id(), "operand metaclass is unresolved"))
+        } else {
+            Ok(operand.conforms_to("LiteralString"))
+        }
+    };
+    if let Some(value) = expression.properties().get("operand") {
+        let descriptor = schema::uml_property("StringExpression", "operand")
+            .map_err(|error| QueryError::unsupported(expression.id(), error.to_string()))?
+            .ok_or_else(|| QueryError::unsupported(expression.id(), "missing operand property contract"))?;
+        checks.push(match property_contracts::check_value(references, expression, descriptor, value) {
+            PropertyOutcome::Satisfied => Ok(true),
+            PropertyOutcome::Violation(message) => Err(QueryError::invalid(expression.id(), message)),
+            PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(expression.id(), message)),
+        });
+        // A known non-string operand disproves forAll even beside unresolved
+        // references. The complete contract check above still retains Invalid.
+        if let Some(values) = value.as_array() {
+            for value in values {
+                if let Ok(Some(id)) = reference_id(value) {
+                    if let Ok(operand) = references.element(id) {
+                        checks.push(literal_string(operand));
+                    }
+                }
+            }
+        }
+    }
+    for child in references.explicit_owned_elements(expression.id())
+        .map_err(|error| QueryError::invalid(expression.id(), error))?
+    {
+        // StringExpression children can also be subExpression or nameExpression;
+        // ownership alone must not select the operand role for those children.
+        match classifiers::contributes_to_owned_union(expression, child, "Expression-operand") {
+            Ok(true) => checks.push(literal_string(child)),
+            Ok(false) => {}
+            Err(error) => checks.push(Err(error)),
+        }
+    }
+    super::feature_compatibility::require_all(checks)
+}
+
 /// Structural results only. Callers decide whether an edit is semantic or a
 /// permissive visual draft; evaluation never changes the graph.
 pub fn validate(references: &ReferenceIndex<'_>) -> Vec<crate::StructuralDiagnostic> {
-    references
+    let mut issues = references
         .model()
         .elements()
         .filter(|element| element.conforms_to("MultiplicityElement"))
@@ -450,5 +498,17 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<crate::StructuralDiagnos
                 }
             })
         })
-        .collect()
+        .collect::<Vec<_>>();
+    for expression in references.model().elements().filter(|element| element.conforms_to("StringExpression")) {
+        let (severity, code, message) = match string_expression_operands(references, expression) {
+            Ok(true) => continue,
+            Ok(false) => (crate::StructuralSeverity::Error, "UML_STRING_EXPRESSION_OPERANDS", "all operands must be LiteralStrings".to_owned()),
+            Err(super::classifiers::QueryError::Invalid { message, .. }) =>
+                (crate::StructuralSeverity::Error, "UML_STRING_EXPRESSION_OPERANDS", message),
+            Err(super::classifiers::QueryError::Unsupported { message, .. }) =>
+                (crate::StructuralSeverity::Warning, "MDE_STRING_EXPRESSION_OPERANDS_UNVERIFIED", message),
+        };
+        issues.push(crate::StructuralDiagnostic { severity, code, subject_id: expression.id().into(), message: format!("StringExpression-operands: {message}") });
+    }
+    issues
 }
