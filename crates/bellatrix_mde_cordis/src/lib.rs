@@ -39,6 +39,7 @@ mod view_style;
 pub use view_style::{
     ModelingReorderView, ModelingReorderViewRequested, ModelingSetViewRouting,
     ModelingSetViewRoutingRequested, ModelingSetViewStyle, ModelingSetViewStyleRequested,
+    ModelingSetViewLabel, ModelingSetViewLabelRequested,
 };
 mod views;
 pub use delete_element::{ModelingDeleteElement, ModelingDeleteElementRequested};

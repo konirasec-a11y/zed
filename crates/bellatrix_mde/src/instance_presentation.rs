@@ -83,7 +83,14 @@ fn format_stored_value(element: ElementRef<'_>) -> String {
     if element.conforms_to("LiteralSpecification")
         && let Some(value) = element.properties().get("value")
     {
-        return value.to_string();
+        return if element.conforms_to("LiteralString") {
+            value.to_string()
+        } else {
+            value
+                .as_str()
+                .map(str::to_owned)
+                .unwrap_or_else(|| value.to_string())
+        };
     }
     element
         .named()

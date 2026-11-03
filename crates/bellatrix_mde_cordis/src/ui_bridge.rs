@@ -16,6 +16,7 @@ use crate::{
     ModelingSetNameExpressionRequested, ModelingSetOwner, ModelingSetOwnerRequested,
     ModelingSetProperty, ModelingSetPropertyRequested, ModelingSetViewRouting,
     ModelingSetViewRoutingRequested, ModelingSetViewStyle, ModelingSetViewStyleRequested,
+    ModelingSetViewLabel, ModelingSetViewLabelRequested,
     ModelingValidateDiagram, ModelingValidateDiagramRequested,
 };
 use bellatrix_project::{
@@ -36,6 +37,11 @@ pub struct DiagramValidationFailure {
 
 #[derive(Clone)]
 pub enum MdeUiCommand {
+    SetViewLabel(ModelingSetViewLabelRequested),
+    SetViewLabelTracked {
+        request: ModelingSetViewLabelRequested,
+        completion: watch::Sender<Option<Result<u64, String>>>,
+    },
     SetViewStyle(ModelingSetViewStyleRequested),
     SetViewStyleTracked {
         request: ModelingSetViewStyleRequested,
@@ -124,6 +130,20 @@ impl MdeUiBridge {
         let task = tokio::spawn(async move {
             while let Some(request) = command_rx.recv().await {
                 let message = match request {
+                    MdeUiCommand::SetViewLabel(request) => describe(
+                        "View label updated", cordis.query::<ModelingSetViewLabel>(Routing::Unscoped, request).await,
+                    ),
+                    MdeUiCommand::SetViewLabelTracked { request, completion } => {
+                        let result = cordis.query::<ModelingSetViewLabel>(Routing::Unscoped, request).await;
+                        let receipt = match &result {
+                            Ok(QueryOutcome::Answer(Ok(revision))) => Ok(*revision),
+                            Ok(QueryOutcome::Answer(Err(error))) => Err(error.to_string()),
+                            Ok(QueryOutcome::Miss) => Err("Cordis responder unavailable".into()),
+                            Err(error) => Err(error.to_string()),
+                        };
+                        completion.send_replace(Some(receipt));
+                        describe("View label updated", result)
+                    }
                     MdeUiCommand::SetViewStyle(request) => describe(
                         "View style updated",
                         cordis

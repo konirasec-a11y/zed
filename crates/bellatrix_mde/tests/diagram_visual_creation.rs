@@ -430,8 +430,35 @@ fn exercise_visual_drafts() -> Result<(), Box<dyn std::error::Error>> {
                 && issue.severity == StructuralSeverity::Warning)
     );
     let draft_id = draft.id.clone();
-    let connected = apply(
+    let labeled = apply(
         &after,
+        &Command::SetViewLabel {
+            view_id: draft_id.clone(),
+            label: Some("Revised".into()),
+        },
+        2,
+    )?;
+    assert_eq!(labeled.elements, after.elements);
+    assert_eq!(
+        labeled
+            .diagrams
+            .iter()
+            .flat_map(|diagram| &diagram.views)
+            .find(|view| view.id == draft_id)
+            .and_then(|view| view.label.as_deref()),
+        Some("Revised")
+    );
+    let canonical_label = apply(
+        &labeled,
+        &Command::SetViewLabel {
+            view_id: "view-task".into(),
+            label: Some("Display only".into()),
+        },
+        3,
+    )?;
+    assert_eq!(canonical_label.elements, labeled.elements);
+    let connected = apply(
+        &canonical_label,
         &Command::CreateVisualDraft {
             diagram_id: "diagram-tasks".into(),
             notation_kind: "uml.transition".into(),

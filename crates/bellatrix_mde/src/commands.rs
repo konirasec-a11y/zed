@@ -100,6 +100,7 @@ pub enum Command {
         view_id: String,
         order: ViewOrder,
     },
+    SetViewLabel { view_id: String, label: Option<String> },
     SetViewStyle {
         diagram_id: String,
         view_id: String,
@@ -259,6 +260,11 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
             view_id,
         } => views::remove(&mut section, diagram_id, view_id)?,
         Command::ReorderView { diagram_id, view_id, order } => view_style::reorder(&mut section, diagram_id, view_id, *order)?,
+        Command::SetViewLabel { view_id, label } => {
+            let view = section.diagrams.iter_mut().flat_map(|diagram| &mut diagram.views)
+                .find(|view| view.id == *view_id).ok_or("view not found")?;
+            view.label = label.clone();
+        }
         Command::SetViewStyle {
             diagram_id,
             view_id,
@@ -313,7 +319,7 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
             .is_some_and(|diagram| diagram.views.iter().any(|view| view.id == *view_id && view.draft.is_some())),
         _ => false,
     };
-    let presentation_only = draft_view_edit || matches!(command, Command::CreateDiagram { .. } | Command::CreateVisualDraft { .. } | Command::SetExplorerParent { .. } | Command::SetViewStyle { .. } | Command::SetViewRouting { .. } | Command::ReorderView { .. });
+    let presentation_only = draft_view_edit || matches!(command, Command::CreateDiagram { .. } | Command::CreateVisualDraft { .. } | Command::SetExplorerParent { .. } | Command::SetViewLabel { .. } | Command::SetViewStyle { .. } | Command::SetViewRouting { .. } | Command::ReorderView { .. });
     if !presentation_only {
         crate::uml::associations::materialize_new(project, &mut section)?;
         crate::uml::associations::synchronize_changes(&previous_section, &mut section)?;

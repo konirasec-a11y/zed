@@ -117,14 +117,32 @@ impl MdeWorkbenchItem {
                         },
                     })
                     .collect();
+                let mut label_properties = draft.properties.clone();
+                if !label.is_empty() {
+                    label_properties.insert("name".into(), serde_json::json!(label));
+                }
+                let presentation = bellatrix_mde::RelationshipPresentation {
+                    name: bellatrix_mde::format_relationship_label(
+                        &draft.notation_kind,
+                        &label_properties,
+                    ),
+                    source_labels: Default::default(),
+                    target_labels: Default::default(),
+                    label: label.clone(),
+                    notation: draft.notation_kind.clone(),
+                    style: bellatrix_mde::relationship_style_for_notation(&draft.notation_kind),
+                    source_role: "source",
+                    target_role: "target",
+                };
                 let figure = UmlRelationGlyph::new(
-                    bellatrix_mde::relationship_style_for_notation(&draft.notation_kind),
+                    presentation.style,
                     width as f32 * zoom,
                     height as f32 * zoom,
                     place(*start),
                     place(end),
                 )
                 .segments(segments)
+                .labels(presentation)
                 .view_style(&view.style)
                 .view_scale(zoom)
                 .selected(selected)
@@ -150,6 +168,41 @@ impl MdeWorkbenchItem {
         }
         let owner = cx.weak_entity();
         let id = view.id.clone();
+        let draft_editor = self
+            .inline_editor
+            .clone()
+            .filter(|_| self.editing_subject.as_deref() == Some(view.id.as_str()))
+            .map(|field| {
+                let confirm = cx.weak_entity();
+                let cancel = cx.weak_entity();
+                let editor_id = field.entity_id();
+                let target = view.id.clone();
+                let cancel_target = target.clone();
+                bellatrix_ui_uml::UmlInlineNameEditor::new(
+                    field,
+                    move |window, cx| {
+                        if let Err(error) = confirm.update(cx, |item, cx| {
+                            item.commit_draft_label(&target, editor_id, window, cx)
+                        }) {
+                            eprintln!("MDE draft label update failed: {error}");
+                        }
+                    },
+                    move |window, cx| {
+                        if let Err(error) = cancel.update(cx, |item, cx| {
+                            if item.editing_subject.as_deref() == Some(cancel_target.as_str())
+                                && item
+                                    .inline_editor
+                                    .as_ref()
+                                    .is_some_and(|field| field.entity_id() == editor_id)
+                            {
+                                item.cancel_inline_edit(window, cx);
+                            }
+                        }) {
+                            eprintln!("MDE draft label cancel failed: {error}");
+                        }
+                    },
+                )
+            });
         let resize_owner = cx.weak_entity();
         let resize_id = view.id.clone();
         Some(
@@ -165,7 +218,9 @@ impl MdeWorkbenchItem {
                     MouseButton::Left,
                     move |event: &MouseDownEvent, window, cx| {
                         if let Err(error) = owner.update(cx, |item, cx| {
-                            if let Some(ModelingTool::Relation(kind)) = item.selected_tool {
+                            if event.click_count >= 2 && item.selected_tool.is_none() {
+                                item.begin_draft_label_edit(id.clone(), window, cx);
+                            } else if let Some(ModelingTool::Relation(kind)) = item.selected_tool {
                                 item.link_visual_draft_endpoint(kind, id.clone(), cx);
                             } else {
                                 item.selected_element = None;
@@ -191,6 +246,9 @@ impl MdeWorkbenchItem {
                     },
                 )
                 .child(figure)
+                .when_some(draft_editor, |element, editor| {
+                    element.child(div().absolute().top_0().left_0().w_full().child(editor))
+                })
                 .when(
                     selected && matches!(view.geometry, Geometry::Rect { .. }),
                     |element| {
@@ -338,4 +396,139 @@ pub(super) fn resolve_interaction_operator_default() -> Option<serde_json::Value
         .flatten()
         .and_then(|property| schema::effective_default(property).ok().flatten())
         .and_then(schema::DefaultValue::scalar_json)
+}
+
+impl MdeWorkbenchItem {
+    pub(super) fn begin_draft_label_edit(
+        &mut self,
+        view_id: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.source.is_read_only() {
+            return;
+        }
+        let Ok(snapshot) = self.source.snapshot() else {
+            return;
+        };
+        let Some(view) = snapshot
+            .section
+            .diagrams
+            .iter()
+            .flat_map(|diagram| &diagram.views)
+            .find(|view| view.id == view_id && view.draft.is_some())
+        else {
+            return;
+        };
+        if self.editing_subject.as_deref() == Some(view_id.as_str()) && self.inline_editor.is_some()
+        {
+            return;
+        }
+        self.draft_label_revision = Some(snapshot.revision);
+        self.draft_label_pending = false;
+        let field = cx.new(|cx| InputField::new(window, cx, "Label").label_min_width(px(96.0)));
+        field.update(cx, |field, cx| {
+            field.set_text(view.label.as_deref().unwrap_or(""), window, cx)
+        });
+        self.selected_element = None;
+        self.selected_view = Some(view_id.clone());
+        self.editing_subject = Some(view_id);
+        self.inline_editor = Some(field.clone());
+        self.gesture = None;
+        field.read(cx).focus_handle(cx).focus(window, cx);
+        field.read(cx).editor().clone().select_all(window, cx);
+        cx.notify();
+    }
+    fn commit_draft_label(
+        &mut self,
+        target: &str,
+        editor_id: gpui::EntityId,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.source.is_read_only()
+            || self.draft_label_pending
+            || self.editing_subject.as_deref() != Some(target)
+            || !self
+                .inline_editor
+                .as_ref()
+                .is_some_and(|field| field.entity_id() == editor_id)
+        {
+            return;
+        }
+        let (Some(view_id), Some(field), Some(expected_revision)) = (
+            self.editing_subject.clone(),
+            self.inline_editor.clone(),
+            self.draft_label_revision,
+        ) else {
+            return;
+        };
+        let label = field.read(cx).text(cx).to_string();
+        let project_id = self.project_id().clone();
+        let (completion, mut receipt) = tokio::sync::watch::channel(None);
+        let request = bellatrix_mde_cordis::ModelingSetViewLabelRequested {
+            project_id: project_id.clone(),
+            view_id: view_id.clone(),
+            label: Some(label.clone()),
+            expected_revision,
+        };
+        if let Err(error) = self.source.submit(MdeUiCommand::SetViewLabelTracked {
+            request,
+            completion,
+        }) {
+            self.feedback = format!("Label not sent; draft preserved: {error}");
+            cx.notify();
+            return;
+        }
+        self.draft_label_pending = true;
+        self.feedback = "Saving view label…".into();
+        cx.spawn(async move |owner, cx| {
+            let waiting = receipt.borrow().is_none();
+            if waiting && let Err(error) = receipt.changed().await {
+                eprintln!("MDE label receipt unavailable: {error}");
+            }
+            let result = receipt
+                .borrow()
+                .clone()
+                .unwrap_or_else(|| Err("Label receipt unavailable; draft preserved".into()));
+            if let Err(error) = owner.update(cx, |item, cx| {
+                let same_editor = item.project_id() == &project_id
+                    && item.editing_subject.as_deref() == Some(view_id.as_str())
+                    && item
+                        .inline_editor
+                        .as_ref()
+                        .is_some_and(|current| current.entity_id() == field.entity_id());
+                if !same_editor {
+                    return;
+                }
+                item.draft_label_pending = false;
+                match result {
+                    Ok(revision) => {
+                        item.draft_label_revision = Some(revision);
+                        if field.read(cx).text(cx).as_str() == label.as_str() {
+                            item.editing_subject = None;
+                            item.inline_editor = None;
+                            item.draft_label_revision = None;
+                        }
+                        item.feedback = "View label saved".into();
+                    }
+                    Err(error) => {
+                        if let Ok(latest) = item.source.snapshot()
+                            && latest.section.diagrams.iter().flat_map(|diagram| &diagram.views).any(|view| view.id == view_id && view.draft.is_some())
+                        {
+                            item.draft_label_revision = Some(latest.revision);
+                            item.feedback = format!("Label not saved; text preserved: {error}. Press Enter to replace the current label at revision {}", latest.revision);
+                        } else {
+                            item.feedback = format!("Label not saved; text preserved: {error}");
+                        }
+                    }
+                }
+                cx.notify();
+            }) {
+                eprintln!("MDE label receipt update failed: {error}");
+            }
+        })
+        .detach();
+        cx.notify();
+    }
 }

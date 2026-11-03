@@ -4,6 +4,20 @@ use cordis::{Context, Event, event::responder};
 use std::{convert::Infallible, io, sync::Arc};
 
 #[derive(Clone, Debug)]
+pub struct ModelingSetViewLabelRequested {
+    pub project_id: ProjectId,
+    pub view_id: String,
+    pub label: Option<String>,
+    pub expected_revision: u64,
+}
+pub struct ModelingSetViewLabel;
+impl Event for ModelingSetViewLabel {
+    const NAME: &'static str = "bellatrix.mde.set-view-label.v1";
+    type Args = ModelingSetViewLabelRequested;
+    type Output = Result<u64, String>;
+}
+
+#[derive(Clone, Debug)]
 pub struct ModelingSetViewStyleRequested {
     pub project_id: ProjectId,
     pub diagram_id: String,
@@ -49,6 +63,28 @@ impl Event for ModelingReorderView {
 }
 
 pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Result<(), io::Error> {
+    let label_projects = Arc::clone(&projects);
+    let _label = context
+        .on::<ModelingSetViewLabel, _>(responder(
+            move |context: Context, request: ModelingSetViewLabelRequested| {
+                let projects = Arc::clone(&label_projects);
+                async move {
+                    let result = crate::mutation::execute(
+                        &context,
+                        &projects,
+                        request.project_id,
+                        request.expected_revision,
+                        Command::SetViewLabel {
+                            view_id: request.view_id,
+                            label: request.label,
+                        },
+                    )
+                    .await;
+                    Ok::<_, Infallible>(Some(result))
+                }
+            },
+        ))
+        .map_err(|error| io::Error::other(error.to_string()))?;
     let service = Arc::clone(&projects);
     let _style = context
         .on::<ModelingSetViewStyle, _>(responder(

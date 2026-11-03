@@ -779,6 +779,8 @@ impl Render for MdeWorkbenchItem {
                     let _ = f2_owner.update(cx, |item, cx| {
                         if let Some(id) = item.selected_element.clone() {
                             item.begin_inline_edit(id, window, cx);
+                        } else if let Some(id) = item.selected_view.clone() {
+                            item.begin_draft_label_edit(id, window, cx);
                         }
                     });
                     cx.stop_propagation();

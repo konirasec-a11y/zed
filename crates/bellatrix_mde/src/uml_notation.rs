@@ -192,7 +192,8 @@ pub fn uml_header(kind: &str, applied: Option<&str>) -> UmlHeader {
         Some(UmlType::DataType) => Some("«dataType»"),
         Some(UmlType::PrimitiveType) => Some("«primitive»"),
         Some(UmlType::Signal) => Some("«signal»"),
-        Some(UmlType::AssociationClass) => Some("«associationClass»"),
+        // §11.5.4 uses an ordinary classifier box attached to the association.
+        Some(UmlType::AssociationClass) => None,
         Some(UmlType::Template) => Some("«template»"),
         Some(UmlType::Model) => Some("«model»"),
         Some(UmlType::Subsystem) => Some("«subsystem»"),

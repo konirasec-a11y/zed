@@ -167,31 +167,7 @@ pub fn relationship_presentation(relation: &Relation) -> RelationshipPresentatio
         }
     }
     RelationshipPresentation {
-        name: {
-            let keyword = match notation {
-                "uml.usage" => Some("«use»"),
-                "uml.include" => Some("«include»"),
-                "uml.extend" => Some("«extend»"),
-                "uml.package_import" => Some(if text("visibility").as_deref() == Some("private") {
-                    "«access»"
-                } else {
-                    "«import»"
-                }),
-                "uml.package_merge" => Some("«merge»"),
-                "uml.deployment" => Some("«deploy»"),
-                "uml.manifestation" => Some("«manifest»"),
-                "uml.profile_application" => Some("«apply»"),
-                _ => None,
-            };
-            match keyword {
-                Some(keyword) => Some(
-                    text("name")
-                        .filter(|name| !name.is_empty())
-                        .map_or_else(|| keyword.into(), |name| format!("{keyword} {name}")),
-                ),
-                None => text("name"),
-            }
-        },
+        name: format_relationship_label(notation, &relation.properties),
         source_labels: RelationshipEndpointLabels {
             role: text("sourceRole"),
             multiplicity: RelationEndMultiplicity::new(relation, RelationEnd::Source)
@@ -209,5 +185,46 @@ pub fn relationship_presentation(relation: &Relation) -> RelationshipPresentatio
         style,
         source_role,
         target_role,
+    }
+}
+
+/// Shared notation text for canonical edges and View-only visual drafts.
+pub fn format_relationship_label(
+    kind: &str,
+    properties: &std::collections::BTreeMap<String, serde_json::Value>,
+) -> Option<String> {
+    let text = |key: &str| properties.get(key).and_then(serde_json::Value::as_str);
+    let keyword = match kind {
+        "uml.usage" => Some("«use»"),
+        "uml.include" => Some("«include»"),
+        "uml.extend" => Some("«extend»"),
+        "uml.package_import" | "uml.element_import" => {
+            Some(if text("visibility") == Some("private") {
+                "«access»"
+            } else {
+                "«import»"
+            })
+        }
+        "uml.package_merge" => Some("«merge»"),
+        "uml.deployment" => Some("«deploy»"),
+        "uml.manifestation" => Some("«manifest»"),
+        "uml.profile_application" => Some(
+            if properties
+                .get("isStrict")
+                .and_then(serde_json::Value::as_bool)
+                == Some(true)
+            {
+                "«strict»"
+            } else {
+                "«apply»"
+            },
+        ),
+        _ => None,
+    };
+    let name = text("name").filter(|name| !name.is_empty());
+    match (keyword, name) {
+        (Some(keyword), Some(name)) => Some(format!("{keyword} {name}")),
+        (Some(keyword), None) => Some(keyword.into()),
+        (None, name) => name.map(str::to_owned),
     }
 }
