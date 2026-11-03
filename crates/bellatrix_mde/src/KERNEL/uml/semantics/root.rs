@@ -619,6 +619,7 @@ impl<'a> Model<'a> {
         issues.extend(super::relationship_endpoints::validate(&references));
         issues.extend(super::classifiers::validate(&references));
         issues.extend(super::components::validate(&references));
+        issues.extend(super::enumerations::validate(&references));
         issues.extend(super::property_subsetting::validate(&references));
         issues.extend(references.validate_typed_elements());
         issues

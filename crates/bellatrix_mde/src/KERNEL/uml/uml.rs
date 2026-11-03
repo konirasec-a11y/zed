@@ -39,3 +39,6 @@ pub mod value_specifications;
 
 #[path = "semantics/components.rs"]
 pub mod components;
+
+#[path = "semantics/enumerations.rs"]
+pub mod enumerations;
