@@ -511,7 +511,7 @@ impl MdeWorkbenchItem {
         self.connect_relation_view(kind, view_id, point, cx);
     }
 }
-fn resolve_message_anchor(
+pub(super) fn resolve_message_anchor(
     section: &bellatrix_mde::ModelingSection,
     diagram: &bellatrix_mde::Diagram,
     view_id: &str,

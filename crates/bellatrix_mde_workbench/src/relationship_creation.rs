@@ -130,7 +130,7 @@ impl MdeWorkbenchItem {
             ] {
                 if diagram.interaction_kind.as_deref() != Some("communication")
                     && let Some(anchor) = point.and_then(|point| {
-                        resolve_message_anchor(&snapshot.section, diagram, view_id, point)
+                        crate::visual_draft_canvas::resolve_message_anchor(&snapshot.section, diagram, view_id, point)
                     })
                 {
                     properties.insert(key.into(), serde_json::json!({"x":anchor.x,"y":anchor.y}));
