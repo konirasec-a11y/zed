@@ -170,3 +170,92 @@ multiplicidades. Gates headless e lint passaram; interação nativa dessas
 mudanças ainda requer verificação. Imports de Namespace, demais restrições de
 Root, propriedades completas de Association e os outros contratos estruturais
 continuam pendentes. UMLDI e StandardProfile permanecem obrigações separadas.
+
+## Adendo KB-09: redefinições e Slots (2026-11-03)
+
+**Estado: implementação parcial testada; KB-09 não integralmente aceito.**
+Este adendo descreve as alterações locais sobre `4e4eb41`, sem substituir a
+baseline histórica acima nem afirmar conformidade integral UML 2.5.1. O
+comparador de Property descrito abaixo permanece uma pendência normativa.
+
+### Escopo implementado
+
+- `crates/bellatrix_mde/src/KERNEL/uml/semantics/classifiers.rs` calcula
+  `Classifier::allSlottableFeatures` conforme
+  `Classifier-allSlottableFeatures-spec` e `Classifier-inherit-spec` do
+  [UML.xmi versionado](standards/uml/20161101/UML.xmi). A chamada é
+  `self.inherit(self.allParents().attribute)`: somente alvos redefinidos pelos
+  membros possuídos do Classifier consultado são excluídos dessa parcela.
+  Um atributo substituído por um ancestral intermediário pode reaparecer.
+  Não há supressão transitiva adicional nem ambiguidade de override importada
+  de uma linguagem-alvo. A expressão consumível por máquina prevalece sobre
+  a descrição mais ampla de exclusão, conforme a precedência normativa da
+  cláusula 2 adotada pelo plano.
+- Os papéis de redefinição são descobertos por descritores e cadeias de
+  `subsets`/`redefines`, não por uma lista limitada a Property/Operation.
+  `isConsistentWith` é despachado no elemento redefinido, com resolução da
+  operação efetiva pela herança de metaclasses. Property e Operation reutilizam
+  seus comparadores; o corpo base de RedefinableElement retorna `false`.
+  Overrides simples de ActivityNode, ActivityEdge e
+  RedefinableTemplateSignature têm seus predicados de tipo reconhecidos;
+  isso não certifica seus contextos nem todos os contratos comportamentais.
+  Overrides/contextos especializados não implementados continuam explícitos
+  como `Unsupported`.
+- `SetRedefinedElements` escolhe o papel mais específico cujo tipo admite
+  todos os alvos. Port para Property não-Port e coleções mistas usam
+  `redefinedProperty`; somente Ports podem usar `redefinedPort`. A substituição
+  limpa os papéis anteriores, preservando a união derivada sem alvos obsoletos.
+- `null` significa ausência apenas em papéis escalares opcionais, com limites
+  `0..1`. Coleções `null`, referência escalar no lugar de coleção e `[null]`
+  continuam inválidas. Autorreferência, alvo ausente/incompatível, duplicação,
+  `isLeaf`, contexto e ciclos continuam verificados pelos mecanismos existentes.
+
+### Evidência executada
+
+Com Rust 1.98.1, dependências offline bloqueadas, dois jobs e sem compilar a UI:
+
+```sh
+cargo test --offline --locked -p bellatrix_mde \
+  --test kb09_redefinitions --test graph_rules
+```
+
+Resultado final após as correções de revisão: **7/7** fluxos novos em
+`crates/bellatrix_mde/tests/kb09_redefinitions.rs` e **2/2** em
+`crates/bellatrix_mde/tests/graph_rules.rs`. O fluxo antigo que exigia
+`allSlottableFeatures ambiguous` foi atualizado para verificar o conjunto
+normativo positivo, mantendo os demais casos negativos.
+
+Cobertura: cadeia e diamante; redefinidores independentes; redefinições diretas
+múltiplas; atributos privados e Slots; ciclos de generalização e redefinição;
+alvos inválidos e finais; default `false` de Classifier; coleções malformadas e
+reparo por comando; Port para Property/Port/mistos; substituição e limpeza dos
+papéis; rejeição sem mutar o original; reabertura JSON e Protobuf.
+
+A suíte `inherited_capabilities` também passou **5/5** antes das duas correções
+finais de revisão. Ela não foi reexecutada por este recorte após essas duas
+correções; a rodada final acima não deve ser apresentada como uma nova execução
+dessa suíte nem como gate integral do Kernel. `git diff --check` passou.
+Nenhum teste de UI, build do editor ou aceitação nativa faz parte desta evidência.
+
+### Pendência impeditiva do aceite integral
+
+`Property-isConsistentWith-spec` no XMI repete `lowerBound()` no consequente da
+cláusula condicionada a `upperBound()`: exige também
+`prop.lowerBound() <= self.lowerBound()`. O comparador existente
+`feature_compatibility.rs::compare_property_consistency` usa inclusão de
+intervalos de multiplicidade, por meio de `compare_multiplicity_containment`,
+seguindo a interpretação descrita em seu comentário. Esse código não foi
+alterado no recorte KB-09 e não é equivalente ao corpo OCL literal.
+
+Por exemplo, com o mesmo tipo e composição compatível, redefinir `1..4` por
+`2..3` satisfaz inclusão de intervalos, mas falha no consequente literal
+`2 <= 1`. Portanto, passar os testes de fluxo não prova equivalência normativa
+integral desse comparador. A ressalva é de auditoria: o comparador atual retorna
+seu resultado booleano, não um diagnóstico automático dessa divergência.
+
+**KB-09 permanece sem aceite integral** até confrontar a divergência com a
+norma e eventual errata oficial, registrar a resolução normativa e acrescentar
+testes de equivalência com casos discriminantes. Não foi verificada errata
+que autorize substituir essa expressão. Os arquivos upstream uml4net não
+puderam ser relidos nesta rodada porque as consultas web retornaram cache miss;
+a fundamentação acima foi conferida no XMI versionado, não inferida de upstream.

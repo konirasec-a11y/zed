@@ -596,7 +596,6 @@ impl<'index, 'model> Queries<'index, 'model> {
                 all_attributes.extend(query.attributes.iter().copied());
             }
             let all_slottable_features = self.collect_slottable_features(
-                direct.element.id(),
                 &members,
                 &ancestors,
                 &redefined,
@@ -639,13 +638,11 @@ impl<'index, 'model> Queries<'index, 'model> {
 
     fn collect_slottable_features(
         &self,
-        id: &str,
         members: &[ElementRef<'model>],
         ancestors: &[ElementRef<'model>],
         redefined: &HashSet<&str>,
     ) -> Result<Vec<ElementRef<'model>>, QueryError> {
         let mut attributes = Vec::new();
-        let mut ancestor_redefinitions = HashSet::new();
         for ancestor in ancestors {
             let query = self
                 .completed
@@ -653,25 +650,14 @@ impl<'index, 'model> Queries<'index, 'model> {
                 .and_then(|query| query.classifier.as_ref())
                 .ok_or_else(|| QueryError::invalid(ancestor.id(), "missing ancestor attributes"))?;
             attributes.extend(query.attributes.iter().copied());
-            for attribute in &query.attributes {
-                ancestor_redefinitions.extend(
-                    redefinitions(self.references, *attribute)?
-                        .into_iter()
-                        .map(|target| target.id()),
-                );
-            }
         }
-        // The literal allSlottableFeatures body can reintroduce a feature replaced
-        // by an intermediate ancestor. Do not invent a transitive suppression rule
-        // or certify ambiguous membership against the prose's exclusion contract.
-        if attributes.iter().any(|attribute| {
-            ancestor_redefinitions.contains(attribute.id()) && !redefined.contains(attribute.id())
-        }) {
-            return Err(QueryError::unsupported(
-                id,
-                "ancestor redefinitions make allSlottableFeatures ambiguous; explicit resolution is required",
-            ));
-        }
+        // UML.xmi Classifier-allSlottableFeatures-spec calls self.inherit over
+        // allParents().attribute, not each parent's allSlottableFeatures().
+        // Classifier-inherit-spec excludes only targets of this classifier's
+        // owned members. Thus an intermediate ancestor's replaced attribute can
+        // reappear here. The machine-readable normative expression takes
+        // precedence over the prose's broader "excluding redefined" wording
+        // (UML 2.5.1 clause 2); do not add transitive suppression.
         Ok(unique(
             members
                 .iter()
@@ -757,22 +743,18 @@ fn redefinitions<'a>(
         let Some(value) = element.properties().get(property.name) else {
             continue;
         };
-        if !matches!(property.name, "redefinedProperty" | "redefinedOperation") && populated(value)
-        {
-            return Err(QueryError::unsupported(
-                element.id(),
-                format!("{} filtering is not implemented", property.name),
-            ));
+        if value.is_null() && property.upper == "1" && property.lower == "0" {
+            continue;
         }
-        let values = value.as_array().ok_or_else(|| {
-            QueryError::invalid(
-                element.id(),
-                format!(
-                    "{} must be an array of local Element references",
-                    property.name,
-                ),
-            )
-        })?;
+        let values = if property.upper == "1" {
+            std::slice::from_ref(value)
+        } else {
+            value.as_array().map(Vec::as_slice).ok_or_else(|| {
+                QueryError::invalid(element.id(), format!(
+                    "{} must be an array of local Element references", property.name,
+                ))
+            })?
+        };
         let mut seen = HashSet::new();
         for value in values {
             let id = reference_id(value)
@@ -801,7 +783,8 @@ fn redefinitions<'a>(
                     "an Element cannot redefine itself",
                 ));
             }
-            if target.properties().get("isLeaf").and_then(Value::as_bool) == Some(true) {
+            if schema::read_effective_boolean(target, "isLeaf")
+                .map_err(|error| QueryError::invalid(target.id(), error))? {
                 return Err(QueryError::invalid(
                     element.id(),
                     format!("{id} isLeaf prohibits redefinition"),
@@ -862,10 +845,54 @@ fn compare_redefinition_consistency(
     source: ElementRef<'_>,
     target: ElementRef<'_>,
 ) -> Result<bool, QueryError> {
-    if source.conforms_to("Property") {
-        super::feature_compatibility::compare_property_consistency(references, source, target)
-    } else {
-        super::operation_signatures::compare_operation_consistency(references, source, target)
+    // isConsistentWith is invoked on the redefined element, not the redefiner.
+    // Resolve the effective override from normative metaclass inheritance so a
+    // newly supported metaclass cannot silently fall through to Operation or
+    // the base false body when it actually declares a specialized predicate.
+    let descriptor = target.metaclass().and_then(schema::uml_classifier)
+        .ok_or_else(|| QueryError::unsupported(target.id(), "missing redefinition metaclass"))?;
+    let mut pending = vec![descriptor];
+    let mut visited = HashSet::new();
+    let mut operations = Vec::new();
+    while let Some(descriptor) = pending.pop() {
+        if !visited.insert(descriptor.id) { continue; }
+        for reference in descriptor.owned_operations {
+            let operation = reference.target.and_then(schema::operation_by_id)
+                .ok_or_else(|| QueryError::unsupported(target.id(), "unresolved metaclass operation"))?;
+            if operation.name == "isConsistentWith" { operations.push(operation); }
+        }
+        for reference in descriptor.generals {
+            pending.push(reference.target.and_then(schema::classifier)
+                .ok_or_else(|| QueryError::unsupported(target.id(), "unresolved metaclass generalization"))?);
+        }
+    }
+    let mut effective = Vec::new();
+    for operation in &operations {
+        let mut overridden = false;
+        for other in &operations {
+            if other.owner != operation.owner && schema::conforms_to(other.owner, operation.owner)
+                .map_err(|error| QueryError::unsupported(target.id(), error.to_string()))? {
+                overridden = true;
+            }
+        }
+        if !overridden { effective.push(*operation); }
+    }
+    let [operation] = effective.as_slice() else {
+        return Err(QueryError::unsupported(target.id(), "ambiguous or missing isConsistentWith override"));
+    };
+    match operation.id.fragment {
+        "Property-isConsistentWith" =>
+            super::feature_compatibility::compare_property_consistency(references, source, target),
+        "Operation-isConsistentWith" =>
+            super::operation_signatures::compare_operation_consistency(references, source, target),
+        "RedefinableElement-isConsistentWith" => Ok(false),
+        "ActivityEdge-isConsistentWith" => Ok(source.conforms_to("ActivityEdge")),
+        "ActivityNode-isConsistentWith" => Ok(source.conforms_to("ActivityNode")),
+        "RedefinableTemplateSignature-isConsistentWith" =>
+            Ok(source.conforms_to("RedefinableTemplateSignature")),
+        operation => Err(QueryError::unsupported(target.id(), format!(
+            "{operation} consistency predicate is not implemented",
+        ))),
     }
 }
 
@@ -873,16 +900,7 @@ pub(crate) fn redefinition_consistency_diagnostic(
     references: &ReferenceIndex<'_>,
     element: ElementRef<'_>,
 ) -> Option<StructuralDiagnostic> {
-    let key = if element.conforms_to("Property") {
-        "redefinedProperty"
-    } else if element.conforms_to("Operation") {
-        "redefinedOperation"
-    } else {
-        return None;
-    };
-    if !element.properties().get(key).is_some_and(populated) {
-        return None;
-    }
+    if !element.conforms_to("RedefinableElement") { return None; }
     let targets = match redefinitions(references, element) {
         Ok(targets) => targets,
         Err(error) => return Some(error.diagnostic()),
@@ -1088,23 +1106,57 @@ pub(crate) fn set_redefined_elements(
     element_id: &str,
     redefined_ids: &[String],
 ) -> Result<(), String> {
+    let targets = {
+        let references = ReferenceIndex::new(super::root::Model::from_section(section));
+        redefined_ids.iter().map(|id| references.element(id))
+            .collect::<Result<Vec<_>, _>>()?
+    };
     let mut candidate = section.clone();
     let element = candidate
         .elements
         .iter_mut()
         .find(|element| element.id == element_id)
         .ok_or("redefining Element not found")?;
-    let key = if ElementRef::Object(element).conforms_to("Property") {
-        "redefinedProperty"
-    } else if ElementRef::Object(element).conforms_to("Operation") {
-        "redefinedOperation"
-    } else {
-        return Err("only Property and Operation redefinition is supported".into());
+    let source = ElementRef::Object(element);
+    if !source.conforms_to("RedefinableElement") {
+        return Err("a RedefinableElement is required".into());
+    }
+    let mut roles = Vec::new();
+    for property in properties(source).map_err(|error| error.to_string())? {
+        if !property.is_derived && contributes(property, "RedefinableElement-redefinedElement")? {
+            roles.push(property);
+        }
+    }
+    // A narrower subset is usable only when its type admits every target.
+    // For example, Port::redefinedPort must not hide the inherited Property
+    // role when a Port redefines a non-Port Property or a mixed collection.
+    let compatible: Vec<_> = roles.iter().copied()
+        .filter(|role| targets.iter().all(|target| matches_type(*target, role)))
+        .collect();
+    let mut effective = Vec::new();
+    for role in &compatible {
+        let mut subsetted = false;
+        for other in &compatible {
+            if role.id != other.id && contributes(other, role.id.fragment)? { subsetted = true; }
+        }
+        if !subsetted { effective.push(*role); }
+    }
+    let [role] = effective.as_slice() else {
+        return Err("ambiguous or missing writable redefinition role".into());
     };
-    element.properties.insert(
-        key.into(),
-        Value::Array(redefined_ids.iter().map(|id| json!({"$ref": id})).collect()),
-    );
+    let value = if role.upper == "1" {
+        match redefined_ids {
+            [] => Value::Null,
+            [id] => json!({"$ref": id}),
+            _ => return Err(format!("{} permits at most one target", role.name)),
+        }
+    } else {
+        Value::Array(redefined_ids.iter().map(|id| json!({"$ref": id})).collect())
+    };
+    // This command replaces the derived union, including authored values in
+    // broader subsetted roles, rather than leaving stale targets in the union.
+    for property in roles { element.properties.remove(property.name); }
+    element.properties.insert(role.name.into(), value);
     let references = ReferenceIndex::new(super::root::Model::from_section(&candidate));
     let element = references.element(element_id)?;
     redefinitions(&references, element).map_err(|error| error.to_string())?;

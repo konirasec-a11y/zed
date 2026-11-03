@@ -552,18 +552,19 @@ fn slot_owner_transition_uses_one_canonical_edge_through_commands_and_roundtrips
         .ok_or("first")?
         .properties
         .insert("classifier".into(), json!([{"$ref": "descendant"}]));
-    reject(
-        &descendant,
-        assign(Some("first")),
-        "allSlottableFeatures ambiguous",
-    )?;
-    assert!(
-        validate_structural_model(&descendant)
-            .iter()
-            .any(|issue| issue.subject_id == "descendant"
-                && issue.code == "UML_NAMESPACE_QUERY_UNSUPPORTED"
-                && issue.severity == StructuralSeverity::Warning)
-    );
+    // The normative OCL applies descendant.inherit to all ancestors' direct
+    // attributes; it does not transitively suppress other-feature here.
+    let descendant = commands::apply(&descendant, &assign(Some("first")), 11)?;
+    assert_eq!(owner_of(&descendant)?, "first");
+    let references = ReferenceIndex::new(Model::from_project(&descendant));
+    let slottable = classifiers::query(&references, "descendant")?
+        .classifier.ok_or("descendant Classifier")?.all_slottable_features?;
+    for feature in ["feature", "other-feature"] {
+        assert!(slottable.iter().any(|candidate| candidate.id() == feature));
+    }
+    assert!(validate_structural_model(&descendant).iter().all(|issue|
+        issue.severity != StructuralSeverity::Error
+            && !(issue.subject_id == "descendant" && issue.code == "UML_NAMESPACE_QUERY_UNSUPPORTED")));
 
     inherited.relations.push(Relation {
         id: "cycle-back".into(),
