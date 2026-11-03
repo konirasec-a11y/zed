@@ -106,6 +106,72 @@ fn stored_subsets<'a>(
     Ok(unique(values))
 }
 
+fn dependency_subsets<'a>(
+    references: &ReferenceIndex<'a>,
+    dependency: ElementRef<'a>,
+    property: &PropertyDescriptor,
+) -> Result<Vec<ElementRef<'a>>, ElementGraphError> {
+    let name = property.name;
+    let mut subsets = stored_subsets(references, dependency, property.id.fragment)?;
+    if name == "client" && dependency.conforms_to("Substitution") {
+        let owner = super::classifier_hierarchy::substituting_classifier(references, dependency)
+            .map_err(|error| match error {
+                super::classifiers::QueryError::Invalid { subject_id, message } => invalid(&subject_id, message),
+                super::classifiers::QueryError::Unsupported { subject_id, message } => unsupported(&subject_id, message),
+            })?;
+        if !subsets.iter().any(|element| element.id() == owner.id()) { subsets.push(owner); }
+    }
+    Ok(subsets)
+}
+
+/// Prove specialized-role inclusion without pretending an unresolved endpoint
+/// collection is completely known. Malformed collections still take precedence;
+/// global property/endpoint validation retains unresolved-reference diagnostics.
+pub(crate) fn validate_dependency_subsets(
+    references: &ReferenceIndex<'_>,
+    id: &str,
+) -> Result<(), ElementGraphError> {
+    let dependency = element(references, id, "Dependency")?;
+    let mut unknown = None;
+    for name in ["client", "supplier"] {
+        let result = (|| {
+            let property = descriptor(id, "Dependency", name)?;
+            let subsets = dependency_subsets(references, dependency, property)?;
+            let Some(value) = dependency.properties().get(name) else {
+                return dependency_role(references, id, name).map(|_| ());
+            };
+            match read(references, dependency, property, value) {
+                Ok(values) => {
+                    if subsets.iter().all(|subset| values.iter().any(|value| value.id() == subset.id())) {
+                        Ok(())
+                    } else {
+                        Err(invalid(id, format!("specialized roles must subset Dependency::{name}")))
+                    }
+                }
+                Err(error @ ElementGraphError::Unsupported { .. }) => {
+                    // A known identity proves includes even beside unknowns.
+                    // read() has already rejected any independently bad member.
+                    let known = value.as_array().into_iter().flatten()
+                        .filter_map(|value| super::references::reference_id(value).ok().flatten())
+                        .collect::<HashSet<_>>();
+                    if subsets.iter().all(|subset| known.contains(subset.id())) {
+                        Ok(())
+                    } else {
+                        Err(error)
+                    }
+                }
+                Err(error) => Err(error),
+            }
+        })();
+        match result {
+            Ok(()) => {}
+            Err(error @ ElementGraphError::Unsupported { .. }) => unknown = Some(error),
+            Err(error) => return Err(error),
+        }
+    }
+    unknown.map_or(Ok(()), Err)
+}
+
 fn dependency_role<'a>(
     references: &ReferenceIndex<'a>,
     id: &str,
@@ -113,7 +179,7 @@ fn dependency_role<'a>(
 ) -> Result<Vec<ElementRef<'a>>, ElementGraphError> {
     let dependency = element(references, id, "Dependency")?;
     let property = descriptor(id, "Dependency", name)?;
-    let subsets = stored_subsets(references, dependency, property.id.fragment)?;
+    let subsets = dependency_subsets(references, dependency, property)?;
     if let Some(value) = dependency.properties().get(name) {
         let values = read(references, dependency, property, value)?;
         if subsets.iter().any(|subset| !values.iter().any(|value| value.id() == subset.id())) {

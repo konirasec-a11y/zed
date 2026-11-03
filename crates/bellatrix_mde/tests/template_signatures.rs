@@ -737,6 +737,7 @@ fn constrained_parameter_flow_decides_identity_ancestry_and_reopens() {
     model.elements.iter_mut().find(|e| e.id == parameter).unwrap().properties.remove("allowSubstitutable");
     assert!(rule_issues(&model).is_empty());
     model.relations.push(serde_json::from_value(serde_json::json!({"id":"unrelated-constraint","kind":"uml.constraining_classifier","from":parameter,"to":"unrelated"})).unwrap());
+    add_substitution(&mut model, "unresolved-substitution", &exposed, serde_json::json!({"href":"external.uml#Contract"}));
     let unknown = rule_issues(&model);
     assert_eq!(unknown.len(), 1, "{unknown:?}");
     assert_eq!(unknown[0].code, "MDE_TEMPLATE_CONSTRAINT_UNSUPPORTED");
@@ -768,6 +769,8 @@ fn constrained_parameter_draft_keeps_unknown_and_invalid_obligations_visible() {
         model.elements.push(serde_json::from_value(serde_json::json!({"id":id,"kind":kind,"name":id})).unwrap());
         model.relations.push(serde_json::from_value(serde_json::json!({"id":format!("constraint-{id}"),"kind":"uml.constraining_classifier","from":parameter,"to":id})).unwrap());
     }
+    let exposed = model.relations.iter().find(|r| r.kind == "uml.parametered_element").unwrap().to.clone();
+    add_substitution(&mut model, "unresolved-substitution", &exposed, serde_json::json!({"href":"external.uml#Contract"}));
     for format in [bellatrix_mde::Format::Json, bellatrix_mde::Format::Protobuf] {
         let reopened = bellatrix_mde::decode(&bellatrix_mde::encode(&model, format).unwrap(), format).unwrap();
         let issues = validate_structural_model(&reopened);
@@ -796,6 +799,199 @@ fn constrained_parameter_flow_preserves_unresolved_ancestry_and_invalid_flags() 
     model.elements.iter_mut().find(|e| e.id == parameter).unwrap().properties.insert("allowSubstitutable".into(), serde_json::json!("false"));
     let issues = validate_structural_model(&model);
     assert!(issues.iter().any(|d| d.code == "UML_TEMPLATE_PARAMETER_FLAG_TYPE"));
-    assert!(issues.iter().any(|d| d.code == "MDE_TEMPLATE_CONSTRAINT_UNSUPPORTED"));
+    assert!(!issues.iter().any(|d| d.code == "MDE_TEMPLATE_CONSTRAINT_UNSUPPORTED"));
+    assert!(issues.iter().any(|d| d.code == "UML_TEMPLATE_PARAMETERED_CONSTRAINT"),
+        "unknown allowSubstitutable AND absent Substitution is false");
+    add_substitution(&mut model, "matching-substitution", &exposed, serde_json::json!({"$ref":"constraint"}));
+    let issues = validate_structural_model(&model);
+    assert!(issues.iter().any(|d| d.code == "UML_TEMPLATE_PARAMETER_FLAG_TYPE"));
+    assert!(issues.iter().any(|d| d.code == "MDE_TEMPLATE_CONSTRAINT_UNSUPPORTED"),
+        "unknown allowSubstitutable AND true Substitution remains unknown");
     assert!(!issues.iter().any(|d| d.code == "UML_TEMPLATE_PARAMETERED_CONSTRAINT"));
+}
+
+fn add_substitution(model: &mut Project, id: &str, owner: &str, contract: serde_json::Value) {
+    model.elements.push(serde_json::from_value(serde_json::json!({
+        "id":id,"kind":"uml.substitution","name":id,
+        "properties":{"contract":contract,"substitutingClassifier":{"$ref":owner},"visibility":null}
+    })).unwrap());
+    model.relations.push(serde_json::from_value(serde_json::json!({
+        "id":format!("owns-{id}"),"kind":"owns","from":owner,"to":id
+    })).unwrap());
+}
+
+#[test]
+fn substitution_flow_uses_owned_contracts_not_inheritance_and_reopens() {
+    use bellatrix_mde::uml::{classifier_hierarchy, references::ReferenceIndex, root::Model};
+    let mut model = add(&project("uml.class"), 0).unwrap();
+    let parameter = model.elements.iter().find(|e| e.kind == "uml.classifier_template_parameter").unwrap().id.clone();
+    let exposed = model.relations.iter().find(|r| r.kind == "uml.parametered_element").unwrap().to.clone();
+    model.elements.iter_mut().find(|e| e.id == parameter).unwrap().properties.remove("allowSubstitutable");
+    for id in ["contract", "parent", "other"] {
+        model.elements.push(serde_json::from_value(serde_json::json!({"id":id,"kind":"uml.class","name":id})).unwrap());
+    }
+    model.relations.push(serde_json::from_value(serde_json::json!({"id":"constraint","kind":"uml.constraining_classifier","from":parameter,"to":"contract"})).unwrap());
+    let decided = |model: &Project| validate_structural_model(model).into_iter().filter(|d|
+        d.code == "UML_TEMPLATE_PARAMETERED_CONSTRAINT" || d.code == "MDE_TEMPLATE_CONSTRAINT_UNSUPPORTED").collect::<Vec<_>>();
+    // A closed empty set proves false, even when allowSubstitutable defaults true.
+    assert!(decided(&model).iter().any(|d| d.code == "UML_TEMPLATE_PARAMETERED_CONSTRAINT"));
+    add_substitution(&mut model, "parent-substitution", "parent", serde_json::json!({"$ref":"contract"}));
+    model.relations.push(serde_json::from_value(serde_json::json!({"id":"parent-edge","kind":"uml.generalization","from":exposed,"to":"parent"})).unwrap());
+    assert!(!classifier_hierarchy::is_substitutable_for(&ReferenceIndex::new(Model::from_project(&model)), &exposed, "contract").unwrap());
+    add_substitution(&mut model, "local-substitution", &exposed, serde_json::json!({"$ref":"contract"}));
+    for format in [bellatrix_mde::Format::Json, bellatrix_mde::Format::Protobuf] {
+        let reopened = bellatrix_mde::decode(&bellatrix_mde::encode(&model, format).unwrap(), format).unwrap();
+        let index = ReferenceIndex::new(Model::from_project(&reopened));
+        assert!(classifier_hierarchy::is_substitutable_for(&index, &exposed, "contract").unwrap());
+        assert!(!classifier_hierarchy::is_substitutable_for(&index, &exposed, "other").unwrap());
+        assert!(decided(&reopened).is_empty(), "{:?}", decided(&reopened));
+    }
+    model.elements.iter_mut().find(|e| e.id == parameter).unwrap().properties.insert("allowSubstitutable".into(), serde_json::json!(true));
+    let before = model.clone();
+    let error = commands::apply(&model, &Command::SetProperty {
+        element_id:parameter.clone(), path:"properties.allowSubstitutable".into(), value:serde_json::json!(false),
+    }, 7).expect_err("disallowing the only satisfying alternative must reject atomically");
+    assert!(error.contains("UML_TEMPLATE_PARAMETERED_CONSTRAINT"), "{error}");
+    assert_eq!(model, before);
+}
+
+#[test]
+fn substitution_draft_flow_preserves_unknowns_and_rejects_bad_ownership_or_types() {
+    use bellatrix_mde::uml::{classifier_hierarchy, references::ReferenceIndex, root::Model};
+    let mut model = project("uml.class");
+    for (id, kind) in [("contract", "uml.class"), ("other", "uml.class"), ("package", "uml.package")] {
+        model.elements.push(serde_json::from_value(serde_json::json!({"id":id,"kind":kind,"name":id})).unwrap());
+    }
+    add_substitution(&mut model, "unknown", "owner", serde_json::json!({"href":"external.uml#Contract"}));
+    let query = |model: &Project| classifier_hierarchy::is_substitutable_for(&ReferenceIndex::new(Model::from_project(model)), "owner", "contract");
+    assert!(query(&model).is_err_and(|error| matches!(error, bellatrix_mde::uml::classifiers::QueryError::Unsupported { .. })));
+    add_substitution(&mut model, "known", "owner", serde_json::json!({"$ref":"contract"}));
+    assert!(query(&model).unwrap(), "known membership decides includes beside unknown");
+    for (field, value) in [
+        ("contract", serde_json::json!({"$ref":"package"})),
+        ("contract", serde_json::Value::Null),
+        ("contract", serde_json::json!({"$ref":"missing"})),
+        ("substitutingClassifier", serde_json::json!({"$ref":"other"})),
+    ] {
+        let mut draft = model.clone();
+        draft.elements.iter_mut().find(|e| e.id == "known").unwrap().properties.insert(field.into(), value);
+        for format in [bellatrix_mde::Format::Json, bellatrix_mde::Format::Protobuf] {
+            let reopened = bellatrix_mde::decode(&bellatrix_mde::encode(&draft, format).unwrap(), format).unwrap();
+            assert!(query(&reopened).is_err());
+            assert!(validate_structural_model(&reopened).iter().any(|d| d.code == "UML_SUBSTITUTION_CONTRACT"));
+        }
+    }
+    let mut draft = model.clone();
+    draft.elements.iter_mut().find(|e| e.id == "owner").unwrap().properties.insert("substitution".into(), serde_json::json!([]));
+    assert!(query(&draft).is_err(), "explicit empty collection cannot conceal owned substitutions");
+    assert!(query(&model).unwrap(), "draft checks must not mutate source");
+    let mut wrong_owner = model.clone();
+    wrong_owner.relations.iter_mut().find(|r| r.id == "owns-known").unwrap().from = "package".into();
+    assert!(validate_structural_model(&wrong_owner).iter().any(|d| d.code == "UML_SUBSTITUTION_CONTRACT"));
+    let mut orphan = model.clone();
+    orphan.relations.retain(|r| r.id != "owns-known");
+    assert!(validate_structural_model(&orphan).iter().any(|d| d.code == "UML_SUBSTITUTION_CONTRACT"));
+    let mut binary = project("uml.class");
+    binary.elements.push(serde_json::from_value(serde_json::json!({"id":"contract","kind":"uml.class","name":"Contract"})).unwrap());
+    binary.relations.push(serde_json::from_value(serde_json::json!({"id":"binary","kind":"uml.substitution","from":"owner","to":"contract"})).unwrap());
+    assert!(query(&binary).is_err_and(|error| matches!(error, bellatrix_mde::uml::classifiers::QueryError::Unsupported { .. })),
+        "unadapted binary record cannot prove absent Substitution");
+}
+
+#[test]
+fn substitution_owner_projection_agrees_across_queries_validation_commands_and_reopen() {
+    use bellatrix_mde::uml::{classifier_hierarchy, references::ReferenceIndex, relationship_endpoints, root::Model};
+    let mut model = project("uml.class");
+    model.root_model = Some("root".into());
+    model.elements.push(serde_json::from_value(serde_json::json!({"id":"root","kind":"uml.model","name":"Root"})).unwrap());
+    for child in ["owner", "contract"] {
+        model.relations.push(serde_json::from_value(serde_json::json!({"id":format!("root-{child}"),"kind":"owns","from":"root","to":child})).unwrap());
+    }
+    model.elements.push(serde_json::from_value(serde_json::json!({"id":"contract","kind":"uml.class","name":"Contract"})).unwrap());
+    add_substitution(&mut model, "substitution", "owner", serde_json::json!({"$ref":"contract"}));
+    model.elements.iter_mut().find(|e| e.id == "substitution").unwrap().properties.remove("substitutingClassifier");
+    for format in [bellatrix_mde::Format::Json, bellatrix_mde::Format::Protobuf] {
+        let reopened = bellatrix_mde::decode(&bellatrix_mde::encode(&model, format).unwrap(), format).unwrap();
+        let index = ReferenceIndex::new(Model::from_project(&reopened));
+        assert!(classifier_hierarchy::is_substitutable_for(&index, "owner", "contract").unwrap());
+        let clients = relationship_endpoints::clients(&index, "substitution").unwrap();
+        assert_eq!(clients.iter().map(|e| e.id()).collect::<Vec<_>>(), vec!["owner"]);
+        let errors = Model::from_project(&reopened).validate().into_iter().filter(|d| d.severity == bellatrix_mde::StructuralSeverity::Error).collect::<Vec<_>>();
+        assert!(errors.is_empty(), "{errors:?}");
+        let renamed = commands::apply(&reopened, &Command::Rename { element_id:"owner".into(), name:"Renamed".into() }, 8).unwrap();
+        assert!(classifier_hierarchy::is_substitutable_for(&ReferenceIndex::new(Model::from_project(&renamed)), "owner", "contract").unwrap());
+    }
+    model.elements.iter_mut().find(|e| e.id == "substitution").unwrap().properties.insert("client".into(), serde_json::json!([{"$ref":"contract"}]));
+    let index = ReferenceIndex::new(Model::from_project(&model));
+    assert!(relationship_endpoints::clients(&index, "substitution").is_err(), "stored client must include the canonical substituting Classifier");
+    assert!(classifier_hierarchy::is_substitutable_for(&index, "owner", "contract").is_err());
+    assert!(Model::from_project(&model).validate().iter().any(|d| d.severity == bellatrix_mde::StructuralSeverity::Error));
+}
+
+#[test]
+fn substitution_explicit_collection_keeps_decisive_membership_and_invalid_precedence() {
+    use bellatrix_mde::uml::{classifier_hierarchy, classifiers::QueryError, references::ReferenceIndex, root::Model};
+    let mut model = project("uml.class");
+    model.elements.push(serde_json::from_value(serde_json::json!({"id":"contract","kind":"uml.class","name":"Contract"})).unwrap());
+    add_substitution(&mut model, "known", "owner", serde_json::json!({"$ref":"contract"}));
+    for entries in [
+        serde_json::json!([{"$ref":"known"},{"href":"external.uml#Substitution"}]),
+        serde_json::json!([{"href":"external.uml#Substitution"},{"$ref":"known"}]),
+    ] {
+        model.elements.iter_mut().find(|e| e.id == "owner").unwrap().properties.insert("substitution".into(), entries);
+        for format in [bellatrix_mde::Format::Json, bellatrix_mde::Format::Protobuf] {
+            let reopened = bellatrix_mde::decode(&bellatrix_mde::encode(&model, format).unwrap(), format).unwrap();
+            assert!(classifier_hierarchy::is_substitutable_for(&ReferenceIndex::new(Model::from_project(&reopened)), "owner", "contract").unwrap());
+            assert!(Model::from_project(&reopened).validate().iter().any(|d| d.severity == bellatrix_mde::StructuralSeverity::Warning), "unresolved collection remains diagnosed");
+        }
+    }
+    for entries in [
+        serde_json::json!([{"$ref":"known"},{"href":"external.uml#Substitution"},false]),
+        serde_json::json!([false,{"href":"external.uml#Substitution"},{"$ref":"known"}]),
+        serde_json::json!([{"$ref":"known"},{"$ref":"known"}]),
+    ] {
+        model.elements.iter_mut().find(|e| e.id == "owner").unwrap().properties.insert("substitution".into(), entries);
+        assert!(classifier_hierarchy::is_substitutable_for(&ReferenceIndex::new(Model::from_project(&model)), "owner", "contract").is_err_and(|e| matches!(e, QueryError::Invalid { .. })));
+    }
+}
+
+#[test]
+fn substitution_endpoint_subsets_keep_known_members_beside_unknowns_without_partial_lists() {
+    use bellatrix_mde::uml::{classifier_hierarchy, classifiers::QueryError, references::ReferenceIndex, relationship_endpoints, root::Model};
+    let mut model = project("uml.class");
+    model.elements.push(serde_json::from_value(serde_json::json!({"id":"contract","kind":"uml.class","name":"Contract"})).unwrap());
+    add_substitution(&mut model, "known", "owner", serde_json::json!({"$ref":"contract"}));
+    for (role, required) in [("client", "owner"), ("supplier", "contract")] {
+        for values in [
+            serde_json::json!([{"$ref":required},{"href":"external.uml#Endpoint"}]),
+            serde_json::json!([{"href":"external.uml#Endpoint"},{"$ref":required}]),
+        ] {
+            let mut draft = model.clone();
+            draft.elements.iter_mut().find(|e| e.id == "known").unwrap().properties.insert(role.into(), values);
+            for format in [bellatrix_mde::Format::Json, bellatrix_mde::Format::Protobuf] {
+                let reopened = bellatrix_mde::decode(&bellatrix_mde::encode(&draft, format).unwrap(), format).unwrap();
+                let index = ReferenceIndex::new(Model::from_project(&reopened));
+                assert!(classifier_hierarchy::is_substitutable_for(&index, "owner", "contract").unwrap());
+                let complete = if role == "client" { relationship_endpoints::clients(&index, "known") } else { relationship_endpoints::suppliers(&index, "known") };
+                assert!(complete.is_err_and(|error| matches!(error,
+                    bellatrix_mde::uml::element_graph_queries::ElementGraphError::Unsupported { .. }
+                )), "full collection must remain explicitly unsupported, not invalid or silently truncated");
+                assert!(Model::from_project(&reopened).validate().iter().any(|d| d.severity == bellatrix_mde::StructuralSeverity::Warning));
+            }
+        }
+        for values in [
+            serde_json::json!([{"$ref":required},{"href":"external.uml#Endpoint"},false]),
+            serde_json::json!([false,{"href":"external.uml#Endpoint"},{"$ref":required}]),
+            serde_json::json!([{"$ref":required},{"$ref":required},{"href":"external.uml#Endpoint"}]),
+        ] {
+            let mut draft = model.clone();
+            draft.elements.iter_mut().find(|e| e.id == "known").unwrap().properties.insert(role.into(), values);
+            assert!(classifier_hierarchy::is_substitutable_for(&ReferenceIndex::new(Model::from_project(&draft)), "owner", "contract").is_err_and(|error| matches!(error, QueryError::Invalid { .. })));
+        }
+    }
+    // Unknown client inclusion cannot conceal an invalid supplier collection.
+    let properties = &mut model.elements.iter_mut().find(|e| e.id == "known").unwrap().properties;
+    properties.insert("client".into(), serde_json::json!([{"href":"external.uml#Endpoint"}]));
+    properties.insert("supplier".into(), serde_json::json!([false]));
+    assert!(classifier_hierarchy::is_substitutable_for(&ReferenceIndex::new(Model::from_project(&model)), "owner", "contract").is_err_and(|error| matches!(error, QueryError::Invalid { .. })));
 }

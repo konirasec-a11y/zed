@@ -267,3 +267,146 @@ pub fn conforms_to(
         .map_err(|error| QueryError::invalid(other_id, error))?;
     Ok(resolve_ancestry(references, classifier_id)?.conforms_to(other))
 }
+
+fn substitution_reference<'a>(
+    references: &ReferenceIndex<'a>,
+    substitution: ElementRef<'a>,
+    name: &str,
+    value: &serde_json::Value,
+) -> Result<ElementRef<'a>, QueryError> {
+    let property = schema::uml_property("Substitution", name)
+        .map_err(|error| QueryError::unsupported(substitution.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(substitution.id(), "missing Substitution property contract"))?;
+    match super::property_contracts::check_value(references, substitution, property, value) {
+        super::property_contracts::PropertyOutcome::Satisfied => {}
+        super::property_contracts::PropertyOutcome::Violation(message) =>
+            return Err(QueryError::invalid(substitution.id(), message)),
+        super::property_contracts::PropertyOutcome::Unverified(message) =>
+            return Err(QueryError::unsupported(substitution.id(), message)),
+    }
+    references.validate(property, value)
+        .map_err(|error| QueryError::invalid(substitution.id(), error))?
+        .ok_or_else(|| QueryError::invalid(substitution.id(), "Substitution requires a Classifier reference"))
+}
+
+/// Resolve a Substitution's contract while checking its canonical owner/client.
+/// The owner is the substituting Classifier; a stored inverse may only agree.
+pub(crate) fn substituting_classifier<'a>(
+    references: &ReferenceIndex<'a>,
+    substitution: ElementRef<'a>,
+) -> Result<ElementRef<'a>, QueryError> {
+    let owner = references.model().owner(substitution)
+        .map_err(|error| QueryError::invalid(substitution.id(), error))?
+        .ok_or_else(|| QueryError::invalid(substitution.id(), "Substitution requires a substituting Classifier owner"))?;
+    if !owner.conforms_to("Classifier") {
+        return Err(QueryError::invalid(substitution.id(), "Substitution owner must be a Classifier"));
+    }
+    if let Some(value) = owner.properties().get("substitution") {
+        let property = schema::uml_property("Classifier", "substitution")
+            .map_err(|error| QueryError::unsupported(owner.id(), error.to_string()))?
+            .ok_or_else(|| QueryError::unsupported(owner.id(), "missing substitution contract"))?;
+        let unknown = match super::property_contracts::check_value(references, owner, property, value) {
+            super::property_contracts::PropertyOutcome::Satisfied => None,
+            super::property_contracts::PropertyOutcome::Violation(message) =>
+                return Err(QueryError::invalid(owner.id(), message)),
+            super::property_contracts::PropertyOutcome::Unverified(message) => Some(message),
+        };
+        let contains = value.as_array().is_some_and(|values| values.iter().any(|value|
+            matches!(super::references::reference_id(value), Ok(Some(id)) if id == substitution.id())));
+        if !contains {
+            return Err(unknown.map_or_else(
+                || QueryError::invalid(substitution.id(), "canonical ownership contradicts Classifier::substitution"),
+                |message| QueryError::unsupported(substitution.id(), message),
+            ));
+        }
+    }
+    let derived_owner = serde_json::json!({"$ref": owner.id()});
+    let client = substitution_reference(references, substitution, "substitutingClassifier",
+        substitution.properties().get("substitutingClassifier").unwrap_or(&derived_owner))?;
+    if client.id() != owner.id() {
+        return Err(QueryError::invalid(substitution.id(), "Substitution::substitutingClassifier must equal its canonical owner"));
+    }
+    Ok(owner)
+}
+
+fn substitution_contract<'a>(
+    references: &ReferenceIndex<'a>,
+    substitution: ElementRef<'a>,
+) -> Result<ElementRef<'a>, QueryError> {
+    substituting_classifier(references, substitution)?;
+    let contract = substitution_reference(references, substitution, "contract",
+        substitution.properties().get("contract").unwrap_or(&serde_json::Value::Null))?;
+    // Keep the specialized roles consistent with the existing Dependency
+    // projections; do not maintain another client/supplier interpretation.
+    super::relationship_endpoints::validate_dependency_subsets(references, substitution.id())
+        .map_err(|error| match error {
+            super::element_graph_queries::ElementGraphError::Invalid { subject_id, message } =>
+                QueryError::invalid(&subject_id, message),
+            super::element_graph_queries::ElementGraphError::Unsupported { subject_id, message } =>
+                QueryError::unsupported(&subject_id, message),
+        })?;
+    Ok(contract)
+}
+
+/// UML.xmi Classifier-isSubstitutableFor-spec: substitution.contract includes
+/// contract. This is an owned relationship query, not transitive inheritance,
+/// structural compatibility, or inference from the names of Classifiers.
+pub fn is_substitutable_for(
+    references: &ReferenceIndex<'_>,
+    classifier_id: &str,
+    contract_id: &str,
+) -> Result<bool, QueryError> {
+    let classifier = references.element(classifier_id)
+        .map_err(|error| QueryError::invalid(classifier_id, error))?;
+    let contract = references.element(contract_id)
+        .map_err(|error| QueryError::invalid(contract_id, error))?;
+    if !classifier.conforms_to("Classifier") || !contract.conforms_to("Classifier") {
+        return Err(QueryError::invalid(classifier_id, "isSubstitutableFor requires two Classifiers"));
+    }
+    let owned = references.model().owned_elements(classifier)
+        .map_err(|error| QueryError::invalid(classifier_id, error))?;
+    // An authored collection is a projection of the same ownership graph, not
+    // an independent source of relationships. Validate it using its descriptor.
+    let mut unresolved_collection = None;
+    if let Some(value) = classifier.properties().get("substitution") {
+        let property = schema::uml_property("Classifier", "substitution")
+            .map_err(|error| QueryError::unsupported(classifier_id, error.to_string()))?
+            .ok_or_else(|| QueryError::unsupported(classifier_id, "missing Classifier::substitution contract"))?;
+        match super::property_contracts::check_value(references, classifier, property, value) {
+            super::property_contracts::PropertyOutcome::Satisfied => {}
+            super::property_contracts::PropertyOutcome::Violation(message) =>
+                return Err(QueryError::invalid(classifier_id, message)),
+            super::property_contracts::PropertyOutcome::Unverified(message) =>
+                unresolved_collection = Some(Err(QueryError::unsupported(classifier_id, message))),
+        }
+    }
+    let unresolved_binary = references.model().relationship_records().any(|relation| {
+        relation.kind == "uml.substitution" && (relation.from == classifier_id
+            || references.model().ownership_links().any(|owner|
+                owner.from == classifier_id && owner.to == relation.id))
+    }).then(|| Err(QueryError::unsupported(classifier_id,
+        "binary Substitution records require a canonical ownership/role adapter")));
+    super::feature_compatibility::accept_any(owned.into_iter()
+        .filter(|element| element.conforms_to("Substitution"))
+        .map(|substitution| {
+            substitution_contract(references, substitution)
+                .map(|target| target.id() == contract.id())
+        }).chain(unresolved_collection).chain(unresolved_binary))
+}
+
+pub(crate) fn validate_substitutions(
+    references: &ReferenceIndex<'_>,
+) -> Vec<crate::StructuralDiagnostic> {
+    references.model().elements()
+        .filter(|element| element.conforms_to("Substitution"))
+        .filter_map(|element| substitution_contract(references, element).err())
+        .map(|error| {
+            let (severity, code, subject_id, message) = match error {
+                QueryError::Invalid { subject_id, message } =>
+                    (crate::StructuralSeverity::Error, "UML_SUBSTITUTION_CONTRACT", subject_id, message),
+                QueryError::Unsupported { subject_id, message } =>
+                    (crate::StructuralSeverity::Warning, "MDE_SUBSTITUTION_UNVERIFIED", subject_id, message),
+            };
+            crate::StructuralDiagnostic { severity, code, subject_id, message }
+        }).collect()
+}

@@ -447,3 +447,56 @@ JSON/Protobuf. Execução focada: **16/16** em `template_signatures` e **4/4** e
 `/tmp/template-constraints-final.log` no ambiente de trabalho. Resultado refere-se
 ao working tree sobre `42470e8`, antes de commit deste incremento; não representa
 gate integral, aceite GUI ou conformidade UML 2.5.1 completa.
+
+### Continuação: consulta canônica de Substitution — 2026-11-03
+
+O incremento seguinte implementa `Classifier::isSubstitutableFor` conforme
+`Classifier-isSubstitutableFor-spec` (UML.xmi:16071): a coleção de Substitutions
+**possuídas** pelo Classifier contém um `contract` com a identidade consultada.
+Reutiliza `owns`, os descritores normativos e `ReferenceIndex`; não herda essa
+coleção dos pais nem infere substituibilidade por nomes ou compatibilidade
+estrutural. Substitution é consumida como objeto canônico, com `contract` tipado
+e `substitutingClassifier` coerente com o owner Classifier. Ownership ausente,
+owner incompatível e contratos malformados são diagnosticados globalmente.
+
+A regra de ClassifierTemplateParameter agora usa essa terceira alternativa:
+coleção fechada vazia prova ausência; uma identidade conhecida prova inclusão,
+mesmo diante de outra referência externa não resolvida, sem ocultar os
+respectivos diagnósticos. Referências externas, coleções sem resolução e
+representações binárias ainda sem adapter continuam não verificadas. Isso não
+implementa os contratos de argumentos de TemplateParameterSubstitution nem
+comprova comportamento de execução dos classificadores.
+
+Código: `semantics/classifier_hierarchy.rs`, ligação em `classifiers.rs` e
+consumo em `templates.rs`. Os fluxos em `tests/template_signatures.rs` verificam
+coleção vazia, ausência de herança, contratos locais/externos, tipos e owner,
+reabertura JSON/Protobuf e rejeição atômica ao desabilitar a alternativa válida.
+A edição visual de referências de Substitution não é parte deste incremento.
+
+Verificação focada deste incremento: `template_signatures` **18/18**,
+`kernel_api_validation` **4/4** e `relationship_roles_flow` **3/3**, além de
+`git diff --check`. Log local: `/tmp/substitution-test-final.log`. Resultados
+sobre o working tree após `ac5af4c`, ainda sem commit deste incremento;
+não representam conformidade integral ou aceite GUI.
+
+Revisão adversarial deste incremento: a mesma projeção de owner agora alimenta
+`Dependency::client` quando `substitutingClassifier` está omitido. Queries,
+validação global e comandos concordam; papéis explícitos conflitantes são
+rejeitados. Coleções explícitas com referência conhecida e `href` preservam
+inclusão comprovada nas duas ordens, sem esconder entradas inválidas ou
+repetidas. A composição de três valores também cobre flag desconhecido:
+`unknown AND false = false`, enquanto `unknown AND true` permanece desconhecido,
+sem suprimir erro de tipo do flag. Gate final após essas correções:
+`template_signatures` **20/20**, `kernel_api_validation` **4/4** e
+`relationship_roles_flow` **3/3**; `git diff --check` passou.
+Log local: `/tmp/substitution-review-final.log`.
+
+A revisão seguinte separa a prova genérica de inclusão dos papéis especializados
+na Dependency da resolução completa das coleções client/supplier. Membro local
+conhecido junto de `href`, em qualquer ordem, pode provar o subset exigido por
+Substitution. A consulta completa de endpoints continua inconclusiva, sem
+retornar uma lista truncada; os warnings de referências externas permanecem.
+Malformados, duplicatas e violações comprovadas prevalecem, inclusive entre
+client e supplier. Fluxo adicional verifica ambas ordens e reabertura.
+Gate focado: templates **21/21**, API **4/4**, relationship roles **3/3**;
+log `/tmp/substitution-subsets-final.log`.

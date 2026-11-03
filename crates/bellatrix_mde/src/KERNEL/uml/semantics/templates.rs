@@ -385,18 +385,33 @@ pub(crate) fn validate(project: &Project) -> Vec<StructuralDiagnostic> {
                     } else {
                         crate::uml::classifier_hierarchy::conforms_to(&index, &exposed.id, &target.id)
                     };
-                    let outcome = match conformance {
+                    let decision = match conformance {
                         Ok(true) => continue,
-                        Ok(false) => match &allow_substitutable {
-                            Ok(false) => (StructuralSeverity::Error,
-                                "UML_TEMPLATE_PARAMETERED_CONSTRAINT",
-                                "parameteredElement does not conform and allowSubstitutable is false".to_owned()),
-                            Ok(true) => (StructuralSeverity::Warning,
-                                "MDE_TEMPLATE_CONSTRAINT_UNSUPPORTED",
-                                "isSubstitutableFor is not resolved by the current Substitution adapter".to_owned()),
-                            Err(error) => (StructuralSeverity::Warning,
-                                "MDE_TEMPLATE_CONSTRAINT_UNSUPPORTED", error.to_string()),
+                        result => match &allow_substitutable {
+                            Ok(false) => result,
+                            Ok(true) => crate::uml::feature_compatibility::accept_any([
+                                result,
+                                crate::uml::classifier_hierarchy::is_substitutable_for(
+                                    &index, &exposed.id, &target.id,
+                                ),
+                            ]),
+                            Err(error) => crate::uml::feature_compatibility::accept_any([
+                                result, crate::uml::feature_compatibility::require_all([
+                                    Err(crate::uml::classifiers::QueryError::unsupported(
+                                        &element.id, error.to_string(),
+                                    )),
+                                    crate::uml::classifier_hierarchy::is_substitutable_for(
+                                        &index, &exposed.id, &target.id,
+                                    ),
+                                ]),
+                            ]),
                         },
+                    };
+                    let outcome = match decision {
+                        Ok(true) => continue,
+                        Ok(false) => (StructuralSeverity::Error,
+                            "UML_TEMPLATE_PARAMETERED_CONSTRAINT",
+                            "parameteredElement neither conforms nor satisfies the permitted Substitution alternative".to_owned()),
                         Err(crate::uml::classifiers::QueryError::Invalid { message, .. }) =>
                             (StructuralSeverity::Error, "UML_TEMPLATE_PARAMETERED_CONSTRAINT", message),
                         Err(error) => (StructuralSeverity::Warning,

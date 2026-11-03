@@ -1053,7 +1053,7 @@ fn validate_feature_rules(
 
 pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut queries = Queries::new(references);
-    let mut issues = Vec::new();
+    let mut issues = super::classifier_hierarchy::validate_substitutions(references);
     for element in references.model().elements() {
         validate_feature_rules(references, element, &mut issues);
         let result = (|| {
