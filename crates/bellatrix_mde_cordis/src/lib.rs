@@ -40,6 +40,7 @@ pub use view_style::{
     ModelingReorderView, ModelingReorderViewRequested, ModelingSetViewRouting,
     ModelingSetViewRoutingRequested, ModelingSetViewStyle, ModelingSetViewStyleRequested,
     ModelingSetViewLabel, ModelingSetViewLabelRequested,
+    ModelingSetViewTiming, ModelingSetViewTimingRequested,
 };
 mod views;
 pub use delete_element::{ModelingDeleteElement, ModelingDeleteElementRequested};

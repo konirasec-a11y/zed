@@ -7,7 +7,8 @@ pub(crate) mod wire;
 
 pub use diagram::{
     Diagram, Geometry, LineMode, PathSegment, Point, RelationshipRouting, StereotypeDisplay, Style,
-    TextAlignment, TextVerticalAlignment, View, VisualDraft,
+    TextAlignment, TextVerticalAlignment, TimingMode, TimingPoint, TimingPresentation, View,
+    VisualDraft,
 };
 pub use graph::{Annotation, Element, FileContent, Implementation, Relation};
 pub use io::{Format, ModelIoError, decode, encode};

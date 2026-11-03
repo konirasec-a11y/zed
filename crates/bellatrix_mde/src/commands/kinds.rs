@@ -402,6 +402,17 @@ impl ModelingElementKind {
             Self::Terminate => "NewTerminate",
         }
     }
+    pub fn initial_size_in_diagram(self, diagram: &crate::Diagram) -> (f64, f64) {
+        if self == Self::Lifeline {
+            match crate::StructuralDiagramKind::from_diagram(diagram) {
+                Some(crate::StructuralDiagramKind::Timing) => return (480.0, 180.0),
+                Some(crate::StructuralDiagramKind::Communication) => return (140.0, 80.0),
+                _ => {}
+            }
+        }
+        self.initial_size()
+    }
+
     pub fn initial_size(self) -> (f64, f64) {
         match self {
             Self::Port => (16.0, 16.0),

@@ -1,4 +1,4 @@
-use bellatrix_mde::{RelationshipRouting, Style, commands::Command};
+use bellatrix_mde::{RelationshipRouting, Style, TimingPresentation, commands::Command};
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::{Context, Event, event::responder};
 use std::{convert::Infallible, io, sync::Arc};
@@ -14,6 +14,20 @@ pub struct ModelingSetViewLabel;
 impl Event for ModelingSetViewLabel {
     const NAME: &'static str = "bellatrix.mde.set-view-label.v1";
     type Args = ModelingSetViewLabelRequested;
+    type Output = Result<u64, String>;
+}
+
+#[derive(Clone, Debug)]
+pub struct ModelingSetViewTimingRequested {
+    pub project_id: ProjectId,
+    pub view_id: String,
+    pub timing: Option<TimingPresentation>,
+    pub expected_revision: u64,
+}
+pub struct ModelingSetViewTiming;
+impl Event for ModelingSetViewTiming {
+    const NAME: &'static str = "bellatrix.mde.set-view-timing.v1";
+    type Args = ModelingSetViewTimingRequested;
     type Output = Result<u64, String>;
 }
 
@@ -77,6 +91,28 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
                         Command::SetViewLabel {
                             view_id: request.view_id,
                             label: request.label,
+                        },
+                    )
+                    .await;
+                    Ok::<_, Infallible>(Some(result))
+                }
+            },
+        ))
+        .map_err(|error| io::Error::other(error.to_string()))?;
+    let service = Arc::clone(&projects);
+    let _timing = context
+        .on::<ModelingSetViewTiming, _>(responder(
+            move |context: Context, request: ModelingSetViewTimingRequested| {
+                let projects = Arc::clone(&service);
+                async move {
+                    let result = crate::mutation::execute(
+                        &context,
+                        &projects,
+                        request.project_id,
+                        request.expected_revision,
+                        Command::SetViewTiming {
+                            view_id: request.view_id,
+                            timing: request.timing,
                         },
                     )
                     .await;

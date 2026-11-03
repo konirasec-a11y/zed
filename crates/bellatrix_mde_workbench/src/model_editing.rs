@@ -248,7 +248,15 @@ impl MdeWorkbenchItem {
         };
         let owner_id = creation_owner(kind, self.selected_element.as_deref());
         if self.visual_draft_mode {
-            let (width, height) = kind.initial_size();
+            let (width, height) = snapshot
+                .section
+                .diagrams
+                .iter()
+                .find(|diagram| diagram.id == diagram_id)
+                .map_or_else(
+                    || kind.initial_size(),
+                    |diagram| kind.initial_size_in_diagram(diagram),
+                );
             let mut properties = std::collections::BTreeMap::new();
             if kind == ModelingElementKind::Part {
                 properties.insert("aggregation".into(), serde_json::json!("composite"));

@@ -1,4 +1,7 @@
-use bellatrix_mde::{Geometry, ModelingSection, PathSegment, Project, RelationshipRouting, Style};
+use bellatrix_mde::{
+    Format, Geometry, ModelingSection, PathSegment, Project, RelationshipRouting, Style,
+    TimingMode, TimingPoint, TimingPresentation, decode, encode,
+};
 use bellatrix_mde_cordis::*;
 use bellatrix_project::*;
 use cordis::{Context, Plugin, PreparedPlugin, Routing, event::QueryOutcome};
@@ -292,6 +295,120 @@ async fn styles_and_routes_use_revision_boundary_and_rollback()
         if segments.iter().all(|segment| matches!(segment, PathSegment::Line { .. })))
     );
     assert_eq!(routed.relations, updated.relations);
+    let timing = TimingPresentation {
+        mode: TimingMode::State,
+        points: vec![
+            TimingPoint {
+                time: 4.0,
+                value: "Running".into(),
+            },
+            TimingPoint {
+                time: -2.0,
+                value: "Idle".into(),
+            },
+            TimingPoint {
+                time: 4.0,
+                value: "Waiting".into(),
+            },
+        ],
+    };
+    let mut invalid_timing = timing.clone();
+    invalid_timing
+        .points
+        .first_mut()
+        .ok_or("point missing")?
+        .time = f64::INFINITY;
+    for (timing, expected_revision, expected_receipt) in [
+        (timing.clone(), 9, Some(10)),
+        (timing.clone(), 10, Some(10)),
+        (timing.clone(), 9, None),
+        (invalid_timing, 10, None),
+    ] {
+        let (completion, mut receipt) = tokio::sync::watch::channel(None);
+        bridge
+            .sender()
+            .try_send(MdeUiCommand::SetViewTimingTracked {
+                request: ModelingSetViewTimingRequested {
+                    project_id: id.clone(),
+                    view_id: view.id.clone(),
+                    timing: Some(timing),
+                    expected_revision,
+                },
+                completion,
+            })?;
+        tokio::time::timeout(std::time::Duration::from_secs(5), receipt.changed()).await??;
+        if let Some(revision) = expected_receipt {
+            assert_eq!(*receipt.borrow(), Some(Ok(revision)));
+        } else {
+            assert!(matches!(&*receipt.borrow(), Some(Err(_))));
+        }
+        assert_eq!(service.snapshot(&id)?.revision(), 10);
+    }
+    let snapshot = service.snapshot(&id)?;
+    let timed: ModelingSection = serde_json::from_value(
+        snapshot
+            .section(MODELING_NAMESPACE)
+            .ok_or("section missing")?
+            .clone(),
+    )?;
+    let mut expected = routed.clone();
+    expected
+        .diagrams
+        .iter_mut()
+        .flat_map(|diagram| &mut diagram.views)
+        .find(|item| item.id == view.id)
+        .ok_or("view missing")?
+        .timing = Some(timing);
+    assert_eq!(
+        timed, expected,
+        "only the selected View presentation may change"
+    );
+    for mode in [TimingMode::State, TimingMode::Value] {
+        let mut persisted = timed.to_model(id.as_str(), snapshot.name());
+        persisted
+            .diagrams
+            .iter_mut()
+            .flat_map(|diagram| &mut diagram.views)
+            .find(|item| item.id == view.id)
+            .and_then(|view| view.timing.as_mut())
+            .ok_or("timing missing")?
+            .mode = mode;
+        for format in [Format::Json, Format::Protobuf] {
+            assert_eq!(
+                decode(&encode(&persisted, format)?, format)?,
+                persisted,
+                "authored event order and values must survive persistence"
+            );
+        }
+    }
+    for (expected_revision, revision) in [(10, 11), (11, 11)] {
+        let (completion, mut receipt) = tokio::sync::watch::channel(None);
+        bridge
+            .sender()
+            .try_send(MdeUiCommand::SetViewTimingTracked {
+                request: ModelingSetViewTimingRequested {
+                    project_id: id.clone(),
+                    view_id: view.id.clone(),
+                    timing: None,
+                    expected_revision,
+                },
+                completion,
+            })?;
+        tokio::time::timeout(std::time::Duration::from_secs(5), receipt.changed()).await??;
+        assert_eq!(*receipt.borrow(), Some(Ok(revision)));
+        assert_eq!(service.snapshot(&id)?.revision(), revision);
+    }
+    let cleared: ModelingSection = serde_json::from_value(
+        service
+            .snapshot(&id)?
+            .section(MODELING_NAMESPACE)
+            .ok_or("section missing")?
+            .clone(),
+    )?;
+    assert_eq!(
+        cleared, routed,
+        "clearing timing restores the prior View-only state"
+    );
     drop(bridge);
     plugin.dispose().await?;
     provider.dispose().await?;

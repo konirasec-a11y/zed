@@ -46,6 +46,8 @@ pub struct View {
     pub subject: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub draft: Option<VisualDraft>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timing: Option<TimingPresentation>,
     #[serde(default)]
     pub label: Option<String>,
     pub geometry: Geometry,
@@ -53,6 +55,64 @@ pub struct View {
     pub style: Style,
     #[serde(default)]
     pub z_index: i32,
+}
+
+// These are authored display events, not evaluated UML time or value specifications.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct TimingPresentation {
+    pub mode: TimingMode,
+    #[serde(default)]
+    pub points: Vec<TimingPoint>,
+}
+
+impl TimingPresentation {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.points.iter().any(|point| !point.time.is_finite()) {
+            return Err("timing event times must be finite".into());
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TimingMode {
+    State,
+    Value,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct TimingPoint {
+    #[serde(
+        serialize_with = "serialize_timing_time",
+        deserialize_with = "deserialize_timing_time"
+    )]
+    pub time: f64,
+    pub value: String,
+}
+
+fn serialize_timing_time<S: serde::Serializer>(
+    time: &f64,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    if !time.is_finite() {
+        return Err(serde::ser::Error::custom(
+            "timing event times must be finite",
+        ));
+    }
+    serializer.serialize_f64(*time)
+}
+
+fn deserialize_timing_time<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<f64, D::Error> {
+    let time = f64::deserialize(deserializer)?;
+    if !time.is_finite() {
+        return Err(serde::de::Error::custom(
+            "timing event times must be finite",
+        ));
+    }
+    Ok(time)
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

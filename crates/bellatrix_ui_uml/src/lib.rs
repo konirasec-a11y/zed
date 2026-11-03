@@ -6,6 +6,7 @@ mod figures;
 mod inline_edit;
 mod quick_edit;
 mod relationship;
+mod timing;
 pub use class::UmlClassifier;
 pub use figures::UmlFigure;
 pub use inline_edit::UmlInlineNameEditor;

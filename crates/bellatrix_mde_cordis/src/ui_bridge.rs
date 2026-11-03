@@ -17,6 +17,7 @@ use crate::{
     ModelingSetProperty, ModelingSetPropertyRequested, ModelingSetViewRouting,
     ModelingSetViewRoutingRequested, ModelingSetViewStyle, ModelingSetViewStyleRequested,
     ModelingSetViewLabel, ModelingSetViewLabelRequested,
+    ModelingSetViewTiming, ModelingSetViewTimingRequested,
     ModelingValidateDiagram, ModelingValidateDiagramRequested,
 };
 use bellatrix_project::{
@@ -40,6 +41,10 @@ pub enum MdeUiCommand {
     SetViewLabel(ModelingSetViewLabelRequested),
     SetViewLabelTracked {
         request: ModelingSetViewLabelRequested,
+        completion: watch::Sender<Option<Result<u64, String>>>,
+    },
+    SetViewTimingTracked {
+        request: ModelingSetViewTimingRequested,
         completion: watch::Sender<Option<Result<u64, String>>>,
     },
     SetViewStyle(ModelingSetViewStyleRequested),
@@ -143,6 +148,17 @@ impl MdeUiBridge {
                         };
                         completion.send_replace(Some(receipt));
                         describe("View label updated", result)
+                    }
+                    MdeUiCommand::SetViewTimingTracked { request, completion } => {
+                        let result = cordis.query::<ModelingSetViewTiming>(Routing::Unscoped, request).await;
+                        let receipt = match &result {
+                            Ok(QueryOutcome::Answer(Ok(revision))) => Ok(*revision),
+                            Ok(QueryOutcome::Answer(Err(error))) => Err(error.to_string()),
+                            Ok(QueryOutcome::Miss) => Err("Cordis responder unavailable".into()),
+                            Err(error) => Err(error.to_string()),
+                        };
+                        completion.send_replace(Some(receipt));
+                        describe("View timing updated", result)
                     }
                     MdeUiCommand::SetViewStyle(request) => describe(
                         "View style updated",

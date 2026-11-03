@@ -564,6 +564,7 @@ mod tests {
             properties: Default::default(),
         });
         project.diagrams[0].views.push(View {
+            timing: None,
             draft: None,
             id: "view-inverse".into(),
             subject: Some("inverse-generalization".into()),
@@ -817,6 +818,7 @@ mod tests {
             let mut project = context_project(kind, "uml.class", &[])?;
             for diagram in &mut project.diagrams {
                 diagram.views.push(View {
+                    timing: None,
             draft: None,
                     id: "visible-context".into(),
                     subject: Some("context".into()),

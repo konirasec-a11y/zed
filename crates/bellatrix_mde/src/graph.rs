@@ -57,7 +57,9 @@ impl<'a> Graph<'a> {
                 {
                     return Err(GraphError::MissingView { view: view.id.clone(), subject: subject.clone() });
                 }
-                if !valid_geometry(&view.geometry) || !valid_style(&view.style) {
+                if !valid_geometry(&view.geometry) || !valid_style(&view.style)
+                    || view.timing.as_ref().is_some_and(|timing| timing.validate().is_err())
+                {
                     return Err(GraphError::Geometry(view.id.clone()));
                 }
             }
@@ -121,7 +123,9 @@ impl<'a> Graph<'a> {
                 {
                     return Err(GraphError::MissingView { view: view.id.clone(), subject: subject.clone() });
                 }
-                if !valid_geometry(&view.geometry) || !valid_style(&view.style) {
+                if !valid_geometry(&view.geometry) || !valid_style(&view.style)
+                    || view.timing.as_ref().is_some_and(|timing| timing.validate().is_err())
+                {
                     return Err(GraphError::Geometry(view.id.clone()));
                 }
             }

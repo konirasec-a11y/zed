@@ -55,4 +55,5 @@ message View {
   bytes style_json = 5;
   sint32 z_index = 6;
   bytes draft_json = 7;
+  optional bytes timing_json = 8;
 }

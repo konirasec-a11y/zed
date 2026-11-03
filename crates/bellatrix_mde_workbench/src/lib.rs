@@ -15,6 +15,7 @@ mod source;
 mod status_entry;
 mod style_drafts;
 mod style_editor;
+mod timing_editor;
 mod symbol_library;
 mod theme;
 mod visual_draft_canvas;

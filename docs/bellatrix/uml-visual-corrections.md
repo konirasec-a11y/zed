@@ -7,7 +7,7 @@ Reference: OMG UML 2.5.1, formal/2017-12-05. PDF pages below are one-based file 
 - §17.6.4.3, printed 585 / PDF 627: CombinedFragment operator comes from `interactionOperator` and appears in the frame descriptor, rather than replacing it with the fragment name. An absent operator uses the official XMI default `seq` (UML.xmi `CombinedFragment-interactionOperator-_defaultValue`).
 - §17.2.4.1, printed 568 / PDF 610: Interaction frame names appear alongside `sd`, rather than at the center of the body. InteractionUse retains `ref` with its reference label in the body.
 
-Still incomplete: semantic AssociationClass binding (a View-only attachment is available below); event-aligned guard positioning; timing data-driven traces; semantic Message/MessageEnd creation and multiple messages grouped on one communication link. SVG currently emits basic paths without UML endpoint markers, so native/export visual parity is not claimed. Explicit line-style overrides can deliberately depart from normative UML strokes; the editor warns about this rather than removing user control. Native GUI acceptance remains pending; headless feature flows are not visual screenshot acceptance.
+Still incomplete: semantic AssociationClass binding (a View-only attachment is available below); event-aligned guard positioning; timing event semantics and MessageLabel shorthand; semantic Message/MessageEnd creation and multiple messages grouped on one communication link. SVG currently emits basic paths without UML endpoint markers, so native/export visual parity is not claimed. Explicit line-style overrides can deliberately depart from normative UML strokes; the editor warns about this rather than removing user control. Native GUI acceptance remains pending; headless feature flows are not visual screenshot acceptance.
 
 ## Presentation freedom and structural follow-up
 
@@ -32,7 +32,7 @@ Port and Part are now direct toolbox entries, alongside DeploymentSpecification 
 
 - §17.4.4.1, printed576–577/PDF618–619: synchronous, asynchronous and reply toolbox connectors use the common relationship style projection for filled, open and dashed-open arrows. These tools explicitly create View-only messages, not semantic MessageEnds or executable calls.
 - Pointer locations on lifelines become persisted normalized visual anchors. Moving/resizing a lifeline keeps messages attached; dragging a message changes its drawn event heights. Two clicks on the same lifeline produce a three-segment self-message. These are authored presentation coordinates, not occurrence ordering or execution validation.
-- Found/lost endpoints and timing-specific messages remain pending.
+- Found/lost endpoints and semantic timing-event attachment remain pending.
 
 ## Communication message presentation
 
@@ -44,3 +44,9 @@ Port and Part are now direct toolbox entries, alongside DeploymentSpecification 
 
 - §12.2.4/12.3.4: ElementImport, ProfileApplication and Extension are now direct toolbox choices. Extension has a solid line and filled triangle toward the metaclass, with an independently drawn matching icon. ElementImport uses the existing canonical namespace-import adapter; ProfileApplication and Extension remain explicitly View-only while their authoring adapters are incomplete.
 - §11.2.4 and §7.7.4: Connector and comment/constraint links are directly placeable using existing solid/dashed arrowless geometry. They are explicitly unverified visual links, not untyped semantic records. Unsupported endpoint arrangements remain drawable. ConnectorEnd authoring, ExtensionEnd binding, required-extension labels and profile reference distinctions remain pending.
+
+## Authored Timing Lifeline presentation
+
+- §17.11.1 Table17.6 and Figures17.28–30, printed604–606/PDF646–648: optional typed `View.timing` stores the chosen state/condition or general-value form and authored time/value samples. The native renderer builds stepped state traces or crossing value ribbons from those samples along a linear time axis. Empty data shows only name and axis; the former fixed example waveform is not used for timing Lifelines.
+- A compact inspector provides state/ribbon icon choices and editable time/value rows. Edits use revision-tracked View-only commands and the existing draft/conflict state, with pending text preserved on rejection and explicit reload/replace choices. This is presentation data, not evaluated states, occurrence ordering, or executable UML.
+- New Timing Lifeline views default to480×180; Communication views to140×80. Existing authored dimensions are preserved. Native message attachment in Timing preserves both selected coordinates instead of forcing the sequence stem center. Event binding, constraints/units, MessageLabel shorthand, point dragging, and export parity remain pending. No native GUI acceptance is claimed.

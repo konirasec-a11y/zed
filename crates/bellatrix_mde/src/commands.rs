@@ -101,6 +101,7 @@ pub enum Command {
         order: ViewOrder,
     },
     SetViewLabel { view_id: String, label: Option<String> },
+    SetViewTiming { view_id: String, timing: Option<crate::TimingPresentation> },
     SetViewStyle {
         diagram_id: String,
         view_id: String,
@@ -148,13 +149,14 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
         return match apply(project, &semantic, revision) {
             Ok(updated) => Ok(updated),
             Err(reason) => {
+                let diagram = project.diagrams.iter().find(|diagram| diagram.id == *diagram_id).ok_or("diagram not found")?;
                 let mut properties = std::collections::BTreeMap::new();
                 properties.insert("semantic_creation_diagnostic".into(), Value::String(reason));
                 if *kind == ModelingElementKind::Part { properties.insert("aggregation".into(), serde_json::json!("composite")); }
                 if let Some(pseudostate) = kind.resolve_pseudostate_kind() { properties.insert("kind".into(), Value::String(pseudostate.into())); }
                 if let Some(owner) = owner_id { properties.insert("requested_owner_id".into(), Value::String(owner.clone())); }
                 apply(project, &Command::CreateVisualDraft { diagram_id: diagram_id.clone(),
-                    notation_kind: kind.model_kind().into(), label: name.clone(), geometry: views::initial_geometry(*kind, *x, *y),
+                    notation_kind: kind.model_kind().into(), label: name.clone(), geometry: views::initial_geometry_in_diagram(*kind, diagram, *x, *y),
                     properties, parent_view_id: None, source_view_id: None, target_view_id: None }, revision)
             }
         };
@@ -266,6 +268,7 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
                 .find(|view| view.id == *view_id).ok_or("view not found")?;
             view.label = label.clone();
         }
+        Command::SetViewTiming { view_id, timing } => views::set_timing(&mut section, view_id, timing)?,
         Command::SetViewStyle {
             diagram_id,
             view_id,
@@ -320,7 +323,7 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
             .is_some_and(|diagram| diagram.views.iter().any(|view| view.id == *view_id && view.draft.is_some())),
         _ => false,
     };
-    let presentation_only = draft_view_edit || matches!(command, Command::CreateDiagram { .. } | Command::CreateVisualDraft { .. } | Command::SetExplorerParent { .. } | Command::SetViewLabel { .. } | Command::SetViewStyle { .. } | Command::SetViewRouting { .. } | Command::ReorderView { .. });
+    let presentation_only = draft_view_edit || matches!(command, Command::CreateDiagram { .. } | Command::CreateVisualDraft { .. } | Command::SetExplorerParent { .. } | Command::SetViewLabel { .. } | Command::SetViewTiming { .. } | Command::SetViewStyle { .. } | Command::SetViewRouting { .. } | Command::ReorderView { .. });
     if !presentation_only {
         crate::uml::associations::materialize_new(project, &mut section)?;
         crate::uml::associations::synchronize_changes(&previous_section, &mut section)?;
@@ -447,11 +450,12 @@ fn create_element(
         .checked_add(1)
         .ok_or("diagram z-index overflow")?;
     diagram.views.push(View {
+        timing: None,
             draft: None,
         id: view_id,
         subject: Some(element_id.clone()),
         label: None,
-        geometry: views::initial_geometry(*kind, *x, *y),
+        geometry: views::initial_geometry_in_diagram(*kind, diagram, *x, *y),
         style: Style::default(),
         z_index,
     });
@@ -600,6 +604,7 @@ fn create_relation(
         .checked_add(1)
         .ok_or("z-index overflow")?;
     diagram.views.push(View {
+        timing: None,
             draft: None,
         id: view_id,
         subject: Some(id),

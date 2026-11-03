@@ -464,10 +464,9 @@ impl Render for MdeWorkbenchItem {
                                 &references,
                                 &view.style,
                             );
-                            let operator_default =
-                                super::visual_draft_canvas::resolve_interaction_operator_default();
                             let mut figure = UmlFigure::new(element.kind.clone(), label)
                                 .diagram_presentation(diagram)
+                                .timing_presentation(view.timing.as_ref())
                                 .nested_views(has_nested_views)
                                 .composite_role(
                                     element
@@ -477,11 +476,10 @@ impl Render for MdeWorkbenchItem {
                                         == Some("composite"),
                                 )
                                 .interaction_operator(
-                                    element
-                                        .properties
-                                        .get("interactionOperator")
-                                        .or(operator_default.as_ref())
-                                        .and_then(serde_json::Value::as_str),
+                                    super::visual_draft_canvas::resolve_interaction_operator(
+                                        &element.properties,
+                                    )
+                                    .as_deref(),
                                 )
                                 .slot_labels(bellatrix_mde::collect_instance_slot_labels(
                                     element,

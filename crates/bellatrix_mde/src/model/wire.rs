@@ -113,6 +113,8 @@ struct WireView {
     z_index: i32,
     #[prost(bytes, tag = "7")]
     draft_json: Vec<u8>,
+    #[prost(bytes, optional, tag = "8")]
+    timing_json: Option<Vec<u8>>,
 }
 
 pub(super) fn encode(project: &Project) -> Result<Vec<u8>, ModelIoError> {
@@ -192,6 +194,7 @@ pub(super) fn encode(project: &Project) -> Result<Vec<u8>, ModelIoError> {
                             style_json: serde_json::to_vec(&v.style)?,
                             z_index: v.z_index,
                             draft_json: serde_json::to_vec(&v.draft)?,
+                            timing_json: v.timing.as_ref().map(serde_json::to_vec).transpose()?,
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()?,
@@ -292,6 +295,11 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Project, ModelIoError> {
                             } else {
                                 serde_json::from_slice(&v.draft_json)?
                             },
+                            timing: v
+                                .timing_json
+                                .as_deref()
+                                .map(serde_json::from_slice)
+                                .transpose()?,
                             id: v.id,
                             subject: v.subject,
                             label: v.label,

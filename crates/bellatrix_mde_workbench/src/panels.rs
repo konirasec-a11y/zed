@@ -1,5 +1,6 @@
 //! Panels owned by the Zed Workspace Dock, consuming the single MDE domain.
 mod toolbox_panel;
+mod view_inspector;
 pub(crate) use crate::hierarchy::element_glyph;
 use crate::{
     MdeToolDrag, MdeWorkbenchItem, WorkbenchPalette,
@@ -146,6 +147,7 @@ pub struct MdeRightPanel {
     pub(crate) style_drafts:
         HashMap<crate::style_editor::StyleKey, crate::style_editor::StyleDraft>,
     pub(crate) inspector_styles_open: bool,
+    pub(crate) timing_drafts: HashMap<(String, String, String), crate::timing_editor::TimingDraft>,
     collapsed_elements: HashSet<String>,
     collapsed_by_document: HashMap<gpui::EntityId, HashSet<String>>,
     explorer_open: bool,
@@ -174,6 +176,7 @@ impl MdeRightPanel {
             style_drafts: HashMap::new(),
             style_target_id: None,
             inspector_styles_open: true,
+            timing_drafts: HashMap::new(),
             collapsed_elements: HashSet::new(),
             collapsed_by_document: HashMap::new(),
             explorer_open: true,
@@ -485,73 +488,8 @@ impl Render for MdeRightPanel {
                 cx,
             );
         }
-        let selected_view = item.read(cx).selected_view.clone();
-        let style_target = snapshot.as_ref().and_then(|snapshot| {
-            let diagram = snapshot
-                .section
-                .diagrams
-                .iter()
-                .find(|diagram| Some(diagram.id.as_str()) == active_diagram.as_deref())?;
-            let view = diagram
-                .views
-                .iter()
-                .find(|view| Some(view.id.as_str()) == selected_view.as_deref())?;
-            let is_edge = matches!(view.geometry, bellatrix_mde::Geometry::Path { .. }) || snapshot
-                .section
-                .relations
-                .iter()
-                .any(|relation| view.subject.as_deref() == Some(relation.id.as_str()));
-            Some((diagram.id.as_str(), view, is_edge))
-        });
-        let style_target_id = style_target.map(|(diagram_id, view, _)| {
-            (
-                inspector_project.as_str().to_owned(),
-                diagram_id.to_owned(),
-                view.id.clone(),
-            )
-        });
-        if !read_only && self.style_target_id != style_target_id {
-            if self
-                .style_target_id
-                .as_ref()
-                .and_then(|key| self.style_drafts.get(key))
-                .is_some_and(|draft| {
-                    draft
-                        .inputs
-                        .values()
-                        .any(|input| input.read(cx).focus_handle(cx).contains_focused(window, cx))
-                })
-            {
-                window.focus(&self.state.focus, cx);
-            }
-            self.style_target_id = style_target_id.clone();
-        }
-        if !read_only {
-            if let Some((diagram_id, view, _)) = style_target {
-                crate::style_editor::reconcile_style_inputs(
-                    &mut self.style_drafts,
-                    &item,
-                    diagram_id,
-                    view,
-                    snapshot.as_ref().map_or(0, |snapshot| snapshot.revision),
-                    window,
-                    cx,
-                );
-            }
-        }
-        let mut inspector_rows = crate::style_editor::render_styles(
-            style_target,
-            item.clone(),
-            if read_only {
-                None
-            } else {
-                style_target_id
-                    .as_ref()
-                    .and_then(|key| self.style_drafts.get(key))
-            },
-            self.inspector_styles_open,
-            window,
-            cx,
+        let mut inspector_rows = self.render_view_presentation(
+            item.clone(), &snapshot, &active_diagram, read_only, window, cx,
         );
         inspector_rows.extend(render_inspector(
             inspection.as_ref(),
@@ -921,7 +859,7 @@ pub(crate) fn bind_panels(
                         .inputs
                         .values()
                         .any(|input| input.read(cx).focus_handle(cx).contains_focused(window, cx))
-                });
+                }) || panel.timing_drafts.values().any(|draft| draft.has_focused_input(window, cx));
                 if hidden_input_focused {
                     window.focus(&panel.state.focus, cx);
                 }

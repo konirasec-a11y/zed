@@ -12,6 +12,19 @@ pub(super) fn initial_geometry(kind: ModelingElementKind, x: f64, y: f64) -> Geo
     }
 }
 
+pub(super) fn initial_geometry_in_diagram(
+    kind: ModelingElementKind,
+    diagram: &crate::Diagram,
+    x: f64,
+    y: f64,
+) -> Geometry {
+    let mut geometry = initial_geometry(kind, x, y);
+    if let Geometry::Rect { width, height, .. } = &mut geometry {
+        (*width, *height) = kind.initial_size_in_diagram(diagram);
+    }
+    geometry
+}
+
 pub(super) fn place(
     section: &mut ModelingSection,
     diagram_id: &str,
@@ -76,7 +89,7 @@ pub(super) fn place(
             .copied().find(|kind| kind.model_kind() == element.kind
                 || semantic_type.is_some() && UmlType::from_kind(kind.model_kind()) == semantic_type)
             .ok_or_else(|| format!("unsupported element View: {} has no existing geometry or registered creation kind", element.kind))?;
-        (initial_geometry(kind, x, y), Style::default(), None)
+        (initial_geometry_in_diagram(kind, diagram, x, y), Style::default(), None)
     };
     let [identifier] = super::fresh_ids(section, ["mde-view"], revision, project_id)?;
     section
@@ -86,6 +99,7 @@ pub(super) fn place(
         .ok_or("diagram not found")?
         .views
         .push(View {
+            timing: None,
             draft: None,
             id: identifier,
             subject: Some(element_id.into()),
@@ -94,6 +108,24 @@ pub(super) fn place(
             style,
             z_index,
         });
+    Ok(())
+}
+
+pub(super) fn set_timing(
+    section: &mut ModelingSection,
+    view_id: &str,
+    timing: &Option<crate::TimingPresentation>,
+) -> Result<(), String> {
+    if let Some(timing) = timing {
+        timing.validate()?;
+    }
+    let view = section
+        .diagrams
+        .iter_mut()
+        .flat_map(|diagram| &mut diagram.views)
+        .find(|view| view.id == view_id)
+        .ok_or("view not found")?;
+    view.timing = timing.clone();
     Ok(())
 }
 
@@ -203,6 +235,7 @@ pub(super) fn create_draft(
         .find(|diagram| diagram.id == diagram_id)
         .ok_or("diagram not found")?;
     diagram.views.push(View {
+        timing: None,
         id,
         subject: None,
         label: label.clone(),

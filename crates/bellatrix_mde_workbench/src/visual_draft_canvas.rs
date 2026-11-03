@@ -63,6 +63,7 @@ impl MdeWorkbenchItem {
                 let figure = if UmlFigure::supports(&draft.notation_kind) {
                     UmlFigure::new(draft.notation_kind.clone(), label)
                         .diagram_presentation(diagram)
+                        .timing_presentation(view.timing.as_ref())
                         .composite_role(
                             draft
                                 .properties
@@ -71,11 +72,7 @@ impl MdeWorkbenchItem {
                                 == Some("composite"),
                         )
                         .interaction_operator(
-                            draft
-                                .properties
-                                .get("interactionOperator")
-                                .or(resolve_interaction_operator_default().as_ref())
-                                .and_then(serde_json::Value::as_str),
+                            resolve_interaction_operator(&draft.properties).as_deref(),
                         )
                         .pseudostate_kind(
                             draft
@@ -485,6 +482,16 @@ pub(super) fn format_figure_label(
     }
 }
 
+pub(super) fn resolve_interaction_operator(
+    properties: &std::collections::BTreeMap<String, serde_json::Value>,
+) -> Option<String> {
+    properties
+        .get("interactionOperator")
+        .cloned()
+        .or_else(resolve_interaction_operator_default)
+        .and_then(|value| value.as_str().map(str::to_owned))
+}
+
 pub(super) fn resolve_interaction_operator_default() -> Option<serde_json::Value> {
     use bellatrix_mde::uml::schema;
     schema::uml_property("CombinedFragment", "interactionOperator")
@@ -688,7 +695,10 @@ fn resolve_message_anchor(
                 .map(|element| element.kind.as_str())
         });
     let anchor_x = if kind == Some("uml.lifeline")
-        && diagram.interaction_kind.as_deref() != Some("communication")
+        && diagram
+            .interaction_kind
+            .as_deref()
+            .is_none_or(|kind| kind == "sequence")
     {
         0.5
     } else {

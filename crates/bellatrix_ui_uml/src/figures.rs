@@ -3,6 +3,7 @@ use crate::figure_geometry::{paint_folded_paper, paint_frame_heading, paint_nota
 use crate::{
     class::{MemberInteractions, MemberRow, UmlClassifier, ViewAppearance, template_signature},
     inline_edit::UmlInlineNameEditor,
+    timing::TimingLifeline,
 };
 use bellatrix_design_system::Palette;
 use bellatrix_mde::{UmlNotation, port_label_layout, uml_header, uml_notation};
@@ -19,6 +20,7 @@ pub struct UmlFigure {
     kind: String,
     pseudostate_kind: Option<String>,
     interaction_presentation: Option<String>,
+    timing_presentation: Option<bellatrix_mde::TimingPresentation>,
     name: SharedString,
     slot_labels: Vec<String>,
     interaction_operator: Option<String>,
@@ -28,6 +30,7 @@ pub struct UmlFigure {
     selected: bool,
     scale: f32,
     view_width: f64,
+    view_height: f64,
     appearance: ViewAppearance,
     edit: Option<Action>,
     editor: Option<(Entity<InputField>, Action, Action)>,
@@ -75,6 +78,7 @@ impl UmlFigure {
             kind: kind.into(),
             pseudostate_kind: None,
             interaction_presentation: None,
+            timing_presentation: None,
             name: name.into(),
             slot_labels: Vec::new(),
             interaction_operator: None,
@@ -84,6 +88,7 @@ impl UmlFigure {
             selected: false,
             scale: 1.0,
             view_width: 16.0,
+            view_height: 180.0,
             appearance: ViewAppearance::default(),
             edit: None,
             editor: None,
@@ -110,6 +115,13 @@ impl UmlFigure {
         if diagram.uml_di_type == "UMLInteractionDiagram" {
             self.interaction_presentation = diagram.interaction_kind.clone();
         }
+        self
+    }
+    pub fn timing_presentation(
+        mut self,
+        presentation: Option<&bellatrix_mde::TimingPresentation>,
+    ) -> Self {
+        self.timing_presentation = presentation.cloned();
         self
     }
     pub fn pseudostate_kind(mut self, kind: &str) -> Self {
@@ -162,9 +174,12 @@ impl UmlFigure {
         }
         self
     }
-    pub fn view_size(mut self, width: f64, _height: f64, scale: f32) -> Self {
+    pub fn view_size(mut self, width: f64, height: f64, scale: f32) -> Self {
         if width.is_finite() && width > 0.0 {
             self.view_width = width;
+        }
+        if height.is_finite() && height > 0.0 {
+            self.view_height = height;
         }
         self.view_scale(scale)
     }
@@ -273,10 +288,38 @@ impl RenderOnce for UmlFigure {
                     cx.stop_propagation();
                 }
             })
-            .when(notation == UmlNotation::Instance, |element| {
-                element.underline()
-            })
+            .when(
+                notation == UmlNotation::Instance && self.kind != "uml.lifeline",
+                |element| element.underline(),
+            )
             .child(title);
+        if self.kind == "uml.lifeline" && self.interaction_presentation.as_deref() == Some("timing")
+        {
+            return TimingLifeline {
+                title: div()
+                    .flex()
+                    .flex_col()
+                    .map(|element| alignment.align_column(element))
+                    .when_some(applied_stereotype, |element, label| {
+                        element.child(
+                            div()
+                                .text_size(px(appearance.font_size(10.0, scale)))
+                                .text_color(appearance.text(palette.muted))
+                                .child(label),
+                        )
+                    })
+                    .child(title_area)
+                    .into_any_element(),
+                presentation: self.timing_presentation,
+                appearance,
+                palette,
+                selected,
+                scale,
+                width: self.view_width,
+                height: self.view_height,
+            }
+            .render();
+        }
         let figure = match notation {
             UmlNotation::FoldedNote => div()
                 .size_full()
@@ -808,6 +851,7 @@ impl RenderOnce for UmlFigure {
             .when_some(font_family, |element, family| element.font_family(family))
             .child(figure)
             .when_some(signature, |element, signature| element.child(signature))
+            .into_any_element()
     }
 }
 
