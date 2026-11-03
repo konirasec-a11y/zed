@@ -77,6 +77,8 @@ InstanceSpecification::structural_feature foram publicadas em
 `d71f0315fb67987983a7effe388cdcb1e7842295` (E60/E61).
 InstanceSpecification::defining_feature e Property::subsetting_rules têm
 recortes publicados em `2d5db0de9184619907ff27729d7500f7babc0ff5` (E62/E63).
+Property::subsetting_context_conforms tem recorte publicado em
+`b2beb7bdcabc2646eaca900b4282e46e6406262d` (E64).
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -192,7 +194,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E63 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E64 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -972,6 +974,44 @@ de execução nova. E12–E63 possuem os gates delimitados nas seções seguinte
   `MDE_PROPERTY_SUBSETTING_RULES_UNVERIFIED`. O agregado e regras de
   nomes/contexto continuam independentes; não há interpretador OCL geral,
   resolução externa ou fechamento integral de subsetting.
+
+- **E64**: `semantics/property_subsetting.rs`,
+  `subsetting_context_conforms`, `resolve_subsetting_context`,
+  `compare_contexts` e `validate`; `property_subsetting_context.rs`, onze
+  testes. Com subsets presentes, exige contexto específico não vazio e, para
+  cada contexto específico e cada Property geral, algum contexto geral ao qual
+  o específico conforme. Identidade e herança transitiva são aceitas. Para
+  ponta de Association, usa os tipos das outras pontas, inclusive n-árias,
+  antes de considerar owner de atributo; não usa o próprio tipo da Property.
+  Nomes, tipos das Properties e limites de multiplicidade não substituem esta
+  prova. Coleção de subsets omitida/vazia satisfaz por vacuidade; contexto
+  comprovadamente vazio pode decidir falso mesmo com referência desconhecida.
+  Witness geral conhecido pode decidir exists diante de vizinho externo,
+  mas forAll específico incompleto continua Unknown sem contraexemplo local.
+  Coleções parciais não são expostas como completas pela consulta pública.
+  Contratos inválidos e tipos de pontas malformados mantêm precedência sobre
+  witness e Unknown. Projeções autoradas não canônicas e referências externas
+  relevantes permanecem não verificadas. Diagnósticos:
+  `UML_PROPERTY_SUBSETTING_CONTEXT_CONFORMS`,
+  `MDE_PROPERTY_SUBSETTING_CONTEXT_CONFORMS_INVALID` e
+  `MDE_PROPERTY_SUBSETTING_CONTEXT_CONFORMS_UNVERIFIED`. Não certifica todas
+  as regras de subsetting nem resolve modelos externos.
+
+### Evidência publicada de conformance de contextos de subsetting
+
+Commit inspecionado: `b2beb7bdcabc2646eaca900b4282e46e6406262d`.
+Log final lido: `/tmp/property-subsetting-context-final-gate.log`,
+**226/226 aprovados**, 161 lib e 65 integrações: graph_rules 2,
+kb09_redefinitions 11, kernel_api_validation 4, property_redefined_inherited 9,
+property_subsetted_names 19, property_subsetting_context 11 e
+property_subsetting_rules 9.
+
+A linha passa a **P/E64**. Casos incluem modelos com/sem raiz, contexto n-ário,
+herança transitiva, conjuntos vazios, witness local com unknown, contraexemplo
+local em ambas as ordens, malformados e roundtrip. Gate anterior à publicação,
+sem rerun no SHA publicado nem execução nova por esta matriz. Regressões
+repetidas não somam cobertura normativa; não certifica suíte integral, UI,
+geração, interchange ou conformidade UML completa.
 
 ### Evidência publicada de membership de Slots e regras de subsetting
 
@@ -2029,7 +2069,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `Property-subsetting_context_conforms`
 
-- Metaclass: `Property`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `Property`. Estado: **P**. Evidência: E64; commit `b2beb7bdcabc2646eaca900b4282e46e6406262d`.
 - OCL publicado: `subsettedProperty->notEmpty() implies (subsettingContext()->notEmpty() and subsettingContext()->forAll (sc | subsettedProperty->forAll(sp | sp.subsettingContext()->exists(c | sc.conformsTo(c)))))`.
 
 #### `Property-derived_union_is_read_only`
@@ -2190,6 +2230,18 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 #### `CollaborationUse-connectors`
 
 - Metaclass: `CollaborationUse`. Estado: **A**. Evidência: revisão individual pendente.
+- Decisão normativa pendente: a prosa exige conectores correspondentes, mas
+  o corpo publicado agrupa a condição de roles e a presença dos tipos no
+  antecedente de implies, pois and tem precedência maior. Assim, um candidato
+  com condição de roles falsa ou tipos ausentes pode satisfazer a implicação;
+  não reparentesizar silenciosamente para exigir roles e depois testar tipos.
+  Além disso, os dois any(true) não escolhem um contexto único especificado:
+  a escolha é indeterminada com múltiplos candidatos e inválida sem candidatos.
+  Não substituir por primeiro elemento, exists ou forAll sem decisão explícita.
+  Fonte: `standards/uml/20161101/UML.xmi`, linhas 4187–4204, e
+  [OCL 2.4, §§7.4.8 e 11.9.1](https://www.omg.org/spec/OCL/2.4/PDF).
+  A linha permanece A; nenhuma dessas diferenças foi corrigida ou implementada
+  pelo incremento de contextos de subsetting.
 - OCL publicado: `type.ownedConnector->forAll(connector | let rolesConnectedInCollab : Set(ConnectableElement) = connector.end.role->asSet(), relevantBindings : Set(Dependency) = roleBinding->select(rb | rb.supplier->intersection(rolesConnectedInCollab)->notEmpty()), boundRoles : Set(ConnectableElement) = relevantBindings->collect(client.oclAsType(ConnectableElement))->asSet(), contextClassifier : StructuredClassifier = boundRoles->any(true).structuredClassifier->any(true) in contextClassifier.ownedConnector->exists( correspondingConnector | correspondingConnector.end.role->forAll( role | boundRoles->includes(role) ) and (connector.type->notEmpty() and correspondingConnector.type->notEmpty()) implies connector.type->forAll(conformsTo(correspondingConnector.type)) ) )`.
 
 #### `Component-no_nested_classifiers`
@@ -2316,6 +2368,12 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 - Metaclass: `Stereotype`. Estado: **A**. Evidência: revisão individual pendente.
 - Corpo OCL: ausente nesta constraint do XMI; não inventar fórmula.
 - Descrição normativa do XMI: If a Stereotype extends only one metaclass, the multiplicity of the corresponding base-property shall be 1..1.
+- Dependência aberta: decidir quais metaclasses são estendidas exige a
+  navegação de Extension::metaclassEnd, ainda Unsupported em U01/E28. Não
+  deduzir extensão de metaclasse apenas porque uma ponta tem tipo Class nem
+  usar a regra de upper bound de E56 como prova do antecedente ou de lower=1.
+  A linha permanece A; o recorte de base-properties diretamente possuídas não
+  fecha a obrigação de extensão única.
 
 #### `Stereotype-base_property_multiplicity_multiple_extension`
 

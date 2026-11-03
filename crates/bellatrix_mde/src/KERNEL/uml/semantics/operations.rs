@@ -172,37 +172,62 @@ pub fn return_properties(
     })
 }
 
+fn body_condition_contract(
+    references: &ReferenceIndex<'_>,
+    operation: ElementRef<'_>,
+) -> Result<(), QueryError> {
+    let Some(value) = operation.properties().get("bodyCondition") else {
+        return Ok(());
+    };
+    let descriptor = schema::uml_property("Operation", "bodyCondition")
+        .map_err(|error| QueryError::unsupported(operation.id(), error.to_string()))?
+        .ok_or_else(|| {
+            QueryError::unsupported(
+                operation.id(),
+                "Operation::bodyCondition contract is missing",
+            )
+        })?;
+    match super::property_contracts::check_value(references, operation, descriptor, value) {
+        super::property_contracts::PropertyOutcome::Satisfied => Ok(()),
+        super::property_contracts::PropertyOutcome::Violation(message) => {
+            Err(QueryError::invalid(operation.id(), message))
+        }
+        super::property_contracts::PropertyOutcome::Unverified(message) => {
+            Err(QueryError::unsupported(operation.id(), message))
+        }
+    }
+}
+
+fn only_body_for_query(
+    references: &ReferenceIndex<'_>,
+    operation: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let contract = body_condition_contract(references, operation);
+    if let Err(error @ QueryError::Invalid { .. }) = contract {
+        return Err(error);
+    }
+    let query = schema::read_effective_boolean(operation, "isQuery")
+        .map_err(|error| QueryError::invalid(operation.id(), error))?;
+    // A well-formed non-null reference establishes that a bodyCondition was
+    // specified even when its external identity or metaclass remains unresolved.
+    Ok(query
+        || operation
+            .properties()
+            .get("bodyCondition")
+            .is_none_or(Value::is_null))
+}
+
 fn validate_body_condition(
     references: &ReferenceIndex<'_>,
     operation: ElementRef<'_>,
-) -> Result<(), String> {
-    let Some(value) = operation
-        .properties()
-        .get("bodyCondition")
-        .filter(|value| !value.is_null())
-    else {
-        return Ok(());
-    };
-    if !schema::read_effective_boolean(operation, "isQuery")? {
-        return Err(
-            "Operation::only_body_for_query requires isQuery when bodyCondition is specified"
-                .into(),
-        );
+) -> Result<(), QueryError> {
+    if !only_body_for_query(references, operation)? {
+        return Err(QueryError::invalid(
+            operation.id(),
+            "Operation::only_body_for_query requires isQuery when bodyCondition is specified",
+        ));
     }
-    let descriptor = schema::uml_property("Operation", "bodyCondition")
-        .map_err(|error| error.to_string())?
-        .ok_or("Operation::bodyCondition contract is missing")?;
-    let constraint = references
-        .validate(descriptor, value)?
-        .ok_or("bodyCondition is missing")?;
-    if references
-        .model()
-        .owner(constraint)?
-        .is_none_or(|owner| owner.id() != operation.id())
-    {
-        return Err("Operation::bodyCondition must be a Constraint owned by this Operation".into());
-    }
-    Ok(())
+    body_condition_contract(references, operation)
 }
 
 pub(crate) fn move_parameter(
@@ -824,12 +849,13 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
                     message: error.to_string(),
                 });
             }
-            if let Err(message) = validate_body_condition(references, element) {
+            if let Err(error) = validate_body_condition(references, element) {
+                let unknown = matches!(error, QueryError::Unsupported { .. });
                 issues.push(StructuralDiagnostic {
-                    severity: StructuralSeverity::Error,
-                    code: "UML_OPERATION_BODY_CONDITION",
+                    severity: if unknown { StructuralSeverity::Warning } else { StructuralSeverity::Error },
+                    code: if unknown { "MDE_OPERATION_BODY_CONDITION_UNVERIFIED" } else { "UML_OPERATION_BODY_CONDITION" },
                     subject_id: element.id().into(),
-                    message,
+                    message: error.to_string(),
                 });
             } else if element
                 .properties()
@@ -839,6 +865,15 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
                 issues.push(StructuralDiagnostic { severity: StructuralSeverity::Warning,
                     code: "MDE_OPERATION_CONDITION_UNSUPPORTED", subject_id: element.id().into(),
                     message: "Operation bodyCondition ownership and only_body_for_query are checked; its constraint expression is not evaluated".into() });
+            }
+            let outcome = match only_body_for_query(references, element) {
+                Ok(true) => None,
+                Ok(false) => Some((StructuralSeverity::Error, "UML_OPERATION_ONLY_BODY_FOR_QUERY", "a bodyCondition requires a query Operation".to_owned())),
+                Err(QueryError::Invalid { message, .. }) => Some((StructuralSeverity::Error, "MDE_OPERATION_ONLY_BODY_FOR_QUERY_INVALID", message)),
+                Err(QueryError::Unsupported { message, .. }) => Some((StructuralSeverity::Warning, "MDE_OPERATION_ONLY_BODY_FOR_QUERY_UNVERIFIED", message)),
+            };
+            if let Some((severity, code, message)) = outcome {
+                issues.push(StructuralDiagnostic { severity, code, subject_id:element.id().into(), message:format!("Operation-only_body_for_query: {message}") });
             }
         } else if element.conforms_to("Parameter") {
             validate_parameter_relations(references, element, &mut issues);
