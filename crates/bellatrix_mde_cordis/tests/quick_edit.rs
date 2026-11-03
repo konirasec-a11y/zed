@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (C) 2019-2026 Starion Group S.A.
+// Operation return scenarios adapted from uml4net OperationExtensionsTestFixture.cs,
+// 8ef13af2c68ae1994c8fa4f5b3e231dee7e6715d, inside the existing public editing flow.
+// Provenance and license: docs/bellatrix/references/uml4net/.
+
 use bellatrix_mde::{
     ModelingSection, Project, element_display_label, element_display_label_with_references,
     inspect_element, member_presentation,
@@ -346,6 +352,22 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
         )
         .expect("model")
     };
+    let no_return = inspect_element(&read_section(), &operation.id).expect("no return yet");
+    for (key, expected) in [
+        ("isOrdered", serde_json::json!(false)),
+        ("isUnique", serde_json::json!(true)),
+        ("lower", serde_json::Value::Null),
+        ("upper", serde_json::Value::Null),
+    ] {
+        assert!(
+            no_return
+                .properties
+                .iter()
+                .any(|field| field.path == format!("properties.{key}")
+                    && field.value == expected
+                    && !field.editable)
+        );
+    }
     let raw_signature = operation.properties.get("signature").cloned();
     let mut parameter_ids = Vec::new();
     for number in 1..=3 {
@@ -413,6 +435,9 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
         ),
         (result, "name", serde_json::json!("result")),
         (result, "properties.direction", serde_json::json!("return")),
+        (result, "properties.isOrdered", serde_json::json!(true)),
+        (result, "properties.isUnique", serde_json::json!(false)),
+        (result, "properties.multiplicity", serde_json::json!("0..*")),
         (
             result,
             "properties.type",
@@ -427,9 +452,41 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
         );
         revision += 1;
     }
+    for value in ["0..capacity", "0..*"] {
+        assert!(
+            matches!(ctx.query::<ModelingSetProperty>(Routing::Unscoped, ModelingSetPropertyRequested {
+            project_id: a.clone(), element_id: result.clone(), path: "properties.multiplicity".into(), value: serde_json::json!(value), expected_revision: revision,
+        }).await.expect("authored multiplicity"), QueryOutcome::Answer(Ok(value)) if value == revision + 1)
+        );
+        revision += 1;
+        let current = read_section();
+        let inspector = inspect_element(&current, &operation.id).expect("return derivation");
+        if value == "0..capacity" {
+            assert!(inspector.properties.iter().any(|field| {
+                field.path == "properties.lower"
+                    && field
+                        .value
+                        .as_str()
+                        .is_some_and(|text| text.contains("not evaluated"))
+            }));
+            assert!(
+                bellatrix_mde::uml::root::Model::from_section(&current)
+                    .validate()
+                    .iter()
+                    .any(|issue| issue.code == "MDE_PARAMETER_MULTIPLICITY_UNSUPPORTED")
+            );
+        }
+    }
     let before_invalid = projects.snapshot(&a).expect("before invalid return");
     for (element_id, path, value) in [
         (context, "properties.direction", serde_json::json!("return")),
+        (result, "properties.multiplicity", serde_json::json!("3..2")),
+        (&operation.id, "properties.lower", serde_json::json!("7")),
+        (
+            &operation.id,
+            "properties.isUnique",
+            serde_json::json!(true),
+        ),
         (
             context,
             "properties.direction",
@@ -486,6 +543,71 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
                 && property.value == serde_json::json!({"$ref":type_id})
                 && !property.editable)
     );
+    for (key, expected) in [
+        ("isOrdered", serde_json::json!(true)),
+        ("isUnique", serde_json::json!(false)),
+        ("lower", serde_json::json!("0")),
+        ("upper", serde_json::json!("*")),
+    ] {
+        assert!(
+            inspector
+                .properties
+                .iter()
+                .any(|field| field.path == format!("properties.{key}")
+                    && field.value == expected
+                    && !field.editable)
+        );
+    }
+    let mut with_body = section.to_model(a.as_str(), a.as_str());
+    with_body.elements.push(serde_json::from_value(serde_json::json!({"id":"return-body", "kind":"uml.constraint", "name":"Result constraint"})).expect("Constraint"));
+    with_body.relations.push(serde_json::from_value(serde_json::json!({"id":"owns-return-body", "kind":"owns", "from":operation.id, "to":"return-body"})).expect("Constraint owner"));
+    let imported_operation = with_body
+        .elements
+        .iter_mut()
+        .find(|element| element.id == operation.id)
+        .expect("Operation");
+    imported_operation.properties.insert(
+        "bodyCondition".into(),
+        serde_json::json!({"$ref":"return-body"}),
+    );
+    imported_operation
+        .properties
+        .insert("isQuery".into(), serde_json::json!(true));
+    imported_operation
+        .properties
+        .insert("isOrdered".into(), serde_json::json!(false));
+    assert!(
+        bellatrix_mde::uml::root::Model::from_project(&with_body)
+            .validate()
+            .iter()
+            .any(|issue| issue.code == "MDE_OPERATION_CONDITION_UNSUPPORTED")
+    );
+    let imported_inspector =
+        inspect_element(&ModelingSection::from_model(&with_body), &operation.id)
+            .expect("imported return cache");
+    assert!(imported_inspector.properties.iter().any(
+        |field| field.path == "properties.isOrdered" && field.value == serde_json::json!(true)
+    ));
+    assert!(
+        imported_inspector
+            .properties
+            .iter()
+            .any(|field| field.path == "legacy.operation.isOrdered"
+                && field.value == serde_json::json!(false))
+    );
+    let before_body_edit = with_body.clone();
+    let rejected = bellatrix_mde::commands::apply(
+        &with_body,
+        &bellatrix_mde::commands::Command::SetProperty {
+            element_id: operation.id.clone(),
+            path: "properties.isQuery".into(),
+            value: serde_json::json!(false),
+        },
+        revision,
+    )
+    .expect_err("bodyCondition requires query Operation");
+    assert!(rejected.contains("only_body_for_query"));
+    assert_eq!(with_body, before_body_edit);
     let mut invalid_loaded = section.to_model(a.as_str(), a.as_str());
     invalid_loaded.root_model = None;
     invalid_loaded
@@ -577,6 +699,31 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
         );
         assert!(!persisted.properties.contains_key("type"));
         assert!(!persisted.properties.contains_key("ownedParameter"));
+        for key in ["isOrdered", "isUnique", "lower", "upper"] {
+            assert!(
+                !persisted.properties.contains_key(key),
+                "derived return fields are never persisted"
+            );
+        }
+        let returned =
+            bellatrix_mde::uml::operations::return_properties(&references, &operation.id)
+                .expect("reopened return properties");
+        assert!(returned.is_ordered && !returned.is_unique);
+        assert_eq!(
+            returned
+                .lower()
+                .expect("lower")
+                .expect("return exists")
+                .to_string(),
+            "0"
+        );
+        assert!(
+            returned
+                .upper()
+                .expect("upper")
+                .expect("return exists")
+                .is_unlimited()
+        );
         assert!(
             parameters
                 .iter()
@@ -644,6 +791,21 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
     }
     let final_section = read_section();
     let inspector = inspect_element(&final_section, &operation.id).expect("remaining Parameters");
+    for (key, expected) in [
+        ("isOrdered", serde_json::json!(false)),
+        ("isUnique", serde_json::json!(true)),
+        ("lower", serde_json::Value::Null),
+        ("upper", serde_json::Value::Null),
+    ] {
+        assert!(
+            inspector
+                .properties
+                .iter()
+                .any(|field| field.path == format!("properties.{key}")
+                    && field.value == expected
+                    && !field.editable)
+        );
+    }
     assert_eq!(
         inspector.display_label,
         "+findAgain(inout context: TaskList)"

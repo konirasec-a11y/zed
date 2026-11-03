@@ -7,6 +7,10 @@ commit `8ef13af2c68ae1994c8fa4f5b3e231dee7e6715d`:
 - `uml4net/Extend/AssociationExtensions.cs`: all-member, deduplicated `endType`.
 - `uml4net/Extend/PropertyExtensions.cs`: own `aggregation` determines
   `isComposite`; only binary membership has a unique `opposite`.
+- `uml4net/Extend/OperationExtensions.cs` and
+  `uml4net.Tests/Extend/OperationExtensionsTestFixture.cs`: return-property
+  derivation and the no-return/default scenarios, adapted into the existing
+  Cordis Class Quick Edit feature flow.
 - `uml4net.Tests/Extend/AssociationExtensionsTestFixture.cs`: mixed ownership
   and self-association fixtures.
 - `uml4net.Tests/Extend/PropertyExtensionsTestFixture.cs`: binary and n-ary
@@ -54,6 +58,35 @@ rendering, AssociationClass ownership-slot differentiation, navigability,
 qualifiers, specialization, redefinition and owned ValueSpecification evaluation
 remain outside this slice. Literal multiplicity notation is a declared adapter,
 not a claim that lowerValue/upperValue model identities exist.
+
+## Derived Operation return properties
+
+The pinned XMI `Operation-isOrdered.1`, `Operation-isUnique.1`,
+`Operation-lower.1` and `Operation-upper.1`, also specified by UML 2.5.1
+§9.9.11.6, derive all four fields from the single canonical return Parameter.
+Without a return Parameter, the results are false, true, null and null.
+With a return Parameter, ordering/uniqueness use its generated scalar defaults;
+missing multiplicity notation is 1..1. The existing shared BigInt Integer and
+UnlimitedNatural interval adapter evaluates literal notation without a machine
+integer limit. Property and Parameter use that same adapter. Present authored
+ValueSpecifications or nonliteral bounds remain explicitly unsupported and
+never masquerade as absent/default bounds. No ValueSpecification identities or
+expression evaluator are invented.
+
+`uml/operations.rs::return_properties` and the read-only Inspector projection
+ignore historical stored Operation return fields, while preserving and showing
+those fields separately as authored data. Mutations edit the Parameter instead.
+`Operation-only_body_for_query` is enforced for populated bodyCondition, whose
+reference must resolve to an owned Constraint. Expression truth is not evaluated
+and remains an explicit capability warning. The upstream `FirstOrDefault`
+behavior is not copied: multiple return Parameters remain invalid.
+
+The existing public Cordis Quick Edit flow adds Parameters, edits their Boolean
+flags and bounds, rejects invalid intervals and writes to derived fields, keeps
+unknown expressions visible, reopens JSON/Protobuf, and deletes the return
+Parameter to recover the no-return defaults. It also exercises an imported body
+Constraint and rejects changing its Operation to non-query. No new isolated
+test functions are introduced.
 
 ## Atomic Association-end editing
 
@@ -206,3 +239,46 @@ also creates packages and imports, changes aliases and visibility, resolves
 collisions, traverses a cycle, repairs an unsupported cyclic collision, and
 reopens JSON and Protobuf. No isolated import tests or alternate diagram UI are
 introduced.
+
+
+## Classifier ancestry and inherited Slots
+
+`uml/classifier_hierarchy.rs` adapts the pinned internal
+`uml4net/Extend/ClassifierExtensions.cs::QueryAllGeneralClassifiers` and public
+`uml4net.Extensions/ClassifierExtensions.cs::QueryConformsTo` intent. Their
+ancestor-chain fixtures inform the existing Slot ownership flow. The two
+upstream helpers disagree on self inclusion and the public traversal recurses;
+Bellatrix follows `Classifier-allParents` and `Classifier-conformsTo` in the
+original XMI instead. The retained Apache-2.0 notices apply.
+
+User-model conformance compares canonical Classifier identities and their
+Generalization closure. It is separate from immutable metaclass conformance:
+two unrelated Class objects both conform to the metaclass Class without one
+user-model Classifier conforming to the other. `allParents` excludes self;
+`conformsTo` includes identity equality. Iterative active-path detection reports
+cycles as the known UML `no_cycles_in_generalization` violation. Diamonds use
+identity deduplication and a topological ordering. Namespace inheritance and
+redefinition context checks reuse this same traversal, rather than keeping a
+second ancestry implementation. Results belong to one immutable graph snapshot.
+
+`Classifier-allSlottableFeatures` combines StructuralFeature members with all
+ancestor attributes, including private attributes, and applies the direct
+`Classifier-inherit` redefinition filter. It is not identical to the visible
+member or allAttributes sets. Instance Slot assignment now consumes that result
+instead of rejecting every generalized Classifier. Association member ends can
+contribute through the existing canonical member query.
+
+The literal allSlottableFeatures OCL can reintroduce a feature redefined by an
+intermediate ancestor, while its description says redefined features are
+excluded. When that ambiguity is present and the receiving Classifier has not
+explicitly resolved it, the slottable query returns Unsupported. Ordinary
+Namespace members remain queryable and the Inspector shows the separate
+slottable-query reason. This is a capability warning, not a new UML constraint.
+Complete Property/Operation redefinition consistency remains unevaluated.
+
+The existing `graph_rules.rs` Slot feature flow now moves a Slot for a private
+inherited attribute, changes direct redefinition, diagnoses ambiguous ancestry
+and cycles, repairs the graph, and reopens JSON/Protobuf. The existing Namespace
+hierarchy/import flow continues exercising diamond ordering and no stale cache.
+No new isolated test functions were added. Official sections: UML 2.5.1
+§§9.9.4.7, 9.9.9 and 9.9.20.

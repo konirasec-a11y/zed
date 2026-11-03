@@ -1,7 +1,20 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (C) 2019-2026 Starion Group S.A.
+// Return-property query patterns adapted from uml4net OperationExtensions.cs,
+// 8ef13af2c68ae1994c8fa4f5b3e231dee7e6715d. Bellatrix derives from canonical
+// ownership and reports unevaluated bounds rather than assuming their values.
+// Provenance and license: docs/bellatrix/references/uml4net/.
 // Contracts: UML 2.5.1 9.9.2, 9.9.11 and 9.9.13; provenance and bounded
 // comparison with RUML mutation recipes: docs/bellatrix/references/RUML.md.
 
-use super::{references::ReferenceIndex, root::ElementRef, schema};
+use super::{
+    references::ReferenceIndex,
+    root::ElementRef,
+    schema,
+    types::{
+        Integer, MultiplicityError, MultiplicityRange, UnlimitedNatural, literal_multiplicity,
+    },
+};
 use crate::{Element, ModelingSection, StructuralDiagnostic, StructuralSeverity};
 use serde_json::Value;
 
@@ -24,27 +37,35 @@ pub fn owned_parameters<'a>(
 }
 
 pub fn direction(parameter: &Element) -> Result<String, String> {
-    let descriptor = schema::uml_property("Parameter", "direction")
-        .map_err(|error| error.to_string())?
-        .ok_or("Parameter::direction contract is missing")?;
-    let value = parameter
-        .properties
-        .get("direction")
-        .cloned()
-        .or_else(|| {
-            schema::effective_default(descriptor)
-                .ok()
-                .flatten()
-                .and_then(|default| default.scalar_json())
-        })
-        .ok_or("Parameter::direction has no value or generated default")?;
-    schema::validate_scalar(descriptor, &value)
-        .map_err(|error| error.to_string())?
-        .map_err(|error| error.to_string())?;
-    value
+    effective_scalar(ElementRef::Object(parameter), "direction")?
         .as_str()
         .map(str::to_owned)
         .ok_or("invalid Parameter::direction".into())
+}
+
+fn effective_scalar(element: ElementRef<'_>, key: &str) -> Result<Value, String> {
+    let metaclass = element.metaclass().ok_or("UML metaclass is missing")?;
+    let descriptor = schema::uml_property(metaclass, key)
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| format!("{metaclass}::{key} contract is missing"))?;
+    let value = if let Some(value) = element.properties().get(key) {
+        value.clone()
+    } else {
+        schema::effective_default(descriptor)
+            .map_err(|error| error.to_string())?
+            .and_then(|default| default.scalar_json())
+            .ok_or_else(|| format!("{metaclass}::{key} has no value or generated default"))?
+    };
+    schema::validate_scalar(descriptor, &value)
+        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())?;
+    Ok(value)
+}
+
+fn effective_boolean(element: ElementRef<'_>, key: &str) -> Result<bool, String> {
+    effective_scalar(element, key)?
+        .as_bool()
+        .ok_or_else(|| format!("{key} requires a Boolean"))
 }
 
 pub fn return_parameter<'a>(
@@ -76,6 +97,82 @@ pub fn return_type<'a>(
         descriptor,
         parameter.properties.get("type").unwrap_or(&Value::Null),
     )
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReturnProperties {
+    pub is_ordered: bool,
+    pub is_unique: bool,
+    pub multiplicity: Result<Option<MultiplicityRange>, MultiplicityError>,
+}
+
+impl ReturnProperties {
+    pub fn lower(&self) -> Result<Option<&Integer>, MultiplicityError> {
+        self.multiplicity
+            .as_ref()
+            .map(|range| range.as_ref().map(MultiplicityRange::lower_bound))
+            .map_err(|error| *error)
+    }
+
+    pub fn upper(&self) -> Result<Option<&UnlimitedNatural>, MultiplicityError> {
+        self.multiplicity
+            .as_ref()
+            .map(|range| range.as_ref().map(MultiplicityRange::upper_bound))
+            .map_err(|error| *error)
+    }
+}
+
+/// UML Operation-isOrdered.1/isUnique.1/lower.1/upper.1: absence of a return
+/// Parameter is different from a return Parameter whose multiplicity is absent.
+pub fn return_properties(
+    references: &ReferenceIndex<'_>,
+    operation_id: &str,
+) -> Result<ReturnProperties, String> {
+    let Some(parameter) = return_parameter(references, operation_id)? else {
+        return Ok(ReturnProperties {
+            is_ordered: false,
+            is_unique: true,
+            multiplicity: Ok(None),
+        });
+    };
+    Ok(ReturnProperties {
+        is_ordered: effective_boolean(ElementRef::Object(parameter), "isOrdered")?,
+        is_unique: effective_boolean(ElementRef::Object(parameter), "isUnique")?,
+        multiplicity: literal_multiplicity(&parameter.properties).map(Some),
+    })
+}
+
+fn validate_body_condition(
+    references: &ReferenceIndex<'_>,
+    operation: ElementRef<'_>,
+) -> Result<(), String> {
+    let Some(value) = operation
+        .properties()
+        .get("bodyCondition")
+        .filter(|value| !value.is_null())
+    else {
+        return Ok(());
+    };
+    if !effective_boolean(operation, "isQuery")? {
+        return Err(
+            "Operation::only_body_for_query requires isQuery when bodyCondition is specified"
+                .into(),
+        );
+    }
+    let descriptor = schema::uml_property("Operation", "bodyCondition")
+        .map_err(|error| error.to_string())?
+        .ok_or("Operation::bodyCondition contract is missing")?;
+    let constraint = references
+        .validate(descriptor, value)?
+        .ok_or("bodyCondition is missing")?;
+    if references
+        .model()
+        .owner(constraint)?
+        .is_none_or(|owner| owner.id() != operation.id())
+    {
+        return Err("Operation::bodyCondition must be a Constraint owned by this Operation".into());
+    }
+    Ok(())
 }
 
 pub(crate) fn move_parameter(
@@ -142,10 +239,43 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
                     message,
                 });
             }
+            if let Err(message) = validate_body_condition(references, element) {
+                issues.push(StructuralDiagnostic {
+                    severity: StructuralSeverity::Error,
+                    code: "UML_OPERATION_BODY_CONDITION",
+                    subject_id: element.id().into(),
+                    message,
+                });
+            } else if element
+                .properties()
+                .get("bodyCondition")
+                .is_some_and(|value| !value.is_null())
+            {
+                issues.push(StructuralDiagnostic { severity: StructuralSeverity::Warning,
+                    code: "MDE_OPERATION_CONDITION_UNSUPPORTED", subject_id: element.id().into(),
+                    message: "Operation bodyCondition ownership and only_body_for_query are checked; its constraint expression is not evaluated".into() });
+            }
         } else if element.conforms_to("Parameter") {
             let ElementRef::Object(parameter) = element else {
                 continue;
             };
+            if let Err(error) = literal_multiplicity(&parameter.properties) {
+                let unsupported = error == MultiplicityError::UnsupportedValueSpecification;
+                issues.push(StructuralDiagnostic {
+                    severity: if unsupported {
+                        StructuralSeverity::Warning
+                    } else {
+                        StructuralSeverity::Error
+                    },
+                    code: if unsupported {
+                        "MDE_PARAMETER_MULTIPLICITY_UNSUPPORTED"
+                    } else {
+                        "UML_PARAMETER_MULTIPLICITY"
+                    },
+                    subject_id: parameter.id.clone(),
+                    message: error.to_string(),
+                });
+            }
             let problem = match direction(parameter) {
                 Err(error) => Some(error),
                 Ok(direction) => {

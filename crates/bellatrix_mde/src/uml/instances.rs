@@ -1,5 +1,5 @@
 //! Borrowed instance/slot views over canonical Elements and ownership edges.
-//! Direct, unredefined classifier attributes are the supported slottable-feature slice.
+//! Slottable features use the shared Classifier graph, including inherited private attributes.
 // SPDX-License-Identifier: MIT
 // Slot ownership transitions adapt Slot::set_owning_instance in javapak/ruml-wasm,
 // commit 5c90d7399acbce4c37847b272759ed85d677ba92, slot.rs:167-188.
@@ -7,6 +7,7 @@
 // Provenance and adaptation boundaries: docs/bellatrix/references/RUML.md.
 
 use super::{
+    classifiers::{self, QueryError},
     references::{ReferenceIndex, reference_id},
     root::{Element, ElementRef, Model},
     schema,
@@ -135,6 +136,15 @@ pub(crate) enum AssignmentError {
     Unsupported(String),
 }
 
+impl From<QueryError> for AssignmentError {
+    fn from(error: QueryError) -> Self {
+        match error {
+            QueryError::Invalid { message, .. } => Self::Invalid(message),
+            QueryError::Unsupported { message, .. } => Self::Unsupported(message),
+        }
+    }
+}
+
 impl From<String> for AssignmentError {
     fn from(message: String) -> Self {
         Self::Invalid(message)
@@ -225,35 +235,37 @@ fn validate_assignment_with<'a>(
             ));
         }
     }
-    let feature_owner = model.owner(feature)?;
-    let classifier = classifiers.into_iter().find(|classifier| {
-        feature_owner.is_some_and(|feature_owner| feature_owner.id() == classifier.id())
-    }).ok_or_else(|| AssignmentError::Unsupported(
-        "only directly owned classifier attributes are supported; inherited, imported and association-member features require further resolution".into(),
-    ))?;
-    if !feature.conforms_to("Property")
-        || !classifier
-            .metaclass()
-            .is_some_and(|name| super::metamodel::has_property(name, "ownedAttribute"))
-    {
-        return Err(AssignmentError::Unsupported(
-            "only directly owned Property attributes are supported".into(),
-        ));
+    let mut unresolved = None;
+    for classifier in classifiers {
+        let features = classifiers::query(references, classifier.id())
+            .and_then(|query| {
+                query.classifier.ok_or_else(|| {
+                    QueryError::invalid(
+                        classifier.id(),
+                        "InstanceSpecification classifier must be a Classifier",
+                    )
+                })
+            })
+            .and_then(|query| query.all_slottable_features);
+        match features {
+            Ok(features)
+                if features
+                    .iter()
+                    .any(|candidate| candidate.id() == feature.id()) =>
+            {
+                return Ok(());
+            }
+            Ok(_) => {}
+            Err(error @ QueryError::Unsupported { .. }) => unresolved = Some(error),
+            Err(error) => return Err(error.into()),
+        }
     }
-    let members = model.owned_elements(classifier)?;
-    if populated(classifier.properties().get("generalization"))
-        || members
-            .iter()
-            .any(|member| member.conforms_to("Generalization"))
-        || members
-            .iter()
-            .any(|member| populated(member.properties().get("redefinedProperty")))
-    {
-        return Err(AssignmentError::Unsupported(
-            "generalized classifiers and redefined properties require allSlottableFeatures evaluation".into(),
-        ));
+    if let Some(error) = unresolved {
+        return Err(error.into());
     }
-    Ok(())
+    Err(AssignmentError::Invalid(
+        "Slot definingFeature is not a slottable feature of any owning InstanceSpecification classifier".into(),
+    ))
 }
 
 pub(crate) fn validate<'a>(

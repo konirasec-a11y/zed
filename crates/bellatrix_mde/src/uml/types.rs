@@ -254,6 +254,24 @@ impl FromStr for MultiplicityRange {
     }
 }
 
+/// The retained notation adapter is shared by Property and Parameter. A present
+/// unevaluated bound is not absence and must never silently become 1.
+pub fn literal_multiplicity(
+    properties: &std::collections::BTreeMap<String, Value>,
+) -> Result<MultiplicityRange, MultiplicityError> {
+    if ["lowerValue", "upperValue"]
+        .iter()
+        .any(|key| properties.get(*key).is_some_and(|value| !value.is_null()))
+    {
+        return Err(MultiplicityError::UnsupportedValueSpecification);
+    }
+    match properties.get("multiplicity") {
+        None => Ok(MultiplicityRange::default()),
+        Some(Value::String(text)) => text.parse(),
+        Some(_) => Err(MultiplicityError::Representation),
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RelationEnd {
     Source,

@@ -75,6 +75,7 @@ struct Declared {
 fn empty() -> Value { json!("") }
 fn public() -> Value { json!("public") }
 fn false_value() -> Value { json!(false) }
+fn one_value() -> Value { json!("1") }
 
 const COMMON_CLASSIFIER: &[Declared] = &[
     Declared { key:"stereotype", label:"Stereotype", editor:PropertyEditor::Text, default:empty },
@@ -98,10 +99,17 @@ const FIELD: &[Declared] = &[
     Declared { key:"isReadOnly", label:"Read only", editor:PropertyEditor::Boolean, default:false_value },
 ];
 const PARAMETER: &[Declared] = &[
+    Declared { key:"isOrdered", label:"Ordered", editor:PropertyEditor::Boolean, default:false_value },
+    Declared { key:"isUnique", label:"Unique", editor:PropertyEditor::Boolean, default:false_value },
+    Declared { key:"multiplicity", label:"Multiplicity notation", editor:PropertyEditor::Text, default:one_value },
     Declared { key:"direction", label:"Direction", editor:PropertyEditor::ReadOnly, default:empty },
     Declared { key:"type", label:"Type reference", editor:PropertyEditor::Reference, default:empty },
 ];
 const FUNCTION: &[Declared] = &[
+    Declared { key:"isOrdered", label:"Return ordered (derived)", editor:PropertyEditor::ReadOnly, default:empty },
+    Declared { key:"isUnique", label:"Return unique (derived)", editor:PropertyEditor::ReadOnly, default:empty },
+    Declared { key:"lower", label:"Return lower (derived)", editor:PropertyEditor::ReadOnly, default:empty },
+    Declared { key:"upper", label:"Return upper (derived)", editor:PropertyEditor::ReadOnly, default:empty },
     Declared { key:"type", label:"Return Type (derived)", editor:PropertyEditor::ReadOnly, default:empty },
     Declared { key:"visibility", label:"Visibility", editor:PropertyEditor::Choice(VISIBILITY), default:public },
     Declared { key:"signature", label:"Authored signature", editor:PropertyEditor::Text, default:empty },
@@ -233,6 +241,11 @@ pub(crate) fn append_namespace_properties(
             }
             if let Some(classifier) = query.classifier {
                 append("uml.general", "Direct parents", ids(&classifier.parents));
+                append("uml.allParents", "All ancestor classifiers", ids(&classifier.all_parents));
+                match classifier.all_slottable_features {
+                    Ok(features) => append("uml.allSlottableFeatures", "All slottable features", ids(&features)),
+                    Err(error) => append("uml.allSlottableFeatures.status", "Slottable feature query unavailable", json!(error.to_string())),
+                }
                 append("uml.inheritedMember", "Inherited members", ids(&classifier.inherited_members));
                 append("uml.feature", "Direct features", ids(&classifier.features));
                 append("uml.attribute", "Direct attributes", ids(&classifier.attributes));
@@ -479,6 +492,27 @@ fn inspect_element_with_references(
     }
     apply_normative_contracts(crate::uml::root::ElementRef::Object(element), &mut properties);
     if crate::uml::root::ElementRef::Object(element).conforms_to("Operation") {
+        let result = crate::uml::operations::return_properties(references, id);
+        for key in ["isOrdered", "isUnique", "lower", "upper"] {
+            if let Some(field) = properties.iter_mut().find(|field| field.path == format!("properties.{key}")) {
+                field.value = match &result {
+                    Err(error) => json!(error),
+                    Ok(result) => match key {
+                        "isOrdered" => json!(result.is_ordered),
+                        "isUnique" => json!(result.is_unique),
+                        "lower" => result.lower().map(|value| json!(value.map(ToString::to_string))).unwrap_or_else(|error| json!(error.to_string())),
+                        "upper" => result.upper().map(|value| json!(value.map(ToString::to_string))).unwrap_or_else(|error| json!(error.to_string())),
+                        _ => Value::Null,
+                    },
+                };
+            }
+            if let Some(value) = element.properties.get(key) {
+                properties.push(InspectorProperty {
+                    path: format!("legacy.operation.{key}"), label: format!("Stored {key} (ignored; derived from Parameter)"),
+                    group: "Authored text", editor: PropertyEditor::ReadOnly, value: value.clone(), editable: false,
+                });
+            }
+        }
         if let Some(field) = properties
             .iter_mut()
             .find(|field| field.path == "properties.type")

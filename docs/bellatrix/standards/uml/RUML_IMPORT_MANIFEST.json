@@ -41,8 +41,8 @@
       ],
       "canonical_state": "one owns edge; inverse views are derived, not stored independently",
       "limits": [
-        "direct classifier properties only in this slice",
-        "unsupported value/specification and inheritance/redefinition cases remain explicit capability diagnostics"
+        "slottable features include inherited private attributes and direct redefinitions through the shared Classifier graph",
+        "unevaluated values/specifications and ambiguous ancestor redefinitions remain explicit capability diagnostics"
       ]
     }
   ]

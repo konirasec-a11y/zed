@@ -1,3 +1,4 @@
+pub mod classifier_hierarchy;
 pub mod classifiers;
 pub mod associations;
 pub mod instances;

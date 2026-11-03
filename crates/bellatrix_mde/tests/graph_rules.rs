@@ -33,6 +33,8 @@ fn slot_owner_transition_uses_one_canonical_edge_through_commands_and_roundtrips
 -> Result<(), Box<dyn std::error::Error>> {
     use bellatrix_mde::commands::{self, Command};
     use bellatrix_mde::uml::{
+        classifier_hierarchy, classifiers,
+        references::ReferenceIndex,
         root::{Element, Model},
         schema,
     };
@@ -250,7 +252,7 @@ fn slot_owner_transition_uses_one_canonical_edge_through_commands_and_roundtrips
     reject(
         &unrelated_feature,
         assign(Some("first")),
-        "Unsupported Slot capability",
+        "not a slottable feature",
     )?;
     let mut parallel_storage = moved.clone();
     parallel_storage
@@ -353,30 +355,180 @@ fn slot_owner_transition_uses_one_canonical_edge_through_commands_and_roundtrips
     });
     reject(&duplicate, assign(Some("first")), "same definingFeature")?;
 
-    let mut unsupported = moved.clone();
-    unsupported.relations.push(Relation {
+    let references = ReferenceIndex::new(Model::from_project(&moved));
+    assert!(references.element("class")?.conforms_to("Class"));
+    assert!(references.element("other-class")?.conforms_to("Class"));
+    assert!(!classifier_hierarchy::conforms_to(
+        &references,
+        "class",
+        "other-class"
+    )?);
+    let mut inherited = moved.clone();
+    inherited.relations.push(Relation {
         id: "inherits".into(),
         kind: "uml.generalization".into(),
         from: "class".into(),
         to: "other-class".into(),
         properties: Default::default(),
     });
-    reject(
-        &unsupported,
-        assign(Some("first")),
-        "Unsupported Slot capability",
+    inherited = commands::apply(
+        &inherited,
+        &Command::SetProperty {
+            element_id: "other-feature".into(),
+            path: "properties.visibility".into(),
+            value: json!("private"),
+        },
+        5,
     )?;
+    inherited
+        .elements
+        .iter_mut()
+        .find(|element| element.id == "slot")
+        .ok_or("slot")?
+        .properties
+        .insert("definingFeature".into(), json!({"$ref": "other-feature"}));
+    inherited = commands::apply(&inherited, &assign(Some("first")), 6)?;
+    assert_eq!(owner_of(&inherited)?, "first");
+    let references = ReferenceIndex::new(Model::from_project(&inherited));
+    assert!(classifier_hierarchy::conforms_to(
+        &references,
+        "class",
+        "other-class"
+    )?);
+    assert!(classifier_hierarchy::conforms_to(
+        &references,
+        "class",
+        "class"
+    )?);
+    let query = classifiers::query(&references, "class")?;
     assert!(
-        validate_structural_model(&unsupported)
+        !query
+            .members
             .iter()
-            .any(|issue| issue.code == "MDE_SLOT_CAPABILITY_UNSUPPORTED"
-                && issue.severity == StructuralSeverity::Warning)
+            .any(|member| member.id() == "other-feature")
+    );
+    let classifier = query.classifier.ok_or("Class query")?;
+    assert_eq!(
+        classifier
+            .all_parents
+            .iter()
+            .map(|parent| parent.id())
+            .collect::<Vec<_>>(),
+        ["other-class"]
     );
     assert!(
-        Model::from_project(&unsupported)
-            .validate()
+        classifier
+            .all_slottable_features?
             .iter()
-            .all(|issue| issue.code != "UML_SLOT_CONTRACT")
+            .any(|feature| feature.id() == "other-feature")
+    );
+    for format in [Format::Json, Format::Protobuf] {
+        let reopened = decode(&encode(&inherited, format)?, format)?;
+        let transferred = commands::apply(&reopened, &assign(Some("second")), 7)?;
+        assert_eq!(owner_of(&transferred)?, "second");
+        let issues = validate_structural_model(&transferred);
+        assert!(
+            issues
+                .iter()
+                .all(|issue| issue.severity != StructuralSeverity::Error),
+            "{issues:?}"
+        );
+    }
+
+    inherited
+        .elements
+        .iter_mut()
+        .find(|element| element.id == "slot")
+        .ok_or("slot")?
+        .properties
+        .insert("definingFeature".into(), json!({"$ref": "feature"}));
+    inherited = commands::apply(
+        &inherited,
+        &Command::SetRedefinedElements {
+            element_id: "feature".into(),
+            redefined_ids: vec!["other-feature".into()],
+        },
+        9,
+    )?;
+    inherited = commands::apply(&inherited, &assign(Some("second")), 10)?;
+    let mut obsolete = inherited.clone();
+    obsolete
+        .elements
+        .iter_mut()
+        .find(|element| element.id == "slot")
+        .ok_or("slot")?
+        .properties
+        .insert("definingFeature".into(), json!({"$ref": "other-feature"}));
+    reject(&obsolete, assign(Some("first")), "not a slottable feature")?;
+
+    let mut descendant = inherited.clone();
+    descendant.elements.push(serde_json::from_value(
+        json!({"id": "descendant", "kind": "uml.class", "name": "Descendant"}),
+    )?);
+    for (id, kind, from, to) in [
+        ("owns-descendant", "owns", "model", "descendant"),
+        (
+            "descendant-inherits",
+            "uml.generalization",
+            "descendant",
+            "class",
+        ),
+    ] {
+        descendant.relations.push(Relation {
+            id: id.into(),
+            kind: kind.into(),
+            from: from.into(),
+            to: to.into(),
+            properties: Default::default(),
+        });
+    }
+    descendant
+        .elements
+        .iter_mut()
+        .find(|element| element.id == "first")
+        .ok_or("first")?
+        .properties
+        .insert("classifier".into(), json!([{"$ref": "descendant"}]));
+    reject(
+        &descendant,
+        assign(Some("first")),
+        "allSlottableFeatures ambiguous",
+    )?;
+    assert!(
+        validate_structural_model(&descendant)
+            .iter()
+            .any(|issue| issue.subject_id == "descendant"
+                && issue.code == "UML_NAMESPACE_QUERY_UNSUPPORTED"
+                && issue.severity == StructuralSeverity::Warning)
+    );
+
+    inherited.relations.push(Relation {
+        id: "cycle-back".into(),
+        kind: "uml.generalization".into(),
+        from: "other-class".into(),
+        to: "class".into(),
+        properties: Default::default(),
+    });
+    reject(
+        &inherited,
+        assign(Some("first")),
+        "cycle in UML generalization",
+    )?;
+    let references = ReferenceIndex::new(Model::from_project(&inherited));
+    assert!(matches!(
+        classifier_hierarchy::conforms_to(&references, "class", "other-class"),
+        Err(classifiers::QueryError::Invalid { .. })
+    ));
+    inherited
+        .relations
+        .retain(|relation| relation.id != "cycle-back");
+    let repaired = commands::apply(&inherited, &assign(Some("first")), 11)?;
+    assert_eq!(owner_of(&repaired)?, "first");
+    let restored = decode(&encode(&repaired, Format::Protobuf)?, Format::Protobuf)?;
+    assert!(
+        validate_structural_model(&restored)
+            .iter()
+            .all(|issue| issue.severity != StructuralSeverity::Error)
     );
     Ok(())
 }

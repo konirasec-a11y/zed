@@ -6,13 +6,14 @@
 // storage adapters below are new; no upstream runtime or object lists are used.
 
 use super::{
+    classifier_hierarchy::HierarchyQueries,
     references::{ReferenceIndex, reference_id},
     root::{ElementRef, VisibilityKind},
     schema::{self, Aggregation, Document, PropertyDescriptor, XmiId},
 };
 use crate::{ModelingSection, StructuralDiagnostic, StructuralSeverity};
 use serde_json::{Value, json};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum QueryError {
@@ -65,6 +66,8 @@ impl QueryError {
 #[derive(Clone, Debug)]
 pub struct ClassifierQuery<'a> {
     pub parents: Vec<ElementRef<'a>>,
+    pub all_parents: Vec<ElementRef<'a>>,
+    pub all_slottable_features: Result<Vec<ElementRef<'a>>, QueryError>,
     pub inherited_members: Vec<ElementRef<'a>>,
     /// UML Classifier::feature is direct, unlike allFeatures().
     pub features: Vec<ElementRef<'a>>,
@@ -193,6 +196,7 @@ struct DirectNamespace<'a> {
 struct Queries<'index, 'model> {
     references: &'index ReferenceIndex<'model>,
     completed: HashMap<&'model str, NamespaceQuery<'model>>,
+    hierarchy: HierarchyQueries<'index, 'model>,
 }
 
 impl<'index, 'model> Queries<'index, 'model> {
@@ -200,6 +204,7 @@ impl<'index, 'model> Queries<'index, 'model> {
         Self {
             references,
             completed: HashMap::new(),
+            hierarchy: HierarchyQueries::new(references),
         }
     }
 
@@ -242,25 +247,27 @@ impl<'index, 'model> Queries<'index, 'model> {
                 "generalization must use canonical relationship records",
             ));
         }
-        let mut parents = Vec::new();
-        for relation in self
-            .references
-            .model()
-            .relationship_records()
-            .filter(|relation| complete && relation.from == id)
-        {
-            if relation.kind == "uml.generalization" {
-                self.element(&relation.id)?;
-                let parent = self.element(&relation.to)?;
-                if !element.conforms_to("Classifier") || !parent.conforms_to("Classifier") {
-                    return Err(QueryError::invalid(
-                        &relation.id,
-                        "Generalization endpoints must be Classifiers",
-                    ));
-                }
-                parents.push(parent);
+        let parents = if complete && element.conforms_to("Classifier") {
+            self.hierarchy
+                .get(id)
+                .ok_or_else(|| QueryError::invalid(id, "missing Classifier ancestry"))?
+                .parents
+                .clone()
+        } else {
+            if complete
+                && self
+                    .references
+                    .model()
+                    .relationship_records()
+                    .any(|relation| relation.kind == "uml.generalization" && relation.from == id)
+            {
+                return Err(QueryError::invalid(
+                    id,
+                    "Generalization source must be a Classifier",
+                ));
             }
-        }
+            Vec::new()
+        };
         let owned = self
             .references
             .explicit_owned_elements(id)
@@ -357,70 +364,6 @@ impl<'index, 'model> Queries<'index, 'model> {
         })
     }
 
-    fn ordered_ancestors(
-        &self,
-        parents: &[ElementRef<'model>],
-    ) -> Result<Vec<ElementRef<'model>>, QueryError> {
-        let mut pending = VecDeque::from(parents.to_vec());
-        let mut ancestors = Vec::new();
-        let mut seen = HashSet::new();
-        while let Some(parent) = pending.pop_front() {
-            if !seen.insert(parent.id()) {
-                continue;
-            }
-            ancestors.push(parent);
-            let query = self
-                .completed
-                .get(parent.id())
-                .and_then(|query| query.classifier.as_ref())
-                .ok_or_else(|| QueryError::invalid(parent.id(), "missing parent query"))?;
-            pending.extend(query.parents.iter().copied());
-        }
-        let mut children: HashMap<&str, usize> =
-            ancestors.iter().map(|parent| (parent.id(), 0)).collect();
-        for ancestor in &ancestors {
-            let query = self
-                .completed
-                .get(ancestor.id())
-                .and_then(|query| query.classifier.as_ref())
-                .ok_or_else(|| QueryError::invalid(ancestor.id(), "missing parent query"))?;
-            for parent in &query.parents {
-                if let Some(count) = children.get_mut(parent.id()) {
-                    *count += 1;
-                }
-            }
-        }
-        let mut ready = ancestors
-            .iter()
-            .copied()
-            .filter(|parent| children.get(parent.id()) == Some(&0))
-            .collect::<VecDeque<_>>();
-        let mut result = Vec::new();
-        while let Some(ancestor) = ready.pop_front() {
-            result.push(ancestor);
-            let query = self
-                .completed
-                .get(ancestor.id())
-                .and_then(|query| query.classifier.as_ref())
-                .ok_or_else(|| QueryError::invalid(ancestor.id(), "missing parent query"))?;
-            for parent in &query.parents {
-                if let Some(count) = children.get_mut(parent.id()) {
-                    *count -= 1;
-                    if *count == 0 {
-                        ready.push_back(*parent);
-                    }
-                }
-            }
-        }
-        if result.len() != ancestors.len() {
-            return Err(QueryError::invalid(
-                parents.first().map_or("", |parent| parent.id()),
-                "cycle in UML generalization",
-            ));
-        }
-        Ok(result)
-    }
-
     fn finish(
         &self,
         direct: DirectNamespace<'model>,
@@ -449,7 +392,10 @@ impl<'index, 'model> Queries<'index, 'model> {
                 }
             }
         }
-        let ancestors = self.ordered_ancestors(&direct.parents)?;
+        let ancestry = self.hierarchy.get(direct.element.id());
+        let ancestors = ancestry
+            .map(|ancestry| ancestry.ancestors.clone())
+            .unwrap_or_default();
         let mut redefined = HashSet::new();
         for member in &direct.owned_members {
             for target in redefinitions(self.references, *member)? {
@@ -464,7 +410,9 @@ impl<'index, 'model> Queries<'index, 'model> {
                             "redefined member requires a Classifier owner",
                         )
                     })?;
-                if !ancestors.iter().any(|ancestor| ancestor.id() == owner.id()) {
+                if owner.id() == direct.element.id()
+                    || !ancestry.is_some_and(|ancestry| ancestry.conforms_to(owner))
+                {
                     return Err(QueryError::invalid(
                         member.id(),
                         format!(
@@ -538,7 +486,7 @@ impl<'index, 'model> Queries<'index, 'model> {
             let mut all_attributes = direct.attributes.clone();
             // A depth-first concatenation puts a diamond's common ancestor before
             // the second parent's attributes. Topological order honors 9.9.4.7.
-            for ancestor in ancestors {
+            for ancestor in &ancestors {
                 let query = self
                     .completed
                     .get(ancestor.id())
@@ -546,8 +494,16 @@ impl<'index, 'model> Queries<'index, 'model> {
                     .ok_or_else(|| QueryError::invalid(ancestor.id(), "missing parent query"))?;
                 all_attributes.extend(query.attributes.iter().copied());
             }
+            let all_slottable_features = self.collect_slottable_features(
+                direct.element.id(),
+                &members,
+                &ancestors,
+                &redefined,
+            );
             Some(ClassifierQuery {
                 parents: direct.parents,
+                all_parents: ancestors,
+                all_slottable_features,
                 inherited_members,
                 features: direct.features,
                 attributes: direct.attributes,
@@ -580,31 +536,74 @@ impl<'index, 'model> Queries<'index, 'model> {
         })
     }
 
+    fn collect_slottable_features(
+        &self,
+        id: &str,
+        members: &[ElementRef<'model>],
+        ancestors: &[ElementRef<'model>],
+        redefined: &HashSet<&str>,
+    ) -> Result<Vec<ElementRef<'model>>, QueryError> {
+        let mut attributes = Vec::new();
+        let mut ancestor_redefinitions = HashSet::new();
+        for ancestor in ancestors {
+            let query = self
+                .completed
+                .get(ancestor.id())
+                .and_then(|query| query.classifier.as_ref())
+                .ok_or_else(|| QueryError::invalid(ancestor.id(), "missing ancestor attributes"))?;
+            attributes.extend(query.attributes.iter().copied());
+            for attribute in &query.attributes {
+                ancestor_redefinitions.extend(
+                    redefinitions(self.references, *attribute)?
+                        .into_iter()
+                        .map(|target| target.id()),
+                );
+            }
+        }
+        // The literal allSlottableFeatures body can reintroduce a feature replaced
+        // by an intermediate ancestor. Do not invent a transitive suppression rule
+        // or certify ambiguous membership against the prose's exclusion contract.
+        if attributes.iter().any(|attribute| {
+            ancestor_redefinitions.contains(attribute.id()) && !redefined.contains(attribute.id())
+        }) {
+            return Err(QueryError::unsupported(
+                id,
+                "ancestor redefinitions make allSlottableFeatures ambiguous; explicit resolution is required",
+            ));
+        }
+        Ok(unique(
+            members
+                .iter()
+                .copied()
+                .filter(|member| member.conforms_to("StructuralFeature"))
+                .chain(
+                    attributes
+                        .into_iter()
+                        .filter(|attribute| !redefined.contains(attribute.id())),
+                ),
+        ))
+    }
+
     fn evaluate(&mut self, id: &str) -> Result<NamespaceQuery<'model>, QueryError> {
         let root = self.element(id)?;
-        let mut pending = vec![(root.id(), false)];
-        let mut active = HashSet::new();
-        let mut direct = HashMap::new();
-        while let Some((id, exiting)) = pending.pop() {
-            if self.completed.contains_key(id) {
+        let mut order = if root.conforms_to("Classifier") {
+            self.hierarchy
+                .resolve(id)?
+                .ancestors
+                .into_iter()
+                .rev()
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+        order.push(root);
+        for element in order {
+            if self.completed.contains_key(element.id()) {
                 continue;
             }
-            if exiting {
-                let node = direct
-                    .remove(id)
-                    .ok_or_else(|| QueryError::invalid(id, "missing namespace traversal state"))?;
-                let result = self.finish(node)?;
-                self.completed.insert(id, result);
-                active.remove(id);
-            } else {
-                if !active.insert(id) {
-                    return Err(QueryError::invalid(id, "cycle in UML generalization"));
-                }
-                let node = self.direct(id, true)?;
-                pending.push((id, true));
-                pending.extend(node.parents.iter().rev().map(|parent| (parent.id(), false)));
-                direct.insert(id, node);
-            }
+            let direct = self.direct(element.id(), true)?;
+            let result = self.finish(direct)?;
+            self.completed.insert(element.id(), result);
         }
         self.completed
             .get(root.id())
@@ -777,8 +776,10 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
                     }
                 }
             }
-            if element.conforms_to("Namespace") {
-                queries.evaluate(element.id())?;
+            if element.conforms_to("Namespace")
+                && let Some(classifier) = queries.evaluate(element.id())?.classifier
+            {
+                classifier.all_slottable_features?;
             }
             Ok::<_, QueryError>(())
         })();

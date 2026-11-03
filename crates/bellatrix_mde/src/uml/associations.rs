@@ -150,17 +150,7 @@ pub fn is_composite(property: &Element) -> Result<bool, String> {
 
 /// Literal notation is retained verbatim; this adapter does not invent ValueSpecification identities.
 pub fn multiplicity(property: &Element) -> Result<MultiplicityRange, MultiplicityError> {
-    if ["lowerValue", "upperValue"]
-        .iter()
-        .any(|key| property.properties.contains_key(*key))
-    {
-        return Err(MultiplicityError::UnsupportedValueSpecification);
-    }
-    match property.properties.get("multiplicity") {
-        None => Ok(MultiplicityRange::default()),
-        Some(Value::String(text)) => text.parse(),
-        Some(_) => Err(MultiplicityError::Representation),
-    }
+    super::types::literal_multiplicity(&property.properties)
 }
 
 fn validate_association(

@@ -37,10 +37,12 @@ O contrato normativo foi conferido em `UML.xmi`: `InstanceSpecification-slot`,
 `InstanceSpecification-defining_feature` e `Classifier-allSlottableFeatures`.
 As seções correspondentes do PDF UML 2.5.1 são 9.9.9, 9.9.20 e 9.9.4.7.
 
-Este incremento suporta a atribuição e movimentação de um Slot existente com
-`properties.definingFeature` como referência `{ "$ref": "id" }` de uma Property
-diretamente possuída por um dos Classifiers referenciados no array
-`properties.classifier` da instância. A representação e a resolução usam o
+A atribuição e movimentação de um Slot existente usa
+`properties.definingFeature` como referência `{ "$ref": "id" }` de uma
+StructuralFeature elegível em um dos Classifiers referenciados no array
+`properties.classifier` da instância. A elegibilidade agora consome o grafo
+compartilhado de Classifiers, incluindo atributos herdados privados e
+redefinições diretas. A representação e a resolução usam o
 mesmo `uml::references::ReferenceIndex` das demais referências canônicas.
 Rejeita proprietário ausente ou incompatível, referência inválida, duplicação de
 definingFeature e armazenamento paralelo de `slot`/`owningInstance`.
@@ -48,13 +50,16 @@ Falhas não alteram o projeto de entrada nem seu proprietário anterior; repetir
 mesma atribuição é idempotente. O teste público em `tests/graph_rules.rs` percorre
 comandos, consultas e serialização JSON/Protobuf.
 
-Classifiers com generalizações, propriedades redefinidas e features herdadas,
-importadas ou memberEnds de associações ainda exigem resolução adicional. São
-reportados como capacidade não suportada, não como proibições da UML. Não foram
+Features são obtidas pela união normativa dos membros StructuralFeature com
+atributos dos ancestrais, inclusive privados, filtrando as redefinições diretas.
+A resolução usa o mesmo motor de Namespace; capacidades de membership ainda
+não resolvidas e redefinições ambíguas em ancestrais produzem diagnóstico de
+capacidade não suportada, não uma falsa proibição da UML. A documentação em
+[uml4net/README.md](uml4net/README.md) registra esse limite. Não foram
 transplantados os erros silenciosos nem os métodos remove/clear inconsistentes
-do upstream. Este incremento não implementa valores de Slots, todo
-`allSlottableFeatures`, criação visual de instâncias ou suporte completo ao
-diagrama de objetos. Referências de classifiers são validadas mesmo em instâncias
+do upstream. Este incremento não implementa valores de Slots, toda consistência
+de redefinições, criação visual de instâncias ou suporte completo ao diagrama
+de objetos. Referências de classifiers são validadas mesmo em instâncias
 sem Slots; `specification` e valores de Slots populados continuam produzindo
 diagnósticos explícitos de capacidade não suportada.
 
