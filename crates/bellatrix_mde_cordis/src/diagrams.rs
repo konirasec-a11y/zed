@@ -1,11 +1,11 @@
 //! Diagram lifecycle requests share the same revision-checked mutation boundary as element edits.
 use bellatrix_mde::{
-    StructuralDiagnostic, StructuralDiagramKind, commands::Command, validate_structural_diagram,
+    ExecutionEvent, ExecutionTrace, TraceOutcome, TracePhase, StructuralDiagnostic, StructuralDiagramKind, commands::Command, validate_structural_diagram, validate_structural_diagram_traced,
 };
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::event::responder;
 use cordis::{Context, Event};
-use std::{convert::Infallible, io, sync::Arc};
+use std::{convert::Infallible, io, sync::{Arc, atomic::{AtomicU64, Ordering}}};
 
 #[derive(Clone, Debug)]
 pub struct ModelingCreateDiagramRequested {
@@ -69,9 +69,46 @@ impl Event for ModelingValidateDiagram {
     type Output = Result<DiagramValidationResult, String>;
 }
 
-fn validate(
+/// Events produced by an MDE run, suitable for a UI observer or JSONL export.
+#[derive(Clone, Debug)]
+pub struct ModelingExecutionTrace {
+    pub project_id: ProjectId,
+    pub run_id: String,
+    pub events: Vec<ExecutionEvent>,
+    pub dropped: u64,
+}
+pub struct ModelingExecutionTraceEvent;
+impl Event for ModelingExecutionTraceEvent {
+    const NAME: &'static str = "bellatrix.mde.execution-trace.v1";
+    type Args = ModelingExecutionTrace;
+    type Output = ();
+}
+static NEXT_VALIDATION_RUN: AtomicU64 = AtomicU64::new(1);
+
+/// Opt-in validation request that returns bounded, correlated execution events.
+#[derive(Clone, Debug)]
+pub struct ModelingValidateDiagramTracedRequested {
+    pub request: ModelingValidateDiagramRequested,
+    pub run_id: String,
+    pub capacity: usize,
+}
+#[derive(Debug)]
+pub struct TracedDiagramValidationResult {
+    pub result: Result<DiagramValidationResult, String>,
+    pub events: Vec<ExecutionEvent>,
+    pub dropped: u64,
+}
+pub struct ModelingValidateDiagramTraced;
+impl Event for ModelingValidateDiagramTraced {
+    const NAME: &'static str = "bellatrix.mde.validate-diagram-traced.v1";
+    type Args = ModelingValidateDiagramTracedRequested;
+    type Output = TracedDiagramValidationResult;
+}
+
+fn validate_inner(
     projects: &ProjectService,
     request: ModelingValidateDiagramRequested,
+    trace: Option<&mut ExecutionTrace>,
 ) -> Result<DiagramValidationResult, String> {
     let document = projects
         .snapshot(&request.project_id)
@@ -96,7 +133,10 @@ fn validate(
     Ok(DiagramValidationResult {
         diagram_id: request.diagram_id.clone(),
         revision: document.revision(),
-        diagnostics: validate_structural_diagram(&model, &request.diagram_id, kind),
+        diagnostics: match trace {
+            Some(trace) => validate_structural_diagram_traced(&model, &request.diagram_id, kind, trace),
+            None => validate_structural_diagram(&model, &request.diagram_id, kind),
+        },
     })
 }
 
@@ -167,11 +207,46 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
             },
         ))
         .map_err(|error| io::Error::other(error.to_string()))?;
+    let traced_projects = Arc::clone(&projects);
+    let _validate_traced = context
+        .on::<ModelingValidateDiagramTraced, _>(responder(
+            move |_context: Context, traced: ModelingValidateDiagramTracedRequested| {
+                let projects = Arc::clone(&traced_projects);
+                async move {
+                    let mut trace = ExecutionTrace::new(traced.run_id, Some(traced.request.expected_revision.to_string()), traced.capacity.min(10_000));
+                    trace.emit("cordis", "diagram.validate.request", TracePhase::Start, Some(&traced.request.diagram_id), &[], None);
+                    let result = validate_inner(&projects, traced.request, Some(&mut trace));
+                    let (phase, outcome) = if result.is_ok() { (TracePhase::Finish, TraceOutcome::Success) } else { (TracePhase::Error, TraceOutcome::Error) };
+                    trace.emit("cordis", "diagram.validate.request", phase, None, &[], Some(outcome));
+                    Ok::<_, Infallible>(Some(TracedDiagramValidationResult { result, events: trace.events().to_vec(), dropped: trace.dropped() }))
+                }
+            },
+        ))
+        .map_err(|error| io::Error::other(error.to_string()))?;
     let _validate = context
         .on::<ModelingValidateDiagram, _>(responder(
-            move |_context: Context, request: ModelingValidateDiagramRequested| {
+            move |context: Context, request: ModelingValidateDiagramRequested| {
                 let projects = Arc::clone(&projects);
-                async move { Ok::<_, Infallible>(Some(validate(&projects, request))) }
+                async move {
+                    let run_id = format!("diagram-validation-{}-{}", std::process::id(), NEXT_VALIDATION_RUN.fetch_add(1, Ordering::Relaxed));
+                    let mut trace = ExecutionTrace::new(run_id, Some(request.expected_revision.to_string()), 10_000);
+                    let forwarder = crate::trace_output::start(context.clone(), &mut trace, request.project_id.clone());
+                    trace.emit("cordis", "diagram.validate.request", TracePhase::Start, Some(&request.diagram_id), &[], None);
+                    let fallback = trace.clone();
+                    let (mut trace, result) = match tokio::task::spawn_blocking(move || {
+                        let result = validate_inner(&projects, request, Some(&mut trace));
+                        (trace, result)
+                    }).await {
+                        Ok(value) => value,
+                        Err(error) => (fallback.clone(), Err(error.to_string())),
+                    };
+                    drop(fallback);
+                    let (phase, outcome) = if result.is_ok() { (TracePhase::Finish, TraceOutcome::Success) } else { (TracePhase::Error, TraceOutcome::Error) };
+                    trace.emit("cordis", "diagram.validate.request", phase, None, &[], Some(outcome));
+                    trace.clear_sink();
+                    drop(forwarder);
+                    Ok::<_, Infallible>(Some(result))
+                }
             },
         ))
         .map_err(|error| io::Error::other(error.to_string()))?;

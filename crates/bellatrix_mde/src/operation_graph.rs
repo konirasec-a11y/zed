@@ -275,6 +275,21 @@ impl OperationGraph {
 
     /// Validate dependencies and produce a deterministic in-memory plan.
     pub fn execute(&self) -> Result<Plan, OperationGraphError> {
+        self.execute_inner(None)
+    }
+
+    /// Executes the same graph while recording actual registered callback boundaries.
+    pub fn execute_traced(&self, trace: &mut crate::ExecutionTrace) -> Result<Plan, OperationGraphError> {
+        use crate::{TraceOutcome, TracePhase};
+        trace.emit("engine", "operation_graph.execute", TracePhase::Start, None, &[], None);
+        let result = self.execute_inner(Some(trace));
+        let (phase, outcome) = if result.is_ok() { (TracePhase::Finish, TraceOutcome::Success) }
+            else { (TracePhase::Error, TraceOutcome::Error) };
+        trace.emit("engine", "operation_graph.execute", phase, None, &[], Some(outcome));
+        result
+    }
+
+    fn execute_inner(&self, mut trace: Option<&mut crate::ExecutionTrace>) -> Result<Plan, OperationGraphError> {
         let mut remaining = BTreeMap::new();
         let mut dependents: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
         let mut ready = BTreeSet::new();
@@ -320,14 +335,34 @@ impl OperationGraph {
                 })?;
                 inputs.insert(port.name.clone(), value.clone());
             }
-            let value = (definition.execute)(id, &inputs, &node.parameters, &mut plan)?;
+            let identity = format!("{}:{}@{}", id, definition.kind, definition.version);
+            let dependencies = definition.inputs.iter().filter_map(|port|
+                self.inputs.get(&(id.to_owned(), port.name.clone())).cloned()).collect::<Vec<_>>();
+            if let Some(trace) = trace.as_deref_mut() {
+                trace.emit("engine", "operation.execute", crate::TracePhase::Start, Some(&identity), &dependencies, None);
+            }
+            let value = match (definition.execute)(id, &inputs, &node.parameters, &mut plan) {
+                Ok(value) => value,
+                Err(error) => {
+                    if let Some(trace) = trace.as_deref_mut() {
+                        trace.emit("engine", "operation.execute", crate::TracePhase::Error, Some(&identity), &dependencies, Some(crate::TraceOutcome::Error));
+                    }
+                    return Err(error);
+                }
+            };
             let actual = value.port_type();
             if actual != definition.output {
+                if let Some(trace) = trace.as_deref_mut() {
+                    trace.emit("engine", "operation.execute", crate::TracePhase::Error, Some(&identity), &dependencies, Some(crate::TraceOutcome::Invalid));
+                }
                 return Err(OperationGraphError::OutputTypeMismatch {
                     operation: id.to_owned(),
                     expected: definition.output,
                     actual,
                 });
+            }
+            if let Some(trace) = trace.as_deref_mut() {
+                trace.emit("engine", "operation.execute", crate::TracePhase::Finish, Some(&identity), &dependencies, Some(crate::TraceOutcome::Success));
             }
             values.insert(id.to_owned(), value);
             remaining.remove(id);

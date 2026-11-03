@@ -1,10 +1,12 @@
 //! Tasks consume a committed project revision; generated artifacts are emissions.
 use crate::project_integration::from_document;
-use bellatrix_mde::{Scope, publish_new, publish_replace};
+use bellatrix_mde::{ExecutionTrace, TraceOutcome, TracePhase, Scope, publish_new, publish_replace};
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::event::responder;
 use cordis::{Context, Event, Routing};
-use std::{convert::Infallible, io, path::PathBuf, sync::Arc};
+use std::{convert::Infallible, io, path::PathBuf, sync::{Arc, atomic::{AtomicU64, Ordering}}};
+
+static NEXT_TASK_RUN: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Debug)]
 pub enum ModelingTaskKind {
@@ -54,7 +56,18 @@ pub fn register(context: &Context, projects: Arc<ProjectService>) -> Result<(), 
                 async move {
                     let project_id = request.project_id.clone();
                     let correlation_id = request.correlation_id;
-                    let outcome = execute(projects, request).await;
+                    let mut trace = ExecutionTrace::new(format!("task-{}-{correlation_id}-{}", std::process::id(), NEXT_TASK_RUN.fetch_add(1, Ordering::Relaxed)), Some(request.expected_revision.to_string()), 10_000);
+                    let action = match &request.task {
+                        ModelingTaskKind::GenerateRust { .. } => "generate_rust",
+                        ModelingTaskKind::ExportHtml => "export_html",
+                    };
+                    let forwarder = crate::trace_output::start(context.clone(), &mut trace, request.project_id.clone());
+                    trace.emit("cordis", action, TracePhase::Start, None, &[], None);
+                    let outcome = execute(projects, request, &mut trace).await;
+                    let (phase, status) = if outcome.is_ok() { (TracePhase::Finish, TraceOutcome::Success) } else { (TracePhase::Error, TraceOutcome::Error) };
+                    trace.emit("cordis", action, phase, None, &[], Some(status));
+                    trace.clear_sink();
+                    drop(forwarder);
                     if let Err(error) = context
                         .emit_parallel::<ModelingTaskCompletedEvent>(
                             Routing::Unscoped,
@@ -78,6 +91,7 @@ pub fn register(context: &Context, projects: Arc<ProjectService>) -> Result<(), 
 async fn execute(
     projects: Arc<ProjectService>,
     request: ModelingRunRequested,
+    trace: &mut ExecutionTrace,
 ) -> Result<ModelingTaskSummary, String> {
     let document = projects
         .snapshot(&request.project_id)
@@ -91,13 +105,16 @@ async fn execute(
     let section = from_document(&document)?;
     let model = section.to_model(document.id().as_str(), document.name());
     let revision = document.revision();
-    tokio::task::spawn_blocking(move || {
+    let mut worker_trace = trace.clone();
+    let (returned_trace, result) = tokio::task::spawn_blocking(move || {
+        let result = (|| {
         let plan = match request.task {
             ModelingTaskKind::GenerateRust { scope, skeleton } => {
-                bellatrix_mde_rust_generator::plan_with_options(
+                bellatrix_mde_rust_generator::plan_with_options_traced(
                     &model,
                     &scope,
                     bellatrix_mde_rust_generator::GenerationOptions { skeleton },
+                    &mut worker_trace,
                 )
             }
             ModelingTaskKind::ExportHtml => bellatrix_mde_html_exporter::plan(&model),
@@ -117,7 +134,11 @@ async fn execute(
             artifact_count: count,
             destination,
         })
+        })();
+        (worker_trace, result)
     })
     .await
-    .map_err(|error| error.to_string())?
+    .map_err(|error| error.to_string())?;
+    *trace = returned_trace;
+    result
 }

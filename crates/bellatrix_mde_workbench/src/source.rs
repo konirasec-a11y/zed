@@ -24,6 +24,7 @@ pub struct MdeUiSource {
         >,
     >,
     pub saves: watch::Receiver<Option<u64>>,
+    pub journal: Arc<bellatrix_mde_cordis::ExecutionJournal>,
     read_only_snapshot: Option<Arc<MdeSnapshot>>,
     read_only_document: Option<Arc<ProjectDocument>>,
     presentation_suspended: Arc<AtomicBool>,
@@ -40,6 +41,7 @@ impl MdeUiSource {
             feedback: bridge.feedback(),
             validations: bridge.validations(),
             saves: bridge.saves(),
+            journal: bridge.execution_journal(),
             read_only_snapshot: None,
             read_only_document: None,
             presentation_suspended: Arc::new(AtomicBool::new(false)),
@@ -57,6 +59,7 @@ impl MdeUiSource {
         let (_, feedback) = watch::channel("Read-only native document preview".to_owned());
         let (_, validations) = watch::channel(None);
         let (_, saves) = watch::channel(None);
+        let journal = Arc::new(bellatrix_mde_cordis::ExecutionJournal::default());
         Self {
             projects,
             project_id: snapshot.project_id.clone(),
@@ -65,6 +68,7 @@ impl MdeUiSource {
             feedback,
             validations,
             saves,
+            journal,
             read_only_snapshot: Some(Arc::new(snapshot)),
             read_only_document: Some(document),
             presentation_suspended: Arc::new(AtomicBool::new(false)),

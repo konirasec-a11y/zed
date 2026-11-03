@@ -1,6 +1,7 @@
 //! Engine-MDE as a native Zed Workspace Item.
 //! Zed owns presentation; bellatrix_mde owns semantics; Cordis publishes revisions.
 mod diagram_canvas;
+mod execution_dashboard;
 mod hierarchy;
 mod inspector_drafts;
 mod integration;

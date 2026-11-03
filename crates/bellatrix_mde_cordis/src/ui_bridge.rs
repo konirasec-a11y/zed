@@ -3,23 +3,23 @@
 use crate::{
     ModelingAddMember, ModelingAddMemberRequested, ModelingCreateDiagram,
     ModelingCreateDiagramRequested, ModelingCreateElement, ModelingCreateElementOrVisualDraft,
-    ModelingCreateElementRequested, ModelingCreateRelation, ModelingCreateRelationOrVisualDraft,
-    ModelingCreateRelationRequested, ModelingCreateRelationAtViewsOrVisualDraft,
-    ModelingCreateRelationAtViewsRequested, ModelingCreateVisualDraft, ModelingCreateVisualDraftRequested,
-    ModelingDeleteDiagram, ModelingDeleteDiagramRequested, ModelingDeleteElement,
-    ModelingDeleteElementRequested, ModelingMoveParameter, ModelingMoveParameterRequested,
-    ModelingMoveView, ModelingMoveViewRequested, ModelingPlaceElementView,
-    ModelingPlaceElementViewRequested, ModelingQuickEdit, ModelingQuickEditRequested,
-    ModelingRemoveView, ModelingRemoveViewRequested, ModelingRename, ModelingRenameDiagram,
-    ModelingRenameDiagramRequested, ModelingRenameRequested, ModelingReorderView,
-    ModelingReorderViewRequested, ModelingResizeView, ModelingResizeViewRequested,
-    ModelingSetExplorerParent, ModelingSetExplorerParentRequested, ModelingSetNameExpression,
-    ModelingSetNameExpressionRequested, ModelingSetOwner, ModelingSetOwnerRequested,
-    ModelingSetProperty, ModelingSetPropertyRequested, ModelingSetViewRouting,
+    ModelingCreateElementRequested, ModelingCreateRelation,
+    ModelingCreateRelationAtViewsOrVisualDraft, ModelingCreateRelationAtViewsRequested,
+    ModelingCreateRelationOrVisualDraft, ModelingCreateRelationRequested,
+    ModelingCreateVisualDraft, ModelingCreateVisualDraftRequested, ModelingDeleteDiagram,
+    ModelingDeleteDiagramRequested, ModelingDeleteElement, ModelingDeleteElementRequested,
+    ModelingMoveParameter, ModelingMoveParameterRequested, ModelingMoveView,
+    ModelingMoveViewRequested, ModelingPlaceElementView, ModelingPlaceElementViewRequested,
+    ModelingQuickEdit, ModelingQuickEditRequested, ModelingRemoveView, ModelingRemoveViewRequested,
+    ModelingRename, ModelingRenameDiagram, ModelingRenameDiagramRequested, ModelingRenameRequested,
+    ModelingReorderView, ModelingReorderViewRequested, ModelingResizeView,
+    ModelingResizeViewRequested, ModelingSetExplorerParent, ModelingSetExplorerParentRequested,
+    ModelingSetNameExpression, ModelingSetNameExpressionRequested, ModelingSetOwner,
+    ModelingSetOwnerRequested, ModelingSetProperty, ModelingSetPropertyRequested,
+    ModelingSetViewLabel, ModelingSetViewLabelRequested, ModelingSetViewRouting,
     ModelingSetViewRoutingRequested, ModelingSetViewStyle, ModelingSetViewStyleRequested,
-    ModelingSetViewLabel, ModelingSetViewLabelRequested,
-    ModelingSetViewTiming, ModelingSetViewTimingRequested,
-    ModelingValidateDiagram, ModelingValidateDiagramRequested,
+    ModelingSetViewTiming, ModelingSetViewTimingRequested, ModelingValidateDiagram,
+    ModelingValidateDiagramRequested,
 };
 use bellatrix_project::{
     ProjectId, ProjectSave, ProjectSaveRequested, ProjectSaved, ProjectSavedEvent,
@@ -27,7 +27,7 @@ use bellatrix_project::{
 };
 use cordis::event::{ListenerRegistration, ListenerRegistrationError, QueryOutcome, observer_sync};
 use cordis::{Context, Routing};
-use std::{convert::Infallible, fmt::Display};
+use std::{convert::Infallible, fmt::Display, sync::Arc};
 use tokio::sync::{mpsc, watch};
 
 #[derive(Clone, Debug)]
@@ -100,6 +100,7 @@ pub struct MdeUiBridge {
     validations:
         watch::Receiver<Option<Result<crate::DiagramValidationResult, DiagramValidationFailure>>>,
     saves: watch::Receiver<Option<u64>>,
+    journal: Arc<crate::ExecutionJournal>,
     _listeners: Vec<ListenerRegistration>,
     task: tokio::task::JoinHandle<()>,
 }
@@ -133,15 +134,41 @@ impl MdeUiBridge {
                     return Err(error);
                 }
             };
+        let journal = Arc::new(crate::ExecutionJournal::default());
+        let trace_journal = Arc::clone(&journal);
+        let trace_project_id = project_id.clone();
+        let trace_listener = match ctx.on::<crate::ModelingExecutionTraceEvent, _>(observer_sync(
+            move |_, trace: crate::ModelingExecutionTrace| {
+                if trace.project_id == trace_project_id {
+                    trace_journal.append(trace);
+                }
+                Ok::<_, Infallible>(())
+            },
+        )) {
+            Ok(listener) => listener,
+            Err(error) => {
+                listener.remove();
+                save_listener.remove();
+                return Err(error);
+            }
+        };
         let cordis = ctx.clone();
         let task = tokio::spawn(async move {
             while let Some(request) = command_rx.recv().await {
                 let message = match request {
                     MdeUiCommand::SetViewLabel(request) => describe(
-                        "View label updated", cordis.query::<ModelingSetViewLabel>(Routing::Unscoped, request).await,
+                        "View label updated",
+                        cordis
+                            .query::<ModelingSetViewLabel>(Routing::Unscoped, request)
+                            .await,
                     ),
-                    MdeUiCommand::SetViewLabelTracked { request, completion } => {
-                        let result = cordis.query::<ModelingSetViewLabel>(Routing::Unscoped, request).await;
+                    MdeUiCommand::SetViewLabelTracked {
+                        request,
+                        completion,
+                    } => {
+                        let result = cordis
+                            .query::<ModelingSetViewLabel>(Routing::Unscoped, request)
+                            .await;
                         let receipt = match &result {
                             Ok(QueryOutcome::Answer(Ok(revision))) => Ok(*revision),
                             Ok(QueryOutcome::Answer(Err(error))) => Err(error.to_string()),
@@ -151,8 +178,13 @@ impl MdeUiBridge {
                         completion.send_replace(Some(receipt));
                         describe("View label updated", result)
                     }
-                    MdeUiCommand::SetViewTimingTracked { request, completion } => {
-                        let result = cordis.query::<ModelingSetViewTiming>(Routing::Unscoped, request).await;
+                    MdeUiCommand::SetViewTimingTracked {
+                        request,
+                        completion,
+                    } => {
+                        let result = cordis
+                            .query::<ModelingSetViewTiming>(Routing::Unscoped, request)
+                            .await;
                         let receipt = match &result {
                             Ok(QueryOutcome::Answer(Ok(revision))) => Ok(*revision),
                             Ok(QueryOutcome::Answer(Err(error))) => Err(error.to_string()),
@@ -274,7 +306,12 @@ impl MdeUiBridge {
                     ),
                     MdeUiCommand::CreateRelationAtViewsOrVisualDraft(request) => describe(
                         "Relationship or visual draft created",
-                        cordis.query::<ModelingCreateRelationAtViewsOrVisualDraft>(Routing::Unscoped, request).await,
+                        cordis
+                            .query::<ModelingCreateRelationAtViewsOrVisualDraft>(
+                                Routing::Unscoped,
+                                request,
+                            )
+                            .await,
                     ),
                     MdeUiCommand::CreateRelationOrVisualDraft(request) => describe(
                         "Relationship or visual draft created",
@@ -408,7 +445,8 @@ impl MdeUiBridge {
             feedback,
             validations,
             saves,
-            _listeners: vec![listener, save_listener],
+            journal,
+            _listeners: vec![listener, save_listener, trace_listener],
             task,
         })
     }
@@ -429,6 +467,9 @@ impl MdeUiBridge {
     }
     pub fn saves(&self) -> watch::Receiver<Option<u64>> {
         self.saves.clone()
+    }
+    pub fn execution_journal(&self) -> Arc<crate::ExecutionJournal> {
+        Arc::clone(&self.journal)
     }
     pub fn feedback(&self) -> watch::Receiver<String> {
         self.feedback.clone()

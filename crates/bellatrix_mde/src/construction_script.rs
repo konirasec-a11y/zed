@@ -195,3 +195,14 @@ def main():
 if __name__ == '__main__':
     main()
 "#;
+
+/// Record script composition without recording artifact paths or contents.
+pub fn python_construction_script_traced(plan: &Plan, trace: &mut crate::ExecutionTrace) -> Result<String, ConstructionScriptError> {
+    use crate::{TraceOutcome, TracePhase};
+    trace.emit("generation", "python_script.compose", TracePhase::Start, None, &[], None);
+    let result = python_construction_script(plan);
+    let (phase, outcome) = if result.is_ok() { (TracePhase::Finish, TraceOutcome::Success) }
+        else { (TracePhase::Error, TraceOutcome::Error) };
+    trace.emit("generation", "python_script.compose", phase, None, &[], Some(outcome));
+    result
+}

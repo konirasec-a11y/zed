@@ -8,6 +8,8 @@ pub use model::*;
 
 pub mod commands;
 mod construction_script;
+mod execution_trace;
+pub use execution_trace::{ExecutionEvent, ExecutionTrace, TraceOutcome, TracePhase, execution_trace_jsonl, validate_structural_diagram_traced, validate_structural_model_traced};
 mod generation;
 mod graph;
 mod hierarchy;
@@ -43,10 +45,10 @@ pub use templates::{
     template_parametered_element, template_parameters,
 };
 
-pub use construction_script::{ConstructionScriptError, python_construction_script};
+pub use construction_script::{ConstructionScriptError, python_construction_script, python_construction_script_traced};
 pub use generation::{
     GenerationGraphError, GenerationModel, GenerationReference, GenerationUnit,
-    analyze_generation_graph,
+    analyze_generation_graph, analyze_generation_graph_traced,
 };
 pub use graph::{Graph, GraphError};
 pub use hierarchy::{HierarchyRow, explorer_parent_map, project_hierarchy};

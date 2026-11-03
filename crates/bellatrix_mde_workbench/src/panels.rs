@@ -953,6 +953,9 @@ pub(crate) fn bind_panels(
     if let Some(panel) = workspace.panel::<MdeBottomPanel>(cx) {
         panel.update(cx, |panel, cx| panel.state.bind(item.as_ref(), cx));
     }
+    if let Some(panel) = workspace.panel::<crate::execution_dashboard::MdeExecutionDashboard>(cx) {
+        panel.update(cx, |panel, cx| panel.bind(item.as_ref(), cx));
+    }
 }
 
 pub fn attach_panels(
@@ -965,6 +968,9 @@ pub fn attach_panels(
         bind_panels(workspace, Some(item), window, cx);
         return;
     }
+    workspace.register_action(|workspace, _: &crate::execution_dashboard::ToggleMdeExecutionDashboard, window, cx| {
+        workspace.toggle_panel_focus::<crate::execution_dashboard::MdeExecutionDashboard>(window, cx);
+    });
     workspace.register_action(|workspace, _: &ToggleMdeLeft, window, cx| {
         workspace.toggle_panel_focus::<MdeLeftPanel>(window, cx);
     });
@@ -985,8 +991,10 @@ pub fn attach_panels(
     });
     let left = cx.new(|cx| MdeLeftPanel::new(item.clone(), window, cx));
     let right = cx.new(|cx| MdeRightPanel::new(item.clone(), window, cx));
+    let execution = cx.new(|cx| crate::execution_dashboard::MdeExecutionDashboard::new(item.clone(), window, cx));
     let bottom = cx.new(|cx| MdeBottomPanel::new(item, cx));
     workspace.add_panel(left, window, cx);
     workspace.add_panel(right, window, cx);
     workspace.add_panel(bottom, window, cx);
+    workspace.add_panel(execution, window, cx);
 }

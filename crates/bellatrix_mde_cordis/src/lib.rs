@@ -1,13 +1,17 @@
 //! Cordis transport and project-revision integration for the single MDE domain.
+mod execution_journal;
+pub use execution_journal::{ExecutionJournal, ExecutionJournalSnapshot};
 pub use bellatrix_mde::MODELING_NAMESPACE;
 pub use bellatrix_mde::commands::{ModelingElementKind, ModelingTool};
 pub use bellatrix_mde::{ModelingRelationKind, ModelingSection, UmlQuickCreate};
 mod diagrams;
+mod trace_output;
 mod mutation;
 pub use diagrams::{
-    DiagramValidationResult, ModelingCreateDiagram, ModelingCreateDiagramRequested, ModelingDeleteDiagram,
+    DiagramValidationResult, ModelingExecutionTrace, ModelingExecutionTraceEvent, ModelingCreateDiagram, ModelingCreateDiagramRequested, ModelingDeleteDiagram,
     ModelingDeleteDiagramRequested, ModelingRenameDiagram, ModelingRenameDiagramRequested,
-    ModelingValidateDiagram, ModelingValidateDiagramRequested,
+    ModelingValidateDiagram, ModelingValidateDiagramRequested, ModelingValidateDiagramTraced,
+    ModelingValidateDiagramTracedRequested, TracedDiagramValidationResult,
 };
 mod task_events;
 pub use task_events::{

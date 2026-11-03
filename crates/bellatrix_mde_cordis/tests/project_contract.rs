@@ -1,9 +1,9 @@
 use bellatrix_mde::{Project, Scope};
 use bellatrix_mde_cordis::{
-    MdePlugin, ModelingRename, ModelingRenameRequested, ModelingSetExplorerParent,
+    MdePlugin, MdeUiBridge, ModelingRename, ModelingRenameRequested, ModelingSetExplorerParent,
     ModelingSetExplorerParentRequested, ModelingSetOwner, ModelingSetOwnerRequested, with_model,
 };
-use bellatrix_mde_cordis::{ModelingRun, ModelingRunRequested, ModelingTaskKind};
+use bellatrix_mde_cordis::{ModelingRun, ModelingRunRequested, ModelingTaskKind, ModelingExecutionTrace, ModelingExecutionTraceEvent};
 use bellatrix_project::{
     ProjectClose, ProjectCloseRequested, ProjectCreate, ProjectCreateRequested, ProjectDocument,
     ProjectId, ProjectOpen, ProjectOpenRequested, ProjectPlugin, ProjectReplace,
@@ -74,6 +74,8 @@ async fn public_event_updates_only_requested_project_and_survives_modeling_dispo
             .unwrap();
         assert!(matches!(response, QueryOutcome::Answer(Ok(_))));
     }
+    let bridge_a = MdeUiBridge::start(&ctx, a_id.clone()).unwrap();
+    let bridge_b = MdeUiBridge::start(&ctx, b_id.clone()).unwrap();
     let result = ctx
         .query::<ModelingRename>(
             Routing::Unscoped,
@@ -87,6 +89,12 @@ async fn public_event_updates_only_requested_project_and_survives_modeling_dispo
         .await
         .unwrap();
     assert!(matches!(result, QueryOutcome::Answer(Ok(1))));
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        while !bridge_a.execution_journal().snapshot().events.iter().any(|event| event.action == "command.apply") {
+            tokio::task::yield_now().await;
+        }
+    }).await.unwrap();
+    assert!(bridge_b.execution_journal().snapshot().events.is_empty());
     assert_eq!(service.snapshot(&a_id).unwrap().revision(), 1);
     assert_eq!(service.snapshot(&b_id).unwrap().revision(), 0);
     {
@@ -375,6 +383,15 @@ async fn revision_conflict_save_close_reopen_and_missing_provider() {
             .section("custom.settings")
             .is_some()
     );
+    let bridge = MdeUiBridge::start(&ctx, id.clone()).unwrap();
+    let journal = bridge.execution_journal();
+    let mut journal_changes = journal.subscribe();
+    let trace_events = Arc::new(Mutex::new(Vec::<bellatrix_mde::ExecutionEvent>::new()));
+    let trace_observer = Arc::clone(&trace_events);
+    let _trace_listener = ctx.on::<ModelingExecutionTraceEvent, _>(observer_sync(move |_, batch: ModelingExecutionTrace| {
+        trace_observer.lock().unwrap().extend(batch.events);
+        Ok::<_, std::convert::Infallible>(())
+    })).unwrap();
     let destination = directory.join("generated-rust");
     let generated = ctx
         .query::<ModelingRun>(
@@ -394,6 +411,29 @@ async fn revision_conflict_save_close_reopen_and_missing_provider() {
         .await
         .unwrap();
     assert!(matches!(generated, QueryOutcome::Answer(Ok(_))));
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        loop {
+            let observer_finished = trace_events.lock().unwrap().last().is_some_and(|event| event.action == "generate_rust" && event.phase == bellatrix_mde::TracePhase::Finish);
+            let journal_finished = journal.snapshot().events.back().is_some_and(|event| event.action == "generate_rust" && event.phase == bellatrix_mde::TracePhase::Finish);
+            if observer_finished && journal_finished { break; }
+            tokio::task::yield_now().await;
+        }
+    }).await.unwrap();
+    {
+        let events = trace_events.lock().unwrap();
+        assert!(events.windows(2).all(|pair| pair[0].run_id == pair[1].run_id && pair[0].sequence < pair[1].sequence));
+        assert!(events.iter().any(|event| event.action == "graph.validate"));
+        assert!(events.iter().any(|event| event.action == "scheduled_unit" && event.identity.as_deref() == Some("type-list") && event.dependencies.iter().any(|dependency| dependency == "type-task")));
+        assert_eq!(events.last().map(|event| event.action.as_str()), Some("generate_rust"));
+    }
+    let snapshot = journal.snapshot();
+    assert!(journal_changes.has_changed().unwrap());
+    journal_changes.borrow_and_update();
+    assert!(snapshot.events.iter().any(|event| event.action == "graph.validate"));
+    assert!(snapshot.events.iter().zip(snapshot.events.iter().skip(1)).all(|(first, second)| first.sequence < second.sequence));
+    journal.clear();
+    assert!(journal_changes.has_changed().unwrap());
+    assert!(journal.snapshot().events.is_empty());
     assert!(destination.join("Cargo.toml").exists());
     let documentation = directory.join("documentation");
     let exported = ctx
