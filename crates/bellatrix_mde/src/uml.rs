@@ -9,6 +9,7 @@ pub mod namespace_imports;
 pub mod operations;
 pub mod operation_signatures;
 pub mod property_subsetting;
+pub mod property_contracts;
 pub mod redefinition_contexts;
 pub mod references;
 pub mod root;

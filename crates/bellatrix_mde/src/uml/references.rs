@@ -3,7 +3,7 @@ use super::{
     schema::{self, ClassifierDescriptor, PropertyDescriptor, UnsupportedContract},
     types::{Integer, MultiplicityRange},
 };
-use crate::{StructuralDiagnostic, StructuralSeverity};
+use crate::StructuralDiagnostic;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 
@@ -237,26 +237,6 @@ impl<'a> ReferenceIndex<'a> {
     }
 
     pub fn validate_typed_elements(&self) -> Vec<StructuralDiagnostic> {
-        self.model
-            .elements()
-            .filter_map(|element| {
-                let property = schema::uml_property(element.metaclass()?, "type").ok()??;
-                if property.is_derived {
-                    return None;
-                }
-                let value = element.properties().get("type").unwrap_or(&Value::Null);
-                // Historical declarations are retained as text, never resolved by matching a name.
-                if value.is_string() {
-                    return None;
-                }
-                let error = self.validate(property, value).err()?;
-                Some(StructuralDiagnostic {
-                    severity: StructuralSeverity::Error,
-                    code: "UML_TYPED_ELEMENT_TYPE",
-                    subject_id: element.id().into(),
-                    message: format!("{}::type: {error}", element.metaclass()?),
-                })
-            })
-            .collect()
+        super::property_contracts::validate(self)
     }
 }
