@@ -19,15 +19,39 @@ fn workbench_action() -> (&'static str, &'static str, &'static str) {
 }
 
 #[test]
-fn workspace_registration_does_not_mount_mde_or_defer_a_startup_mount() {
+fn ordinary_workspace_gets_an_entry_without_an_imposed_mde_tab() {
     let (before, _, after) = workbench_action();
-    for registration in [before, after] {
-        assert!(!registration.contains("open_in_workspace(workspace,"));
-        assert!(!registration.contains("panels::attach_panels("));
-        assert!(!registration.contains("defer_in("));
-        assert!(!registration.contains("dispatch_action("));
-    }
+    assert!(!before.contains("open_in_workspace(workspace,"));
+    assert!(!before.contains("panels::attach_panels("));
+    let explicit_startup = after
+        .find("if auto_open_configured_source {")
+        .expect("explicit startup gate");
+    assert!(!after[..explicit_startup].contains("open_in_workspace(workspace,"));
+    assert!(!after[..explicit_startup].contains("panels::attach_panels("));
+    assert!(!after[..explicit_startup].contains("dispatch_action("));
+    assert!(before.contains("std::env::var_os(\"BELLATRIX_PROJECT_FILE\").is_some()"));
+    assert!(before.contains("std::env::var_os(\"BELLATRIX_MODEL_FILE\").is_some()"));
     assert!(!INTEGRATION.contains("register_project_item"));
+    assert!(!INTEGRATION.contains("worktrees("));
+}
+
+#[test]
+fn status_entry_is_deduplicated_and_uses_visible_text_and_existing_action() {
+    let (_, _, after) = workbench_action();
+    let gate = after
+        .find("if show_status_button {")
+        .expect("button visibility gate");
+    let dedup = after
+        .find("status_bar.item_of_type::<MdeStatusEntry>().is_none()")
+        .expect("button deduplication");
+    let add = after
+        .find("status_bar.add_left_item(button, window, cx)")
+        .expect("native status entry");
+    assert!(gate < dedup && dedup < add);
+    let status = include_str!("../src/status_entry.rs");
+    assert!(status.contains("Button::new(\"bellatrix-mde-status-entry\", \"MDE\")"));
+    assert!(status.contains("Tooltip::for_action(\"Open MDE Workbench\", &OpenMdeWorkbench, cx)"));
+    assert!(status.contains("window.dispatch_action(Box::new(OpenMdeWorkbench), cx)"));
 }
 
 #[test]

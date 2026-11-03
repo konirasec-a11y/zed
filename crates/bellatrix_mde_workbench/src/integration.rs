@@ -3,6 +3,7 @@
 //! Zed owns tabs, docks and focus. The native action remains available
 //! to focus or reopen the MDE tab without creating a parallel window.
 
+use crate::status_entry::{MdeStatusEntry, status_button_enabled};
 use crate::{MdeSymbolLibraryItem, MdeUiSource, MdeWorkbenchItem, open_in_workspace, panels};
 use bellatrix_mde_cordis::MdeUiCommand;
 use bellatrix_project::ProjectSaveRequested;
@@ -43,10 +44,14 @@ impl Drop for SavePathPromptGuard {
     }
 }
 
-/// Register native actions without changing Workspace tabs, docks or focus.
+/// Keep MDE discoverable without opening it in unconfigured Workspaces.
 ///
 /// Opening the action again focuses the existing item without duplicates.
 pub fn register_mde_workspace(cx: &mut App, source: MdeUiSource) {
+    let auto_open_configured_source = std::env::var_os("BELLATRIX_PROJECT_FILE").is_some()
+        || std::env::var_os("BELLATRIX_MODEL_FILE").is_some();
+    let show_status_button =
+        status_button_enabled(std::env::var("BELLATRIX_MDE_STATUS_BUTTON").ok().as_deref());
     cx.bind_keys([
         gpui::KeyBinding::new("delete", RemoveFromDiagram, Some("BellatrixMde && !Editor")),
         gpui::KeyBinding::new(
@@ -62,7 +67,7 @@ pub fn register_mde_workspace(cx: &mut App, source: MdeUiSource) {
     ]);
 
     cx.observe_new(
-        move |workspace: &mut Workspace, _window: Option<&mut Window>, _cx| {
+        move |workspace: &mut Workspace, window: Option<&mut Window>, cx| {
             // The full Bellatrix catalog is a native Zed Item. The Workbench
             // remains focused on supported Class and Interface editing gestures.
             workspace.register_action(|workspace, _: &OpenMdeSymbols, window, cx| {
@@ -167,6 +172,41 @@ pub fn register_mde_workspace(cx: &mut App, source: MdeUiSource) {
                 panels::attach_panels(workspace, item.clone(), window, cx);
                 *action_item.borrow_mut() = Some(item);
             });
+
+            if let Some(window) = window {
+                let startup_source = source.clone();
+                let startup_item = Rc::clone(&cached_item);
+                cx.defer_in(window, move |workspace, window, cx| {
+                    if show_status_button {
+                        workspace.status_bar().update(cx, |status_bar, cx| {
+                            if status_bar.item_of_type::<MdeStatusEntry>().is_none() {
+                                let button = cx.new(|_| MdeStatusEntry);
+                                status_bar.add_left_item(button, window, cx);
+                            }
+                        });
+                    }
+                    // Only an explicitly configured startup source authorizes
+                    // auto-opening; an empty/restoring Workspace is not intent.
+                    if auto_open_configured_source {
+                        let cached = startup_item.borrow().clone();
+                        if let Some(item) = workspace.item_of_type::<MdeWorkbenchItem>(cx) {
+                            *startup_item.borrow_mut() = Some(item);
+                        } else if let Some(item) = cached {
+                            workspace.add_item_to_active_pane(
+                                Box::new(item),
+                                None,
+                                true,
+                                window,
+                                cx,
+                            );
+                        } else {
+                            let item = open_in_workspace(workspace, startup_source, window, cx);
+                            panels::attach_panels(workspace, item.clone(), window, cx);
+                            *startup_item.borrow_mut() = Some(item);
+                        }
+                    }
+                });
+            }
         },
     )
     .detach();

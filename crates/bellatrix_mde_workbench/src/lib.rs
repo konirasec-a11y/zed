@@ -7,6 +7,7 @@ mod property_editor;
 mod quick_edit_view;
 mod snapshot;
 mod source;
+mod status_entry;
 mod style_editor;
 mod symbol_library;
 mod theme;
