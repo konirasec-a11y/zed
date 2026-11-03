@@ -49,8 +49,8 @@ pub fn project_explorer(section: &ModelingSection) -> Vec<ExplorerRow> {
         let mut row = nodes[index].clone();
         row.depth = depth;
         result.push(row);
-        if let Some(children) = children.get(&Some(nodes[index].element_id.clone())) {
-            for child in children { visit(*child, depth + 1, nodes, children, seen, result); }
+        if let Some(child_indices) = children.get(&Some(nodes[index].element_id.clone())) {
+            for child in child_indices { visit(*child, depth + 1, nodes, children, seen, result); }
         }
     }
     let mut rows = Vec::new();

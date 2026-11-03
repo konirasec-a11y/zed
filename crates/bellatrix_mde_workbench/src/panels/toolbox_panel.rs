@@ -220,10 +220,15 @@ impl Render for MdeLeftPanel {
         };
         let read_only = item.read(cx).source().is_read_only();
         let palette = WorkbenchPalette::current(cx);
-        let state = item.read(cx);
-        let active = state.active_diagram().map(str::to_owned);
-        let chosen = state.selected_tool();
-        let snapshot = state.source().snapshot().ok();
+        let (active, chosen, snapshot, visual_draft_mode) = {
+            let state = item.read(cx);
+            (
+                state.active_diagram().map(str::to_owned),
+                state.selected_tool(),
+                state.source().snapshot().ok(),
+                state.visual_draft_mode,
+            )
+        };
         let mut diagrams = Vec::new();
         if let Some(snapshot) = &snapshot {
             for diagram in &snapshot.section.diagrams {
@@ -683,7 +688,7 @@ impl Render for MdeLeftPanel {
                         .when(!read_only, |header| {
                             let draft_owner = item.clone();
                             header.action(ui::IconButton::new("mde-visual-draft-mode", IconName::Pencil)
-                                .toggle_state(state.visual_draft_mode)
+                                .toggle_state(visual_draft_mode)
                                 .tooltip(ui::Tooltip::text("Visual draft mode: place freely without semantic validation"))
                                 .on_click(move |_, _, cx| { draft_owner.update(cx, |workbench, cx| {
                                     workbench.visual_draft_mode = !workbench.visual_draft_mode;
