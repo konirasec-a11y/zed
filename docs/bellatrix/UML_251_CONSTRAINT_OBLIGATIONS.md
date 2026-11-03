@@ -52,6 +52,9 @@ expr de Duration/TimeExpression têm recortes publicados em
 `1d0843a1db2bb2bee6c22638cb15b159be2c4821` (E42/E43).
 ClassifierTemplateParameter::matching_abstract e StringExpression::subexpressions
 têm recortes publicados em `f3644ea91f41df63238d775332ec66035ca7fcae` (E44/E45).
+ClassifierTemplateParameter::constraining_classifiers_constrain_args e
+CollaborationUse::every_role têm recortes publicados em
+`695097cc12e34c10fbab6854bdd346323274b599` (E46/E47).
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -167,7 +170,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E45 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E47 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -654,6 +657,56 @@ de execução nova. E12–E45 possuem os gates delimitados nas seções seguinte
   permanecem avaliados. Projeções ambíguas conservam unknown; presença conhecida
   não oculta coleções malformadas ou ownership incompatível. Não avalia o texto
   resultante nem substitui a obrigação LiteralString dos operands em E35.
+
+- **E46**: `semantics/templates.rs`, `classifier_template_constraints`,
+  `classifier_template_constrained_actual` e `validate_bindings`;
+  `classifier_template_constraints.rs`, onze testes. Recorte pelos witnesses
+  canônicos substitution.formal: para cada constrainingClassifier, actual deve
+  ter a mesma identidade, conformar via ancestralidade ou, se allowSubstitutable
+  efetivo permitir, satisfazer isSubstitutableFor. Essa última consulta usa o
+  contrato existente de Substitution, não semelhança estrutural inventada.
+  Identidade conhecida pode decidir sem declarar metaclasse resolvida; o
+  contrato de propriedades conserva a incerteza de tipo separadamente.
+  Actual conhecido não Classifier não passa pelo cast, mesmo com restrições
+  vazias. Referências externas, metaclasses e ancestralidade não resolvidas
+  conservam unknown; malformados permanecem erros. A inversa armazenada
+  templateParameterSubstitution continua não reconciliada e explicitamente
+  não verificada. Não é fechamento integral do OCL em todas as representações.
+
+- **E47**: `semantics/connectors.rs`, `collaboration_members`,
+  `collaboration_every_role` e `validate`; `collaboration_use_roles.rs`, onze
+  testes. Cada collaborationRole do tipo Collaboration deve aparecer como
+  supplier de algum roleBinding. Usa referências materializadas e papéis
+  canônicos de ownership; lê suppliers pelo contrato compartilhado de
+  endpoints/subsets. Witness supplier local explícito pode provar inclusão
+  com vizinho externo, sem apresentar a coleção parcial como completa. Não
+  substitui supplier materializado pelo target binário visual. Papéis ausentes,
+  tipos externos e listas incompletas continuam limites; todos os contratos
+  materializados são checados para não ocultar malformados com witness válido.
+
+### Evidência publicada de argumentos restritos e CollaborationUse::every_role
+
+Commit inspecionado: `695097cc12e34c10fbab6854bdd346323274b599`.
+Logs locais finais lidos:
+
+- `/tmp/classifier-template-constraints-gate.log`: **89/89 aprovados**,
+  classifier_template_abstract 11, classifier_template_actual 10,
+  classifier_template_constraints 11, operation_template_default 11,
+  template_binding_formal 13, template_binding_unique 12 e template_signatures 21.
+- `/tmp/collaboration-use-final-gate.log`: **188/188 aprovados**,
+  160 testes lib e 28 integrações (collaboration_use_roles 11,
+  connector_roles 9, connector_types 5 e relationship_roles_flow 3).
+
+As linhas ficam **P/E46–E47**. Templates mantêm a fronteira de inversa
+independentemente armazenada, resolução externa e autoria. CollaborationUse
+não recebe certificação de client_elements ou connectors, nem de autoria
+visual de Composite Structure. A existência de witness para every_role não
+prova todos os contratos de cada binding ou fechamento das coleções externas.
+
+Gates anteriores à publicação, não reruns no SHA remoto nem novos testes pela
+matriz. Lib completa mais integrações selecionadas não é suíte integral;
+não somar novamente regressões de gates anteriores como cobertura normativa.
+UI, geração, interchange e suporte integral permanecem fora desta alegação.
 
 ### Evidência publicada de matching_abstract e StringExpression::subexpressions
 
@@ -1394,7 +1447,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `ClassifierTemplateParameter-constraining_classifiers_constrain_args`
 
-- Metaclass: `ClassifierTemplateParameter`. Estado: **N**. Evidência: sem predicado dedicado identificado nos passes inspecionados.
+- Metaclass: `ClassifierTemplateParameter`. Estado: **P**. Evidência: E46; commit `695097cc12e34c10fbab6854bdd346323274b599`.
 - OCL publicado: `templateParameterSubstitution.actual->forAll( a | let arg : Classifier = a.oclAsType(Classifier) in constrainingClassifier->forAll( cc | arg = cc or arg.conformsTo(cc) or (allowSubstitutable and arg.isSubstitutableFor(cc)) ) )`.
 
 #### `ClassifierTemplateParameter-constraining_classifiers_constrain_parametered_element`
@@ -1649,7 +1702,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `CollaborationUse-every_role`
 
-- Metaclass: `CollaborationUse`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `CollaborationUse`. Estado: **P**. Evidência: E47; commit `695097cc12e34c10fbab6854bdd346323274b599`.
 - OCL publicado: `type.collaborationRole->forAll(role | roleBinding->exists(rb | rb.supplier->includes(role)))`.
 
 #### `CollaborationUse-connectors`

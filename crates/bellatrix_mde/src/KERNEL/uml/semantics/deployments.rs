@@ -580,6 +580,139 @@ fn instance_deployment_artifact(
     accept_any([present.map(|present| !present), classifiers])
 }
 
+// InstanceSpecification-deployment_target uses identity of the part Type, not
+// classifier conformance and not ownership of the InstanceSpecification itself.
+fn instance_deployment_target(
+    references: &ReferenceIndex<'_>,
+    instance: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let descriptor = |id| {
+        schema::property_by_id(schema::XmiId::new(schema::Document::Uml, id))
+            .ok_or_else(|| QueryError::unsupported(instance.id(), format!("missing {id} contract")))
+    };
+    let mut deployments = composite_targets(
+        references,
+        instance,
+        descriptor("DeploymentTarget-deployment")?,
+    );
+    for deployment in &deployments.values {
+        match opposite_owner(
+            references,
+            *deployment,
+            "location",
+            "DeploymentTarget",
+            "DeploymentTarget-deployment",
+        ) {
+            Ok(owner) => {
+                deployments.checks.push(owner.canonical.map(|_| true));
+                if let Some(error) = owner.unknown {
+                    deployments.checks.push(Err(error));
+                }
+            }
+            Err(error) => deployments.checks.push(Err(error)),
+        }
+    }
+    // Invalid association evidence cannot disappear behind an existential witness.
+    let mut presence = Vec::new();
+    for check in deployments.checks {
+        if let Err(error @ QueryError::Invalid { .. }) = check {
+            return Err(error);
+        }
+        if check.is_err() {
+            presence.push(check);
+        }
+    }
+    presence.push(Ok(!deployments.values.is_empty()));
+    let present = accept_any(presence);
+    if matches!(present, Ok(false)) {
+        return Ok(true);
+    }
+
+    let mut candidates = if instance.properties().contains_key("classifier") {
+        reference_targets(
+            references,
+            instance,
+            descriptor("InstanceSpecification-classifier")?,
+        )
+    } else {
+        RoleEvidence {
+            values: Vec::new(),
+            checks: Vec::new(),
+        }
+    };
+    for candidate in candidates.values {
+        let node = if candidate.metaclass().is_none() {
+            Err(QueryError::unsupported(
+                candidate.id(),
+                "classifier metaclass is unresolved",
+            ))
+        } else {
+            Ok(candidate.conforms_to("Node"))
+        };
+        if matches!(node, Ok(false)) {
+            candidates.checks.push(Ok(false));
+            continue;
+        }
+        let mut witnesses = Vec::new();
+        for enclosing in references.model().elements() {
+            if enclosing.metaclass().is_none() {
+                witnesses.push(Err(QueryError::unsupported(
+                    enclosing.id(),
+                    "possible Node metaclass is unresolved",
+                )));
+                continue;
+            }
+            if !enclosing.conforms_to("Node") {
+                continue;
+            }
+            let attributes = composite_targets(
+                references,
+                enclosing,
+                descriptor("StructuredClassifier-ownedAttribute")?,
+            );
+            witnesses.extend(attributes.checks);
+            for attribute in attributes.values {
+                let composite = match attribute {
+                    ElementRef::Object(object) => super::associations::aggregation(object)
+                        .map(|aggregation| aggregation == "composite")
+                        .map_err(|error| QueryError::invalid(attribute.id(), error)),
+                    _ => Err(QueryError::invalid(
+                        attribute.id(),
+                        "part requires a Property object",
+                    )),
+                };
+                if matches!(composite, Ok(false)) {
+                    witnesses.push(Ok(false));
+                    continue;
+                }
+                let type_matches = if !attribute.properties().contains_key("type")
+                    || attribute
+                        .properties()
+                        .get("type")
+                        .is_some_and(serde_json::Value::is_null)
+                {
+                    Ok(false)
+                } else {
+                    let mut types =
+                        reference_targets(references, attribute, descriptor("TypedElement-type")?);
+                    types
+                        .checks
+                        .extend(types.values.iter().map(|ty| Ok(ty.id() == candidate.id())));
+                    accept_any(types.checks)
+                };
+                witnesses.push(require_all([composite, type_matches]));
+            }
+        }
+        candidates
+            .checks
+            .push(require_all([node, accept_any(witnesses)]));
+    }
+    accept_any([
+        present.map(|present| !present),
+        accept_any(candidates.checks),
+    ])
+}
+
 pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = validate_targets(references);
     for specification in references
@@ -670,6 +803,27 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             code,
             subject_id: instance.id().into(),
             message: format!("InstanceSpecification-deployment_artifact: {message}"),
+        });
+    }
+    for instance in references
+        .model()
+        .elements()
+        .filter(|element| element.conforms_to("InstanceSpecification"))
+    {
+        let (severity, code, message) = match instance_deployment_target(references, instance) {
+            Ok(true) => continue,
+            Ok(false) => (StructuralSeverity::Error, "UML_INSTANCE_SPECIFICATION_DEPLOYMENT_TARGET",
+                "A deployment target instance needs a Node classifier used as the Type of a Node part".into()),
+            Err(QueryError::Invalid { message, .. }) => (StructuralSeverity::Error,
+                "MDE_INSTANCE_SPECIFICATION_DEPLOYMENT_TARGET_INVALID", message),
+            Err(QueryError::Unsupported { message, .. }) => (StructuralSeverity::Warning,
+                "MDE_INSTANCE_SPECIFICATION_DEPLOYMENT_TARGET_UNVERIFIED", message),
+        };
+        issues.push(StructuralDiagnostic {
+            severity,
+            code,
+            subject_id: instance.id().into(),
+            message: format!("InstanceSpecification-deployment_target: {message}"),
         });
     }
     issues

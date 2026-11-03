@@ -447,9 +447,10 @@ fn template_reference_target<'a>(
     })
 }
 
-fn checked_parametered_classifier<'a>(
+fn checked_parametered_element<'a>(
     references: &crate::uml::references::ReferenceIndex<'a>,
     formal: crate::uml::root::ElementRef<'a>,
+    required_metaclass: &str,
 ) -> Result<crate::uml::root::ElementRef<'a>, crate::uml::classifiers::QueryError> {
     use crate::uml::classifiers::QueryError;
     let mut relations = references
@@ -487,6 +488,16 @@ fn checked_parametered_classifier<'a>(
             "parameteredElement projection contradicts its canonical reference",
         ));
     }
+    let descriptor = formal
+        .metaclass()
+        .ok_or_else(|| QueryError::unsupported(formal.id(), "formal metaclass is unresolved"))
+        .and_then(|metaclass| {
+            crate::uml::schema::uml_property(metaclass, "parameteredElement")
+                .map_err(|error| QueryError::unsupported(formal.id(), error.to_string()))
+        })?
+        .ok_or_else(|| {
+            QueryError::unsupported(formal.id(), "parameteredElement contract is unavailable")
+        })?;
     let mut unresolved = None;
     for target in canonical.into_iter().chain(
         explicit
@@ -494,15 +505,31 @@ fn checked_parametered_classifier<'a>(
             .and_then(|value| value.as_ref().ok())
             .copied(),
     ) {
+        // Canonical references obey the same specialized range as an authored
+        // property (e.g. OperationTemplateParameter exposes an Operation).
+        match crate::uml::property_contracts::check_value(
+            references,
+            formal,
+            descriptor,
+            &serde_json::json!({"$ref": target.id()}),
+        ) {
+            crate::uml::property_contracts::PropertyOutcome::Satisfied => {}
+            crate::uml::property_contracts::PropertyOutcome::Violation(message) => {
+                return Err(QueryError::invalid(formal.id(), message));
+            }
+            crate::uml::property_contracts::PropertyOutcome::Unverified(message) => {
+                unresolved = Some(QueryError::unsupported(formal.id(), message))
+            }
+        }
         if target.metaclass().is_none() {
             unresolved = Some(QueryError::unsupported(
                 formal.id(),
                 "parameteredElement metaclass is unresolved",
             ));
-        } else if !target.conforms_to("Classifier") {
+        } else if !target.conforms_to(required_metaclass) {
             return Err(QueryError::invalid(
                 formal.id(),
-                "ClassifierTemplateParameter parameteredElement must be a Classifier",
+                format!("parameteredElement must be a {required_metaclass}"),
             ));
         }
     }
@@ -518,6 +545,13 @@ fn checked_parametered_classifier<'a>(
             )
         }),
     }
+}
+
+fn checked_parametered_classifier<'a>(
+    references: &crate::uml::references::ReferenceIndex<'a>,
+    formal: crate::uml::root::ElementRef<'a>,
+) -> Result<crate::uml::root::ElementRef<'a>, crate::uml::classifiers::QueryError> {
+    checked_parametered_element(references, formal, "Classifier")
 }
 
 fn classifier_template_matching_abstract(
@@ -771,6 +805,53 @@ fn classifier_template_actual(
     crate::uml::feature_compatibility::accept_any([not_classifier_parameter, classifier_actual])
 }
 
+fn template_substitution_compatible(
+    references: &crate::uml::references::ReferenceIndex<'_>,
+    substitution: crate::uml::root::ElementRef<'_>,
+) -> Result<bool, crate::uml::classifiers::QueryError> {
+    use crate::uml::classifiers::QueryError;
+    let actual = template_reference_target(references, substitution, "actual");
+    let exposed =
+        template_reference_target(references, substitution, "formal").and_then(|formal| {
+            if formal.metaclass().is_none() {
+                return Err(QueryError::unsupported(
+                    formal.id(),
+                    "formal metaclass is unresolved",
+                ));
+            }
+            checked_parametered_element(references, formal, "ParameterableElement")
+        });
+    // A malformed independent operand must not disappear behind Unknown.
+    for operand in [&actual, &exposed] {
+        if let Err(error @ QueryError::Invalid { .. }) = operand {
+            return Err(error.clone());
+        }
+    }
+    let actual = actual?;
+    let exposed = exposed?;
+    let exposed_metaclass = exposed.metaclass().ok_or_else(|| {
+        QueryError::unsupported(exposed.id(), "parameteredElement metaclass is unresolved")
+    })?;
+    if actual.metaclass().is_none() {
+        return Err(QueryError::unsupported(
+            actual.id(),
+            "actual metaclass is unresolved",
+        ));
+    }
+    // These UML operations override the base query. Property's published body
+    // additionally references TypeElement (not TypedElement); do not silently
+    // repair it or substitute the base algorithm for either override.
+    if actual.conforms_to("Property") || actual.conforms_to("ValueSpecification") {
+        return Err(QueryError::unsupported(
+            actual.id(),
+            "Property/ValueSpecification isCompatibleWith override is not implemented by this base-query adapter",
+        ));
+    }
+    // ParameterableElement::isCompatibleWith compares UML metaclasses, not
+    // model-level Classifier generalization, equality, or substitutability.
+    Ok(actual.conforms_to(exposed_metaclass))
+}
+
 pub(crate) fn validate_bindings(
     references: &crate::uml::references::ReferenceIndex<'_>,
 ) -> Vec<StructuralDiagnostic> {
@@ -804,6 +885,32 @@ pub(crate) fn validate_bindings(
             });
         }
         if binding.conforms_to("TemplateParameterSubstitution") {
+            let compatible = match template_substitution_compatible(references, binding) {
+                Ok(true) => None,
+                Ok(false) => Some((
+                    StructuralSeverity::Error,
+                    "UML_TEMPLATE_SUBSTITUTION_COMPATIBLE",
+                    "Actual UML metaclass must equal or specialize the exposed ParameterableElement metaclass".to_owned(),
+                )),
+                Err(QueryError::Invalid { message, .. }) => Some((
+                    StructuralSeverity::Error,
+                    "MDE_TEMPLATE_SUBSTITUTION_COMPATIBLE_INVALID",
+                    message,
+                )),
+                Err(QueryError::Unsupported { message, .. }) => Some((
+                    StructuralSeverity::Warning,
+                    "MDE_TEMPLATE_SUBSTITUTION_COMPATIBLE_UNVERIFIED",
+                    message,
+                )),
+            };
+            if let Some((severity, code, message)) = compatible {
+                issues.push(StructuralDiagnostic {
+                    severity,
+                    code,
+                    subject_id: binding.id().into(),
+                    message: format!("TemplateParameterSubstitution-must_be_compatible: {message}"),
+                });
+            }
             let constrained = match classifier_template_constrained_actual(references, binding) {
                         Ok(true) => None,
                         Ok(false) => Some((StructuralSeverity::Error, "UML_CLASSIFIER_TEMPLATE_CONSTRAINED_ACTUAL", "Actual must equal, conform to, or satisfy the permitted Substitution alternative for every constraining Classifier".to_owned())),
