@@ -474,6 +474,78 @@ fn exercise_visual_drafts() -> Result<(), Box<dyn std::error::Error>> {
         },
         2,
     )?;
+    let message = apply(
+        &connected,
+        &Command::CreateVisualDraft {
+            diagram_id: "diagram-tasks".into(),
+            notation_kind: "uml.message".into(),
+            label: Some("1: retry()".into()),
+            geometry: Geometry::Path {
+                start: bellatrix_mde::Point { x: 70.0, y: 40.0 },
+                segments: vec![
+                    bellatrix_mde::PathSegment::Line {
+                        to: bellatrix_mde::Point { x: 118.0, y: 40.0 },
+                    },
+                    bellatrix_mde::PathSegment::Line {
+                        to: bellatrix_mde::Point { x: 118.0, y: 80.0 },
+                    },
+                    bellatrix_mde::PathSegment::Line {
+                        to: bellatrix_mde::Point { x: 70.0, y: 80.0 },
+                    },
+                ],
+            },
+            properties: serde_json::from_value(
+                serde_json::json!({"messageSort":"synchCall", "self_message":true,
+            "source_anchor":{"x":0.5,"y":0.25}, "target_anchor":{"x":0.5,"y":0.75}}),
+            )?,
+            parent_view_id: None,
+            source_view_id: Some(draft_id.clone()),
+            target_view_id: Some(draft_id.clone()),
+        },
+        3,
+    )?;
+    let message_id = message
+        .diagrams
+        .iter()
+        .find(|diagram| diagram.id == "diagram-tasks")
+        .and_then(|diagram| diagram.views.last())
+        .ok_or("missing visual message")?
+        .id
+        .clone();
+    let moved = apply(
+        &message,
+        &Command::MoveView {
+            view_id: draft_id.clone(),
+            dx: 20.0,
+            dy: 10.0,
+        },
+        4,
+    )?;
+    let connected = apply(
+        &moved,
+        &Command::MoveView {
+            view_id: message_id.clone(),
+            dx: 0.0,
+            dy: 8.0,
+        },
+        5,
+    )?;
+    let message = connected
+        .diagrams
+        .iter()
+        .flat_map(|diagram| &diagram.views)
+        .find(|view| view.id == message_id)
+        .ok_or("missing moved message")?;
+    let Geometry::Path { start, segments } = &message.geometry else {
+        return Err("missing message path".into());
+    };
+    assert_eq!(*start, bellatrix_mde::Point { x: 90.0, y: 58.0 });
+    assert!(
+        matches!(segments.as_slice(), [bellatrix_mde::PathSegment::Line { to: first },
+        bellatrix_mde::PathSegment::Line { to: second }, bellatrix_mde::PathSegment::Line { to: end }]
+        if first.x == 138.0 && first.y == 58.0 && second.x == 138.0 && second.y == 98.0 && end.x == 90.0 && end.y == 98.0)
+    );
+    assert_eq!(connected.elements, before.elements);
     let removed = apply(
         &connected,
         &Command::RemoveView {

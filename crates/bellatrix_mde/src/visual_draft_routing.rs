@@ -125,6 +125,19 @@ pub fn reroute_visual_drafts(diagram: &mut Diagram) {
             } else {
                 source.center
             };
+            let self_loop_offset = if draft
+                .properties
+                .get("self_message")
+                .and_then(serde_json::Value::as_bool)
+                == Some(true)
+            {
+                match segments.first() {
+                    Some(PathSegment::Line { to }) => Some(to.x - start.x),
+                    _ => None,
+                }
+            } else {
+                None
+            };
             *start = resolve_authored_anchor(&draft.properties, "source_anchor", *source)
                 .unwrap_or_else(|| source.anchor_toward(first_direction));
             if let Some(segment) = segments.last_mut() {
@@ -134,6 +147,20 @@ pub fn reroute_visual_drafts(diagram: &mut Diagram) {
                             .unwrap_or_else(|| target.anchor_toward(last_direction))
                     }
                 }
+            }
+            if let (
+                Some(offset),
+                [
+                    PathSegment::Line { to: first },
+                    PathSegment::Line { to: second },
+                    PathSegment::Line { to: end },
+                ],
+            ) = (self_loop_offset, segments.as_mut_slice())
+            {
+                first.x = start.x + offset;
+                first.y = start.y;
+                second.x = first.x;
+                second.y = end.y;
             }
             if let Some(center) = resolve_visual_center(&view.geometry) {
                 endpoints.insert(

@@ -176,6 +176,7 @@ impl MdeWorkbenchItem {
                     place(end),
                 )
                 .segments(segments)
+                .diagram_presentation(diagram, &draft.notation_kind)
                 .labels(presentation)
                 .view_style(&view.style)
                 .view_scale(zoom)
@@ -399,17 +400,26 @@ impl MdeWorkbenchItem {
                 ("source_anchor", from.as_str(), source_point),
                 ("target_anchor", target.as_str(), point),
             ] {
-                if let Some(anchor) = point.and_then(|point| {
-                    resolve_message_anchor(&snapshot.section, diagram, view_id, point)
-                }) {
+                if diagram.interaction_kind.as_deref() != Some("communication")
+                    && let Some(anchor) = point.and_then(|point| {
+                        resolve_message_anchor(&snapshot.section, diagram, view_id, point)
+                    })
+                {
                     properties.insert(key.into(), serde_json::json!({"x":anchor.x,"y":anchor.y}));
                 }
             }
-            Some("message()".to_owned())
+            Some(
+                if diagram.interaction_kind.as_deref() == Some("communication") {
+                    "1: message()".to_owned()
+                } else {
+                    "message()".to_owned()
+                },
+            )
         } else {
             None
         };
         let segments = if from == target && kind.resolve_message_sort().is_some() {
+            properties.insert("self_message".into(), serde_json::json!(true));
             let send_y = source_point.map_or(start.y, |point| point.y);
             let receive_y = point.map_or(to.y + 30.0, |point| point.y);
             vec![

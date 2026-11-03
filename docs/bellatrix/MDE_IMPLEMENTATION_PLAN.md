@@ -93,6 +93,13 @@ de diretório ou SQLite. A engine compõe as funções necessárias e gera um ú
 script de construção, em Rust, Python, Julia, F# ou outra linguagem escolhida.
 A execução posterior desse script é que materializa todo o projeto físico.
 A engine não acessa o sistema de arquivos nem materializa o projeto diretamente.
+O próprio grafo é a representação intermediária: grafos UML e de saída podem
+compartilhar infraestrutura, preservando contratos distintos. Cada operação de
+transformação declara entradas e saídas tipadas; a composição verifica as
+ligações, entradas ausentes e ciclos reais de dependência, e ordena as funções
+com desempate estável. A linguagem do script pode diferir da linguagem do
+projeto gerado. Fable é referência de separação de passes e backends, não uma
+exigência de AST adicional nem de dependência do compilador Fable.
 
 ## 1. Fixar a base e consolidar as especificações
 

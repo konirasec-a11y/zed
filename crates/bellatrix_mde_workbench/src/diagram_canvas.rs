@@ -151,6 +151,7 @@ impl Render for MdeWorkbenchItem {
                                 )
                                 .view_style(&view.style)
                                 .segments(local_segments)
+                                .diagram_presentation(diagram, &relation.kind)
                                 .labels(presentation)
                                 .view_scale(zoom)
                                 .selected(self.selected_element.as_deref() == Some(subject));

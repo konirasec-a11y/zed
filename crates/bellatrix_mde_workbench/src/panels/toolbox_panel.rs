@@ -404,7 +404,7 @@ impl Render for MdeLeftPanel {
                     .collect(),
             ),
             (
-                "Sequence messages · visual",
+                "Messages · visual",
                 ModelingRelationKind::MESSAGES
                     .iter()
                     .copied()

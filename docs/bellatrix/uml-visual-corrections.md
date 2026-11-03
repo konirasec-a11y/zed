@@ -7,7 +7,7 @@ Reference: OMG UML 2.5.1, formal/2017-12-05. PDF pages below are one-based file 
 - §17.6.4.3, printed 585 / PDF 627: CombinedFragment operator comes from `interactionOperator` and appears in the frame descriptor, rather than replacing it with the fragment name. An absent operator uses the official XMI default `seq` (UML.xmi `CombinedFragment-interactionOperator-_defaultValue`).
 - §17.2.4.1, printed 568 / PDF 610: Interaction frame names appear alongside `sd`, rather than at the center of the body. InteractionUse retains `ref` with its reference label in the body.
 
-Still incomplete: semantic AssociationClass binding (a View-only attachment is available below); event-aligned guard positioning; timing data-driven traces; semantic Message/MessageEnd creation and numbered communication labels. SVG currently emits basic paths without UML endpoint markers, so native/export visual parity is not claimed. Explicit line-style overrides can deliberately depart from normative UML strokes; the editor warns about this rather than removing user control. Native GUI acceptance remains pending; headless feature flows are not visual screenshot acceptance.
+Still incomplete: semantic AssociationClass binding (a View-only attachment is available below); event-aligned guard positioning; timing data-driven traces; semantic Message/MessageEnd creation and multiple messages grouped on one communication link. SVG currently emits basic paths without UML endpoint markers, so native/export visual parity is not claimed. Explicit line-style overrides can deliberately depart from normative UML strokes; the editor warns about this rather than removing user control. Native GUI acceptance remains pending; headless feature flows are not visual screenshot acceptance.
 
 ## Presentation freedom and structural follow-up
 
@@ -32,4 +32,10 @@ Port and Part are now direct toolbox entries, alongside DeploymentSpecification 
 
 - §17.4.4.1, printed576–577/PDF618–619: synchronous, asynchronous and reply toolbox connectors use the common relationship style projection for filled, open and dashed-open arrows. These tools explicitly create View-only messages, not semantic MessageEnds or executable calls.
 - Pointer locations on lifelines become persisted normalized visual anchors. Moving/resizing a lifeline keeps messages attached; dragging a message changes its drawn event heights. Two clicks on the same lifeline produce a three-segment self-message. These are authored presentation coordinates, not occurrence ordering or execution validation.
-- Communication needs its own numbered labels and small arrows near those labels, rather than the sequence endpoint arrows. That presentation, found/lost endpoints, and timing-specific messages remain pending.
+- Found/lost endpoints and timing-specific messages remain pending.
+
+## Communication message presentation
+
+- §17.4.4.1 and §17.9.1, Table17.4, printed600/PDF642: Communication messages render an arrowless link with a separate small open directional arrow beside the label, instead of a sequence arrowhead at the target object. Canonical and View-only message paths use the same renderer mode and shared styles.
+- New Communication visual messages begin with the editable label `1: message()`. This is a presentation placeholder, not a computed semantic sequence. The user can author nested sequence expressions through the existing label editor. Endpoint routing clips at object heads; sequence event-height anchors are not applied in this diagram context.
+- Grouping multiple directional messages on a single shared link and independent label placement remain pending. No sequence-expression execution or ordering validation is claimed.

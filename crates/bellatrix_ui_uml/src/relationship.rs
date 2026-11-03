@@ -28,6 +28,7 @@ pub struct UmlRelationGlyph {
     labels: Option<RelationshipPresentation>,
     scale: f32,
     appearance: ViewAppearance,
+    communication_message: bool,
 }
 impl UmlRelationGlyph {
     pub fn new(
@@ -46,7 +47,13 @@ impl UmlRelationGlyph {
             labels: None,
             scale: 1.0,
             appearance: ViewAppearance::default(),
+            communication_message: false,
         }
+    }
+    pub fn diagram_presentation(mut self, diagram: &bellatrix_mde::Diagram, kind: &str) -> Self {
+        self.communication_message =
+            kind == "uml.message" && diagram.interaction_kind.as_deref() == Some("communication");
+        self
     }
     pub fn view_style(mut self, style: &bellatrix_mde::Style) -> Self {
         self.appearance = ViewAppearance(style.clone());
@@ -378,7 +385,9 @@ impl RenderOnce for UmlRelationGlyph {
             self.scale,
             self.selected,
         );
-        let dashes = appearance.resolve_stroke_pattern(dashed, self.scale);
+        let communication_message = self.communication_message;
+        let dashes =
+            appearance.resolve_stroke_pattern(dashed && !communication_message, self.scale);
         let text_color = appearance.text(palette.text);
         let font_size = appearance.font_size(12.0, self.scale);
         let (source_anchor, target_anchor, middle) =
@@ -436,7 +445,11 @@ impl RenderOnce for UmlRelationGlyph {
                 }
                 paint_marker(
                     window,
-                    source_marker,
+                    if communication_message {
+                        RelationshipMarker::None
+                    } else {
+                        source_marker
+                    },
                     from,
                     initial_tangent,
                     bounds,
@@ -447,7 +460,11 @@ impl RenderOnce for UmlRelationGlyph {
                 );
                 paint_marker(
                     window,
-                    target_marker,
+                    if communication_message {
+                        RelationshipMarker::None
+                    } else {
+                        target_marker
+                    },
                     last,
                     (-final_tangent.0, -final_tangent.1),
                     bounds,
@@ -456,6 +473,30 @@ impl RenderOnce for UmlRelationGlyph {
                     width,
                     scale,
                 );
+                if communication_message {
+                    let direction = tangent(from, last);
+                    let center = (middle.0 - 20.0 * scale, middle.1 - 18.0 * scale);
+                    let tail = (
+                        center.0 - direction.0 * 11.0 * scale,
+                        center.1 - direction.1 * 11.0 * scale,
+                    );
+                    let head = (
+                        center.0 + direction.0 * 11.0 * scale,
+                        center.1 + direction.1 * 11.0 * scale,
+                    );
+                    stroke_line(window, tail, head, bounds, stroke, width);
+                    paint_marker(
+                        window,
+                        RelationshipMarker::OpenArrow,
+                        head,
+                        (-direction.0, -direction.1),
+                        bounds,
+                        stroke,
+                        background,
+                        width,
+                        scale * 0.6,
+                    );
+                }
             },
         )
         .size_full();
