@@ -489,9 +489,91 @@ fn validate_reception(
     }
 }
 
+fn parameter_set_same_entity(
+    references: &ReferenceIndex<'_>,
+    parameter_set: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    use super::property_contracts::{check_value, PropertyOutcome};
+    let descriptor = schema::uml_property("ParameterSet", "parameter")
+        .map_err(|error| QueryError::unsupported(parameter_set.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(parameter_set.id(), "missing ParameterSet::parameter contract"))?;
+    let value = parameter_set.properties().get("parameter")
+        .ok_or_else(|| QueryError::unsupported(parameter_set.id(), "ParameterSet::parameter identities are not materialized"))?;
+    let mut checks = Vec::new();
+    match check_value(references, parameter_set, descriptor, value) {
+        PropertyOutcome::Satisfied => {}
+        PropertyOutcome::Violation(message) => return Err(QueryError::invalid(parameter_set.id(), message)),
+        PropertyOutcome::Unverified(message) => checks.push(Err(QueryError::unsupported(parameter_set.id(), message))),
+    }
+    let values = value.as_array().ok_or_else(|| QueryError::invalid(parameter_set.id(), "parameter must be a collection"))?;
+    let owner_id = |element| -> Result<Option<&str>, QueryError> {
+        references.model().owner(element)
+            .map_err(|error| QueryError::invalid(parameter_set.id(), error))?
+            .map(|owner| references.element(owner.id()).map(ElementRef::id)
+                .map_err(|error| QueryError::invalid(parameter_set.id(), error)))
+            .transpose()
+    };
+    let owner = owner_id(parameter_set)?;
+    let single = schema::PropertyDescriptor { lower: "1", upper: "1", ..*descriptor };
+    let mut known_direction = None;
+    for value in values {
+        match check_value(references, parameter_set, &single, value) {
+            PropertyOutcome::Satisfied => {}
+            PropertyOutcome::Violation(message) => {
+                checks.push(Err(QueryError::invalid(parameter_set.id(), message)));
+                continue;
+            }
+            PropertyOutcome::Unverified(message) => {
+                checks.push(Err(QueryError::unsupported(parameter_set.id(), message)));
+            }
+        }
+        // An unresolved metaclass does not erase a local identity or its
+        // canonical owner. Only a genuinely external member lacks that evidence.
+        if matches!(super::references::external_reference_href(value), Ok(Some(_))) { continue; }
+        let parameter = super::references::reference_id(value)
+            .map_err(|error| QueryError::invalid(parameter_set.id(), error))
+            .and_then(|id| id.ok_or_else(|| QueryError::invalid(parameter_set.id(), "parameter cannot be absent")))
+            .and_then(|id| references.element(id).map_err(|error| QueryError::invalid(parameter_set.id(), error)));
+        let parameter = match parameter {
+            Ok(parameter) => parameter,
+            Err(error) => { checks.push(Err(error)); continue; }
+        };
+        checks.push(owner_id(parameter).map(|parameter_owner| parameter_owner == owner));
+        if !parameter.conforms_to("Parameter") { continue; }
+        let parameter_direction = schema::read_effective_scalar(parameter, "direction")
+            .map_err(|error| QueryError::invalid(parameter.id(), error));
+        match parameter_direction {
+            Ok(direction) => {
+                if let Some(known) = &known_direction { checks.push(Ok(known == &direction)); }
+                else { known_direction = Some(direction); }
+            }
+            Err(error) => checks.push(Err(error)),
+        }
+    }
+    // Each owner equality and each known direction is examined even if another
+    // member is external. A malformed member/owner/direction dominates false,
+    // and known disagreement dominates uncertainty without claiming a full set.
+    super::feature_compatibility::require_all(checks)
+}
+
 pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     for element in references.model().elements() {
+        if element.conforms_to("ParameterSet") {
+            let outcome = match parameter_set_same_entity(references, element) {
+                Ok(true) => None,
+                Ok(false) => Some((StructuralSeverity::Error, "UML_PARAMETER_SET_SAME_PARAMETERIZED_ENTITY",
+                    "Parameters must share their ParameterSet's canonical owner and direction".to_owned())),
+                Err(QueryError::Invalid { message, .. }) => Some((StructuralSeverity::Error,
+                    "MDE_PARAMETER_SET_SAME_PARAMETERIZED_ENTITY_INVALID", message)),
+                Err(QueryError::Unsupported { message, .. }) => Some((StructuralSeverity::Warning,
+                    "MDE_PARAMETER_SET_SAME_PARAMETERIZED_ENTITY_UNVERIFIED", message)),
+            };
+            if let Some((severity, code, message)) = outcome {
+                issues.push(StructuralDiagnostic { severity, code, subject_id: element.id().into(),
+                    message: format!("ParameterSet-same_parameterized_entity: {message}") });
+            }
+        }
         if element.conforms_to("Reception") {
             validate_reception(references, element, &mut issues);
         }
