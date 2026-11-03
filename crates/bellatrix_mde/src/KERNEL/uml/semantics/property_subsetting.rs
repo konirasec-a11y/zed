@@ -235,12 +235,81 @@ pub fn subsetting_diagnostic(
     })
 }
 
+fn subsetted_property_names(
+    references: &ReferenceIndex<'_>,
+    property: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let Some(value) = property.properties().get("subsettedProperty") else {
+        return Ok(true);
+    };
+    let descriptor = schema::uml_property("Property", "subsettedProperty")
+        .map_err(|error| QueryError::unsupported(property.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(property.id(), "missing subsetting contract"))?;
+    let contract =
+        match super::property_contracts::check_value(references, property, descriptor, value) {
+            super::property_contracts::PropertyOutcome::Satisfied => Ok(true),
+            super::property_contracts::PropertyOutcome::Violation(message) => {
+                return Err(QueryError::invalid(property.id(), message));
+            }
+            super::property_contracts::PropertyOutcome::Unverified(message) => {
+                Err(QueryError::unsupported(property.id(), message))
+            }
+        };
+    let mut checks = vec![contract];
+    for target in value
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|value| super::references::reference_id(value).ok().flatten())
+        .filter_map(|id| references.element(id).ok())
+    {
+        // Unknown metaclasses cannot supply a NamedElement name, even if the
+        // storage record has editor text. Keep the contract's Unknown instead.
+        if target.conforms_to("Property") {
+            checks.push(Ok(property.named().and_then(|named| named.name())
+                != target.named().and_then(|named| named.name())));
+        }
+    }
+    require_all(checks)
+}
+
 pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
-    references
+    let mut issues: Vec<_> = references
         .model()
         .elements()
         .filter_map(|element| subsetting_diagnostic(references, element))
-        .collect()
+        .collect();
+    for property in references
+        .model()
+        .elements()
+        .filter(|element| element.conforms_to("Property"))
+    {
+        let (severity, code, message) = match subsetted_property_names(references, property) {
+            Ok(true) => continue,
+            Ok(false) => (
+                StructuralSeverity::Error,
+                "UML_PROPERTY_SUBSETTED_PROPERTY_NAMES",
+                "a Property may not subset a Property with the same name".to_owned(),
+            ),
+            Err(QueryError::Invalid { message, .. }) => (
+                StructuralSeverity::Error,
+                "MDE_PROPERTY_SUBSETTED_PROPERTY_NAMES_INVALID",
+                message,
+            ),
+            Err(QueryError::Unsupported { message, .. }) => (
+                StructuralSeverity::Warning,
+                "MDE_PROPERTY_SUBSETTED_PROPERTY_NAMES_UNVERIFIED",
+                message,
+            ),
+        };
+        issues.push(StructuralDiagnostic {
+            severity,
+            code,
+            subject_id: property.id().into(),
+            message: format!("Property-subsetted_property_names: {message}"),
+        });
+    }
+    issues
 }
 
 pub fn set_subsetted_properties(

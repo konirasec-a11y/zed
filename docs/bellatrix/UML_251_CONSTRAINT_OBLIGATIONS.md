@@ -66,6 +66,9 @@ TemplateSignature::unique_parameters foram publicados em
 ParameterSet::input e as duas invariantes de qualifiedName de NamedElement
 têm recortes publicados em `4da8a8c77c50c0b8876d22eff794f5b8200b16d7`
 (E54/E55).
+Stereotype::base_property_upper_bound e Classifier::maps_to_generalization_set
+têm recortes publicados em `497f200eb443bdbaaf6ea6cd14ac0630c5ed6390`
+(E56/E57).
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -181,7 +184,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E55 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E57 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -810,6 +813,67 @@ de execução nova. E12–E55 possuem os gates delimitados nas seções seguinte
   `MDE_NAMED_ELEMENT_QUALIFIED_NAME_UNVERIFIED`. Não é avaliação geral de OCL
   nem prova integral de toda representação possível de allNamespaces.
 
+- **E56**: `semantics/profiles.rs`, `validate`,
+  `stereotype_attributes_satisfy` e `attribute_associations_satisfy`, com
+  `value_specifications.rs::upper_bound`; `stereotype_base_property.rs`, nove
+  testes, e um novo teste lib do gate `validate_changes`. Implementa a prosa
+  normativa de base_property_upper_bound, sem inventar corpo OCL. Identifica
+  base-properties por ownedAttribute canônico do Stereotype e participação
+  em Extension::memberEnd, nunca pelo prefixo `base_` do nome. O recorte é de
+  atributos diretamente possuídos; não certifica bases herdadas. Exige upper
+  exatamente 1, inclusive default efetivo e LiteralUnlimitedNatural canônico;
+  cache de multiplicidade não substitui upperValue. Association comum e
+  atributo sem participação em Extension não criam essa obrigação. Membership
+  externo/incompleto e valores não avaliáveis permanecem não verificados;
+  inversa armazenada não inventa membership. Upper local inválido conhecido
+  pode decidir violação diante de ramo desconhecido, sem ocultar contratos
+  malformados inspecionados. Diagnósticos:
+  `UML_STEREOTYPE_BASE_PROPERTY_UPPER_BOUND` e
+  `MDE_STEREOTYPE_BASE_PROPERTY_UPPER_BOUND_UNVERIFIED`.
+  O editor genérico ainda rejeita edição no modelo com Extension por
+  `MDE_ASSOCIATION_UNSUPPORTED`, preservando o modelo. O teste lib exercita
+  rejeição/reparo do gate sem transformar essa limitação em autoria aprovada.
+  Não implementa as duas regras seguintes de multiplicidade de base-properties.
+
+- **E57**: `semantics/classifiers.rs`, `classifier_powertype_extent`,
+  `powertype_constraints` e `validate`; `classifier_powertype_extent.rs`, dez
+  testes. Reutiliza as exclusões assimétricas publicadas: o Classifier não
+  pode ser endpoint, ancestral de general nem descendente de specific.
+  As direções inversas não são proibidas por esta regra. Membership pode vir
+  de GeneralizationSet::powertype ou de powertypeExtent autorado quando o
+  oposto foi omitido; omissão não equivale a null explícito. Verifica
+  contradições de identidade, omissões locais e dois Classifiers autorados
+  para o mesmo conjunto. Entradas externas não provam cobertura completa da
+  inversa. Powertype externo pode manter unknown, salvo conjunto de
+  generalizações comprovadamente vazio; valor malformado não ganha vacuidade.
+  Violações locais e ciclos não são apagados por referências desconhecidas.
+  Diagnósticos: `UML_CLASSIFIER_POWERTYPE_EXTENT`,
+  `MDE_CLASSIFIER_POWERTYPE_EXTENT_INVALID` e
+  `MDE_CLASSIFIER_POWERTYPE_EXTENT_UNVERIFIED`. É o recorte do snapshot local,
+  não resolução geral de modelos externos, isCovering/isDisjoint ou
+  certificação integral de GeneralizationSet.
+
+### Evidência publicada de bases de Stereotype e powertypeExtent
+
+Commit inspecionado: `497f200eb443bdbaaf6ea6cd14ac0630c5ed6390`.
+Logs finais lidos:
+
+- `/tmp/stereotype-base-property-related-gate.log`: **213/213 aprovados**,
+  161 lib e 52 integrações (extension_contracts 6, extension_end_constraints 8,
+  stereotype_association_ownership 10, stereotype_associations 8,
+  stereotype_base_property 9 e stereotype_generalize 11).
+- `/tmp/classifier-extent.log`: **32/32 aprovados**, classifier_powertype_extent
+  10, generalization_set_classifier 10 e generalization_set_powertype 12.
+
+As duas linhas ficam **P/E56–E57**. Os testes cobrem modelos com/sem raiz,
+referências externas, malformados, precedência de violação local, roundtrip e
+reparo de snapshot. A rejeição do editor genérico de Extension continua sendo
+limitação, distinta da prova do gate lib. O gate inicial de base-properties
+registrou 7 aprovados e 1 falho; foi superado pelo gate final acima e não é
+contado como sucesso nem somado novamente. Gates anteriores à publicação,
+sem rerun no SHA publicado e sem execução nova por esta matriz; não certificam
+suíte integral, UI, geração, interchange ou conformidade UML completa.
+
 ### Evidência publicada de ParameterSet::input e qualifiedName
 
 Commit inspecionado: `4da8a8c77c50c0b8876d22eff794f5b8200b16d7`.
@@ -1062,6 +1126,7 @@ tamanhos válidos/inválidos, null/escalar, duplicatas, metaclasse local indefin
 referências externas, roundtrip e rejeição atômica ao excluir o único elemento.
 As três linhas ficam **P/E36–E37**. Não certificam Classifier::maps_to_generalization_set,
 isCovering/isDisjoint ou avaliação de intervalos;
+Classifier::maps_to_generalization_set tem recorte posterior em E57.
 DurationConstraint::first_event_multiplicity tem recorte posterior em E39.
 Esses gates não certificam observações ou semântica temporal em runtime.
 
@@ -1641,7 +1706,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `Classifier-maps_to_generalization_set`
 
-- Metaclass: `Classifier`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `Classifier`. Estado: **P**. Evidência: E57; commit `497f200eb443bdbaaf6ea6cd14ac0630c5ed6390`.
 - OCL publicado: `powertypeExtent->forAll( gs | gs.generalization->forAll( gen | not (gen.general = self) and not gen.general.allParents()->includes(self) and not (gen.specific = self) and not self.allParents()->includes(gen.specific) ))`.
 
 #### `Classifier-non_final_parents`
@@ -2054,7 +2119,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `Stereotype-base_property_upper_bound`
 
-- Metaclass: `Stereotype`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `Stereotype`. Estado: **P**. Evidência: E56; commit `497f200eb443bdbaaf6ea6cd14ac0630c5ed6390`.
 - Corpo OCL: ausente nesta constraint do XMI; não inventar fórmula.
 - Descrição normativa do XMI: The upper bound of base-properties is exactly 1.
 
