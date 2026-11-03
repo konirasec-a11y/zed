@@ -483,6 +483,103 @@ fn property_deployment_target(
     ])
 }
 
+fn deployment_artifact_presence(
+    references: &ReferenceIndex<'_>,
+    instance: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let descriptor = |id| {
+        schema::property_by_id(schema::XmiId::new(schema::Document::Uml, id))
+            .ok_or_else(|| QueryError::unsupported(instance.id(), format!("missing {id} contract")))
+    };
+    let deployed = descriptor("Deployment-deployedArtifact")?;
+    let mut known = Vec::new();
+    let mut unresolved = Vec::new();
+    let mut checks = Vec::new();
+    for deployment in references
+        .model()
+        .elements()
+        .filter(|element| element.conforms_to("Deployment"))
+    {
+        let evidence = reference_targets(references, deployment, deployed);
+        if evidence
+            .values
+            .iter()
+            .any(|target| target.id() == instance.id())
+        {
+            known.push(deployment.id());
+        }
+        if evidence.checks.iter().any(Result::is_err) {
+            unresolved.push(deployment.id());
+        }
+        checks.extend(evidence.checks);
+    }
+    if instance.properties().contains_key("deploymentForArtifact") {
+        let inverse = reference_targets(
+            references,
+            instance,
+            descriptor("A_deployedArtifact_deploymentForArtifact-deploymentForArtifact")?,
+        );
+        let inverse_unknown = inverse.checks.iter().any(Result::is_err);
+        checks.extend(inverse.checks);
+        // Authored inverse references must agree with the forward association;
+        // they never establish deployment membership on their own.
+        for deployment in &inverse.values {
+            if deployment.metaclass().is_none() || unresolved.contains(&deployment.id()) {
+                continue;
+            }
+            if !known.contains(&deployment.id()) {
+                checks.push(Err(QueryError::invalid(
+                    instance.id(),
+                    "deploymentForArtifact contradicts canonical Deployment::deployedArtifact",
+                )));
+            }
+        }
+        if !inverse_unknown
+            && known.iter().any(|id| {
+                !inverse
+                    .values
+                    .iter()
+                    .any(|deployment| deployment.id() == *id)
+            })
+        {
+            checks.push(Err(QueryError::invalid(
+                instance.id(),
+                "deploymentForArtifact omits a canonical Deployment::deployedArtifact membership",
+            )));
+        }
+    }
+    // Existential evidence is sufficient for this implication. Invalid remains
+    // decisive, but unresolved neighbors cannot erase a known local membership.
+    checks.push(Ok(!known.is_empty()));
+    accept_any(checks)
+}
+
+fn instance_deployment_artifact(
+    references: &ReferenceIndex<'_>,
+    instance: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let present = deployment_artifact_presence(references, instance);
+    if matches!(present, Ok(false)) {
+        return Ok(true);
+    }
+    let classifiers = if instance.properties().contains_key("classifier") {
+        let descriptor = schema::uml_property("InstanceSpecification", "classifier")
+            .map_err(|error| QueryError::unsupported(instance.id(), error.to_string()))?
+            .ok_or_else(|| QueryError::unsupported(instance.id(), "missing classifier contract"))?;
+        let mut evidence = reference_targets(references, instance, descriptor);
+        evidence.checks.extend(
+            evidence
+                .values
+                .iter()
+                .map(|classifier| Ok(classifier.conforms_to("Artifact"))),
+        );
+        accept_any(evidence.checks)
+    } else {
+        Ok(false)
+    };
+    accept_any([present.map(|present| !present), classifiers])
+}
+
 pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = validate_targets(references);
     for specification in references
@@ -545,5 +642,71 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             message: format!("Property-deployment_target: {message}"),
         });
     }
+    for instance in references
+        .model()
+        .elements()
+        .filter(|element| element.conforms_to("InstanceSpecification"))
+    {
+        let (severity, code, message) = match instance_deployment_artifact(references, instance) {
+            Ok(true) => continue,
+            Ok(false) => (
+                StructuralSeverity::Error,
+                "UML_INSTANCE_SPECIFICATION_DEPLOYMENT_ARTIFACT",
+                "A deployed InstanceSpecification must have an Artifact classifier".into(),
+            ),
+            Err(QueryError::Invalid { message, .. }) => (
+                StructuralSeverity::Error,
+                "MDE_INSTANCE_SPECIFICATION_DEPLOYMENT_ARTIFACT_INVALID",
+                message,
+            ),
+            Err(QueryError::Unsupported { message, .. }) => (
+                StructuralSeverity::Warning,
+                "MDE_INSTANCE_SPECIFICATION_DEPLOYMENT_ARTIFACT_UNVERIFIED",
+                message,
+            ),
+        };
+        issues.push(StructuralDiagnostic {
+            severity,
+            code,
+            subject_id: instance.id().into(),
+            message: format!("InstanceSpecification-deployment_artifact: {message}"),
+        });
+    }
     issues
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    #[test]
+    fn instance_deployment_artifact_gate_rejects_new_violation_and_accepts_repair()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let before: crate::Project = serde_json::from_value(json!({"id":"project","name":"Gate",
+            "elements":[
+                {"id":"node","kind":"uml.node","name":"Node"},
+                {"id":"artifact","kind":"uml.artifact","name":"Artifact"},
+                {"id":"class","kind":"uml.class","name":"Class"},
+                {"id":"instance","kind":"uml.instance_specification","name":"Instance","properties":{"classifier":[{"$ref":"artifact"}]}}
+            ],"relations":[{"id":"deployment","kind":"uml.deployment","from":"node","to":"instance","properties":{"deployedArtifact":[{"$ref":"instance"}]}}]
+        }))?;
+        let unchanged = before.clone();
+        let mut after = before.clone();
+        after
+            .elements
+            .iter_mut()
+            .find(|element| element.id == "instance")
+            .ok_or("instance")?
+            .properties
+            .insert("classifier".into(), json!([{"$ref":"class"}]));
+        let error = super::super::root::validate_changes(&before, &after)
+            .expect_err("deployed instance must have Artifact classifier");
+        assert!(
+            error.contains("InstanceSpecification-deployment_artifact:"),
+            "{error}"
+        );
+        assert_eq!(before, unchanged);
+        super::super::root::validate_changes(&after, &before)?;
+        Ok(())
+    }
 }

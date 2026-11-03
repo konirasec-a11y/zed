@@ -402,6 +402,12 @@ fn validate_association(
             Err(error) => return Err(format!("Unsupported CommunicationPath-association_ends: {error}")),
         }
     }
+    // UML 2.5.1 §12.4.1.6 and UML.xmi both cast every memberEnd to
+    // ExtensionEnd inside metaclassEnd(), including its non-owned Property.
+    // Do not silently replace that narrowing cast with identity subtraction.
+    if association.conforms_to("Extension") {
+        return Err("Unsupported Extension-non_owned_end: published metaclassEnd() narrows all member ends to ExtensionEnd; the non-owned Property case requires normative clarification".into());
+    }
     // CommunicationPath has one own constraint and no own properties/operations
     // in UML.xmi; all inherited Association checks have already run above.
     if !matches!(association.metaclass(), Some("Association" | "CommunicationPath")) {
