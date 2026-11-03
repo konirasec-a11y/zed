@@ -134,6 +134,17 @@ ou manipulem índices, registros, passes ou representações internas. Dados de
 contrato público não tornam a estrutura interna parte da API. O formato
 concreto desses dados, sua serialização, transporte e ABI permanecem em aberto.
 
+A pasta `kernel-api`, com esse nome explícito, concentra a única fronteira
+pública por funções. Não expor atalhos por reexports ou módulos internos.
+Concentrar todo I/O real interno em `KERNEL/I_O`, incluindo leitura, escrita,
+publicação, exportação de eventos e execução de processos realizadas pelo
+componente. Essa pasta permanece interna, acessível ao consumidor somente
+pelas funções pertinentes de `kernel-api`, com seus efeitos declarados.
+Adaptadores de I/O ficam fora do cálculo puro, ainda que sua implementação
+pertença a `KERNEL/I_O`. Nenhuma função de geração pura passa a ter I/O por
+causa dessa organização de pastas. Verificar dependências e chamadas efetivas,
+não apenas nomes de diretórios, para demonstrar ambas as fronteiras.
+
 As chamadas não retêm estado entre execuções; dados, opções e versões que
 afetam o resultado são entradas explícitas. Histórico de chamadas, estado
 global mutável, relógio, aleatoriedade e ambiente não podem determinar o

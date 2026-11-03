@@ -20,6 +20,17 @@ operation registries or compiler representations. This requirement does not
 select the future input/output format, serialization, transport or ABI. The
 JSON Lines behavior above describes the existing observation adapter only.
 
+The explicitly named `kernel-api` directory is the sole public function-based
+boundary. Consumers must not bypass it through internal modules or reexports.
+All actual internal I/O belongs in `KERNEL/I_O`, including trace export or
+delivery that performs I/O, resource reads, file publication and process
+execution performed by this component. `KERNEL/I_O` is internal implementation,
+not a second public API. Functions exposed through `kernel-api` must declare
+these effects; pure generation remains separate from effectful adapters even
+when the latter are housed inside `KERNEL/I_O`. In-memory event construction
+alone is not external I/O. Verify dependencies and actual effectful calls, not
+just directory names, without prescribing the future data representation.
+
 For each public function, document its inputs, results, errors, preconditions,
 postconditions and allowed effects. Distinguish pure computation from optional
 observation and from external adapters that export events, read resources,

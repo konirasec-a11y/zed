@@ -120,6 +120,18 @@ não a API que o consumidor precisa construir ou manipular. Esta decisão não
 escolhe formato de entrada/saída, serialização, transporte ou ABI; os contratos
 públicos de dados ainda serão definidos sem expor a representação interna.
 
+A pasta explicitamente nomeada `kernel-api` é a única fronteira pública de
+acesso ao Kernel e mini-compilador, por funções. Consumidores não acessam
+módulos internos diretamente nem por reexports que contornem essa fronteira.
+Todo I/O real interno deve ficar na pasta `KERNEL/I_O`, incluindo leitura de
+recursos, escrita/publicação, exportação de observabilidade e execução de
+processos quando realizadas por este componente. `KERNEL/I_O` é implementação
+interna, não uma segunda API pública; seus efeitos são declarados por função
+na fronteira `kernel-api`. A separação entre geração pura e execução/publicação
+com efeitos permanece obrigatória. Os adaptadores com I/O são externos ao
+núcleo de cálculo puro mesmo quando organizados internamente em `KERNEL/I_O`;
+isso não autoriza a geração pura a acessar arquivos ou executar processos.
+
 Cada chamada recebe todos os dados, opções e versões necessários. Não retém
 estado de execução entre chamadas nem depende de inicialização, sessão,
 registro global mutável ou histórico de chamadas. Estruturas temporárias e
@@ -148,6 +160,9 @@ desligada ou com perda de eventos preserva o resultado semântico; relógios e
 metadados de observabilidade não integram essa igualdade. A composição do
 script não executa o script. Registrar evidência por função e distinguir
 requisito, implementação existente e testes efetivamente executados.
+Verificar também que consumidores usam somente `kernel-api` e que nenhum
+I/O real interno ocorre fora de `KERNEL/I_O`. A existência das pastas, isolada,
+não comprova essas fronteiras; auditar dependências, exports e chamadas reais.
 
 ## 1. Fixar a base e consolidar as especificações
 
