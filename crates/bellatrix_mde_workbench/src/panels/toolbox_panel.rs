@@ -294,7 +294,7 @@ impl Render for MdeLeftPanel {
                     })
                 })
         });
-        let tool_groups: [(&str, Vec<ModelingTool>); 17] = [
+        let tool_groups: [(&str, Vec<ModelingTool>); 18] = [
             (
                 "Classes · basic",
                 ModelingElementKind::BASIC
