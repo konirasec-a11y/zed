@@ -361,12 +361,56 @@ pub(crate) fn validate(project: &Project) -> Vec<StructuralDiagnostic> {
                 ));
             }
             if constrained {
-                issues.push(StructuralDiagnostic {
-                    severity:StructuralSeverity::Warning,
-                    code:"MDE_TEMPLATE_CONSTRAINT_UNSUPPORTED",
-                    subject_id:element.id.clone(),
-                    message:"Classifier template constraint conformance and substitution are not implemented".into(),
-                });
+                // UML.xmi ClassifierTemplateParameter-
+                // constraining_classifiers_constrain_parametered_element.
+                // Identity and conformsTo decide the disjunction without requiring
+                // Substitution. Do not confuse that alternative with structural
+                // compatibility, or claim actual-argument substitution support.
+                let index = crate::uml::references::ReferenceIndex::new(
+                    crate::uml::root::Model::from_project(project),
+                );
+                let allow_substitutable = crate::uml::schema::read_effective_boolean(
+                    crate::uml::root::ElementRef::Object(element), "allowSubstitutable",
+                );
+                for constraint in project.relations.iter().filter(|relation| {
+                    relation.kind == "uml.constraining_classifier" && relation.from == element.id
+                }) {
+                    // Existing endpoint validation reports missing/wrong targets.
+                    let Some(target) = project.elements.iter().find(|candidate| {
+                        candidate.id == constraint.to && conforms(candidate, "Classifier")
+                    }) else { continue; };
+                    if !conforms(exposed, "Classifier") { continue; }
+                    let conformance = if exposed.id == target.id {
+                        Ok(true)
+                    } else {
+                        crate::uml::classifier_hierarchy::conforms_to(&index, &exposed.id, &target.id)
+                    };
+                    let outcome = match conformance {
+                        Ok(true) => continue,
+                        Ok(false) => match &allow_substitutable {
+                            Ok(false) => (StructuralSeverity::Error,
+                                "UML_TEMPLATE_PARAMETERED_CONSTRAINT",
+                                "parameteredElement does not conform and allowSubstitutable is false".to_owned()),
+                            Ok(true) => (StructuralSeverity::Warning,
+                                "MDE_TEMPLATE_CONSTRAINT_UNSUPPORTED",
+                                "isSubstitutableFor is not resolved by the current Substitution adapter".to_owned()),
+                            Err(error) => (StructuralSeverity::Warning,
+                                "MDE_TEMPLATE_CONSTRAINT_UNSUPPORTED", error.to_string()),
+                        },
+                        Err(crate::uml::classifiers::QueryError::Invalid { message, .. }) =>
+                            (StructuralSeverity::Error, "UML_TEMPLATE_PARAMETERED_CONSTRAINT", message),
+                        Err(error) => (StructuralSeverity::Warning,
+                            "MDE_TEMPLATE_CONSTRAINT_UNSUPPORTED", error.to_string()),
+                    };
+                    // Keep all obligations: an unknown result cannot hide a
+                    // proven violation of another constraining classifier.
+                    issues.push(StructuralDiagnostic {
+                        severity: outcome.0,
+                        code: outcome.1,
+                        subject_id: element.id.clone(),
+                        message: format!("ClassifierTemplateParameter-constraining_classifiers_constrain_parametered_element [{}]: {}", target.id, outcome.2),
+                    });
+                }
             }
             if !constrained
                 && (element

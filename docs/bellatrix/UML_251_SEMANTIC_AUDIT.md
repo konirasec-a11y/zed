@@ -419,3 +419,31 @@ UMLR-424 permanece aberta; usa-se o OCL publicado, não a errata proposta.
 UI, geração, compilação de aplicação e aceite local do mantenedor não foram
 executados. A API continua declarando `implemented_rules_only`. O fingerprint
 testado deve ser associado ao commit final no checkpoint de publicação.
+
+## Atualização focada: constraints de ClassifierTemplateParameter — 2026-11-03
+
+O incremento implementa os casos decidíveis de
+`ClassifierTemplateParameter-constraining_classifiers_constrain_parametered_element`
+(UML.xmi:16218–16234) no adapter existente de `uml.constraining_classifier`.
+Identidade ou conformidade por herança direta/transitiva do `parameteredElement`
+satisfazem a disjunção normativa. Não conformidade comprovada com
+`allowSubstitutable=false` gera `UML_TEMPLATE_PARAMETERED_CONSTRAINT`. A leitura
+do flag usa o default normativo `true`; valor malformado não vira default.
+
+Quando a decisão depende de `isSubstitutableFor` ou de ancestry não resolvida,
+o resultado permanece não verificado, com `MDE_TEMPLATE_CONSTRAINT_UNSUPPORTED`.
+Cada constraint é avaliada: um resultado desconhecido não oculta uma violação
+comprovada em outra obrigação. A consulta `Classifier::isSubstitutableFor`, o
+contrato completo de Substitution e as regras sobre argumentos de
+TemplateParameterSubstitution **não foram implementados neste incremento**.
+Não confundir satisfação desta regra com suporte completo a templates ou UML.
+
+Código: `crates/bellatrix_mde/src/KERNEL/uml/semantics/templates.rs`.
+Três fluxos novos em `tests/template_signatures.rs` cobrem identidade, herança,
+default omitido, múltiplos constraints, referências/ancestry não resolvidas,
+flags inválidos, rejeição atômica pela regra, correção de draft e reabertura
+JSON/Protobuf. Execução focada: **16/16** em `template_signatures` e **4/4** em
+`kernel_api_validation`; `git diff --check` passou. Evidência da execução:
+`/tmp/template-constraints-final.log` no ambiente de trabalho. Resultado refere-se
+ao working tree sobre `42470e8`, antes de commit deste incremento; não representa
+gate integral, aceite GUI ou conformidade UML 2.5.1 completa.

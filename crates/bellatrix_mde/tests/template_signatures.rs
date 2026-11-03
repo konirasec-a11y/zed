@@ -707,3 +707,95 @@ fn parameter_rename_rejects_invalid_signature_owner_before_following_reference()
     );
     assert_eq!(malformed, before);
 }
+
+#[test]
+fn constrained_parameter_flow_decides_identity_ancestry_and_reopens() {
+    use bellatrix_mde::{decode, encode, Format};
+    let mut model = add(&project("uml.class"), 0).expect("template");
+    let parameter = model.elements.iter().find(|e| e.kind == "uml.classifier_template_parameter").unwrap().id.clone();
+    let exposed = model.relations.iter().find(|r| r.kind == "uml.parametered_element").unwrap().to.clone();
+    for (id, kind) in [("base", "uml.class"), ("middle", "uml.class"), ("unrelated", "uml.class")] {
+        model.elements.push(serde_json::from_value(serde_json::json!({"id":id,"kind":kind,"name":id})).unwrap());
+    }
+    for (id, kind, from, to) in [
+        ("first", "uml.generalization", exposed.as_str(), "middle"),
+        ("second", "uml.generalization", "middle", "base"),
+        ("identity", "uml.constraining_classifier", parameter.as_str(), exposed.as_str()),
+        ("direct", "uml.constraining_classifier", parameter.as_str(), "middle"),
+        ("transitive", "uml.constraining_classifier", parameter.as_str(), "base"),
+    ] {
+        model.relations.push(serde_json::from_value(serde_json::json!({"id":id,"kind":kind,"from":from,"to":to})).unwrap());
+    }
+    let rule_issues = |model: &Project| validate_structural_model(model).into_iter().filter(|d|
+        d.code == "MDE_TEMPLATE_CONSTRAINT_UNSUPPORTED" || d.code == "UML_TEMPLATE_PARAMETERED_CONSTRAINT").collect::<Vec<_>>();
+    for format in [Format::Json, Format::Protobuf] {
+        let reopened = decode(&encode(&model, format).unwrap(), format).unwrap();
+        assert!(rule_issues(&reopened).is_empty(), "{:?}", rule_issues(&reopened));
+    }
+    // True branches do not require the unimplemented Substitution alternative,
+    // including the normative omitted/default true value.
+    model.elements.iter_mut().find(|e| e.id == parameter).unwrap().properties.remove("allowSubstitutable");
+    assert!(rule_issues(&model).is_empty());
+    model.relations.push(serde_json::from_value(serde_json::json!({"id":"unrelated-constraint","kind":"uml.constraining_classifier","from":parameter,"to":"unrelated"})).unwrap());
+    let unknown = rule_issues(&model);
+    assert_eq!(unknown.len(), 1, "{unknown:?}");
+    assert_eq!(unknown[0].code, "MDE_TEMPLATE_CONSTRAINT_UNSUPPORTED");
+    model.elements.iter_mut().find(|e| e.id == parameter).unwrap().properties.insert("allowSubstitutable".into(), serde_json::json!(true));
+    let before = serde_json::to_value(&model).unwrap();
+    let rejected = commands::apply(&model, &Command::SetProperty {
+        element_id: parameter.clone(), path: "properties.allowSubstitutable".into(), value: serde_json::json!(false),
+    }, 2);
+    let error = rejected.expect_err("nonconforming constraint became valid");
+    assert!(error.contains("UML_TEMPLATE_PARAMETERED_CONSTRAINT"), "{error}");
+    assert_eq!(before, serde_json::to_value(&model).unwrap());
+    // Imported invalid drafts remain diagnosable after reopening; repairing the
+    // offending relationship restores the decided rule without changing IDs.
+    model.elements.iter_mut().find(|e| e.id == parameter).unwrap().properties.insert("allowSubstitutable".into(), serde_json::json!(false));
+    for format in [Format::Json, Format::Protobuf] {
+        let reopened = decode(&encode(&model, format).unwrap(), format).unwrap();
+        assert!(rule_issues(&reopened).iter().any(|d| d.code == "UML_TEMPLATE_PARAMETERED_CONSTRAINT"));
+    }
+    model.relations.retain(|r| r.id != "unrelated-constraint");
+    assert!(rule_issues(&model).is_empty());
+}
+
+#[test]
+fn constrained_parameter_draft_keeps_unknown_and_invalid_obligations_visible() {
+    let mut model = add(&project("uml.class"), 0).unwrap();
+    let parameter = model.elements.iter().find(|e| e.kind == "uml.classifier_template_parameter").unwrap().id.clone();
+    model.elements.iter_mut().find(|e| e.id == parameter).unwrap().properties.remove("allowSubstitutable");
+    for (id, kind) in [("unrelated", "uml.class"), ("bad", "uml.package")] {
+        model.elements.push(serde_json::from_value(serde_json::json!({"id":id,"kind":kind,"name":id})).unwrap());
+        model.relations.push(serde_json::from_value(serde_json::json!({"id":format!("constraint-{id}"),"kind":"uml.constraining_classifier","from":parameter,"to":id})).unwrap());
+    }
+    for format in [bellatrix_mde::Format::Json, bellatrix_mde::Format::Protobuf] {
+        let reopened = bellatrix_mde::decode(&bellatrix_mde::encode(&model, format).unwrap(), format).unwrap();
+        let issues = validate_structural_model(&reopened);
+        assert!(issues.iter().any(|d| d.code == "MDE_TEMPLATE_CONSTRAINT_UNSUPPORTED"));
+        assert!(issues.iter().any(|d| d.code == "UML_TEMPLATE_CONSTRAINING_TYPE"));
+    }
+}
+
+#[test]
+fn constrained_parameter_flow_preserves_unresolved_ancestry_and_invalid_flags() {
+    let mut model = add(&project("uml.class"), 0).unwrap();
+    let parameter = model.elements.iter().find(|e| e.kind == "uml.classifier_template_parameter").unwrap().id.clone();
+    let exposed = model.relations.iter().find(|r| r.kind == "uml.parametered_element").unwrap().to.clone();
+    model.elements.push(serde_json::from_value(serde_json::json!({"id":"constraint","kind":"uml.class","name":"Constraint"})).unwrap());
+    model.relations.push(serde_json::from_value(serde_json::json!({"id":"cc","kind":"uml.constraining_classifier","from":parameter,"to":"constraint"})).unwrap());
+    // A stored, unresolved ancestry declaration cannot prove nonconformance.
+    model.elements.iter_mut().find(|e| e.id == exposed).unwrap().properties.insert("general".into(), serde_json::json!([{"href":"external.uml#Base"}]));
+    let issues = validate_structural_model(&model);
+    assert!(issues.iter().any(|d| d.code == "MDE_TEMPLATE_CONSTRAINT_UNSUPPORTED"));
+    assert!(!issues.iter().any(|d| d.code == "UML_TEMPLATE_PARAMETERED_CONSTRAINT"));
+    // Identity is true even when the alternative ancestry query is unresolved.
+    model.relations.iter_mut().find(|r| r.id == "cc").unwrap().to = exposed.clone();
+    assert!(!validate_structural_model(&model).iter().any(|d| d.code == "MDE_TEMPLATE_CONSTRAINT_UNSUPPORTED"));
+    model.elements.iter_mut().find(|e| e.id == exposed).unwrap().properties.remove("general");
+    model.relations.iter_mut().find(|r| r.id == "cc").unwrap().to = "constraint".into();
+    model.elements.iter_mut().find(|e| e.id == parameter).unwrap().properties.insert("allowSubstitutable".into(), serde_json::json!("false"));
+    let issues = validate_structural_model(&model);
+    assert!(issues.iter().any(|d| d.code == "UML_TEMPLATE_PARAMETER_FLAG_TYPE"));
+    assert!(issues.iter().any(|d| d.code == "MDE_TEMPLATE_CONSTRAINT_UNSUPPORTED"));
+    assert!(!issues.iter().any(|d| d.code == "UML_TEMPLATE_PARAMETERED_CONSTRAINT"));
+}
