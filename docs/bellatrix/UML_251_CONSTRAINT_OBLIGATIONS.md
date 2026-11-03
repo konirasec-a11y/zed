@@ -269,6 +269,50 @@ de execução nova. E12–E19 possuem os gates delimitados nas seções seguinte
   `MDE_DEPLOYMENT_SPECIFICATION_OWNERSHIP` e
   `MDE_DEPLOYMENT_SPECIFICATION_UNVERIFIED`.
 
+### Evidência transversal de envelopes externos no working tree
+
+Ajustes inspecionados no working tree sobre
+`d1ef526` (base documental).
+O delta foi posteriormente registrado no commit local
+`556b16456ed51d6de8352b2ef192b046bdcde913`; os resultados abaixo são dos gates
+anteriores ao commit, não uma execução nova sobre esse SHA. Nenhuma linha do
+inventário é promovida por esses números.
+
+`semantics/references.rs::external_reference_href` exige objeto com exatamente
+uma chave href e string não vazia. href null, booleano, número, vazio, mistura
+com $ref ou campos adicionais são malformados, não referências apenas
+não resolvidas. A validação é compartilhada por contratos de propriedades,
+membership composto, subsetting, consultas diretas de tipo/assinatura e bounds.
+URI relativa é permitida pelo envelope; sintaxe e resolução de URI não são
+implementadas aqui. Envelope válido continua não verificado quando exige
+resolver documento externo, e não se torna prova de tipo ou identidade UML.
+
+`property_collection_validation.rs` contém seis testes, incluindo precedência
+de violação local sobre desconhecido em ambas as ordens, coleções mistas,
+queries diretas e roundtrip/API pública. O teste unitário
+`composite_membership_rejects_malformed_external_envelopes_beside_local_proof`
+verifica que nem membership local comprovado oculta envelope malformado.
+Na revisão, expectativas de warnings de associações legadas foram atualizadas
+nos testes de structural_rules/structural_diagrams sem remover Unsupported;
+a responsabilidade de Graph por endpoint inexistente também permanece testada.
+
+Logs locais lidos, sem nova execução pela matriz:
+
+- `/tmp/external-reference-final-regressions.log`: **19/19 integrações**,
+  distribuídas em graph_rules 2, kernel_api_validation 4,
+  ownership_namespace_flow 4, property_collection_validation 6 e
+  property_contract_flow 3.
+- `/tmp/external-reference-final-unit.log`: **1/1 unitário focado**,
+  com 158 filtrados.
+- `/tmp/structural-warning-regressions.log`: **36/36 unitários selecionados**,
+  com 123 filtrados, após revisão das expectativas estruturais.
+- `/tmp/structural-warning-full-lib.log`: **159/159 testes lib**, sem filtrados.
+
+Os gates unitários se sobrepõem; não somá-los como testes distintos. A suíte lib
+completa não equivale à suíte integral de integrações, conformidade UML 2.5.1,
+validação de UI, geração ou suporte a documentos externos. Os logs não fixam
+fingerprint completo do working tree; futuras alterações exigem novos gates.
+
 ### Evidência publicada de Connector::roles e deployment_target
 
 Commit de implementação inspecionado:

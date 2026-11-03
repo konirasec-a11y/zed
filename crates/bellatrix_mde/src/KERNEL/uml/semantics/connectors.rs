@@ -1,5 +1,5 @@
-//! Executable Connector-types over ordered canonical role references.
-//! Connector-roles/allRoles and the other ConnectorEnd constraints remain separate.
+//! Executable Connector and ConnectorEnd constraints over canonical references.
+//! ConnectorEnd multiplicity and definingEnd derivation remain separate.
 use super::{
     classifier_hierarchy,
     classifiers::{self, QueryError},
@@ -221,6 +221,97 @@ fn roles_rule(references: &ReferenceIndex<'_>, connector: ElementRef<'_>) -> Res
     feature_compatibility::require_all(checks)
 }
 
+fn end_reference<'a>(references: &ReferenceIndex<'a>, end: ElementRef<'a>, name: &str) -> Result<Option<ElementRef<'a>>, QueryError> {
+    reference(references, end, property(end, name)?, end.properties().get(name).unwrap_or(&Value::Null))
+}
+
+fn invalid_input<T>(result: &Result<T, QueryError>) -> Result<bool, QueryError> {
+    match result {
+        Err(error @ QueryError::Invalid { .. }) => Err(error.clone()),
+        _ => Ok(true),
+    }
+}
+
+fn role_and_part_with_port(references: &ReferenceIndex<'_>, end: ElementRef<'_>) -> Result<bool, QueryError> {
+    let role = end_reference(references, end, "role");
+    let part = end_reference(references, end, "partWithPort");
+    let present = !end.properties().get("partWithPort").unwrap_or(&Value::Null).is_null();
+    let port = role.as_ref().map(|role| role.is_some_and(|role| role.conforms_to("Port"))).map_err(Clone::clone);
+    let members = match &part {
+        Ok(Some(part)) => (|| {
+            let part_type = end_reference(references, *part, "type")?
+                .ok_or_else(|| QueryError::unsupported(part.id(), "partWithPort Type is not materialized"))?;
+            if !part_type.conforms_to("Namespace") {
+                return Err(QueryError::invalid(part.id(), "partWithPort Type must conform to Namespace"));
+            }
+            classifiers::query(references, part_type.id()).map(|namespace| namespace.members)
+        })(),
+        Ok(None) => Ok(Vec::new()),
+        Err(error) => Err(error.clone()),
+    };
+    let membership = match (&members, &role) {
+        (Err(error @ QueryError::Invalid { .. }), _) | (_, Err(error @ QueryError::Invalid { .. })) => Err(error.clone()),
+        (Err(error), _) | (_, Err(error)) => Err(error.clone()),
+        (Ok(members), Ok(role)) => Ok(role.is_some_and(|role| members.iter().any(|member| member.id() == role.id()))),
+    };
+    feature_compatibility::require_all([
+        invalid_input(&role), invalid_input(&part),
+        feature_compatibility::accept_any([
+            Ok(!present), feature_compatibility::require_all([port, membership]),
+        ]),
+    ])
+}
+
+fn part_with_port_empty(references: &ReferenceIndex<'_>, end: ElementRef<'_>) -> Result<bool, QueryError> {
+    let role = end_reference(references, end, "role");
+    let part = end_reference(references, end, "partWithPort");
+    let port = role.as_ref().map(|role| role.is_some_and(|role| role.conforms_to("Port"))).map_err(Clone::clone);
+    let same_owner = (|| {
+        let connector = references.model().owner(end)
+            .map_err(|error| QueryError::invalid(end.id(), error))?
+            .ok_or_else(|| QueryError::invalid(end.id(), "ConnectorEnd requires a canonical owning Connector"))?;
+        if let Some(stored) = end.properties().get("connector") {
+            let descriptor = schema::property_by_id(schema::XmiId::new(schema::Document::Uml, "A_end_connector-connector"))
+                .ok_or_else(|| QueryError::unsupported(end.id(), "missing connector inverse contract"))?;
+            invalid_input(&check(references, end, descriptor, stored))?;
+            if let Ok(id) = super::references::reference_id(stored) {
+                if id != Some(connector.id()) {
+                    return Err(QueryError::invalid(end.id(), "connector inverse contradicts canonical ownership"));
+                }
+            }
+        }
+        if connector.metaclass().is_none() {
+            return Err(QueryError::unsupported(end.id(), "ConnectorEnd owner metaclass is unresolved"));
+        }
+        if !connector.conforms_to("Connector") {
+            return Err(QueryError::invalid(end.id(), "ConnectorEnd owner must conform to Connector"));
+        }
+        if !classifiers::contributes_to_owned_union(connector, end, "Connector-end")? {
+            return Err(QueryError::invalid(end.id(), "ConnectorEnd must belong to Connector::end"));
+        }
+        let connector_owner = references.model().owner(connector)
+            .map_err(|error| QueryError::invalid(connector.id(), error))?;
+        let role = role.as_ref().map_err(Clone::clone)?.as_ref()
+            .ok_or_else(|| QueryError::invalid(end.id(), "ConnectorEnd::role is required"))?;
+        let role_owner = references.model().owner(*role)
+            .map_err(|error| QueryError::invalid(role.id(), error))?;
+        Ok(role_owner.map(|owner| owner.id()) == connector_owner.map(|owner| owner.id()))
+    })();
+    let empty = end.properties().get("partWithPort").is_none_or(Value::is_null);
+    feature_compatibility::require_all([
+        invalid_input(&role), invalid_input(&part),
+        feature_compatibility::accept_any([
+            feature_compatibility::require_all([port, same_owner]).map(|antecedent| !antecedent),
+            Ok(empty),
+        ]),
+    ])
+}
+
+fn self_part_with_port(references: &ReferenceIndex<'_>, end: ElementRef<'_>) -> Result<bool, QueryError> {
+    end_reference(references, end, "partWithPort")
+        .map(|part| part.is_none_or(|part| !part.conforms_to("Port")))
+}
+
 pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     for connector in references.model().elements().filter(|element| element.conforms_to("Connector")) {
@@ -235,6 +326,21 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
                 Err(QueryError::Unsupported { message, .. }) => (StructuralSeverity::Warning, unknown_code, message),
             };
             issues.push(StructuralDiagnostic { severity, code, subject_id:connector.id().into(), message:format!("{rule}: {message}") });
+        }
+    }
+    for end in references.model().elements().filter(|element| element.conforms_to("ConnectorEnd")) {
+        for (rule, error_code, unknown_code, result) in [
+            ("ConnectorEnd-role_and_part_with_port", "UML_CONNECTOR_END_ROLE_AND_PART_WITH_PORT", "MDE_CONNECTOR_END_ROLE_AND_PART_WITH_PORT_UNVERIFIED", role_and_part_with_port(references, end)),
+            ("ConnectorEnd-part_with_port_empty", "UML_CONNECTOR_END_PART_WITH_PORT_EMPTY", "MDE_CONNECTOR_END_PART_WITH_PORT_EMPTY_UNVERIFIED", part_with_port_empty(references, end)),
+            ("ConnectorEnd-self_part_with_port", "UML_CONNECTOR_END_SELF_PART_WITH_PORT", "MDE_CONNECTOR_END_SELF_PART_WITH_PORT_UNVERIFIED", self_part_with_port(references, end)),
+        ] {
+            let (severity, code, message) = match result {
+                Ok(true) => continue,
+                Ok(false) => (StructuralSeverity::Error, error_code, "normative constraint is violated".to_owned()),
+                Err(QueryError::Invalid { message, .. }) => (StructuralSeverity::Error, error_code, message),
+                Err(QueryError::Unsupported { message, .. }) => (StructuralSeverity::Warning, unknown_code, message),
+            };
+            issues.push(StructuralDiagnostic { severity, code, subject_id:end.id().into(), message:format!("{rule}: {message}") });
         }
     }
     issues
