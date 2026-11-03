@@ -937,6 +937,42 @@ pub fn has_role(
     if found { Ok(true) } else { complete.map(|_| false) }
 }
 
+/// Partial allFeatures membership: a direct canonical Feature remains known
+/// when an unrelated inheritance/import branch cannot be enumerated completely.
+pub(crate) fn has_feature(
+    references: &ReferenceIndex<'_>, classifier_id: &str, feature_id: &str,
+) -> Result<bool, QueryError> {
+    let complete = query(references, classifier_id).and_then(|query| {
+        query.classifier.map(|classifier| classifier.all_features)
+            .ok_or_else(|| QueryError::invalid(classifier_id, "allFeatures requires a Classifier"))
+    });
+    match &complete {
+        Ok(features) => return Ok(features.iter().any(|feature| feature.id() == feature_id)),
+        Err(error @ QueryError::Invalid { .. }) => return Err(error.clone()),
+        Err(_) => {},
+    }
+    let classifier = references.element(classifier_id)
+        .map_err(|error| QueryError::invalid(classifier_id, error))?;
+    let feature = references.element(feature_id)
+        .map_err(|error| QueryError::invalid(feature_id, error))?;
+    if let Err(super::element_graph_queries::ElementGraphError::Invalid { subject_id, message }) =
+        super::element_graph_queries::ensure_canonical_ownership(references, classifier) {
+        return Err(QueryError::invalid(&subject_id, message));
+    }
+    if let Err(error @ QueryError::Invalid { .. }) =
+        super::classifier_hierarchy::has_ancestor(references, classifier_id, classifier_id) { return Err(error); }
+    let mut found = false;
+    for child in references.explicit_owned_elements(classifier_id)
+        .map_err(|error| QueryError::invalid(classifier_id, error))? {
+        match contributes_to_owned_union(classifier, child, "Classifier-feature") {
+            Ok(true) if child.id() == feature_id && feature.conforms_to("Feature") => found = true,
+            Err(error @ QueryError::Invalid { .. }) => return Err(error),
+            _ => {},
+        }
+    }
+    if found { Ok(true) } else { complete.map(|_| false) }
+}
+
 fn compare_redefinition_consistency(
     references: &ReferenceIndex<'_>,
     source: ElementRef<'_>,
@@ -1415,6 +1451,18 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut queries = Queries::new(references);
     let mut issues = super::classifier_hierarchy::validate_substitutions(references);
     for element in references.model().elements() {
+        if element.conforms_to("Property") {
+            let outcome = match super::redefinition_contexts::property_redefined_inherited(references, element) {
+                Ok(true) => None,
+                Ok(false) => Some((StructuralSeverity::Error, "UML_PROPERTY_REDEFINED_PROPERTY_INHERITED", "redefined Properties must be ancestral allFeatures members".to_owned())),
+                Err(QueryError::Invalid { message, .. }) => Some((StructuralSeverity::Error, "UML_PROPERTY_REDEFINED_PROPERTY_INHERITED", message)),
+                Err(QueryError::Unsupported { message, .. }) => Some((StructuralSeverity::Warning, "MDE_PROPERTY_REDEFINED_PROPERTY_INHERITED_UNVERIFIED", message)),
+            };
+            if let Some((severity, code, message)) = outcome {
+                issues.push(StructuralDiagnostic { severity, code, subject_id: element.id().into(),
+                    message: format!("Property-redefined_property_inherited: {message}") });
+            }
+        }
         if element.conforms_to("GeneralizationSet") {
             let power_outcome = match generalization_set_powertype(references, element) {
                 Ok(true) => None,

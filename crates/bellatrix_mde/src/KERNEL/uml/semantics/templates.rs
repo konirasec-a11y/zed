@@ -928,12 +928,113 @@ fn template_default_compatible(
     ])
 }
 
+fn template_signature_unique_parameters(
+    references: &crate::uml::references::ReferenceIndex<'_>,
+    signature: crate::uml::root::ElementRef<'_>,
+) -> Result<bool, crate::uml::classifiers::QueryError> {
+    use crate::uml::{classifiers::QueryError, feature_compatibility::require_all};
+    let parameters = template_reference_evidence(references, signature, "parameter")?;
+    let mut unknown = parameters
+        .cardinality
+        .unwrap_or(parameters.known.len())
+        .saturating_sub(parameters.known.len());
+    let mut names = std::collections::HashMap::new();
+    let mut seen = HashSet::new();
+    let mut checks = Vec::new();
+    for parameter in parameters.known {
+        // The inequality guard compares formal identities, not exposed elements.
+        if !seen.insert(parameter.id()) {
+            continue;
+        }
+        if parameter.metaclass().is_none() {
+            unknown += 1;
+            continue;
+        }
+        match checked_parametered_element(references, parameter, "ParameterableElement") {
+            Err(error @ QueryError::Invalid { .. }) => checks.push(Err(error)),
+            Err(QueryError::Unsupported { .. }) => unknown += 1,
+            Ok(exposed) => {
+                if let Some(named) = exposed.named() {
+                    if matches!(exposed, crate::uml::root::ElementRef::Relationship(_))
+                        && let Some(value) = exposed.properties().get("name")
+                    {
+                        let descriptor = crate::uml::schema::uml_property("NamedElement", "name")
+                            .map_err(|error| {
+                                QueryError::unsupported(exposed.id(), error.to_string())
+                            })?
+                            .ok_or_else(|| {
+                                QueryError::unsupported(
+                                    exposed.id(),
+                                    "NamedElement name contract is unavailable",
+                                )
+                            })?;
+                        match crate::uml::property_contracts::check_value(
+                            references, exposed, descriptor, value,
+                        ) {
+                            crate::uml::property_contracts::PropertyOutcome::Satisfied => {}
+                            crate::uml::property_contracts::PropertyOutcome::Violation(message) => {
+                                checks.push(Err(QueryError::invalid(exposed.id(), message)));
+                                continue;
+                            }
+                            crate::uml::property_contracts::PropertyOutcome::Unverified(
+                                message,
+                            ) => {
+                                checks.push(Err(QueryError::unsupported(exposed.id(), message)));
+                                continue;
+                            }
+                        }
+                    }
+                    // Empty editor text is UML's absent name. Two absent names
+                    // compare equal in this constraint; neither is invented.
+                    if names.insert(named.name(), parameter.id()).is_some() {
+                        checks.push(Ok(false));
+                    }
+                }
+            }
+        }
+    }
+    if unknown > 0 && unknown + names.len() > 1 {
+        checks.push(Err(QueryError::unsupported(
+            signature.id(),
+            "parameter names or identities are not fully resolved",
+        )));
+    }
+    require_all(checks)
+}
+
 pub(crate) fn validate_bindings(
     references: &crate::uml::references::ReferenceIndex<'_>,
 ) -> Vec<StructuralDiagnostic> {
     use crate::uml::classifiers::QueryError;
     let mut issues = Vec::new();
     for binding in references.model().elements() {
+        if binding.conforms_to("TemplateSignature") {
+            let unique = match template_signature_unique_parameters(references, binding) {
+                Ok(true) => None,
+                Ok(false) => Some((
+                    StructuralSeverity::Error,
+                    "UML_TEMPLATE_SIGNATURE_UNIQUE_PARAMETERS",
+                    "Distinct formal parameters exposing NamedElements must have distinct exposed names".to_owned(),
+                )),
+                Err(QueryError::Invalid { message, .. }) => Some((
+                    StructuralSeverity::Error,
+                    "MDE_TEMPLATE_SIGNATURE_UNIQUE_PARAMETERS_INVALID",
+                    message,
+                )),
+                Err(QueryError::Unsupported { message, .. }) => Some((
+                    StructuralSeverity::Warning,
+                    "MDE_TEMPLATE_SIGNATURE_UNIQUE_PARAMETERS_UNVERIFIED",
+                    message,
+                )),
+            };
+            if let Some((severity, code, message)) = unique {
+                issues.push(StructuralDiagnostic {
+                    severity, code, subject_id: binding.id().into(),
+                    message: format!("TemplateSignature-unique_parameters: {message}"),
+                });
+            }
+        }
+
         if binding.conforms_to("TemplateParameter") {
             let default = match template_default_compatible(references, binding) {
                 Ok(true) => None,

@@ -58,6 +58,8 @@ CollaborationUse::every_role têm recortes publicados em
 InstanceSpecification::deployment_target e o recorte base de
 TemplateParameterSubstitution::must_be_compatible foram publicados em
 `84ff594be299ba824a0ab2efe0b0488bd58b40d4` (E48/E49).
+TemplateParameter::must_be_compatible e CollaborationUse::client_elements têm
+recortes publicados em `f6caa47d39cff8da5bef4f351a555af68a32902b` (E50/E51).
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -173,7 +175,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E49 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E51 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -712,6 +714,60 @@ de execução nova. E12–E49 possuem os gates delimitados nas seções seguinte
   usar a base para contornar os overrides. Metaclasse indefinida ou projeção
   ausente conserva unknown.
 
+- **E50**: `semantics/templates.rs`, `template_default_compatible`,
+  `parameterable_compatible` e `validate_bindings`;
+  `template_default_compatibility.rs`, dez testes. Default comprovadamente
+  ausente satisfaz a implicação; default presente usa o recorte base de
+  isCompatibleWith contra parameteredElement canônico. ownedDefault ou filho
+  que possa ocupar esse papel não é apagado como ausência quando a projeção
+  default não está materializada: o caso permanece não verificado. Contratos
+  inválidos de referências e ownership continuam erros. A compatibilidade base
+  compara metaclasses, não herança do modelo ou identidade; overrides de
+  Property/ValueSpecification continuam Unsupported conforme E49. Não alegar
+  suporte integral de defaults ou substituições por esse predicado.
+
+- **E51**: `semantics/connectors.rs`, `collaboration_client_elements`,
+  `collaboration_context_membership` e `validate`;
+  `collaboration_use_clients.rs`, dez testes. Clients e suppliers de roleBinding
+  devem ser ConnectableElement e ter, respectivamente, conjuntos iguais de
+  structuredClassifier e collaboration. Compara membership par a par nos
+  contextos canônicos, não igualdade de owner. StructuredClassifier::role não
+  é allRoles: não promove features herdadas a membership direto. Suppliers e
+  clients usam consultas compartilhadas de endpoints/subsets; papéis explícitos
+  incompletos não são substituídos por endpoints binários visuais. Inversas
+  structuredClassifier/collaboration armazenadas nos endpoints permanecem
+  explicitamente não reconciliadas, mesmo com memberships forward conhecidos;
+  cache derivado de role não prova membership. Diferença local conhecida não é
+  apagada por ramo externo, e witness não encobre malformados.
+
+### Evidência publicada de default compatível e CollaborationUse::client_elements
+
+Commit inspecionado: `f6caa47d39cff8da5bef4f351a555af68a32902b`.
+Logs finais lidos:
+
+- `/tmp/template-default-compatibility-gate.log`: **109/109 aprovados**,
+  classifier_template_abstract 11, classifier_template_actual 10,
+  classifier_template_constraints 11, operation_template_default 11,
+  template_binding_formal 13, template_binding_unique 12,
+  template_default_compatibility 10, template_signatures 21 e
+  template_substitution_compatibility 10.
+- `/tmp/collaboration-clients-final-gate.log`: **198/198 aprovados**,
+  160 testes lib e 38 integrações (collaboration_use_clients 10,
+  collaboration_use_roles 11, connector_roles 9, connector_types 5 e
+  relationship_roles_flow 3).
+
+As linhas ficam **P/E50–E51**. O log inicial
+`/tmp/collaboration-clients-gate.log` contém uma falha; não é gate aprovado.
+O gate final inclui a correção e casos adicionais. Continuam pendentes overrides
+isCompatibleWith, reconciliação das inversas de contexto e
+CollaborationUse::connectors. Igualdade de conjuntos de contextos não certifica
+semântica completa da colaboração ou autoria visual.
+
+Gates anteriores à publicação, sem rerun no SHA remoto nem testes novos pela
+matriz. Lib completa mais integrações selecionadas não é suíte integral;
+regressões repetidas não somam cobertura normativa. UI, geração, interchange
+e autoria completa permanecem fora da alegação.
+
 ### Evidência publicada de InstanceSpecification target e compatibilidade base
 
 Commit inspecionado: `84ff594be299ba824a0ab2efe0b0488bd58b40d4`.
@@ -755,7 +811,7 @@ Logs locais finais lidos:
 
 As linhas ficam **P/E46–E47**. Templates mantêm a fronteira de inversa
 independentemente armazenada, resolução externa e autoria. CollaborationUse
-não recebe certificação de client_elements ou connectors, nem de autoria
+tem recorte posterior de client_elements em E51, mas não certificação de connectors, nem de autoria
 visual de Composite Structure. A existência de witness para every_role não
 prova todos os contratos de cada binding ou fechamento das coleções externas.
 
@@ -1436,7 +1492,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `TemplateParameter-must_be_compatible`
 
-- Metaclass: `TemplateParameter`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `TemplateParameter`. Estado: **P**. Evidência: E50; commit `f6caa47d39cff8da5bef4f351a555af68a32902b`.
 - OCL publicado: `default <> null implies default.isCompatibleWith(parameteredElement)`.
 
 #### `TemplateParameterSubstitution-must_be_compatible`
@@ -1753,7 +1809,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `CollaborationUse-client_elements`
 
-- Metaclass: `CollaborationUse`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `CollaborationUse`. Estado: **P**. Evidência: E51; commit `f6caa47d39cff8da5bef4f351a555af68a32902b`.
 - OCL publicado: `roleBinding->collect(client)->forAll(ne1, ne2 | ne1.oclIsKindOf(ConnectableElement) and ne2.oclIsKindOf(ConnectableElement) and let ce1 : ConnectableElement = ne1.oclAsType(ConnectableElement), ce2 : ConnectableElement = ne2.oclAsType(ConnectableElement) in ce1.structuredClassifier = ce2.structuredClassifier) and roleBinding->collect(supplier)->forAll(ne1, ne2 | ne1.oclIsKindOf(ConnectableElement) and ne2.oclIsKindOf(ConnectableElement) and let ce1 : ConnectableElement = ne1.oclAsType(ConnectableElement), ce2 : ConnectableElement = ne2.oclAsType(ConnectableElement) in ce1.collaboration = ce2.collaboration)`.
 
 #### `CollaborationUse-every_role`
