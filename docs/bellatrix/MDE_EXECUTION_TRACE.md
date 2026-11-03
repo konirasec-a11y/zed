@@ -9,3 +9,35 @@ The Cordis host streams each default event to standard error prefixed `MDE_TRACE
 Each Cordis JSON event also contains `project_id`. Each event contains `run_id`, optional `revision`, zero-based `sequence`, monotonic `elapsed_ns`, `component`, `action`, `phase`, optional `identity`, `dependencies` (source IDs), and optional `outcome`. Sort by run ID and sequence; match start/finish pairs by action and identity. Dependencies describe semantic or operation inputs. Durations can be calculated from matching start and finish elapsed times. Normal Rust generation threads one run through the Cordis task, kernel graph validation and generation analysis. The current Rust generator does not invoke the typed-operation graph, so those runs do not contain operation callback events; `execute_traced` records callbacks only when a caller actually invokes that graph. HTML export currently records only its Cordis task boundary. Validation and generation use separate run IDs; they are not represented as one combined execution unless a caller explicitly shares a trace.
 
 The Cordis `diagram.validate.request` outcome reports whether the request completed; the nested kernel `diagram.validate` outcome reports model validity. These are separate results.
+
+## Functional API requirement and observation effects
+
+The [master plan functional contract](MDE_IMPLEMENTATION_PLAN.md#contrato-funcional-público-do-kernel-e-mini-compilador)
+is a target requirement, not a claim that the current mutable `ExecutionTrace`
+API satisfies the intended public boundary. Public consumers must use functions
+with explicit inputs and results without depending on internal trace storage,
+operation registries or compiler representations. This requirement does not
+select the future input/output format, serialization, transport or ABI. The
+JSON Lines behavior above describes the existing observation adapter only.
+
+For each public function, document its inputs, results, errors, preconditions,
+postconditions and allowed effects. Distinguish pure computation from optional
+observation and from external adapters that export events, read resources,
+publish files or execute processes. Any observer callback has an explicit
+effect contract and trust boundary; accepting a callback does not enforce
+purity or sandbox its implementation.
+
+A call must not retain execution state for later calls. Caller-supplied run
+correlation and per-call temporary storage do not authorize hidden sessions or
+shared mutable registries. Clocks used for observation, event delivery and
+observer failures must not influence semantic results. Observed elapsed times
+and delivery metadata are not part of deterministic semantic output or model
+transformation correspondence.
+
+Acceptance tests must compare semantic results with tracing enabled, disabled,
+at capacity, and with failing observers. They must also check repeated A→B→A
+calls, independent/concurrent runs, unchanged input, per-run isolation and
+visible loss reporting. Generating a construction script must neither execute
+it nor publish its artifacts. Record which functions are actually covered;
+this requirement does not imply that all existing entry points are traced or
+that these acceptance tests have already passed.

@@ -125,6 +125,38 @@ A normalização de relações do editor está em
 [GRAPH_RELATIONSHIPS.md](GRAPH_RELATIONSHIPS.md). Atributos de notação
 e direções source/target ficam no modelo, não nos `IconButton`s.
 
+### API por funções e efeitos explícitos
+
+O [contrato funcional do plano mestre](MDE_IMPLEMENTATION_PLAN.md#contrato-funcional-público-do-kernel-e-mini-compilador)
+rege a fronteira pretendida do Kernel UML e mini-compilador. Expor funções
+com entradas e resultados explícitos, sem exigir que consumidores construam
+ou manipulem índices, registros, passes ou representações internas. Dados de
+contrato público não tornam a estrutura interna parte da API. O formato
+concreto desses dados, sua serialização, transporte e ABI permanecem em aberto.
+
+As chamadas não retêm estado entre execuções; dados, opções e versões que
+afetam o resultado são entradas explícitas. Histórico de chamadas, estado
+global mutável, relógio, aleatoriedade e ambiente não podem determinar o
+resultado de uma função pura. Estruturas e mutações locais à chamada são
+permitidas, preservando as entradas e o isolamento entre execuções.
+
+O catálogo público deve declarar, para cada função, entradas, resultados,
+erros, pré/pós-condições e efeitos. Distinguir funções puras, observabilidade
+opcional e adaptadores externos de leitura, publicação ou execução. Gerar
+plano, conteúdo ou script não publica arquivos nem executa processos. Efeitos
+de callbacks externos também são parte do contrato e do limite de confiança;
+seu tipo não prova pureza. Eventos e tempos observados não alteram o resultado
+semântico e não se confundem com a rastreabilidade determinística do modelo.
+
+O aceite exige repetibilidade, independência do histórico, isolamento em
+concorrência, entradas intactas, ordenação estável onde a ordem de inserção
+não é semântica, rejeição sem publicação parcial e equivalência de resultados
+com/sem tracing e sob perda de eventos. Testar a API por um consumidor externo
+sem acesso às estruturas internas. Esses são requisitos de direção, não uma
+afirmação de que os reexports atuais, o registro de operações ou a publicação
+existente já cumprem essa fronteira. Preservar as salvaguardas de publicação
+no adaptador responsável ao separar o I/O da geração pura.
+
 ## Renderização Tera 2.4.0 já integrada ao gerador Rust
 
 A primeira etapa **M2T** utiliza o crate `bellatrix_mde_templates`

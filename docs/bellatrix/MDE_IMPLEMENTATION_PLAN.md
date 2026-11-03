@@ -110,6 +110,45 @@ com desempate estável. A linguagem do script pode diferir da linguagem do
 projeto gerado. Fable é referência de separação de passes e backends, não uma
 exigência de AST adicional nem de dependência do compilador Fable.
 
+### Contrato funcional público do Kernel e mini-compilador
+
+**Requisito a implementar e verificar:** o consumidor acessa as capacidades
+por funções com entradas e resultados explícitos, sem depender de estruturas
+internas do Kernel ou mini-compilador. Índices, registros de operações,
+representações intermediárias e organização dos passes são detalhes internos,
+não a API que o consumidor precisa construir ou manipular. Esta decisão não
+escolhe formato de entrada/saída, serialização, transporte ou ABI; os contratos
+públicos de dados ainda serão definidos sem expor a representação interna.
+
+Cada chamada recebe todos os dados, opções e versões necessários. Não retém
+estado de execução entre chamadas nem depende de inicialização, sessão,
+registro global mutável ou histórico de chamadas. Estruturas temporárias e
+mutação local durante a execução são permitidas como detalhes internos,
+sem alterar as entradas do consumidor nem escapar como estado compartilhado.
+As mesmas entradas explícitas produzem os mesmos resultados semânticos,
+diagnósticos, script e artefatos, independentemente de chamadas anteriores.
+
+Manter um catálogo de funções públicas com finalidade, entradas, resultados,
+erros, pré/pós-condições e efeitos permitidos. Para cada função, declarar
+se não há efeitos externos ou quais efeitos de observabilidade existem.
+Identificar separadamente funções dos adaptadores que leem recursos,
+publicam arquivos ou executam processos. A geração do plano/script é pura;
+publicação e execução são etapas externas, não efeitos ocultos da geração.
+Callbacks fornecidos pelo host também precisam desse contrato; uma assinatura
+de função não garante pureza nem oferece sandbox para código arbitrário.
+
+**Aceite transversal P03/P07/P08:** testar repetição A→B→A, chamadas
+independentes e concorrentes, preservação das entradas e ausência de efeitos
+externos nas funções puras. Quando a ordem de inserção não tiver significado
+semântico, permutá-la deve preservar o resultado, inclusive desempates e
+ordem dos diagnósticos. Falhas não publicam resultados parciais nem alteram
+modelo/revisão. Um consumidor externo deve conseguir usar as funções sem
+acessar índices, registros ou outros tipos internos. Instrumentação ligada,
+desligada ou com perda de eventos preserva o resultado semântico; relógios e
+metadados de observabilidade não integram essa igualdade. A composição do
+script não executa o script. Registrar evidência por função e distinguir
+requisito, implementação existente e testes efetivamente executados.
+
 ## 1. Fixar a base e consolidar as especificações
 
 Auditar o resultado real da consolidação existente antes de acrescentar
