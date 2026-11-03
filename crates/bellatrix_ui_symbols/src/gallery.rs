@@ -1,7 +1,9 @@
 //! Public symbol gallery on the same GPUI runtime as Zed Workspace.
 use crate::{Family, count, glyph, groups};
 use bellatrix_design_system::Palette;
-use gpui::{App, StatefulInteractiveElement, IntoElement, RenderOnce, Window, div, prelude::*, px, rgb, svg};
+use gpui::{
+    App, IntoElement, RenderOnce, StatefulInteractiveElement, Window, div, prelude::*, px, rgb, svg,
+};
 
 #[derive(IntoElement)]
 pub struct SymbolGallery {
@@ -9,7 +11,9 @@ pub struct SymbolGallery {
 }
 
 impl SymbolGallery {
-    pub fn new(family: Family) -> Self { Self { family } }
+    pub fn new(family: Family) -> Self {
+        Self { family }
+    }
 }
 
 impl RenderOnce for SymbolGallery {
@@ -44,7 +48,12 @@ impl RenderOnce for SymbolGallery {
                             .border_b_1()
                             .border_color(rgb(p.border))
                             .pb_2()
-                            .child(div().text_sm().font_weight(gpui::FontWeight::SEMIBOLD).child(group.title))
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .child(group.title),
+                            )
                             .child(
                                 div()
                                     .text_xs()

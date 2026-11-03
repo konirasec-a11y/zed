@@ -13,6 +13,9 @@ pub struct Diagram {
     /// Required UMLDI metaclass name; explicit future names survive round trips.
     #[serde(deserialize_with = "deserialize_diagram_type")]
     pub uml_di_type: String,
+    /// UMLInteractionDiagram.kind; absent uses the UMLDI default, sequence.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interaction_kind: Option<String>,
     /// UMLDI diagram context, not the subjects of its contained Views.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub model_elements: Vec<String>,
@@ -101,6 +104,22 @@ pub enum RelationshipRouting {
     Curve,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TextAlignment {
+    Left,
+    Center,
+    Right,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TextVerticalAlignment {
+    Top,
+    Center,
+    Bottom,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Style {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -119,6 +138,10 @@ pub struct Style {
     pub opacity: Option<f64>,
     #[serde(default)]
     pub text_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_align: Option<TextAlignment>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_vertical_align: Option<TextVerticalAlignment>,
     #[serde(default)]
     pub corner_radius: Option<f64>,
     #[serde(default)]

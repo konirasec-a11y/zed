@@ -54,6 +54,24 @@ diagnóstico não autoriza excluir ou sobrescrever arquivos do usuário.
 Formatos/APIs nativos Zed não são alterados por essa decisão. Obrigações
 oficiais de intercâmbio XMI/DI são independentes dessa política beta.
 
+**Frente visual paralela (2026-11-03):** completar o repertório de elementos,
+notações e ferramentas de criação dos 14 diagramas, reaproveitando os
+componentes existentes e respeitando o tema da IDE. O Kernel continua
+prioritário e os sete estruturais continuam sendo a primeira entrega.
+Distinguir explicitamente notação renderizada, criação/edição funcional e
+semântica validada; símbolos de galeria não comprovam suporte no canvas.
+Elementos dependentes de ownership ou regras ainda ausentes devem ter
+limitações identificadas, sem produzir modelos inválidos silenciosamente.
+
+**Contrato comum de apresentação:** todos os elementos visuais compartilham
+as mesmas características de estilo por View, independentes do Kernel e da
+validação semântica. Cor, fonte, borda, opacidade, alinhamento horizontal/vertical
+de texto e ordem de sobreposição pertencem à visualização, não ao elemento UML.
+Oferecer trazer à frente/enviar para trás e avançar/recuar uma camada. Usar
+ícones reconhecíveis, descrição ao passar o mouse e nomes acessíveis, com
+aplicação em tempo real e herança do tema da IDE. Geometria/notação específica
+não autoriza duplicar contratos de estilo por tipo.
+
 ## 1. Fixar a base e consolidar as especificações
 
 Auditar o resultado real da consolidação existente antes de acrescentar

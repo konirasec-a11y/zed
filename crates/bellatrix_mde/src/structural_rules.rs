@@ -262,7 +262,9 @@ mod tests {
                 "uml.interface_realization",
                 json!({}),
             )?;
-            assert!(validate_structural_model(&project).is_empty(), "{source}");
+            assert!(validate_structural_model(&project).iter().all(|issue|
+                issue.severity == StructuralSeverity::Warning && matches!(issue.code,
+                    "MDE_ASSOCIATION_ENDS_UNMATERIALIZED" | "UML_NAMESPACE_QUERY_UNSUPPORTED")), "{source}");
         }
         Ok(())
     }
@@ -404,7 +406,9 @@ mod tests {
     -> serde_json::Result<()> {
         let mut project = fixture("uml.class", "uml.class", "uml.association", json!({}))?;
         project.relations[0].to = "a".into();
-        assert!(validate_structural_model(&project).is_empty());
+        assert!(validate_structural_model(&project).iter().all(|issue|
+            issue.severity == StructuralSeverity::Warning && matches!(issue.code,
+                "MDE_ASSOCIATION_ENDS_UNMATERIALIZED" | "UML_NAMESPACE_QUERY_UNSUPPORTED")));
         project.relations[0].to = "missing".into();
         assert!(validate(&project).is_empty());
         Ok(())

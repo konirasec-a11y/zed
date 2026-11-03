@@ -1025,7 +1025,7 @@
     },
     {
       "file": "crates/bellatrix_mde/src/uml/references.rs",
-      "scope": "Snapshot-indexed local scalar TypedElement.type references, target conformance and graph diagnostics; collection and external references remain unsupported."
+      "scope": "Snapshot-indexed local TypedElement.type and descriptor-driven reference collections with bounds, uniqueness and target conformance; derived Association membership index; external references remain unsupported."
     },
     {
       "file": "crates/bellatrix_mde/src/uml/instances.rs",
@@ -1034,6 +1034,14 @@
     {
       "file": "crates/bellatrix_mde/src/uml/operations.rs",
       "scope": "Ordered owned Parameters on canonical edges, generated direction/defaults, derived Operation return Type and selected handwritten Parameter/return constraints; full redefinition/pre/post semantics remain pending."
+    },
+    {
+      "file": "crates/bellatrix_mde/src/uml/associations.rs",
+      "scope": "Canonical ordered Property member ends, derived ownership/opposite/end Types, binary compatibility migration/projections and selected Association/Property constraints; n-ary queries supported, binary notation and specialized/navigability/ValueSpecification limits explicit."
+    },
+    {
+      "file": "crates/bellatrix_mde/src/uml/classifiers.rs",
+      "scope": "Generated ownership subsets, direct/inherited Namespace members and Classifier features/attributes, explicit redefinition filtering and fail-closed cycles; imports, complete redefinition consistency and ambiguous ownership slots remain explicit unsupported capabilities."
     }
   ],
   "not_executable_from_extraction": [

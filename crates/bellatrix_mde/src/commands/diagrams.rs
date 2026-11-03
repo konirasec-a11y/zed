@@ -21,6 +21,7 @@ pub(super) fn create(
         width: 1280.0,
         height: 720.0,
         uml_di_type: kind.uml_di_type().into(),
+        interaction_kind: kind.interaction_kind().map(str::to_owned),
         model_elements: model_elements.to_vec(),
         views: Vec::new(),
     });

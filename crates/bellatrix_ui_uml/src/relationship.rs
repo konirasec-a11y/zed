@@ -186,7 +186,8 @@ fn label_block(
     lines: impl IntoIterator<Item = String>,
     color: gpui::Rgba,
     font_size: f32,
-) -> impl IntoElement {
+    appearance: &ViewAppearance,
+) -> gpui::AnyElement {
     div()
         .absolute()
         .left(px(anchor.position.0))
@@ -208,6 +209,8 @@ fn label_block(
                 })
                 .when(anchor.above, |element| element.bottom(px(0.0)))
                 .when(!anchor.above, |element| element.top(px(0.0)))
+                .min_h(px(font_size * 1.5))
+                .map(|element| appearance.align_column(element))
                 .children(
                     lines
                         .into_iter()
@@ -215,6 +218,7 @@ fn label_block(
                         .map(|line| div().child(line)),
                 ),
         )
+        .into_any_element()
 }
 fn stroke_line(
     window: &mut Window,
@@ -465,7 +469,7 @@ impl RenderOnce for UmlRelationGlyph {
         .size_full();
         div()
             .relative()
-            .when_some(appearance.0.font_family, |element, family| {
+            .when_some(appearance.0.font_family.clone(), |element, family| {
                 element.font_family(family)
             })
             .size_full()
@@ -481,6 +485,7 @@ impl RenderOnce for UmlRelationGlyph {
                             .chain(labels.source_labels.multiplicity),
                         text_color,
                         font_size,
+                        &appearance,
                     ))
                     .child(label_block(
                         target_anchor,
@@ -491,6 +496,7 @@ impl RenderOnce for UmlRelationGlyph {
                             .chain(labels.target_labels.multiplicity),
                         text_color,
                         font_size,
+                        &appearance,
                     ))
                     .when_some(
                         labels.name.filter(|name| !name.is_empty()),
@@ -504,6 +510,7 @@ impl RenderOnce for UmlRelationGlyph {
                                 [name],
                                 text_color,
                                 font_size,
+                                &appearance,
                             ))
                         },
                     )

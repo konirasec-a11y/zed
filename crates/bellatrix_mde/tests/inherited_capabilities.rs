@@ -155,3 +155,299 @@ fn legacy_template_schema_does_not_claim_a_normative_metaclass() {
         );
     }
 }
+
+// Namespace/Classifier fixture patterns adapted from uml4net at
+// 8ef13af2c68ae1994c8fa4f5b3e231dee7e6715d, Apache-2.0,
+// Copyright 2019-2026 Starion Group S.A. See references/uml4net/ for attribution.
+#[test]
+fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
+-> Result<(), Box<dyn std::error::Error>> {
+    use bellatrix_mde::commands::ModelingMemberKind::{Attribute, Operation};
+    use bellatrix_mde::uml::{
+        classifiers::{self, NamespaceQuery},
+        references::ReferenceIndex,
+        root::{ElementRef, Model},
+    };
+    use bellatrix_mde::{Format, decode, encode, validate_structural_model};
+    use serde_json::json;
+
+    fn apply(project: &mut Project, command: Command) -> Result<(), String> {
+        *project = commands::apply(project, &command, 0)?;
+        Ok(())
+    }
+    fn visibility(project: &mut Project, id: &str, value: &str) -> Result<(), String> {
+        apply(
+            project,
+            Command::SetProperty {
+                element_id: id.into(),
+                path: "properties.visibility".into(),
+                value: json!(value),
+            },
+        )
+    }
+    fn redefine(project: &mut Project, id: &str, targets: &[&str]) -> Result<(), String> {
+        apply(
+            project,
+            Command::SetRedefinedElements {
+                element_id: id.into(),
+                redefined_ids: targets.iter().map(|id| (*id).into()).collect(),
+            },
+        )
+    }
+    fn query<'a>(
+        project: &'a Project,
+        id: &str,
+    ) -> Result<NamespaceQuery<'a>, classifiers::QueryError> {
+        classifiers::query(&ReferenceIndex::new(Model::from_project(project)), id)
+    }
+    fn ids<'a>(members: &[ElementRef<'a>]) -> Vec<&'a str> {
+        members.iter().map(|member| member.id()).collect()
+    }
+    let mut project: Project = serde_json::from_value(json!({
+        "id":"kernel", "name":"Kernel", "root_model":"model",
+        "elements":[
+            {"id":"model", "kind":"uml.model", "name":"Root"},
+            {"id":"ancestor", "kind":"uml.class", "name":"Ancestor"},
+            {"id":"left", "kind":"uml.class", "name":"Left"},
+            {"id":"right", "kind":"uml.class", "name":"Right"},
+            {"id":"leaf", "kind":"uml.class", "name":"Leaf"},
+            {"id":"public", "kind":"uml.attribute", "name":"public", "properties":{"visibility":"public"}},
+            {"id":"private", "kind":"uml.attribute", "name":"private", "properties":{"visibility":"private"}},
+            {"id":"protected", "kind":"uml.attribute", "name":"protected", "properties":{"visibility":"protected"}},
+            {"id":"package", "kind":"uml.attribute", "name":"package", "properties":{"visibility":"package"}},
+            {"id":"left-attribute", "kind":"uml.attribute", "name":"leftValue"},
+            {"id":"right-attribute", "kind":"uml.attribute", "name":"rightValue"},
+            {"id":"original", "kind":"uml.operation", "name":"original", "properties":{"visibility":"public"}},
+            {"id":"replacement", "kind":"uml.operation", "name":"replacement", "properties":{"visibility":"public"}}
+        ],
+        "relations":[],
+        "diagrams":[{"id":"diagram", "name":"Classes", "uml_di_type":"UMLClassDiagram", "width":1200, "height":800}]
+    }))?;
+    for (owner, children) in [
+        ("model", &["ancestor", "left", "right", "leaf"][..]),
+        (
+            "ancestor",
+            &["public", "private", "protected", "package", "original"][..],
+        ),
+        ("left", &["left-attribute", "replacement"][..]),
+        ("right", &["right-attribute"][..]),
+    ] {
+        for child in children {
+            apply(
+                &mut project,
+                Command::SetOwner {
+                    element_id: (*child).into(),
+                    owner_id: Some(owner.into()),
+                },
+            )?;
+        }
+    }
+    for (child, parent) in [
+        ("left", "ancestor"),
+        ("right", "ancestor"),
+        ("leaf", "left"),
+        ("leaf", "right"),
+    ] {
+        project.relations.push(bellatrix_mde::Relation {
+            id: format!("{child}-{parent}"),
+            kind: "uml.generalization".into(),
+            from: child.into(),
+            to: parent.into(),
+            properties: Default::default(),
+        });
+    }
+    let [
+        ancestor,
+        left,
+        right,
+        leaf,
+        public,
+        private,
+        protected,
+        package,
+        left_attribute,
+        right_attribute,
+        original_operation,
+        left_operation,
+    ] = [
+        "ancestor",
+        "left",
+        "right",
+        "leaf",
+        "public",
+        "private",
+        "protected",
+        "package",
+        "left-attribute",
+        "right-attribute",
+        "original",
+        "replacement",
+    ]
+    .map(str::to_owned);
+    apply(
+        &mut project,
+        Command::AddMember {
+            owner_id: leaf.clone(),
+            kind: Attribute,
+        },
+    )?;
+    let own_attribute = project.elements.last().ok_or("new attribute")?.id.clone();
+    redefine(&mut project, &left_operation, &[&original_operation])?;
+
+    let result = query(&project, &leaf)?;
+    assert_eq!(ids(&result.owned_members), vec![own_attribute.as_str()]);
+    let classifier = result.classifier.ok_or("Classifier query")?;
+    assert_eq!(ids(&classifier.features), vec![own_attribute.as_str()]);
+    assert_eq!(ids(&classifier.attributes), vec![own_attribute.as_str()]);
+    assert_eq!(
+        ids(&classifier.all_attributes),
+        vec![
+            own_attribute.as_str(),
+            left_attribute.as_str(),
+            right_attribute.as_str(),
+            public.as_str(),
+            protected.as_str(),
+            package.as_str()
+        ]
+    );
+    assert!(!ids(&classifier.inherited_members).contains(&private.as_str()));
+    assert_eq!(
+        ids(&classifier.inherited_members)
+            .iter()
+            .filter(|id| **id == public)
+            .count(),
+        1
+    );
+    // A diamond's other branch still contributes the original: inherit() only
+    // removes targets of THIS classifier's owned redefiners, as the XMI states.
+    assert!(ids(&classifier.inherited_members).contains(&original_operation.as_str()));
+    assert!(ids(&classifier.inherited_members).contains(&left_operation.as_str()));
+    let left_query = query(&project, &left)?
+        .classifier
+        .ok_or("left Classifier")?;
+    assert!(!ids(&left_query.inherited_members).contains(&original_operation.as_str()));
+    assert!(ids(&query(&project, &ancestor)?.owned_members).contains(&private.as_str()));
+
+    apply(
+        &mut project,
+        Command::AddMember {
+            owner_id: leaf.clone(),
+            kind: Operation,
+        },
+    )?;
+    let own_operation = project.elements.last().ok_or("new operation")?.id.clone();
+    redefine(
+        &mut project,
+        &own_operation,
+        &[&original_operation, &left_operation],
+    )?;
+    redefine(&mut project, &own_attribute, &[&public])?;
+    let result = query(&project, &leaf)?
+        .classifier
+        .ok_or("leaf Classifier")?;
+    assert!(!ids(&result.inherited_members).contains(&original_operation.as_str()));
+    assert!(!ids(&result.inherited_members).contains(&left_operation.as_str()));
+    assert!(!ids(&result.all_attributes).contains(&public.as_str()));
+    assert!(ids(&result.all_features).contains(&own_operation.as_str()));
+
+    for (member_id, targets, expected) in [
+        (
+            &own_attribute,
+            vec![own_attribute.clone()],
+            "redefine itself",
+        ),
+        (
+            &own_attribute,
+            vec![original_operation.clone()],
+            "wrong metaclass",
+        ),
+        (
+            &own_attribute,
+            vec![public.clone(), public.clone()],
+            "unique",
+        ),
+        (&own_attribute, vec!["unknown".into()], "unknown Element"),
+        (
+            &left_attribute,
+            vec![right_attribute.clone()],
+            "ancestor Classifier",
+        ),
+    ] {
+        let before = encode(&project, Format::Json)?;
+        let error = commands::apply(
+            &project,
+            &Command::SetRedefinedElements {
+                element_id: member_id.clone(),
+                redefined_ids: targets,
+            },
+            0,
+        )
+        .err()
+        .ok_or("redefinition unexpectedly accepted")?;
+        assert!(error.contains(expected), "{error}");
+        assert_eq!(encode(&project, Format::Json)?, before);
+    }
+
+    visibility(&mut project, &protected, "private")?;
+    visibility(&mut project, &private, "public")?;
+    let result = query(&project, &leaf)?
+        .classifier
+        .ok_or("leaf Classifier")?;
+    assert!(!ids(&result.all_attributes).contains(&protected.as_str()));
+    assert!(ids(&result.all_attributes).contains(&private.as_str()));
+    redefine(&mut project, &own_attribute, &[])?;
+    assert!(
+        ids(&query(&project, &leaf)?
+            .classifier
+            .ok_or("leaf Classifier")?
+            .all_attributes)
+        .contains(&public.as_str())
+    );
+    visibility(&mut project, &right, "private")?;
+    let package_query = query(&project, "model")?;
+    assert!(ids(&package_query.members).contains(&right.as_str()));
+    assert!(!ids(&package_query.visible_members.ok_or("Package query")?).contains(&right.as_str()));
+
+    let expected = ids(&query(&project, &leaf)?.members)
+        .into_iter()
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    for format in [Format::Json, Format::Protobuf] {
+        let reopened = decode(&encode(&project, format)?, format)?;
+        assert_eq!(ids(&query(&reopened, &leaf)?.members), expected);
+        let diagnostics = validate_structural_model(&reopened);
+        assert!(
+            diagnostics
+                .iter()
+                .all(|issue| issue.severity != bellatrix_mde::StructuralSeverity::Error),
+            "{diagnostics:?}"
+        );
+        assert!(
+            diagnostics
+                .iter()
+                .any(|issue| issue.code == "UML_REDEFINITION_CONSISTENCY_UNSUPPORTED")
+        );
+        let section = ModelingSection::from_model(&reopened);
+        let inspector = inspect_element(&section, &leaf).ok_or("Inspector")?;
+        let field = inspector
+            .properties
+            .iter()
+            .find(|field| field.path == "uml.allAttributes")
+            .ok_or("derived Inspector field")?;
+        assert!(!field.editable);
+        assert!(
+            field
+                .value
+                .as_array()
+                .is_some_and(|values| values.contains(&json!({"$ref": private})))
+        );
+        assert!(
+            reopened
+                .elements
+                .iter()
+                .all(|element| !element.properties.contains_key("inheritedMember"))
+        );
+    }
+    Ok(())
+}
+

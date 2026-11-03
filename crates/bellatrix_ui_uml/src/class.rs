@@ -36,6 +36,44 @@ impl ViewAppearance {
         let width = self.0.stroke_width.map_or(default, |value| value as f32) * scale;
         if selected { width.max(2.0) } else { width }
     }
+    pub(crate) fn align_text<T: gpui::Styled>(&self, element: T) -> T {
+        match self.0.text_align {
+            Some(bellatrix_mde::TextAlignment::Left) => element.text_left(),
+            Some(bellatrix_mde::TextAlignment::Center) => element.text_center(),
+            Some(bellatrix_mde::TextAlignment::Right) => element.text_right(),
+            None => element,
+        }
+    }
+    pub(crate) fn align_row<T: gpui::Styled>(&self, element: T) -> T {
+        let element = self.align_text(element);
+        let element = match self.0.text_align {
+            Some(bellatrix_mde::TextAlignment::Left) => element.justify_start(),
+            Some(bellatrix_mde::TextAlignment::Center) => element.justify_center(),
+            Some(bellatrix_mde::TextAlignment::Right) => element.justify_end(),
+            None => element,
+        };
+        match self.0.text_vertical_align {
+            Some(bellatrix_mde::TextVerticalAlignment::Top) => element.items_start(),
+            Some(bellatrix_mde::TextVerticalAlignment::Center) => element.items_center(),
+            Some(bellatrix_mde::TextVerticalAlignment::Bottom) => element.items_end(),
+            None => element,
+        }
+    }
+    pub(crate) fn align_column<T: gpui::Styled>(&self, element: T) -> T {
+        let element = self.align_text(element);
+        let element = match self.0.text_align {
+            Some(bellatrix_mde::TextAlignment::Left) => element.items_start(),
+            Some(bellatrix_mde::TextAlignment::Center) => element.items_center(),
+            Some(bellatrix_mde::TextAlignment::Right) => element.items_end(),
+            None => element,
+        };
+        match self.0.text_vertical_align {
+            Some(bellatrix_mde::TextVerticalAlignment::Top) => element.justify_start(),
+            Some(bellatrix_mde::TextVerticalAlignment::Center) => element.justify_center(),
+            Some(bellatrix_mde::TextVerticalAlignment::Bottom) => element.justify_end(),
+            None => element,
+        }
+    }
     pub(crate) fn font_size(&self, default: f32, scale: f32) -> f32 {
         self.0
             .font_size
@@ -335,6 +373,9 @@ pub(crate) fn compartment(
                 .w_full()
                 .min_w_0()
                 .min_h(px(20.0 * scale))
+                .flex()
+                .flex_col()
+                .map(|element| appearance.align_column(element))
                 .cursor_pointer()
                 .text_size(px(appearance.font_size(12.0, scale)))
                 .text_color(appearance.text(palette.text))
@@ -405,6 +446,9 @@ pub(crate) fn template_signature(
                     .id(format!("uml-template-parameter-{index}"))
                     .h(px(20.0 * scale))
                     .flex_none()
+                    .flex()
+                    .flex_col()
+                    .map(|element| appearance.align_column(element))
                     .text_size(px(appearance.font_size(12.0, scale)))
                     .text_color(appearance.text(palette.text))
                     .whitespace_nowrap()
@@ -479,6 +523,7 @@ impl RenderOnce for UmlClassifier {
                     .flex()
                     .items_center()
                     .justify_center()
+                    .map(|element| appearance.align_row(element))
                     .bg(appearance.fill(palette.panel_alt))
                     .border_b(px(appearance.width(1.0, scale, false)))
                     .border_color(line)
@@ -501,12 +546,14 @@ impl RenderOnce for UmlClassifier {
                             .flex_col()
                             .items_center()
                             .justify_center()
+                            .map(|element| appearance.align_column(element))
                             .whitespace_normal()
                             .when_some(keyword, |header, value| {
                                 header.child(
                                     div()
                                         .w_full()
                                         .text_center()
+                                        .map(|element| appearance.align_text(element))
                                         .text_size(px(appearance.font_size(10.0, scale)))
                                         .text_color(appearance.text(palette.muted))
                                         .child(value),
@@ -517,6 +564,7 @@ impl RenderOnce for UmlClassifier {
                                     div()
                                         .w_full()
                                         .text_center()
+                                        .map(|element| appearance.align_text(element))
                                         .text_size(px(appearance.font_size(10.0, scale)))
                                         .text_color(appearance.text(palette.muted))
                                         .child(value),

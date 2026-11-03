@@ -6,10 +6,10 @@ use crate::{
     ModelingCreateRelation, ModelingCreateRelationRequested, ModelingDeleteDiagram,
     ModelingDeleteDiagramRequested, ModelingDeleteElement, ModelingDeleteElementRequested,
     ModelingMoveParameter, ModelingMoveParameterRequested, ModelingMoveView,
-    ModelingMoveViewRequested, ModelingPlaceElementView,
-    ModelingPlaceElementViewRequested, ModelingQuickEdit, ModelingQuickEditRequested,
-    ModelingRemoveView, ModelingRemoveViewRequested, ModelingRename, ModelingRenameDiagram,
-    ModelingRenameDiagramRequested, ModelingRenameRequested, ModelingResizeView,
+    ModelingMoveViewRequested, ModelingPlaceElementView, ModelingPlaceElementViewRequested,
+    ModelingQuickEdit, ModelingQuickEditRequested, ModelingRemoveView, ModelingRemoveViewRequested,
+    ModelingRename, ModelingRenameDiagram, ModelingRenameDiagramRequested, ModelingRenameRequested,
+    ModelingReorderView, ModelingReorderViewRequested, ModelingResizeView,
     ModelingResizeViewRequested, ModelingSetNameExpression, ModelingSetNameExpressionRequested,
     ModelingSetProperty, ModelingSetPropertyRequested, ModelingSetViewRouting,
     ModelingSetViewRoutingRequested, ModelingSetViewStyle, ModelingSetViewStyleRequested,
@@ -33,6 +33,10 @@ pub enum MdeUiCommand {
     SetViewRouting(ModelingSetViewRoutingRequested),
     SetViewRoutingTracked {
         request: ModelingSetViewRoutingRequested,
+        completion: watch::Sender<Option<Result<u64, String>>>,
+    },
+    ReorderViewTracked {
+        request: ModelingReorderViewRequested,
         completion: watch::Sender<Option<Result<u64, String>>>,
     },
     CreateDiagram(ModelingCreateDiagramRequested),
@@ -128,6 +132,22 @@ impl MdeUiBridge {
                         };
                         completion.send_replace(Some(receipt));
                         describe("View routing updated", result)
+                    }
+                    MdeUiCommand::ReorderViewTracked {
+                        request,
+                        completion,
+                    } => {
+                        let result = cordis
+                            .query::<ModelingReorderView>(Routing::Unscoped, request)
+                            .await;
+                        let receipt = match &result {
+                            Ok(QueryOutcome::Answer(Ok(revision))) => Ok(*revision),
+                            Ok(QueryOutcome::Answer(Err(error))) => Err(error.to_string()),
+                            Ok(QueryOutcome::Miss) => Err("Cordis responder unavailable".into()),
+                            Err(error) => Err(error.to_string()),
+                        };
+                        completion.send_replace(Some(receipt));
+                        describe("View order updated", result)
                     }
                     MdeUiCommand::ValidateDiagram(request) => describe_validation(
                         cordis

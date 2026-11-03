@@ -112,3 +112,53 @@ O resultado visual mínimo deve reproduzir o comportamento observado nas referê
 - Diagramas originais **versionados com esta especificação**: [seleção e Inspector](inspector-reference.svg) e [contrato Inspector/Cordis](inspector-contract.svg).
 
 **Aviso:** as imagens do StarUML são referência de comportamento e UX, não autorização para copiar assets ou código proprietário. As duas ilustrações SVG neste diretório são próprias e documentam essa referência.
+
+## Shared view appearance: reference inventory (2026-11-03)
+
+Appearance belongs to a diagram `View`, never its semantic subject. Two views of
+one subject can have different appearances. Every visual family uses the same
+`Style` contract and shared renderer appearance helpers. Style availability does
+not depend on metaclass property descriptors or kernel coverage.
+
+Reference behavior and icon meaning are taken from
+`crates/bellatrix_design_system/docs/ref/staruml/src/static/html-contents/style-editor-view.html`
+and `src/views/style-editor-view.js` in the same StarUML tree. The supplied
+Bellatrix design provides composition and reusable components through
+`docs/design/src/components/panels/PropertyInspectorPane.tsx`,
+`docs/design/src/components/primitives/Icon.tsx`, and
+`docs/design/src/styles/workbench/inspector.css` under the design-system crate.
+The design is incomplete: it is not a substitute for the complete StarUML
+behavior/icon inventory. Existing repository restrictions prohibit copying
+proprietary StarUML source, CSS, or assets into the shipping implementation.
+The new alignment vectors use the supplied Bellatrix design geometry; vertical
+variants are independently drawn. Existing theme roles and Zed controls remain
+native rather than embedding the reference web interface.
+
+Current implementation status (not a full parity claim):
+
+| Reference capability | Current implementation and remaining work |
+| --- | --- |
+| Font family and size | Live per-view inputs, rendered through shared appearance; theme inheritance when empty. Native font picker/presets remain pending. |
+| Fill, line, text color; inherit | Compact icon-first inputs and swatches, immediate receipts and theme reset. Full native color-picker popover remains pending. |
+| Outline width and opacity | Shared persisted style, existing renderer projection, compact live inputs. |
+| Horizontal and vertical text alignment | Six icon controls, persisted optional enums, shared classifier/figure/relationship-label projection. Model JSON/protobuf and receipt-state tests cover values; native visual acceptance remains pending. |
+| Send to back / bring to front | View-local stack command; also forward/backward by one layer. One sorted canvas child list interleaves edges and nodes so paint and hit-test stacking agree. Core view-local/semantic-isolation/roundtrip tests added; native pointer acceptance remains pending. |
+| Straight/oblique, rectilinear, rounded rectilinear, curve | Straight, automatic orthogonal, and curve already routed by the model and now icon controls. Rounded orthogonal corners remain pending. |
+| Solid, dotted, dashed strokes | `dash_pattern` persisted, but full shared rendering and icon controls remain pending. UML notation defaults must survive absent overrides. |
+| Flat/stick/solid head and tail | View-only overrides pending. Default UML-required relationship markers must remain intact; changing a visual marker must never mutate relation kind. |
+| Auto resize | Pending shared view-format command and renderer-measured bounds. |
+| Show shadow and word wrap | Pending common optional Style contract and renderer/control projection. |
+| Stereotype display (none/label/decoration/icon variants) | Pending common view-format options, with notation-specific projection. |
+| Show visibility, namespace, property, type | Pending view-format toggles; semantic values must stay unchanged. |
+| Suppress attributes, operations, receptions, literals, columns | Pending shared view-format flags and compartment projection. |
+| Align selected objects left/center/right/top/middle/bottom | Pending multi-view selection and geometry transaction. Text alignment is distinct and does not implement these operations. |
+| Equal horizontal/vertical spacing | Pending multi-view geometry transaction. |
+| Equal width/height/size | Pending multi-view geometry transaction. |
+
+`SetViewStyle`, `SetViewRouting`, and `ReorderView` validate identifier uniqueness,
+view references, geometry, and style without running semantic kernel validators
+or association materialization. Other commands retain full semantic validation.
+The same project revision/receipt channel serializes property and appearance
+edits. Input admission, selection binding, original target, stale revision,
+conflict preservation, and theme reset continue through the existing draft gate.
+No Apply/Cancel cycle or parallel semantic store is introduced.

@@ -194,3 +194,86 @@ fn style_validation_is_atomic_and_preserves_semantics() -> Result<(), Box<dyn st
     assert_eq!(original, fixture()?);
     Ok(())
 }
+
+#[test]
+fn presentation_alignment_and_stack_are_view_local_and_ignore_unrelated_semantic_errors()
+-> Result<(), Box<dyn std::error::Error>> {
+    use bellatrix_mde::commands::ViewOrder;
+    let mut project = fixture()?;
+    let mut other = project.diagrams[0].clone();
+    other.id = "other-diagram".into();
+    for view in &mut other.views {
+        view.id = format!("other-{}", view.id);
+    }
+    project.diagrams.push(other.clone());
+    // A bad semantic ownership cycle must not prevent fixing presentation.
+    project.relations.push(Relation {
+        id: "bad-ownership".into(),
+        kind: "owns".into(),
+        from: "a".into(),
+        to: "a".into(),
+        properties: Default::default(),
+    });
+    assert!(Graph::new(&project).validate().is_err());
+    let original_elements = project.elements.clone();
+    let original_relations = project.relations.clone();
+    let style = Style {
+        text_align: Some(TextAlignment::Right),
+        text_vertical_align: Some(TextVerticalAlignment::Bottom),
+        fill: Some("#112233".into()),
+        ..Style::default()
+    };
+    project = apply(
+        &project,
+        &Command::SetViewStyle {
+            diagram_id: "d".into(),
+            view_id: "a-view".into(),
+            style: style.clone(),
+        },
+        10,
+    )?;
+    for (order, expected) in [
+        (ViewOrder::BringToFront, 2),
+        (ViewOrder::SendBackward, 1),
+        (ViewOrder::SendToBack, 0),
+        (ViewOrder::BringForward, 1),
+    ] {
+        project = apply(
+            &project,
+            &Command::ReorderView {
+                diagram_id: "d".into(),
+                view_id: "a-view".into(),
+                order,
+            },
+            11,
+        )?;
+        let mut ordered: Vec<_> = project.diagrams[0].views.iter().collect();
+        ordered.sort_by_key(|view| view.z_index);
+        assert_eq!(
+            ordered.iter().position(|view| view.id == "a-view"),
+            Some(expected)
+        );
+    }
+    assert_eq!(project.elements, original_elements);
+    assert_eq!(project.relations, original_relations);
+    assert_eq!(project.diagrams[1], other);
+    assert_eq!(project.diagrams[0].views[0].style, style);
+    for format in [Format::Json, Format::Protobuf] {
+        assert_eq!(decode(&encode(&project, format)?, format)?, project);
+    }
+    let mut malformed = project.clone();
+    malformed.diagrams[0].width = f64::NAN;
+    assert!(
+        apply(
+            &malformed,
+            &Command::ReorderView {
+                diagram_id: "d".into(),
+                view_id: "a-view".into(),
+                order: ViewOrder::BringToFront
+            },
+            12
+        )
+        .is_err()
+    );
+    Ok(())
+}

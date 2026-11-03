@@ -120,3 +120,40 @@ pub(super) fn set_routing(
     current.style.routing = Some(routing);
     Ok(())
 }
+
+pub(super) fn reorder(
+    section: &mut ModelingSection,
+    diagram_id: &str,
+    view_id: &str,
+    order: super::ViewOrder,
+) -> Result<(), String> {
+    let diagram = section
+        .diagrams
+        .iter_mut()
+        .find(|diagram| diagram.id == diagram_id)
+        .ok_or("diagram not found")?;
+    let mut ordered: Vec<_> = diagram.views.iter().enumerate().collect();
+    ordered.sort_by_key(|(_, view)| view.z_index);
+    let position = ordered
+        .iter()
+        .position(|(_, view)| view.id == view_id)
+        .ok_or("view not found in diagram")?;
+    let destination = match order {
+        super::ViewOrder::BringToFront => ordered.len().saturating_sub(1),
+        super::ViewOrder::SendToBack => 0,
+        super::ViewOrder::BringForward => (position + 1).min(ordered.len().saturating_sub(1)),
+        super::ViewOrder::SendBackward => position.saturating_sub(1),
+    };
+    if position == destination {
+        return Ok(());
+    }
+    let moved = ordered.remove(position);
+    ordered.insert(destination, moved);
+    // Normalize the entire local stack so duplicate or extreme imported indices remain reorderable.
+    let indices: Vec<_> = ordered.into_iter().map(|(index, _)| index).collect();
+    for (rank, index) in indices.into_iter().enumerate() {
+        let rank = i32::try_from(rank).map_err(|_| "too many views to reorder")?;
+        diagram.views[index].z_index = rank;
+    }
+    Ok(())
+}

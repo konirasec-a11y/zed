@@ -160,7 +160,7 @@ fn invalid_placements_are_atomic_and_do_not_invent_unsupported_geometry() -> ser
     }
     let mut unsupported = fixture()?;
     for element in &mut unsupported.elements {
-        element.kind = "uml.node".into();
+        element.kind = "uml.unsupported_figure".into();
     }
     for diagram in &mut unsupported.diagrams {
         diagram.views.clear();

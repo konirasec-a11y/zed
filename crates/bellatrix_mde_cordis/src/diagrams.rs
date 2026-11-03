@@ -77,7 +77,7 @@ fn validate(
         .find(|diagram| diagram.id == request.diagram_id)
         .ok_or("diagram not found")?;
     let stored = diagram.uml_di_type.as_str();
-    let kind = StructuralDiagramKind::from_uml_di_type(stored)
+    let kind = StructuralDiagramKind::from_diagram(diagram)
         .ok_or_else(|| format!("unsupported UMLDI diagram type: {stored}"))?;
     Ok(validate_structural_diagram(
         &model,

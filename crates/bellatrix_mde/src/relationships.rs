@@ -609,6 +609,7 @@ pub fn relationship_presentation(relation: &Relation) -> RelationshipPresentatio
         "uml.association" => match relation
             .properties
             .get("end1Aggregation")
+            .or_else(|| relation.properties.get("end2Aggregation"))
             .and_then(serde_json::Value::as_str)
         {
             Some("shared") => "uml.aggregation",
@@ -626,6 +627,8 @@ pub fn relationship_presentation(relation: &Relation) -> RelationshipPresentatio
         "uml.interface_realization" => ("implementer", "interface"),
         "uml.realization" => ("implementation", "specification"),
         "uml.dependency" | "uml.usage" | "uml.template_binding" => ("client", "supplier"),
+        "uml.aggregation" | "uml.composition" if relation.properties.get("end2Aggregation")
+            .and_then(serde_json::Value::as_str).is_some_and(|kind| matches!(kind, "shared" | "composite")) => ("part", "whole"),
         "uml.aggregation" | "uml.composition" => ("whole", "part"),
         "uml.containment" => ("container", "contained"),
         "uml.association" => ("end1", "end2"),
@@ -638,6 +641,19 @@ pub fn relationship_presentation(relation: &Relation) -> RelationshipPresentatio
             .and_then(serde_json::Value::as_str)
             .map(str::to_owned)
     };
+    let mut style = relationship_style_for_notation(notation);
+    if matches!(relation.kind.as_str(), "uml.association" | "uml.directed_association") {
+        let marker = |key: &str| match relation.properties.get(key).and_then(serde_json::Value::as_str) {
+            Some("shared") => RelationshipMarker::Diamond,
+            Some("composite") => RelationshipMarker::FilledDiamond,
+            _ => RelationshipMarker::None,
+        };
+        style.source_marker = marker("end1Aggregation");
+        let target_marker = marker("end2Aggregation");
+        if relation.kind == "uml.association" || target_marker != RelationshipMarker::None {
+            style.target_marker = target_marker;
+        }
+    }
     RelationshipPresentation {
         name: if notation == "uml.usage" {
             Some(
@@ -662,7 +678,7 @@ pub fn relationship_presentation(relation: &Relation) -> RelationshipPresentatio
         },
         label,
         notation: notation.to_owned(),
-        style: relationship_style_for_notation(notation),
+        style,
         source_role,
         target_role,
     }

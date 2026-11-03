@@ -362,7 +362,8 @@ mod tests {
                         3
                     } else {
                         1
-                    } + usize::from(project.root_model.is_some() && original.root_model.is_none()),
+                    } + if relation_kind == Some("uml.association") { 2 } else { 0 }
+                    + usize::from(project.root_model.is_some() && original.root_model.is_none()),
                 "{action:?}"
             );
             let child = project

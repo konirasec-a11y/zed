@@ -134,6 +134,13 @@ pub(crate) fn diagram_kind_label(kind: bellatrix_mde::StructuralDiagramKind) -> 
         CompositeStructure => "Composite structure",
         Deployment => "Deployment",
         Profile => "Profile",
+        UseCase => "Use case",
+        Activity => "Activity",
+        StateMachine => "State machine",
+        Sequence => "Sequence",
+        Communication => "Communication",
+        InteractionOverview => "Interaction overview",
+        Timing => "Timing",
     }
 }
 
@@ -141,13 +148,14 @@ fn diagram_creation_context(
     kind: bellatrix_mde::StructuralDiagramKind,
     selected: Option<&str>,
 ) -> Vec<String> {
-    if kind == bellatrix_mde::StructuralDiagramKind::CompositeStructure {
+    if kind == bellatrix_mde::StructuralDiagramKind::CompositeStructure || kind.context_metaclass().is_some() {
         selected.map(str::to_owned).into_iter().collect()
     } else {
         Vec::new()
     }
 }
 
+#[cfg(test)]
 fn diagram_validation_kind(
     stored_type: &str,
 ) -> Result<bellatrix_mde::StructuralDiagramKind, String> {
@@ -583,13 +591,14 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
-        if let Err(error) = diagram_validation_kind(&diagram.uml_di_type) {
+        if let Err(error) = bellatrix_mde::StructuralDiagramKind::from_diagram(diagram)
+            .ok_or_else(|| format!("Unsupported diagram presentation: {} {:?}", diagram.uml_di_type, diagram.interaction_kind)) {
             self.feedback = error;
             cx.notify();
             return;
         }
         if self.source.is_read_only() {
-            if let Ok(kind) = diagram_validation_kind(&diagram.uml_di_type) {
+            if let Some(kind) = bellatrix_mde::StructuralDiagramKind::from_diagram(diagram) {
                 let model = snapshot
                     .section
                     .to_model(snapshot.project_id.as_str(), &snapshot.name);
@@ -740,6 +749,10 @@ impl MdeWorkbenchItem {
             ModelingTool::Relation(kind) => {
                 format!("{}: {}", kind.label(), kind.endpoint_instruction())
             }
+            ModelingTool::Element(kind) if kind.requires_nested_owner() => format!(
+                "{}: select its Activity, StateMachine/State/Region, or Interaction owner, then place it",
+                kind.label()
+            ),
             ModelingTool::Element(kind) if kind.requires_owner() => format!(
                 "{}: select a Package or Model owner in Model explorer, then click canvas to place",
                 kind.label()
@@ -1326,7 +1339,6 @@ impl Render for MdeWorkbenchItem {
         let mut title = format!("MDE · {}", self.project_id().as_str());
         let details: String;
         let mut cards = Vec::new();
-        let mut edges = Vec::new();
         match self.source.snapshot() {
             Ok(snapshot) => {
                 let references = bellatrix_mde::uml::references::ReferenceIndex::new(
@@ -1455,7 +1467,7 @@ impl Render for MdeWorkbenchItem {
                                 let menu_diagram = diagram.id.clone();
                                 let menu_view = view.id.clone();
                                 let menu_subject = relation.id.clone();
-                                edges.push(
+                                cards.push(
                                     div()
                                         .id(format!("mde-edge-{}", view.id))
                                         .absolute()
@@ -1534,8 +1546,9 @@ impl Render for MdeWorkbenchItem {
                             Some(CanvasGesture::Resize {
                                 view_id, dx, dy, ..
                             }) if view_id == &view.id => {
-                                local_width = (width + dx).max(80.0) as f32;
-                                local_height = (height + dy).max(48.0) as f32;
+                                let (minimum_width, minimum_height) = bellatrix_mde::uml_notation(&element.kind).minimum_size();
+                                local_width = (width + dx).max(minimum_width) as f32;
+                                local_height = (height + dy).max(minimum_height) as f32;
                             }
                             _ => {}
                         }
@@ -1762,6 +1775,9 @@ impl Render for MdeWorkbenchItem {
                                         item.begin_inline_edit(id, window, cx)
                                     });
                                 });
+                            if let Some(kind) = element.properties.get("kind").and_then(serde_json::Value::as_str) {
+                                figure = figure.pseudostate_kind(kind);
+                            }
                             if let Some(value) = element
                                 .properties
                                 .get("stereotype")
@@ -2224,7 +2240,6 @@ impl Render for MdeWorkbenchItem {
                         .left_0()
                         .size_full(),
                     )
-                    .children(edges)
                     .children(cards),
             )
             .child(

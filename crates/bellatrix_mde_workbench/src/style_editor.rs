@@ -1,13 +1,14 @@
 use crate::property_editor::compact_row;
 use crate::style_drafts::{FIELDS, StyleEditState, StyleSubmission, field_error, style_value};
 use crate::{MdeWorkbenchItem, panels::MdeRightPanel};
-use bellatrix_mde::{RelationshipRouting, View};
+use bellatrix_mde::{RelationshipRouting, View, commands::ViewOrder};
 use bellatrix_mde_cordis::{
-    MdeUiCommand, ModelingSetViewRoutingRequested, ModelingSetViewStyleRequested,
+    MdeUiCommand, ModelingReorderViewRequested, ModelingSetViewRoutingRequested,
+    ModelingSetViewStyleRequested,
 };
 use gpui::{AnyElement, Context, Entity, IntoElement, Window, div, prelude::*, px};
 use std::collections::HashMap;
-use ui::{Button, ContextMenu, DropdownMenu, Label, prelude::*};
+use ui::{Button, IconButton, Label, Tooltip, prelude::*};
 use ui_input::{ErasedEditorEvent, InputField};
 
 type Completion = tokio::sync::watch::Receiver<Option<Result<u64, String>>>;
@@ -121,6 +122,7 @@ pub(crate) fn reconcile_style_inputs(
         let mut listeners = Vec::new();
         let inputs = FIELDS
             .iter()
+            .filter(|(field, _)| !matches!(*field, "text_align" | "text_vertical_align"))
             .map(|(field, _)| {
                 let input = cx.new(|cx| {
                     let input = InputField::new(window, cx, "Inherited").label_min_width(px(0.0));
@@ -301,7 +303,7 @@ pub(crate) fn render_styles(
     item: Entity<MdeWorkbenchItem>,
     draft: Option<&StyleDraft>,
     open: bool,
-    window: &mut Window,
+    _window: &mut Window,
     cx: &mut Context<MdeRightPanel>,
 ) -> Vec<AnyElement> {
     let mut rows = vec![
@@ -375,24 +377,45 @@ pub(crate) fn render_styles(
         diagram_id.to_owned(),
         view.id.clone(),
     );
-    for (key, label) in FIELDS {
-        if is_edge && *key == "fill" {
-            continue;
-        }
-        if let Some(input) = draft.inputs.get(*key) {
+    for fields in [
+        &["font_family", "font_size"][..],
+        &["fill", "stroke", "text_color"][..],
+        &["stroke_width", "opacity"][..],
+    ] {
+        let mut row = div().px_3().py_1().flex().items_center().gap_1();
+        for field in fields {
+            if is_edge && *field == "fill" {
+                continue;
+            }
+            let Some(input) = draft.inputs.get(*field) else {
+                continue;
+            };
+            let (icon, description) = match *field {
+                "font_family" => (IconName::Font, "Font family · blank inherits IDE theme"),
+                "font_size" => (IconName::FontSize, "Font size · blank inherits IDE theme"),
+                "fill" => (IconName::Box, "Fill color · #RRGGBB or #RRGGBBAA"),
+                "stroke" => (IconName::Pencil, "Outline color · #RRGGBB or #RRGGBBAA"),
+                "text_color" => (IconName::CaseSensitive, "Text color · #RRGGBB or #RRGGBBAA"),
+                "stroke_width" => (IconName::LineHeight, "Outline width"),
+                _ => (IconName::Eye, "Opacity · 0 to 1"),
+            };
             let color = input.read(cx).text(cx);
             let swatch = gpui::Rgba::try_from(color.trim()).ok();
-            rows.push(compact_row(
-                *label,
+            row = row.child(
                 div()
-                    .w_full()
+                    .flex_1()
+                    .min_w_0()
                     .flex()
                     .items_center()
                     .gap_1()
-                    .when(matches!(*key, "fill" | "stroke" | "text_color"), |row| {
-                        row.child(
+                    .child(
+                        IconButton::new(format!("mde-style-{field}-hint"), icon)
+                            .tooltip(Tooltip::text(description)),
+                    )
+                    .when(matches!(*field, "fill" | "stroke" | "text_color"), |cell| {
+                        cell.child(
                             div()
-                                .size(px(16.0))
+                                .size(px(10.0))
                                 .flex_none()
                                 .border_1()
                                 .border_color(cx.theme().colors().border)
@@ -400,9 +423,111 @@ pub(crate) fn render_styles(
                         )
                     })
                     .child(div().flex_1().min_w_0().child(input.clone())),
-            ));
+            );
         }
+        rows.push(row.into_any_element());
     }
+    let mut alignment = div().px_3().py_1().flex().gap_1();
+    for (field, value, glyph, description) in [
+        ("text_align", "left", "left", "Align text left"),
+        ("text_align", "center", "center", "Center text horizontally"),
+        ("text_align", "right", "right", "Align text right"),
+        ("text_vertical_align", "top", "top", "Align text top"),
+        (
+            "text_vertical_align",
+            "center",
+            "middle",
+            "Center text vertically",
+        ),
+        (
+            "text_vertical_align",
+            "bottom",
+            "bottom",
+            "Align text bottom",
+        ),
+    ] {
+        let item = item.clone();
+        let key = key.clone();
+        alignment = alignment.child(
+            Button::new(format!("mde-style-{field}-{value}"), "")
+                .start_icon(
+                    Icon::from_path(format!("icons/bellatrix-text-align-{glyph}.svg"))
+                        .size(IconSize::Small),
+                )
+                .tooltip(Tooltip::text(description))
+                .toggle_state(
+                    draft
+                        .state
+                        .values
+                        .get(field)
+                        .is_some_and(|current| current == value),
+                )
+                .disabled(draft.state.conflict)
+                .on_click(cx.listener(move |panel, _, _, cx| {
+                    if !target_is_active(panel, &item, &key, cx) {
+                        return;
+                    }
+                    if let Some(draft) = panel.style_drafts.get_mut(&key) {
+                        if draft.state.conflict {
+                            return;
+                        }
+                        draft.state.edit(field, value.into());
+                    }
+                    flush_style_edits(panel, &item, cx);
+                    cx.notify();
+                })),
+        );
+    }
+    rows.push(alignment.into_any_element());
+    let mut ordering = div().px_3().py_1().flex().gap_1();
+    for (id, icon, description, order) in [
+        (
+            "front",
+            IconName::ChevronUp,
+            "Bring to front",
+            ViewOrder::BringToFront,
+        ),
+        (
+            "forward",
+            IconName::ArrowUp,
+            "Bring forward one layer",
+            ViewOrder::BringForward,
+        ),
+        (
+            "backward",
+            IconName::ArrowDown,
+            "Send backward one layer",
+            ViewOrder::SendBackward,
+        ),
+        (
+            "back",
+            IconName::ChevronDown,
+            "Send to back",
+            ViewOrder::SendToBack,
+        ),
+    ] {
+        let item = item.clone();
+        let key = key.clone();
+        ordering = ordering.child(
+            IconButton::new(format!("mde-style-order-{id}"), icon)
+                .tooltip(Tooltip::text(description))
+                .disabled(draft.state.conflict || draft.state.pending.is_some())
+                .on_click(cx.listener(move |panel, _, _, cx| {
+                    if !target_is_active(panel, &item, &key, cx) {
+                        return;
+                    }
+                    if let Some(draft) = panel.style_drafts.get_mut(&key) {
+                        if draft.state.conflict || draft.state.pending.is_some() {
+                            return;
+                        }
+                        draft.state.reorder(order);
+                    }
+                    flush_style_edits(panel, &item, cx);
+                    cx.notify();
+                })),
+        );
+    }
+    rows.push(ordering.into_any_element());
     if draft.state.conflict || draft.state.error.is_some() {
         let reload_key = key.clone();
         let target = item.clone();
@@ -462,94 +587,69 @@ pub(crate) fn render_styles(
         div()
             .px_3()
             .child(
-                Button::new(
-                    "mde-style-restore-theme",
-                    if draft.state.dirty() {
+                IconButton::new("mde-style-restore-theme", IconName::RefreshTitle)
+                    .tooltip(Tooltip::text(if draft.state.dirty() {
                         "Restore IDE theme and discard draft"
                     } else {
                         "Restore IDE theme"
-                    },
-                )
-                .disabled(draft.state.conflict || draft.state.pending.is_some())
-                .on_click(cx.listener(move |panel, _, _, cx| {
-                    if !target_is_active(panel, &theme_item, &theme_key, cx) {
-                        return;
-                    }
-                    if let Some(draft) = panel.style_drafts.get_mut(&theme_key) {
-                        if draft.state.conflict || draft.state.pending.is_some() {
+                    }))
+                    .disabled(draft.state.conflict || draft.state.pending.is_some())
+                    .on_click(cx.listener(move |panel, _, _, cx| {
+                        if !target_is_active(panel, &theme_item, &theme_key, cx) {
                             return;
                         }
-                        draft.state.restore_theme();
-                    }
-                    flush_style_edits(panel, &theme_item, cx);
-                    cx.notify();
-                })),
-            )
-            .into_any_element(),
-    );
-    rows.push(
-        div()
-            .px_3()
-            .child(
-                Label::new("Changes update immediately. Blank values inherit the theme.")
-                    .size(LabelSize::XSmall)
-                    .color(Color::Muted),
+                        if let Some(draft) = panel.style_drafts.get_mut(&theme_key) {
+                            if draft.state.conflict || draft.state.pending.is_some() {
+                                return;
+                            }
+                            draft.state.restore_theme();
+                        }
+                        flush_style_edits(panel, &theme_item, cx);
+                        cx.notify();
+                    })),
             )
             .into_any_element(),
     );
     if is_edge {
-        let owner = cx.weak_entity();
-        let menu = ContextMenu::build(window, cx, {
-            move |menu, _, _| {
-                [
-                    ("Straight", RelationshipRouting::Straight),
-                    ("Automatic", RelationshipRouting::Automatic),
-                    ("Curve", RelationshipRouting::Curve),
-                ]
-                .into_iter()
-                .fold(menu, |menu, (label, routing)| {
-                    let owner = owner.clone();
-                    let item = item.clone();
-                    let key = key.clone();
-                    menu.entry(label, None, move |_, cx| {
-                        if let Err(error) = owner.update(cx, |panel, cx| {
-                            if !target_is_active(panel, &item, &key, cx) {
+        let mut routing_row = div().px_3().py_1().flex().gap_1();
+        for (id, glyph, description, routing) in [
+            (
+                "straight",
+                "╱",
+                "Straight line",
+                RelationshipRouting::Straight,
+            ),
+            (
+                "automatic",
+                "⌐",
+                "Automatic orthogonal routing",
+                RelationshipRouting::Automatic,
+            ),
+            ("curve", "∿", "Curved line", RelationshipRouting::Curve),
+        ] {
+            let item = item.clone();
+            let key = key.clone();
+            routing_row = routing_row.child(
+                Button::new(format!("mde-style-routing-{id}"), glyph)
+                    .tooltip(Tooltip::text(description))
+                    .toggle_state(draft.state.displayed_routing() == Some(routing))
+                    .disabled(draft.state.conflict)
+                    .on_click(cx.listener(move |panel, _, _, cx| {
+                        if !target_is_active(panel, &item, &key, cx) {
+                            return;
+                        }
+                        if let Some(draft) = panel.style_drafts.get_mut(&key) {
+                            if draft.state.conflict {
                                 return;
                             }
-                            if let Some(draft) = panel.style_drafts.get_mut(&key) {
-                                if draft.state.conflict {
-                                    return;
-                                }
-                                draft.state.set_routing(routing);
-                            }
-                            flush_style_edits(panel, &item, cx);
-                            cx.notify();
-                        }) {
-                            eprintln!("MDE routing edit failed: {error}");
+                            draft.state.set_routing(routing);
                         }
-                    })
-                })
-            }
-        });
-        rows.push(compact_row(
-            "Routing",
-            DropdownMenu::new(
-                "mde-style-routing",
-                routing_label(draft.state.displayed_routing()),
-                menu,
-            )
-            .full_width(true),
-        ));
-        rows.push(
-            div()
-                .px_3()
-                .child(
-                    Label::new("UML controls arrowheads and line patterns.")
-                        .size(LabelSize::XSmall)
-                        .color(Color::Muted),
-                )
-                .into_any_element(),
-        );
+                        flush_style_edits(panel, &item, cx);
+                        cx.notify();
+                    })),
+            );
+        }
+        rows.push(routing_row.into_any_element());
     }
     rows
 }
@@ -576,7 +676,18 @@ impl MdeWorkbenchItem {
                 "Select the original editable diagram view before changing its style".into(),
             );
         }
-        let command = if let Some(routing) = submission.routing {
+        let command = if let Some(order) = submission.order {
+            MdeUiCommand::ReorderViewTracked {
+                request: ModelingReorderViewRequested {
+                    project_id: self.project_id().clone(),
+                    expected_revision: submission.expected_revision,
+                    diagram_id: key.1.clone(),
+                    view_id: key.2.clone(),
+                    order,
+                },
+                completion,
+            }
+        } else if let Some(routing) = submission.routing {
             MdeUiCommand::SetViewRoutingTracked {
                 request: ModelingSetViewRoutingRequested {
                     project_id: self.project_id().clone(),

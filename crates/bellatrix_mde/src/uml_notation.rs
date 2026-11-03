@@ -11,10 +11,82 @@ pub enum UmlNotation {
     AssociationDiamond,
     Port,
     Part,
+    Actor,
+    UseCase,
+    DeploymentNode,
+    Collaboration,
+    Instance,
+    Action,
+    State,
+    InitialNode,
+    FinalNode,
+    FlowFinal,
+    Decision,
+    Fork,
+    Lifeline,
+    Execution,
+    InteractionUse,
+    CombinedFragment,
+    ObjectNode,
+    SendSignal,
+    AcceptEvent,
+    Partition,
+    TimingState,
+    History,
+    Terminate,
     Unsupported,
 }
 
+impl UmlNotation {
+    pub fn minimum_size(self) -> (f64, f64) {
+        match self {
+            Self::InitialNode
+            | Self::FinalNode
+            | Self::FlowFinal
+            | Self::History
+            | Self::Terminate => (20.0, 20.0),
+            Self::Fork => (20.0, 8.0),
+            Self::Execution => (12.0, 24.0),
+            Self::Decision => (32.0, 32.0),
+            _ => (80.0, 48.0),
+        }
+    }
+}
+
 pub fn uml_notation(kind: &str) -> UmlNotation {
+    // These are presentation strategies, not executable behavior adapters.
+    match kind {
+        "uml.actor" => return UmlNotation::Actor,
+        "uml.use_case" => return UmlNotation::UseCase,
+        "uml.instance_specification" => return UmlNotation::Instance,
+        "uml.activity"
+        | "uml.opaque_action"
+        | "uml.call_behavior_action"
+        | "uml.call_operation_action"
+        | "uml.structured_activity_node" => return UmlNotation::Action,
+        "uml.state" | "uml.state_machine" | "uml.state_invariant" => return UmlNotation::State,
+        "uml.pseudostate" | "uml.initial_node" => return UmlNotation::InitialNode,
+        "uml.activity_final_node" | "uml.final_state" => return UmlNotation::FinalNode,
+        "uml.flow_final_node" => return UmlNotation::FlowFinal,
+        "uml.decision_node" | "uml.merge_node" => return UmlNotation::Decision,
+        "uml.fork_node" | "uml.join_node" => return UmlNotation::Fork,
+        "uml.lifeline" => return UmlNotation::Lifeline,
+        "uml.behavior_execution_specification" | "uml.action_execution_specification" => {
+            return UmlNotation::Execution;
+        }
+        "uml.interaction" | "uml.interaction_use" => return UmlNotation::InteractionUse,
+        "uml.combined_fragment" => return UmlNotation::CombinedFragment,
+        "uml.central_buffer_node"
+        | "uml.data_store_node"
+        | "uml.activity_parameter_node"
+        | "uml.input_pin"
+        | "uml.output_pin"
+        | "uml.value_pin" => return UmlNotation::ObjectNode,
+        "uml.send_signal_action" => return UmlNotation::SendSignal,
+        "uml.accept_event_action" => return UmlNotation::AcceptEvent,
+        "uml.activity_partition" | "uml.region" => return UmlNotation::Partition,
+        _ => {}
+    }
     match UmlType::from_kind(kind) {
         Some(
             UmlType::Class
@@ -37,6 +109,10 @@ pub fn uml_notation(kind: &str) -> UmlNotation {
         Some(UmlType::NaryAssociation) => UmlNotation::AssociationDiamond,
         Some(UmlType::Port) => UmlNotation::Port,
         Some(UmlType::Part) => UmlNotation::Part,
+        Some(UmlType::Node | UmlType::Device | UmlType::ExecutionEnvironment) => {
+            UmlNotation::DeploymentNode
+        }
+        Some(UmlType::Collaboration) => UmlNotation::Collaboration,
         _ => UmlNotation::Unsupported,
     }
 }
@@ -66,7 +142,7 @@ impl UmlHeader {
         match notation {
             UmlNotation::ClassifierRectangle => self.classifier_header_height().max(48.0),
             UmlNotation::PackageTab => (45.0 + 15.0 * labels).max(48.0),
-            _ => 48.0,
+            _ => notation.minimum_size().1,
         }
     }
 }
@@ -79,6 +155,8 @@ pub fn uml_header(kind: &str, applied: Option<&str>) -> UmlHeader {
         // presentations without replacing their semantic kinds with Class.
         Some(UmlType::Component) => Some("«component»"),
         Some(UmlType::Artifact) => Some("«artifact»"),
+        Some(UmlType::Device) => Some("«device»"),
+        Some(UmlType::ExecutionEnvironment) => Some("«executionEnvironment»"),
         Some(UmlType::Stereotype) => Some("«stereotype»"),
         Some(UmlType::Profile) => Some("«profile»"),
         // Preserve the existing editor's labels; these aliases are not a claim
@@ -173,16 +251,7 @@ mod tests {
 
     #[test]
     fn notation_support_is_explicit_not_classifier_inheritance() {
-        for kind in [
-            "uml.node",
-            "uml.device",
-            "uml.execution_environment",
-            "uml.collaboration",
-            "uml.instance_specification",
-            "uml.unknown",
-            "fs.file",
-            "uml.operation",
-        ] {
+        for kind in ["uml.unknown", "fs.file", "uml.operation"] {
             assert_eq!(uml_notation(kind), UmlNotation::Unsupported, "{kind}");
         }
         for kind in ["uml.component", "uml.artifact", "uml.stereotype"] {

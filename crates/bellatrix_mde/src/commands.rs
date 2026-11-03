@@ -1,4 +1,12 @@
 //! Pure model commands. The caller owns concurrency; this module owns mutations.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ViewOrder {
+    BringToFront,
+    SendToBack,
+    BringForward,
+    SendBackward,
+}
+
 mod diagrams;
 mod features;
 mod kinds;
@@ -56,6 +64,9 @@ pub enum Command {
         kind: ModelingMemberKind,
     },
     MoveParameter { parameter_id: String, up: bool },
+    MigrateAssociation { association_id: String },
+    SetRedefinedElements { element_id: String, redefined_ids: Vec<String> },
+    SetAssociationMemberEnds { association_id: String, member_end_ids: Vec<String> },
     QuickEdit {
         diagram_id: String,
         element_id: String,
@@ -70,6 +81,11 @@ pub enum Command {
     RemoveView {
         diagram_id: String,
         view_id: String,
+    },
+    ReorderView {
+        diagram_id: String,
+        view_id: String,
+        order: ViewOrder,
     },
     SetViewStyle {
         diagram_id: String,
@@ -112,7 +128,16 @@ pub enum Command {
 /// Failure never changes the input. `revision` seeds IDs; it is NOT a lock.
 /// The adapter must check its revision and publish with compare-and-swap.
 pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Project, String> {
-    let mut section = ModelingSection::from_model(project);
+    let previous_section = ModelingSection::from_model(project);
+    let mut section = previous_section.clone();
+    if let Command::SetProperty { element_id, path, .. } = command
+        && crate::uml::associations::is_projection_path(path)
+        && section.relations.iter().any(|relation| relation.id == *element_id
+            && crate::uml::root::relationship_metaclass(&relation.kind) == Some("Association")
+            && !relation.properties.contains_key("memberEnd"))
+    {
+        crate::uml::associations::migrate(&mut section, &project.id, element_id)?;
+    }
     match command {
         Command::SetOwner { element_id, owner_id } => crate::uml::root::reparent(&mut section, &project.id, element_id, owner_id.as_deref())?,
         Command::AdoptRootModel => { crate::uml::root::adopt_root_model(&mut section, &project.id, &project.name)?; }
@@ -146,6 +171,9 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
             members::append_member(&mut section, owner_id, *kind, revision, &project.id)?;
         }
         Command::MoveParameter { parameter_id, up } => crate::uml::operations::move_parameter(&mut section, parameter_id, *up)?,
+        Command::SetRedefinedElements { element_id, redefined_ids } => crate::uml::classifiers::set_redefined_elements(&mut section, element_id, redefined_ids)?,
+        Command::MigrateAssociation { association_id } => crate::uml::associations::migrate(&mut section, &project.id, association_id)?,
+        Command::SetAssociationMemberEnds { association_id, member_end_ids } => crate::uml::associations::set_member_ends(&mut section, association_id, member_end_ids)?,
         Command::QuickEdit {
             diagram_id,
             element_id,
@@ -176,6 +204,7 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
             diagram_id,
             view_id,
         } => views::remove(&mut section, diagram_id, view_id)?,
+        Command::ReorderView { diagram_id, view_id, order } => view_style::reorder(&mut section, diagram_id, view_id, *order)?,
         Command::SetViewStyle {
             diagram_id,
             view_id,
@@ -223,14 +252,22 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
             }
         }
     }
+    let presentation_only = matches!(command, Command::SetViewStyle { .. } | Command::SetViewRouting { .. } | Command::ReorderView { .. });
+    if !presentation_only {
+        crate::uml::associations::materialize_new(project, &mut section)?;
+        crate::uml::associations::synchronize_changes(&previous_section, &mut section)?;
+        crate::uml::associations::validate_changes(&previous_section, &section)?;
+    }
     let mut updated = section.to_model(&project.id, &project.name);
     updated.schema_version = project.schema_version;
-    Graph::new(&updated)
-        .validate()
+    let graph = Graph::new(&updated);
+    if presentation_only { graph.validate_presentation() } else { graph.validate() }
         .map_err(|error| error.to_string())?;
-    validation::new_relationships(project, &updated)?;
-    crate::templates::validate_changes(project, &updated)?;
-    crate::uml::root::validate_changes(project, &updated)?;
+    if !presentation_only {
+        validation::new_relationships(project, &updated)?;
+        crate::templates::validate_changes(project, &updated)?;
+        crate::uml::root::validate_changes(project, &updated)?;
+    }
     Ok(updated)
 }
 
@@ -280,7 +317,11 @@ fn create_element(
     }
     let requested_name = name.as_deref();
     let mut chosen_name = requested_name.unwrap_or(kind.default_name()).to_owned();
-    if kind.requires_owner() && owner_id.is_none() { return Err("Component/Artifact creation requires an explicit Package or Model owner".into()); }
+    if kind.requires_owner() && owner_id.is_none() {
+        return Err(if kind.requires_nested_owner() {
+            "Select the containing Activity, StateMachine, State, Region, or Interaction first"
+        } else { "this element requires an explicit Package or Model owner" }.into());
+    }
     let resolved_owner = if let Some(owner_id) = owner_id { Some(owner_id.clone()) } else if crate::uml::root::object_metaclass(kind.model_kind()).is_some() {
         Some(crate::uml::root::adopt_root_model(section, project_id, "Model")?)
     } else { None };
@@ -291,7 +332,7 @@ fn create_element(
             .find(|element| element.id == *owner_id)
             .ok_or("element owner not found")?;
         // This creation slice supports package ownership, not every UML ownership context.
-        if !matches!(owner.kind.as_str(), "uml.package" | "uml.model") {
+        if !kind.requires_nested_owner() && !matches!(owner.kind.as_str(), "uml.package" | "uml.model") {
             return Err("this creation command requires a Package or Model owner".into());
         }
     }
@@ -338,17 +379,23 @@ fn create_element(
         z_index,
     });
     let mut properties = std::collections::BTreeMap::new();
+    if crate::uml::root::object_metaclass(kind.model_kind()).is_some_and(|metaclass|
+        crate::uml::metamodel::conforms_to(metaclass, "PackageableElement")) {
+        properties.insert("visibility".into(), serde_json::json!("public"));
+    }
     if matches!(
         kind,
         ModelingElementKind::Component | ModelingElementKind::Artifact
     ) {
-        properties.insert("visibility".into(), serde_json::json!("public"));
         properties.insert("isAbstract".into(), serde_json::json!(false));
         properties.insert("isFinalSpecialization".into(), serde_json::json!(false));
     }
     if *kind == ModelingElementKind::Component {
         properties.insert("isIndirectlyInstantiated".into(), serde_json::json!(true));
         properties.insert("isActive".into(), serde_json::json!(false));
+    }
+    if *kind == ModelingElementKind::Pseudostate {
+        properties.insert("kind".into(), serde_json::json!("initial"));
     }
     if crate::uml::root::object_metaclass(kind.model_kind()) == Some("Comment") {
         properties.insert("body".into(), Value::String(chosen_name.clone()));
@@ -365,6 +412,9 @@ fn create_element(
         content: None,
     });
     if let Some(owner_id) = resolved_owner {
+        if kind.requires_nested_owner() {
+            crate::uml::root::set_owner(section, project_id, &element_id, &owner_id)?;
+        } else {
         section.relations.push(Relation {
             id: ownership_id,
             kind: "owns".into(),
@@ -372,6 +422,7 @@ fn create_element(
             to: element_id,
             properties: Default::default(),
         });
+        }
     }
     Ok(())
 }
@@ -497,6 +548,10 @@ fn resize_view(
     let minimum = owner_id
         .as_deref()
         .and_then(|id| features::class_minimum_bounds(section, &diagram_id, id));
+    let notation_minimum = owner_id.as_deref()
+        .and_then(|id| section.elements.iter().find(|element| element.id == id))
+        .map(|element| crate::uml_notation(&element.kind).minimum_size())
+        .unwrap_or((80.0, 48.0));
     let minimum_height = owner_id
         .as_deref()
         .and_then(|id| section.elements.iter().find(|element| element.id == id))
@@ -521,7 +576,7 @@ fn resize_view(
         .flat_map(|diagram| &mut diagram.views)
         .find(|view| view.id == view_id)
         .ok_or("view not found")?;
-    let (minimum_width, minimum_part_height) = minimum.unwrap_or((80.0, 48.0));
+    let (minimum_width, minimum_part_height) = minimum.unwrap_or(notation_minimum);
     match &mut view.geometry {
         Geometry::Rect {
             width: current_width,

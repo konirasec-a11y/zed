@@ -346,6 +346,11 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
             )
             .await
             .expect("multiplicity edit response");
+        if notation == "3..2" {
+            assert!(matches!(result, QueryOutcome::Answer(Err(ref error)) if error.to_string().contains("multiplicity")));
+            assert_eq!(service.snapshot(&id).expect("rejected edit snapshot").revision(), revision);
+            continue;
+        }
         revision += 1;
         assert!(matches!(result, QueryOutcome::Answer(Ok(value)) if value == revision));
         let persisted = service.snapshot(&id).expect("edited association");

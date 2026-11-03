@@ -226,12 +226,12 @@ pub(super) static UML: &[SymbolGroup] = &[
             Symbol {
                 id: "uml-sequence-10",
                 label: "Execution",
-                kind: ShapeKind::Lifeline,
+                kind: ShapeKind::Execution,
             },
             Symbol {
                 id: "uml-sequence-11",
                 label: "Combined fragment",
-                kind: ShapeKind::Boundary,
+                kind: ShapeKind::CombinedFragment,
             },
             Symbol {
                 id: "uml-sequence-12",
@@ -262,7 +262,7 @@ pub(super) static UML: &[SymbolGroup] = &[
             Symbol {
                 id: "uml-activity-0",
                 label: "Initial node",
-                kind: ShapeKind::State,
+                kind: ShapeKind::InitialNode,
             },
             Symbol {
                 id: "uml-activity-1",
@@ -297,17 +297,17 @@ pub(super) static UML: &[SymbolGroup] = &[
             Symbol {
                 id: "uml-activity-7",
                 label: "Activity final",
-                kind: ShapeKind::State,
+                kind: ShapeKind::FinalNode,
             },
             Symbol {
                 id: "uml-activity-8",
                 label: "Flow final",
-                kind: ShapeKind::State,
+                kind: ShapeKind::FlowFinal,
             },
             Symbol {
                 id: "uml-activity-9",
                 label: "Object node",
-                kind: ShapeKind::Activity,
+                kind: ShapeKind::ObjectNode,
             },
             Symbol {
                 id: "uml-activity-10",
@@ -332,7 +332,7 @@ pub(super) static UML: &[SymbolGroup] = &[
             Symbol {
                 id: "uml-activity-14",
                 label: "Partition",
-                kind: ShapeKind::Boundary,
+                kind: ShapeKind::Partition,
             },
             Symbol {
                 id: "uml-activity-15",
@@ -342,7 +342,7 @@ pub(super) static UML: &[SymbolGroup] = &[
             Symbol {
                 id: "uml-activity-16",
                 label: "Accept event",
-                kind: ShapeKind::Activity,
+                kind: ShapeKind::AcceptEvent,
             },
         ],
     },
@@ -358,12 +358,12 @@ pub(super) static UML: &[SymbolGroup] = &[
             Symbol {
                 id: "uml-state-1",
                 label: "Initial pseudostate",
-                kind: ShapeKind::State,
+                kind: ShapeKind::InitialNode,
             },
             Symbol {
                 id: "uml-state-2",
                 label: "Final state",
-                kind: ShapeKind::State,
+                kind: ShapeKind::FinalNode,
             },
             Symbol {
                 id: "uml-state-3",
@@ -373,7 +373,7 @@ pub(super) static UML: &[SymbolGroup] = &[
             Symbol {
                 id: "uml-state-4",
                 label: "Junction",
-                kind: ShapeKind::Decision,
+                kind: ShapeKind::InitialNode,
             },
             Symbol {
                 id: "uml-state-5",
@@ -383,17 +383,17 @@ pub(super) static UML: &[SymbolGroup] = &[
             Symbol {
                 id: "uml-state-6",
                 label: "History",
-                kind: ShapeKind::State,
+                kind: ShapeKind::History,
             },
             Symbol {
                 id: "uml-state-7",
                 label: "Entry point",
-                kind: ShapeKind::Connector,
+                kind: ShapeKind::EntryPoint,
             },
             Symbol {
                 id: "uml-state-8",
                 label: "Exit point",
-                kind: ShapeKind::Connector,
+                kind: ShapeKind::FlowFinal,
             },
             Symbol {
                 id: "uml-state-9",
@@ -403,12 +403,12 @@ pub(super) static UML: &[SymbolGroup] = &[
             Symbol {
                 id: "uml-state-10",
                 label: "Region",
-                kind: ShapeKind::Boundary,
+                kind: ShapeKind::Partition,
             },
             Symbol {
                 id: "uml-state-11",
                 label: "Terminate",
-                kind: ShapeKind::State,
+                kind: ShapeKind::Terminate,
             },
         ],
     },
@@ -510,7 +510,7 @@ pub(super) static UML: &[SymbolGroup] = &[
             Symbol {
                 id: "uml-others-3",
                 label: "Collaboration",
-                kind: ShapeKind::Component,
+                kind: ShapeKind::Collaboration,
             },
             Symbol {
                 id: "uml-others-4",

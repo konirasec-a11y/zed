@@ -145,6 +145,29 @@ fn tool_glyph(tool: ModelingTool) -> ShapeKind {
             ModelingElementKind::Package
             | ModelingElementKind::Model
             | ModelingElementKind::Subsystem => ShapeKind::Package,
+            ModelingElementKind::Node | ModelingElementKind::Device | ModelingElementKind::ExecutionEnvironment => ShapeKind::Deployment,
+            ModelingElementKind::Collaboration => ShapeKind::Collaboration,
+            ModelingElementKind::UseCase => ShapeKind::Usecase,
+            ModelingElementKind::InstanceSpecification | ModelingElementKind::Stereotype => ShapeKind::Class,
+            ModelingElementKind::Profile => ShapeKind::Package,
+            ModelingElementKind::Actor => ShapeKind::Actor,
+            ModelingElementKind::Activity => ShapeKind::Activity,
+            ModelingElementKind::StateMachine => ShapeKind::State,
+            ModelingElementKind::Interaction | ModelingElementKind::InteractionUse => ShapeKind::Boundary,
+            ModelingElementKind::CombinedFragment => ShapeKind::CombinedFragment,
+            ModelingElementKind::Region | ModelingElementKind::ActivityPartition => ShapeKind::Partition,
+            ModelingElementKind::OpaqueAction => ShapeKind::Activity,
+            ModelingElementKind::SendSignalAction => ShapeKind::SendSignal,
+            ModelingElementKind::AcceptEventAction => ShapeKind::AcceptEvent,
+            ModelingElementKind::InitialNode | ModelingElementKind::Pseudostate => ShapeKind::InitialNode,
+            ModelingElementKind::ActivityFinalNode | ModelingElementKind::FinalState => ShapeKind::FinalNode,
+            ModelingElementKind::FlowFinalNode => ShapeKind::FlowFinal,
+            ModelingElementKind::State | ModelingElementKind::StateInvariant => ShapeKind::State,
+            ModelingElementKind::DecisionNode | ModelingElementKind::MergeNode => ShapeKind::Decision,
+            ModelingElementKind::ForkNode | ModelingElementKind::JoinNode => ShapeKind::Fork,
+            ModelingElementKind::Lifeline => ShapeKind::Lifeline,
+            ModelingElementKind::BehaviorExecutionSpecification => ShapeKind::Execution,
+            ModelingElementKind::CentralBufferNode | ModelingElementKind::DataStoreNode => ShapeKind::ObjectNode,
             ModelingElementKind::Comment => ShapeKind::Note,
             ModelingElementKind::Frame => ShapeKind::Boundary,
             ModelingElementKind::NaryAssociation => ShapeKind::Aggregate,
@@ -279,7 +302,7 @@ impl Render for MdeLeftPanel {
                 let diagram_id = diagram.id.clone();
                 let owner = item.clone();
                 let diagram_kind =
-                    bellatrix_mde::StructuralDiagramKind::from_uml_di_type(&diagram.uml_di_type)
+                    bellatrix_mde::StructuralDiagramKind::from_diagram(diagram)
                         .map(crate::diagram_kind_label)
                         .unwrap_or("Unsupported diagram");
                 diagrams.push(
@@ -320,13 +343,15 @@ impl Render for MdeLeftPanel {
         }
         let create_item = item.clone();
         let create_menu = ui::ContextMenu::build(window, cx, move |menu, _, _| {
-            bellatrix_mde::StructuralDiagramKind::ALL
+            bellatrix_mde::StructuralDiagramKind::ALL_DIAGRAMS
                 .into_iter()
                 .fold(menu, |menu, kind| {
                     let owner = create_item.clone();
                     let label = if kind == bellatrix_mde::StructuralDiagramKind::CompositeStructure
                     {
                         "Composite structure (selected classifier)".to_owned()
+                    } else if let Some(context) = kind.context_metaclass() {
+                        format!("{} (selected {context})", crate::diagram_kind_label(kind))
                     } else {
                         crate::diagram_kind_label(kind).to_owned()
                     };
@@ -339,7 +364,7 @@ impl Render for MdeLeftPanel {
                     })
                 })
         });
-        let tool_groups: [(&str, Vec<ModelingTool>); 7] = [
+        let tool_groups: [(&str, Vec<ModelingTool>); 12] = [
             (
                 "Classes · basic",
                 ModelingElementKind::BASIC
@@ -394,6 +419,17 @@ impl Render for MdeLeftPanel {
                     .map(ModelingTool::Element)
                     .collect(),
             ),
+            (
+                "Profiles",
+                ModelingElementKind::PROFILES.iter().copied().map(ModelingTool::Element).collect(),
+            ),
+            (
+                "Behavior roots · notation",
+                ModelingElementKind::BEHAVIOR.iter().copied().map(ModelingTool::Element).collect(),
+            ),
+            ("Activity nodes · select Activity", ModelingElementKind::ACTIVITY_NODES.iter().copied().map(ModelingTool::Element).collect()),
+            ("States · select container", ModelingElementKind::STATE_NODES.iter().copied().map(ModelingTool::Element).collect()),
+            ("Interactions · select Interaction", ModelingElementKind::INTERACTION_NODES.iter().copied().map(ModelingTool::Element).collect()),
             (
                 "Annotations",
                 ModelingElementKind::ANNOTATIONS

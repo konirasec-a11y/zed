@@ -1,3 +1,5 @@
+pub mod classifiers;
+pub mod associations;
 pub mod instances;
 pub mod metamodel;
 pub mod operations;

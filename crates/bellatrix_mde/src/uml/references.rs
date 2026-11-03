@@ -1,6 +1,7 @@
 use super::{
     root::{ElementRef, Model},
-    schema::{self, PropertyDescriptor, UnsupportedContract},
+    schema::{self, ClassifierDescriptor, PropertyDescriptor, UnsupportedContract},
+    types::{Integer, MultiplicityRange},
 };
 use crate::{StructuralDiagnostic, StructuralSeverity};
 use serde_json::Value;
@@ -10,6 +11,7 @@ use std::collections::{HashMap, HashSet};
 pub struct ReferenceIndex<'a> {
     model: Model<'a>,
     elements: HashMap<&'a str, Option<ElementRef<'a>>>,
+    association_memberships: HashMap<&'a str, Vec<&'a str>>,
 }
 
 pub fn reference_id(value: &Value) -> Result<Option<&str>, String> {
@@ -19,10 +21,13 @@ pub fn reference_id(value: &Value) -> Result<Option<&str>, String> {
     let object = value
         .as_object()
         .ok_or("expected a local Element reference object or null")?;
-    if object.len() != 1 {
+    if object.contains_key("href") {
         return Err(
-            "expected exactly one $ref field; external references are not supported".into(),
+            "external Element references are not supported; expected a local $ref identity".into(),
         );
+    }
+    if object.len() != 1 {
+        return Err("expected exactly one $ref field for a local Element reference".into());
     }
     object
         .get("$ref")
@@ -35,17 +40,52 @@ pub fn reference_id(value: &Value) -> Result<Option<&str>, String> {
 impl<'a> ReferenceIndex<'a> {
     pub fn new(model: Model<'a>) -> Self {
         let mut elements = HashMap::new();
+        let mut association_memberships = HashMap::<&str, Vec<&str>>::new();
         for element in model.elements() {
             elements
                 .entry(element.id())
                 .and_modify(|entry| *entry = None)
                 .or_insert(Some(element));
+            if element.conforms_to("Association")
+                && let Some(values) = element
+                    .properties()
+                    .get("memberEnd")
+                    .and_then(Value::as_array)
+            {
+                for id in values
+                    .iter()
+                    .filter_map(|value| reference_id(value).ok().flatten())
+                {
+                    association_memberships
+                        .entry(id)
+                        .or_default()
+                        .push(element.id());
+                }
+            }
         }
-        Self { model, elements }
+        Self {
+            model,
+            elements,
+            association_memberships,
+        }
     }
 
     pub fn model(&self) -> Model<'a> {
         self.model
+    }
+
+    /// Snapshot-derived candidates, not an independently mutable opposite list.
+    /// Callers still validate the candidate's canonical memberEnd collection.
+    pub fn association_membership_candidates(
+        &self,
+        property_id: &str,
+    ) -> Result<Vec<ElementRef<'a>>, String> {
+        self.association_memberships
+            .get(property_id)
+            .into_iter()
+            .flatten()
+            .map(|id| self.element(id))
+            .collect()
     }
 
     /// Explicit `owns` targets in persisted edge order; excludes ownership derived
@@ -93,11 +133,77 @@ impl<'a> ReferenceIndex<'a> {
         if property.upper == "0" {
             return Err("the property's upper bound is zero".into());
         }
-        let required = property
+        self.validate_target(Self::required_type(property)?, id)
+            .map(Some)
+    }
+
+    pub fn validate_many(
+        &self,
+        property: &PropertyDescriptor,
+        value: &Value,
+    ) -> Result<Vec<ElementRef<'a>>, String> {
+        let values = value
+            .as_array()
+            .ok_or("expected an array of local Element references")?;
+        let multiplicity = format!("{}..{}", property.lower, property.upper)
+            .parse::<MultiplicityRange>()
+            .map_err(|error| format!("invalid {} multiplicity: {error}", property.name))?;
+        let cardinality = values
+            .len()
+            .to_string()
+            .parse::<Integer>()
+            .map_err(|error| error.to_string())?;
+        if !multiplicity.includes_cardinality(&cardinality) {
+            return Err(format!(
+                "{} requires {}..{} references; received {cardinality}",
+                property.name, property.lower, property.upper
+            ));
+        }
+        let required = Self::required_type(property)?;
+        let mut seen = HashSet::new();
+        values
+            .iter()
+            .enumerate()
+            .map(|(index, value)| {
+                let validate = || {
+                    let id =
+                        reference_id(value)?.ok_or("reference collections cannot contain null")?;
+                    self.validate_target(required, id)
+                };
+                let target =
+                    validate().map_err(|error| format!("{}[{index}]: {error}", property.name))?;
+                if property.is_unique && !seen.insert(target.id()) {
+                    return Err(format!(
+                        "{}[{index}]: duplicate Element reference {}; unique values are required",
+                        property.name,
+                        target.id()
+                    ));
+                }
+                Ok(target)
+            })
+            .collect()
+    }
+
+    fn required_type(
+        property: &PropertyDescriptor,
+    ) -> Result<&'static ClassifierDescriptor, String> {
+        if property.property_type.resolution == schema::ReferenceResolution::ExternalDocument {
+            return Err(
+                "external property Types are not supported by local Element references".into(),
+            );
+        }
+        property
             .property_type
             .target
             .and_then(schema::classifier)
-            .ok_or_else(|| UnsupportedContract::UnresolvedType.to_string())?;
+            .ok_or_else(|| UnsupportedContract::UnresolvedType.to_string())
+    }
+
+    fn validate_target(
+        &self,
+        required: &ClassifierDescriptor,
+        id: &str,
+    ) -> Result<ElementRef<'a>, String> {
         let target = self.element(id)?;
         let conforms = target
             .metaclass()
@@ -106,7 +212,7 @@ impl<'a> ReferenceIndex<'a> {
         if !conforms {
             return Err(format!("{id} must conform to UML {}", required.name));
         }
-        Ok(Some(target))
+        Ok(target)
     }
 
     pub fn candidates(&self, property: &PropertyDescriptor) -> Vec<ElementRef<'a>> {

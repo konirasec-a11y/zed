@@ -92,6 +92,8 @@ struct WireDiagram {
     uml_di_type: Option<String>,
     #[prost(string, repeated, tag = "7")]
     model_elements: Vec<String>,
+    #[prost(string, optional, tag = "8")]
+    interaction_kind: Option<String>,
 }
 #[derive(Clone, PartialEq, Message)]
 struct WireView {
@@ -173,6 +175,7 @@ pub(super) fn encode(project: &Project) -> Result<Vec<u8>, ModelIoError> {
                 height: d.height,
                 uml_di_type: Some(d.uml_di_type.clone()),
                 model_elements: d.model_elements.clone(),
+                interaction_kind: d.interaction_kind.clone(),
                 views: d
                     .views
                     .iter()
@@ -272,6 +275,7 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Project, ModelIoError> {
                     .filter(|value| !value.trim().is_empty())
                     .ok_or(ModelIoError::DiagramType)?,
                 model_elements: d.model_elements,
+                interaction_kind: d.interaction_kind,
                 views: d
                     .views
                     .into_iter()

@@ -14,8 +14,19 @@ pub enum StructuralDiagramKind {
     CompositeStructure,
     Deployment,
     Profile,
+    UseCase,
+    Activity,
+    StateMachine,
+    Sequence,
+    Communication,
+    InteractionOverview,
+    Timing,
 }
 impl StructuralDiagramKind {
+    pub const ALL_DIAGRAMS: [Self; 14] = [Self::Class, Self::Object, Self::Package,
+        Self::Component, Self::CompositeStructure, Self::Deployment, Self::Profile,
+        Self::UseCase, Self::Activity, Self::StateMachine, Self::Sequence,
+        Self::Communication, Self::InteractionOverview, Self::Timing];
     pub const ALL: [Self; 7] = [
         Self::Class,
         Self::Object,
@@ -34,10 +45,43 @@ impl StructuralDiagramKind {
             Self::CompositeStructure => "UMLCompositeStructureDiagram",
             Self::Deployment => "UMLDeploymentDiagram",
             Self::Profile => "UMLProfileDiagram",
+            Self::UseCase => "UMLUseCaseDiagram",
+            Self::Activity => "UMLActivityDiagram",
+            Self::StateMachine => "UMLStateMachineDiagram",
+            Self::Sequence | Self::Communication | Self::InteractionOverview | Self::Timing => "UMLInteractionDiagram",
         }
     }
+    pub const fn interaction_kind(self) -> Option<&'static str> {
+        match self {
+            Self::Sequence => Some("sequence"),
+            Self::Communication => Some("communication"),
+            Self::InteractionOverview => Some("overview"),
+            Self::Timing => Some("timing"),
+            _ => None,
+        }
+    }
+    pub const fn context_metaclass(self) -> Option<&'static str> {
+        match self {
+            Self::Activity => Some("Activity"),
+            Self::StateMachine => Some("StateMachine"),
+            Self::Sequence | Self::Communication | Self::InteractionOverview | Self::Timing => Some("Interaction"),
+            _ => None,
+        }
+    }
+    pub fn from_diagram(diagram: &crate::Diagram) -> Option<Self> {
+        if diagram.uml_di_type == "UMLInteractionDiagram" {
+            return match diagram.interaction_kind.as_deref().unwrap_or("sequence") {
+                "sequence" => Some(Self::Sequence),
+                "communication" => Some(Self::Communication),
+                "overview" => Some(Self::InteractionOverview),
+                "timing" => Some(Self::Timing),
+                _ => None,
+            };
+        }
+        Self::from_uml_di_type(&diagram.uml_di_type)
+    }
     pub fn from_uml_di_type(value: &str) -> Option<Self> {
-        Self::ALL
+        Self::ALL_DIAGRAMS
             .into_iter()
             .find(|kind| kind.uml_di_type() == value)
     }
@@ -135,7 +179,7 @@ pub fn validate_structural_diagram(
         .map(|element| (element.id.as_str(), element))
         .collect::<HashMap<_, _>>();
     let stored_type = &diagram.uml_di_type;
-    if StructuralDiagramKind::from_uml_di_type(stored_type).is_none() {
+    if StructuralDiagramKind::from_diagram(diagram).is_none() {
         issues.push(problem(
             "UMLDI_UNSUPPORTED_DIAGRAM_TYPE",
             &diagram.id,
@@ -143,7 +187,7 @@ pub fn validate_structural_diagram(
         ));
         return issues;
     }
-    if stored_type != kind.uml_di_type() {
+    if StructuralDiagramKind::from_diagram(diagram) != Some(kind) {
         issues.push(problem(
             "UMLDI_DIAGRAM_KIND_MISMATCH",
             &diagram.id,
@@ -155,7 +199,22 @@ pub fn validate_structural_diagram(
     }
     // UMLDI.xmi: the six *-no_modelElement rules concern the diagram's own
     // context, never the subjects of its contained Views.
-    if kind != StructuralDiagramKind::CompositeStructure {
+    if let Some(expected) = kind.context_metaclass() {
+        if diagram.model_elements.len() != 1 {
+            issues.push(problem("UMLDI_CONTEXT_MULTIPLICITY", &diagram.id,
+                format!("This diagram requires exactly one {expected} context")));
+        }
+        for context_id in &diagram.model_elements {
+            match elements.get(context_id.as_str()) {
+                None => issues.push(problem("UMLDI_CONTEXT_MISSING", context_id, "The diagram context does not identify a model Element")),
+                Some(context) if !crate::uml::root::object_metaclass(&context.kind)
+                    .is_some_and(|metaclass| crate::uml::metamodel::conforms_to(metaclass, expected)) => {
+                    issues.push(problem("UMLDI_CONTEXT_TYPE", context_id, format!("This diagram requires a {expected} context")));
+                }
+                Some(_) => {}
+            }
+        }
+    } else if kind != StructuralDiagramKind::CompositeStructure {
         if !diagram.model_elements.is_empty() {
             issues.push(problem(
                 "UMLDI_UNEXPECTED_CONTEXT",
@@ -365,6 +424,8 @@ pub fn validate_structural_model(project: &Project) -> Vec<StructuralDiagnostic>
         let references = crate::uml::references::ReferenceIndex::new(model);
         issues.extend(crate::uml::instances::validate(model, &references));
         issues.extend(crate::uml::operations::validate(&references));
+        issues.extend(crate::uml::associations::validate(&references));
+        issues.extend(crate::uml::classifiers::validate(&references));
         issues.extend(references.validate_typed_elements());
     }
     issues.extend(crate::structural_rules::validate(project));
@@ -777,7 +838,9 @@ mod tests {
         ] {
             let project = context_project(kind, context_kind, &["context"])?;
             assert!(
-                validate_structural_diagram(&project, "context-diagram", kind).is_empty(),
+                validate_structural_diagram(&project, "context-diagram", kind).iter().all(|issue|
+                    issue.severity == StructuralSeverity::Warning && matches!(issue.code,
+                        "MDE_ASSOCIATION_ENDS_UNMATERIALIZED" | "UML_NAMESPACE_QUERY_UNSUPPORTED")),
                 "{context_kind}"
             );
         }
@@ -853,7 +916,7 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn obsolete_aggregation_kinds_are_rejected_but_canonical_association_ends_are_valid()
+    fn obsolete_aggregation_kinds_are_rejected_but_legacy_association_notation_is_retained()
     -> serde_json::Result<()> {
         for (obsolete, aggregation) in [
             ("uml.aggregation", "shared"),
@@ -883,7 +946,9 @@ mod tests {
                     Some(RootMetaclass::Relationship)
                 );
             }
-            assert!(validate_structural_model(&project).is_empty());
+            assert!(validate_structural_model(&project).iter().all(|issue|
+                issue.severity == StructuralSeverity::Warning && matches!(issue.code,
+                    "MDE_ASSOCIATION_ENDS_UNMATERIALIZED" | "UML_NAMESPACE_QUERY_UNSUPPORTED")));
         }
         Ok(())
     }

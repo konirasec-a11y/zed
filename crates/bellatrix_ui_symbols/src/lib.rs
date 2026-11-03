@@ -12,6 +12,20 @@ pub enum Family {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum ShapeKind {
+    InitialNode,
+    FinalNode,
+    FlowFinal,
+    History,
+    Terminate,
+    EntryPoint,
+    Collaboration,
+    Execution,
+    ObjectNode,
+    SendSignal,
+    AcceptEvent,
+    Partition,
+    CombinedFragment,
+
     Activity,
     Actor,
     Aggregate,
@@ -78,6 +92,20 @@ pub fn count(family: Family) -> usize {
 
 pub fn glyph(kind: ShapeKind) -> &'static [u8] {
     match kind {
+        ShapeKind::InitialNode => include_bytes!("../assets/initial-node.svg"),
+        ShapeKind::FinalNode => include_bytes!("../assets/final-node.svg"),
+        ShapeKind::FlowFinal => include_bytes!("../assets/flow-final.svg"),
+        ShapeKind::History => include_bytes!("../assets/history.svg"),
+        ShapeKind::Terminate => include_bytes!("../assets/terminate.svg"),
+        ShapeKind::EntryPoint => include_bytes!("../assets/entry-point.svg"),
+        ShapeKind::Collaboration => include_bytes!("../assets/collaboration.svg"),
+        ShapeKind::Execution => include_bytes!("../assets/execution.svg"),
+        ShapeKind::ObjectNode => include_bytes!("../assets/object-node.svg"),
+        ShapeKind::SendSignal => include_bytes!("../assets/send-signal.svg"),
+        ShapeKind::AcceptEvent => include_bytes!("../assets/accept-event.svg"),
+        ShapeKind::Partition => include_bytes!("../assets/partition.svg"),
+        ShapeKind::CombinedFragment => include_bytes!("../assets/combined-fragment.svg"),
+
         ShapeKind::Activity => include_bytes!("../assets/activity.svg"),
         ShapeKind::Actor => include_bytes!("../assets/actor.svg"),
         ShapeKind::Aggregate => include_bytes!("../assets/aggregate.svg"),

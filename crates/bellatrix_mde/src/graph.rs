@@ -33,6 +33,38 @@ pub struct Graph<'a> { pub project: &'a Project }
 impl<'a> Graph<'a> {
     pub fn new(project: &'a Project) -> Self { Self { project } }
 
+    pub fn validate_presentation(&self) -> Result<(), GraphError> {
+        let mut all = HashSet::new();
+        for id in std::iter::once(&self.project.id)
+            .chain(self.project.elements.iter().map(|element| &element.id))
+            .chain(self.project.relations.iter().map(|relation| &relation.id))
+            .chain(self.project.diagrams.iter().map(|diagram| &diagram.id))
+            .chain(self.project.diagrams.iter().flat_map(|diagram| diagram.views.iter().map(|view| &view.id)))
+        {
+            if id.trim().is_empty() || !all.insert(id.as_str()) {
+                return Err(GraphError::Duplicate(id.clone()));
+            }
+        }
+        let nodes: HashSet<&str> = self.project.elements.iter().map(|element| element.id.as_str()).collect();
+        let relations: HashSet<&str> = self.project.relations.iter().map(|relation| relation.id.as_str()).collect();
+        for diagram in &self.project.diagrams {
+            if !(diagram.width.is_finite() && diagram.height.is_finite() && diagram.width > 0.0 && diagram.height > 0.0) {
+                return Err(GraphError::Geometry(diagram.id.clone()));
+            }
+            for view in &diagram.views {
+                if let Some(subject) = &view.subject
+                    && !nodes.contains(subject.as_str()) && !relations.contains(subject.as_str())
+                {
+                    return Err(GraphError::MissingView { view: view.id.clone(), subject: subject.clone() });
+                }
+                if !valid_geometry(&view.geometry) || !valid_style(&view.style) {
+                    return Err(GraphError::Geometry(view.id.clone()));
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn validate(&self) -> Result<(), GraphError> {
         let mut all = HashSet::new();
         for id in std::iter::once(&self.project.id)

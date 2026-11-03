@@ -33,6 +33,21 @@ impl Event for ModelingSetViewRouting {
     type Output = Result<u64, String>;
 }
 
+#[derive(Clone, Debug)]
+pub struct ModelingReorderViewRequested {
+    pub project_id: ProjectId,
+    pub diagram_id: String,
+    pub view_id: String,
+    pub order: bellatrix_mde::commands::ViewOrder,
+    pub expected_revision: u64,
+}
+pub struct ModelingReorderView;
+impl Event for ModelingReorderView {
+    const NAME: &'static str = "bellatrix.mde.reorder-view.v1";
+    type Args = ModelingReorderViewRequested;
+    type Output = Result<u64, String>;
+}
+
 pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Result<(), io::Error> {
     let service = Arc::clone(&projects);
     let _style = context
@@ -72,6 +87,29 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
                             diagram_id: request.diagram_id,
                             view_id: request.view_id,
                             routing: request.routing,
+                        },
+                    )
+                    .await;
+                    Ok::<_, Infallible>(Some(result))
+                }
+            },
+        ))
+        .map_err(|error| io::Error::other(error.to_string()))?;
+    let service = Arc::clone(&projects);
+    let _order = context
+        .on::<ModelingReorderView, _>(responder(
+            move |context: Context, request: ModelingReorderViewRequested| {
+                let projects = Arc::clone(&service);
+                async move {
+                    let result = crate::mutation::execute(
+                        &context,
+                        &projects,
+                        request.project_id,
+                        request.expected_revision,
+                        Command::ReorderView {
+                            diagram_id: request.diagram_id,
+                            view_id: request.view_id,
+                            order: request.order,
                         },
                     )
                     .await;

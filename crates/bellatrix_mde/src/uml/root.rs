@@ -61,8 +61,9 @@ pub trait NamedElement<'a>: Element<'a> {
 
 pub trait Namespace<'a>: NamedElement<'a> {
     fn owned_members(self, model: Model<'a>) -> Result<Vec<NamedElementRef<'a>>, String> {
-        Ok(self
-            .owned_elements(model)?
+        Ok(super::classifiers::owned_members(
+            &super::references::ReferenceIndex::new(model), self.id(),
+        ).map_err(|error| error.to_string())?
             .into_iter()
             .filter_map(ElementRef::named)
             .collect())
@@ -134,6 +135,9 @@ impl<'a> NamedElement<'a> for NamespaceRef<'a> {
 impl<'a> Namespace<'a> for NamespaceRef<'a> {}
 impl<'a> Relationship<'a> for RelationshipRef<'a> {
     fn related_elements(self, model: Model<'a>) -> Result<Vec<ElementRef<'a>>, String> {
+        if self.as_element().conforms_to("Association") && self.0.properties.contains_key("memberEnd") {
+            return super::associations::end_types(&super::references::ReferenceIndex::new(model), &self.0.id);
+        }
         let mut related = Vec::new();
         for id in [&self.0.from, &self.0.to] {
             let element = model
@@ -377,6 +381,9 @@ impl<'a> Model<'a> {
     pub fn element(self, id: &str) -> Option<ElementRef<'a>> {
         self.elements().find(|element| element.id() == id)
     }
+    pub fn relationship_records(self) -> impl Iterator<Item = &'a Relation> {
+        self.relationships.iter()
+    }
     pub(crate) fn ownership_links(self) -> impl Iterator<Item = &'a Relation> {
         self.relationships.iter().filter(|relation| relation.kind == "owns")
     }
@@ -436,9 +443,11 @@ impl<'a> Model<'a> {
         self,
         named: impl NamedElement<'a>,
     ) -> Result<Option<NamespaceRef<'a>>, String> {
-        Ok(self
-            .owner(named.as_element())?
-            .and_then(ElementRef::namespace))
+        let element = named.as_element();
+        let Some(owner) = self.owner(element)? else { return Ok(None); };
+        let Some(namespace) = owner.namespace() else { return Ok(None); };
+        Ok(super::classifiers::is_owned_member(owner, element)
+            .map_err(|error| error.to_string())?.then_some(namespace))
     }
     pub fn qualified_name(self, named: impl NamedElement<'a>) -> Result<Option<String>, String> {
         let Some(name) = named.name() else {
@@ -449,7 +458,8 @@ impl<'a> Model<'a> {
         let mut visited = HashSet::from([current.id()]);
         while let Some(mut owner) = self.owner(current)? {
             // NamedElement::allNamespaces handles exposed template parameters specially.
-            if owner.conforms_to("TemplateParameter") {
+            let exposed_parameter = owner.conforms_to("TemplateParameter");
+            if exposed_parameter {
                 let Some(signature) = self.owner(owner)? else {
                     break;
                 };
@@ -461,6 +471,10 @@ impl<'a> Model<'a> {
             let Some(namespace) = owner.namespace() else {
                 break;
             };
+            if !exposed_parameter && !super::classifiers::is_owned_member(owner, current)
+                .map_err(|error| error.to_string())? {
+                break;
+            }
             if !visited.insert(owner.id()) {
                 return Err("cycle in UML ownership".into());
             }
@@ -615,6 +629,8 @@ impl<'a> Model<'a> {
         let references = super::references::ReferenceIndex::new(self);
         issues.extend(super::instances::validate(self, &references));
         issues.extend(super::operations::validate(&references));
+        issues.extend(super::associations::validate(&references));
+        issues.extend(super::classifiers::validate(&references));
         issues.extend(references.validate_typed_elements());
         issues
     }
@@ -623,6 +639,7 @@ impl<'a> Model<'a> {
 pub(crate) fn validate_changes(before: &Project, after: &Project) -> Result<(), String> {
     let existing = Model::from_project(before).validate();
     for issue in Model::from_project(after).validate() {
+        if issue.severity != StructuralSeverity::Error { continue; }
         if !existing.iter().any(|previous| {
             previous.code == issue.code
                 && previous.subject_id == issue.subject_id
@@ -662,6 +679,21 @@ fn ownership_property(owner: ElementRef<'_>, child: ElementRef<'_>) -> Option<&'
     }
     if owner.instance_specification().is_some() && child.slot().is_some() {
         return Some("slot");
+    }
+    // Diagram tools attach actual UML objects through their composite features,
+    // rather than treating activity nodes or interaction fragments as packages.
+    for (owner_type, child_type, property) in [
+        ("Activity", "ActivityNode", "node"),
+        ("Activity", "ActivityPartition", "group"),
+        ("StateMachine", "Region", "region"),
+        ("State", "Region", "region"),
+        ("Region", "Vertex", "subvertex"),
+        ("Interaction", "Lifeline", "lifeline"),
+        ("Interaction", "InteractionFragment", "fragment"),
+    ] {
+        if owner.conforms_to(owner_type) && child.conforms_to(child_type) && has(property) {
+            return Some(property);
+        }
     }
     if owner.conforms_to("Package") && child.conforms_to("PackageableElement") {
         return Some("packagedElement");

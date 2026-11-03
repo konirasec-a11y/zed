@@ -1,4 +1,6 @@
-use bellatrix_mde::{RelationshipRouting, Style};
+use bellatrix_mde::{
+    RelationshipRouting, Style, TextAlignment, TextVerticalAlignment, commands::ViewOrder,
+};
 use std::collections::HashMap;
 
 pub(crate) const FIELDS: &[(&str, &str)] = &[
@@ -9,10 +11,28 @@ pub(crate) const FIELDS: &[(&str, &str)] = &[
     ("font_size", "Font size"),
     ("stroke_width", "Line width"),
     ("opacity", "Opacity"),
+    ("text_align", "Horizontal text alignment"),
+    ("text_vertical_align", "Vertical text alignment"),
 ];
 
 pub(crate) fn style_value(style: &Style, key: &str) -> String {
     match key {
+        "text_align" => style.text_align.map(|value| {
+            match value {
+                TextAlignment::Left => "left",
+                TextAlignment::Center => "center",
+                TextAlignment::Right => "right",
+            }
+            .into()
+        }),
+        "text_vertical_align" => style.text_vertical_align.map(|value| {
+            match value {
+                TextVerticalAlignment::Top => "top",
+                TextVerticalAlignment::Center => "center",
+                TextVerticalAlignment::Bottom => "bottom",
+            }
+            .into()
+        }),
         "fill" => style.fill.clone(),
         "stroke" => style.stroke.clone(),
         "text_color" => style.text_color.clone(),
@@ -88,6 +108,7 @@ pub(crate) struct StyleSubmission {
     pub expected_revision: u64,
     pub style: Style,
     pub routing: Option<RelationshipRouting>,
+    pub order: Option<ViewOrder>,
     reset: bool,
     captured: HashMap<String, String>,
     admitted: HashMap<String, String>,
@@ -103,6 +124,7 @@ pub(crate) struct StyleEditState {
     queued: bool,
     admitted: HashMap<String, String>,
     routing: Option<RelationshipRouting>,
+    order: Option<ViewOrder>,
     reset: bool,
 }
 
@@ -121,6 +143,7 @@ impl StyleEditState {
             queued: false,
             admitted: HashMap::new(),
             routing: None,
+            order: None,
             reset: false,
         }
     }
@@ -138,6 +161,12 @@ impl StyleEditState {
 
     pub fn preserve_input(&mut self, key: &str, text: String) {
         self.values.insert(key.into(), text);
+    }
+
+    pub fn reorder(&mut self, order: ViewOrder) {
+        self.order = Some(order);
+        self.queued = true;
+        self.error = None;
     }
 
     pub fn set_routing(&mut self, routing: RelationshipRouting) {
@@ -201,7 +230,10 @@ impl StyleEditState {
         let routing = self
             .routing
             .filter(|routing| Some(*routing) != style.routing);
-        if let Some(routing) = routing {
+        let order = self.order;
+        if order.is_some() {
+            // Ordering shares the same receipt gate, but does not submit unrelated draft text.
+        } else if let Some(routing) = routing {
             style.routing = Some(routing);
         } else {
             for (key, _) in FIELDS {
@@ -217,6 +249,22 @@ impl StyleEditState {
                 }
                 let value = (!text.is_empty()).then(|| text.to_owned());
                 match *key {
+                    "text_align" => {
+                        style.text_align = match text {
+                            "left" => Some(TextAlignment::Left),
+                            "center" => Some(TextAlignment::Center),
+                            "right" => Some(TextAlignment::Right),
+                            _ => None,
+                        }
+                    }
+                    "text_vertical_align" => {
+                        style.text_vertical_align = match text {
+                            "top" => Some(TextVerticalAlignment::Top),
+                            "center" => Some(TextVerticalAlignment::Center),
+                            "bottom" => Some(TextVerticalAlignment::Bottom),
+                            _ => None,
+                        }
+                    }
                     "fill" => style.fill = value,
                     "stroke" => style.stroke = value,
                     "text_color" => style.text_color = value,
@@ -229,7 +277,7 @@ impl StyleEditState {
             }
         }
         // Even a no-op reset needs a receipt before discarding invalid local text.
-        if style == self.baseline && !self.reset {
+        if style == self.baseline && !self.reset && order.is_none() {
             self.admitted.clear();
             self.routing = None;
             return None;
@@ -237,8 +285,9 @@ impl StyleEditState {
         let submission = StyleSubmission {
             expected_revision: self.revision,
             style,
-            routing,
-            reset: self.reset && routing.is_none(),
+            routing: if order.is_none() { routing } else { None },
+            order,
+            reset: self.reset && routing.is_none() && order.is_none(),
             captured: self.values.clone(),
             admitted: self.admitted.clone(),
         };
@@ -256,7 +305,7 @@ impl StyleEditState {
                     || revision == submitted.expected_revision.saturating_add(1) =>
             {
                 self.baseline = submitted.style;
-                if submitted.routing.is_none() {
+                if submitted.routing.is_none() && submitted.order.is_none() {
                     self.admitted
                         .retain(|key, value| submitted.admitted.get(key) != Some(value));
                 }
@@ -273,7 +322,13 @@ impl StyleEditState {
                 if submitted.routing == self.routing {
                     self.routing = None;
                 }
-                self.queued |= !self.admitted.is_empty() || self.routing.is_some() || self.reset;
+                if submitted.order == self.order {
+                    self.order = None;
+                }
+                self.queued |= !self.admitted.is_empty()
+                    || self.routing.is_some()
+                    || self.order.is_some()
+                    || self.reset;
             }
             Ok(_) => {
                 self.error = Some("Unexpected style command revision".into());
@@ -281,7 +336,8 @@ impl StyleEditState {
                 self.reset = false;
             }
             Err(error) => {
-                let newer_edit = self.admitted != submitted.admitted
+                let newer_edit = self.order != submitted.order
+                    || self.admitted != submitted.admitted
                     || self
                         .routing
                         .is_some_and(|routing| Some(routing) != submitted.routing);

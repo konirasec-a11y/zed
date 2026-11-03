@@ -88,6 +88,8 @@ const CLASS: &[Declared] = &[
 ];
 const COMMENT: &[Declared] = &[Declared { key: "body", label: "Body", editor: PropertyEditor::Multiline, default: empty }];
 const FIELD: &[Declared] = &[
+    Declared { key:"aggregation", label:"Aggregation", editor:PropertyEditor::Choice(&["none", "shared", "composite"]), default:empty },
+    Declared { key:"multiplicity", label:"Multiplicity notation", editor:PropertyEditor::Text, default:empty },
     Declared { key:"visibility", label:"Visibility", editor:PropertyEditor::Choice(VISIBILITY), default:public },
     Declared { key:"declaration", label:"Declaration", editor:PropertyEditor::Text, default:empty },
     Declared { key:"type", label:"Type", editor:PropertyEditor::Text, default:empty },
@@ -195,6 +197,78 @@ fn root_properties(section: &ModelingSection, id: &str) -> Vec<InspectorProperty
         .into_iter().map(|(path, label, value)| InspectorProperty { path: path.into(), label: label.into(), group: "UML identity", editor: PropertyEditor::ReadOnly, value, editable: false }).collect()
 }
 
+pub(crate) fn append_namespace_properties(
+    references: &crate::uml::references::ReferenceIndex<'_>,
+    id: &str,
+    properties: &mut Vec<InspectorProperty>,
+) {
+    let Ok(element) = references.element(id) else { return; };
+    if let Some(warning) = crate::uml::classifiers::redefinition_consistency_warning(element) {
+        properties.push(InspectorProperty {
+            path: "uml.redefinition.status".into(), label: "Redefinition consistency not evaluated".into(),
+            group: "UML members", editor: PropertyEditor::ReadOnly, value: json!(warning.message), editable: false,
+        });
+    }
+    if !element.conforms_to("Namespace") { return; }
+    let result = crate::uml::classifiers::query(references, id);
+    let mut append = |path: &str, label: &str, value: Value| properties.push(InspectorProperty {
+        path: path.into(), label: label.into(), group: "UML members",
+        editor: PropertyEditor::ReadOnly, value, editable: false,
+    });
+    let ids = |members: &[crate::uml::root::ElementRef<'_>]| {
+        Value::Array(members.iter().map(|member| json!({"$ref": member.id()})).collect())
+    };
+    match result {
+        Err(error) => append("uml.members.status", "Member query unavailable", json!(error.to_string())),
+        Ok(query) => {
+            append("uml.ownedMember", "Owned members", ids(&query.owned_members));
+            append("uml.member", "All members", ids(&query.members));
+            if let Some(visible) = query.visible_members {
+                append("uml.visibleMembers", "Public package members", ids(&visible));
+            }
+            if let Some(classifier) = query.classifier {
+                append("uml.general", "Direct parents", ids(&classifier.parents));
+                append("uml.inheritedMember", "Inherited members", ids(&classifier.inherited_members));
+                append("uml.feature", "Direct features", ids(&classifier.features));
+                append("uml.attribute", "Direct attributes", ids(&classifier.attributes));
+                append("uml.allFeatures", "All features", ids(&classifier.all_features));
+                append("uml.allAttributes", "All attributes", ids(&classifier.all_attributes));
+            }
+        }
+    }
+}
+
+fn append_association_properties(
+    references: &crate::uml::references::ReferenceIndex<'_>,
+    id: &str,
+    properties: &mut Vec<InspectorProperty>,
+) {
+    use crate::uml::{associations, root::ElementRef};
+    let Ok(element) = references.element(id) else { return; };
+    let mut append = |path: &str, label: &str, value: Result<Value, String>| properties.push(InspectorProperty {
+        path: path.into(), label: label.into(), group: "UML association ends",
+        editor: PropertyEditor::ReadOnly,
+        value: value.unwrap_or_else(|error| json!(error)), editable: false,
+    });
+    if element.conforms_to("Association") {
+        append("uml.memberEnd", "Member ends (ordered)", associations::member_ends(references, id)
+            .map(|ends| json!(ends.iter().map(|end| json!({"$ref": end.id})).collect::<Vec<_>>())));
+        append("uml.ownedEnd", "Association-owned ends", associations::owned_ends(references, id)
+            .map(|ends| json!(ends.iter().map(|end| json!({"$ref": end.id})).collect::<Vec<_>>())));
+        append("uml.endType", "End Types", associations::end_types(references, id)
+            .map(|types| json!(types.iter().map(|element| json!({"$ref": element.id()})).collect::<Vec<_>>())));
+    } else if let ElementRef::Object(property) = element && element.conforms_to("Property") {
+        append("uml.association", "Association", associations::association_of(references, id)
+            .map(|association| association.map_or(Value::Null, |association| json!({"$ref": association.id()}))));
+        append("uml.owningAssociation", "Owning Association", references.model().owner(element)
+            .map(|owner| owner.filter(|owner| owner.conforms_to("Association"))
+                .map_or(Value::Null, |owner| json!({"$ref": owner.id()}))));
+        append("uml.opposite", "Binary opposite", associations::opposite(references, id)
+            .map(|opposite| opposite.map_or(Value::Null, |opposite| json!({"$ref": opposite.id}))));
+        append("uml.isComposite", "Composite (derived)", associations::is_composite(property).map(Value::Bool));
+    }
+}
+
 pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementInspector> {
     let references = crate::uml::references::ReferenceIndex::new(
         crate::uml::root::Model::from_section(section),
@@ -242,6 +316,8 @@ fn inspect_element_with_references(
                 editor:PropertyEditor::ReadOnly,value:json!(target),editable:false},
         ];
         properties.extend(root_properties(section, id));
+        append_namespace_properties(references, id, &mut properties);
+        append_association_properties(references, id, &mut properties);
         let semantic_named = crate::uml::root::Model::from_section(section).element(id).and_then(|element| element.named()).is_some();
         let common = [
             ("name",if semantic_named { "Name" } else { "Editor label (not a UML name)" },PropertyEditor::Text,Value::String(String::new())),
@@ -261,6 +337,16 @@ fn inspect_element_with_references(
                 value:relation.properties.get(key).cloned().unwrap_or(default),
                 editable:true,
             });
+        }
+        if crate::uml::root::relationship_metaclass(&relation.kind) == Some("Association") {
+            for (key, label) in [("end1Aggregation", "Source diamond"), ("end2Aggregation", "Target diamond")] {
+                known.insert(key);
+                properties.push(InspectorProperty {
+                    path: format!("properties.{key}"), label: label.into(), group: "Relationship",
+                    editor: PropertyEditor::Choice(&["none", "shared", "composite"]),
+                    value: relation.properties.get(key).cloned().unwrap_or_else(|| json!("none")), editable: true,
+                });
+            }
         }
         for (key,value) in &relation.properties {
             if known.contains(key.as_str()) {continue;}
@@ -302,6 +388,8 @@ fn inspect_element_with_references(
             editor:PropertyEditor::Text, value:json!(element.label.clone().unwrap_or_default()), editable:true },
     ];
     properties.extend(root_properties(section, id));
+    append_namespace_properties(references, id, &mut properties);
+    append_association_properties(references, id, &mut properties);
     if crate::uml::root::ElementRef::Object(element).named().is_none()
         && let Some(name) = properties.iter_mut().find(|property| property.path == "name") {
         name.label = if crate::templates::is_parameter(&element.kind) { "Parametered element name" } else { "Editor label (not a UML name)" }.into();
@@ -421,6 +509,17 @@ fn inspect_element_with_references(
 pub fn set_inspected_property(
     section: &mut ModelingSection, id: &str, path: &str, value: Value
 ) -> Result<(), String> {
+    let mut updated = section.clone();
+    set_inspected_property_inner(&mut updated, id, path, value)?;
+    crate::uml::associations::synchronize_changes(section, &mut updated)?;
+    crate::uml::associations::validate_changes(section, &updated)?;
+    *section = updated;
+    Ok(())
+}
+
+fn set_inspected_property_inner(
+    section: &mut ModelingSection, id: &str, path: &str, value: Value
+) -> Result<(), String> {
     let references = crate::uml::references::ReferenceIndex::new(
         crate::uml::root::Model::from_section(section),
     );
@@ -465,6 +564,9 @@ pub fn set_inspected_property(
                 return Err("existing typeText differs from the legacy type declaration; preserve both before choosing a Type".into());
             }
         }
+    }
+    if crate::uml::associations::set_projection_property(section, id, path, &value)? {
+        return Ok(());
     }
     let diagram_relation = section.diagrams.iter().any(|diagram|
         diagram.views.iter().any(|view| view.subject.as_deref() == Some(id)));

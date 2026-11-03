@@ -71,6 +71,8 @@ pub(super) fn place(
         let kind = ModelingElementKind::BASIC.iter().chain(ModelingElementKind::ADVANCED)
             .chain(ModelingElementKind::PACKAGES).chain(ModelingElementKind::ANNOTATIONS)
             .chain(ModelingElementKind::STRUCTURAL)
+            .chain(ModelingElementKind::PROFILES).chain(ModelingElementKind::BEHAVIOR)
+            .chain(ModelingElementKind::ACTIVITY_NODES).chain(ModelingElementKind::STATE_NODES).chain(ModelingElementKind::INTERACTION_NODES)
             .copied().find(|kind| kind.model_kind() == element.kind
                 || semantic_type.is_some() && UmlType::from_kind(kind.model_kind()) == semantic_type)
             .ok_or_else(|| format!("unsupported element View: {} has no existing geometry or registered creation kind", element.kind))?;

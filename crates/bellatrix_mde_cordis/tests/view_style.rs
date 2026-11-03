@@ -297,3 +297,56 @@ async fn styles_and_routes_use_revision_boundary_and_rollback()
     provider.dispose().await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn reorder_roundtrips_receipt_and_rejects_stale_revision()
+-> Result<(), Box<dyn std::error::Error>> {
+    let context = Context::new();
+    let service = Arc::new(ProjectService::new());
+    let provider = context
+        .spawn(PreparedPlugin::from_input(
+            ProjectPlugin::new(Arc::clone(&service)),
+            Arc::clone(&service),
+        ))
+        .await?;
+    let plugin = MdePlugin;
+    plugin.prepare(())?;
+    let plugin = context
+        .spawn(PreparedPlugin::from_input(plugin, ()))
+        .await?;
+    let id = ProjectId::new("order-test")?;
+    let mut model: Project =
+        serde_json::from_str(include_str!("../../bellatrix_mde/fixtures/todo.json"))?;
+    model.id = id.as_str().into();
+    model.name = "Order".into();
+    let document = with_model(ProjectDocument::new(id.clone(), "Order")?, &model)?;
+    assert!(matches!(
+        context
+            .query::<ProjectCreate>(Routing::Unscoped, ProjectCreateRequested { document })
+            .await?,
+        QueryOutcome::Answer(Ok(_))
+    ));
+    let request = ModelingReorderViewRequested {
+        project_id: id.clone(),
+        diagram_id: "diagram-tasks".into(),
+        view_id: "view-task".into(),
+        order: bellatrix_mde::commands::ViewOrder::SendToBack,
+        expected_revision: 0,
+    };
+    assert!(matches!(
+        context
+            .query::<ModelingReorderView>(Routing::Unscoped, request.clone())
+            .await?,
+        QueryOutcome::Answer(Ok(1))
+    ));
+    assert!(matches!(
+        context
+            .query::<ModelingReorderView>(Routing::Unscoped, request)
+            .await?,
+        QueryOutcome::Answer(Err(_))
+    ));
+    assert_eq!(service.snapshot(&id)?.revision(), 1);
+    drop(plugin);
+    drop(provider);
+    Ok(())
+}
