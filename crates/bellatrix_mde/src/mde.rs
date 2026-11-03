@@ -35,8 +35,8 @@ mod index;
 mod inspector;
 #[path = "KERNEL/compiler/operations/operation_graph.rs"]
 mod operation_graph;
-#[path = "KERNEL/I_O/ownership.rs"]
-mod ownership;
+#[path = "KERNEL/I_O/generated_files.rs"]
+mod generated_files;
 #[path = "KERNEL/compiler/artifacts/path.rs"]
 mod path;
 #[path = "KERNEL/compiler/artifacts/plan.rs"]

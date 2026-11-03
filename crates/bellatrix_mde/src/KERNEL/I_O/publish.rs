@@ -1,5 +1,5 @@
 //! Staged publication and explicit, ownership-checked regeneration.
-use crate::{Plan, ownership};
+use crate::{Plan, generated_files};
 use std::{
     fs, io,
     path::{Path, PathBuf},
@@ -75,7 +75,7 @@ fn publish(plan: &Plan, destination: &Path, replace: bool) -> io::Result<()> {
             ));
         }
         if nonempty {
-            ownership::verify(destination)?;
+            generated_files::verify(destination)?;
         }
     }
     let parent = destination
@@ -137,7 +137,7 @@ fn materialize(plan: &Plan, root: &Path) -> io::Result<()> {
             fs::create_dir_all(path)?;
         }
     }
-    ownership::write(root, plan)
+    generated_files::write(root, plan)
 }
 
 #[cfg(test)]
