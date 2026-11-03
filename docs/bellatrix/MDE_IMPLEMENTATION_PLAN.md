@@ -268,6 +268,25 @@ parcialmente sobrescrito. Testar colisão de caminhos, renome, remoção,
 rollback/recuperação e preservação gerado/autoral/misto. Política beta não
 é licença para apagar documentos ou código do usuário.
 
+## Auditoria normativa e prioridade estrutural — 2026-11-03
+
+A ordem do plano completo é preservada. A execução atual concentra P03/P04/P09
+no marco de **todos os sete diagramas estruturais**, começando pelas dependências
+do índice oficial: Root, Namespaces, Types/Values, Classifiers, Simple/Structured
+Classifiers, Packages/Profiles e Deployments. Não expandir geração de código ou
+outras aplicações enquanto esse marco permanece incompleto.
+
+- [Auditoria dos contratos semânticos](UML_251_SEMANTIC_AUDIT.md).
+- [Auditoria dos sete diagramas estruturais](UML_251_STRUCTURAL_AUDIT.md).
+- APIs e contratos internos podem mudar: não há obrigação de retrocompatibilidade
+  de código. Migrar os consumidores e preservar os fluxos funcionais e os dados
+  autorais; não reintroduzir DTOs sem uso nem criar outra fonte de estado.
+- PDF e XMI normativos definem os contratos. Catálogo de metaclasses, tipos Rust
+  declarados, símbolos ou build verde não comprovam implementação das invariantes.
+- Não declarar conformidade integral. Cada lacuna exige implementação, vínculo
+  ao fluxo real e evidência focada; os resultados das auditorias são limitados
+  às cláusulas e aos caminhos de código explicitamente examinados.
+
 ## 9. Montar a UI Bellatrix como contribuição nativa
 
 Conectar Canvas/Toolbox, Model Explorer, Inspector/QuickEdit, Editor de
