@@ -88,6 +88,20 @@ pub fn subsetting_context<'a>(
     references: &ReferenceIndex<'a>,
     property: ElementRef<'a>,
 ) -> Result<Vec<ElementRef<'a>>, QueryError> {
+    let (contexts, unresolved) = resolve_subsetting_context(references, property)?;
+    if unresolved {
+        return Err(QueryError::unsupported(
+            property.id(),
+            "subsetting context is not fully resolved",
+        ));
+    }
+    Ok(contexts)
+}
+
+fn resolve_subsetting_context<'a>(
+    references: &ReferenceIndex<'a>,
+    property: ElementRef<'a>,
+) -> Result<(Vec<ElementRef<'a>>, bool), QueryError> {
     require_property(property)?;
     for key in [
         "association",
@@ -122,7 +136,12 @@ pub fn subsetting_context<'a>(
         let value = association.properties().get("memberEnd").ok_or_else(|| {
             QueryError::unsupported(property.id(), "Association memberEnd is not materialized")
         })?;
-        let contract = match super::property_contracts::check_value(references, *association, descriptor, value) {
+        let contract = match super::property_contracts::check_value(
+            references,
+            *association,
+            descriptor,
+            value,
+        ) {
             super::property_contracts::PropertyOutcome::Satisfied => Ok(()),
             super::property_contracts::PropertyOutcome::Violation(message) => {
                 return Err(QueryError::invalid(property.id(), message));
@@ -132,7 +151,10 @@ pub fn subsetting_context<'a>(
             }
         };
         let mut seen = HashSet::new();
-        let contexts = value.as_array().into_iter().flatten()
+        let contexts = value
+            .as_array()
+            .into_iter()
+            .flatten()
             .filter_map(|value| reference_id(value).ok().flatten())
             .filter_map(|id| references.element(id).ok())
             .filter(|other| other.id() != property.id() && other.conforms_to("Property"))
@@ -147,15 +169,18 @@ pub fn subsetting_context<'a>(
                 return Err(error.clone());
             }
         }
-        contract?;
-        return contexts.into_iter().collect();
+        let unresolved = contract.is_err() || contexts.iter().any(Result::is_err);
+        return Ok((
+            contexts.into_iter().filter_map(Result::ok).collect(),
+            unresolved,
+        ));
     }
     let Some(owner) = references
         .model()
         .owner(property)
         .map_err(|error| QueryError::invalid(property.id(), error))?
     else {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), false));
     };
     if owner.metaclass().is_none() {
         return Err(QueryError::unsupported(
@@ -170,9 +195,9 @@ pub fn subsetting_context<'a>(
         ));
     }
     if owner.conforms_to("Classifier") && classifiers::is_owned_attribute(owner, property)? {
-        Ok(vec![owner])
+        Ok((vec![owner], false))
     } else {
-        Ok(Vec::new())
+        Ok((Vec::new(), false))
     }
 }
 
@@ -181,25 +206,39 @@ fn compare_contexts(
     specific: ElementRef<'_>,
     general: ElementRef<'_>,
 ) -> Result<bool, QueryError> {
-    let contexts = subsetting_context(references, specific);
-    let general_contexts = subsetting_context(references, general);
+    let contexts = resolve_subsetting_context(references, specific);
+    let general_contexts = resolve_subsetting_context(references, general);
     for result in [&contexts, &general_contexts] {
         if let Err(error @ QueryError::Invalid { .. }) = result {
             return Err(error.clone());
         }
     }
-    let contexts = contexts?;
-    if contexts.is_empty() {
-        return Ok(false);
-    }
-    let general_contexts = general_contexts?;
-    require_all(contexts.into_iter().map(|context| {
-        accept_any(
+    // An Unsupported query has no complete collection to expose, but must not
+    // erase a known false conjunct or a known existential witness elsewhere.
+    let (contexts, unresolved) = contexts.unwrap_or((Vec::new(), true));
+    let (general_contexts, general_unresolved) = general_contexts.unwrap_or((Vec::new(), true));
+    let unknown = || {
+        QueryError::unsupported(
+            specific.id(),
+            "subsetting context conformance is unresolved",
+        )
+    };
+    let mut checks = vec![
+        Ok(!contexts.is_empty() || unresolved),
+        Ok(!general_contexts.is_empty() || general_unresolved),
+    ];
+    for context in contexts {
+        checks.push(accept_any(
             general_contexts
                 .iter()
-                .map(|general| compare_resolved_types(references, context, *general)),
-        )
-    }))
+                .map(|general| compare_resolved_types(references, context, *general))
+                .chain(general_unresolved.then(|| Err(unknown()))),
+        ));
+    }
+    if unresolved {
+        checks.push(Err(unknown()));
+    }
+    require_all(checks)
 }
 
 fn compare_subsetting_type_and_upper(
@@ -251,12 +290,12 @@ fn check_subsetting(
     references: &ReferenceIndex<'_>,
     property: ElementRef<'_>,
 ) -> Result<(), QueryError> {
-    let (local, unresolved) = resolve_subsetted_properties(references, property)?;
-    let results = local
-        .into_iter()
-        .map(|general| compare_subsetting(references, property, general))
-        .chain(unresolved.then(|| Err(unresolved_subset(property))));
-    if require_all(results)? {
+    resolve_subsetted_properties(references, property)?;
+    if require_all([
+        subsetted_property_names(references, property),
+        subsetting_rules(references, property),
+        subsetting_context_conforms(references, property),
+    ])? {
         return Ok(());
     }
     Err(QueryError::invalid(
@@ -344,6 +383,38 @@ fn subsetting_rules(
     )
 }
 
+fn subsetting_context_conforms(
+    references: &ReferenceIndex<'_>,
+    property: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let (local, unresolved) = resolve_subsetted_properties(references, property)?;
+    if local.is_empty() && !unresolved {
+        return Ok(true);
+    }
+    let context_exists =
+        resolve_subsetting_context(references, property).and_then(|(contexts, unknown)| {
+            if !contexts.is_empty() {
+                Ok(true)
+            } else if unknown {
+                Err(QueryError::unsupported(
+                    property.id(),
+                    "subsetting context nonemptiness is unresolved",
+                ))
+            } else {
+                Ok(false)
+            }
+        });
+    require_all(
+        std::iter::once(context_exists)
+            .chain(
+                local
+                    .into_iter()
+                    .map(|general| compare_contexts(references, property, general)),
+            )
+            .chain(unresolved.then(|| Err(unresolved_subset(property)))),
+    )
+}
+
 pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues: Vec<_> = references
         .model()
@@ -369,6 +440,13 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
                 "MDE_PROPERTY_SUBSETTING_RULES_INVALID",
                 "MDE_PROPERTY_SUBSETTING_RULES_UNVERIFIED",
                 subsetting_rules(references, property),
+            ),
+            (
+                "Property-subsetting_context_conforms",
+                "UML_PROPERTY_SUBSETTING_CONTEXT_CONFORMS",
+                "MDE_PROPERTY_SUBSETTING_CONTEXT_CONFORMS_INVALID",
+                "MDE_PROPERTY_SUBSETTING_CONTEXT_CONFORMS_UNVERIFIED",
+                subsetting_context_conforms(references, property),
             ),
         ] {
             let (severity, code, message) = match outcome {

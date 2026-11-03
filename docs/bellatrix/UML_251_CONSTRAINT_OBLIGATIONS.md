@@ -75,6 +75,8 @@ têm recortes publicados em `9b71a3146ce4c7e28b8734439e9fd0c9a60cf6ef`
 A preservação de Unknown/Invalid no agregado de subsetting e
 InstanceSpecification::structural_feature foram publicadas em
 `d71f0315fb67987983a7effe388cdcb1e7842295` (E60/E61).
+InstanceSpecification::defining_feature e Property::subsetting_rules têm
+recortes publicados em `2d5db0de9184619907ff27729d7500f7babc0ff5` (E62/E63).
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -190,7 +192,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E61 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E63 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -919,8 +921,8 @@ de execução nova. E12–E61 possuem os gates delimitados nas seções seguinte
   possuídos por instância e suas identidades definingFeature, não valores dos
   Slots. Para cada classifier, proíbe mais de um Slot para uma feature em
   allSlottableFeatures, incluindo atributos herdados privados. Duplicata fora
-  dessa coleção não viola esta invariante; defining_feature continua obrigação
-  separada. Usa consulta completa ou witness local de StructuralFeature em
+  dessa coleção não viola esta invariante; defining_feature tem recorte
+  separado posterior em E62. Usa consulta completa ou witness local de StructuralFeature em
   allFeatures, sem inferir ausência de membership de consulta incompleta.
   Projeção slot armazenada não pode omitir Slots canônicos conhecidos;
   referências externas e metaclasses desconhecidas preservam não verificado
@@ -932,6 +934,65 @@ de execução nova. E12–E61 possuem os gates delimitados nas seções seguinte
   `UML_INSTANCE_STRUCTURAL_FEATURE`, `MDE_INSTANCE_STRUCTURAL_FEATURE_INVALID`
   e `MDE_INSTANCE_STRUCTURAL_FEATURE_UNVERIFIED`. Não certifica valores de
   Slot, specification, todas as regras de instâncias ou modelos externos.
+
+- **E62**: `semantics/instances.rs`, `instance_defining_feature`,
+  `instance_slots_evidence`, `slottable_membership` e `validate`;
+  `instance_defining_feature.rs`, doze testes. Cada Slot canonicamente possuído
+  exige definingFeature em allSlottableFeatures de pelo menos um classifier
+  da instância. Slots distintos podem usar classifiers distintos; valores e
+  specification não substituem membership. Inclui atributos herdados privados
+  e exclusão dos alvos de redefinição local pela consulta existente. Witness
+  local de feature pode sobreviver a ancestry/classifier externo; ausência
+  depende de coleção completa, não de resultado parcial. Feature externa
+  permanece não verificada salvo conjunto de features comprovadamente vazio,
+  que prova ausência. Slots vazios satisfazem por vacuidade, mas contratos
+  malformados inspecionados e ciclos não desaparecem diante de witness.
+  Projeção slot armazenada não pode omitir Slots canônicos. Violação conhecida
+  de um Slot vence irmão desconhecido; referências desconhecidas relevantes
+  mantêm Unknown. Diagnósticos: `UML_INSTANCE_DEFINING_FEATURE`,
+  `MDE_INSTANCE_DEFINING_FEATURE_INVALID` e
+  `MDE_INSTANCE_DEFINING_FEATURE_UNVERIFIED`. Não certifica valores, execução
+  de specification, resolução externa ou todas as regras de instâncias.
+
+- **E63**: `semantics/property_subsetting.rs`, `subsetting_rules`,
+  `compare_subsetting_type_and_upper` e `validate`;
+  `property_subsetting_rules.rs`, nove testes. Separa a obrigação de tipo e
+  upper bound dos checks de nomes/contexto do agregado. Exige conformance do
+  tipo específico ao geral e upper específico não maior que o geral, usando
+  consultas de valores existentes; não impõe contenção do lower bound.
+  Identidade e especialização transitiva são aceitas, não a direção inversa.
+  Ausência/coleção vazia de subsettedProperty satisfaz por vacuidade, mas
+  contratos inválidos não. Tipo opcional ausente pode permanecer Unknown;
+  ausência de tipo obrigatório em ExtensionEnd é Invalid. Referências
+  externas/metaclasses desconhecidas não viram falsa satisfação ou ausência.
+  Tipo ou upper incompatível conhecido pode decidir falso com outro operando
+  desconhecido; Invalid de qualquer lado preserva precedência. O mutador
+  canônico rejeita tipo/upper inválido sem mutação. Diagnósticos:
+  `UML_PROPERTY_SUBSETTING_RULES`, `MDE_PROPERTY_SUBSETTING_RULES_INVALID` e
+  `MDE_PROPERTY_SUBSETTING_RULES_UNVERIFIED`. O agregado e regras de
+  nomes/contexto continuam independentes; não há interpretador OCL geral,
+  resolução externa ou fechamento integral de subsetting.
+
+### Evidência publicada de membership de Slots e regras de subsetting
+
+Commit inspecionado: `2d5db0de9184619907ff27729d7500f7babc0ff5`.
+Logs finais lidos:
+
+- `/tmp/instance-defining-feature-final.log`: **52/52 aprovados**,
+  instance_defining_feature 12, instance_deployment_artifact 8,
+  instance_deployment_target 8, instance_structural_feature 13 e
+  kb09_redefinitions 11.
+- `/tmp/property-subsetting-rules-final-gate.log`: **215/215 aprovados**,
+  161 lib e 54 integrações (graph_rules 2, kb09_redefinitions 11,
+  kernel_api_validation 4, property_redefined_inherited 9,
+  property_subsetted_names 19 e property_subsetting_rules 9).
+
+As duas linhas passam a **P/E62–E63**. Casos cobrem modelos com/sem raiz,
+roundtrip, unknown, malformados, precedência em ambos os lados/ordens, reparo
+sem perda de valores e revalidação de snapshot. Gates anteriores à publicação,
+sem rerun no SHA publicado nem execução nova por esta matriz. Regressões
+repetidas não somam cobertura normativa; não certificam suíte integral, UI,
+geração, interchange ou conformidade UML completa.
 
 ### Evidência publicada de subsetting parcial e unicidade de Slots
 
@@ -1898,7 +1959,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `InstanceSpecification-defining_feature`
 
-- Metaclass: `InstanceSpecification`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `InstanceSpecification`. Estado: **P**. Evidência: E62; commit `2d5db0de9184619907ff27729d7500f7babc0ff5`.
 - OCL publicado: `slot->forAll(s | classifier->exists (c | c.allSlottableFeatures()->includes (s.definingFeature)))`.
 
 #### `InstanceSpecification-deployment_target`
@@ -1988,7 +2049,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `Property-subsetting_rules`
 
-- Metaclass: `Property`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `Property`. Estado: **P**. Evidência: E63; commit `2d5db0de9184619907ff27729d7500f7babc0ff5`.
 - OCL publicado: `subsettedProperty->forAll(sp | self.type.conformsTo(sp.type) and ((self.upperBound()->notEmpty() and sp.upperBound()->notEmpty()) implies self.upperBound() <= sp.upperBound() ))`.
 
 #### `Property-binding_to_attribute`
