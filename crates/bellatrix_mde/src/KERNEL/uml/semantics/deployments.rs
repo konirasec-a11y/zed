@@ -1,6 +1,6 @@
 use super::{
     classifiers::{self, QueryError},
-    feature_compatibility::require_all,
+    feature_compatibility::{accept_any, require_all},
     property_contracts::{self, PropertyOutcome},
     references::{ReferenceIndex, reference_id},
     root::ElementRef,
@@ -235,6 +235,14 @@ fn composite_targets<'a>(
         }
     };
     for child in children {
+        // A known incompatible child cannot witness this composite role; its
+        // other roles are validated separately and cannot make this set unknown.
+        if child.metaclass().is_some()
+            && let Some(required) = property.property_type.target.and_then(schema::classifier)
+            && !child.conforms_to(required.name)
+        {
+            continue;
+        }
         match classifiers::contributes_to_owned_union(owner, child, property.id.fragment) {
             Ok(true) => evidence.values.push(child),
             Ok(false) => {}
@@ -385,6 +393,96 @@ fn validate_targets(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic
     issues
 }
 
+fn property_deployment_target(
+    references: &ReferenceIndex<'_>,
+    property: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let descriptor = schema::property_by_id(schema::XmiId::new(
+        schema::Document::Uml,
+        "DeploymentTarget-deployment",
+    ))
+    .ok_or_else(|| QueryError::unsupported(property.id(), "missing deployment contract"))?;
+    let deployments = composite_targets(references, property, descriptor);
+    let mut checks = deployments.checks;
+    for deployment in &deployments.values {
+        let check = match opposite_owner(
+            references,
+            *deployment,
+            "location",
+            "DeploymentTarget",
+            "DeploymentTarget-deployment",
+        ) {
+            Ok(owner) => {
+                if let Some(error) = owner.unknown {
+                    checks.push(Err(error));
+                }
+                owner.canonical.map(|_| true)
+            }
+            Err(error) => Err(error),
+        };
+        checks.push(check);
+    }
+    let mut unknown = None;
+    for check in checks {
+        match check {
+            Err(error @ QueryError::Invalid { .. }) => return Err(error),
+            Err(error) => unknown = Some(error),
+            Ok(_) => {}
+        }
+    }
+    // A known canonical member proves nonemptiness even when other members or
+    // inverse references remain unresolved. No complete collection is claimed.
+    let present = if !deployments.values.is_empty() {
+        Ok(true)
+    } else if let Some(error) = unknown {
+        Err(error)
+    } else {
+        return Ok(true);
+    };
+    let composite = match property {
+        ElementRef::Object(element) => super::associations::aggregation(element)
+            .map(|aggregation| aggregation == "composite")
+            .map_err(|error| QueryError::invalid(property.id(), error)),
+        _ => Err(QueryError::invalid(
+            property.id(),
+            "Property requires an object identity",
+        )),
+    };
+    let node_part = (|| {
+        let owner = references
+            .model()
+            .owner(property)
+            .map_err(|error| QueryError::invalid(property.id(), error))?;
+        let Some(owner) = owner else {
+            return Ok(false);
+        };
+        references
+            .element(owner.id())
+            .map_err(|error| QueryError::invalid(property.id(), error))?;
+        if owner.metaclass().is_none() {
+            return Err(QueryError::unsupported(
+                property.id(),
+                "canonical owner metaclass is unresolved",
+            ));
+        }
+        if !owner.conforms_to("Node") {
+            return Ok(false);
+        }
+        // UML part derives only from ownedAttribute, not inherited attributes.
+        // Unique canonical ownership makes the owning Node the only possible
+        // witness for Node.allInstances()->exists(n | n.part->includes(self)).
+        classifiers::contributes_to_owned_union(
+            owner,
+            property,
+            "StructuredClassifier-ownedAttribute",
+        )
+    })();
+    accept_any([
+        present.map(|present| !present),
+        require_all([composite, node_part]),
+    ])
+}
+
 pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = validate_targets(references);
     for specification in references
@@ -415,6 +513,36 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             code,
             subject_id: specification.id().into(),
             message: format!("DeploymentSpecification-deployed_elements: {message}"),
+        });
+    }
+    for property in references
+        .model()
+        .elements()
+        .filter(|element| element.conforms_to("Property"))
+    {
+        let (severity, code, message) = match property_deployment_target(references, property) {
+            Ok(true) => continue,
+            Ok(false) => (
+                StructuralSeverity::Error,
+                "UML_PROPERTY_DEPLOYMENT_TARGET",
+                "A deployed Property must be a composite ownedAttribute of a Node".into(),
+            ),
+            Err(QueryError::Invalid { message, .. }) => (
+                StructuralSeverity::Error,
+                "MDE_PROPERTY_DEPLOYMENT_TARGET_INVALID",
+                message,
+            ),
+            Err(QueryError::Unsupported { message, .. }) => (
+                StructuralSeverity::Warning,
+                "MDE_PROPERTY_DEPLOYMENT_TARGET_UNVERIFIED",
+                message,
+            ),
+        };
+        issues.push(StructuralDiagnostic {
+            severity,
+            code,
+            subject_id: property.id().into(),
+            message: format!("Property-deployment_target: {message}"),
         });
     }
     issues
