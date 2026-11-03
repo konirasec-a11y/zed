@@ -142,11 +142,42 @@ pub fn compare_property_consistency(
             .map_err(|error| QueryError::invalid(redefining.id(), error))?;
         Ok(!general || specific)
     })();
-    // The upper-bound clause in the published OCL repeats lowerBound. Follow
-    // the accompanying interval-containment requirement, including infinity.
+    // UML 2.5.1 §9.9.17.7 repeats lowerBound in the upper-bound clause.
+    // UMLR-424 proposes upperBound instead, but remains an open issue, not an
+    // adopted erratum: preserve the published OCL rather than interval containment.
+    // Bounds must be queried independently: a false lower-bound clause decides
+    // the conjunction even when an upper ValueSpecification is unevaluated.
+    // Typed-null/invalid bounds remain errors, not empty or default bounds.
+    let specific_lower = value_specifications::lower_bound(references, redefining)
+        .map_err(|error| classify_value_error(redefining.id(), error));
+    let general_lower = value_specifications::lower_bound(references, redefined)
+        .map_err(|error| classify_value_error(redefined.id(), error));
+    // Evaluate both sides before choosing an error: an unsupported expression
+    // must not mask a structurally invalid bound on the other Property.
+    let lower_bounds = match (specific_lower, general_lower) {
+        (Err(error @ QueryError::Invalid { .. }), _)
+        | (_, Err(error @ QueryError::Invalid { .. })) => Err(error),
+        (Err(error), _) | (_, Err(error)) => Err(error),
+        (Ok(specific), Ok(general)) => Ok((specific, general)),
+    };
+    let lower_clause = lower_bounds
+        .clone()
+        .map(|(specific, general)| specific >= general);
+    // Resolved bounds are non-null, including defaults. Unsupported is unknown,
+    // not an empty bound. A true consequent also decides an implication whose
+    // antecedent cannot be evaluated (not antecedent or consequent).
+    let upper_guard = require_all([
+        resolve_feature_upper_bound(references, redefining).map(|_| true),
+        resolve_feature_upper_bound(references, redefined).map(|_| true),
+    ]);
+    let upper_clause = accept_any([
+        upper_guard.map(|present| !present),
+        lower_bounds.map(|(specific, general)| specific <= general),
+    ]);
     require_all([
         compare_type_conformance(references, redefining, redefined),
-        compare_multiplicity_containment(references, redefining, redefined),
+        lower_clause,
+        upper_clause,
         composite,
     ])
 }

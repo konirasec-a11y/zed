@@ -219,7 +219,7 @@ cargo test --offline --locked -p bellatrix_mde \
   --test kb09_redefinitions --test graph_rules
 ```
 
-Resultado final após as correções de revisão: **7/7** fluxos novos em
+Rodada inicial após as correções de revisão: **7/7** fluxos novos em
 `crates/bellatrix_mde/tests/kb09_redefinitions.rs` e **2/2** em
 `crates/bellatrix_mde/tests/graph_rules.rs`. O fluxo antigo que exigia
 `allSlottableFeatures ambiguous` foi atualizado para verificar o conjunto
@@ -231,31 +231,124 @@ alvos inválidos e finais; default `false` de Classifier; coleções malformadas
 reparo por comando; Port para Property/Port/mistos; substituição e limpeza dos
 papéis; rejeição sem mutar o original; reabertura JSON e Protobuf.
 
-A suíte `inherited_capabilities` também passou **5/5** antes das duas correções
-finais de revisão. Ela não foi reexecutada por este recorte após essas duas
-correções; a rodada final acima não deve ser apresentada como uma nova execução
-dessa suíte nem como gate integral do Kernel. `git diff --check` passou.
-Nenhum teste de UI, build do editor ou aceitação nativa faz parte desta evidência.
+A rodada final, após a resolução normativa e a revisão dos bounds independentes,
+aprovou **9/9** em `kb09_redefinitions`, **5/5** em `inherited_capabilities`
+e **4/4** em `kernel_api_validation`. Essa execução final substitui a limitação
+da rodada inicial, que ainda não havia repetido a suíte de herança após suas
+últimas correções. Não representa gate integral do Kernel. `git diff --check`
+passou. Nenhum teste de UI, build do editor ou aceitação nativa faz parte desta
+evidência.
 
-### Pendência impeditiva do aceite integral
+### Resolução da divergência Property::isConsistentWith (2026-11-03)
 
-`Property-isConsistentWith-spec` no XMI repete `lowerBound()` no consequente da
-cláusula condicionada a `upperBound()`: exige também
-`prop.lowerBound() <= self.lowerBound()`. O comparador existente
-`feature_compatibility.rs::compare_property_consistency` usa inclusão de
-intervalos de multiplicidade, por meio de `compare_multiplicity_containment`,
-seguindo a interpretação descrita em seu comentário. Esse código não foi
-alterado no recorte KB-09 e não é equivalente ao corpo OCL literal.
+A investigação confirmou a divergência em ambas as fontes publicadas:
+`Property-isConsistentWith-spec` no XMI 20161101 e UML 2.5.1,
+§9.9.17.7, p.151, repetem `lowerBound()` no consequente da cláusula
+condicionada a `upperBound()`. A descrição textual, por outro lado, exige
+contenção de intervalos. A [OMG lista PDF e XMI como normativos](https://www.omg.org/spec/UML/2.5.1/About-UML).
 
-Por exemplo, com o mesmo tipo e composição compatível, redefinir `1..4` por
-`2..3` satisfaz inclusão de intervalos, mas falha no consequente literal
-`2 <= 1`. Portanto, passar os testes de fluxo não prova equivalência normativa
-integral desse comparador. A ressalva é de auditoria: o comparador atual retorna
-seu resultado booleano, não um diagnóstico automático dessa divergência.
+A questão primária [OMG UMLR-424](https://issues.omg.org/issues/UMLR-424),
+consultada em 2026-11-03, identifica exatamente esse erro e propõe substituir
+o segundo consequente por `prop.upperBound() <= self.upperBound()`.
+Seu status é **open**, não uma errata aprovada. A evidência não autoriza
+apresentar a correção proposta como corpo OCL publicado.
 
-**KB-09 permanece sem aceite integral** até confrontar a divergência com a
-norma e eventual errata oficial, registrar a resolução normativa e acrescentar
-testes de equivalência com casos discriminantes. Não foi verificada errata
-que autorize substituir essa expressão. Os arquivos upstream uml4net não
-puderam ser relidos nesta rodada porque as consultas web retornaram cache miss;
-a fundamentação acima foi conferida no XMI versionado, não inferida de upstream.
+O Kernel passa a executar o OCL publicado nesse recorte. Após resolver limites
+válidos e não nulos (incluindo os defaults), ambas as guardas `notEmpty()` são
+verdadeiras e os consequentes exigem `prop.lowerBound() >= self.lowerBound()`
+e `prop.lowerBound() <= self.lowerBound()`. Portanto, os limites inferiores
+precisam ser iguais; os valores dos superiores não são comparados entre si.
+Os limites são consultados independentemente, sem exigir previamente um
+intervalo completo válido. Um lower decisivamente incompatível torna a conjunção
+falsa mesmo com upper opaco. Se o consequente da implicação do upper for
+verdadeiro, o upper opaco também não impede esse resultado verdadeiro.
+Um limite não avaliável permanece unknown/unsupported, nunca ausência ou default
+inventado; o resultado booleano pode ser decisivo sem resolver esse limite.
+Bounds inválidos não são convertidos em unknown ou ignorados.
+
+Um `true` de `Property::isConsistentWith` não certifica o intervalo nem substitui
+as validações separadas de `upper_is_unlimitedNatural`, do limite inferior e da
+ordem dos limites. Por exemplo, o comparador literal pode aceitar lower iguais
+sem comparar os valores de upper entre si, enquanto o snapshot ainda recebe um
+diagnóstico por upper inválido ou intervalo inconsistente. Tipo, contexto e
+composição continuam sujeitos aos seus contratos separados.
+O XMI e o metamodelo gerado não foram alterados. O helper de contenção permanece
+intacto para os demais contratos.
+
+Contraexemplos com tipo, contexto e composição compatíveis:
+
+- Base `1..4`, redefinidora `2..3`: literal rejeita; contenção aceita.
+- Base `1..4`, redefinidora `1..5` ou `1..*`: literal aceita; contenção rejeita.
+- Base `1..*`, redefinidora `2..3`: literal rejeita; contenção aceita.
+- Base `1..4`, redefinidora `1..3`: ambas aceitam.
+- Base `1..4`, redefinidora `0..3`: ambas rejeitam.
+
+`property_consistency_preserves_published_lower_bound_clause_and_roundtrips`
+cobre esses casos, defaults, preservação do helper de contenção, comparador,
+validação, comando de redefinição, consulta de Slots e roundtrip JSON/Protobuf.
+O fluxo positivo em `inherited_capabilities` usa agora `0..3` por `0..2`;
+seu negativo discriminante usa `0..3` por `1..2`.
+`property_consistency_evaluates_owned_bounds_independently` acrescenta bounds
+possuídos, upper opaco, decisão booleana independente e distinção entre o
+comparador e os diagnósticos de multiplicidade do snapshot.
+
+Esta resolução estabelece aderência ao corpo OCL publicado no recorte, não
+resolve a contradição editorial da OMG nem implica aceite integral de outros
+contratos do Kernel. Nenhum teste de UI ou aceitação nativa está incluído.
+
+## Adendo KB-10: aplicação integrada em drafts sem raiz (2026-11-03)
+
+A auditoria encontrou um desvio entre `Model::validate` e a API pública:
+`validate_structural_model` mantinha uma lista independente de passes quando
+`root_model` estava ausente. Esse caminho omitia namespace/imports, projeções
+de extremidades e subsetting de Property. Assim, o mesmo grafo podia perder
+diagnósticos ao retirar apenas a designação da raiz, mesmo sem mudar os
+papéis semânticos ou desenhar qualquer View.
+
+`Model::validate_contracts` reúne agora os passes existentes, incluindo os
+contratos escalares herdados. Tanto a validação completa quanto o caminho de
+drafts sem raiz consomem essa lista única. Os checks de raiz e de ownership
+completo continuam exclusivos da validação completa; não se exige uma raiz
+ou owner para toda Class provisória. Não foi criado outro modelo, catálogo
+ou interpretador OCL.
+
+O fluxo público
+`kernel_contract_flow_validates_rooted_and_rootless_drafts_without_views`
+verifica, com e sem raiz designada:
+
+- snapshot válido sem Views e sem diagnósticos;
+- colisão de nomes, subsetting com tipo incompatível e projeção binária fora
+  de `Dependency::client`, com seus diagnósticos específicos;
+- preservação dos drafts inválidos e diagnósticos em JSON e Protobuf;
+- correção até recuperar o resultado original;
+- referência externa não resolvida como warning, não falsa conformidade;
+- independência entre chamadas e preservação de Class provisória sem owner;
+- igualdade completa dos resultados com/sem raiz para casos válidos, inválidos,
+  não resolvidos e escalares malformados, sem diagnósticos duplicados;
+- escalar `isAbstract: "yes"` diagnosticado também no draft sem raiz.
+
+Gate focado executado no workspace nativo, Rust 1.98.1, Linux, com cache
+compartilhado, `CARGO_BUILD_JOBS=2` e `CARGO_INCREMENTAL=0`:
+
+```text
+cargo test --offline --locked -p bellatrix_mde \
+  --test kernel_api_validation --test ownership_namespace_flow \
+  --test namespace_distinguishability_flow --test relationship_roles_flow \
+  --test property_invariants_flow --test association_specialization_flow \
+  --test property_contract_flow
+```
+
+Resultado: **24 testes aprovados**, incluindo o novo fluxo de integração.
+Execução sobre a árvore de trabalho de `0f400666` com este delta KB-10; o SHA
+final de publicação deve ser registrado no checkpoint. `git diff --check`
+aprovado. Não houve build de UI, geração de aplicação ou aceite UML integral.
+A resposta pública continua declarando `coverage: implemented_rules_only`.
+
+Após ampliar as verificações de equivalência e escalares e concluir a revisão
+dos bounds de KB-09, a suíte de API foi reexecutada: **4/4 aprovados**. A rodada
+final conjunta registrou **9/9 KB-09**, **5/5 herança** e **4/4 API KB-10**.
+A divergência editorial **UMLR-424 permanece aberta**; estes testes não convertem
+sua proposta em errata aprovada nem ampliam a cobertura UML declarada.
+
+Uma rodada posterior acrescentou o caso de precedência de erro estrutural sobre
+limite não computável em ambas as ordens: **10/10 testes KB-09 aprovados**.

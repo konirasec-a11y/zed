@@ -481,3 +481,201 @@ fn port_redefinition_selects_a_role_that_accepts_all_targets_and_replaces_old_ro
         .expect("reopen");
     }
 }
+
+#[test]
+fn property_consistency_preserves_published_lower_bound_clause_and_roundtrips() {
+    use bellatrix_mde::uml::feature_compatibility::{
+        compare_multiplicity_containment, compare_property_consistency,
+    };
+    // The first four cases distinguish the published OCL from UMLR-424's
+    // proposed correction. The issue is open, so containment is not substituted.
+    for (general, specific, literal, containment) in [
+        (Some("1..4"), Some("2..3"), false, true),
+        (Some("1..4"), Some("1..5"), true, false),
+        (Some("1..4"), Some("1..*"), true, false),
+        (Some("1..*"), Some("2..3"), false, true),
+        (Some("1..4"), Some("1..3"), true, true),
+        (Some("1..4"), Some("0..3"), false, false),
+        (None, None, true, true),
+        (None, Some("1..*"), true, false),
+    ] {
+        let project = edit(&document(false), |value| {
+            for element in value["elements"].as_array_mut().expect("elements") {
+                let bound = match element["id"].as_str() {
+                    Some("original") => general,
+                    Some("replacement") => specific,
+                    _ => continue,
+                };
+                if let Some(bound) = bound {
+                    element["properties"]["multiplicity"] = json!(bound);
+                }
+            }
+        });
+        for format in [Format::Json, Format::Protobuf] {
+            let reopened =
+                decode(&encode(&project, format).expect("save"), format).expect("reopen");
+            let references = ReferenceIndex::new(Model::from_project(&reopened));
+            let original = references.element("original").expect("original");
+            let replacement = references.element("replacement").expect("replacement");
+            assert_eq!(
+                compare_property_consistency(&references, replacement, original)
+                    .expect("literal consistency"),
+                literal,
+                "{general:?} <- {specific:?}"
+            );
+            assert_eq!(
+                compare_multiplicity_containment(&references, replacement, original)
+                    .expect("containment remains independent"),
+                containment
+            );
+            let diagnostics = Model::from_project(&reopened).validate();
+            assert_eq!(
+                diagnostics
+                    .iter()
+                    .any(|issue| issue.subject_id == "replacement"
+                        && issue.severity == StructuralSeverity::Error
+                        && issue.message.contains("inconsistent")),
+                !literal,
+                "{diagnostics:?}"
+            );
+            let before = encode(&reopened, Format::Json).expect("snapshot");
+            let applied = commands::apply(
+                &reopened,
+                &Command::SetRedefinedElements {
+                    element_id: "replacement".into(),
+                    redefined_ids: vec!["original".into()],
+                },
+                1,
+            );
+            assert_eq!(
+                applied.is_ok(),
+                literal,
+                "{general:?} <- {specific:?}: {applied:?}"
+            );
+            if let Ok(updated) = applied {
+                assert_eq!(
+                    slots(&updated, "middle"),
+                    BTreeSet::from(["replacement".into()])
+                );
+            }
+            assert_eq!(encode(&reopened, Format::Json).expect("unchanged"), before);
+        }
+    }
+}
+
+#[test]
+fn property_consistency_evaluates_owned_bounds_independently() {
+    use bellatrix_mde::uml::feature_compatibility::compare_property_consistency;
+    for (lower_kind, lower_value, expected) in [
+        ("uml.literal_integer", json!(0), "false"),
+        ("uml.literal_integer", json!(1), "true"),
+        ("uml.literal_integer", json!(2), "unsupported"),
+        ("uml.opaque_expression", Value::Null, "unsupported"),
+        ("uml.literal_null", Value::Null, "invalid"),
+        ("uml.literal_integer", Value::Null, "invalid"),
+    ] {
+        let project = edit(&document(false), |value| {
+            let elements = value["elements"].as_array_mut().expect("elements");
+            let replacement = elements
+                .iter_mut()
+                .find(|element| element["id"] == "replacement")
+                .expect("replacement");
+            replacement["properties"]["lowerValue"] = json!({"$ref":"specific-lower"});
+            replacement["properties"]["upperValue"] = json!({"$ref":"specific-upper"});
+            let mut lower = json!({"id":"specific-lower", "kind":lower_kind, "name":"",
+                "properties":{"visibility":null}});
+            if lower_kind == "uml.literal_integer" {
+                lower["properties"]["value"] = lower_value.clone();
+            }
+            elements.extend([
+                lower,
+                json!({"id":"specific-upper", "kind":"uml.opaque_expression", "name":"",
+                    "properties":{"visibility":null}}),
+            ]);
+            value["relations"].as_array_mut().expect("relations").extend([
+                json!({"id":"owns-specific-lower","kind":"owns","from":"replacement","to":"specific-lower"}),
+                json!({"id":"owns-specific-upper","kind":"owns","from":"replacement","to":"specific-upper"}),
+            ]);
+        });
+        for format in [Format::Json, Format::Protobuf] {
+            let reopened =
+                decode(&encode(&project, format).expect("save"), format).expect("reopen");
+            let references = ReferenceIndex::new(Model::from_project(&reopened));
+            let result = compare_property_consistency(
+                &references,
+                references.element("replacement").expect("replacement"),
+                references.element("original").expect("original"),
+            );
+            let actual = match result {
+                Ok(false) => "false",
+                Ok(true) => "true",
+                Err(classifiers::QueryError::Unsupported { .. }) => "unsupported",
+                Err(classifiers::QueryError::Invalid { .. }) => "invalid",
+            };
+            assert_eq!(actual, expected, "{lower_kind}: {lower_value}");
+            if expected == "false" {
+                assert!(
+                    Model::from_project(&reopened)
+                        .validate()
+                        .iter()
+                        .any(|issue| issue.subject_id == "replacement"
+                            && issue.severity == StructuralSeverity::Error
+                            && issue.message.contains("inconsistent"))
+                );
+                let before = encode(&reopened, Format::Json).expect("snapshot");
+                assert!(
+                    commands::apply(
+                        &reopened,
+                        &Command::SetRedefinedElements {
+                            element_id: "replacement".into(),
+                            redefined_ids: vec!["original".into()],
+                        },
+                        1
+                    )
+                    .is_err()
+                );
+                assert_eq!(encode(&reopened, Format::Json).expect("unchanged"), before);
+            }
+        }
+    }
+}
+
+#[test]
+fn property_consistency_prioritizes_invalid_lower_in_either_argument() {
+    use bellatrix_mde::uml::feature_compatibility::compare_property_consistency;
+    for invalid_owner in ["original", "replacement"] {
+        let project = edit(&document(false), |value| {
+            for owner in ["original", "replacement"] {
+                let lower_id = format!("{owner}-lower");
+                let elements = value["elements"].as_array_mut().expect("elements");
+                elements
+                    .iter_mut()
+                    .find(|element| element["id"] == owner)
+                    .expect("property")["properties"]["lowerValue"] = json!({"$ref":lower_id});
+                elements.push(json!({"id":lower_id,
+                    "kind":if owner == invalid_owner { "uml.literal_null" } else { "uml.opaque_expression" },
+                    "name":"", "properties":{"visibility":null}}));
+                value["relations"]
+                    .as_array_mut()
+                    .expect("relations")
+                    .push(json!({
+                        "id":format!("owns-{lower_id}"), "kind":"owns", "from":owner,"to":lower_id
+                    }));
+            }
+        });
+        for format in [Format::Json, Format::Protobuf] {
+            let reopened =
+                decode(&encode(&project, format).expect("save"), format).expect("reopen");
+            let references = ReferenceIndex::new(Model::from_project(&reopened));
+            let result = compare_property_consistency(
+                &references,
+                references.element("replacement").expect("replacement"),
+                references.element("original").expect("original"),
+            );
+            assert!(
+                matches!(result, Err(classifiers::QueryError::Invalid { .. })),
+                "invalid lower owned by {invalid_owner}: {result:?}"
+            );
+        }
+    }
+}

@@ -370,11 +370,14 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
     assert!(!ids(&result.all_attributes).contains(&public.as_str()));
     assert!(ids(&result.all_features).contains(&own_operation.as_str()));
 
+    // Detach before changing both lower bounds: an intermediate mismatch is
+    // inconsistent under the published Property::isConsistentWith OCL.
+    redefine(&mut project, &own_attribute, &[])?;
     for (id, key, value) in [
         (&own_attribute, "type", json!({"$ref": left})),
         (&public, "type", json!({"$ref": ancestor})),
         (&public, "multiplicity", json!("0..3")),
-        (&own_attribute, "multiplicity", json!("1..2")),
+        (&own_attribute, "multiplicity", json!("0..2")),
         (&own_attribute, "aggregation", json!("composite")),
         (&public, "aggregation", json!("composite")),
     ] {
@@ -395,7 +398,7 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
                 && issue.code == "UML_REDEFINITION_CONSISTENCY_UNSUPPORTED")
     );
     for (id, key, value) in [
-        (&own_attribute, "multiplicity", json!("0..4")),
+        (&own_attribute, "multiplicity", json!("1..2")),
         (&own_attribute, "aggregation", json!("none")),
         (&public, "type", json!({"$ref": leaf})),
     ] {
@@ -446,7 +449,7 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
         (
             &own_attribute,
             vec![original_operation.clone()],
-            "wrong metaclass",
+            "writable redefinition role",
         ),
         (
             &own_attribute,
