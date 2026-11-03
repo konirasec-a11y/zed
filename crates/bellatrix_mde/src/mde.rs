@@ -16,6 +16,7 @@ mod ownership;
 mod path;
 mod plan;
 mod publish;
+mod presentation;
 mod quick_edit;
 mod relationships;
 mod scope;
@@ -40,6 +41,7 @@ pub use inspector::{
 pub use path::{PathError, physical_path, validate_segment};
 pub use plan::{Artifact, Diagnostic, Plan, PlanError};
 pub use publish::{publish_new, publish_replace};
+pub use presentation::{SemanticIdentity, semantic_identity, element_display_label};
 pub use quick_edit::{
     QuickEditAction, QuickEditAvailability, QuickEditControl, QuickEditSide, quick_edit_for,
 };

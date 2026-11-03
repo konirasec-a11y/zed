@@ -33,6 +33,7 @@ pub struct InspectorProperty {
 pub struct InspectorMember {
     pub id: String,
     pub name: String,
+    pub display_label: String,
     pub kind: String,
 }
 
@@ -41,6 +42,7 @@ pub struct ElementInspector {
     pub element_id: String,
     pub kind: String,
     pub name: String,
+    pub display_label: String,
     pub properties: Vec<InspectorProperty>,
     /// Owned attributes/operations are model Elements, not strings in a form.
     pub attributes: Vec<InspectorMember>,
@@ -172,6 +174,7 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
         return Some(ElementInspector {
             element_id:relation.id.clone(),kind:relation.kind.clone(),
             name:format!("{source} → {target}"),
+            display_label:format!("{source} → {target}"),
             properties,attributes:Vec::new(),operations:Vec::new(),receptions:Vec::new(),
             template_parameters:Vec::new(),ports:Vec::new(),parts:Vec::new(),
         });
@@ -225,6 +228,7 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
         if let Some(member) = section.elements.iter().find(|e| e.id == relation.to) {
             let descriptor = InspectorMember {
                 id:member.id.clone(),name:member.name.clone(),kind:member.kind.clone(),
+                display_label:crate::element_display_label(member),
             };
             match member.kind.as_str() {
                 "rust.field" | "uml.attribute" => attributes.push(descriptor),
@@ -238,7 +242,7 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
         }
     }
     Some(ElementInspector {element_id:element.id.clone(),kind:element.kind.clone(),
-        name:element.name.clone(),properties,attributes,operations,receptions,
+        name:element.name.clone(),display_label:crate::element_display_label(element),properties,attributes,operations,receptions,
         template_parameters,ports,parts})
 }
 

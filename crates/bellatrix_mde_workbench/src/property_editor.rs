@@ -3,9 +3,7 @@ use crate::{
     MdeWorkbenchItem, WorkbenchPalette,
     panels::{MdeRightPanel, element_glyph},
 };
-use bellatrix_mde::{
-    ElementInspector, InspectorProperty, ModelingRelationKind, PropertyEditor, UmlType,
-};
+use bellatrix_mde::{ElementInspector, InspectorProperty, PropertyEditor};
 use bellatrix_ui_panels::PropertyRow;
 use bellatrix_ui_symbols::glyph;
 use gpui::{AnyElement, Context, Entity, Focusable, IntoElement, Window, div, prelude::*, px, svg};
@@ -24,17 +22,7 @@ fn display(value: &Value) -> String {
 }
 
 fn display_kind(kind: &str) -> &str {
-    UmlType::from_kind(kind)
-        .and_then(UmlType::metaclass)
-        .or_else(|| {
-            ModelingRelationKind::BASIC
-                .iter()
-                .chain(ModelingRelationKind::ADVANCED)
-                .chain(ModelingRelationKind::PACKAGES)
-                .find(|relation| relation.model_kind() == kind)
-                .map(|relation| relation.label())
-        })
-        .unwrap_or(kind)
+    bellatrix_mde::semantic_identity(kind).type_label
 }
 
 fn section_title(group: &str) -> AnyElement {
@@ -314,7 +302,10 @@ pub(crate) fn render_inspector(
                     .flex()
                     .flex_col()
                     .gap_1()
-                    .child(Label::new(inspector.name.clone()).weight(gpui::FontWeight::SEMIBOLD))
+                    .child(
+                        Label::new(inspector.display_label.clone())
+                            .weight(gpui::FontWeight::SEMIBOLD),
+                    )
                     .child(
                         Label::new(format!("{} · Selected", display_kind(&inspector.kind)))
                             .size(LabelSize::XSmall)
@@ -351,12 +342,15 @@ pub(crate) fn render_inspector(
                 div()
                     .px_3()
                     .child(
-                        Button::new(format!("mde-inspector-owned-{id}"), member.name.clone())
-                            .on_click(move |_, _, cx| {
-                                target.update(cx, |workbench, cx| {
-                                    workbench.select_element(id.clone(), cx)
-                                });
-                            }),
+                        Button::new(
+                            format!("mde-inspector-owned-{id}"),
+                            member.display_label.clone(),
+                        )
+                        .on_click(move |_, _, cx| {
+                            target.update(cx, |workbench, cx| {
+                                workbench.select_element(id.clone(), cx)
+                            });
+                        }),
                     )
                     .into_any_element(),
             );

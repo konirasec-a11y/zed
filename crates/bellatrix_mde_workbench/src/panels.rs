@@ -58,6 +58,11 @@ mod tests {
         assert_eq!(element_glyph("uml.interface"), ShapeKind::Interface);
         assert_eq!(element_glyph("rust.enum"), ShapeKind::Enum);
         assert_eq!(element_glyph("rust.struct"), ShapeKind::Class);
+        assert_eq!(element_glyph("uml.constraint"), ShapeKind::Note);
+        assert_eq!(element_glyph("uml.port"), ShapeKind::Connector);
+        assert_eq!(element_glyph("uml.frame"), ShapeKind::Boundary);
+        assert_eq!(element_glyph("custom.widget"), ShapeKind::Topic);
+        assert_ne!(element_glyph("uml.reception"), ShapeKind::Class);
     }
 
     #[test]
@@ -881,7 +886,14 @@ impl Render for MdeRightPanel {
                 let disclosure_panel = cx.weak_entity();
                 let menu_owner = item.clone();
                 let menu_subject = id.clone();
-                let tree_item = TreeViewItem::new(id.clone(), row.label.clone())
+                let label = snapshot
+                    .section
+                    .elements
+                    .iter()
+                    .find(|element| element.id == row.element_id)
+                    .map(bellatrix_mde::element_display_label)
+                    .unwrap_or_else(|| row.label.clone());
+                let tree_item = TreeViewItem::new(id.clone(), label)
                     .root_item(has_children)
                     .expanded(expanded)
                     .toggle_state(selected_id.as_deref() == Some(id.as_str()))
@@ -923,7 +935,7 @@ impl Render for MdeRightPanel {
                                 ),
                         )
                         .child(
-                            div().flex_1().min_w_0().child(
+                            div().flex_1().min_w_0().overflow_hidden().child(
                                 ui::right_click_menu(format!(
                                     "mde-explorer-menu-{}",
                                     row.element_id
@@ -969,6 +981,22 @@ impl Render for MdeRightPanel {
                                     })
                                 }),
                             ),
+                        )
+                        .child(
+                            div()
+                                .flex_none()
+                                .px_1()
+                                .rounded_sm()
+                                .bg(palette.surface)
+                                .child(
+                                    Label::new(
+                                        bellatrix_mde::semantic_identity(&row.kind)
+                                            .type_label
+                                            .to_owned(),
+                                    )
+                                    .size(LabelSize::XSmall)
+                                    .color(Color::Muted),
+                                ),
                         ),
                 );
                 if has_children && !expanded {
@@ -1372,17 +1400,21 @@ impl Render for MdeRightPanel {
 }
 
 pub(crate) fn element_glyph(kind: &str) -> ShapeKind {
-    match kind {
-        "uml.package" | "uml.model" | "uml.subsystem" | "rust.module" => ShapeKind::Package,
-        "uml.interface" | "rust.trait" => ShapeKind::Interface,
-        "uml.enumeration" | "rust.enum" => ShapeKind::Enum,
-        "uml.component" => ShapeKind::Component,
-        "uml.artifact" => ShapeKind::Document,
-        "uml.comment" => ShapeKind::Note,
-        "uml.attribute" | "rust.field" => ShapeKind::Input,
-        "uml.operation" | "rust.function" => ShapeKind::Process,
-        _ => ShapeKind::Class,
+    let identity = bellatrix_mde::semantic_identity(kind);
+    if identity.type_label == "Frame" {
+        return ShapeKind::Boundary;
     }
+    let label = if kind == "rust.module" {
+        "Package"
+    } else {
+        identity.type_label
+    };
+    bellatrix_ui_symbols::groups(bellatrix_ui_symbols::Family::Uml)
+        .iter()
+        .flat_map(|group| group.items)
+        .find(|symbol| symbol.label.eq_ignore_ascii_case(label))
+        .map(|symbol| symbol.kind)
+        .unwrap_or(ShapeKind::Topic)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

@@ -1445,27 +1445,7 @@ impl Render for MdeWorkbenchItem {
                             else {
                                 continue;
                             };
-                            let visibility = member
-                                .properties
-                                .get("visibility")
-                                .and_then(serde_json::Value::as_str)
-                                .unwrap_or("public");
-                            let prefix = match visibility {
-                                "private" => "-",
-                                "protected" => "#",
-                                "package" => "~",
-                                _ => "+",
-                            };
-                            let suffix = if matches!(
-                                member.kind.as_str(),
-                                "rust.function" | "uml.operation" | "uml.reception"
-                            ) && !member.name.ends_with(')')
-                            {
-                                "()"
-                            } else {
-                                ""
-                            };
-                            let text = format!("{prefix}{}{suffix}", member.name);
+                            let text = bellatrix_mde::element_display_label(member);
                             match member.kind.as_str() {
                                 "rust.field" | "uml.attribute" => {
                                     classifier =
