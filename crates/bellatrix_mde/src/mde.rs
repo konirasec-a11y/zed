@@ -80,10 +80,10 @@ pub use templates::{
     template_parametered_element, template_parameters,
 };
 
-pub use construction_script::{ConstructionScriptError, python_construction_script, python_construction_script_traced};
+pub use construction_script::{ConstructionScriptError, python_construction_script};
 pub use generation::{
     GenerationGraphError, GenerationModel, GenerationReference, GenerationUnit,
-    analyze_generation_graph, analyze_generation_graph_traced,
+    analyze_generation_graph,
 };
 pub use graph::{Graph, GraphError};
 pub use hierarchy::{HierarchyRow, project_hierarchy};
@@ -145,3 +145,7 @@ pub use explorer_placement::explorer_parent_map;
 
 #[path = "KERNEL/compiler/artifacts/ownership_manifest.rs"]
 mod ownership_manifest;
+
+#[path = "kernel-api/validation.rs"]
+mod kernel_api_validation;
+pub use kernel_api_validation::validate_uml_model;

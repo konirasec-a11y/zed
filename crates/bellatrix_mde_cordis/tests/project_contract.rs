@@ -422,14 +422,14 @@ async fn revision_conflict_save_close_reopen_and_missing_provider() {
     {
         let events = trace_events.lock().unwrap();
         assert!(events.windows(2).all(|pair| pair[0].run_id == pair[1].run_id && pair[0].sequence < pair[1].sequence));
-        assert!(events.iter().any(|event| event.action == "graph.validate"));
-        assert!(events.iter().any(|event| event.action == "scheduled_unit" && event.identity.as_deref() == Some("type-list") && event.dependencies.iter().any(|dependency| dependency == "type-task")));
+        assert!(events.iter().all(|event| event.component == "cordis"));
+        assert!(events.iter().any(|event| event.action == "generate_rust" && event.phase == bellatrix_mde::TracePhase::Start));
         assert_eq!(events.last().map(|event| event.action.as_str()), Some("generate_rust"));
     }
     let snapshot = journal.snapshot();
     assert!(journal_changes.has_changed().unwrap());
     journal_changes.borrow_and_update();
-    assert!(snapshot.events.iter().any(|event| event.action == "graph.validate"));
+    assert!(snapshot.events.iter().any(|event| event.action == "generate_rust"));
     assert!(snapshot.events.iter().zip(snapshot.events.iter().skip(1)).all(|(first, second)| first.sequence < second.sequence));
     journal.clear();
     assert!(journal_changes.has_changed().unwrap());

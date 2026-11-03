@@ -159,35 +159,6 @@ fn valid_style(style: &crate::Style) -> bool {
         && style.dash_pattern.iter().all(|value| value.is_finite() && *value >= 0.0)
 }
 
-impl Graph<'_> {
-    /// Validate graph integrity while recording the actual call and its outcome.
-    pub fn validate_traced(&self, trace: &mut crate::ExecutionTrace) -> Result<(), GraphError> {
-        use crate::{TraceOutcome, TracePhase};
-        trace.emit("kernel", "graph.validate", TracePhase::Start, Some(&self.project.id), &[], None);
-        let result = self.validate();
-        if let Err(error) = &result {
-            let rule = match error {
-                GraphError::Duplicate(_) => "graph.duplicate_id",
-                GraphError::MissingEndpoint { .. } => "graph.missing_endpoint",
-                GraphError::MissingView { .. } => "graph.missing_view_subject",
-                GraphError::InvalidPhysicalParent(_) => "graph.invalid_physical_parent",
-                GraphError::MultipleParents(_) => "graph.multiple_parents",
-                GraphError::MultipleOwners(_) => "graph.multiple_owners",
-                GraphError::MultipleDeclarations(_) => "graph.multiple_declarations",
-                GraphError::InvalidRelation(_) => "graph.invalid_relation",
-                GraphError::Cycle(_) => "graph.cycle",
-                GraphError::InvalidRoot(_) => "graph.invalid_root",
-                GraphError::Geometry(_) => "graph.geometry",
-            };
-            trace.emit("kernel", rule, TracePhase::Diagnostic, None, &[], Some(TraceOutcome::Invalid));
-        }
-        let (phase, outcome) = if result.is_ok() { (TracePhase::Finish, TraceOutcome::Success) }
-            else { (TracePhase::Error, TraceOutcome::Invalid) };
-        trace.emit("kernel", "graph.validate", phase, Some(&self.project.id), &[], Some(outcome));
-        result
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

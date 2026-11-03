@@ -118,33 +118,6 @@ pub fn analyze_generation_graph(
     Ok(GenerationModel { units })
 }
 
-/// Records scheduled units and their semantic dependencies without changing generation output.
-///
-/// # Effects and determinism
-/// Does not itself read or write files, execute processes or access the network.
-/// Updates the caller-owned trace, reads its monotonic clock and invokes its
-/// configured sink synchronously. Logging itself is not classified as a side
-/// effect; clock-derived trace timestamps are nevertheless nondeterministic.
-/// A sink can perform arbitrary external effects or panic, which this function
-/// neither restricts nor rolls back. The underlying generated result is unchanged
-/// by tracing when the sink completes normally.
-pub fn analyze_generation_graph_traced(project: &Project, selected: &HashSet<String>, trace: &mut crate::ExecutionTrace) -> Result<GenerationModel, GenerationGraphError> {
-    use crate::{TraceOutcome, TracePhase};
-    trace.emit("generation", "analyze", TracePhase::Start, Some(&project.id), &[], None);
-    let result = analyze_generation_graph(project, selected);
-    match &result {
-        Ok(model) => {
-            for unit in &model.units {
-                let dependencies = unit.requires.iter().map(|reference| reference.id.clone()).collect::<Vec<_>>();
-                trace.emit("generation", "scheduled_unit", TracePhase::Finish, Some(&unit.id), &dependencies, Some(TraceOutcome::Success));
-            }
-            trace.emit("generation", "analyze", TracePhase::Finish, Some(&project.id), &[], Some(TraceOutcome::Success));
-        }
-        Err(_) => trace.emit("generation", "analyze", TracePhase::Error, Some(&project.id), &[], Some(TraceOutcome::Invalid)),
-    }
-    result
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

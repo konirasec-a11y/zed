@@ -34,7 +34,8 @@ artifacts and emission; it is not limited to passive validation.
   publication, ownership-manifest reads/writes and output-tree inspection.
   Manifest encoding, decoding and path membership remain pure functions in
   `KERNEL/compiler/artifacts/ownership_manifest.rs`.
-- `observability/`: execution events and explicitly traced entry points.
+- `observability/`: external execution events and validation wrappers. Kernel
+  calculations receive no trace and perform no observation clock reads.
 - `view-model/`: renderer-independent projections grouped by `inspector/`,
   `hierarchy/`, `notation/`, `diagram/` and `authoring/`. These do not depend on GPUI.
 
@@ -105,3 +106,10 @@ those implementation limits rather than claiming future compiler work exists.
 Likewise, the Python source emitted by the compiler contains filesystem calls,
 but composing that source does not execute them. Public publication functions
 in `KERNEL/I_O/` document their actual effects and partial-failure limitations.
+
+## Functional entry point
+
+`validate_uml_model(&str) -> Result<String, String>` is implemented in
+[`kernel-api/`](src/kernel-api/README.md) with a versioned JSON contract and no
+external effects. It exposes no new internal types or public modules. Legacy
+exports remain during migration; complete API isolation is not yet achieved.

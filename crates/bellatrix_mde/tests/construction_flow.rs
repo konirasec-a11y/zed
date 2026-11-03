@@ -1,7 +1,7 @@
 use bellatrix_mde::{
     InputPort, Operation, OperationDefinition, OperationGraph, OperationGraphError, OperationValue,
-    OperationValues, Plan, PortType, python_construction_script, python_construction_script_traced,
-    ExecutionTrace, Graph, Project, TracePhase,
+    OperationValues, Plan, PortType, python_construction_script,
+    Graph, Project,
 };
 use std::{
     fs,
@@ -102,18 +102,9 @@ fn construction_script_builds_the_rendered_project() -> Result<(), Box<dyn std::
         Ok(graph)
     }
     let project: Project = serde_json::from_str(include_str!("../fixtures/todo.json"))?;
-    let mut trace = ExecutionTrace::new("construction-flow", Some("1".into()), 1000);
-    Graph::new(&project).validate_traced(&mut trace)?;
-    let plan = graph(false)?.execute_traced(&mut trace)?;
-    let script = python_construction_script_traced(&plan, &mut trace)?;
-    let events = trace.events();
-    assert!(events.windows(2).all(|pair| pair[0].sequence < pair[1].sequence));
-    let graph_start = events.iter().position(|event| event.action == "operation_graph.execute" && event.phase == TracePhase::Start).ok_or("missing graph start")?;
-    let kernel_finish = events.iter().position(|event| event.action == "graph.validate" && event.phase == TracePhase::Finish).ok_or("missing kernel finish")?;
-    let script_start = events.iter().position(|event| event.action == "python_script.compose" && event.phase == TracePhase::Start).ok_or("missing script start")?;
-    assert!(kernel_finish < graph_start && graph_start < script_start);
-    assert!(events.iter().any(|event| event.action == "operation.execute" && event.identity.as_deref().is_some_and(|id| id.starts_with("combined:combine@1")) && event.dependencies.iter().any(|id| id == "readme")));
-    assert_eq!(trace.dropped(), 0);
+    Graph::new(&project).validate()?;
+    let plan = graph(false)?.execute()?;
+    let script = python_construction_script(&plan)?;
     assert_eq!(
         script,
         python_construction_script(&graph(true)?.execute()?)?

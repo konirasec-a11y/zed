@@ -1,14 +1,16 @@
 # MDE execution events
 
-The pure library uses explicit tracing. Create an `ExecutionTrace` per run with a caller-supplied unique run ID, optional model revision and event capacity, and pass it through the traced entry points. Read `events()` and `dropped()` and use `execution_trace_jsonl` to export JSON Lines; the host owns the destination. A nonzero dropped count means the trace is incomplete. IDs can be application-specific and should be handled as potentially sensitive; event content and parameters are never recorded. Runs are independent and may be correlated by their IDs. The per-run sequence is the observed order; `elapsed_ns` is monotonic elapsed time since the run began, not a wall-clock timestamp.
+Observation is implemented outside `KERNEL`; kernel calculations do not accept traces, read observation clocks or invoke trace sinks. Create an `ExecutionTrace` per run with a caller-supplied unique run ID, optional model revision and event capacity, and pass it through the traced entry points. Read `events()` and `dropped()` and use `execution_trace_jsonl` to export JSON Lines; the host owns the destination. A nonzero dropped count means the trace is incomplete. IDs can be application-specific and should be handled as potentially sensitive; event content and parameters are never recorded. Runs are independent and may be correlated by their IDs. The per-run sequence is the observed order; `elapsed_ns` is monotonic elapsed time since the run began, not a wall-clock timestamp.
 
-Currently instrumented boundaries are graph integrity validation, structural model/diagram validation (including diagnostic codes and subjects), generation graph analysis (scheduled units and dependencies), typed operation execution, and Python script composition. Diagnostics record reported issues, not every rule evaluated. Generation unit events describe the scheduler's output, not execution of generated code. Script composition does not trace execution of the resulting script. Ordinary Cordis mutation requests emit command and kernel apply boundaries with the command variant name; generation/export tasks emit their task boundaries, and diagram validation emits its validation boundaries and diagnostic codes. These events are published through `ModelingExecutionTraceEvent` as they occur. A bounded nonblocking queue forwards these to observers and stderr; overflow or an observer delivery failure/timeout produces a loss-count event. A timeout is counted conservatively because delivery may have occurred before the timeout. Forwarding is detached from the operation result. The opt-in `ModelingValidateDiagramTraced` request carries a caller run ID and capacity and returns the events directly. The MDE host bridge maintains a bounded `ExecutionJournal` with retained history, eviction and producer-loss counts, and live change subscriptions for consumers. Ordinary untraced entry points, other kernel functions, host callback internals and external code have no automatic events. The trace must be explicitly threaded through the relevant calls; absence of events is not evidence that those paths did not run.
+Current external observation covers structural model/diagram validation through wrappers in `observability/`, Cordis command application boundaries, and Cordis generation/export task boundaries. Diagnostics record returned issues, not every rule evaluated. Graph integrity validation, generation analysis, typed operation execution, Python script composition and the Rust backend have no internal tracing. The removed `*_traced` kernel variants are not alternative entry points.
+
+Cordis publishes external events through `ModelingExecutionTraceEvent`. A bounded nonblocking queue forwards them to observers and stderr; overflow or an observer delivery failure/timeout produces a loss-count event. A timeout is counted conservatively because delivery may have occurred before the timeout. Forwarding is detached from the operation result. The opt-in `ModelingValidateDiagramTraced` request carries a caller run ID and capacity and returns events from the external validation wrapper. The MDE host bridge maintains a bounded `ExecutionJournal` with retained history, eviction and producer-loss counts, and live change subscriptions. Absence of internal events does not mean a kernel calculation did not run.
 
 The Cordis host streams each default event to standard error prefixed `MDE_TRACE ` followed by a JSON object. Capture the application's standard error, filter lines with that prefix, and remove it to obtain JSON Lines for plotting. Set `BELLATRIX_MDE_TRACE=off` before starting the host to disable this output. The Cordis event batch remains available to observers. A JSON record with `record_type` set to `dropped` reports the affected run ID and count and means that run is incomplete. Treat logs as potentially sensitive because model IDs may reveal project structure.
 
-Each Cordis JSON event also contains `project_id`. Each event contains `run_id`, optional `revision`, zero-based `sequence`, monotonic `elapsed_ns`, `component`, `action`, `phase`, optional `identity`, `dependencies` (source IDs), and optional `outcome`. Sort by run ID and sequence; match start/finish pairs by action and identity. Dependencies describe semantic or operation inputs. Durations can be calculated from matching start and finish elapsed times. Normal Rust generation threads one run through the Cordis task, kernel graph validation and generation analysis. The current Rust generator does not invoke the typed-operation graph, so those runs do not contain operation callback events; `execute_traced` records callbacks only when a caller actually invokes that graph. HTML export currently records only its Cordis task boundary. Validation and generation use separate run IDs; they are not represented as one combined execution unless a caller explicitly shares a trace.
+Each Cordis JSON event also contains `project_id`. Each event contains `run_id`, optional `revision`, zero-based `sequence`, monotonic `elapsed_ns`, `component`, `action`, `phase`, optional `identity`, `dependencies` (source IDs), and optional `outcome`. Sort by run ID and sequence; match start/finish pairs by action and identity. The dependencies field is retained in the external event format, but kernel calculations no longer emit dependency events. Durations describe externally observed call boundaries. Rust generation and HTML export record only their Cordis task boundaries, not individual compiler stages or operations. Validation and generation use separate run IDs unless an external caller explicitly shares one.
 
-The Cordis `diagram.validate.request` outcome reports whether the request completed; the nested kernel `diagram.validate` outcome reports model validity. These are separate results.
+The Cordis `diagram.validate.request` outcome reports whether the request completed; the external `diagram.validate` wrapper reports model validity. These are separate results, and the legacy `kernel` component label does not indicate instrumentation inside the kernel.
 
 ## Functional API requirement and observation effects
 
@@ -22,13 +24,15 @@ JSON Lines behavior above describes the existing observation adapter only.
 
 The explicitly named `kernel-api` directory is the sole public function-based
 boundary. Consumers must not bypass it through internal modules or reexports.
-All actual internal I/O belongs in `KERNEL/I_O`, including trace export or
-delivery that performs I/O, resource reads, file publication and process
-execution performed by this component. `KERNEL/I_O` is internal implementation,
+Actual internal resource I/O belongs in `KERNEL/I_O`, including resource reads,
+file publication and process execution performed by this component. Observation
+clocks, event construction and trace export/delivery stay outside `KERNEL`,
+including outside `KERNEL/I_O`. Optional measurement may wrap a public API call
+before and after its calculation, never run inside it. `KERNEL/I_O` is internal implementation,
 not a second public API. Functions exposed through `kernel-api` must declare
 these effects; pure generation remains separate from effectful adapters even
-when the latter are housed inside `KERNEL/I_O`. In-memory event construction
-alone is not external I/O. Verify dependencies and actual effectful calls, not
+when the latter are housed inside `KERNEL/I_O`. In-memory trace construction is also excluded from kernel calculations.
+Verify dependencies and actual effectful calls, not
 just directory names, without prescribing the future data representation.
 
 For each public function, document its inputs, results, errors, preconditions,
@@ -45,8 +49,9 @@ observer failures must not influence semantic results. Observed elapsed times
 and delivery metadata are not part of deterministic semantic output or model
 transformation correspondence.
 
-Acceptance tests must compare semantic results with tracing enabled, disabled,
-at capacity, and with failing observers. They must also check repeated A→B→A
+Kernel tests must verify deterministic semantic results without instrumentation.
+Tests of external observation adapters must compare results with observation
+enabled, disabled, at capacity, and with failing observers. They must also check repeated A→B→A
 calls, independent/concurrent runs, unchanged input, per-run isolation and
 visible loss reporting. Generating a construction script must neither execute
 it nor publish its artifacts. Record which functions are actually covered;

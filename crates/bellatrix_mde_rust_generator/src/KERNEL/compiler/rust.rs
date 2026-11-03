@@ -31,46 +31,14 @@ pub fn plan_with_options(project: &Project, scope: &Scope, options: GenerationOp
 /// Validate/select, analyze, render, and return an immutable publication plan.
 pub fn plan_with_templates(project: &Project, scope: &Scope, options: GenerationOptions,
     templates: &TemplatePack) -> Result<Plan, Box<dyn std::error::Error>> {
-    plan_with_templates_inner(project, scope, options, templates, None)
-}
-
-fn plan_with_templates_inner(project: &Project, scope: &Scope, options: GenerationOptions,
-    templates: &TemplatePack, mut trace: Option<&mut bellatrix_mde::ExecutionTrace>) -> Result<Plan, Box<dyn std::error::Error>> {
-    match trace.as_deref_mut() {
-        Some(trace) => Graph::new(project).validate_traced(trace)?,
-        None => Graph::new(project).validate()?,
-    }
+    Graph::new(project).validate()?;
     let selected = select_elements(project, scope)?;
-    let generation_model = match trace {
-        Some(trace) => bellatrix_mde::analyze_generation_graph_traced(project, &selected, trace)?,
-        None => analyze_generation_graph(project, &selected)?,
-    };
+    let generation_model = analyze_generation_graph(project, &selected)?;
     let mut result = Plan::new();
     files::plan_files(project, &selected, &mut result)?;
     cargo::plan_manifests(project, &selected, &mut result, templates)?;
     declarations::plan_rust(project, &generation_model, &selected, templates, &mut result, options.skeleton)?;
     Ok(result)
-}
-/// The same planner with observed kernel and generation stages recorded in a caller-owned run.
-///
-/// # Effects and determinism
-/// Does not itself read or write files, execute processes or access the network.
-/// Updates the caller-owned trace, reads its monotonic clock and invokes its
-/// configured sink synchronously. Logging itself is not classified as a side
-/// effect; clock-derived trace timestamps are nevertheless nondeterministic.
-/// A sink can perform arbitrary external effects or panic, which this function
-/// neither restricts nor rolls back. The underlying generated result is unchanged
-/// by tracing when the sink completes normally.
-pub fn plan_with_options_traced(project: &Project, scope: &Scope, options: GenerationOptions, trace: &mut bellatrix_mde::ExecutionTrace) -> Result<Plan, Box<dyn std::error::Error>> {
-    use bellatrix_mde::{TracePhase, TraceOutcome};
-    trace.emit("generation", "rust.plan", TracePhase::Start, Some(&project.id), &[], None);
-    let result = (|| {
-        let templates = default_templates()?;
-        plan_with_templates_inner(project, scope, options, &templates, Some(trace))
-    })();
-    let (phase, outcome) = if result.is_ok() { (TracePhase::Finish, TraceOutcome::Success) } else { (TracePhase::Error, TraceOutcome::Error) };
-    trace.emit("generation", "rust.plan", phase, Some(&project.id), &[], Some(outcome));
-    result
 }
 #[cfg(test)]
 mod tests {

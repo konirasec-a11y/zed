@@ -246,7 +246,7 @@ impl Render for MdeExecutionDashboard {
                     .on_click(move |_, _, cx| { if let Err(error) = clear_owner.update(cx, |panel, cx| { if let Some(journal) = &panel.journal { journal.clear(); panel.snapshot = journal.snapshot(); } cx.notify(); }) { eprintln!("MDE execution clear failed: {error}"); } })))
             .child(div().px_2().child(self.search.clone()))
             .child(div().px_2().child(format!("Received order; sequence and elapsed-time plots (latest 300 matches, relative scale per run) · {} retained · {} evicted · {} producer events dropped", self.snapshot.events.len(), self.snapshot.evicted_events, self.snapshot.producer_dropped_events)))
-            .child(div().px_2().child("The in-memory MDE journal retains events while this panel is closed and resets when the app exits. Mutation boundaries, Rust generation and diagram validation are instrumented; HTML export has task boundaries only. Internal helper calls are not all traced."))
+            .child(div().px_2().child("The in-memory MDE journal retains events while this panel is closed and resets when the app exits. Mutation and diagram validation boundaries are observed outside the kernel. Rust generation and HTML export have task boundaries only. Kernel calculations have no internal tracing."))
             .children(producer_loss.into_iter().map(|line| div().px_2().child(line)))
             .child(div().id("mde-execution-rows").flex_1().min_h_0().overflow_y_scroll().p_2()
                 .when(rows.is_empty(), |view| view.child("No matching execution events. Select an MDE document and run an instrumented operation."))

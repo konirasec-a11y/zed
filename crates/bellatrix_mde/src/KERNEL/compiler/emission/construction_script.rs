@@ -210,23 +210,3 @@ def main():
 if __name__ == '__main__':
     main()
 "#;
-
-/// Record script composition without recording artifact paths or contents.
-///
-/// # Effects and determinism
-/// Does not itself read or write files, execute processes or access the network.
-/// Updates the caller-owned trace, reads its monotonic clock and invokes its
-/// configured sink synchronously. Logging itself is not classified as a side
-/// effect; clock-derived trace timestamps are nevertheless nondeterministic.
-/// A sink can perform arbitrary external effects or panic, which this function
-/// neither restricts nor rolls back. The underlying generated result is unchanged
-/// by tracing when the sink completes normally.
-pub fn python_construction_script_traced(plan: &Plan, trace: &mut crate::ExecutionTrace) -> Result<String, ConstructionScriptError> {
-    use crate::{TraceOutcome, TracePhase};
-    trace.emit("generation", "python_script.compose", TracePhase::Start, None, &[], None);
-    let result = python_construction_script(plan);
-    let (phase, outcome) = if result.is_ok() { (TracePhase::Finish, TraceOutcome::Success) }
-        else { (TracePhase::Error, TraceOutcome::Error) };
-    trace.emit("generation", "python_script.compose", phase, None, &[], Some(outcome));
-    result
-}
