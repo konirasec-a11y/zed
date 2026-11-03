@@ -1,5 +1,5 @@
+use crate::uml::types::{MultiplicityError, RelationEnd, RelationEndMultiplicity};
 use crate::{Element, GraphIndex, Project, StructuralDiagnostic, StructuralSeverity, UmlType};
-use serde_json::Value;
 use std::collections::HashMap;
 
 fn metaclass(element: &Element) -> Option<&'static str> {
@@ -81,10 +81,12 @@ pub(super) fn validate(project: &Project) -> Vec<StructuralDiagnostic> {
                     }
                 }
             }
-            for key in ["sourceMultiplicity", "targetMultiplicity"] {
-                if let Some(value) = relation.properties.get(key)
-                    && let Some(issue) = multiplicity(&relation.id, key, value)
-                {
+            for end in [RelationEnd::Source, RelationEnd::Target] {
+                if let Some(issue) = multiplicity(
+                    &relation.id,
+                    end.multiplicity_key(),
+                    RelationEndMultiplicity::new(relation, end),
+                ) {
                     issues.push(issue);
                 }
             }
@@ -140,72 +142,34 @@ pub(super) fn validate(project: &Project) -> Vec<StructuralDiagnostic> {
     issues
 }
 
-// Decimal comparison avoids imposing a machine-integer maximum on UML literals.
-fn integer(text: &str) -> Option<(bool, &str)> {
-    let text = text.trim();
-    let negative = text.starts_with('-');
-    let digits = text.strip_prefix(['-', '+']).unwrap_or(text);
-    if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
-        return None;
-    }
-    let digits = digits.trim_start_matches('0');
-    Some((negative && !digits.is_empty(), digits))
-}
-
-fn multiplicity(subject: &str, key: &str, value: &Value) -> Option<StructuralDiagnostic> {
-    let Some(text) = value.as_str() else {
-        return Some(diagnostic(
-            StructuralSeverity::Error,
-            "MDE_MULTIPLICITY_REPRESENTATION",
-            subject,
-            format!("{key} must be a string in the MDE representation"),
-        ));
+fn multiplicity(
+    subject: &str,
+    key: &str,
+    multiplicity: RelationEndMultiplicity<'_>,
+) -> Option<StructuralDiagnostic> {
+    let error = multiplicity.effective().err()?;
+    let (severity, code) = match error {
+        MultiplicityError::Representation => {
+            (StructuralSeverity::Error, "MDE_MULTIPLICITY_REPRESENTATION")
+        }
+        MultiplicityError::UnsupportedValueSpecification => {
+            (StructuralSeverity::Warning, "MDE_MULTIPLICITY_UNSUPPORTED")
+        }
+        MultiplicityError::InvalidBounds => (StructuralSeverity::Error, "UML_MULTIPLICITY_BOUNDS"),
     };
-    let text = text.trim();
-    let (lower, upper) = if text == "*" {
-        ("0", "*")
-    } else {
-        text.split_once("..").unwrap_or((text, text))
-    };
-    let parsed_lower = integer(lower);
-    let parsed_upper = if upper.trim() == "*" {
-        None
-    } else {
-        integer(upper)
-    };
-    let unsupported = || {
-        diagnostic(
-            StructuralSeverity::Warning,
-            "MDE_MULTIPLICITY_UNSUPPORTED",
-            subject,
-            format!(
-                "{key} cannot be evaluated by the literal-bound validator; constant UML ValueSpecifications are not evaluated"
-            ),
-        )
-    };
-    let Some((negative_lower, lower_digits)) = parsed_lower else {
-        return Some(unsupported());
-    };
-    if upper.trim() != "*" && parsed_upper.is_none() {
-        return Some(unsupported());
-    }
-    // UML.xmi MultiplicityElement-lower_ge_0, -upper_is_unlimitedNatural,
-    // and -upper_ge_lower; UML 2.5.1 §7.8.8.8. Nonliteral values remain unsupported,
-    // not invalid UML (value_specification_constant permits constant expressions).
-    let invalid = negative_lower
-        || parsed_upper.is_some_and(|(negative_upper, upper_digits)| {
-            negative_upper
-                || (upper_digits.len(), upper_digits) < (lower_digits.len(), lower_digits)
-        });
-    invalid.then(|| diagnostic(StructuralSeverity::Error, "UML_MULTIPLICITY_BOUNDS", subject,
-        format!("{key} must have a nonnegative integer lower bound and an unlimited-natural upper bound at least as large")))
+    Some(diagnostic(
+        severity,
+        code,
+        subject,
+        format!("{key}: {error}"),
+    ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::validate_structural_model;
-    use serde_json::json;
+    use serde_json::{Value, json};
 
     fn fixture(
         source: &str,
@@ -395,16 +359,24 @@ mod tests {
     #[test]
     fn nonliteral_multiplicity_is_unsupported_not_invalid_uml() {
         for text in ["", "limit", "0..limit", "1..2..3", "*..3", "1.5"] {
-            let issue = multiplicity("r", "sourceMultiplicity", &json!(text))
-                .expect("unsupported literal syntax");
+            let issue = multiplicity(
+                "r",
+                "sourceMultiplicity",
+                RelationEndMultiplicity::from_value(Some(&json!(text))),
+            )
+            .expect("unsupported literal syntax");
             assert_eq!(issue.severity, StructuralSeverity::Warning);
             assert_eq!(issue.code, "MDE_MULTIPLICITY_UNSUPPORTED");
         }
         for value in [json!(2), json!(null), json!({"lower":0}), json!(true)] {
             assert_eq!(
-                multiplicity("r", "sourceMultiplicity", &value)
-                    .expect("wrong representation")
-                    .code,
+                multiplicity(
+                    "r",
+                    "sourceMultiplicity",
+                    RelationEndMultiplicity::from_value(Some(&value))
+                )
+                .expect("wrong representation")
+                .code,
                 "MDE_MULTIPLICITY_REPRESENTATION"
             );
         }

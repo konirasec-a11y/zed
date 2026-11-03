@@ -129,7 +129,7 @@ fn specialization_preserves_subject_metaclass_and_respects_final_supertype() {
                 let child = updated
                     .elements
                     .iter()
-                    .find(|element| element.id != "owner")
+                    .find(|element| element.id != "owner" && element.kind == kind)
                     .expect("child");
                 assert_eq!(child.kind, kind);
                 let relation = updated

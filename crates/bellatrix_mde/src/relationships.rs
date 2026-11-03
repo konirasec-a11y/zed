@@ -1,5 +1,6 @@
 //! One relationship contract for model operations and diagram projections.
 //! GPUI paints and hit-tests; it does not define relationship semantics.
+use crate::uml::types::{RelationEnd, RelationEndMultiplicity};
 use crate::{Geometry, ModelingSection, PathSegment, Point, Relation, RelationshipRouting, View};
 use crate::{UmlType, classifier_contents};
 
@@ -555,7 +556,9 @@ pub fn relationship_style_for_notation(kind: &str) -> RelationshipStyle {
         "uml.generalization" => (None, Triangle, false),
         "uml.interface_realization" | "uml.realization" => (None, Triangle, true),
         "uml.directed_association" => (None, OpenArrow, false),
-        "uml.dependency" | "uml.usage" | "uml.template_binding" | "depends_on" => (None, OpenArrow, true),
+        "uml.dependency" | "uml.usage" | "uml.template_binding" | "depends_on" => {
+            (None, OpenArrow, true)
+        }
         "uml.aggregation" => (Diamond, None, false),
         "uml.composition" => (FilledDiamond, None, false),
         "uml.containment" => (Containment, None, false),
@@ -637,18 +640,25 @@ pub fn relationship_presentation(relation: &Relation) -> RelationshipPresentatio
     };
     RelationshipPresentation {
         name: if notation == "uml.usage" {
-            Some(text("name").filter(|name| !name.is_empty())
-                .map_or_else(|| "«use»".into(), |name| format!("«use» {name}")))
+            Some(
+                text("name")
+                    .filter(|name| !name.is_empty())
+                    .map_or_else(|| "«use»".into(), |name| format!("«use» {name}")),
+            )
         } else {
             text("name")
         },
         source_labels: RelationshipEndpointLabels {
             role: text("sourceRole"),
-            multiplicity: text("sourceMultiplicity"),
+            multiplicity: RelationEndMultiplicity::new(relation, RelationEnd::Source)
+                .authored_notation()
+                .map(str::to_owned),
         },
         target_labels: RelationshipEndpointLabels {
             role: text("targetRole"),
-            multiplicity: text("targetMultiplicity"),
+            multiplicity: RelationEndMultiplicity::new(relation, RelationEnd::Target)
+                .authored_notation()
+                .map(str::to_owned),
         },
         label,
         notation: notation.to_owned(),

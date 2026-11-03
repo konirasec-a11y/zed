@@ -20,6 +20,9 @@ impl<'a> GraphIndex<'a> {
         let mut graph = DiGraph::new();
         let mut ids = HashMap::new();
         for element in &project.elements { ids.insert(element.id.as_str(), graph.add_node(element.id.as_str())); }
+        for relation in project.relations.iter().filter(|relation| crate::uml::root::relationship_metaclass(&relation.kind).is_some()) {
+            ids.insert(relation.id.as_str(), graph.add_node(relation.id.as_str()));
+        }
         for relation in &project.relations {
             if let (Some(&from), Some(&to)) = (ids.get(relation.from.as_str()), ids.get(relation.to.as_str())) {
                 graph.add_edge(from, to, relation);

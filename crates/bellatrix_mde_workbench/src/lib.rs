@@ -451,13 +451,18 @@ impl MdeWorkbenchItem {
             return;
         }
         let classifier = UmlType::from_kind(&target.kind).is_some_and(UmlType::is_classifier);
-        let hint = if classifier {
+        let comment = UmlType::from_kind(&target.kind) == Some(UmlType::Note);
+        let hint = if comment {
+            "Body"
+        } else if classifier {
             "<< stereotype >> name"
         } else {
             "Name"
         };
         let field = cx.new(|cx| InputField::new(window, cx, hint).label_min_width(px(96.0)));
-        let display = if classifier {
+        let display = if comment {
+            bellatrix_mde::element_display_label(target)
+        } else if classifier {
             Self::name_expression_text(target)
         } else {
             bellatrix_mde::template_parametered_element(&snapshot.section, target)
@@ -483,13 +488,7 @@ impl MdeWorkbenchItem {
         else {
             return;
         };
-        let name = field.read(cx).text(cx).trim().to_owned();
-        if name.is_empty() {
-            field.update(cx, |field, cx| {
-                field.set_error(Some("Name is required"), cx)
-            });
-            return;
-        }
+        let text = field.read(cx).text(cx);
         let Ok(snapshot) = self.source.snapshot() else {
             self.feedback = "Project snapshot unavailable".into();
             cx.notify();
@@ -505,8 +504,12 @@ impl MdeWorkbenchItem {
             return;
         };
         let classifier = UmlType::from_kind(&element.kind).is_some_and(UmlType::is_classifier);
+        let comment = UmlType::from_kind(&element.kind) == Some(UmlType::Note);
+        let name = if comment { text.to_string() } else { text.trim().to_owned() };
         let changed = name
-            != if classifier {
+            != if comment {
+                bellatrix_mde::element_display_label(element)
+            } else if classifier {
                 Self::name_expression_text(element)
             } else {
                 bellatrix_mde::template_parametered_element(&snapshot.section, element)
@@ -532,7 +535,7 @@ impl MdeWorkbenchItem {
                     MdeUiCommand::SetProperty(ModelingSetPropertyRequested {
                         project_id: self.project_id().clone(),
                         element_id: id,
-                        path: "name".into(),
+                        path: if comment { "properties.body" } else { "name" }.into(),
                         value: serde_json::Value::String(name),
                         expected_revision: snapshot.revision,
                     }),
@@ -1649,7 +1652,7 @@ impl Render for MdeWorkbenchItem {
                             let edit_id = element.id.clone();
                             let label = if element.kind == "uml.constraint" {
                                 format!("{{{}}}", element.name)
-                            } else if element.kind == "uml.port" {
+                            } else if matches!(element.kind.as_str(), "uml.port" | "uml.note" | "uml.comment") {
                                 bellatrix_mde::element_display_label(element)
                             } else {
                                 element.name.clone()

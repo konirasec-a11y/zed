@@ -23,6 +23,8 @@ use std::collections::HashSet;
 
 #[derive(Clone, Debug)]
 pub enum Command {
+    AdoptRootModel,
+    SetOwner { element_id: String, owner_id: Option<String> },
     CreateDiagram {
         kind: StructuralDiagramKind,
         name: String,
@@ -111,6 +113,8 @@ pub enum Command {
 pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Project, String> {
     let mut section = ModelingSection::from_model(project);
     match command {
+        Command::SetOwner { element_id, owner_id } => crate::uml::root::reparent(&mut section, &project.id, element_id, owner_id.as_deref())?,
+        Command::AdoptRootModel => { crate::uml::root::adopt_root_model(&mut section, &project.id, &project.name)?; }
         Command::CreateDiagram {
             kind,
             name,
@@ -207,9 +211,6 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
             expression,
         } => name_expression::apply(&mut section, element_id, expression)?,
         Command::Rename { element_id, name } => {
-            if name.trim().is_empty() {
-                return Err("name must not be blank".into());
-            }
             if !crate::templates::rename_parameter(&mut section, element_id, name)? {
                 section
                     .elements
@@ -227,6 +228,7 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
         .map_err(|error| error.to_string())?;
     validation::new_relationships(project, &updated)?;
     crate::templates::validate_changes(project, &updated)?;
+    crate::uml::root::validate_changes(project, &updated)?;
     Ok(updated)
 }
 
@@ -274,16 +276,13 @@ fn create_element(
     if !x.is_finite() || !y.is_finite() {
         return Err("element position must be finite".into());
     }
-    let name = name.as_deref().unwrap_or(kind.default_name());
-    if name.trim().is_empty() {
-        return Err("element name must not be empty".into());
-    }
-    if kind.requires_owner() && owner_id.is_none() {
-        return Err(
-            "Component/Artifact creation requires an explicit Package or Model owner".into(),
-        );
-    }
-    if let Some(owner_id) = owner_id {
+    let requested_name = name.as_deref();
+    let mut chosen_name = requested_name.unwrap_or(kind.default_name()).to_owned();
+    if kind.requires_owner() && owner_id.is_none() { return Err("Component/Artifact creation requires an explicit Package or Model owner".into()); }
+    let resolved_owner = if let Some(owner_id) = owner_id { Some(owner_id.clone()) } else if crate::uml::root::object_metaclass(kind.model_kind()).is_some() {
+        Some(crate::uml::root::adopt_root_model(section, project_id, "Model")?)
+    } else { None };
+    if let Some(owner_id) = &resolved_owner {
         let owner = section
             .elements
             .iter()
@@ -300,6 +299,14 @@ fn create_element(
         .any(|diagram| diagram.id == *diagram_id)
     {
         return Err("diagram not found".into());
+    }
+    if requested_name.is_none() {
+        let base = chosen_name.clone();
+        for sequence in 1_u64.. {
+            let duplicate = section.elements.iter().any(|element| element.name == chosen_name && section.relations.iter().any(|relation| relation.kind == "owns" && Some(&relation.from) == resolved_owner.as_ref() && relation.to == element.id));
+            if !duplicate { break; }
+            chosen_name = format!("{base}{sequence}");
+        }
     }
     let [element_id, view_id, ownership_id] = fresh_ids(
         section,
@@ -341,10 +348,13 @@ fn create_element(
         properties.insert("isIndirectlyInstantiated".into(), serde_json::json!(true));
         properties.insert("isActive".into(), serde_json::json!(false));
     }
+    if crate::uml::root::object_metaclass(kind.model_kind()) == Some("Comment") {
+        properties.insert("body".into(), Value::String(chosen_name.clone()));
+    }
     section.elements.push(Element {
         id: element_id.clone(),
         kind: kind.model_kind().into(),
-        name: name.into(),
+        name: chosen_name,
         label: None,
         description: None,
         properties,
@@ -352,7 +362,7 @@ fn create_element(
         implementations: Vec::new(),
         content: None,
     });
-    if let Some(owner_id) = owner_id {
+    if let Some(owner_id) = resolved_owner {
         section.relations.push(Relation {
             id: ownership_id,
             kind: "owns".into(),
@@ -403,6 +413,11 @@ fn create_relation(
         to: to.into(),
         properties,
     });
+    if crate::uml::root::relationship_metaclass(semantic_kind).is_some()
+        && !matches!(semantic_kind, "uml.generalization" | "uml.interface_realization" | "uml.template_binding") {
+        let root_id = crate::uml::root::adopt_root_model(section, project_id, "Model")?;
+        crate::uml::root::set_owner(section, project_id, &id, &root_id)?;
+    }
     let diagram = section
         .diagrams
         .iter_mut()
@@ -524,36 +539,25 @@ fn resize_view(
 }
 
 fn remove_element(section: &mut ModelingSection, id: &str) -> Result<(), String> {
-    if section.relations.iter().any(|relation| relation.id == id) {
-        if !section.diagrams.iter().any(|diagram| {
-            RelationshipGraph::new(section, &diagram.id)
-                .visible_relations()
-                .iter()
-                .any(|relation| relation.id == id)
-        }) {
-            return Err("structural relationship cannot be deleted directly".into());
+    let semantic = crate::uml::root::Model::from_section(section);
+    if semantic.element(id).is_none() {
+        if section.diagrams.iter().any(|diagram| RelationshipGraph::new(section, &diagram.id).visible_relations().iter().any(|relation| relation.id == id)) {
+            section.relations.retain(|relation| relation.id != id);
+            for diagram in &mut section.diagrams { diagram.views.retain(|view| view.subject.as_deref() != Some(id)); }
+            return Ok(());
         }
-        section.relations.retain(|relation| relation.id != id);
-        for diagram in &mut section.diagrams {
-            diagram
-                .views
-                .retain(|view| view.subject.as_deref() != Some(id));
-        }
-        return Ok(());
-    }
-    if !section.elements.iter().any(|element| element.id == id) {
-        return Err("element not found".into());
+        return Err("element not found or structural link cannot be deleted directly".into());
     }
     let mut deleted = HashSet::from([id.to_owned()]);
     loop {
         let mut changed = false;
+        for element in semantic.elements() {
+            if semantic.owner(element)?.is_some_and(|owner| deleted.contains(owner.id()))
+                && deleted.insert(element.id().to_owned()) { changed = true; }
+        }
         for relation in &section.relations {
-            if relation.kind == "owns"
-                && deleted.contains(&relation.from)
-                && deleted.insert(relation.to.clone())
-            {
-                changed = true;
-            }
+            if (deleted.contains(&relation.from) || deleted.contains(&relation.to))
+                && deleted.insert(relation.id.clone()) { changed = true; }
         }
         if !changed {
             break;
@@ -583,7 +587,8 @@ fn remove_element(section: &mut ModelingSection, id: &str) -> Result<(), String>
         .retain(|element| !deleted.contains(&element.id));
     section
         .relations
-        .retain(|relation| !incident.contains(&relation.id));
+        .retain(|relation| !incident.contains(&relation.id) && !deleted.contains(&relation.id));
+    if section.root_model.as_ref().is_some_and(|root| deleted.contains(root)) { section.root_model = None; }
     for diagram in &mut section.diagrams {
         diagram.views.retain(|view| {
             view.subject

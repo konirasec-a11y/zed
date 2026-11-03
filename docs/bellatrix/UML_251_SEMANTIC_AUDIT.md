@@ -145,3 +145,28 @@ O projeto tem uma base real de identidade, ownership, criação de membros, hera
 3. Modelar memberEnd/ownedEnd/navigableOwnedEnd de Association e documentar/migrar corretamente `end1Aggregation`; então validar multiplicidade oposta e demais regras de Property.
 4. Fechar namespace/distinguibilidade e endpoints de Dependency/Realization; ampliar templates e herança de membros somente com os contratos correspondentes.
 5. Somente depois declarar os níveis específicos de conformidade efetivamente verificados. As alterações publicadas de rótulos e integração de painéis não resolvem as lacunas semânticas acima.
+
+## Avanço posterior: contratos consumidos de Root e multiplicidade
+
+As conclusões acima são a auditoria da base indicada, não uma alegação de que
+cada lacuna continua inalterada após as correções. O incremento seguinte liga
+contratos Rust de Element, NamedElement, Namespace, Relationship e
+DirectedRelationship, além de CommentRef, aos registros canônicos existentes
+em `crates/bellatrix_mde/src/uml/root.rs`. Inspector, hierarquia e comandos usam
+esses contratos. O root Model possui referência persistida; owner, namespace e
+qualifiedName são derivados, não cópias independentes mantidas pela UI.
+A mutação rejeita violações novas do recorte implementado, sem bloquear a
+correção de um draft por erros anteriores não relacionados.
+
+`uml/types.rs` fornece Integer de precisão arbitrária, UnlimitedNatural
+explícito e intervalo de multiplicidade consumido pela validação e pela
+apresentação das pontas atualmente representadas. Os cinco nomes de
+PrimitiveTypes são identificados. Isso não implementa todos os primitivos,
+ValueSpecifications possuídos, Type references ou memberEnds de Association.
+
+Os fluxos existentes foram ajustados à nova raiz e complementados com um
+percurso de criação/edição/ownership/comentário/reabertura, além do fluxo de
+multiplicidades. Gates headless e lint passaram; interação nativa dessas
+mudanças ainda requer verificação. Imports de Namespace, demais restrições de
+Root, propriedades completas de Association e os outros contratos estruturais
+continuam pendentes. UMLDI e StandardProfile permanecem obrigações separadas.

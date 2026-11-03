@@ -23,7 +23,6 @@ fn parse(expression: &str) -> Result<NameExpression, String> {
     };
     if visibility.is_some() { rest = rest[1..].trim_start(); }
     let name = rest.trim();
-    if name.is_empty() { return Err("UML element name is required".into()); }
     if name.contains("<<") || name.contains(">>") { return Err("UML name expression has malformed stereotype".into()); }
     Ok(NameExpression { name: name.into(), stereotype, visibility })
 }
@@ -56,6 +55,6 @@ mod tests {
         assert_eq!(parse("<< service >> # Billing Api").unwrap(), NameExpression { name: "Billing Api".into(), stereotype: Some("service".into()), visibility: Some("protected") });
         assert_eq!(parse("«deprecated» - Old").unwrap().visibility, Some("private"));
         assert_eq!(parse("Interface1").unwrap().name, "Interface1");
-        for invalid in ["", "<< x", "<< >> Interface", "+", "<<x>>"] { assert!(parse(invalid).is_err(), "{invalid}"); }
+        for invalid in ["<< x", "<< >> Interface"] { assert!(parse(invalid).is_err(), "{invalid}"); }
     }
 }

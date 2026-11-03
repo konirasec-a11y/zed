@@ -294,7 +294,7 @@ fn insert_template_parameter(
         exposed_id.clone(),
         "uml.class",
         parameter_name,
-        Default::default(),
+        std::collections::BTreeMap::from([("visibility".into(), serde_json::Value::Null)]),
     ));
     for (id, kind, from, to) in [
         (

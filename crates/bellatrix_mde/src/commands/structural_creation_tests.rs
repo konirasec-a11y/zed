@@ -132,12 +132,15 @@ fn required_owner_is_explicit_resolved_and_supported_not_inferred_from_diagram_c
 }
 
 #[test]
-fn existing_ownerless_creation_semantics_stay_unchanged() -> Result<(), Box<dyn std::error::Error>>
+fn implicit_creation_uses_an_actual_model_without_using_diagram_context() -> Result<(), Box<dyn std::error::Error>>
 {
     let source = fixture()?;
     let updated = apply(&source, &create(ModelingElementKind::Class, None), 0)?;
     assert!(!ModelingElementKind::Class.requires_owner());
-    assert_eq!(updated.relations, source.relations);
+    assert_eq!(updated.root_model.as_deref(), Some("model"));
+    let semantic = crate::uml::root::Model::from_project(&updated);
+    let created = updated.elements.last().ok_or("missing class")?;
+    assert_eq!(semantic.owner(semantic.element(&created.id).ok_or("missing identity")?)?.map(|owner| owner.id()), Some("model"));
     assert_eq!(
         updated
             .diagrams

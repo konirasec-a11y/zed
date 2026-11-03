@@ -81,31 +81,22 @@ fn problem(code: &'static str, id: &str, message: impl Into<String>) -> Structur
     }
 }
 
-/// Compatibility classification retained during the crate migration. This
-/// table still includes editor-specific links; it is not a UML metaclass registry.
-pub fn relationship_root_kind(relation: &Relation) -> Option<RootMetaclass> {
-    Some(match relation.kind.as_str() {
-        "uml.association" => RootMetaclass::Relationship,
-        "uml.generalization"
-        | "uml.dependency"
-        | "uml.usage"
-        | "uml.directed_association"
-        | "uml.interface_realization"
-        | "uml.realization"
-        | "uml.template_binding"
-        | "uml.containment"
-        | "uml.note_link"
-        | "uml.constraint_link"
-        | "depends_on" => RootMetaclass::DirectedRelationship,
-        _ => return None,
-    })
-}
-pub fn element_root_kind(kind: &str) -> RootMetaclass {
-    if matches!(kind, "uml.comment" | "uml.note") {
+fn root_kind(metaclass: &str) -> RootMetaclass {
+    if crate::uml::metamodel::conforms_to(metaclass, "Comment") {
         RootMetaclass::Comment
+    } else if crate::uml::metamodel::conforms_to(metaclass, "DirectedRelationship") {
+        RootMetaclass::DirectedRelationship
+    } else if crate::uml::metamodel::conforms_to(metaclass, "Relationship") {
+        RootMetaclass::Relationship
     } else {
         RootMetaclass::Element
     }
+}
+pub fn relationship_root_kind(relation: &Relation) -> Option<RootMetaclass> {
+    crate::uml::root::relationship_metaclass(&relation.kind).map(root_kind)
+}
+pub fn element_root_kind(kind: &str) -> Option<RootMetaclass> {
+    crate::uml::root::object_metaclass(kind).map(root_kind)
 }
 
 /// Combines whole-model semantic diagnostics with the selected projection. The `kind`
@@ -345,9 +336,9 @@ pub fn validate_structural_model(project: &Project) -> Vec<StructuralDiagnostic>
                 "end1Aggregation belongs to Association and must be none, shared or composite",
             ));
         }
-        // Template property references are not UML Relationship instances.
+        // Property-reference and editor links remain supported without becoming UML Relationships.
         if relationship_root_kind(relation).is_none() && relation.kind.starts_with("uml.")
-            && !matches!(relation.kind.as_str(), "uml.parametered_element" | "uml.constraining_classifier") {
+            && !matches!(relation.kind.as_str(), "uml.parametered_element" | "uml.constraining_classifier" | "uml.note_link" | "uml.constraint_link" | "uml.containment") {
             issues.push(problem(
                 "UML_UNKNOWN_RELATIONSHIP",
                 &relation.id,
@@ -367,6 +358,7 @@ pub fn validate_structural_model(project: &Project) -> Vec<StructuralDiagnostic>
             "Generalization cannot contain cycles of Classifiers",
         ));
     }
+    if project.root_model.is_some() { issues.extend(crate::uml::root::Model::from_project(project).validate()); }
     issues.extend(crate::structural_rules::validate(project));
     issues.extend(crate::templates::validate(project));
     issues

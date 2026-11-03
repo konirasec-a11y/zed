@@ -114,6 +114,7 @@ pub fn member_presentation(element: &Element) -> MemberPresentation {
 }
 
 pub fn element_display_label(element: &Element) -> String {
+    if let Some(body) = crate::uml::root::ElementRef::Object(element).comment().and_then(|comment| comment.body()) { return body.to_owned(); }
     let kind = UmlType::from_kind(&element.kind);
     let member = matches!(
         kind,

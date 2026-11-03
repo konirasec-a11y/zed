@@ -12,6 +12,7 @@ message Project {
   repeated Element elements = 4;
   repeated Relation relations = 5;
   repeated Diagram diagrams = 6;
+  optional string root_model = 7;
 }
 message Element {
   string id = 1;

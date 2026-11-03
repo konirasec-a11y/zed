@@ -1,11 +1,18 @@
 //! Acceptance: the StarUML class-diagram tools create typed persisted nodes
 //! and relationships through the same public Cordis revision boundary.
-use bellatrix_mde::{Geometry, ModelingSection, Project, relation_kind_for_creation};
+use bellatrix_mde::uml::types::{
+    Integer, MultiplicityError, MultiplicityRange, RelationEnd, RelationEndMultiplicity,
+    StandardPrimitiveType, UnlimitedNatural,
+};
+use bellatrix_mde::{
+    Format, Geometry, ModelingSection, Project, StructuralSeverity, decode, encode,
+    relation_kind_for_creation, relationship_presentation, validate_structural_model,
+};
 use bellatrix_mde_cordis::{
     MdePlugin, ModelingCreateElement, ModelingCreateElementRequested, ModelingCreateRelation,
     ModelingCreateRelationRequested, ModelingDeleteElement, ModelingDeleteElementRequested,
     ModelingElementKind, ModelingMoveView, ModelingMoveViewRequested, ModelingRelationKind,
-    with_model,
+    ModelingSetProperty, ModelingSetPropertyRequested, with_model,
 };
 use bellatrix_project::{
     ProjectCreate, ProjectCreateRequested, ProjectDocument, ProjectId, ProjectPlugin,
@@ -262,6 +269,155 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
         "auto-routed UML connector must follow its node"
     );
     assert_eq!(updated.revision(), 26);
+    let association = after
+        .relations
+        .iter()
+        .find(|relation| {
+            relation.kind == "uml.association"
+                && !relation.properties.contains_key("end1Aggregation")
+        })
+        .expect("authored association");
+    let association_id = association.id.clone();
+    let default_range = RelationEndMultiplicity::new(association, RelationEnd::Target)
+        .effective()
+        .expect("absent multiplicity defaults to one");
+    assert_eq!(default_range.lower_bound(), &Integer::from(1));
+    assert_eq!(default_range.upper_bound(), &UnlimitedNatural::from(1));
+    assert!(!default_range.is_multivalued());
+    assert_eq!(
+        relationship_presentation(association)
+            .target_labels
+            .multiplicity,
+        None
+    );
+    assert_eq!(Integer::PRIMITIVE_TYPE, StandardPrimitiveType::Integer);
+    assert_eq!(
+        UnlimitedNatural::PRIMITIVE_TYPE,
+        StandardPrimitiveType::UnlimitedNatural
+    );
+    let unbounded: MultiplicityRange = "*".parse().expect("unlimited alias");
+    assert!(unbounded.includes_multiplicity(&default_range));
+    assert!(default_range.compatible_with(&unbounded));
+    assert!(!default_range.includes_multiplicity(&unbounded));
+    assert_eq!(
+        MultiplicityRange::from_bounds(None, None).unwrap(),
+        default_range
+    );
+    assert_eq!(
+        MultiplicityRange::from_bounds(Some(0.into()), None)
+            .unwrap()
+            .upper_bound(),
+        &UnlimitedNatural::from(1)
+    );
+    assert_eq!(
+        MultiplicityRange::from_bounds(None, Some(2.into()))
+            .unwrap()
+            .lower_bound(),
+        &Integer::from(1)
+    );
+    let huge = "999999999999999999999999999999999999999999999999";
+    revision = updated.revision();
+    for (end, notation, expected_issue) in [
+        (RelationEnd::Source, " 01 .. 0002 ".to_owned(), None),
+        (RelationEnd::Target, format!("{huge}..*"), None),
+        (
+            RelationEnd::Target,
+            "0..limit".to_owned(),
+            Some((StructuralSeverity::Warning, "MDE_MULTIPLICITY_UNSUPPORTED")),
+        ),
+        (
+            RelationEnd::Target,
+            "3..2".to_owned(),
+            Some((StructuralSeverity::Error, "UML_MULTIPLICITY_BOUNDS")),
+        ),
+        (RelationEnd::Target, "*".to_owned(), None),
+        (RelationEnd::Source, "-0".to_owned(), None),
+    ] {
+        let result = cx
+            .query::<ModelingSetProperty>(
+                Routing::Unscoped,
+                ModelingSetPropertyRequested {
+                    project_id: id.clone(),
+                    element_id: association_id.clone(),
+                    path: format!("properties.{}", end.multiplicity_key()),
+                    value: serde_json::json!(notation),
+                    expected_revision: revision,
+                },
+            )
+            .await
+            .expect("multiplicity edit response");
+        revision += 1;
+        assert!(matches!(result, QueryOutcome::Answer(Ok(value)) if value == revision));
+        let persisted = service.snapshot(&id).expect("edited association");
+        let section: ModelingSection = serde_json::from_value(
+            persisted
+                .section(bellatrix_mde::MODELING_NAMESPACE)
+                .unwrap()
+                .clone(),
+        )
+        .expect("persisted model");
+        let model = section.to_model(id.as_str(), "UML acceptance");
+        for format in [Format::Json, Format::Protobuf] {
+            let reopened = decode(&encode(&model, format).expect("serialize model"), format)
+                .expect("reopen model");
+            let relation = reopened
+                .relations
+                .iter()
+                .find(|relation| relation.id == association_id)
+                .expect("same association identity after reopen");
+            let multiplicity = RelationEndMultiplicity::new(relation, end);
+            assert_eq!(multiplicity.authored_notation(), Some(notation.as_str()));
+            let presentation = relationship_presentation(relation);
+            let label = match end {
+                RelationEnd::Source => presentation.source_labels.multiplicity,
+                RelationEnd::Target => presentation.target_labels.multiplicity,
+            };
+            assert_eq!(label.as_deref(), Some(notation.as_str()));
+            let diagnostics = validate_structural_model(&reopened)
+                .into_iter()
+                .filter(|issue| {
+                    issue.subject_id == association_id && issue.code.contains("MULTIPLICITY")
+                })
+                .map(|issue| (issue.severity, issue.code))
+                .collect::<Vec<_>>();
+            assert_eq!(diagnostics, expected_issue.into_iter().collect::<Vec<_>>());
+            match notation.as_str() {
+                "0..limit" => assert_eq!(
+                    multiplicity.effective(),
+                    Err(MultiplicityError::UnsupportedValueSpecification)
+                ),
+                "3..2" => assert_eq!(
+                    multiplicity.effective(),
+                    Err(MultiplicityError::InvalidBounds)
+                ),
+                " 01 .. 0002 " => {
+                    let range = multiplicity.effective().expect("finite interval");
+                    assert_eq!(range.lower_bound(), &Integer::from(1));
+                    assert_eq!(range.upper_bound(), &UnlimitedNatural::from(2));
+                    assert!(range.is_multivalued());
+                    assert!(range.includes_cardinality(&Integer::from(2)));
+                    assert!(!range.includes_cardinality(&Integer::from(3)));
+                }
+                "-0" => {
+                    let range = multiplicity.effective().expect("zero cardinality");
+                    assert_eq!(range.lower_bound(), &Integer::from(0));
+                    assert_eq!(range.upper_bound(), &UnlimitedNatural::from(0));
+                    assert!(!range.is_multivalued());
+                }
+                _ => {
+                    let range = multiplicity.effective().expect("unlimited interval");
+                    assert!(range.upper_bound().is_unlimited());
+                    assert!(range.is_multivalued());
+                    assert!(range.includes_cardinality(&huge.parse().unwrap()));
+                    assert_eq!(
+                        range.lower_bound().to_string(),
+                        if notation == "*" { "0" } else { huge }
+                    );
+                }
+            }
+        }
+    }
+    assert_eq!(service.snapshot(&id).unwrap().revision(), revision);
     plugin.dispose().await.unwrap();
     provider.dispose().await.unwrap();
 }

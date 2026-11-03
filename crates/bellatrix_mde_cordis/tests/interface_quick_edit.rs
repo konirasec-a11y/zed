@@ -161,7 +161,7 @@ async fn interface_quick_edit_commands_create_real_objects_and_names() {
             ModelingSetNameExpressionRequested {
                 project_id: id.clone(),
                 element_id: interface_id.clone(),
-                expression: "<< service >> # CloudIface".into(),
+                expression: "<< service >> - CloudIface".into(),
                 expected_revision: 7,
             }
         )
@@ -209,7 +209,7 @@ async fn interface_quick_edit_commands_create_real_objects_and_names() {
         .unwrap();
     assert_eq!(interface.name, "CloudIface");
     assert_eq!(interface.properties.get("stereotype").unwrap(), "service");
-    assert_eq!(interface.properties.get("visibility").unwrap(), "protected");
+    assert_eq!(interface.properties.get("visibility").unwrap(), "private");
     let view = section
         .diagrams
         .iter()

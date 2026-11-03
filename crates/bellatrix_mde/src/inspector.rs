@@ -5,6 +5,7 @@
 //! their specific descriptors and with existing typed JSON properties.
 use crate::{Element, ModelingSection};
 use serde_json::{Value, json};
+use crate::uml::root::NamedElement;
 use std::collections::HashSet;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -76,6 +77,7 @@ const CLASS: &[Declared] = &[
     Declared { key:"isFinalSpecialization", label:"Final specialization", editor:PropertyEditor::Boolean, default:false_value },
     Declared { key:"isActive", label:"Active", editor:PropertyEditor::Boolean, default:false_value },
 ];
+const COMMENT: &[Declared] = &[Declared { key: "body", label: "Body", editor: PropertyEditor::Multiline, default: empty }];
 const FIELD: &[Declared] = &[
     Declared { key:"visibility", label:"Visibility", editor:PropertyEditor::Choice(VISIBILITY), default:public },
     Declared { key:"declaration", label:"Declaration", editor:PropertyEditor::Text, default:empty },
@@ -108,19 +110,33 @@ fn fields_for(kind: &str) -> impl Iterator<Item = &Declared> {
         })
     }).chain(match kind {
         "rust.field" | "uml.attribute" | "uml.part" | "uml.port" => FIELD,
+        "uml.comment" | "uml.note" => COMMENT,
         "rust.function" | "uml.operation" => FUNCTION,
         _ => &[],
     }.iter())
 }
 
 fn inherited_value(element: &Element, key: &str, fallback: fn() -> Value) -> Value {
-    element.properties.get(key).cloned().unwrap_or_else(fallback)
+    element.properties.get(key).cloned().unwrap_or_else(|| {
+        if key == "body" && crate::uml::root::ElementRef::Object(element).comment().is_some() { json!(element.name) } else { fallback() }
+    })
+}
+
+fn root_properties(section: &ModelingSection, id: &str) -> Vec<InspectorProperty> {
+    let model = crate::uml::root::Model::from_section(section);
+    let Some(element) = model.element(id) else { return Vec::new(); };
+    let owner = model.owner(element).map(|owner| json!(owner.map(|owner| owner.id()))).unwrap_or_else(|error| json!(error));
+    let namespace = element.named().map(|named| model.namespace(named)).transpose().map(|namespace| json!(namespace.flatten().map(|namespace| namespace.element().id()))).unwrap_or_else(|error| json!(error));
+    let qualified = element.named().map(|named| named.qualified_name(model)).transpose().map(|name| json!(name.flatten())).unwrap_or_else(|error| json!(error));
+    [("uml.metaclass", "UML metaclass", json!(element.metaclass())), ("uml.owner", "Owner", json!(owner)),
+     ("uml.namespace", "Namespace", json!(namespace)), ("uml.qualifiedName", "Qualified name", json!(qualified))]
+        .into_iter().map(|(path, label, value)| InspectorProperty { path: path.into(), label: label.into(), group: "UML identity", editor: PropertyEditor::ReadOnly, value, editable: false }).collect()
 }
 
 pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementInspector> {
-    // Connections are Relations, not fake Elements inheriting Class properties.
+    // Relationship records share Element identity without acquiring unrelated Class properties.
     if let Some(relation) = section.relations.iter().find(|relation| relation.id == id
-        && (relation.kind.starts_with("uml.") || section.diagrams.iter().any(|diagram|
+        && (crate::uml::root::relationship_metaclass(&relation.kind).is_some() || relation.kind.starts_with("uml.") || section.diagrams.iter().any(|diagram|
             diagram.views.iter().any(|view| view.subject.as_deref() == Some(id))
         ))) {
         let source = section.elements.iter().find(|e|e.id==relation.from)
@@ -137,8 +153,10 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
             InspectorProperty {path:"to".into(),label:"Target".into(),group:"Endpoints",
                 editor:PropertyEditor::ReadOnly,value:json!(target),editable:false},
         ];
+        properties.extend(root_properties(section, id));
+        let semantic_named = crate::uml::root::Model::from_section(section).element(id).and_then(|element| element.named()).is_some();
         let common = [
-            ("name","Name",PropertyEditor::Text,Value::String(String::new())),
+            ("name",if semantic_named { "Name" } else { "Editor label (not a UML name)" },PropertyEditor::Text,Value::String(String::new())),
             ("sourceMultiplicity","Source multiplicity",PropertyEditor::Text,json!("")),
             ("targetMultiplicity","Target multiplicity",PropertyEditor::Text,json!("")),
             ("sourceRole","Source role",PropertyEditor::Text,json!("")),
@@ -192,6 +210,12 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
         InspectorProperty { path:"label".into(), label:"Label metadata (not diagram name)".into(), group:"Metadata",
             editor:PropertyEditor::Text, value:json!(element.label.clone().unwrap_or_default()), editable:true },
     ];
+    properties.extend(root_properties(section, id));
+    if crate::uml::root::ElementRef::Object(element).named().is_none()
+        && let Some(name) = properties.iter_mut().find(|property| property.path == "name") {
+        name.label = if crate::templates::is_parameter(&element.kind) { "Parametered element name" } else { "Editor label (not a UML name)" }.into();
+        name.group = "Metadata";
+    }
     let mut known = HashSet::new();
     for definition in fields_for(&element.kind) {
         if !known.insert(definition.key) { continue; }
@@ -262,8 +286,7 @@ pub fn set_inspected_property(
     match field.editor {
         PropertyEditor::ReadOnly => return Err("property is read-only".into()),
         PropertyEditor::Text | PropertyEditor::Multiline => {
-            let s = value.as_str().ok_or("expected string")?;
-            if path == "name" && s.trim().is_empty() {return Err("name may not be empty".into());}
+            value.as_str().ok_or("expected string")?;
         },
         PropertyEditor::Boolean if !value.is_boolean() => return Err("expected boolean".into()),
         PropertyEditor::Number if !value.is_number() => return Err("expected number".into()),
@@ -276,7 +299,7 @@ pub fn set_inspected_property(
     let diagram_relation = section.diagrams.iter().any(|diagram|
         diagram.views.iter().any(|view| view.subject.as_deref() == Some(id)));
     if let Some(relation) = section.relations.iter_mut().find(|r|
-        r.id == id && (r.kind.starts_with("uml.") || diagram_relation)) {
+        r.id == id && (crate::uml::root::relationship_metaclass(&r.kind).is_some() || r.kind.starts_with("uml.") || diagram_relation)) {
         let key=path.strip_prefix("properties.").ok_or("relationship identity is read-only")?;
         relation.properties.insert(key.into(),value);
         return Ok(());

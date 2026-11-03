@@ -61,6 +61,11 @@ pub(super) fn apply(
         )?;
         return Ok(());
     }
+    if !matches!(action, UmlQuickCreate::Note | UmlQuickCreate::Constraint) {
+        let model = crate::uml::root::Model::from_section(section);
+        let subject = model.element(element_id).ok_or("Quick Edit subject not found")?;
+        if model.owner(subject)?.is_none() { crate::uml::root::adopt_root_model(section, project_id, "Model")?; }
+    }
     let diagram = section
         .diagrams
         .iter()
@@ -143,7 +148,6 @@ pub(super) fn apply(
     let new_view_id = fresh_id(section, "view", revision, project_id)?;
     let relation_id = fresh_id(section, "relation", revision, project_id)?;
     let relation_view_id = fresh_id(section, "relation-view", revision, project_id)?;
-    let owner_id = fresh_id(section, "owner", revision, project_id)?;
     let name = unique_name(section, prefix)?;
     let z_index = diagram
         .views
@@ -176,13 +180,17 @@ pub(super) fn apply(
         }
         child_y += child_size.1 + 24.0;
     }
+    let mut child_properties = std::collections::BTreeMap::new();
+    if action == UmlQuickCreate::Note {
+        child_properties.insert("body".into(), serde_json::Value::String(name.clone()));
+    }
     section.elements.push(Element {
         id: new_id.clone(),
         kind: child_kind.into(),
         name,
         label: None,
         description: None,
-        properties: Default::default(),
+        properties: child_properties,
         annotations: Vec::new(),
         implementations: Vec::new(),
         content: None,
@@ -231,7 +239,7 @@ pub(super) fn apply(
         .views
         .push(View {
             id: relation_view_id,
-            subject: Some(relation_id),
+            subject: Some(relation_id.clone()),
             label: None,
             geometry,
             style: Style {
@@ -240,14 +248,17 @@ pub(super) fn apply(
             },
             z_index: edge_z_index,
         });
-    if action == UmlQuickCreate::Constraint {
-        section.relations.push(Relation {
-            id: owner_id,
-            kind: "owns".into(),
-            from: element_id.into(),
-            to: new_id,
-            properties: Default::default(),
-        });
+    if matches!(action, UmlQuickCreate::Note | UmlQuickCreate::Constraint) {
+        crate::uml::root::set_owner(section, project_id, &new_id, element_id)?;
+    } else {
+        let model = crate::uml::root::Model::from_section(section);
+        let subject = model.element(element_id).ok_or("Quick Edit subject not found")?;
+        let namespace = model.owner(subject)?.filter(|owner| owner.conforms_to("Namespace")).map(|owner| owner.id().to_owned());
+        let owner_id = match namespace { Some(id) => id, None => crate::uml::root::adopt_root_model(section, project_id, "Model")? };
+        crate::uml::root::set_owner(section, project_id, &new_id, &owner_id)?;
+        if matches!(rule.kind, "uml.association" | "uml.usage") {
+            crate::uml::root::set_owner(section, project_id, &relation_id, &owner_id)?;
+        }
     }
     reroute_relationships(section, diagram_id);
     Ok(())
@@ -285,7 +296,7 @@ mod tests {
                     .unwrap()
                     .kind = subject_kind.into();
                 let project = crate::commands::apply(&original, &command(action), 0).unwrap();
-                assert_eq!(project.elements.len(), original.elements.len() + 1);
+                assert_eq!(project.elements.len(), original.elements.len() + 1 + usize::from(project.root_model.is_some() && original.root_model.is_none()));
                 Graph::new(&project).validate().unwrap();
                 if matches!(action, UmlQuickCreate::Subtype | UmlQuickCreate::Supertype) {
                     let child = project.elements.last().unwrap();
@@ -351,7 +362,7 @@ mod tests {
                         3
                     } else {
                         1
-                    },
+                    } + usize::from(project.root_model.is_some() && original.root_model.is_none()),
                 "{action:?}"
             );
             let child = project

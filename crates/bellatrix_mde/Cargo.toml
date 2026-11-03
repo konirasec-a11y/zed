@@ -10,6 +10,7 @@ path = "src/mde.rs"
 
 [dependencies]
 base64.workspace = true
+num-bigint = "0.4.8"
 prost.workspace = true
 serde.workspace = true
 serde_json = { workspace = true, features = ["float_roundtrip"] }

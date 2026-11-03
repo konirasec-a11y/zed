@@ -18,6 +18,8 @@ struct WireProject {
     relations: Vec<WireRelation>,
     #[prost(message, repeated, tag = "6")]
     diagrams: Vec<WireDiagram>,
+    #[prost(string, optional, tag = "7")]
+    root_model: Option<String>,
 }
 #[derive(Clone, PartialEq, Message)]
 struct WireElement {
@@ -190,6 +192,7 @@ pub(super) fn encode(project: &Project) -> Result<Vec<u8>, ModelIoError> {
         .collect::<Result<Vec<_>, _>>()?;
     Ok(WireProject {
         version: project.schema_version,
+        root_model: project.root_model.clone(),
         id: project.id.clone(),
         name: project.name.clone(),
         elements,
@@ -288,6 +291,7 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Project, ModelIoError> {
         .collect::<Result<Vec<_>, _>>()?;
     Ok(Project {
         schema_version: data.version,
+        root_model: data.root_model,
         id: data.id,
         name: data.name,
         elements,

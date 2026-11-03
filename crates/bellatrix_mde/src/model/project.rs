@@ -12,6 +12,8 @@ pub struct Project {
     pub schema_version: u32,
     pub id: String,
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root_model: Option<String>,
     #[serde(default)]
     pub elements: Vec<Element>,
     #[serde(default)]

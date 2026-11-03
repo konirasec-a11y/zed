@@ -22,6 +22,8 @@ pub enum GraphError {
     InvalidRelation(String),
     #[error("cycle in {0} hierarchy")]
     Cycle(String),
+    #[error("invalid UML root: {0}")]
+    InvalidRoot(String),
     #[error("invalid geometry in view {0}")]
     Geometry(String),
 }
@@ -43,7 +45,9 @@ impl<'a> Graph<'a> {
                 return Err(GraphError::Duplicate(id.clone()));
             }
         }
-        let nodes: HashSet<&str> = self.project.elements.iter().map(|element| element.id.as_str()).collect();
+        let semantic = crate::uml::root::Model::from_project(self.project);
+        semantic.root().map_err(GraphError::InvalidRoot)?;
+        let nodes: HashSet<&str> = semantic.elements().map(|element| element.id()).collect();
         let relations: HashSet<&str> = self.project.relations.iter().map(|relation| relation.id.as_str()).collect();
         let mut physical_parents = HashSet::new();
         let mut semantic_owners = HashSet::new();
@@ -54,22 +58,22 @@ impl<'a> Graph<'a> {
                     return Err(GraphError::MissingEndpoint { relation: relation.id.clone(), endpoint: end.clone() });
                 }
             }
-            let parent = self.project.element(&relation.from).expect("checked above");
-            let child = self.project.element(&relation.to).expect("checked above");
+            let parent = semantic.element(&relation.from).ok_or_else(|| GraphError::MissingEndpoint { relation: relation.id.clone(), endpoint: relation.from.clone() })?;
+            let child = semantic.element(&relation.to).ok_or_else(|| GraphError::MissingEndpoint { relation: relation.id.clone(), endpoint: relation.to.clone() })?;
             if relation.kind == "owns" {
                 if !semantic_owners.insert(relation.to.as_str()) {
                     return Err(GraphError::MultipleOwners(relation.to.clone()));
                 }
-                if parent.kind.starts_with("rust.") && child.kind.starts_with("fs.") {
+                if parent.kind().starts_with("rust.") && child.kind().starts_with("fs.") {
                     return Err(GraphError::InvalidRelation(relation.id.clone()));
                 }
             }
-            if relation.kind == "declares" && child.kind.starts_with("rust.") {
-                if parent.kind != "fs.file" { return Err(GraphError::InvalidRelation(relation.id.clone())); }
+            if relation.kind == "declares" && child.kind().starts_with("rust.") {
+                if parent.kind() != "fs.file" { return Err(GraphError::InvalidRelation(relation.id.clone())); }
                 if !declarations.insert(relation.to.as_str()) { return Err(GraphError::MultipleDeclarations(relation.to.clone())); }
             }
             if relation.kind == "physical_parent" {
-                if parent.kind != "fs.directory" || !matches!(child.kind.as_str(), "fs.directory" | "fs.file" | "cargo.package" | "cargo.workspace") {
+                if parent.kind() != "fs.directory" || !matches!(child.kind(), "fs.directory" | "fs.file" | "cargo.package" | "cargo.workspace") {
                     return Err(GraphError::InvalidPhysicalParent(relation.id.clone()));
                 }
                 if !physical_parents.insert(relation.to.as_str()) { return Err(GraphError::MultipleParents(relation.to.clone())); }

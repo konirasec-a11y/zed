@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 /// Domain payload inside a platform ProjectDocument, without duplicate identity.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ModelingSection {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root_model: Option<String>,
     pub elements: Vec<Element>,
     pub relations: Vec<Relation>,
     pub diagrams: Vec<Diagram>,
@@ -12,6 +14,7 @@ pub struct ModelingSection {
 impl ModelingSection {
     pub fn from_model(model: &Project) -> Self {
         Self {
+            root_model: model.root_model.clone(),
             elements: model.elements.clone(),
             relations: model.relations.clone(),
             diagrams: model.diagrams.clone(),
@@ -23,6 +26,7 @@ impl ModelingSection {
             schema_version: 1,
             id: id.into(),
             name: name.into(),
+            root_model: self.root_model.clone(),
             elements: self.elements.clone(),
             relations: self.relations.clone(),
             diagrams: self.diagrams.clone(),
