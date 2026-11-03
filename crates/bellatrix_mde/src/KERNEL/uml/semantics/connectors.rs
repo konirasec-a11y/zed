@@ -432,12 +432,69 @@ fn end_multiplicity(references: &ReferenceIndex<'_>, end: ElementRef<'_>) -> Res
     feature_compatibility::require_all(checks)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConnectorKind {
+    Assembly,
+    Delegation,
+}
+
+fn delegation_end(references: &ReferenceIndex<'_>, end: ElementRef<'_>) -> Result<bool, QueryError> {
+    let role = end_reference(references, end, "role");
+    let part = end_reference(references, end, "partWithPort");
+    let ownership = owning_connector(references, end).and_then(|(_, membership)| membership);
+    let port = role.as_ref().map(|role| role.is_some_and(|role| role.conforms_to("Port"))).map_err(Clone::clone);
+    let non_behavior = match &role {
+        Ok(Some(role)) if role.conforms_to("Port") => schema::read_effective_boolean(*role, "isBehavior")
+            .map(|behavior| !behavior).map_err(|error| QueryError::invalid(role.id(), error)),
+        Ok(_) => Ok(false),
+        Err(error) => Err(error.clone()),
+    };
+    feature_compatibility::require_all([
+        invalid_input(&role), invalid_input(&part), invalid_input(&ownership),
+        port,
+        Ok(end.properties().get("partWithPort").is_none_or(Value::is_null)),
+        non_behavior,
+    ])
+}
+
+/// UML Connector::kind is derived from endpoint roles, never the stored cache.
+pub fn kind(references: &ReferenceIndex<'_>, connector: ElementRef<'_>) -> Result<ConnectorKind, QueryError> {
+    if connector.metaclass().is_none() {
+        return Err(QueryError::unsupported(connector.id(), "Connector metaclass is unresolved"));
+    }
+    if !connector.conforms_to("Connector") {
+        return Err(QueryError::invalid(connector.id(), "kind requires a Connector"));
+    }
+    let descriptor = property(connector, "end")?;
+    let value = connector.properties().get("end")
+        .ok_or_else(|| QueryError::unsupported(connector.id(), "Connector::end is not materialized"))?;
+    let contract = check(references, connector, descriptor, value);
+    invalid_input(&contract)?;
+    let ends = value.as_array()
+        .ok_or_else(|| QueryError::invalid(connector.id(), "Connector::end must be a collection"))?;
+    let single = PropertyDescriptor { lower:"1", upper:"1", ..*descriptor };
+    let mut candidates = Vec::new();
+    for value in ends {
+        candidates.push(match reference(references, connector, &single, value) {
+            Ok(Some(end)) => delegation_end(references, end),
+            Ok(None) => Err(QueryError::invalid(connector.id(), "ConnectorEnd cannot be absent")),
+            Err(error) => Err(error),
+        });
+    }
+    // A known delegating endpoint decides exists(), but malformed siblings must
+    // still be inspected. An unresolved sibling cannot establish assembly.
+    feature_compatibility::accept_any(candidates).map(|delegation| {
+        if delegation { ConnectorKind::Delegation } else { ConnectorKind::Assembly }
+    })
+}
+
 pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     for connector in references.model().elements().filter(|element| element.conforms_to("Connector")) {
         for (rule, error_code, unknown_code, result) in [
             ("Connector-types", "UML_CONNECTOR_TYPES", "MDE_CONNECTOR_TYPES_UNVERIFIED", types_rule(references, connector)),
             ("Connector-roles", "UML_CONNECTOR_ROLES", "MDE_CONNECTOR_ROLES_UNVERIFIED", roles_rule(references, connector)),
+            ("Connector-kind.1-spec", "UML_CONNECTOR_KIND_DERIVATION", "MDE_CONNECTOR_KIND_UNVERIFIED", kind(references, connector).map(|_| true)),
         ] {
             let (severity, code, message) = match result {
                 Ok(true) => continue,

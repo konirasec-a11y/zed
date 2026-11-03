@@ -21,6 +21,8 @@ E18/E19. A leitura dessas duas regras usa esse commit, não os deltas posteriore
 do working tree. Três invariantes de ConnectorEnd e
 DeploymentSpecification::deployed_elements têm recortes publicados em
 `c09553f7b0fb11a3580f91bc6e95c553d1582e2b`, descritos em E20/E21.
+ConnectorEnd::multiplicity e definingEnd têm recorte publicado em
+`211a333d2e4c0b9f468b884a3e77623d868364e2`, descrito em E22.
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -136,7 +138,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E21 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E22 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -303,6 +305,49 @@ de execução nova. E12–E21 possuem os gates delimitados nas seções seguinte
   `MDE_DEPLOYMENT_SPECIFICATION_DEPLOYED_ELEMENTS_INVALID` e
   `MDE_DEPLOYMENT_SPECIFICATION_DEPLOYED_ELEMENTS_UNVERIFIED`.
 
+- **E22**: `semantics/connectors.rs`, `owning_connector`,
+  `defining_end_projection`, `defining_end`, `compatible_multiplicity` e
+  `end_multiplicity`; `semantics/value_specifications.rs`, avaliação de bounds;
+  `connector_end_multiplicity.rs`, dez testes. definingEnd usa a posição do
+  ConnectorEnd na coleção canônica explícita Connector::end para selecionar
+  Association::memberEnd. Ordem de ownership e cache definingEnd não são prova.
+  A consulta pública preserva unknown quando a projeção não está completa;
+  internamente, uma posição conhecida ainda permite detectar violação local.
+  A comparação exige lower do definingEnd <= lower do ConnectorEnd e upper do
+  ConnectorEnd <= upper do definingEnd, ou upper geral ilimitado. Bounds são
+  avaliados separadamente: uma incompatibilidade conhecida e valores inválidos
+  não desaparecem diante de bound opaco ou referência externa no outro lado.
+  Diagnósticos: `UML_CONNECTOR_END_MULTIPLICITY` e
+  `MDE_CONNECTOR_END_MULTIPLICITY_UNVERIFIED`.
+
+### Evidência publicada de ConnectorEnd::multiplicity/definingEnd
+
+Commit inspecionado: `211a333d2e4c0b9f468b884a3e77623d868364e2`.
+A revisão confirmou árvore `59d1b6c1db1fc2272909c52a75e16493a76b356c`
+idêntica à do commit local anterior à publicação, `74aeec0`.
+O log local `/tmp/connector-end-multiplicity-gate-final.log` registra
+**44/44 aprovados**: connector_end_constraints 10, connector_end_multiplicity 10,
+connector_roles 9, connector_types 5, property_collection_validation 6 e
+reception_signal_contracts 4. É gate focado da árvore de implementação anterior
+à publicação, não rerun no SHA remoto nem suíte integral. Nenhum teste novo foi
+executado pela matriz. O log `/tmp/connector-value-specifications-gate.log`
+executou **zero testes**, com 159 filtrados, e não é evidência de cobertura
+adicional de value_specifications.
+
+Os testes discriminam posições versus ordem de ownership/cache, coleções
+malformadas ou ausentes, índice fora da coleção, referências externas,
+intervalos inferiores/superiores, ilimitado, bounds por identidade e opacos,
+precedência de erro em ambas as ordens, rollback e reparo de draft. Uma regressão
+adicional de ConnectorEnd exige que membership canônico inválido não seja
+ocultado por role externo ou partWithPort vazio.
+
+A linha permanece **P/E22**. Connector sem type retorna definingEnd ausente e
+não inventa comparação; isso registra o comportamento implementado, sem alegar
+fechamento da interpretação de compatibleWith(null). Bounds não computáveis,
+referências externas e ordem não materializada continuam limites explícitos.
+A operação auxiliar definingEnd não acrescenta uma invariante ao inventário.
+Não declarar suporte integral a Connectors, autoria visual ou conformidade UML.
+
 ### Evidência de ConnectorEnd e deployed_elements
 
 Commit publicado: `c09553f7b0fb11a3580f91bc6e95c553d1582e2b`.
@@ -325,9 +370,9 @@ papéis ausentes, cache derivado não autoritativo, ramos externos, projeções
 vazias e reparo após rejeição de reparent.
 
 As quatro linhas ficam **P/E20–E21**, sem certificar todas as representações ou
-fluxos de autoria. `ConnectorEnd-multiplicity`, a derivação de definingEnd e
-suas dependências de compatibleWith continuam pendentes, assim como
-Node::internal_structure. Esses gates não comprovam UI, geração, interchange
+fluxos de autoria. O incremento posterior de ConnectorEnd::multiplicity e
+definingEnd está em E22; Node::internal_structure continua pendente de decisão
+normativa. Esses gates não comprovam UI, geração, interchange
 XMI nem fechamento integral de Connectors ou Deployments.
 
 ### Evidência transversal de envelopes externos no working tree
@@ -403,7 +448,8 @@ de autoria nem todas as representações do catálogo.
 
 As duas linhas permanecem **P**. Três invariantes próprias de ConnectorEnd e
 DeploymentSpecification::deployed_elements têm incremento posterior em E20/E21.
-ConnectorEnd::multiplicity e Node::internal_structure continuam pendentes. Kind/adapter binário, autoria visual de Connector e semântica integral
+ConnectorEnd::multiplicity tem recorte posterior em E22;
+Node::internal_structure continua pendente. Kind/adapter binário, autoria visual de Connector e semântica integral
 de deployment não são demonstrados; não houve build de UI nem geração.
 
 ### Evidência publicada de Connector::types
@@ -420,7 +466,7 @@ quando uma coleção está ausente. A linha permanece P/E17.
 Esse gate isolado não comprovava `Connector-roles` ou
 `StructuredClassifier::allRoles`; o incremento posterior está delimitado em E18.
 As invariantes próprias de ConnectorEnd não são provadas por esse gate;
-três delas têm recorte posterior em E20, mantendo multiplicity pendente. Derivação de kind, adapter binário
+três delas têm recorte posterior em E20 e multiplicity em E22. Derivação de kind, adapter binário
 e autoria visual de Connector também não são certificados por este incremento.
 Não alegar suporte completo a Connectors ou Composite Structure.
 
@@ -976,7 +1022,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `ConnectorEnd-multiplicity`
 
-- Metaclass: `ConnectorEnd`. Estado: **N**. Evidência: sem predicado dedicado identificado nos passes inspecionados.
+- Metaclass: `ConnectorEnd`. Estado: **P**. Evidência: E22; commit `211a333d2e4c0b9f468b884a3e77623d868364e2`.
 - OCL publicado: `self.compatibleWith(definingEnd)`.
 
 #### `ConnectorEnd-self_part_with_port`
@@ -1096,6 +1142,12 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 - Metaclass: `Node`. Estado: **N**. Evidência: sem predicado dedicado identificado nos passes inspecionados.
 - OCL publicado: `part->forAll(oclIsKindOf(Node))`.
+- Decisão normativa pendente: a prosa exige partes de tipo Node, mas o OCL
+  publicado testa se cada parte é Node. StructuredClassifier::part é uma
+  coleção de Property, tornando as duas leituras distintas. Não substituir
+  silenciosamente o corpo por `part->forAll(type.oclIsKindOf(Node))`, nem usar
+  nestedNode como se fosse part. A linha permanece N até explicitar a decisão
+  e sua base normativa; não foi implementada por este incremento.
 
 ### Values: 11 invariantes diretas
 
@@ -1193,8 +1245,8 @@ viram vazio/false; erro estrutural não desaparece diante de outro unknown.
 AssociationClass::cannot_be_defined já tem recorte publicado em E15 e
 AssociationClass::disjoint_attributes_ends tem recorte em E05. Fechar os limites
 e contratos restantes sem remover Unsupported prematuramente. Continuar com
-CommunicationPath e ConnectorEnd::multiplicity/definingEnd; três invariantes
-de ConnectorEnd têm recorte em E20. Connector::roles tem recorte publicado em
+CommunicationPath e o fechamento dos limites de ConnectorEnd; três invariantes
+de ConnectorEnd têm recorte em E20, multiplicity/definingEnd em E22. Connector::roles tem recorte publicado em
 E18, incluindo allRoles e membership conservador; fechar os limites restantes.
 Connector::types já tem recorte publicado em E17; preservar seus limites e testar as dependências
 adicionadas sem transformar a implicação de type em validação de todos os roles.
@@ -1215,7 +1267,8 @@ atual do parameteredElement para actual arguments.
 
 DeploymentSpecification::deployment_target tem recorte publicado em E19.
 DeploymentSpecification::deployed_elements tem recorte em E21.
-Continuar Node::internal_structure, InstanceSpecification e Property relacionados a deployment; completar
+Decidir a contradição OCL/prosa de Node::internal_structure antes de implementar.
+Continuar InstanceSpecification e Property relacionados a deployment; completar
 specification/values e slots. O caminho
 `instances.rs::validate_instance` declara explicitamente que valores de
 InstanceSpecification::specification ainda não são avaliados.
