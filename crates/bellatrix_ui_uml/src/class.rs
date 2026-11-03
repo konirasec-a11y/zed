@@ -1,9 +1,7 @@
 //! Shared classifier labels, compartments and editing. The notation selects the silhouette.
-use crate::{inline_edit::UmlInlineNameEditor, interface::UmlInterfaceBall};
+use crate::inline_edit::UmlInlineNameEditor;
 use bellatrix_design_system::Palette;
-use bellatrix_mde::{
-    ClassifierPresentation, MemberPresentation, UmlHeader, UmlNotation, uml_header, uml_notation,
-};
+use bellatrix_mde::{ClassifierPresentation, MemberPresentation, UmlHeader, uml_header};
 use gpui::{
     App, Entity, InteractiveElement, IntoElement, MouseButton, RenderOnce, SharedString, Window,
     div, prelude::*, px, rgb,
@@ -71,7 +69,6 @@ pub struct UmlClassifier {
     pub(crate) title: SharedString,
     pub(crate) header: UmlHeader,
     pub(crate) presentation: ClassifierPresentation,
-    pub(crate) interface_ball: bool,
     pub(crate) attributes: Vec<MemberRow>,
     pub(crate) operations: Vec<MemberRow>,
     pub(crate) receptions: Vec<MemberRow>,
@@ -96,7 +93,6 @@ impl UmlClassifier {
             title: title.into(),
             header: uml_header("", None),
             presentation: ClassifierPresentation::default(),
-            interface_ball: false,
             attributes: Vec::new(),
             operations: Vec::new(),
             receptions: Vec::new(),
@@ -135,7 +131,6 @@ impl UmlClassifier {
         self
     }
     pub fn model_kind(mut self, kind: &str) -> Self {
-        self.interface_ball = uml_notation(kind) == UmlNotation::InterfaceBall;
         self.header.keyword = uml_header(kind, None).keyword;
         self
     }
@@ -435,9 +430,6 @@ pub(crate) fn template_signature(
 
 impl RenderOnce for UmlClassifier {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        if self.interface_ball {
-            return UmlInterfaceBall::new(self).into_any_element();
-        }
         let palette = Palette::current(cx);
         let appearance = self.appearance.clone();
         let line = appearance.stroke(palette, self.selected);
@@ -687,7 +679,13 @@ mod tests {
 
     #[test]
     fn model_keyword_and_application_label_are_independent_in_either_builder_order() {
-        for kind in ["uml.component", "uml.artifact", "uml.stereotype"] {
+        for kind in [
+            "uml.interface",
+            "rust.trait",
+            "uml.component",
+            "uml.artifact",
+            "uml.stereotype",
+        ] {
             let expected = uml_header(kind, Some("Service"));
             let first = UmlClassifier::new("Example")
                 .model_kind(kind)

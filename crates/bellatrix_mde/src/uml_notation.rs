@@ -5,7 +5,6 @@ use crate::UmlType;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UmlNotation {
     ClassifierRectangle,
-    InterfaceBall,
     PackageTab,
     FoldedNote,
     Frame,
@@ -19,6 +18,7 @@ pub fn uml_notation(kind: &str) -> UmlNotation {
     match UmlType::from_kind(kind) {
         Some(
             UmlType::Class
+            | UmlType::Interface
             | UmlType::Signal
             | UmlType::DataType
             | UmlType::PrimitiveType
@@ -29,7 +29,6 @@ pub fn uml_notation(kind: &str) -> UmlNotation {
             | UmlType::Artifact
             | UmlType::Stereotype,
         ) => UmlNotation::ClassifierRectangle,
-        Some(UmlType::Interface) => UmlNotation::InterfaceBall,
         Some(UmlType::Package | UmlType::Profile | UmlType::Model | UmlType::Subsystem) => {
             UmlNotation::PackageTab
         }
@@ -62,7 +61,6 @@ impl UmlHeader {
     }
 
     /// Shared unscaled minimum for diagram display, resize and edge anchors.
-    /// InterfaceBall retains its dedicated interface_layout contract.
     pub fn minimum_height(&self, notation: UmlNotation) -> f64 {
         let labels = (self.line_count() - 1) as f64;
         match notation {
@@ -75,6 +73,8 @@ impl UmlHeader {
 
 pub fn uml_header(kind: &str, applied: Option<&str>) -> UmlHeader {
     let keyword = match UmlType::from_kind(kind) {
+        // §10.4.4 permits expanded Interfaces with dependency arrows.
+        Some(UmlType::Interface) => Some("«interface»"),
         // OMG UML 2.5.1 §§11.6.4, 19.3.4 and 12.3.4 permit these lightweight
         // presentations without replacing their semantic kinds with Class.
         Some(UmlType::Component) => Some("«component»"),
@@ -125,6 +125,8 @@ mod tests {
     #[test]
     fn mandatory_keywords_survive_applied_labels() {
         for (kind, keyword) in [
+            ("uml.interface", "«interface»"),
+            ("rust.trait", "«interface»"),
             ("uml.component", "«component»"),
             ("uml.artifact", "«artifact»"),
             ("uml.profile", "«profile»"),
@@ -208,7 +210,7 @@ mod tests {
             );
         }
         for kind in ["uml.interface", "rust.trait"] {
-            assert_eq!(uml_notation(kind), UmlNotation::InterfaceBall);
+            assert_eq!(uml_notation(kind), UmlNotation::ClassifierRectangle);
         }
         for kind in ["uml.package", "uml.model", "uml.subsystem"] {
             assert_eq!(uml_notation(kind), UmlNotation::PackageTab);
@@ -272,7 +274,12 @@ mod tests {
     #[test]
     fn projected_anchors_follow_both_headers_without_mutating_small_views()
     -> Result<(), Box<dyn std::error::Error>> {
-        for (kind, expected) in [("uml.component", 64.0), ("uml.profile", 75.0)] {
+        for (kind, expected) in [
+            ("uml.component", 64.0),
+            ("uml.profile", 75.0),
+            ("uml.interface", 90.0),
+            ("rust.trait", 90.0),
+        ] {
             let project = small_header_project(kind, Some("Domain"))?;
             let before = serde_json::to_value(&project)?;
             let section = crate::ModelingSection::from_model(&project);

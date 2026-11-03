@@ -26,7 +26,7 @@ pub use theme::WorkbenchPalette;
 use bellatrix_mde::commands::{ModelingElementKind, ModelingMemberKind, ModelingTool};
 use bellatrix_mde::{
     Geometry, ModelingRelationKind, PathSegment, RelationshipGraph, UmlQuickCreate, UmlType,
-    classifier_contents, interface_layout, relationship_presentation,
+    classifier_contents, relationship_presentation,
 };
 use bellatrix_mde_cordis::{
     MdeUiCommand, ModelingAddMemberRequested, ModelingCreateElementRequested,
@@ -1480,23 +1480,11 @@ impl Render for MdeWorkbenchItem {
                             local_height =
                                 local_height.max(contents.minimum_interface_height() as f32);
                         }
-                        let quick_top = if is_interface {
-                            interface_layout(
-                                f64::from(local_width),
-                                f64::from(local_height),
-                                contents,
-                            )
-                            .label_top as f32
-                                * zoom
-                        } else {
-                            0.0
-                        };
                         let template_parameters =
                             bellatrix_mde::template_parameters(&snapshot.section, &element.id);
                         let signature_layout = matches!(
                             notation,
                             bellatrix_mde::UmlNotation::ClassifierRectangle
-                                | bellatrix_mde::UmlNotation::InterfaceBall
                                 | bellatrix_mde::UmlNotation::PackageTab
                         )
                         .then(|| {
@@ -1707,7 +1695,6 @@ impl Render for MdeWorkbenchItem {
                         } else if matches!(
                             notation,
                             bellatrix_mde::UmlNotation::ClassifierRectangle
-                                | bellatrix_mde::UmlNotation::InterfaceBall
                         ) {
                             classifier.into_any_element()
                         } else {
@@ -1797,7 +1784,7 @@ impl Render for MdeWorkbenchItem {
                                             .id(format!("mde-quick-actions-{}", view.id))
                                             .absolute()
                                             .left(px(local_width * zoom + signature_right + 6.0))
-                                            .top(px(quick_top + signature_top))
+                                            .top(px(signature_top))
                                             .child(actions),
                                     )
                                 })
@@ -1807,7 +1794,7 @@ impl Render for MdeWorkbenchItem {
                                             .id(format!("mde-quick-left-actions-{}", view.id))
                                             .absolute()
                                             .left(px(-78.0))
-                                            .top(px(quick_top + signature_top + 28.0))
+                                            .top(px(signature_top + 28.0))
                                             .child(actions),
                                     )
                                 })
@@ -1817,7 +1804,7 @@ impl Render for MdeWorkbenchItem {
                                             .id(format!("mde-quick-visibility-{}", view.id))
                                             .absolute()
                                             .left(px(-34.0))
-                                            .top(px(quick_top + signature_top))
+                                            .top(px(signature_top))
                                             .child(picker),
                                     )
                                 })

@@ -1,7 +1,7 @@
 //! One relationship contract for model operations and diagram projections.
 //! GPUI paints and hit-tests; it does not define relationship semantics.
 use crate::{Geometry, ModelingSection, PathSegment, Point, Relation, RelationshipRouting, View};
-use crate::{InterfaceLayout, UmlType, classifier_contents, interface_layout};
+use crate::{UmlType, classifier_contents};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ModelingRelationKind {
@@ -107,13 +107,9 @@ struct Endpoint {
     center: Point,
     width: f64,
     height: f64,
-    circle: Option<InterfaceLayout>,
 }
 impl Endpoint {
     fn anchor_toward(self, target: Point) -> Point {
-        if let Some(circle) = self.circle {
-            return circle.anchor_toward(target);
-        }
         let delta_x = target.x - self.center.x;
         let delta_y = target.y - self.center.y;
         if delta_x.abs() < f64::EPSILON && delta_y.abs() < f64::EPSILON {
@@ -181,17 +177,11 @@ fn route_with_lane(
             .iter()
             .find(|element| element.id == subject)
             .and_then(|element| UmlType::from_kind(&element.kind));
-        if kind == Some(UmlType::Interface) {
-            let mut layout = interface_layout(width, height, classifier_contents(section, subject));
-            layout.center.x += left;
-            layout.center.y += top;
-            return Ok(Endpoint {
-                center: layout.center,
-                width: layout.radius * 2.0,
-                height: layout.radius * 2.0,
-                circle: Some(layout),
-            });
-        }
+        let height = if kind == Some(UmlType::Interface) {
+            height.max(classifier_contents(section, subject).minimum_interface_height())
+        } else {
+            height
+        };
         let height = section
             .elements
             .iter()
@@ -220,7 +210,6 @@ fn route_with_lane(
             },
             width,
             height,
-            circle: None,
         })
     };
     let source = endpoint(from)?;

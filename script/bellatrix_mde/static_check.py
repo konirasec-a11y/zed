@@ -129,7 +129,7 @@ def check() -> None:
     assert ".w(px(local_width * zoom))" in trigger
     assert ".h(px(local_height * zoom))" in trigger
     assert ".child(figure)" in trigger
-    for filename in ["class.rs", "figures.rs", "interface.rs"]:
+    for filename in ["class.rs", "figures.rs"]:
         renderer = (ROOT / "crates/bellatrix_ui_uml/src" / filename).read_text(encoding="utf-8")
         assert "appearance.stroke(" in renderer, filename
     shared_style = (ROOT / "crates/bellatrix_ui_uml/src/class.rs").read_text(encoding="utf-8")

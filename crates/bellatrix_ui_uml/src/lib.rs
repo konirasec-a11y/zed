@@ -1,8 +1,6 @@
 //! UML visual elements and in-place editors for the native Zed GPUI runtime.
 //! Geometry and capability contracts are headless; this crate only renders them.
 mod class;
-mod interface;
-pub use interface::UmlInterfaceBall;
 mod figures;
 mod inline_edit;
 mod quick_edit;
