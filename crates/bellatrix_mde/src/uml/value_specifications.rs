@@ -8,6 +8,7 @@ use super::{
     schema,
     types::{
         Integer, MultiplicityError, MultiplicityRange, UnlimitedNatural, literal_multiplicity,
+        literal_upper_bound,
     },
 };
 use serde_json::Value;
@@ -193,6 +194,65 @@ fn bound<'a>(
     Ok(Some(target))
 }
 
+fn require_assigned_values(
+    references: &ReferenceIndex<'_>,
+    element: ElementRef<'_>,
+) -> Result<(), EvaluationError> {
+    if references
+        .model()
+        .owned_elements(element)
+        .map_err(|error| EvaluationError::invalid(element.id(), error))?
+        .iter()
+        .any(|child| child.conforms_to("ValueSpecification"))
+    {
+        return Err(EvaluationError::unsupported(
+            element.id(),
+            "owned ValueSpecification role is not represented by lowerValue/upperValue",
+        ));
+    }
+    Ok(())
+}
+
+fn classify_multiplicity_error(id: &str, error: MultiplicityError) -> EvaluationError {
+    if error == MultiplicityError::UnsupportedValueSpecification {
+        EvaluationError::unsupported(id, error.to_string())
+    } else {
+        EvaluationError::invalid(id, error.to_string())
+    }
+}
+
+fn evaluate_upper_bound(
+    references: &ReferenceIndex<'_>,
+    element: ElementRef<'_>,
+) -> Result<UnlimitedNatural, EvaluationError> {
+    bound(references, element, "upperValue")?.map_or(Ok(1.into()), |target| {
+        match evaluate(references, target.id())? {
+            LiteralValue::UnlimitedNatural(value) => Ok(value),
+            _ => Err(EvaluationError::invalid(target.id(), "MultiplicityElement::upper_is_unlimitedNatural requires a non-null unlimitedValue()")),
+        }
+    })
+}
+
+/// UML upperBound() is independent of lowerValue evaluation. Overall interval
+/// validity is checked separately by multiplicity(), never inferred here.
+pub fn upper_bound(
+    references: &ReferenceIndex<'_>,
+    element: ElementRef<'_>,
+) -> Result<UnlimitedNatural, EvaluationError> {
+    if !element.conforms_to("MultiplicityElement") {
+        return Err(EvaluationError::invalid(
+            element.id(),
+            "a MultiplicityElement is required",
+        ));
+    }
+    if has_bound_references(element) {
+        return evaluate_upper_bound(references, element);
+    }
+    require_assigned_values(references, element)?;
+    literal_upper_bound(element.properties())
+        .map_err(|error| classify_multiplicity_error(element.id(), error))
+}
+
 /// Resolve identity bounds before the retained notation adapter. Unknown values
 /// are not absence; they cannot prove a valid interval or composition bound.
 pub fn multiplicity(
@@ -206,25 +266,9 @@ pub fn multiplicity(
         ));
     }
     if !has_bound_references(element) {
-        if references
-            .model()
-            .owned_elements(element)
-            .map_err(|error| EvaluationError::invalid(element.id(), error))?
-            .iter()
-            .any(|child| child.conforms_to("ValueSpecification"))
-        {
-            return Err(EvaluationError::unsupported(
-                element.id(),
-                "owned ValueSpecification role is not represented by lowerValue/upperValue",
-            ));
-        }
-        return literal_multiplicity(element.properties()).map_err(|error| {
-            if error == MultiplicityError::UnsupportedValueSpecification {
-                EvaluationError::unsupported(element.id(), error.to_string())
-            } else {
-                EvaluationError::invalid(element.id(), error.to_string())
-            }
-        });
+        require_assigned_values(references, element)?;
+        return literal_multiplicity(element.properties())
+            .map_err(|error| classify_multiplicity_error(element.id(), error));
     }
     let lower = bound(references, element, "lowerValue")?
         .map(|target| match evaluate(references, target.id())? {
@@ -235,12 +279,7 @@ pub fn multiplicity(
             )),
         })
         .transpose()?;
-    let upper = bound(references, element, "upperValue")?.map(|target| {
-        match evaluate(references, target.id())? {
-            LiteralValue::UnlimitedNatural(value) => Ok(value),
-            _ => Err(EvaluationError::invalid(target.id(), "MultiplicityElement::upper_is_unlimitedNatural requires a non-null unlimitedValue()")),
-        }
-    }).transpose()?;
+    let upper = Some(evaluate_upper_bound(references, element)?);
     MultiplicityRange::from_bounds(lower, upper)
         .map_err(|error| EvaluationError::invalid(element.id(), error.to_string()))
 }

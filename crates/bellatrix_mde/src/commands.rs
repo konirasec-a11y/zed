@@ -73,6 +73,7 @@ pub enum Command {
     MoveParameter { parameter_id: String, up: bool },
     MigrateAssociation { association_id: String },
     SetRedefinedElements { element_id: String, redefined_ids: Vec<String> },
+    SetSubsettedProperties { property_id: String, subsetted_ids: Vec<String> },
     SetNamespaceImport { import_id: String, namespace_id: String, target_id: String, is_package: bool, alias: Option<String>, visibility: String },
     SetAssociationMemberEnds { association_id: String, member_end_ids: Vec<String> },
     EditAssociationEnds { association_id: String, edits: Vec<AssociationEndEdit> },
@@ -226,6 +227,7 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
         }
         Command::MoveParameter { parameter_id, up } => crate::uml::operations::move_parameter(&mut section, parameter_id, *up)?,
         Command::SetRedefinedElements { element_id, redefined_ids } => crate::uml::classifiers::set_redefined_elements(&mut section, element_id, redefined_ids)?,
+        Command::SetSubsettedProperties { property_id, subsetted_ids } => crate::uml::property_subsetting::set_subsetted_properties(&mut section, property_id, subsetted_ids)?,
         Command::SetNamespaceImport { import_id, namespace_id, target_id, is_package, alias, visibility } => crate::uml::namespace_imports::set_namespace_import(&mut section, import_id, namespace_id, target_id, *is_package, alias.as_deref(), visibility)?,
         Command::MigrateAssociation { association_id } => crate::uml::associations::migrate(&mut section, &project.id, association_id)?,
         Command::SetAssociationMemberEnds { association_id, member_end_ids } => crate::uml::associations::set_member_ends(&mut section, association_id, member_end_ids)?,

@@ -147,6 +147,21 @@ pub(crate) fn is_owned_member(
     owner: ElementRef<'_>,
     child: ElementRef<'_>,
 ) -> Result<bool, QueryError> {
+    contributes_to_owned_union(owner, child, "Namespace-ownedMember")
+}
+
+pub(crate) fn is_owned_attribute(
+    owner: ElementRef<'_>,
+    child: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    contributes_to_owned_union(owner, child, "Classifier-attribute")
+}
+
+fn contributes_to_owned_union(
+    owner: ElementRef<'_>,
+    child: ElementRef<'_>,
+    target: &'static str,
+) -> Result<bool, QueryError> {
     let mut roles = HashSet::new();
     for property in properties(owner)? {
         if property.aggregation == Aggregation::Composite
@@ -154,7 +169,7 @@ pub(crate) fn is_owned_member(
             && matches_type(child, property)
         {
             roles.insert(
-                contributes(property, "Namespace-ownedMember")
+                contributes(property, target)
                     .map_err(|error| QueryError::unsupported(owner.id(), error))?,
             );
         }
@@ -162,7 +177,7 @@ pub(crate) fn is_owned_member(
     if roles.len() > 1 {
         return Err(QueryError::unsupported(
             child.id(),
-            "ambiguous composite namespace membership role",
+            "ambiguous composite membership role",
         ));
     }
     roles.into_iter().next().ok_or_else(|| {

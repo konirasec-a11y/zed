@@ -217,6 +217,20 @@ pub(crate) fn append_namespace_properties(
             group: "UML members", editor: PropertyEditor::ReadOnly, value: json!(warning.message), editable: false,
         });
     }
+    if element.conforms_to("Property") {
+        let rows = [
+            ("uml.subsettedProperty", "Subsetted Properties", crate::uml::property_subsetting::subsetted_properties(references, element)),
+            ("uml.subsettingContext", "Subsetting contexts", crate::uml::property_subsetting::subsetting_context(references, element)),
+        ];
+        for (path, label, result) in rows {
+            let value = result.map(|values| json!(values.iter().map(|value| json!({"$ref": value.id()})).collect::<Vec<_>>()))
+                .unwrap_or_else(|error| json!(error.to_string()));
+            properties.push(InspectorProperty { path: path.into(), label: label.into(), group: "UML members", editor: PropertyEditor::ReadOnly, value, editable: false });
+        }
+        if let Some(issue) = crate::uml::property_subsetting::subsetting_diagnostic(references, element) {
+            properties.push(InspectorProperty { path: "uml.subsetting.status".into(), label: "Subsetting status".into(), group: "UML members", editor: PropertyEditor::ReadOnly, value: json!(issue.message), editable: false });
+        }
+    }
     if !element.conforms_to("Namespace") { return; }
     let result = crate::uml::classifiers::query(references, id);
     let mut append = |path: &str, label: &str, value: Value| properties.push(InspectorProperty {

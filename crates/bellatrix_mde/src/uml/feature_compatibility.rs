@@ -8,7 +8,7 @@ use super::{
     references::ReferenceIndex,
     root::ElementRef,
     schema,
-    types::MultiplicityRange,
+    types::{MultiplicityRange, UnlimitedNatural},
     value_specifications::{self, EvaluationError},
 };
 use serde_json::Value;
@@ -58,8 +58,25 @@ pub fn compare_type_conformance(
     specific: ElementRef<'_>,
     general: ElementRef<'_>,
 ) -> Result<bool, QueryError> {
-    let specific = resolve_feature_type(references, specific)?;
-    let general = resolve_feature_type(references, general)?;
+    compare_resolved_types(
+        references,
+        resolve_feature_type(references, specific)?,
+        resolve_feature_type(references, general)?,
+    )
+}
+
+/// User-model Type conformance, not schema/metaclass conformance.
+pub fn compare_resolved_types(
+    references: &ReferenceIndex<'_>,
+    specific: ElementRef<'_>,
+    general: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    if !specific.conforms_to("Type") || !general.conforms_to("Type") {
+        return Err(QueryError::invalid(
+            specific.id(),
+            "conformance comparison requires Types",
+        ));
+    }
     if specific.conforms_to("Classifier") {
         classifier_hierarchy::conforms_to(references, specific.id(), general.id())
     } else {
@@ -72,12 +89,23 @@ pub fn resolve_feature_multiplicity(
     references: &ReferenceIndex<'_>,
     element: ElementRef<'_>,
 ) -> Result<MultiplicityRange, QueryError> {
-    value_specifications::multiplicity(references, element).map_err(|error| match error {
-        EvaluationError::Invalid { message, .. } => QueryError::invalid(element.id(), message),
-        EvaluationError::Unsupported { message, .. } => {
-            QueryError::unsupported(element.id(), message)
-        }
-    })
+    value_specifications::multiplicity(references, element)
+        .map_err(|error| classify_value_error(element.id(), error))
+}
+
+pub fn resolve_feature_upper_bound(
+    references: &ReferenceIndex<'_>,
+    element: ElementRef<'_>,
+) -> Result<UnlimitedNatural, QueryError> {
+    value_specifications::upper_bound(references, element)
+        .map_err(|error| classify_value_error(element.id(), error))
+}
+
+fn classify_value_error(id: &str, error: EvaluationError) -> QueryError {
+    match error {
+        EvaluationError::Invalid { message, .. } => QueryError::invalid(id, message),
+        EvaluationError::Unsupported { message, .. } => QueryError::unsupported(id, message),
+    }
 }
 
 pub fn compare_multiplicity_containment(

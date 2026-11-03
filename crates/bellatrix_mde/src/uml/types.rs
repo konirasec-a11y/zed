@@ -101,6 +101,13 @@ impl UnlimitedNatural {
     pub fn is_unlimited(&self) -> bool {
         self.0.is_none()
     }
+
+    /// Upper-bound ordering: an absent limit contains any finite or unlimited bound.
+    pub fn fits_within(&self, limit: &Self) -> bool {
+        limit
+            .finite_value()
+            .is_none_or(|upper| self.finite_value().is_some_and(|value| value <= upper))
+    }
 }
 
 impl From<u64> for UnlimitedNatural {
@@ -207,13 +214,7 @@ impl MultiplicityRange {
     }
 
     pub fn includes_multiplicity(&self, other: &Self) -> bool {
-        self.lower <= other.lower
-            && self.upper.finite_value().is_none_or(|upper| {
-                other
-                    .upper
-                    .finite_value()
-                    .is_some_and(|other_upper| other_upper <= upper)
-            })
+        self.lower <= other.lower && other.upper.fits_within(&self.upper)
     }
 
     pub fn compatible_with(&self, other: &Self) -> bool {
@@ -225,12 +226,7 @@ impl FromStr for MultiplicityRange {
     type Err = MultiplicityError;
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
-        let text = text.trim();
-        let (lower, upper) = if text == "*" {
-            ("0", "*")
-        } else {
-            text.split_once("..").unwrap_or((text, text))
-        };
+        let (lower, upper) = split_multiplicity_notation(text);
         let lower = lower
             .parse()
             .map_err(|_| MultiplicityError::UnsupportedValueSpecification)?;
@@ -244,11 +240,18 @@ impl FromStr for MultiplicityRange {
     }
 }
 
-/// The retained notation adapter is shared by Property and Parameter. A present
-/// unevaluated bound is not absence and must never silently become 1.
-pub fn literal_multiplicity(
+fn split_multiplicity_notation(text: &str) -> (&str, &str) {
+    let text = text.trim();
+    if text == "*" {
+        ("0", "*")
+    } else {
+        text.split_once("..").unwrap_or((text, text))
+    }
+}
+
+fn literal_notation(
     properties: &std::collections::BTreeMap<String, Value>,
-) -> Result<MultiplicityRange, MultiplicityError> {
+) -> Result<Option<&str>, MultiplicityError> {
     if ["lowerValue", "upperValue"]
         .iter()
         .any(|key| properties.get(*key).is_some_and(|value| !value.is_null()))
@@ -256,10 +259,34 @@ pub fn literal_multiplicity(
         return Err(MultiplicityError::UnsupportedValueSpecification);
     }
     match properties.get("multiplicity") {
-        None => Ok(MultiplicityRange::default()),
-        Some(Value::String(text)) => text.parse(),
+        None => Ok(None),
+        Some(Value::String(text)) => Ok(Some(text)),
         Some(_) => Err(MultiplicityError::Representation),
     }
+}
+
+pub fn literal_upper_bound(
+    properties: &std::collections::BTreeMap<String, Value>,
+) -> Result<UnlimitedNatural, MultiplicityError> {
+    literal_notation(properties)?.map_or(Ok(1.into()), |text| {
+        split_multiplicity_notation(text)
+            .1
+            .parse()
+            .map_err(|error| match error {
+                LiteralValueError::UnsupportedInteger => {
+                    MultiplicityError::UnsupportedValueSpecification
+                }
+                LiteralValueError::NegativeUnlimitedNatural => MultiplicityError::InvalidBounds,
+            })
+    })
+}
+
+/// The retained notation adapter is shared by Property and Parameter. A present
+/// unevaluated bound is not absence and must never silently become 1.
+pub fn literal_multiplicity(
+    properties: &std::collections::BTreeMap<String, Value>,
+) -> Result<MultiplicityRange, MultiplicityError> {
+    literal_notation(properties)?.map_or(Ok(MultiplicityRange::default()), str::parse)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

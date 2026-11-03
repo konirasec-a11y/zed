@@ -530,5 +530,274 @@ fn slot_owner_transition_uses_one_canonical_edge_through_commands_and_roundtrips
             .iter()
             .all(|issue| issue.severity != StructuralSeverity::Error)
     );
+    // Continue the same classifier/Slot lifecycle with subsetting instead of replacement.
+    // A subset restricts the upper bound but may have a lower lower-bound.
+    let subset = |property: &str, targets: &[&str]| Command::SetSubsettedProperties {
+        property_id: property.into(),
+        subsetted_ids: targets.iter().map(|id| (*id).into()).collect(),
+    };
+    let set = |id: &str, key: &str, value| Command::SetProperty {
+        element_id: id.into(),
+        path: format!("properties.{key}"),
+        value,
+    };
+    let mut subset_model = commands::apply(
+        &restored,
+        &Command::SetRedefinedElements {
+            element_id: "feature".into(),
+            redefined_ids: vec![],
+        },
+        12,
+    )?;
+    for (id, key, value) in [
+        ("feature", "type", json!({"$ref": "class"})),
+        ("other-feature", "type", json!({"$ref": "other-class"})),
+        ("feature", "multiplicity", json!("0..3")),
+        ("other-feature", "multiplicity", json!("2..5")),
+    ] {
+        subset_model = commands::apply(&subset_model, &set(id, key, value), 13)?;
+    }
+    subset_model = commands::apply(&subset_model, &subset("feature", &["other-feature"]), 14)?;
+    subset_model
+        .elements
+        .iter_mut()
+        .find(|element| element.id == "slot")
+        .ok_or("Slot")?
+        .properties
+        .insert("definingFeature".into(), json!({"$ref": "other-feature"}));
+    subset_model = commands::apply(&subset_model, &assign(Some("second")), 15)?;
+    assert_eq!(owner_of(&subset_model)?, "second"); // subsetting did not remove the original feature
+    for owner in ["other-class", "class"] {
+        subset_model = commands::apply(
+            &subset_model,
+            &Command::SetOwner {
+                element_id: "feature".into(),
+                owner_id: Some(owner.into()),
+            },
+            16,
+        )?; // equality of contexts is valid, unlike strict redefinition ancestry
+    }
+    for (command, reason) in [
+        (subset("feature", &["missing"]), "unknown Element"),
+        (subset("feature", &["class"]), "Property"),
+        (
+            subset("feature", &["other-feature", "other-feature"]),
+            "unique",
+        ),
+        (set("feature", "multiplicity", json!("0..6")), "subsetting"),
+        (set("feature", "multiplicity", json!("0..*")), "subsetting"),
+        (
+            Command::Rename {
+                element_id: "feature".into(),
+                name: "other".into(),
+            },
+            "subsetting",
+        ),
+    ] {
+        reject(&subset_model, command, reason)?;
+    }
+    subset_model = commands::apply(
+        &subset_model,
+        &set("other-feature", "multiplicity", json!("2..*")),
+        17,
+    )?;
+    subset_model = commands::apply(
+        &subset_model,
+        &set(
+            "feature",
+            "multiplicity",
+            json!("0..10000000000000000000000000000000000000000"),
+        ),
+        18,
+    )?;
+    let mut unknown = commands::apply(
+        &subset_model,
+        &set("feature", "multiplicity", json!("0..limit")),
+        19,
+    )?;
+    unknown = commands::apply(&unknown, &subset("feature", &["other-feature"]), 20)?;
+    let unknown = decode(&encode(&unknown, Format::Protobuf)?, Format::Protobuf)?;
+    assert!(
+        validate_structural_model(&unknown)
+            .iter()
+            .any(|issue| issue.subject_id == "feature"
+                && issue.code == "UML_PROPERTY_SUBSETTING_UNSUPPORTED"
+                && issue.severity == StructuralSeverity::Warning)
+    );
+    let section = bellatrix_mde::ModelingSection::from_model(&unknown);
+    assert!(
+        bellatrix_mde::inspect_element(&section, "feature")
+            .ok_or("Inspector")?
+            .properties
+            .iter()
+            .any(|property| property.path == "uml.subsetting.status" && !property.editable)
+    );
+
+    // Import an unknown lower expression with a known upper violation, then repair
+    // only the upper literal. Overall multiplicity remains unknown, independently.
+    let mut bounds = subset_model.clone();
+    bounds
+        .elements
+        .iter_mut()
+        .find(|element| element.id == "other-feature")
+        .ok_or("target")?
+        .properties
+        .insert("multiplicity".into(), json!("2..5"));
+    let feature = bounds
+        .elements
+        .iter_mut()
+        .find(|element| element.id == "feature")
+        .ok_or("feature")?;
+    feature
+        .properties
+        .insert("lowerValue".into(), json!({"$ref":"subset-lower"}));
+    feature
+        .properties
+        .insert("upperValue".into(), json!({"$ref":"subset-upper"}));
+    for element in [
+        json!({"id":"subset-lower","kind":"uml.opaque_expression","name":"","properties":{"visibility":null,"body":["limit"],"language":["OCL"]}}),
+        json!({"id":"subset-upper","kind":"uml.literal_unlimited_natural","name":"","properties":{"visibility":null,"value":"6"}}),
+    ] {
+        bounds.elements.push(serde_json::from_value(element)?);
+    }
+    for to in ["subset-lower", "subset-upper"] {
+        bounds.relations.push(Relation {
+            id: format!("owns-{to}"),
+            kind: "owns".into(),
+            from: "feature".into(),
+            to: to.into(),
+            properties: Default::default(),
+        });
+    }
+    reject(&bounds, subset("feature", &["other-feature"]), "subsetting")?;
+    bounds = commands::apply(&bounds, &set("subset-upper", "value", json!("3")), 20)?;
+    let issues = validate_structural_model(&bounds);
+    assert!(
+        issues
+            .iter()
+            .any(|issue| issue.subject_id == "feature"
+                && issue.code == "MDE_MULTIPLICITY_UNSUPPORTED")
+    );
+    assert!(
+        !issues.iter().any(|issue| issue.subject_id == "feature"
+            && issue.code.starts_with("UML_PROPERTY_SUBSETTING"))
+    );
+    // An unresolved external target cannot hide locally provable invalid data.
+    for (local, expected) in [
+        (json!([{"$ref":"missing"}]), StructuralSeverity::Error),
+        (json!([{"$ref":"class"}]), StructuralSeverity::Error),
+        (
+            json!([{"$ref":"other-feature"},{"$ref":"other-feature"}]),
+            StructuralSeverity::Error,
+        ),
+        (json!([{"$ref":"feature"}]), StructuralSeverity::Error),
+        (
+            json!([{"$ref":"other-feature"}]),
+            StructuralSeverity::Warning,
+        ),
+    ] {
+        let mut imported = bounds.clone();
+        let mut targets = vec![json!({"href":"external-model#property"})];
+        targets.extend(local.as_array().ok_or("local references")?.iter().cloned());
+        imported
+            .elements
+            .iter_mut()
+            .find(|element| element.id == "feature")
+            .ok_or("feature")?
+            .properties
+            .insert("subsettedProperty".into(), json!(targets));
+        let imported = decode(&encode(&imported, Format::Json)?, Format::Json)?;
+        assert!(
+            validate_structural_model(&imported)
+                .iter()
+                .any(|issue| issue.subject_id == "feature"
+                    && issue.code.starts_with("UML_PROPERTY_SUBSETTING")
+                    && issue.severity == expected)
+        );
+        let repaired = commands::apply(&imported, &subset("feature", &["other-feature"]), 20)?;
+        let issues = validate_structural_model(&repaired);
+        assert!(
+            issues
+                .iter()
+                .all(|issue| issue.severity != StructuralSeverity::Error),
+            "{issues:?}"
+        );
+    }
+
+    // The same subset constraint applies to a n-ary Association end. Its contexts
+    // are the other end Types, not the owning Association or its generalizations.
+    for element in [
+        json!({"id":"selection", "kind":"uml.association", "name":"Selection", "properties":{"memberEnd":[{"$ref":"selected"},{"$ref":"selection-context"},{"$ref":"selection-context2"}]}}),
+        json!({"id":"selected", "kind":"uml.attribute", "name":"selected", "properties":{"type":{"$ref":"class"},"multiplicity":"0..2"}}),
+        json!({"id":"selection-context", "kind":"uml.attribute", "name":"context", "properties":{"type":{"$ref":"class"}}}),
+        json!({"id":"selection-context2", "kind":"uml.attribute", "name":"context2", "properties":{"type":{"$ref":"other-class"}}}),
+        json!({"id":"unrelated", "kind":"uml.class", "name":"Unrelated"}),
+    ] {
+        subset_model.elements.push(serde_json::from_value(element)?);
+    }
+    for (from, to) in [
+        ("model", "selection"),
+        ("model", "unrelated"),
+        ("selection", "selected"),
+        ("selection", "selection-context"),
+        ("selection", "selection-context2"),
+    ] {
+        subset_model.relations.push(Relation {
+            id: format!("owns-{to}"),
+            kind: "owns".into(),
+            from: from.into(),
+            to: to.into(),
+            properties: Default::default(),
+        });
+    }
+    subset_model = commands::apply(&subset_model, &subset("selected", &["other-feature"]), 21)?;
+    for (id, key, value) in [
+        ("selected", "type", json!({"$ref":"unrelated"})),
+        ("selection-context2", "type", json!({"$ref":"unrelated"})),
+    ] {
+        reject(&subset_model, set(id, key, value), "subsetting")?;
+    }
+    let mut cycle = subset_model.clone();
+    cycle.relations.push(Relation {
+        id: "subset-context-cycle".into(),
+        kind: "uml.generalization".into(),
+        from: "other-class".into(),
+        to: "class".into(),
+        properties: Default::default(),
+    });
+    reject(
+        &cycle,
+        subset("selected", &["other-feature"]),
+        "cycle in UML generalization",
+    )?;
+    for format in [Format::Json, Format::Protobuf] {
+        let reopened = decode(&encode(&subset_model, format)?, format)?;
+        let transferred = commands::apply(&reopened, &assign(Some("first")), 22)?;
+        let issues = validate_structural_model(&transferred);
+        assert!(
+            issues
+                .iter()
+                .all(|issue| issue.severity != StructuralSeverity::Error),
+            "{issues:?}"
+        );
+        let section = bellatrix_mde::ModelingSection::from_model(&transferred);
+        let inspector =
+            bellatrix_mde::inspect_element(&section, "selected").ok_or("end Inspector")?;
+        assert_eq!(
+            inspector
+                .properties
+                .iter()
+                .find(|property| property.path == "uml.subsettingContext")
+                .ok_or("contexts")?
+                .value,
+            json!([{"$ref":"class"},{"$ref":"other-class"}])
+        );
+        assert!(
+            transferred
+                .elements
+                .iter()
+                .all(|element| !element.properties.contains_key("subsettingContext"))
+        );
+    }
     Ok(())
 }

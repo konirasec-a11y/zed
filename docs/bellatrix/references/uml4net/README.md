@@ -379,8 +379,9 @@ The existing redefinition command rejects known incompatibility atomically.
 Loaded graphs, member queries and Inspector diagnostics use the same comparison;
 unknown cases remain storable with capability warnings. A fully resolved,
 compatible Property no longer receives the blanket unsupported-consistency
-warning. This does not implement Property subsetting, qualifiers or all template
-contexts. Operation signatures reuse these comparisons as described below. The existing hierarchy
+warning. Property subsetting has the subsequent bounded implementation below;
+qualifiers and all template contexts remain outside this comparison. Operation
+signatures reuse these comparisons as described below. The existing hierarchy
 feature flow now mutates compatible Types/bounds/aggregation, rejects each
 incompatibility, preserves unknown bounds and reopens the canonical graph.
 No new test functions were introduced.
@@ -421,3 +422,51 @@ three ordered signatures through commands, establishes redefinitions, changes
 Parameter order/count/Type/bounds/flags, repairs the model, preserves an unknown
 bound with Inspector diagnostics, and reopens JSON and Protobuf. No test function
 or isolated unit test was added.
+
+
+## Bounded Property subsetting
+
+`uml/property_subsetting.rs` implements the original XMI
+`Property-subsettingContext`, `Property-subsetting_context_conforms`,
+`Property-subsetting_rules` and `Property-subsetted_property_names`, also specified
+by UML 2.5.1 §§9.9.17.7–8. This composition is new: the pinned uml4net Property
+extensions do not implement those queries. It reuses Bellatrix's previously
+attributed Association membership and Classifier conformance adaptations, the
+existing generated ownership-subset walker, one snapshot ReferenceIndex and the
+shared literal ValueSpecification evaluator. No separate AST, model ownership
+list or persistent subset-closure cache is created.
+
+Canonical `subsettedProperty` reference collections use generated cardinality,
+uniqueness and target-metaclass checks. A subsetting Property must have a
+different name, a Type conforming to the subsetted Type, and an upper bound no
+greater than the subsetted upper bound. No lower-bound containment rule is
+invented. The shared upperBound query evaluates the upper independently of an
+unknown lower, without certifying the whole interval. Mixed external/local
+collections preserve known local errors; unresolved targets never turn them
+into mere capability warnings. The shared UnlimitedNatural bound comparison also serves the existing
+multiplicity interval containment; unbounded values never become machine
+maximums.
+
+The context is the owning Classifier for an attribute, or the Types at every
+other Association end when it is an end. This applies to n-ary Associations and
+takes precedence over classifier ownership. Each source context must conform to
+at least one context of each target Property. Equal contexts are permitted;
+this is not strict redefinition ancestry. Subsetting does not suppress inherited
+features or remove the original Property from Slot eligibility.
+
+`Command::SetSubsettedProperties`, structural validation and the existing
+Inspector consume the same query. Known violations reject explicit semantic
+mutations atomically. Missing/external Types, unevaluated bounds, ambiguous
+ownership and alternate association/context representations return Unsupported
+capability diagnostics and remain storable; they are not added as visual
+placement prohibitions. Literal bounds are evaluated in memory and no engine
+query accesses the filesystem or network. Qualifier semantics, arbitrary
+expressions and general external-document identity resolution remain outside
+this slice.
+
+The existing Slot/classifier lifecycle now switches from redefinition to
+subsetting, preserves the original feature's Slot eligibility, reparents within
+valid contexts, edits names/Types/finite and unlimited bounds, keeps an unknown
+expression with Inspector diagnostics, adds a n-ary end using the same rule,
+diagnoses a generalization cycle, and reopens JSON/Protobuf. No test function or
+isolated unit test was added.
