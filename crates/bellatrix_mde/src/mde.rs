@@ -7,6 +7,7 @@ pub(crate) use model::wire;
 pub use model::*;
 
 pub mod commands;
+mod construction_script;
 mod generation;
 mod graph;
 mod hierarchy;
@@ -38,6 +39,7 @@ pub use templates::{
     template_parametered_element, template_parameters,
 };
 
+pub use construction_script::{ConstructionScriptError, python_construction_script};
 pub use generation::{
     GenerationGraphError, GenerationModel, GenerationReference, GenerationUnit,
     analyze_generation_graph,
