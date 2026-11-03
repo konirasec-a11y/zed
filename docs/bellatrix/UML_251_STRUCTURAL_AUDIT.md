@@ -266,3 +266,25 @@ n-ário, externos/malformados, Unknown/Invalid, JSON/Protobuf e rejeição atôm
 com reparo por comando. Gate **15/15**: CommunicationPath 7, AssociationClass 4,
 association kernel 2 e specialization 2. Log `/tmp/communication-path-gate.log`.
 Sem alteração de UI ou geração.
+
+## Limites normativos remanescentes: ParameterSet — 2026-11-03
+
+A implementação de `same_parameterized_entity` não significa suporte completo
+às constraints de ParameterSet. No UML.xmi 20161101, `ParameterSet-input`
+(linhas 17138–17153) navega `behavioralFeature`, mas ParameterSet não declara
+essa propriedade e seu owner pode ser também Behavior. `two_parameter_sets`
+(linhas 17154–17165) quantifica s1 e s2 sem excluir s1 = s2 e compara `s1->size()`
+e `s2->size()`, não os tamanhos de seus conjuntos de Parameters. A leitura
+literal pode rejeitar o próprio conjunto, contrariando a descrição de dois
+conjuntos distintos. Ambas permanecem pendentes de decisão normativa; não se
+substituiu silenciosamente o OCL por uma interpretação da prosa.
+
+`Parameter-object_effect` agora valida os contratos de type e effect antes de
+avaliar a implicação. Tipo externo/desconhecido com efeito presente permanece
+Unknown; efeito ausente prova a consequência, mas não esconde dados Invalid.
+DataType, PrimitiveType e Enumeration são reconhecidos por metaclasse, não por
+herança de classificadores do usuário. Sete BDD/API cobrem esses casos,
+JSON/Protobuf e rejeição atômica/reparo via SetProperty. Gate **28/28** com
+ParameterSet (10), ClassBehavior (6) e Reception (5), registrado em
+`/tmp/parameter-object-effect-gate.log`. Sem UI, geração ou novo suporte completo
+de ParameterSet.

@@ -489,6 +489,28 @@ fn validate_reception(
     }
 }
 
+// UML Parameter-object_effect: validate both operands before deciding the
+// implication. An absent effect proves it even if the type is external, but
+// malformed operands remain Invalid rather than disappearing through .ok().
+fn parameter_object_effect(
+    references: &ReferenceIndex<'_>,
+    parameter: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    use super::property_contracts::{check_value, PropertyOutcome};
+    let descriptor = schema::uml_property("Parameter", "effect")
+        .map_err(|error| QueryError::unsupported(parameter.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(parameter.id(), "missing Parameter::effect contract"))?;
+    let effect = parameter.properties().get("effect").unwrap_or(&Value::Null);
+    let absent_effect = match check_value(references, parameter, descriptor, effect) {
+        PropertyOutcome::Satisfied => Ok(effect.is_null()),
+        PropertyOutcome::Violation(message) => Err(QueryError::invalid(parameter.id(), message)),
+        PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(parameter.id(), message)),
+    };
+    let not_data_type = reception_reference(references, parameter, "type")
+        .map(|target| target.is_none_or(|target| !target.conforms_to("DataType")));
+    super::feature_compatibility::accept_any([not_data_type, absent_effect])
+}
+
 fn parameter_set_same_entity(
     references: &ReferenceIndex<'_>,
     parameter_set: ElementRef<'_>,
@@ -644,6 +666,19 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
             }
         } else if element.conforms_to("Parameter") {
             validate_parameter_relations(references, element, &mut issues);
+            let outcome = match parameter_object_effect(references, element) {
+                Ok(true) => None,
+                Ok(false) => Some((StructuralSeverity::Error, "UML_PARAMETER_OBJECT_EFFECT",
+                    "DataType-typed Parameters cannot have an effect".to_owned())),
+                Err(QueryError::Invalid { message, .. }) => Some((StructuralSeverity::Error,
+                    "MDE_PARAMETER_OBJECT_EFFECT_INVALID", message)),
+                Err(QueryError::Unsupported { message, .. }) => Some((StructuralSeverity::Warning,
+                    "MDE_PARAMETER_OBJECT_EFFECT_UNVERIFIED", message)),
+            };
+            if let Some((severity, code, message)) = outcome {
+                issues.push(StructuralDiagnostic { severity, code, subject_id: element.id().into(),
+                    message: format!("Parameter-object_effect: {message}") });
+            }
             let ElementRef::Object(parameter) = element else {
                 continue;
             };
@@ -673,18 +708,6 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
                         Some("Parameter::not_exception prohibits input exception Parameters".into())
                     } else if is_exception && is_stream {
                         Some("Parameter::stream_and_exception prohibits both flags together".into())
-                    } else if effect.is_some()
-                        && parameter
-                            .properties
-                            .get("type")
-                            .and_then(|value| super::references::reference_id(value).ok().flatten())
-                            .and_then(|id| references.element(id).ok())
-                            .is_some_and(|target| target.conforms_to("DataType"))
-                    {
-                        Some(
-                            "Parameter::object_effect prohibits an effect on a DataType Parameter"
-                                .into(),
-                        )
                     } else {
                         None
                     }

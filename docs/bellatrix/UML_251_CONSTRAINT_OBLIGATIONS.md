@@ -32,7 +32,8 @@ ExtensionEnd têm recorte publicado em
 `6188ddb14d09d2641fa188c58087f5056de5d18a` (E26).
 InstanceSpecification::deployment_artifact e recortes de Extension têm
 implementação publicada em `062ef43162559c7d6d784543ecb28f1a82e8510f`
-(E27/E28).
+(E27/E28). Stereotype::binaryAssociationsOnly tem recorte publicado em E29;
+ParameterSet::same_parameterized_entity tem recorte publicado em E30.
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -148,7 +149,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E28 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E30 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -416,6 +417,56 @@ de execução nova. E12–E28 possuem os gates delimitados nas seções seguinte
   isRequired é corpo de operação: não acrescentar invariantes ao inventário.
   Diagnósticos usam `UML_EXTENSION_IS_BINARY`, `UML_EXTENSION_OWNED_END`,
   `UML_EXTENSION_IS_REQUIRED` e variantes `MDE_EXTENSION_*_UNVERIFIED`.
+
+- **E29**: `semantics/profiles.rs`, `stereotype_binary_associations`,
+  `attribute_associations_binary` e `validate`; `stereotype_associations.rs`,
+  oito testes. Somente ownedAttribute direto do Stereotype cria a obrigação;
+  atributo herdado não é promovido a possuído. Membership em Association é
+  derivado de memberEnd canônico, com inversa association sujeita a coerência.
+  Cada associação correspondente deve ter duas pontas. Cardinalidade conhecida
+  pode decidir a regra diante de identidades externas, sem ocultar malformados.
+  Listas memberEnd ausentes ou incompletas não provam ausência de associação;
+  inverse/cache e endpoints visuais não substituem membership materializado.
+
+- **E30**: `semantics/operations.rs`, `parameter_set_same_entity` e `validate`;
+  `parameter_set_entity.rs`, dez testes. ParameterSet::parameter precisa estar
+  materializado. Cada Parameter local deve ter o mesmo owner canônico do set,
+  e todas as directions devem coincidir. Direction ausente usa o default `in`;
+  valor inválido não é substituído por default. Identidade local com metaclasse
+  desconhecida ainda permite provar divergência de owner, sem provar direction.
+  Referências externas preservam unknown quando necessárias; owner ambíguo,
+  malformados e divergência local não desaparecem diante de membro desconhecido.
+  Não inferir membership de ownership ou inversas armazenadas.
+
+### Evidência de Stereotype e ParameterSet
+
+Stereotype::binaryAssociationsOnly: commit publicado
+`12c99872d62372ee52d2298285a1635c348393d4`. O log local
+`/tmp/stereotype-associations-gate.log` registra **33/33 aprovados**:
+association_class_constraints 4, communication_path 7, extension_contracts 6,
+extension_end_constraints 8 e stereotype_associations 8. A linha fica **P/E29**.
+Os casos cobrem atributos diretos versus herdados, aridade, inversas conflitantes,
+coleções incompletas, precedência em ambas as ordens, roundtrip e rejeição
+atômica pelo gate de associação. Não certifica todas as constraints de Stereotype
+nem elimina Unsupported restante de Extension.
+
+ParameterSet::same_parameterized_entity: evidência inicialmente inspecionada
+no working tree sobre `12c99872d62372ee52d2298285a1635c348393d4`, registrada
+localmente em `abbced6` e publicada em
+`c2669e6877c70b673deafab07046b790e0ca6488`, com árvore confirmada idêntica à
+local. O gate abaixo é anterior à publicação, não rerun sobre o SHA remoto.
+O log `/tmp/parameter-set-entity-review-gate.log` registra **21/21 aprovados**:
+class_behavior 6, parameter_set_entity 10, reception_authoring_drafts 1 e
+reception_signal_contracts 4. A linha fica **P/E30**. A revisão inclui
+metaclasse desconhecida com owner local divergente/ambíguo, directions default
+ou inválidas, referências externas e papéis ausentes. Isso não certifica
+ParameterSet::input, output ou two_parameter_sets, nem semântica comportamental
+em runtime ou autoria completa.
+
+São gates focados, com alvos parcialmente sobrepostos a gates anteriores;
+não somar as contagens como cobertura normativa. Não houve teste novo pela
+matriz nem rerun sobre o SHA remoto. A publicação não amplia a cobertura dos
+gates; UI, geração e fechamento integral UML continuam fora desta prova.
 
 ### Evidência publicada de InstanceSpecification e Extension
 
@@ -998,7 +1049,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `ParameterSet-same_parameterized_entity`
 
-- Metaclass: `ParameterSet`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `ParameterSet`. Estado: **P**. Evidência: E30; commit `c2669e6877c70b673deafab07046b790e0ca6488`.
 - OCL publicado: `parameter->forAll(p1, p2 | self.owner = p1.owner and self.owner = p2.owner and p1.direction = p2.direction)`.
 
 #### `ParameterSet-input`
@@ -1270,7 +1321,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `Stereotype-binaryAssociationsOnly`
 
-- Metaclass: `Stereotype`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `Stereotype`. Estado: **P**. Evidência: E29; commit `12c99872d62372ee52d2298285a1635c348393d4`.
 - OCL publicado: `ownedAttribute.association->forAll(memberEnd->size()=2)`.
 
 #### `Stereotype-generalize`
