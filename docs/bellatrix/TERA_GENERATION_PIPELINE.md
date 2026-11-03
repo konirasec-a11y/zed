@@ -26,7 +26,7 @@ sua sintaxe e seus caminhos. O Tera é fixado em
 O primeiro alvo integrado é Rust. Templating de classes/structs,
 traits, assinaturas, corpos fornecidos pelo usuário e manifestos
 `Cargo.toml` está em
-`crates/bellatrix_mde_rust_generator/templates/`.
+`crates/bellatrix_mde_rust_generator/src/KERNEL/compiler/rust/templates/`.
 O manifesto ainda é **validado/construído com TOML tipado** antes de
 ser renderizado pelo Tera; não inventamos estruturas Cargo no template.
 

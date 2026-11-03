@@ -15,12 +15,12 @@ pub mod commands;
 mod diagram_operations;
 #[path = "view-model/diagram/diagram_operations.rs"]
 mod diagram_operation_policy;
-#[path = "generation/construction_script.rs"]
+#[path = "KERNEL/compiler/emission/construction_script.rs"]
 mod construction_script;
 #[path = "observability/execution_trace.rs"]
 mod execution_trace;
 pub use execution_trace::{ExecutionEvent, ExecutionTrace, TraceOutcome, TracePhase, execution_trace_jsonl, validate_structural_diagram_traced, validate_structural_model_traced};
-#[path = "generation/generation_graph.rs"]
+#[path = "KERNEL/compiler/analysis/generation_graph.rs"]
 mod generation;
 #[path = "KERNEL/graph/graph.rs"]
 mod graph;
@@ -33,13 +33,13 @@ pub use visual_consistency::{VisualComponent, visual_components};
 mod index;
 #[path = "view-model/inspector/inspector.rs"]
 mod inspector;
-#[path = "generation/operation_graph.rs"]
+#[path = "KERNEL/compiler/operations/operation_graph.rs"]
 mod operation_graph;
-#[path = "publishing/ownership.rs"]
+#[path = "KERNEL/compiler/emission/ownership.rs"]
 mod ownership;
-#[path = "generation/path.rs"]
+#[path = "KERNEL/compiler/artifacts/path.rs"]
 mod path;
-#[path = "generation/plan.rs"]
+#[path = "KERNEL/compiler/artifacts/plan.rs"]
 mod plan;
 #[path = "view-model/notation/presentation.rs"]
 mod presentation;
@@ -49,7 +49,7 @@ mod instance_presentation;
 mod interaction_presentation;
 pub use interaction_presentation::format_operand_guard;
 pub use instance_presentation::{format_instance_heading, collect_instance_slot_labels};
-#[path = "publishing/publish.rs"]
+#[path = "KERNEL/compiler/emission/publish.rs"]
 mod publish;
 #[path = "view-model/authoring/quick_edit.rs"]
 mod quick_edit;
