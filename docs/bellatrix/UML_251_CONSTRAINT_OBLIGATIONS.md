@@ -92,6 +92,11 @@ value_specification_no_side_effects têm recorte publicado em
 `01d1b1e28776168bd6ddd3fc081533704d931bab` (E69): ausência/literais,
 com expressões não literais ainda não verificadas. O gate amplo deste
 incremento também não está verde: 862 aprovados e três falhas.
+Correções de criação/reparent e fixtures foram publicadas em
+`836c44b2ebe336e83e9c72b3cad6e016938e3aba` (E70). O gate completo posterior
+de `-p bellatrix_mde` passou **867/867, sem falhas ou testes ignorados**.
+Isso supera as três falhas dos gates históricos acima, sem alterar seus
+resultados registrados. Nenhum componente de UI foi compilado nesse gate.
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -207,7 +212,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E69 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E70 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -1107,6 +1112,51 @@ de execução nova. E12–E69 possuem os gates delimitados nas seções seguinte
   `MDE_MULTIPLICITY_CONSTANT_INVALID`/`MDE_MULTIPLICITY_CONSTANT_UNVERIFIED` e
   `MDE_MULTIPLICITY_NO_SIDE_EFFECTS_INVALID`/
   `MDE_MULTIPLICITY_NO_SIDE_EFFECTS_UNVERIFIED`.
+
+- **E70**: correções em `semantics/root.rs::ownership_property` e
+  `crates/bellatrix_mde/src/application/commands/executor.rs::create_relation`;
+  testes unitários de ownership e integrações diagram_visual_creation/indexing.
+  A escolha do papel de ownership para criação/reparent exige Pin sob Action,
+  InteractionOperand sob CombinedFragment e Pseudostate entryPoint/exitPoint
+  sob State ou StateMachine. Outros kinds de Pseudostate não são convertidos
+  silenciosamente em connectionPoint desses owners. Papéis especializados de
+  Action, como argument/result, e referências explícitas válidas permanecem
+  preservados; projeção explícita malformada não autoriza inferir um papel.
+  O recorte não é um validador geral dessas invariantes: snapshots importados
+  e mudanças posteriores via SetProperty ainda não estão cobertos por essas
+  guardas de criação/reparent. Não promover obrigações comportamentais com
+  base apenas nessa correção.
+  A criação de Deployment/Manifestation limpa visibility para null, como já
+  ocorria para InterfaceRealization: seus owners compostos não projetam
+  Namespace::ownedMember. Os testes verificam owner, visibility e ausência de
+  namespace; isso não certifica todos os contratos dessas metaclasses.
+
+### Evidência publicada da recuperação do gate completo do kernel
+
+Commit inspecionado: `836c44b2ebe336e83e9c72b3cad6e016938e3aba`.
+O log `/tmp/kernel-three-reviewed-final-gate.log` registra o gate completo de
+`-p bellatrix_mde`: **867/867 aprovados, zero falhas e zero ignorados**,
+incluindo 163 testes lib e os testes de integração do pacote. Doc-tests
+executaram zero testes. Nenhum componente de UI foi compilado; os alvos de
+integração com nomes visuais exercitam comandos e modelos do kernel, não
+constituem aceite de interface gráfica.
+
+Além das correções de ownership e criação de relações de E70, as fixtures
+foram ajustadas sem silenciar diagnósticos: diagram_visual_creation verifica
+que duas Associations sem nome no mesmo Namespace geram draft com
+`UML_NAMESPACE_MEMBERS_DISTINGUISHABLE` e não alteram as relações canônicas;
+depois nomeia a primeira para testar a criação da relação reversa. indexing
+agora exige os quatro warnings esperados de contratos legados não verificados
+(frame, declaration, sourceRole e targetRole), preserva esses diagnósticos após
+reabertura e verifica o código de erro específico para nomes duplicados.
+
+As três falhas antes registradas em diagram_visual_creation/indexing estão
+resolvidas neste gate posterior. Os resultados históricos 857/3 e 862/3 não
+são reclassificados retroativamente como verdes. O gate foi executado antes
+da publicação, sem rerun no SHA publicado nem execução nova por esta matriz.
+A aprovação é do pacote bellatrix_mde neste recorte, não da aplicação inteira,
+UI, geração, interchange ou conformidade UML completa. Permanece aberta a
+lacuna de snapshots/SetProperty para as guardas de ownership descritas em E70.
 
 ### Evidência publicada de constância e ausência de efeitos em multiplicidades
 
