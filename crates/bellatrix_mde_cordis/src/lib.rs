@@ -5,7 +5,7 @@ pub use bellatrix_mde::{ModelingRelationKind, ModelingSection, UmlQuickCreate};
 mod diagrams;
 mod mutation;
 pub use diagrams::{
-    ModelingCreateDiagram, ModelingCreateDiagramRequested, ModelingDeleteDiagram,
+    DiagramValidationResult, ModelingCreateDiagram, ModelingCreateDiagramRequested, ModelingDeleteDiagram,
     ModelingDeleteDiagramRequested, ModelingRenameDiagram, ModelingRenameDiagramRequested,
     ModelingValidateDiagram, ModelingValidateDiagramRequested,
 };
@@ -21,7 +21,7 @@ mod quick_edit_commands;
 pub use quick_edit_commands::{ModelingQuickEdit, ModelingQuickEditRequested};
 mod create_relation;
 pub use create_relation::{
-    ModelingCreateRelation, ModelingCreateRelationRequested, projected_automatic_routes,
+    ModelingCreateRelation, ModelingCreateRelationOrVisualDraft, ModelingCreateRelationRequested, projected_automatic_routes,
 };
 mod association_ends;
 pub use association_ends::{ModelingEditAssociationEnds, ModelingEditAssociationEndsRequested};
@@ -45,6 +45,7 @@ pub use delete_element::{ModelingDeleteElement, ModelingDeleteElementRequested};
 pub use resize_view::{ModelingResizeView, ModelingResizeViewRequested};
 pub use set_property::{ModelingSetProperty, ModelingSetPropertyRequested};
 pub use views::{
+    ModelingCreateVisualDraft, ModelingCreateVisualDraftRequested,
     ModelingPlaceElementView, ModelingPlaceElementViewRequested, ModelingRemoveView,
     ModelingRemoveViewRequested,
 };
@@ -52,14 +53,14 @@ mod ui_bridge;
 use bellatrix_mde::Scope;
 use cordis::event::{ListenerRegistrationError, observer_sync};
 use cordis::{Context, Event, Plugin};
-pub use create_element::{ModelingCreateElement, ModelingCreateElementRequested};
+pub use create_element::{ModelingCreateElement, ModelingCreateElementOrVisualDraft, ModelingCreateElementRequested};
 pub use project_integration::{
-    MdePlugin, ModelingRename, ModelingRenameRequested, ModelingSetOwner,
-    ModelingSetOwnerRequested, with_model,
+    MdePlugin, ModelingRename, ModelingRenameRequested, ModelingSetExplorerParent,
+    ModelingSetExplorerParentRequested, ModelingSetOwner, ModelingSetOwnerRequested, with_model,
 };
 use std::convert::Infallible;
 use tokio::sync::mpsc;
-pub use ui_bridge::{MdeUiBridge, MdeUiCommand};
+pub use ui_bridge::{DiagramValidationFailure, MdeUiBridge, MdeUiCommand};
 pub use view_edits::{ModelingMoveView, ModelingMoveViewRequested};
 
 #[derive(Clone, Debug)]

@@ -19,6 +19,17 @@ impl Event for ModelingCreateRelation {
     type Args = ModelingCreateRelationRequested;
     type Output = Result<u64, String>;
 }
+pub struct ModelingCreateRelationOrVisualDraft;
+impl Event for ModelingCreateRelationOrVisualDraft {
+    const NAME: &'static str = "bellatrix.mde.create-relation-or-visual-draft.v1";
+    type Args = ModelingCreateRelationRequested;
+    type Output = Result<u64, String>;
+}
+pub(crate) async fn create_relation_or_visual_draft(context: &Context, projects: &ProjectService,
+    request: ModelingCreateRelationRequested) -> Result<u64, String> {
+    crate::mutation::execute(context, projects, request.project_id, request.expected_revision,
+        Command::CreateRelationOrVisualDraft { diagram_id: request.diagram_id, kind: request.kind, from: request.from, to: request.to }).await
+}
 pub(crate) async fn create_relation(context: &Context, projects: &ProjectService,
     request: ModelingCreateRelationRequested) -> Result<u64, String> {
     crate::mutation::execute(context, projects, request.project_id, request.expected_revision, Command::CreateRelation {

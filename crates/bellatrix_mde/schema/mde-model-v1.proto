@@ -13,6 +13,7 @@ message Project {
   repeated Relation relations = 5;
   repeated Diagram diagrams = 6;
   optional string root_model = 7;
+  bytes explorer_parents_json = 8; // map from identity to parent identity or null (project root)
 }
 message Element {
   string id = 1;
@@ -53,4 +54,5 @@ message View {
   bytes geometry_json = 4;
   bytes style_json = 5;
   sint32 z_index = 6;
+  bytes draft_json = 7;
 }

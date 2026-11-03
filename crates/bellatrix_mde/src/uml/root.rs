@@ -217,6 +217,7 @@ pub fn relationship_metaclass(kind: &str) -> Option<&'static str> {
         "uml.include" => "Include",
         "uml.extend" => "Extend",
         "uml.package_import" => "PackageImport",
+        "uml.element_import" => "ElementImport",
         "uml.package_merge" => "PackageMerge",
         "uml.deployment" => "Deployment",
         "uml.manifestation" => "Manifestation",
@@ -420,7 +421,7 @@ impl<'a> Model<'a> {
         if let ElementRef::Relationship(relation) = element
             && matches!(
                 relation.kind.as_str(),
-                "uml.generalization" | "uml.interface_realization" | "uml.template_binding"
+                "uml.generalization" | "uml.interface_realization" | "uml.template_binding" | "uml.element_import" | "uml.package_import"
             )
         {
             owners.insert(&relation.from);
@@ -771,7 +772,7 @@ pub(crate) fn set_owner(
     if let ElementRef::Relationship(relation) = element
         && matches!(
             relation.kind.as_str(),
-            "uml.generalization" | "uml.interface_realization" | "uml.template_binding"
+            "uml.generalization" | "uml.interface_realization" | "uml.template_binding" | "uml.element_import" | "uml.package_import"
         )
     {
         return if relation.from == owner_id {
@@ -891,7 +892,7 @@ pub(crate) fn reparent(
     if let ElementRef::Relationship(relation) = element
         && matches!(
             relation.kind.as_str(),
-            "uml.generalization" | "uml.interface_realization" | "uml.template_binding"
+            "uml.generalization" | "uml.interface_realization" | "uml.template_binding" | "uml.element_import" | "uml.package_import"
         )
     {
         return Err(

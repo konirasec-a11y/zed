@@ -2,26 +2,37 @@
 //! The host owns this bridge and its lifetime. The UI only owns a sender.
 use crate::{
     ModelingAddMember, ModelingAddMemberRequested, ModelingCreateDiagram,
-    ModelingCreateDiagramRequested, ModelingCreateElement, ModelingCreateElementRequested,
-    ModelingCreateRelation, ModelingCreateRelationRequested, ModelingDeleteDiagram,
-    ModelingDeleteDiagramRequested, ModelingDeleteElement, ModelingDeleteElementRequested,
-    ModelingMoveParameter, ModelingMoveParameterRequested, ModelingMoveView,
-    ModelingMoveViewRequested, ModelingPlaceElementView, ModelingPlaceElementViewRequested,
-    ModelingQuickEdit, ModelingQuickEditRequested, ModelingRemoveView, ModelingRemoveViewRequested,
-    ModelingRename, ModelingRenameDiagram, ModelingRenameDiagramRequested, ModelingRenameRequested,
-    ModelingReorderView, ModelingReorderViewRequested, ModelingResizeView,
-    ModelingResizeViewRequested, ModelingSetNameExpression, ModelingSetNameExpressionRequested,
-    ModelingSetOwner, ModelingSetOwnerRequested, ModelingSetProperty, ModelingSetPropertyRequested,
-    ModelingSetViewRouting, ModelingSetViewRoutingRequested, ModelingSetViewStyle,
-    ModelingSetViewStyleRequested, ModelingValidateDiagram, ModelingValidateDiagramRequested,
+    ModelingCreateDiagramRequested, ModelingCreateElement, ModelingCreateElementOrVisualDraft,
+    ModelingCreateElementRequested, ModelingCreateRelation, ModelingCreateRelationOrVisualDraft,
+    ModelingCreateRelationRequested, ModelingCreateVisualDraft, ModelingCreateVisualDraftRequested,
+    ModelingDeleteDiagram, ModelingDeleteDiagramRequested, ModelingDeleteElement,
+    ModelingDeleteElementRequested, ModelingMoveParameter, ModelingMoveParameterRequested,
+    ModelingMoveView, ModelingMoveViewRequested, ModelingPlaceElementView,
+    ModelingPlaceElementViewRequested, ModelingQuickEdit, ModelingQuickEditRequested,
+    ModelingRemoveView, ModelingRemoveViewRequested, ModelingRename, ModelingRenameDiagram,
+    ModelingRenameDiagramRequested, ModelingRenameRequested, ModelingReorderView,
+    ModelingReorderViewRequested, ModelingResizeView, ModelingResizeViewRequested,
+    ModelingSetExplorerParent, ModelingSetExplorerParentRequested, ModelingSetNameExpression,
+    ModelingSetNameExpressionRequested, ModelingSetOwner, ModelingSetOwnerRequested,
+    ModelingSetProperty, ModelingSetPropertyRequested, ModelingSetViewRouting,
+    ModelingSetViewRoutingRequested, ModelingSetViewStyle, ModelingSetViewStyleRequested,
+    ModelingValidateDiagram, ModelingValidateDiagramRequested,
 };
 use bellatrix_project::{
-    ProjectId, ProjectSave, ProjectSaveRequested, ProjectStateChanged, ProjectStateChangedEvent,
+    ProjectId, ProjectSave, ProjectSaveRequested, ProjectSaved, ProjectSavedEvent,
+    ProjectStateChanged, ProjectStateChangedEvent,
 };
 use cordis::event::{ListenerRegistration, ListenerRegistrationError, QueryOutcome, observer_sync};
 use cordis::{Context, Routing};
 use std::{convert::Infallible, fmt::Display};
 use tokio::sync::{mpsc, watch};
+
+#[derive(Clone, Debug)]
+pub struct DiagramValidationFailure {
+    pub diagram_id: String,
+    pub revision: u64,
+    pub message: String,
+}
 
 #[derive(Clone)]
 pub enum MdeUiCommand {
@@ -43,7 +54,10 @@ pub enum MdeUiCommand {
     RenameDiagram(ModelingRenameDiagramRequested),
     DeleteDiagram(ModelingDeleteDiagramRequested),
     ValidateDiagram(ModelingValidateDiagramRequested),
+    CreateVisualDraft(ModelingCreateVisualDraftRequested),
+    CreateElementOrVisualDraft(ModelingCreateElementRequested),
     CreateElement(ModelingCreateElementRequested),
+    CreateRelationOrVisualDraft(ModelingCreateRelationRequested),
     CreateRelation(ModelingCreateRelationRequested),
     MoveView(ModelingMoveViewRequested),
     ResizeView(ModelingResizeViewRequested),
@@ -51,6 +65,7 @@ pub enum MdeUiCommand {
     PlaceElementView(ModelingPlaceElementViewRequested),
     Rename(ModelingRenameRequested),
     SetOwner(ModelingSetOwnerRequested),
+    SetExplorerParent(ModelingSetExplorerParentRequested),
     DeleteElement(ModelingDeleteElementRequested),
     SetProperty(ModelingSetPropertyRequested),
     SetPropertyTracked {
@@ -69,7 +84,10 @@ pub struct MdeUiBridge {
     commands: mpsc::Sender<MdeUiCommand>,
     changes: watch::Receiver<u64>,
     feedback: watch::Receiver<String>,
-    _listener: ListenerRegistration,
+    validations:
+        watch::Receiver<Option<Result<crate::DiagramValidationResult, DiagramValidationFailure>>>,
+    saves: watch::Receiver<Option<u64>>,
+    _listeners: Vec<ListenerRegistration>,
     task: tokio::task::JoinHandle<()>,
 }
 impl MdeUiBridge {
@@ -77,6 +95,8 @@ impl MdeUiBridge {
         let (command_tx, mut command_rx) = mpsc::channel::<MdeUiCommand>(64);
         let (revision_tx, changes) = watch::channel(0_u64);
         let (feedback_tx, feedback) = watch::channel(String::new());
+        let (validation_tx, validations) = watch::channel(None);
+        let (save_tx, saves) = watch::channel(None);
         let id = project_id.clone();
         let listener = ctx.on::<ProjectStateChangedEvent, _>(observer_sync(
             move |_, changed: ProjectStateChanged| {
@@ -86,6 +106,20 @@ impl MdeUiBridge {
                 Ok::<_, Infallible>(())
             },
         ))?;
+        let save_id = project_id.clone();
+        let save_listener =
+            match ctx.on::<ProjectSavedEvent, _>(observer_sync(move |_, saved: ProjectSaved| {
+                if saved.id == save_id {
+                    save_tx.send_replace(Some(saved.revision));
+                }
+                Ok::<_, Infallible>(())
+            })) {
+                Ok(listener) => listener,
+                Err(error) => {
+                    listener.remove();
+                    return Err(error);
+                }
+            };
         let cordis = ctx.clone();
         let task = tokio::spawn(async move {
             while let Some(request) = command_rx.recv().await {
@@ -150,11 +184,26 @@ impl MdeUiBridge {
                         completion.send_replace(Some(receipt));
                         describe("View order updated", result)
                     }
-                    MdeUiCommand::ValidateDiagram(request) => describe_validation(
-                        cordis
+                    MdeUiCommand::ValidateDiagram(request) => {
+                        let diagram_id = request.diagram_id.clone();
+                        let revision = request.expected_revision;
+                        let result = cordis
                             .query::<ModelingValidateDiagram>(Routing::Unscoped, request)
-                            .await,
-                    ),
+                            .await;
+                        let outcome = match result {
+                            Ok(QueryOutcome::Answer(Ok(validation))) => Ok(validation),
+                            Ok(QueryOutcome::Answer(Err(error))) => Err(error),
+                            Ok(QueryOutcome::Miss) => Err("Cordis responder unavailable".into()),
+                            Err(error) => Err(format!("Cordis dispatch failed: {error}")),
+                        }
+                        .map_err(|message| DiagramValidationFailure {
+                            diagram_id,
+                            revision,
+                            message,
+                        });
+                        validation_tx.send_replace(Some(outcome));
+                        continue;
+                    }
                     MdeUiCommand::CreateDiagram(request) => describe(
                         "Diagram created",
                         cordis
@@ -173,10 +222,25 @@ impl MdeUiBridge {
                             .query::<ModelingDeleteDiagram>(Routing::Unscoped, request)
                             .await,
                     ),
+                    MdeUiCommand::CreateElementOrVisualDraft(request) => describe(
+                        "Element or visual draft created",
+                        cordis
+                            .query::<ModelingCreateElementOrVisualDraft>(Routing::Unscoped, request)
+                            .await,
+                    ),
                     MdeUiCommand::CreateElement(request) => describe(
                         "Element created",
                         cordis
                             .query::<ModelingCreateElement>(Routing::Unscoped, request)
+                            .await,
+                    ),
+                    MdeUiCommand::CreateRelationOrVisualDraft(request) => describe(
+                        "Relationship or visual draft created",
+                        cordis
+                            .query::<ModelingCreateRelationOrVisualDraft>(
+                                Routing::Unscoped,
+                                request,
+                            )
                             .await,
                     ),
                     MdeUiCommand::CreateRelation(request) => describe(
@@ -189,6 +253,12 @@ impl MdeUiBridge {
                         "View moved",
                         cordis
                             .query::<ModelingMoveView>(Routing::Unscoped, request)
+                            .await,
+                    ),
+                    MdeUiCommand::CreateVisualDraft(request) => describe(
+                        "Visual draft created",
+                        cordis
+                            .query::<ModelingCreateVisualDraft>(Routing::Unscoped, request)
                             .await,
                     ),
                     MdeUiCommand::PlaceElementView(request) => describe(
@@ -213,6 +283,12 @@ impl MdeUiBridge {
                         "Element renamed",
                         cordis
                             .query::<ModelingRename>(Routing::Unscoped, request)
+                            .await,
+                    ),
+                    MdeUiCommand::SetExplorerParent(request) => describe(
+                        "Explorer placement updated",
+                        cordis
+                            .query::<ModelingSetExplorerParent>(Routing::Unscoped, request)
                             .await,
                     ),
                     MdeUiCommand::SetOwner(request) => describe(
@@ -288,7 +364,9 @@ impl MdeUiBridge {
             commands: command_tx,
             changes,
             feedback,
-            _listener: listener,
+            validations,
+            saves,
+            _listeners: vec![listener, save_listener],
             task,
         })
     }
@@ -301,6 +379,15 @@ impl MdeUiBridge {
     pub fn changes(&self) -> watch::Receiver<u64> {
         self.changes.clone()
     }
+    pub fn validations(
+        &self,
+    ) -> watch::Receiver<Option<Result<crate::DiagramValidationResult, DiagramValidationFailure>>>
+    {
+        self.validations.clone()
+    }
+    pub fn saves(&self) -> watch::Receiver<Option<u64>> {
+        self.saves.clone()
+    }
     pub fn feedback(&self) -> watch::Receiver<String> {
         self.feedback.clone()
     }
@@ -308,6 +395,9 @@ impl MdeUiBridge {
 impl Drop for MdeUiBridge {
     fn drop(&mut self) {
         self.task.abort();
+        for listener in self._listeners.drain(..) {
+            listener.remove();
+        }
     }
 }
 fn describe<E: Display, D: Display>(
@@ -317,23 +407,6 @@ fn describe<E: Display, D: Display>(
     match result {
         Ok(QueryOutcome::Answer(Ok(revision))) => format!("{title}: revision {revision}"),
         Ok(QueryOutcome::Answer(Err(error))) => format!("{title} rejected: {error}"),
-        Ok(QueryOutcome::Miss) => "Cordis responder unavailable".into(),
-        Err(error) => format!("Cordis dispatch failed: {error}"),
-    }
-}
-
-fn describe_validation<D: Display>(
-    result: Result<QueryOutcome<Result<Vec<bellatrix_mde::StructuralDiagnostic>, String>>, D>,
-) -> String {
-    match result {
-        Ok(QueryOutcome::Answer(Ok(diagnostics))) if diagnostics.is_empty() =>
-            "Diagram validation: no issues found in the implemented checks (not full UML conformance)".into(),
-        Ok(QueryOutcome::Answer(Ok(diagnostics))) => {
-            let details = diagnostics.iter().map(|diagnostic| format!("{:?} {} [{}]: {}",
-                diagnostic.severity, diagnostic.code, diagnostic.subject_id, diagnostic.message)).collect::<Vec<_>>().join("\n");
-            format!("Diagram validation: {} diagnostic(s)\n{details}", diagnostics.len())
-        }
-        Ok(QueryOutcome::Answer(Err(error))) => format!("Diagram validation failed: {error}"),
         Ok(QueryOutcome::Miss) => "Cordis responder unavailable".into(),
         Err(error) => format!("Cordis dispatch failed: {error}"),
     }

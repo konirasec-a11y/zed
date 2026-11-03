@@ -142,11 +142,67 @@ members through commands, changes visibility, redefines and clears
 redefinitions, rejects malformed targets and cycles atomically, and reopens
 JSON and Protobuf before querying again.
 
-ElementImport, PackageImport, import aliases/collisions, explicit collaboration
-roles and other unimplemented membership sources do not produce a partial
-successful member result. A query returns an explicit unsupported-capability
-error when their data appears, including in an ancestor; model diagnostics
-retain this as a capability warning rather than a UML prohibition. The
-Inspector shows the unavailable-query reason. Dependent redefinition commands
-still fail closed. Independently stored derived member/feature/attribute arrays
-are not accepted as an authoritative alternate graph.
+Explicit collaboration roles and other unimplemented membership sources do
+not produce a partial successful member result. A query returns an explicit
+unsupported-capability error when their data appears, including in an ancestor;
+model diagnostics retain this as a capability warning rather than a UML
+prohibition. The Inspector shows the unavailable-query reason. Dependent
+redefinition commands still require a complete member query. Independently
+stored derived member/feature/attribute arrays are not an authoritative
+alternate graph.
+
+## Namespace and Package imports
+
+`crates/bellatrix_mde/src/uml/namespace_imports.rs` adapts import and name
+patterns from the pinned `NamespaceExtensions.cs`, `PackageExtensions.cs`,
+`ElementImportExtensions.cs`, and `NamedElementExtensions.cs`. The retained
+Apache-2.0 attribution applies. The finite graph solver is new; it does not
+reuse the upstream thread-local recursion guard or mutable result lists.
+
+The authoritative contracts are `Namespace-importedMember.1`,
+`Namespace-getNamesOfMember`, `Namespace-importMembers`,
+`Namespace-excludeCollisions`, `NamedElement-isDistinguishableFrom`,
+`ElementImport-getName`, `Package-visibleMembers`, and `Package-makesVisible`,
+plus import target, visibility and ownership constraints in the original XMI.
+See UML 2.5.1 §§7.4.3.3, 7.8.7, 7.8.9–11 and 12.4.5.
+
+Canonical `uml.element_import` and `uml.package_import` relationship records
+hold source and target identities. Their source derives `importingNamespace`
+and their owner; no inverse ownership or member arrays are added.
+`ElementImport` may store an alias. Both imports store public/private visibility,
+with the generated public default. Imported identities remain in their original
+owner and retain their original qualified name. Import names belong to the
+receiving Namespace, including multiple aliases for one identity.
+
+The query resolves public and absent-visibility package members, transitive
+public re-exports and private imports. An explicit ElementImport overrides
+PackageImport for the same identity, including its aliases and restricted
+re-export visibility, as stated in §7.4.3.3. Indistinguishable imported identities
+are excluded together; owned members take precedence over imported names.
+Collision checks use metaclass conformance and names, not string-only equality.
+
+Two literal OCL defects are corrected against the accompanying normative prose:
+`excludeCollisions` must compare distinct identities, and `makesVisible` must
+check public import visibility rather than compare an element to an enumeration
+literal or test whether a collected Boolean list is nonempty. Private owned
+members are not exported. These corrections avoid silently exposing private
+members or excluding every import as a collision with itself.
+
+Strongly connected components separate cyclic package imports from their
+external dependencies. A collision-free component reaches a finite monotone
+fixed point over identities, names and public visibility; no recursive stack or
+arbitrary traversal limit is used. Collisions within such a component require
+non-monotone resolution and remain explicitly unsupported. These graphs can be
+stored and reopened, with a capability warning; no partial member result or
+false UML-invalid diagnosis is returned. Non-cyclic import collisions are
+resolved completely. Import objects or independently stored import-reference
+arrays remain unsupported alternate representations, not second authorities.
+
+`Command::SetNamespaceImport` atomically adds or updates an import, checks its
+known target/visibility/ownership constraints and preserves unrelated records.
+The existing Namespace query, structural diagnostics and read-only Inspector
+consume the results and imported names. The existing hierarchy feature flow
+also creates packages and imports, changes aliases and visibility, resolves
+collisions, traverses a cycle, repairs an unsupported cyclic collision, and
+reopens JSON and Protobuf. No isolated import tests or alternate diagram UI are
+introduced.

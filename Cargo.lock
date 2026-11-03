@@ -2235,6 +2235,7 @@ dependencies = [
  "bellatrix_ui_panels",
  "bellatrix_ui_symbols",
  "bellatrix_ui_uml",
+ "db",
  "dugong",
  "gpui",
  "language",

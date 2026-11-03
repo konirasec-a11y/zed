@@ -17,6 +17,8 @@ mod style_drafts;
 mod style_editor;
 mod symbol_library;
 mod theme;
+mod visual_draft_canvas;
+mod validation;
 pub use bellatrix_mde::MODELING_NAMESPACE;
 pub use integration::register_mde_workspace;
 pub use native_document::{NativeDocumentImporter, NativeDocumentLease};
@@ -98,12 +100,15 @@ pub struct MdeWorkbenchItem {
     active_diagram: Option<String>,
     selected_tool: Option<ModelingTool>,
     pending_relation_source: Option<String>,
+    visual_draft_mode: bool,
     gesture: Option<CanvasGesture>,
     drop_point: Option<(f64, f64)>,
     zoom: f32,
     pan: (f32, f32),
     pan_origin: Option<(Point<Pixels>, (f32, f32))>,
     feedback: String,
+    validation_mode: validation::ValidationMode,
+    validation_status: String,
     _watch_task: Task<()>,
 }
 #[derive(Debug, PartialEq, Eq)]
@@ -237,6 +242,8 @@ fn switch_diagram_selection(
 
 impl MdeWorkbenchItem {
     pub fn new(source: MdeUiSource, cx: &mut Context<Self>) -> Self {
+        let validation_mode = validation::ValidationMode::load(source.project_id.as_str());
+        let initial_validation_feedback = validation_mode.as_ref().err().map(|error| format!("Could not load validation preference: {error}")).unwrap_or_default();
         let initial_diagram = source.snapshot().ok().and_then(|snapshot| {
             snapshot
                 .section
@@ -246,17 +253,30 @@ impl MdeWorkbenchItem {
         });
         let mut revisions = source.revisions.clone();
         let mut feedback = source.feedback.clone();
+        let mut validations = source.validations.clone();
+        let mut saves = source.saves.clone();
         let task = cx.spawn(async move |this, cx| {
             loop {
                 tokio::select! {
                     changed = revisions.changed() => {
                         if changed.is_err() { break; }
-                        if this.update(cx, |item, cx| item.refresh(cx)).is_err() { break; }
+                        if this.update(cx, |item, cx| { item.refresh(cx); item.validate_after_change(cx); }).is_err() { break; }
+                    }
+                    changed = saves.changed() => {
+                        if changed.is_err() { break; }
+                        if this.update(cx, |item, cx| item.validate_after_save(cx)).is_err() { break; }
+                    }
+                    changed = validations.changed() => {
+                        if changed.is_err() { break; }
+                        let result = validations.borrow().clone();
+                        if this.update(cx, |item, cx| item.accept_validation(result, cx)).is_err() { break; }
                     }
                     changed = feedback.changed() => {
                         if changed.is_err() { break; }
                         let text = feedback.borrow().clone();
-                        if this.update(cx, |item, cx| { item.feedback = text; cx.notify(); }).is_err() { break; }
+                        if this.update(cx, |item, cx| {
+                            item.feedback = text; cx.notify();
+                        }).is_err() { break; }
                     }
                 }
             }
@@ -271,12 +291,15 @@ impl MdeWorkbenchItem {
             active_diagram: initial_diagram,
             selected_tool: None,
             pending_relation_source: None,
+            visual_draft_mode: false,
             gesture: None,
             drop_point: None,
             zoom: 1.0,
             pan: (0.0, 0.0),
             pan_origin: None,
-            feedback: String::new(),
+            feedback: initial_validation_feedback,
+            validation_mode: validation_mode.unwrap_or(validation::ValidationMode::Manual),
+            validation_status: "Not yet validated".into(),
             _watch_task: task,
         }
     }
@@ -572,64 +595,7 @@ impl MdeWorkbenchItem {
     pub fn feedback(&self) -> &str {
         &self.feedback
     }
-
-    pub fn validate_diagram(&mut self, cx: &mut Context<Self>) {
-        let Ok(snapshot) = self.source.snapshot() else {
-            self.feedback = "Project snapshot unavailable".into();
-            cx.notify();
-            return;
-        };
-        let diagram = self
-            .active_diagram
-            .as_deref()
-            .and_then(|id| {
-                snapshot
-                    .section
-                    .diagrams
-                    .iter()
-                    .find(|diagram| diagram.id == id)
-            })
-            .or_else(|| snapshot.section.diagrams.first());
-        let Some(diagram) = diagram else {
-            self.feedback = "Project has no diagram to validate".into();
-            cx.notify();
-            return;
-        };
-        if let Err(error) =
-            bellatrix_mde::StructuralDiagramKind::from_diagram(diagram).ok_or_else(|| {
-                format!(
-                    "Unsupported diagram presentation: {} {:?}",
-                    diagram.uml_di_type, diagram.interaction_kind
-                )
-            })
-        {
-            self.feedback = error;
-            cx.notify();
-            return;
-        }
-        if self.source.is_read_only() {
-            if let Some(kind) = bellatrix_mde::StructuralDiagramKind::from_diagram(diagram) {
-                let model = snapshot
-                    .section
-                    .to_model(snapshot.project_id.as_str(), &snapshot.name);
-                let issues = bellatrix_mde::validate_structural_diagram(&model, &diagram.id, kind);
-                self.feedback = if issues.is_empty() {
-                    "Read-only preview validation: no reported issues".into()
-                } else {
-                    format!("Read-only preview validation: {issues:?}")
-                };
-                cx.notify();
-            }
-            return;
-        }
-        self.submit(
-            MdeUiCommand::ValidateDiagram(bellatrix_mde_cordis::ModelingValidateDiagramRequested {
-                project_id: self.project_id().clone(),
-                diagram_id: diagram.id.clone(),
-            }),
-            cx,
-        );
-    }
+    pub fn validation_status(&self) -> &str { &self.validation_status }
 
     pub fn create_diagram(
         &mut self,
@@ -665,6 +631,7 @@ impl MdeWorkbenchItem {
     pub fn select_diagram(&mut self, id: String, cx: &mut Context<Self>) {
         if self.active_diagram.as_deref() != Some(id.as_str()) {
             self.selected_view = None;
+            self.validation_status = "Not yet validated for this diagram".into();
         }
 
         switch_diagram_selection(&mut self.active_diagram, &mut self.selected_element, id);
@@ -733,7 +700,7 @@ impl MdeWorkbenchItem {
             return;
         };
         self.submit(
-            MdeUiCommand::CreateRelation(ModelingCreateRelationRequested {
+            MdeUiCommand::CreateRelationOrVisualDraft(ModelingCreateRelationRequested {
                 project_id: self.project_id().clone(),
                 diagram_id,
                 kind,
@@ -760,11 +727,11 @@ impl MdeWorkbenchItem {
                 format!("{}: {}", kind.label(), kind.endpoint_instruction())
             }
             ModelingTool::Element(kind) if kind.requires_nested_owner() => format!(
-                "{}: select its Activity, StateMachine/State/Region, or Interaction owner, then place it",
+                "{}: click to place; unsupported semantic ownership is preserved as a visual draft",
                 kind.label()
             ),
             ModelingTool::Element(kind) if kind.requires_owner() => format!(
-                "{}: select a Package or Model owner in Model explorer, then click canvas to place",
+                "{}: click to place; select an owner to create a semantic element",
                 kind.label()
             ),
             ModelingTool::Element(kind) => format!("{}: click canvas to place", kind.label()),
@@ -820,6 +787,10 @@ impl MdeWorkbenchItem {
         cx: &mut Context<Self>,
     ) {
         if let Some(ModelingTool::Relation(kind)) = self.selected_tool {
+            if self.visual_draft_mode {
+                self.link_visual_draft_endpoint(kind, view_id, cx);
+                return;
+            }
             self.link_endpoint(kind, subject, cx);
             return;
         }

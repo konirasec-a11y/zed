@@ -202,6 +202,7 @@ pub(super) fn apply(
         .ok_or("diagram not found")?
         .views
         .push(View {
+            draft: None,
             id: new_view_id,
             subject: Some(new_id.clone()),
             label: None,
@@ -238,6 +239,7 @@ pub(super) fn apply(
         .ok_or("diagram not found")?
         .views
         .push(View {
+            draft: None,
             id: relation_view_id,
             subject: Some(relation_id.clone()),
             label: None,

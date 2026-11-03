@@ -156,6 +156,25 @@ pub fn validate_structural_diagram(
     kind: StructuralDiagramKind,
 ) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
+    if let Some(diagram) = project.diagrams.iter().find(|diagram| diagram.id == diagram_id) {
+        for view in &diagram.views {
+            if let Some(draft) = &view.draft {
+                issues.push(StructuralDiagnostic {
+                    severity: StructuralSeverity::Warning,
+                    code: "VISUAL_DRAFT_UNCHECKED",
+                    subject_id: view.id.clone(),
+                    message: format!("Visual draft {} has not been validated as a semantic UML element or relationship", draft.notation_kind),
+                });
+                for identifier in [&draft.parent_view_id, &draft.source_view_id, &draft.target_view_id].into_iter().flatten() {
+                    if !diagram.views.iter().any(|candidate| &candidate.id == identifier) {
+                        issues.push(StructuralDiagnostic { severity: StructuralSeverity::Warning,
+                            code: "VISUAL_DRAFT_ORPHANED_LINK", subject_id: view.id.clone(),
+                            message: format!("Visual draft references removed view {identifier}"), });
+                    }
+                }
+            }
+        }
+    }
     if let Err(error) = Graph::new(project).validate() {
         issues.push(problem("UML_ROOT_INVALID", &project.id, error.to_string()));
         return issues;
@@ -544,6 +563,7 @@ mod tests {
             properties: Default::default(),
         });
         project.diagrams[0].views.push(View {
+            draft: None,
             id: "view-inverse".into(),
             subject: Some("inverse-generalization".into()),
             label: None,
@@ -796,6 +816,7 @@ mod tests {
             let mut project = context_project(kind, "uml.class", &[])?;
             for diagram in &mut project.diagrams {
                 diagram.views.push(View {
+            draft: None,
                     id: "visible-context".into(),
                     subject: Some("context".into()),
                     label: None,

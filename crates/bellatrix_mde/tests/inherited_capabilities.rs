@@ -408,6 +408,215 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
     assert!(ids(&package_query.members).contains(&right.as_str()));
     assert!(!ids(&package_query.visible_members.ok_or("Package query")?).contains(&right.as_str()));
 
+    fn configure_import(
+        project: &mut Project,
+        endpoints: [&str; 3],
+        package: bool,
+        alias: Option<&str>,
+        visibility: &str,
+    ) -> Result<(), String> {
+        apply(
+            project,
+            Command::SetNamespaceImport {
+                import_id: endpoints[0].into(),
+                namespace_id: endpoints[1].into(),
+                target_id: endpoints[2].into(),
+                is_package: package,
+                alias: alias.map(str::to_owned),
+                visibility: visibility.into(),
+            },
+        )
+    }
+    let mut packages = Vec::new();
+    for name in ["Facade", "Consumer", "Observer"] {
+        apply(
+            &mut project,
+            Command::CreateElement {
+                diagram_id: "diagram".into(),
+                owner_id: Some("model".into()),
+                kind: commands::ModelingElementKind::Package,
+                name: Some(name.into()),
+                x: 0.0,
+                y: 0.0,
+            },
+        )?;
+        packages.push(
+            project
+                .elements
+                .iter()
+                .find(|element| element.name == name)
+                .ok_or("new package")?
+                .id
+                .clone(),
+        );
+    }
+    let [facade, consumer, observer]: [String; 3] =
+        packages.try_into().map_err(|_| "package fixture")?;
+    configure_import(
+        &mut project,
+        ["export-record", &facade, &ancestor],
+        false,
+        Some("Record"),
+        "public",
+    )?;
+    configure_import(
+        &mut project,
+        ["private-leaf", &facade, &leaf],
+        false,
+        Some("HiddenLeaf"),
+        "private",
+    )?;
+    configure_import(
+        &mut project,
+        ["consume-facade", &consumer, &facade],
+        true,
+        None,
+        "public",
+    )?;
+    assert_eq!(
+        ids(&query(&project, &consumer)?.imported_members),
+        [ancestor.as_str()]
+    );
+    assert_eq!(
+        query(&project, &consumer)?.imported_names.get(&ancestor),
+        Some(&vec![Some("Record".into())])
+    );
+
+    configure_import(
+        &mut project,
+        ["export-left", &facade, &left],
+        false,
+        Some("Record"),
+        "public",
+    )?;
+    assert!(query(&project, &consumer)?.imported_members.is_empty());
+    assert_eq!(query(&project, &facade)?.excluded_imports.len(), 2);
+    configure_import(
+        &mut project,
+        ["export-left", &facade, &left],
+        false,
+        Some("LeftRecord"),
+        "public",
+    )?;
+    apply(
+        &mut project,
+        Command::CreateElement {
+            diagram_id: "diagram".into(),
+            owner_id: Some(consumer.clone()),
+            kind: commands::ModelingElementKind::Class,
+            name: Some("Record".into()),
+            x: 0.0,
+            y: 0.0,
+        },
+    )?;
+    let local = project
+        .elements
+        .iter()
+        .find(|element| element.name == "Record")
+        .ok_or("local Class")?
+        .id
+        .clone();
+    assert_eq!(
+        ids(&query(&project, &consumer)?.excluded_imports),
+        [ancestor.as_str()]
+    );
+    apply(
+        &mut project,
+        Command::Rename {
+            element_id: local,
+            name: "LocalRecord".into(),
+        },
+    )?;
+    configure_import(
+        &mut project,
+        ["cycle-back", &facade, &consumer],
+        true,
+        None,
+        "public",
+    )?;
+    assert_eq!(query(&project, &facade)?.imported_members.len(), 4);
+    configure_import(
+        &mut project,
+        ["private-leaf", &facade, &leaf],
+        false,
+        Some("HiddenLeaf"),
+        "public",
+    )?;
+    configure_import(
+        &mut project,
+        ["left-alias", &facade, &left],
+        false,
+        Some("AlternateLeft"),
+        "public",
+    )?;
+    configure_import(
+        &mut project,
+        ["local-ancestor", &consumer, &ancestor],
+        false,
+        Some("LocalAncestor"),
+        "private",
+    )?;
+    configure_import(
+        &mut project,
+        ["observe-consumer", &observer, &consumer],
+        true,
+        None,
+        "public",
+    )?;
+    configure_import(
+        &mut project,
+        ["self-name", &observer, &observer],
+        false,
+        Some("CurrentNamespace"),
+        "private",
+    )?;
+    assert!(!ids(&query(&project, &observer)?.members).contains(&ancestor.as_str()));
+    assert!(ids(&query(&project, &observer)?.members).contains(&leaf.as_str()));
+    assert_eq!(
+        query(&project, &observer)?.imported_names.get(&left),
+        Some(&vec![
+            Some("AlternateLeft".into()),
+            Some("LeftRecord".into())
+        ])
+    );
+    let before = encode(&project, Format::Json)?;
+    configure_import(
+        &mut project,
+        ["export-left", &facade, &left],
+        false,
+        Some("Record"),
+        "public",
+    )?;
+    assert!(matches!(
+        query(&project, &facade),
+        Err(classifiers::QueryError::Unsupported { .. })
+    ));
+    assert!(
+        validate_structural_model(&project)
+            .iter()
+            .any(|issue| issue.code == "UML_NAMESPACE_QUERY_UNSUPPORTED"
+                && issue.severity == bellatrix_mde::StructuralSeverity::Warning)
+    );
+    configure_import(
+        &mut project,
+        ["export-left", &facade, &left],
+        false,
+        Some("LeftRecord"),
+        "public",
+    )?;
+    assert_eq!(encode(&project, Format::Json)?, before);
+    assert!(
+        configure_import(
+            &mut project,
+            ["import-private", &observer, &right],
+            false,
+            None,
+            "public"
+        )
+        .is_err()
+    );
+    assert_eq!(encode(&project, Format::Json)?, before);
+
     let expected = ids(&query(&project, &leaf)?.members)
         .into_iter()
         .map(str::to_owned)
@@ -415,6 +624,34 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
     for format in [Format::Json, Format::Protobuf] {
         let reopened = decode(&encode(&project, format)?, format)?;
         assert_eq!(ids(&query(&reopened, &leaf)?.members), expected);
+        let reopened_imports = query(&reopened, &observer)?;
+        assert!(!ids(&reopened_imports.members).contains(&ancestor.as_str()));
+        assert_eq!(
+            reopened_imports.imported_names.get(&left),
+            Some(&vec![
+                Some("AlternateLeft".into()),
+                Some("LeftRecord".into())
+            ])
+        );
+        let import_model = Model::from_project(&reopened);
+        assert_eq!(
+            import_model
+                .owner(
+                    import_model
+                        .element("consume-facade")
+                        .ok_or("PackageImport")?
+                )?
+                .map(|owner| owner.id()),
+            Some(consumer.as_str())
+        );
+        let import_inspector = inspect_element(&ModelingSection::from_model(&reopened), &consumer)
+            .ok_or("import Inspector")?;
+        assert!(
+            import_inspector
+                .properties
+                .iter()
+                .any(|field| field.path == "uml.importedNames" && !field.editable)
+        );
         let diagnostics = validate_structural_model(&reopened);
         assert!(
             diagnostics
@@ -450,4 +687,3 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
     }
     Ok(())
 }
-

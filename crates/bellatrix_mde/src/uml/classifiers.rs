@@ -23,14 +23,14 @@ pub enum QueryError {
 }
 
 impl QueryError {
-    fn invalid(subject_id: &str, message: impl Into<String>) -> Self {
+    pub(crate) fn invalid(subject_id: &str, message: impl Into<String>) -> Self {
         Self::Invalid {
             subject_id: subject_id.into(),
             message: message.into(),
         }
     }
 
-    fn unsupported(subject_id: &str, message: impl Into<String>) -> Self {
+    pub(crate) fn unsupported(subject_id: &str, message: impl Into<String>) -> Self {
         Self::Unsupported {
             subject_id: subject_id.into(),
             message: message.into(),
@@ -78,6 +78,10 @@ pub struct ClassifierQuery<'a> {
 pub struct NamespaceQuery<'a> {
     pub owned_members: Vec<ElementRef<'a>>,
     pub members: Vec<ElementRef<'a>>,
+    pub imported_members: Vec<ElementRef<'a>>,
+    pub imported_names: std::collections::BTreeMap<String, Vec<Option<String>>>,
+    pub excluded_imports: Vec<ElementRef<'a>>,
+    pub public_imported_members: Vec<ElementRef<'a>>,
     /// Present only for Packages; this is Package::visibleMembers().
     pub visible_members: Option<Vec<ElementRef<'a>>>,
     pub classifier: Option<ClassifierQuery<'a>>,
@@ -210,14 +214,6 @@ impl<'index, 'model> Queries<'index, 'model> {
         if !element.conforms_to("Namespace") {
             return Err(QueryError::invalid(id, "a UML Namespace is required"));
         }
-        for key in ["elementImport", "packageImport", "importedMember"] {
-            if complete && element.properties().get(key).is_some_and(populated) {
-                return Err(QueryError::unsupported(
-                    id,
-                    format!("{key} resolution is not implemented"),
-                ));
-            }
-        }
         for key in [
             "member",
             "importedMember",
@@ -253,15 +249,6 @@ impl<'index, 'model> Queries<'index, 'model> {
             .relationship_records()
             .filter(|relation| complete && relation.from == id)
         {
-            if matches!(
-                relation.kind.as_str(),
-                "uml.element_import" | "uml.package_import"
-            ) {
-                return Err(QueryError::unsupported(
-                    id,
-                    "ElementImport/PackageImport resolution is not implemented",
-                ));
-            }
             if relation.kind == "uml.generalization" {
                 self.element(&relation.id)?;
                 let parent = self.element(&relation.to)?;
@@ -278,16 +265,6 @@ impl<'index, 'model> Queries<'index, 'model> {
             .references
             .explicit_owned_elements(id)
             .map_err(|error| QueryError::invalid(id, error))?;
-        if complete
-            && owned.iter().any(|child| {
-                child.conforms_to("ElementImport") || child.conforms_to("PackageImport")
-            })
-        {
-            return Err(QueryError::unsupported(
-                id,
-                "ElementImport/PackageImport resolution is not implemented",
-            ));
-        }
         let descriptors = properties(element)?;
         let mut projections = Vec::new();
         for property in descriptors {
@@ -455,7 +432,19 @@ impl<'index, 'model> Queries<'index, 'model> {
                 .get(parent.id())
                 .ok_or_else(|| QueryError::invalid(parent.id(), "missing parent query"))?;
             for member in &query.members {
-                if inheritable(*member)? {
+                let imported = query
+                    .imported_members
+                    .iter()
+                    .any(|imported| imported.id() == member.id());
+                let visible = if imported {
+                    query
+                        .public_imported_members
+                        .iter()
+                        .any(|imported| imported.id() == member.id())
+                } else {
+                    inheritable(*member)?
+                };
+                if visible {
                     inherited_members.push(*member);
                 }
             }
@@ -520,12 +509,28 @@ impl<'index, 'model> Queries<'index, 'model> {
             .into_iter()
             .filter(|member| !redefined.contains(member.id()))
             .collect();
+        let imports = super::namespace_imports::resolve_namespace_imports(
+            self.references,
+            direct.element.id(),
+        )?;
+        let public_imported_members = imports
+            .imported_members
+            .iter()
+            .copied()
+            .filter(|member| {
+                imports
+                    .visible_members
+                    .iter()
+                    .any(|visible| visible.id() == member.id())
+            })
+            .collect();
         let members = unique(
             direct
                 .owned_members
                 .iter()
                 .copied()
                 .chain(inherited_members.iter().copied())
+                .chain(imports.imported_members.iter().copied())
                 .chain(direct.extra_members),
         );
         let member_ids: HashSet<_> = members.iter().map(|member| member.id()).collect();
@@ -559,22 +564,17 @@ impl<'index, 'model> Queries<'index, 'model> {
         } else {
             None
         };
-        let visible_members = if direct.element.conforms_to("Package") {
-            let mut visible = Vec::new();
-            for member in &members {
-                if member.conforms_to("PackageableElement")
-                    && visibility(*member)? == Some(VisibilityKind::Public)
-                {
-                    visible.push(*member);
-                }
-            }
-            Some(visible)
-        } else {
-            None
-        };
+        let visible_members = direct
+            .element
+            .conforms_to("Package")
+            .then_some(imports.visible_members);
         Ok(NamespaceQuery {
             owned_members: direct.owned_members,
             members,
+            imported_members: imports.imported_members,
+            imported_names: imports.imported_names,
+            excluded_imports: imports.excluded_members,
+            public_imported_members,
             visible_members,
             classifier,
         })
@@ -613,7 +613,7 @@ impl<'index, 'model> Queries<'index, 'model> {
     }
 }
 
-fn visibility(element: ElementRef<'_>) -> Result<Option<VisibilityKind>, QueryError> {
+pub(crate) fn visibility(element: ElementRef<'_>) -> Result<Option<VisibilityKind>, QueryError> {
     let named = element
         .named()
         .ok_or_else(|| QueryError::invalid(element.id(), "member must be a NamedElement"))?;
@@ -724,7 +724,7 @@ pub fn owned_members<'a>(
 }
 
 /// One immutable graph snapshot, with local traversal state and no global user-model cache.
-/// Imports or unimplemented membership sources return an error, never a partial success.
+/// Unimplemented membership sources return an error, never a partial success.
 pub fn query<'a>(
     references: &ReferenceIndex<'a>,
     namespace_id: &str,
@@ -755,6 +755,9 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     for element in references.model().elements() {
         let result = (|| {
+            if element.conforms_to("ElementImport") || element.conforms_to("PackageImport") {
+                super::namespace_imports::validate_import_record(references, element)?;
+            }
             if element.conforms_to("RedefinableElement") {
                 let targets = redefinitions(references, element)?;
                 if !targets.is_empty() {

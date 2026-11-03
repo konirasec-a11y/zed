@@ -196,13 +196,13 @@ impl ModelingRelationKind {
 }
 
 #[derive(Clone, Copy)]
-struct Endpoint {
-    center: Point,
-    width: f64,
-    height: f64,
+pub(crate) struct Endpoint {
+    pub(crate) center: Point,
+    pub(crate) width: f64,
+    pub(crate) height: f64,
 }
 impl Endpoint {
-    fn anchor_toward(self, target: Point) -> Point {
+    pub(crate) fn anchor_toward(self, target: Point) -> Point {
         let delta_x = target.x - self.center.x;
         let delta_y = target.y - self.center.y;
         if delta_x.abs() < f64::EPSILON && delta_y.abs() < f64::EPSILON {

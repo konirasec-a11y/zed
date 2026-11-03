@@ -223,6 +223,11 @@ pub(crate) fn append_namespace_properties(
         Ok(query) => {
             append("uml.ownedMember", "Owned members", ids(&query.owned_members));
             append("uml.member", "All members", ids(&query.members));
+            append("uml.importedMember", "Imported members", ids(&query.imported_members));
+            append("uml.importedNames", "Imported names and aliases", json!(query.imported_names));
+            if !query.excluded_imports.is_empty() {
+                append("uml.excludedImports", "Excluded colliding imports", ids(&query.excluded_imports));
+            }
             if let Some(visible) = query.visible_members {
                 append("uml.visibleMembers", "Public package members", ids(&visible));
             }

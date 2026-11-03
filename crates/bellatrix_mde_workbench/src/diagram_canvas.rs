@@ -48,6 +48,14 @@ impl Render for MdeWorkbenchItem {
                     let mut views = diagram.views.iter().collect::<Vec<_>>();
                     views.sort_by_key(|view| view.z_index);
                     for view in views {
+                        if view.subject.is_none() && view.draft.is_some() {
+                            if let Some(card) =
+                                self.render_visual_draft(view, diagram, snapshot.revision, cx)
+                            {
+                                cards.push(card);
+                            }
+                            continue;
+                        }
                         let Some(subject) = view.subject.as_deref() else {
                             continue;
                         };
@@ -186,7 +194,8 @@ impl Render for MdeWorkbenchItem {
                                                     )
                                                 },
                                             ),
-                                        ),
+                                        )
+                                        .into_any_element(),
                                 );
                             }
                             continue;
@@ -324,7 +333,17 @@ impl Render for MdeWorkbenchItem {
                         let title_owner = cx.weak_entity();
                         let select_owner = cx.weak_entity();
                         let edit_owner = cx.weak_entity();
+                        // Spatial containment is presentation only, not semantic ownership validation.
+                        let has_nested_views = diagram.views.iter().any(|other| {
+                            other.id != view.id && matches!(other.geometry, Geometry::Rect { x: child_x, y: child_y, width: child_width, height: child_height }
+                                if child_x >= x && child_y >= y + 20.0 && child_x + child_width <= x + width && child_y + child_height <= y + height)
+                        });
                         let mut classifier = UmlClassifier::new(element.name.clone())
+                            .show_internal_structure(
+                                has_nested_views
+                                    && bellatrix_mde::uml::root::ElementRef::Object(element)
+                                        .conforms_to("StructuredClassifier"),
+                            )
                             .presentation(bellatrix_mde::classifier_presentation(
                                 element,
                                 bellatrix_mde::ClassifierPresentationOptions {
@@ -434,40 +453,23 @@ impl Render for MdeWorkbenchItem {
                         let figure: gpui::AnyElement = if UmlFigure::supports(&element.kind) {
                             let edit_owner = cx.weak_entity();
                             let edit_id = element.id.clone();
-                            let label = if element.kind == "uml.interaction_operand" {
-                                String::new()
-                            } else if element.kind == "uml.constraint" {
-                                format!("{{{}}}", element.name)
-                            } else if matches!(
-                                element.kind.as_str(),
-                                "uml.port"
-                                    | "uml.part"
-                                    | "uml.note"
-                                    | "uml.comment"
-                                    | "uml.instance_specification"
-                            ) {
-                                bellatrix_mde::format_element_label_for_view(
-                                    element,
-                                    &references,
-                                    &view.style,
-                                )
-                            } else {
-                                element.name.clone()
-                            };
-                            let operator_default = bellatrix_mde::uml::schema::uml_property(
-                                "CombinedFragment",
-                                "interactionOperator",
-                            )
-                            .ok()
-                            .flatten()
-                            .and_then(|property| {
-                                bellatrix_mde::uml::schema::effective_default(property)
-                                    .ok()
-                                    .flatten()
-                            })
-                            .and_then(bellatrix_mde::uml::schema::DefaultValue::scalar_json);
+                            let label = super::visual_draft_canvas::format_figure_label(
+                                element,
+                                &references,
+                                &view.style,
+                            );
+                            let operator_default =
+                                super::visual_draft_canvas::resolve_interaction_operator_default();
                             let mut figure = UmlFigure::new(element.kind.clone(), label)
                                 .diagram_presentation(diagram)
+                                .nested_views(has_nested_views)
+                                .composite_role(
+                                    element
+                                        .properties
+                                        .get("aggregation")
+                                        .and_then(serde_json::Value::as_str)
+                                        == Some("composite"),
+                                )
                                 .interaction_operator(
                                     element
                                         .properties
@@ -549,6 +551,7 @@ impl Render for MdeWorkbenchItem {
                             matches!(self.selected_tool, Some(ModelingTool::Relation(_)));
                         let connect_owner = cx.weak_entity();
                         let connect_target = subject.to_owned();
+                        let connect_view = view.id.clone();
                         let resize_owner = cx.weak_entity();
                         let resize_id = view.id.clone();
                         let element_id = subject.to_owned();
@@ -690,11 +693,21 @@ impl Render for MdeWorkbenchItem {
                                                         if let Some(ModelingTool::Relation(kind)) =
                                                             item.selected_tool
                                                         {
-                                                            item.link_endpoint(
-                                                                kind,
-                                                                connect_target.clone(),
-                                                                cx,
-                                                            );
+                                                            if item.visual_draft_mode
+                                                                || item.is_pending_visual_endpoint()
+                                                            {
+                                                                item.link_visual_draft_endpoint(
+                                                                    kind,
+                                                                    connect_view.clone(),
+                                                                    cx,
+                                                                );
+                                                            } else {
+                                                                item.link_endpoint(
+                                                                    kind,
+                                                                    connect_target.clone(),
+                                                                    cx,
+                                                                );
+                                                            }
                                                             cx.focus_self(window);
                                                         }
                                                     });
@@ -702,7 +715,8 @@ impl Render for MdeWorkbenchItem {
                                                 },
                                             ),
                                     )
-                                }),
+                                })
+                                .into_any_element(),
                         );
                     }
                 }
@@ -822,6 +836,7 @@ impl Render for MdeWorkbenchItem {
                                     },
                                 ),
                             )
+                            .child(self.render_validation_mode(cx))
                             .when_some(relation_hint, |header, hint| {
                                 header.child(
                                     div()

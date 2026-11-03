@@ -82,20 +82,25 @@ fn fourteen_presentations_preserve_normative_diagram_identity_and_context()
             assert_eq!(decode(&encode(&result, format)?, format)?, result);
         }
         if kind.context_metaclass().is_some() {
+            let draft = apply(
+                &source,
+                &Command::CreateDiagram {
+                    kind,
+                    name: "Unverified".into(),
+                    model_elements: Vec::new(),
+                },
+                1,
+            )?;
+            let diagram = draft.diagrams.last().ok_or("missing diagram")?;
+            assert_eq!(diagram.uml_di_type, kind.uml_di_type());
             assert!(
-                apply(
-                    &source,
-                    &Command::CreateDiagram {
-                        kind,
-                        name: "Invalid".into(),
-                        model_elements: vec!["type-list".into()],
-                    },
-                    0
-                )
-                .is_err()
+                bellatrix_mde::validate_structural_diagram(&draft, &diagram.id, kind)
+                    .iter()
+                    .any(|diagnostic| diagnostic.code == "UMLDI_CONTEXT_MULTIPLICITY")
             );
         }
     }
+    exercise_visual_drafts()?;
     Ok(())
 }
 
@@ -235,9 +240,14 @@ fn behavior_nodes_use_canonical_composite_owners_and_transactional_commands()
                 .find(|edge| edge.kind == kind.model_kind())
                 .ok_or("missing relationship")?;
             let owner_id = if owner_is_target { &right_id } else { &left_id };
-            assert!(linked.relations.iter().any(|owner| owner.kind == "owns"
-                && &owner.from == owner_id
-                && owner.to == edge.id));
+            let semantic_model = bellatrix_mde::uml::root::Model::from_project(&linked);
+            let relationship = semantic_model
+                .element(&edge.id)
+                .ok_or("missing semantic relationship")?;
+            assert_eq!(
+                semantic_model.owner(relationship)?.map(|owner| owner.id()),
+                Some(owner_id.as_str())
+            );
             let presentation = bellatrix_mde::relationship_presentation(edge);
             assert!(presentation.style.dashed);
             assert!(
@@ -252,33 +262,216 @@ fn behavior_nodes_use_canonical_composite_owners_and_transactional_commands()
             );
         }
     }
-    for pin in [ModelingElementKind::InputPin, ModelingElementKind::OutputPin, ModelingElementKind::ValuePin] {
+    for pin in [
+        ModelingElementKind::InputPin,
+        ModelingElementKind::OutputPin,
+        ModelingElementKind::ValuePin,
+    ] {
         let pinned = create(&graph, pin, Some(&source_node))?;
         let pin_id = pinned.elements.last().ok_or("missing pin")?.id.clone();
-        let pin_view = pinned.diagrams.iter().flat_map(|diagram| &diagram.views)
-            .find(|view| view.subject.as_deref() == Some(&pin_id)).ok_or("missing pin view")?;
+        let pin_view = pinned
+            .diagrams
+            .iter()
+            .flat_map(|diagram| &diagram.views)
+            .find(|view| view.subject.as_deref() == Some(&pin_id))
+            .ok_or("missing pin view")?;
         let before = pin_view.geometry.clone();
-        let action_view = pinned.diagrams.iter().flat_map(|diagram| &diagram.views)
-            .find(|view| view.subject.as_deref() == Some(&source_node)).ok_or("missing action view")?.id.clone();
-        let moved = apply(&pinned, &Command::MoveView { view_id: action_view, dx: 50.0, dy: 30.0 }, 0)?;
-        let after = &moved.diagrams.iter().flat_map(|diagram| &diagram.views).find(|view| view.id == pin_view.id).ok_or("missing moved pin")?.geometry;
+        let action_view = pinned
+            .diagrams
+            .iter()
+            .flat_map(|diagram| &diagram.views)
+            .find(|view| view.subject.as_deref() == Some(&source_node))
+            .ok_or("missing action view")?
+            .id
+            .clone();
+        let moved = apply(
+            &pinned,
+            &Command::MoveView {
+                view_id: action_view,
+                dx: 50.0,
+                dy: 30.0,
+            },
+            0,
+        )?;
+        let after = &moved
+            .diagrams
+            .iter()
+            .flat_map(|diagram| &diagram.views)
+            .find(|view| view.id == pin_view.id)
+            .ok_or("missing moved pin")?
+            .geometry;
         let mut expected = before;
         expected.translate(50.0, 30.0);
         assert_eq!(after, &expected);
         assert!(create(&graph, pin, Some(&activity_id)).is_err());
     }
     let interaction = create(&source, ModelingElementKind::Interaction, None)?;
-    let interaction_id = interaction.elements.last().ok_or("missing interaction")?.id.clone();
-    let fragment = create(&interaction, ModelingElementKind::CombinedFragment, Some(&interaction_id))?;
-    let fragment_id = fragment.elements.last().ok_or("missing fragment")?.id.clone();
-    let one = create(&fragment, ModelingElementKind::InteractionOperand, Some(&fragment_id))?;
+    let interaction_id = interaction
+        .elements
+        .last()
+        .ok_or("missing interaction")?
+        .id
+        .clone();
+    let fragment = create(
+        &interaction,
+        ModelingElementKind::CombinedFragment,
+        Some(&interaction_id),
+    )?;
+    let fragment_id = fragment
+        .elements
+        .last()
+        .ok_or("missing fragment")?
+        .id
+        .clone();
+    let one = create(
+        &fragment,
+        ModelingElementKind::InteractionOperand,
+        Some(&fragment_id),
+    )?;
     let one_id = one.elements.last().ok_or("missing operand")?.id.clone();
-    let two = create(&one, ModelingElementKind::InteractionOperand, Some(&fragment_id))?;
+    let two = create(
+        &one,
+        ModelingElementKind::InteractionOperand,
+        Some(&fragment_id),
+    )?;
     let two_id = two.elements.last().ok_or("missing operand")?.id.clone();
-    let views = two.diagrams.iter().flat_map(|diagram| &diagram.views).filter(|view| view.subject.as_deref().is_some_and(|id| id == one_id || id == two_id)).collect::<Vec<_>>();
+    let views = two
+        .diagrams
+        .iter()
+        .flat_map(|diagram| &diagram.views)
+        .filter(|view| {
+            view.subject
+                .as_deref()
+                .is_some_and(|id| id == one_id || id == two_id)
+        })
+        .collect::<Vec<_>>();
     assert_eq!(views.len(), 2);
     assert_ne!(views[0].geometry, views[1].geometry);
-    assert!(create(&interaction, ModelingElementKind::InteractionOperand, Some(&interaction_id)).is_err());
-    assert_eq!(decode(&encode(&two, Format::Protobuf)?, Format::Protobuf)?, two);
+    assert!(
+        create(
+            &interaction,
+            ModelingElementKind::InteractionOperand,
+            Some(&interaction_id)
+        )
+        .is_err()
+    );
+    assert_eq!(
+        decode(&encode(&two, Format::Protobuf)?, Format::Protobuf)?,
+        two
+    );
+    Ok(())
+}
+
+fn exercise_visual_drafts() -> Result<(), Box<dyn std::error::Error>> {
+    use bellatrix_mde::{Geometry, StructuralSeverity, validate_structural_diagram};
+    let before = fixture()?;
+    let fallback = apply(
+        &before,
+        &Command::CreateElementOrVisualDraft {
+            diagram_id: "diagram-tasks".into(),
+            owner_id: None,
+            kind: ModelingElementKind::State,
+            name: Some("Waiting".into()),
+            x: 10.0,
+            y: 20.0,
+        },
+        0,
+    )?;
+    assert_eq!(fallback.elements, before.elements);
+    assert!(
+        fallback
+            .diagrams
+            .iter()
+            .flat_map(|diagram| &diagram.views)
+            .any(|view| view.draft.as_ref().is_some_and(|draft| draft
+                .properties
+                .contains_key("semantic_creation_diagnostic")))
+    );
+    let after = apply(
+        &before,
+        &Command::CreateVisualDraft {
+            diagram_id: "diagram-tasks".into(),
+            notation_kind: "State".into(),
+            label: Some("Waiting".into()),
+            geometry: Geometry::Rect {
+                x: 10.0,
+                y: 20.0,
+                width: 120.0,
+                height: 80.0,
+            },
+            properties: Default::default(),
+            parent_view_id: None,
+            source_view_id: None,
+            target_view_id: None,
+        },
+        1,
+    )?;
+    assert_eq!(after.elements, before.elements);
+    let diagram = after
+        .diagrams
+        .iter()
+        .find(|diagram| diagram.id == "diagram-tasks")
+        .ok_or("missing diagram")?;
+    let draft = diagram.views.last().ok_or("missing draft")?;
+    assert!(draft.subject.is_none());
+    assert_eq!(
+        draft
+            .draft
+            .as_ref()
+            .map(|metadata| metadata.notation_kind.as_str()),
+        Some("State")
+    );
+    let kind = StructuralDiagramKind::from_diagram(diagram).ok_or("missing diagram type")?;
+    assert!(
+        validate_structural_diagram(&after, &diagram.id, kind)
+            .iter()
+            .any(|issue| issue.code == "VISUAL_DRAFT_UNCHECKED"
+                && issue.subject_id == draft.id
+                && issue.severity == StructuralSeverity::Warning)
+    );
+    let draft_id = draft.id.clone();
+    let connected = apply(
+        &after,
+        &Command::CreateVisualDraft {
+            diagram_id: "diagram-tasks".into(),
+            notation_kind: "uml.transition".into(),
+            label: None,
+            geometry: Geometry::Path {
+                start: bellatrix_mde::Point { x: 0.0, y: 0.0 },
+                segments: Vec::new(),
+            },
+            properties: Default::default(),
+            parent_view_id: None,
+            source_view_id: Some(draft_id.clone()),
+            target_view_id: Some("view-task".into()),
+        },
+        2,
+    )?;
+    let removed = apply(
+        &connected,
+        &Command::RemoveView {
+            diagram_id: "diagram-tasks".into(),
+            view_id: draft_id.clone(),
+        },
+        3,
+    )?;
+    let diagram = removed
+        .diagrams
+        .iter()
+        .find(|diagram| diagram.id == "diagram-tasks")
+        .ok_or("missing diagram")?;
+    assert!(diagram.views.iter().any(|view| {
+        view.draft
+            .as_ref()
+            .is_some_and(|draft| draft.source_view_id.as_deref() == Some(&draft_id))
+    }));
+    assert!(
+        validate_structural_diagram(&removed, &diagram.id, kind)
+            .iter()
+            .any(|issue| issue.code == "VISUAL_DRAFT_ORPHANED_LINK")
+    );
+    for format in [Format::Json, Format::Protobuf] {
+        assert_eq!(decode(&encode(&removed, format)?, format)?, removed);
+    }
     Ok(())
 }

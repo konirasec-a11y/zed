@@ -20,6 +20,8 @@ struct WireProject {
     diagrams: Vec<WireDiagram>,
     #[prost(string, optional, tag = "7")]
     root_model: Option<String>,
+    #[prost(bytes, tag = "8")]
+    explorer_parents_json: Vec<u8>,
 }
 #[derive(Clone, PartialEq, Message)]
 struct WireElement {
@@ -109,6 +111,8 @@ struct WireView {
     style_json: Vec<u8>,
     #[prost(sint32, tag = "6")]
     z_index: i32,
+    #[prost(bytes, tag = "7")]
+    draft_json: Vec<u8>,
 }
 
 pub(super) fn encode(project: &Project) -> Result<Vec<u8>, ModelIoError> {
@@ -187,6 +191,7 @@ pub(super) fn encode(project: &Project) -> Result<Vec<u8>, ModelIoError> {
                             geometry_json: serde_json::to_vec(&v.geometry)?,
                             style_json: serde_json::to_vec(&v.style)?,
                             z_index: v.z_index,
+                            draft_json: serde_json::to_vec(&v.draft)?,
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()?,
@@ -196,6 +201,7 @@ pub(super) fn encode(project: &Project) -> Result<Vec<u8>, ModelIoError> {
     Ok(WireProject {
         version: project.schema_version,
         root_model: project.root_model.clone(),
+        explorer_parents_json: serde_json::to_vec(&project.explorer_parents)?,
         id: project.id.clone(),
         name: project.name.clone(),
         elements,
@@ -281,6 +287,11 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Project, ModelIoError> {
                     .into_iter()
                     .map(|v| {
                         Ok::<_, ModelIoError>(View {
+                            draft: if v.draft_json.is_empty() {
+                                None
+                            } else {
+                                serde_json::from_slice(&v.draft_json)?
+                            },
                             id: v.id,
                             subject: v.subject,
                             label: v.label,
@@ -296,6 +307,11 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Project, ModelIoError> {
     Ok(Project {
         schema_version: data.version,
         root_model: data.root_model,
+        explorer_parents: if data.explorer_parents_json.is_empty() {
+            Default::default()
+        } else {
+            serde_json::from_slice(&data.explorer_parents_json)?
+        },
         id: data.id,
         name: data.name,
         elements,

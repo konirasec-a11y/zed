@@ -40,7 +40,7 @@ pub use generation::{
     analyze_generation_graph,
 };
 pub use graph::{Graph, GraphError};
-pub use hierarchy::{HierarchyRow, project_hierarchy};
+pub use hierarchy::{HierarchyRow, explorer_parent_map, project_hierarchy};
 pub use index::{GraphIndex, GraphLookupError};
 pub use inspector::{
     ElementInspector, InspectorMember, InspectorProperty, InspectorReferenceChoice, PropertyEditor,
@@ -77,3 +77,6 @@ pub use uml_geometry::{
 pub use uml_types::{UmlCapability, UmlQuickCreate, UmlType};
 
 pub use uml_notation::{UmlHeader, UmlNotation, resolve_element_notation, resolve_pseudostate_notation, uml_header, uml_notation};
+
+mod visual_draft_routing;
+pub use visual_draft_routing::reroute_visual_drafts;

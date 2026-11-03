@@ -35,6 +35,7 @@ use std::collections::HashSet;
 pub enum Command {
     AdoptRootModel,
     SetOwner { element_id: String, owner_id: Option<String> },
+    SetExplorerParent { subject_id: String, parent_id: Option<String> },
     CreateDiagram {
         kind: StructuralDiagramKind,
         name: String,
@@ -55,6 +56,10 @@ pub enum Command {
         x: f64,
         y: f64,
     },
+    CreateElementOrVisualDraft {
+        diagram_id: String, owner_id: Option<String>, kind: ModelingElementKind, name: Option<String>, x: f64, y: f64,
+    },
+    CreateRelationOrVisualDraft { diagram_id: String, kind: ModelingRelationKind, from: String, to: String },
     CreateRelation {
         diagram_id: String,
         kind: ModelingRelationKind,
@@ -68,12 +73,17 @@ pub enum Command {
     MoveParameter { parameter_id: String, up: bool },
     MigrateAssociation { association_id: String },
     SetRedefinedElements { element_id: String, redefined_ids: Vec<String> },
+    SetNamespaceImport { import_id: String, namespace_id: String, target_id: String, is_package: bool, alias: Option<String>, visibility: String },
     SetAssociationMemberEnds { association_id: String, member_end_ids: Vec<String> },
     EditAssociationEnds { association_id: String, edits: Vec<AssociationEndEdit> },
     QuickEdit {
         diagram_id: String,
         element_id: String,
         action: UmlQuickCreate,
+    },
+    CreateVisualDraft {
+        diagram_id: String, notation_kind: String, label: Option<String>, geometry: Geometry, properties: std::collections::BTreeMap<String, Value>,
+        parent_view_id: Option<String>, source_view_id: Option<String>, target_view_id: Option<String>,
     },
     PlaceElementView {
         diagram_id: String,
@@ -131,6 +141,40 @@ pub enum Command {
 /// Failure never changes the input. `revision` seeds IDs; it is NOT a lock.
 /// The adapter must check its revision and publish with compare-and-swap.
 pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Project, String> {
+    if let Command::CreateElementOrVisualDraft { diagram_id, owner_id, kind, name, x, y } = command {
+        let semantic = Command::CreateElement { diagram_id: diagram_id.clone(), owner_id: owner_id.clone(), kind: *kind,
+            name: name.clone(), x: *x, y: *y };
+        return match apply(project, &semantic, revision) {
+            Ok(updated) => Ok(updated),
+            Err(reason) => {
+                let mut properties = std::collections::BTreeMap::new();
+                properties.insert("semantic_creation_diagnostic".into(), Value::String(reason));
+                if let Some(pseudostate) = kind.resolve_pseudostate_kind() { properties.insert("kind".into(), Value::String(pseudostate.into())); }
+                if let Some(owner) = owner_id { properties.insert("requested_owner_id".into(), Value::String(owner.clone())); }
+                apply(project, &Command::CreateVisualDraft { diagram_id: diagram_id.clone(),
+                    notation_kind: kind.model_kind().into(), label: name.clone(), geometry: views::initial_geometry(*kind, *x, *y),
+                    properties, parent_view_id: None, source_view_id: None, target_view_id: None }, revision)
+            }
+        };
+    }
+    if let Command::CreateRelationOrVisualDraft { diagram_id, kind, from, to } = command {
+        let semantic = Command::CreateRelation { diagram_id: diagram_id.clone(), kind: *kind, from: from.clone(), to: to.clone() };
+        return match apply(project, &semantic, revision) {
+            Ok(updated) => Ok(updated),
+            Err(reason) => {
+                let diagram = project.diagrams.iter().find(|diagram| diagram.id == *diagram_id).ok_or("diagram not found")?;
+                let source = diagram.views.iter().find(|view| view.subject.as_ref() == Some(from)).ok_or("source view not found")?;
+                let target = diagram.views.iter().find(|view| view.subject.as_ref() == Some(to)).ok_or("target view not found")?;
+                let mut properties = std::collections::BTreeMap::new();
+                properties.insert("semantic_creation_diagnostic".into(), Value::String(reason));
+                properties.insert("requested_source_id".into(), Value::String(from.clone()));
+                properties.insert("requested_target_id".into(), Value::String(to.clone()));
+                apply(project, &Command::CreateVisualDraft { diagram_id: diagram_id.clone(), notation_kind: kind.model_kind().into(),
+                    label: None, geometry: Geometry::Path { start: crate::Point { x: 0.0, y: 0.0 }, segments: Vec::new() },
+                    properties, parent_view_id: None, source_view_id: Some(source.id.clone()), target_view_id: Some(target.id.clone()) }, revision)
+            }
+        };
+    }
     let previous_section = ModelingSection::from_model(project);
     let mut section = previous_section.clone();
     if let Command::SetProperty { element_id, path, .. } = command
@@ -142,6 +186,7 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
         crate::uml::associations::migrate(&mut section, &project.id, element_id)?;
     }
     match command {
+        Command::SetExplorerParent { subject_id, parent_id } => crate::hierarchy::set_explorer_parent(&mut section, subject_id, parent_id.as_deref())?,
         Command::SetOwner { element_id, owner_id } => crate::uml::root::reparent(&mut section, &project.id, element_id, owner_id.as_deref())?,
         Command::AdoptRootModel => { crate::uml::root::adopt_root_model(&mut section, &project.id, &project.name)?; }
         Command::CreateDiagram {
@@ -153,6 +198,8 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
             diagrams::rename(&mut section, diagram_id, name)?
         }
         Command::DeleteDiagram { diagram_id } => diagrams::delete(&mut section, diagram_id)?,
+        Command::CreateRelationOrVisualDraft { .. } => return Err("visual relation dispatch failed".into()),
+        Command::CreateElementOrVisualDraft { .. } => return Err("visual creation dispatch failed".into()),
         Command::CreateElement { .. } => {
             create_element(&mut section, command, revision, &project.id)?
         }
@@ -175,6 +222,7 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
         }
         Command::MoveParameter { parameter_id, up } => crate::uml::operations::move_parameter(&mut section, parameter_id, *up)?,
         Command::SetRedefinedElements { element_id, redefined_ids } => crate::uml::classifiers::set_redefined_elements(&mut section, element_id, redefined_ids)?,
+        Command::SetNamespaceImport { import_id, namespace_id, target_id, is_package, alias, visibility } => crate::uml::namespace_imports::set_namespace_import(&mut section, import_id, namespace_id, target_id, *is_package, alias.as_deref(), visibility)?,
         Command::MigrateAssociation { association_id } => crate::uml::associations::migrate(&mut section, &project.id, association_id)?,
         Command::SetAssociationMemberEnds { association_id, member_end_ids } => crate::uml::associations::set_member_ends(&mut section, association_id, member_end_ids)?,
         Command::EditAssociationEnds { association_id, edits } => association_ends::apply(&mut section, association_id, edits, revision, &project.id)?,
@@ -190,6 +238,8 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
             revision,
             &project.id,
         )?,
+        Command::CreateVisualDraft { diagram_id, notation_kind, label, geometry, properties, parent_view_id, source_view_id, target_view_id } =>
+            views::create_draft(&mut section, diagram_id, notation_kind, label, geometry, properties, parent_view_id, source_view_id, target_view_id, revision, &project.id)?,
         Command::PlaceElementView {
             diagram_id,
             element_id,
@@ -256,7 +306,14 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
             }
         }
     }
-    let presentation_only = matches!(command, Command::SetViewStyle { .. } | Command::SetViewRouting { .. } | Command::ReorderView { .. });
+    let draft_view_edit = match command {
+        Command::MoveView { view_id, .. } | Command::ResizeView { view_id, .. } => project.diagrams.iter()
+            .flat_map(|diagram| &diagram.views).any(|view| view.id == *view_id && view.draft.is_some()),
+        Command::RemoveView { diagram_id, view_id } => project.diagrams.iter().find(|diagram| diagram.id == *diagram_id)
+            .is_some_and(|diagram| diagram.views.iter().any(|view| view.id == *view_id && view.draft.is_some())),
+        _ => false,
+    };
+    let presentation_only = draft_view_edit || matches!(command, Command::CreateDiagram { .. } | Command::CreateVisualDraft { .. } | Command::SetExplorerParent { .. } | Command::SetViewStyle { .. } | Command::SetViewRouting { .. } | Command::ReorderView { .. });
     if !presentation_only {
         crate::uml::associations::materialize_new(project, &mut section)?;
         crate::uml::associations::synchronize_changes(&previous_section, &mut section)?;
@@ -264,6 +321,8 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
     }
     let mut updated = section.to_model(&project.id, &project.name);
     updated.schema_version = project.schema_version;
+    // Explorer placement must not be blocked by unrelated semantic or diagram drafts.
+    if matches!(command, Command::SetExplorerParent { .. }) { return Ok(updated); }
     let graph = Graph::new(&updated);
     if presentation_only { graph.validate_presentation() } else { graph.validate() }
         .map_err(|error| error.to_string())?;
@@ -286,6 +345,8 @@ fn fresh_ids<const N: usize>(
         let ids = prefixes.map(|prefix| format!("{prefix}-{sequence}"));
         let occupied = ids.iter().any(|id| {
             id == project_id
+                || section.explorer_parents.contains_key(id)
+                || section.explorer_parents.values().any(|parent| parent.as_ref() == Some(id))
                 || section.elements.iter().any(|element| &element.id == id)
                 || section.relations.iter().any(|relation| &relation.id == id)
                 || section.diagrams.iter().any(|diagram| {
@@ -379,6 +440,7 @@ fn create_element(
         .checked_add(1)
         .ok_or("diagram z-index overflow")?;
     diagram.views.push(View {
+            draft: None,
         id: view_id,
         subject: Some(element_id.clone()),
         label: None,
@@ -527,6 +589,7 @@ fn create_relation(
         .checked_add(1)
         .ok_or("z-index overflow")?;
     diagram.views.push(View {
+            draft: None,
         id: view_id,
         subject: Some(id),
         label: None,
@@ -563,6 +626,9 @@ fn move_view(section: &mut ModelingSection, view_id: &str, dx: f64, dy: f64) -> 
         features::translate_contained_views(section, &diagram_id, &subject, dx, dy);
     }
     reroute_relationships(section, &diagram_id);
+    if let Some(diagram) = section.diagrams.iter_mut().find(|diagram| diagram.id == diagram_id) {
+        crate::reroute_visual_drafts(diagram);
+    }
     Ok(())
 }
 
@@ -572,8 +638,13 @@ fn resize_view(
     width: f64,
     height: f64,
 ) -> Result<(), String> {
-    if !width.is_finite() || !height.is_finite() || width < 80.0 || height < 48.0 {
-        return Err("view dimensions must be finite and at least 80x48".into());
+    let is_draft = section.diagrams.iter().flat_map(|diagram| &diagram.views)
+        .find(|view| view.id == view_id).is_some_and(|view| view.draft.is_some());
+    if !width.is_finite() || !height.is_finite() || width <= 0.0 || height <= 0.0 {
+        return Err("view dimensions must be finite and positive".into());
+    }
+    if !is_draft && (width < 80.0 || height < 48.0) {
+        return Err("view dimensions must be at least 80x48".into());
     }
     let diagram_id = section
         .diagrams
@@ -625,8 +696,8 @@ fn resize_view(
             height: current_height,
             ..
         } => {
-            *current_width = width.max(minimum_width);
-            *current_height = height.max(minimum_height).max(minimum_part_height);
+            *current_width = if is_draft { width } else { width.max(minimum_width) };
+            *current_height = if is_draft { height } else { height.max(minimum_height).max(minimum_part_height) };
         }
         _ => return Err("only node Views can be resized with this command".into()),
     }
@@ -635,6 +706,9 @@ fn resize_view(
         features::layout_interaction_operands(section, &diagram_id, &owner_id);
     }
     reroute_relationships(section, &diagram_id);
+    if let Some(diagram) = section.diagrams.iter_mut().find(|diagram| diagram.id == diagram_id) {
+        crate::reroute_visual_drafts(diagram);
+    }
     Ok(())
 }
 

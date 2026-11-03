@@ -15,6 +15,15 @@ pub struct MdeUiSource {
     pub commands: mpsc::Sender<MdeUiCommand>,
     pub revisions: watch::Receiver<u64>,
     pub feedback: watch::Receiver<String>,
+    pub validations: watch::Receiver<
+        Option<
+            Result<
+                bellatrix_mde_cordis::DiagramValidationResult,
+                bellatrix_mde_cordis::DiagramValidationFailure,
+            >,
+        >,
+    >,
+    pub saves: watch::Receiver<Option<u64>>,
     read_only_snapshot: Option<Arc<MdeSnapshot>>,
     read_only_document: Option<Arc<ProjectDocument>>,
     presentation_suspended: Arc<AtomicBool>,
@@ -30,6 +39,8 @@ impl MdeUiSource {
             commands: bridge.sender(),
             revisions: bridge.changes(),
             feedback: bridge.feedback(),
+            validations: bridge.validations(),
+            saves: bridge.saves(),
             read_only_snapshot: None,
             read_only_document: None,
             presentation_suspended: Arc::new(AtomicBool::new(false)),
@@ -46,12 +57,16 @@ impl MdeUiSource {
         drop(receiver);
         let (_, revisions) = watch::channel(snapshot.revision);
         let (_, feedback) = watch::channel("Read-only native document preview".to_owned());
+        let (_, validations) = watch::channel(None);
+        let (_, saves) = watch::channel(None);
         Self {
             projects,
             project_id: snapshot.project_id.clone(),
             commands,
             revisions,
             feedback,
+            validations,
+            saves,
             read_only_snapshot: Some(Arc::new(snapshot)),
             read_only_document: Some(document),
             presentation_suspended: Arc::new(AtomicBool::new(false)),

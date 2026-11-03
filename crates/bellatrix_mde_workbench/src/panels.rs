@@ -3,7 +3,7 @@ mod toolbox_panel;
 pub(crate) use crate::hierarchy::element_glyph;
 use crate::{
     MdeToolDrag, MdeWorkbenchItem, WorkbenchPalette,
-    hierarchy::project_explorer,
+    hierarchy::{project_explorer, ExplorerDrag},
     integration::{OpenMdeSymbols, OpenMdeWorkbench},
     property_editor::render_inspector,
 };
@@ -256,8 +256,11 @@ impl Render for MdeRightPanel {
             let root_key = format!("project:{}", snapshot.project_id.as_str());
             let root_expanded = !self.collapsed_elements.contains(&root_key);
             let root_panel = cx.weak_entity();
+            let root_drop_owner = item.clone();
             rows.push(div().id("mde-explorer-project").flex().items_center().gap_1()
-
+                .when(!read_only, |row| row.on_drop(move |drag: &ExplorerDrag, _, cx| {
+                    crate::hierarchy::submit_explorer_placement(&root_drop_owner, drag, None, cx);
+                }))
                 .child(svg().data(glyph(ShapeKind::Package)).size(px(14.0)).flex_none().text_color(palette.muted))
                 .child(TreeViewItem::new(root_key.clone(), snapshot.name.clone())
                     .root_item(!tree.is_empty()).expanded(root_expanded)
@@ -283,15 +286,33 @@ impl Render for MdeRightPanel {
                     let id = row.element_id.clone();
                     let owner = item.clone();
                     let is_active = active_diagram.as_deref() == Some(id.as_str());
+                    let expanded = !self.collapsed_elements.contains(&id);
+                    let disclosure_id = id.clone();
+                    let disclosure_panel = cx.weak_entity();
+                    let drop_target = id.clone();
+                    let drop_owner = item.clone();
+                    let drag = ExplorerDrag { project_id: snapshot.project_id.clone(), element_id: id.clone(), label: row.label.clone(), revision: snapshot.revision };
                     rows.push(
                         div()
                             .id(format!("mde-explorer-diagram-{id}"))
+                            .when(!read_only, |row| row
+                                .on_drag(drag, |drag: &ExplorerDrag, _, _, cx| cx.new(|_| drag.clone()))
+                                .on_drop(move |drag: &ExplorerDrag, _, cx| {
+                                    crate::hierarchy::submit_explorer_placement(&drop_owner, drag, Some(&drop_target), cx);
+                                }))
                             .pl(px((row.depth.min(15) + 2) as f32 * 14.0))
                             .flex().items_center().gap_1()
                             .when(is_active, |row| row.bg(palette.surface))
                             .child(svg().data(glyph(ShapeKind::Document)).size(px(14.0)).flex_none().text_color(if is_active { palette.selection } else { palette.muted }))
                             .child(div().flex_1().min_w_0().overflow_hidden().child(
                                 TreeViewItem::new(id.clone(), row.label.clone())
+                                    .root_item(has_children).expanded(expanded)
+                                    .on_toggle(move |_, _, cx| {
+                                        let _ = disclosure_panel.update(cx, |panel, cx| {
+                                            if !panel.collapsed_elements.insert(disclosure_id.clone()) { panel.collapsed_elements.remove(&disclosure_id); }
+                                            cx.notify();
+                                        });
+                                    })
                                     .toggle_state(is_active)
                                     .on_click(move |_, _, cx| {
                                         owner.update(cx, |workbench, cx| workbench.select_diagram(id.clone(), cx));
@@ -299,6 +320,7 @@ impl Render for MdeRightPanel {
                             ))
                             .child(Label::new(row.kind.clone()).size(LabelSize::XSmall).color(Color::Muted)),
                     );
+                    if has_children && !expanded { hidden_by_depth = Some(row.depth); }
                     continue;
                 }
                 let expanded = !self.collapsed_elements.contains(&row.element_id);
@@ -308,7 +330,12 @@ impl Render for MdeRightPanel {
                 let disclosure_panel = cx.weak_entity();
                 let menu_owner = item.clone();
                 let menu_subject = id.clone();
-                let label = row.label.clone();
+                let label = if snapshot.section.explorer_parents.contains_key(&row.element_id) {
+                    format!("{} · organized", row.label)
+                } else { row.label.clone() };
+                let drag = ExplorerDrag { project_id: snapshot.project_id.clone(), element_id: id.clone(), label: label.clone(), revision: snapshot.revision };
+                let drop_owner = item.clone();
+                let drop_target = id.clone();
                 let tree_item = TreeViewItem::new(id.clone(), label)
                     .root_item(has_children)
                     .expanded(expanded)
@@ -329,7 +356,11 @@ impl Render for MdeRightPanel {
                 rows.push(
                     div()
                         .id(format!("mde-explorer-row-{}", row.element_id))
-
+                        .when(!read_only, |row| row
+                            .on_drag(drag, |drag: &ExplorerDrag, _, _, cx| cx.new(|_| drag.clone()))
+                            .on_drop(move |drag: &ExplorerDrag, _, cx| {
+                                crate::hierarchy::submit_explorer_placement(&drop_owner, drag, Some(&drop_target), cx);
+                            }))
                         .pl(px((row.depth.min(15) + 2) as f32 * 14.0))
                         .flex()
                         .items_center()
@@ -465,7 +496,7 @@ impl Render for MdeRightPanel {
                 .views
                 .iter()
                 .find(|view| Some(view.id.as_str()) == selected_view.as_deref())?;
-            let is_edge = snapshot
+            let is_edge = matches!(view.geometry, Geometry::Path { .. }) || snapshot
                 .section
                 .relations
                 .iter()
@@ -837,7 +868,8 @@ impl Render for MdeBottomPanel {
                     .child(div().whitespace_normal().child(description))
                     .when(active == BottomTab::Diagnostics, |output| {
                         let feedback = item.read(cx).feedback();
-                        output.children(
+                        let validation_status = item.read(cx).validation_status();
+                        output.child(div().w_full().whitespace_normal().child(validation_status.to_owned())).children(
                             feedback
                                 .lines()
                                 .map(|line| {

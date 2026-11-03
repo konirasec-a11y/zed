@@ -50,6 +50,19 @@ impl Event for ModelingSetOwner {
     type Args = ModelingSetOwnerRequested;
     type Output = Result<u64, String>;
 }
+#[derive(Clone, Debug)]
+pub struct ModelingSetExplorerParentRequested {
+    pub project_id: ProjectId,
+    pub subject_id: String,
+    pub parent_id: Option<String>,
+    pub expected_revision: u64,
+}
+pub struct ModelingSetExplorerParent;
+impl Event for ModelingSetExplorerParent {
+    const NAME: &'static str = "bellatrix.mde.set-explorer-parent.v1";
+    type Args = ModelingSetExplorerParentRequested;
+    type Output = Result<u64, String>;
+}
 pub struct MdePlugin;
 impl Plugin for MdePlugin {
     type Config = ();
@@ -86,6 +99,20 @@ impl Plugin for MdePlugin {
             ))
             .map_err(|error| io::Error::other(error.to_string()))?;
         let creation_projects = Arc::clone(&projects);
+        let draft_projects = Arc::clone(&projects);
+        let _visual_creation = ctx.on::<crate::create_element::ModelingCreateElementOrVisualDraft, _>(responder(
+            move |ctx: Context, request: crate::create_element::ModelingCreateElementRequested| {
+                let projects = Arc::clone(&draft_projects);
+                async move { Ok::<_, Infallible>(Some(crate::create_element::create_element_or_visual_draft(&ctx, &projects, request).await)) }
+            },
+        )).map_err(|error| io::Error::other(error.to_string()))?;
+        let draft_relation_projects = Arc::clone(&projects);
+        let _visual_relation = ctx.on::<crate::create_relation::ModelingCreateRelationOrVisualDraft, _>(responder(
+            move |ctx: Context, request: crate::create_relation::ModelingCreateRelationRequested| {
+                let projects = Arc::clone(&draft_relation_projects);
+                async move { Ok::<_, Infallible>(Some(crate::create_relation::create_relation_or_visual_draft(&ctx, &projects, request).await)) }
+            },
+        )).map_err(|error| io::Error::other(error.to_string()))?;
         let _creation = ctx.on::<crate::create_element::ModelingCreateElement, _>(responder(
             move |ctx: Context, request: crate::create_element::ModelingCreateElementRequested| {
                 let projects = Arc::clone(&creation_projects);
@@ -214,6 +241,28 @@ impl Plugin for MdePlugin {
                             Command::SetOwner {
                                 element_id: request.element_id,
                                 owner_id: request.owner_id,
+                            },
+                        )
+                        .await;
+                        Ok::<_, Infallible>(Some(result))
+                    }
+                },
+            ))
+            .map_err(|error| io::Error::other(error.to_string()))?;
+        let explorer_projects = Arc::clone(&projects);
+        let _explorer_parent = ctx
+            .on::<ModelingSetExplorerParent, _>(responder(
+                move |ctx: Context, request: ModelingSetExplorerParentRequested| {
+                    let projects = Arc::clone(&explorer_projects);
+                    async move {
+                        let result = crate::mutation::execute(
+                            &ctx,
+                            &projects,
+                            request.project_id,
+                            request.expected_revision,
+                            Command::SetExplorerParent {
+                                subject_id: request.subject_id,
+                                parent_id: request.parent_id,
                             },
                         )
                         .await;

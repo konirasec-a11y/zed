@@ -36,7 +36,11 @@ impl ViewAppearance {
         let width = self.0.stroke_width.map_or(default, |value| value as f32) * scale;
         if selected { width.max(2.0) } else { width }
     }
-    pub(crate) fn resolve_stroke_pattern(&self, notation_dashed: bool, scale: f32) -> Vec<gpui::Pixels> {
+    pub(crate) fn resolve_stroke_pattern(
+        &self,
+        notation_dashed: bool,
+        scale: f32,
+    ) -> Vec<gpui::Pixels> {
         self.0
             .resolve_stroke_pattern(notation_dashed)
             .iter()
@@ -51,10 +55,28 @@ impl ViewAppearance {
         scale: f32,
         default_radius: f64,
     ) -> gpui::Div {
+        self.apply_notation_rectangle_border(
+            element,
+            palette,
+            selected,
+            scale,
+            default_radius,
+            false,
+        )
+    }
+    pub(crate) fn apply_notation_rectangle_border(
+        &self,
+        element: gpui::Div,
+        palette: Palette,
+        selected: bool,
+        scale: f32,
+        default_radius: f64,
+        notation_dashed: bool,
+    ) -> gpui::Div {
         let width = self.width(1.0, scale, selected);
         let radius = self.0.corner_radius.unwrap_or(default_radius) as f32 * scale;
         let color = self.stroke(palette, selected);
-        let pattern = self.resolve_stroke_pattern(false, scale);
+        let pattern = self.resolve_stroke_pattern(notation_dashed, scale);
         let element = element.border(px(width)).rounded(px(radius));
         if pattern.is_empty() {
             return element.border_color(color);
@@ -111,9 +133,14 @@ impl ViewAppearance {
     }
     pub(crate) fn apply_surface<T: gpui::Styled>(&self, element: T, scale: f32) -> T {
         match self.0.show_shadow {
-            Some(true) => element.shadow(vec![gpui::BoxShadow::new(
-                px(2.0 * scale), px(3.0 * scale), gpui::hsla(0.0, 0.0, 0.0, 0.25 * self.0.opacity.unwrap_or(1.0) as f32),
-            ).blur_radius(px(4.0 * scale))]),
+            Some(true) => element.shadow(vec![
+                gpui::BoxShadow::new(
+                    px(2.0 * scale),
+                    px(3.0 * scale),
+                    gpui::hsla(0.0, 0.0, 0.0, 0.25 * self.0.opacity.unwrap_or(1.0) as f32),
+                )
+                .blur_radius(px(4.0 * scale)),
+            ]),
             Some(false) => element.shadow(Vec::new()),
             None => element,
         }
@@ -193,6 +220,7 @@ pub struct UmlClassifier {
     pub(crate) attributes: Vec<MemberRow>,
     pub(crate) operations: Vec<MemberRow>,
     pub(crate) receptions: Vec<MemberRow>,
+    show_internal_structure: bool,
     pub(crate) template_parameters: Vec<MemberRow>,
     pub(crate) selected: bool,
     pub(crate) editing: Option<(String, Entity<InputField>)>,
@@ -208,6 +236,10 @@ pub struct UmlClassifier {
 }
 
 impl UmlClassifier {
+    pub fn show_internal_structure(mut self, show: bool) -> Self {
+        self.show_internal_structure = show;
+        self
+    }
     pub fn new(title: impl Into<SharedString>) -> Self {
         Self {
             class_id: None,
@@ -217,6 +249,7 @@ impl UmlClassifier {
             attributes: Vec::new(),
             operations: Vec::new(),
             receptions: Vec::new(),
+            show_internal_structure: false,
             template_parameters: Vec::new(),
             selected: false,
             editing: None,
@@ -582,7 +615,9 @@ impl RenderOnce for UmlClassifier {
         };
         let edit_title = self.edit_title.clone();
         let mut header = self.header;
-        if !appearance.0.should_show_stereotype() { header.applied_stereotype = None; }
+        if !appearance.0.should_show_stereotype() {
+            header.applied_stereotype = None;
+        }
         let header_height = header.classifier_header_height();
         let keyword = header.keyword;
         let applied_stereotype = header.applied_stereotype;
@@ -591,7 +626,9 @@ impl RenderOnce for UmlClassifier {
             .flex()
             .flex_col()
             .relative()
-            .map(|element| appearance.apply_rectangle_border(element, palette, self.selected, scale, 2.0))
+            .map(|element| {
+                appearance.apply_rectangle_border(element, palette, self.selected, scale, 2.0)
+            })
             .when_some(appearance.0.font_family.clone(), |element, family| {
                 element.font_family(family)
             })
@@ -658,32 +695,55 @@ impl RenderOnce for UmlClassifier {
                             .child(title),
                     ),
             )
-            .when(appearance.0.suppress_attributes != Some(true) && !self.attributes.is_empty(), |element| {
-                element.child(compartment(
-                    self.attributes,
-                    "attribute",
-                    interactions.clone(),
-                    palette,
-                    false,
-                ))
-            })
-            .when(appearance.0.suppress_operations != Some(true) && !self.operations.is_empty(), |element| {
-                element.child(compartment(
-                    self.operations,
-                    "operation",
-                    interactions.clone(),
-                    palette,
-                    true,
-                ))
-            })
-            .when(appearance.0.suppress_receptions != Some(true) && !self.receptions.is_empty(), |element| {
-                element.child(compartment(
-                    self.receptions,
-                    "reception",
-                    interactions,
-                    palette,
-                    true,
-                ))
+            .when(
+                appearance.0.suppress_attributes != Some(true) && !self.attributes.is_empty(),
+                |element| {
+                    element.child(compartment(
+                        self.attributes,
+                        "attribute",
+                        interactions.clone(),
+                        palette,
+                        false,
+                    ))
+                },
+            )
+            .when(
+                appearance.0.suppress_operations != Some(true) && !self.operations.is_empty(),
+                |element| {
+                    element.child(compartment(
+                        self.operations,
+                        "operation",
+                        interactions.clone(),
+                        palette,
+                        true,
+                    ))
+                },
+            )
+            .when(
+                appearance.0.suppress_receptions != Some(true) && !self.receptions.is_empty(),
+                |element| {
+                    element.child(compartment(
+                        self.receptions,
+                        "reception",
+                        interactions,
+                        palette,
+                        true,
+                    ))
+                },
+            )
+            .when(self.show_internal_structure, |element| {
+                element.child(
+                    div()
+                        .flex_1()
+                        .min_h(px(60.0 * scale))
+                        .border_t(px(appearance.width(1.0, scale, false)))
+                        .border_color(line)
+                        .pt(px(3.0 * scale))
+                        .px(px(6.0 * scale))
+                        .text_size(px(appearance.font_size(10.0, scale)))
+                        .text_color(appearance.text(palette.muted))
+                        .child("internal structure"),
+                )
             })
             .into_any_element();
         div()
@@ -831,5 +891,4 @@ mod tests {
             assert_eq!(second.header, expected);
         }
     }
-
 }

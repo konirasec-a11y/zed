@@ -113,3 +113,12 @@ loop. UML arrowheads and relationship dashing remain derived from semantics.
 Documentation uses the native multiline editor; semantic properties still use
 the existing Inspector command boundary. These controls require the native
 acceptance scenarios above, independently of headless command tests.
+
+The Model Explorer shows the project tree and diagram contexts. Dragging an item
+or diagram onto another row changes its saved explorer organization; dragging it
+onto the project row places it at the root. An “organized” marker identifies a
+manual placement. This is presentation metadata: it does not change UML ownership,
+diagram `model_elements`, or which views a diagram contains. Without an override,
+the tree follows semantic ownership and the diagram's explicit context. Missing or
+ambiguous contexts and missing organization parents remain visible rather than being
+silently assigned a different owner.

@@ -72,6 +72,16 @@ Oferecer trazer à frente/enviar para trás e avançar/recuar uma camada. Usar
 aplicação em tempo real e herança do tema da IDE. Geometria/notação específica
 não autoriza duplicar contratos de estilo por tipo.
 
+**Organização visual e validação configurável:** a árvore do Model Explorer
+é projetada a partir do projeto e pode registrar organização visual explícita
+para elementos e diagramas sem alterar propriedade UML nem confundir
+organização com contexto UMLDI. A edição visual não deve ser proibida por
+regras UML ainda ausentes: guardar representações provisórias sem fingir que
+foram validadas. O usuário escolhe validar a cada mudança, ao salvar ou por
+comando manual. O front envia o snapshot ao motor UML, apresenta diagnósticos
+e associa resultados à revisão; regras não implementadas permanecem como
+não verificadas. A validação e suas regras pertencem ao motor.
+
 ## 1. Fixar a base e consolidar as especificações
 
 Auditar o resultado real da consolidação existente antes de acrescentar

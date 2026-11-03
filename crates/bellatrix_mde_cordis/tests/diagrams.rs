@@ -77,20 +77,6 @@ async fn diagram_lifecycle_is_revision_checked_and_preserves_semantic_model() ->
         .query::<ModelingCreateDiagram>(Routing::Unscoped, create(StructuralDiagramKind::Class, 0))
         .await?;
     assert!(matches!(stale, QueryOutcome::Answer(Err(_))));
-    let invalid = context
-        .query::<ModelingCreateDiagram>(
-            Routing::Unscoped,
-            create(StructuralDiagramKind::CompositeStructure, 1),
-        )
-        .await?;
-    assert!(matches!(invalid, QueryOutcome::Answer(Err(_))));
-    let unchanged = service.snapshot(&id)?;
-    assert_eq!(unchanged.revision(), 1);
-    assert_eq!(
-        unchanged.section(MODELING_NAMESPACE),
-        snapshot.section(MODELING_NAMESPACE)
-    );
-
     let rename = |revision| ModelingRenameDiagramRequested {
         project_id: id.clone(),
         diagram_id: diagram_id.clone(),
@@ -150,12 +136,43 @@ async fn diagram_lifecycle_is_revision_checked_and_preserves_semantic_model() ->
             .clone(),
     )?;
     assert_eq!(final_section, ModelingSection::from_model(&model));
+    assert!(matches!(
+        context
+            .query::<ModelingCreateDiagram>(
+                Routing::Unscoped,
+                create(StructuralDiagramKind::CompositeStructure, 3)
+            )
+            .await?,
+        QueryOutcome::Answer(Ok(4))
+    ));
+    let unverified = service.snapshot(&id)?;
+    let section: ModelingSection = serde_json::from_value(
+        unverified
+            .section(MODELING_NAMESPACE)
+            .ok_or("section missing")?
+            .clone(),
+    )?;
+    let diagram = section
+        .diagrams
+        .iter()
+        .find(|diagram| diagram.uml_di_type == "UMLCompositeStructureDiagram")
+        .ok_or("unverified diagram missing")?;
+    let projected = section.to_model(id.as_str(), unverified.name());
+    assert!(
+        bellatrix_mde::validate_structural_diagram(
+            &projected,
+            &diagram.id,
+            StructuralDiagramKind::CompositeStructure
+        )
+        .iter()
+        .any(|diagnostic| diagnostic.code == "UMLDI_CONTEXT_MULTIPLICITY")
+    );
     mde.dispose().await?;
     assert!(matches!(
         context
             .query::<ModelingCreateDiagram>(
                 Routing::Unscoped,
-                create(StructuralDiagramKind::Class, 3)
+                create(StructuralDiagramKind::Class, 4)
             )
             .await?,
         QueryOutcome::Miss
@@ -205,13 +222,17 @@ async fn repeated_validation_reports_hidden_semantics_without_mutating_or_bumpin
                 ModelingValidateDiagramRequested {
                     project_id: id.clone(),
                     diagram_id: "diagram-tasks".into(),
+                    expected_revision: before.revision(),
                 },
             )
             .await?;
-        let diagnostics = match result {
-            QueryOutcome::Answer(Ok(diagnostics)) => diagnostics,
+        let validation = match result {
+            QueryOutcome::Answer(Ok(result)) => result,
             other => return Err(format!("unexpected validation response: {other:?}").into()),
         };
+        assert_eq!(validation.revision, before.revision());
+        assert_eq!(validation.diagram_id, "diagram-tasks");
+        let diagnostics = validation.diagnostics;
         assert!(
             diagnostics
                 .iter()
@@ -230,12 +251,24 @@ async fn repeated_validation_reports_hidden_semantics_without_mutating_or_bumpin
             before.section(MODELING_NAMESPACE)
         );
     }
+    let stale = context
+        .query::<ModelingValidateDiagram>(
+            Routing::Unscoped,
+            ModelingValidateDiagramRequested {
+                project_id: id.clone(),
+                diagram_id: "diagram-tasks".into(),
+                expected_revision: before.revision() + 1,
+            },
+        )
+        .await?;
+    assert!(matches!(stale, QueryOutcome::Answer(Err(_))));
     let missing = context
         .query::<ModelingValidateDiagram>(
             Routing::Unscoped,
             ModelingValidateDiagramRequested {
                 project_id: id.clone(),
                 diagram_id: "missing".into(),
+                expected_revision: before.revision(),
             },
         )
         .await?;

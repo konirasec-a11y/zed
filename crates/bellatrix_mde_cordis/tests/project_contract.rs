@@ -1,7 +1,7 @@
 use bellatrix_mde::{Project, Scope};
 use bellatrix_mde_cordis::{
-    MdePlugin, ModelingRename, ModelingRenameRequested, ModelingSetOwner,
-    ModelingSetOwnerRequested, with_model,
+    MdePlugin, ModelingRename, ModelingRenameRequested, ModelingSetExplorerParent,
+    ModelingSetExplorerParentRequested, ModelingSetOwner, ModelingSetOwnerRequested, with_model,
 };
 use bellatrix_mde_cordis::{ModelingRun, ModelingRunRequested, ModelingTaskKind};
 use bellatrix_project::{
@@ -102,11 +102,13 @@ async fn public_event_updates_only_requested_project_and_survives_modeling_dispo
         "elements": [
             {"id": "model", "kind": "uml.model", "name": "Model"},
             {"id": "package", "kind": "uml.package", "name": "Package"},
-            {"id": "class", "kind": "uml.class", "name": "Class"}
+            {"id": "class", "kind": "uml.class", "name": "Class"},
+            {"id": "other", "kind": "uml.class", "name": "Other"}
         ],
         "relations": [
             {"id": "owns-package", "kind": "owns", "from": "model", "to": "package"},
-            {"id": "owns-class", "kind": "owns", "from": "model", "to": "class"}
+            {"id": "owns-class", "kind": "owns", "from": "model", "to": "class"},
+            {"id": "owns-other", "kind": "owns", "from": "model", "to": "other"}
         ]
     }))
     .unwrap();
@@ -154,6 +156,44 @@ async fn public_event_updates_only_requested_project_and_survives_modeling_dispo
     assert_eq!(class_edges.len(), 1);
     assert_eq!(class_edges[0]["id"], "owns-class");
     assert_eq!(class_edges[0]["from"], "package");
+
+    // Explorer organization accepts a class under another class without changing UML ownership.
+    let placement =
+        |subject: &str, parent: &str, expected_revision| ModelingSetExplorerParentRequested {
+            project_id: hierarchy_id.clone(),
+            subject_id: subject.into(),
+            parent_id: Some(parent.into()),
+            expected_revision,
+        };
+    assert!(matches!(
+        ctx.query::<ModelingSetExplorerParent>(Routing::Unscoped, placement("class", "other", 1))
+            .await
+            .unwrap(),
+        QueryOutcome::Answer(Ok(2))
+    ));
+    assert!(matches!(
+        ctx.query::<ModelingSetExplorerParent>(Routing::Unscoped, placement("other", "class", 2))
+            .await
+            .unwrap(),
+        QueryOutcome::Answer(Err(_))
+    ));
+    assert!(matches!(
+        ctx.query::<ModelingSetExplorerParent>(Routing::Unscoped, placement("class", "model", 1))
+            .await
+            .unwrap(),
+        QueryOutcome::Answer(Err(_))
+    ));
+    let snapshot = service.snapshot(&hierarchy_id).unwrap();
+    assert_eq!(snapshot.revision(), 2);
+    let section = snapshot.section("bellatrix.mde").unwrap();
+    assert_eq!(section["explorer_parents"]["class"], "other");
+    let class_edge = section["relations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|edge| edge["id"] == "owns-class")
+        .unwrap();
+    assert_eq!(class_edge["from"], "package");
 
     engine.dispose().await.unwrap();
     let missed = ctx

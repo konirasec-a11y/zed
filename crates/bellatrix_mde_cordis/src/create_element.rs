@@ -19,6 +19,33 @@ impl Event for ModelingCreateElement {
     type Args = ModelingCreateElementRequested;
     type Output = Result<u64, String>;
 }
+pub struct ModelingCreateElementOrVisualDraft;
+impl Event for ModelingCreateElementOrVisualDraft {
+    const NAME: &'static str = "bellatrix.mde.create-element-or-visual-draft.v1";
+    type Args = ModelingCreateElementRequested;
+    type Output = Result<u64, String>;
+}
+pub(crate) async fn create_element_or_visual_draft(
+    context: &Context,
+    projects: &ProjectService,
+    request: ModelingCreateElementRequested,
+) -> Result<u64, String> {
+    crate::mutation::execute(
+        context,
+        projects,
+        request.project_id,
+        request.expected_revision,
+        Command::CreateElementOrVisualDraft {
+            diagram_id: request.diagram_id,
+            owner_id: request.owner_id,
+            kind: request.kind,
+            name: request.name,
+            x: request.x,
+            y: request.y,
+        },
+    )
+    .await
+}
 pub(crate) async fn create_element(
     context: &Context,
     projects: &ProjectService,

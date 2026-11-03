@@ -54,21 +54,35 @@ impl Event for ModelingDeleteDiagram {
 pub struct ModelingValidateDiagramRequested {
     pub project_id: ProjectId,
     pub diagram_id: String,
+    pub expected_revision: u64,
+}
+#[derive(Clone, Debug)]
+pub struct DiagramValidationResult {
+    pub diagram_id: String,
+    pub revision: u64,
+    pub diagnostics: Vec<StructuralDiagnostic>,
 }
 pub struct ModelingValidateDiagram;
 impl Event for ModelingValidateDiagram {
     const NAME: &'static str = "bellatrix.mde.validate-diagram.v1";
     type Args = ModelingValidateDiagramRequested;
-    type Output = Result<Vec<StructuralDiagnostic>, String>;
+    type Output = Result<DiagramValidationResult, String>;
 }
 
 fn validate(
     projects: &ProjectService,
     request: ModelingValidateDiagramRequested,
-) -> Result<Vec<StructuralDiagnostic>, String> {
+) -> Result<DiagramValidationResult, String> {
     let document = projects
         .snapshot(&request.project_id)
         .map_err(|error| error.to_string())?;
+    if document.revision() != request.expected_revision {
+        return Err(format!(
+            "validation revision changed: requested {}, current {}",
+            request.expected_revision,
+            document.revision()
+        ));
+    }
     let model = crate::project_integration::from_document(&document)?
         .to_model(document.id().as_str(), document.name());
     let diagram = model
@@ -79,11 +93,11 @@ fn validate(
     let stored = diagram.uml_di_type.as_str();
     let kind = StructuralDiagramKind::from_diagram(diagram)
         .ok_or_else(|| format!("unsupported UMLDI diagram type: {stored}"))?;
-    Ok(validate_structural_diagram(
-        &model,
-        &request.diagram_id,
-        kind,
-    ))
+    Ok(DiagramValidationResult {
+        diagram_id: request.diagram_id.clone(),
+        revision: document.revision(),
+        diagnostics: validate_structural_diagram(&model, &request.diagram_id, kind),
+    })
 }
 
 pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Result<(), io::Error> {

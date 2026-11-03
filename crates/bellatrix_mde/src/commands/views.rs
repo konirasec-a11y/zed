@@ -86,6 +86,7 @@ pub(super) fn place(
         .ok_or("diagram not found")?
         .views
         .push(View {
+            draft: None,
             id: identifier,
             subject: Some(element_id.into()),
             label,
@@ -152,6 +153,71 @@ pub(super) fn remove(
             .retain(|view| !hidden.contains(&view.id));
         crate::relationships::reroute_relationships_for_endpoint(section, diagram_id, &element_id);
     }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn create_draft(
+    section: &mut ModelingSection,
+    diagram_id: &str,
+    notation_kind: &str,
+    label: &Option<String>,
+    geometry: &Geometry,
+    properties: &std::collections::BTreeMap<String, serde_json::Value>,
+    parent_view_id: &Option<String>,
+    source_view_id: &Option<String>,
+    target_view_id: &Option<String>,
+    revision: u64,
+    project_id: &str,
+) -> Result<(), String> {
+    if notation_kind.trim().is_empty() {
+        return Err("visual notation kind must not be blank".into());
+    }
+    let diagram = section
+        .diagrams
+        .iter()
+        .find(|diagram| diagram.id == diagram_id)
+        .ok_or("diagram not found")?;
+    for identifier in [parent_view_id, source_view_id, target_view_id]
+        .into_iter()
+        .flatten()
+    {
+        if !diagram.views.iter().any(|view| &view.id == identifier) {
+            return Err(format!(
+                "referenced view not found in diagram: {identifier}"
+            ));
+        }
+    }
+    let z_index = diagram
+        .views
+        .iter()
+        .map(|view| view.z_index)
+        .max()
+        .unwrap_or(0)
+        .checked_add(1)
+        .ok_or("diagram z-index overflow")?;
+    let [id] = super::fresh_ids(section, ["mde-view"], revision, project_id)?;
+    let diagram = section
+        .diagrams
+        .iter_mut()
+        .find(|diagram| diagram.id == diagram_id)
+        .ok_or("diagram not found")?;
+    diagram.views.push(View {
+        id,
+        subject: None,
+        label: label.clone(),
+        geometry: geometry.clone(),
+        style: Style::default(),
+        z_index,
+        draft: Some(crate::VisualDraft {
+            notation_kind: notation_kind.into(),
+            properties: properties.clone(),
+            parent_view_id: parent_view_id.clone(),
+            source_view_id: source_view_id.clone(),
+            target_view_id: target_view_id.clone(),
+        }),
+    });
+    crate::reroute_visual_drafts(diagram);
     Ok(())
 }
 

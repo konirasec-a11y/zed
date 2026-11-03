@@ -6,7 +6,9 @@ fn tool_glyph(tool: ModelingTool) -> ShapeKind {
             ModelingElementKind::Choice => ShapeKind::Decision,
             ModelingElementKind::Junction => ShapeKind::InitialNode,
             ModelingElementKind::StateFork | ModelingElementKind::StateJoin => ShapeKind::Fork,
-            ModelingElementKind::ShallowHistory | ModelingElementKind::DeepHistory => ShapeKind::History,
+            ModelingElementKind::ShallowHistory | ModelingElementKind::DeepHistory => {
+                ShapeKind::History
+            }
             ModelingElementKind::EntryPoint => ShapeKind::EntryPoint,
             ModelingElementKind::ExitPoint => ShapeKind::FlowFinal,
             ModelingElementKind::Terminate => ShapeKind::Terminate,
@@ -251,14 +253,7 @@ impl Render for MdeLeftPanel {
                 .into_iter()
                 .fold(menu, |menu, kind| {
                     let owner = create_item.clone();
-                    let label = if kind == bellatrix_mde::StructuralDiagramKind::CompositeStructure
-                    {
-                        "Composite structure (selected classifier)".to_owned()
-                    } else if let Some(context) = kind.context_metaclass() {
-                        format!("{} (selected {context})", crate::diagram_kind_label(kind))
-                    } else {
-                        crate::diagram_kind_label(kind).to_owned()
-                    };
+                    let label = crate::diagram_kind_label(kind).to_owned();
                     menu.entry(label, None, move |window, cx| {
                         if owner.read(cx).source().is_read_only() {
                             return;
@@ -340,7 +335,7 @@ impl Render for MdeLeftPanel {
                     .collect(),
             ),
             (
-                "Activity nodes · select Activity",
+                "Activity nodes",
                 ModelingElementKind::ACTIVITY_NODES
                     .iter()
                     .copied()
@@ -348,7 +343,7 @@ impl Render for MdeLeftPanel {
                     .collect(),
             ),
             (
-                "States · select container",
+                "States",
                 ModelingElementKind::STATE_NODES
                     .iter()
                     .copied()
@@ -356,7 +351,7 @@ impl Render for MdeLeftPanel {
                     .collect(),
             ),
             (
-                "Interactions · select Interaction",
+                "Interactions",
                 ModelingElementKind::INTERACTION_NODES
                     .iter()
                     .copied()
@@ -380,14 +375,21 @@ impl Render for MdeLeftPanel {
                     .collect(),
             ),
             (
-                "Pins & operands · select container",
+                "Pins & operands",
                 ModelingElementKind::DETAILS
                     .iter()
                     .copied()
                     .map(ModelingTool::Element)
                     .collect(),
             ),
-            ("State pseudostates", ModelingElementKind::PSEUDOSTATES.iter().copied().map(ModelingTool::Element).collect()),
+            (
+                "State pseudostates",
+                ModelingElementKind::PSEUDOSTATES
+                    .iter()
+                    .copied()
+                    .map(ModelingTool::Element)
+                    .collect(),
+            ),
             (
                 "Annotations",
                 ModelingElementKind::ANNOTATIONS
@@ -650,7 +652,17 @@ impl Render for MdeLeftPanel {
                             }),
                         )
                         .when(!read_only, |header| {
-                            header.action(
+                            let draft_owner = item.clone();
+                            header.action(ui::IconButton::new("mde-visual-draft-mode", IconName::Pencil)
+                                .toggle_state(state.visual_draft_mode)
+                                .tooltip(ui::Tooltip::text("Visual draft mode: place freely without semantic validation"))
+                                .on_click(move |_, _, cx| { draft_owner.update(cx, |workbench, cx| {
+                                    workbench.visual_draft_mode = !workbench.visual_draft_mode;
+                                    workbench.pending_relation_source = None;
+                                    workbench.feedback = if workbench.visual_draft_mode { "Visual drafts: no semantic validation or code generation" } else { "Semantic modeling mode" }.into();
+                                    cx.notify();
+                                }); }))
+                            .action(
                                 ui::IconButton::new("mde-search-tools", IconName::MagnifyingGlass)
                                     .toggle_state(self.search_open)
                                     .on_click(cx.listener(|panel, _, window, cx| {

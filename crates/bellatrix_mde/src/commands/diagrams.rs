@@ -1,7 +1,4 @@
-use crate::{
-    Diagram, ModelingSection, Project, StructuralDiagramKind, StructuralSeverity,
-    validate_structural_diagram,
-};
+use crate::{Diagram, ModelingSection, Project, StructuralDiagramKind};
 
 pub(super) fn create(
     section: &mut ModelingSection,
@@ -25,15 +22,6 @@ pub(super) fn create(
         model_elements: model_elements.to_vec(),
         views: Vec::new(),
     });
-    let candidate = section.to_model(&project.id, &project.name);
-    // Whole-model semantic errors may predate this empty diagram. Only its
-    // UMLDI metadata/context errors constrain this command; warnings allow drafts.
-    for diagnostic in validate_structural_diagram(&candidate, &identifier, kind) {
-        if diagnostic.severity == StructuralSeverity::Error && diagnostic.code.starts_with("UMLDI_")
-        {
-            return Err(format!("{}: {}", diagnostic.code, diagnostic.message));
-        }
-    }
     Ok(())
 }
 
@@ -128,21 +116,6 @@ mod tests {
                 kind: StructuralDiagramKind::Class,
                 name: " ".into(),
                 model_elements: Vec::new(),
-            },
-            Command::CreateDiagram {
-                kind: StructuralDiagramKind::Class,
-                name: "Invalid context".into(),
-                model_elements: vec!["type-list".into()],
-            },
-            Command::CreateDiagram {
-                kind: StructuralDiagramKind::CompositeStructure,
-                name: "Missing context".into(),
-                model_elements: Vec::new(),
-            },
-            Command::CreateDiagram {
-                kind: StructuralDiagramKind::CompositeStructure,
-                name: "Unknown context".into(),
-                model_elements: vec!["missing".into()],
             },
             Command::RenameDiagram {
                 diagram_id: "missing".into(),

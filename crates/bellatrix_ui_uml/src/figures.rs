@@ -22,6 +22,8 @@ pub struct UmlFigure {
     name: SharedString,
     slot_labels: Vec<String>,
     interaction_operator: Option<String>,
+    has_nested_views: bool,
+    composite_role: bool,
     applied_stereotype: Option<SharedString>,
     selected: bool,
     scale: f32,
@@ -76,6 +78,8 @@ impl UmlFigure {
             name: name.into(),
             slot_labels: Vec::new(),
             interaction_operator: None,
+            has_nested_views: false,
+            composite_role: true,
             applied_stereotype: None,
             selected: false,
             scale: 1.0,
@@ -85,6 +89,14 @@ impl UmlFigure {
             editor: None,
             template_parameters: None,
         }
+    }
+    pub fn nested_views(mut self, nested: bool) -> Self {
+        self.has_nested_views = nested;
+        self
+    }
+    pub fn composite_role(mut self, composite: bool) -> Self {
+        self.composite_role = composite;
+        self
     }
     pub fn interaction_operator(mut self, operator: Option<&str>) -> Self {
         self.interaction_operator = operator.map(str::to_owned);
@@ -277,8 +289,16 @@ impl RenderOnce for UmlFigure {
                             .absolute()
                             .left_0()
                             .top_0()
-                            .w(px(87.0 * scale))
-                            .h(px(17.0 * scale))
+                            .w(px(if self.has_nested_views {
+                                (self.view_width as f32 * scale * 0.70).max(87.0 * scale)
+                            } else {
+                                87.0 * scale
+                            }))
+                            .h(px(if self.has_nested_views {
+                                26.0 * scale
+                            } else {
+                                17.0 * scale
+                            }))
                             .map(|element| {
                                 appearance
                                     .apply_rectangle_border(element, palette, selected, scale, 0.0)
@@ -289,9 +309,17 @@ impl RenderOnce for UmlFigure {
                         div()
                             .absolute()
                             .left(px(11.0 * scale))
-                            .top(px(25.0 * scale))
-                            .bottom(px(8.0 * scale))
-                            .right(px(8.0 * scale))
+                            .when(!self.has_nested_views, |element| {
+                                element
+                                    .top(px(25.0 * scale))
+                                    .bottom(px(8.0 * scale))
+                                    .right(px(8.0 * scale))
+                            })
+                            .when(self.has_nested_views, |element| {
+                                element
+                                    .top(px(2.0 * scale))
+                                    .max_w(px(self.view_width as f32 * scale * 0.65))
+                            })
                             .flex()
                             .flex_col()
                             .overflow_hidden()
@@ -344,7 +372,14 @@ impl RenderOnce for UmlFigure {
                 .flex()
                 .flex_col()
                 .map(|element| {
-                    appearance.apply_rectangle_border(element, palette, selected, scale, 0.0)
+                    appearance.apply_notation_rectangle_border(
+                        element,
+                        palette,
+                        selected,
+                        scale,
+                        0.0,
+                        !self.composite_role,
+                    )
                 })
                 .bg(appearance.fill(palette.panel))
                 .child(

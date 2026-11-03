@@ -6,6 +6,7 @@ edition.workspace = true
 rust-version = "1.98.1"
 
 [dependencies]
+db.workspace = true
 bellatrix_project = { path = "../bellatrix_project" }
 bellatrix_mde = { path = "../bellatrix_mde" }
 bellatrix_mde_cordis = { path = "../bellatrix_mde_cordis" }

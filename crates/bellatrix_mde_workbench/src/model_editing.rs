@@ -270,11 +270,43 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
+        let owner_id = creation_owner(kind, self.selected_element.as_deref());
+        if self.visual_draft_mode {
+            let (width, height) = kind.initial_size();
+            let mut properties = std::collections::BTreeMap::new();
+            if let Some(pseudostate_kind) = kind.resolve_pseudostate_kind() {
+                properties.insert("kind".into(), serde_json::json!(pseudostate_kind));
+            }
+            self.submit(
+                MdeUiCommand::CreateVisualDraft(
+                    bellatrix_mde_cordis::ModelingCreateVisualDraftRequested {
+                        project_id: self.project_id().clone(),
+                        diagram_id,
+                        notation_kind: kind.model_kind().into(),
+                        label: Some(kind.default_name().into()),
+                        geometry: Geometry::Rect {
+                            x,
+                            y,
+                            width,
+                            height,
+                        },
+                        properties,
+                        parent_view_id: None,
+                        source_view_id: None,
+                        target_view_id: None,
+                        expected_revision: snapshot.revision,
+                    },
+                ),
+                cx,
+            );
+            self.selected_tool = None;
+            return;
+        }
         self.submit(
-            MdeUiCommand::CreateElement(ModelingCreateElementRequested {
+            MdeUiCommand::CreateElementOrVisualDraft(ModelingCreateElementRequested {
                 project_id: self.project_id().clone(),
                 diagram_id,
-                owner_id: creation_owner(kind, self.selected_element.as_deref()),
+                owner_id,
                 kind,
                 name: None,
                 x: x.max(0.0),

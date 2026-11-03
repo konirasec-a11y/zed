@@ -44,6 +44,8 @@ pub struct View {
     pub id: String,
     #[serde(default)]
     pub subject: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub draft: Option<VisualDraft>,
     #[serde(default)]
     pub label: Option<String>,
     pub geometry: Geometry,
@@ -51,6 +53,19 @@ pub struct View {
     pub style: Style,
     #[serde(default)]
     pub z_index: i32,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct VisualDraft {
+    pub notation_kind: String,
+    #[serde(default)]
+    pub properties: std::collections::BTreeMap<String, serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_view_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_view_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_view_id: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

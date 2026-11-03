@@ -438,6 +438,7 @@ pub(super) fn insert_feature(
         properties.insert("isService".into(), serde_json::json!(false));
     }
     if action == UmlQuickCreate::Part {
+        properties.insert("aggregation".into(), serde_json::json!("composite"));
         properties.insert("type".into(), serde_json::json!(""));
     }
     section.elements.push(Element {
@@ -478,6 +479,7 @@ pub(super) fn insert_feature(
             .ok_or("diagram missing")?
             .views
             .push(View {
+            draft: None,
                 id: view_id,
                 subject: Some(node_id),
                 label: None,
