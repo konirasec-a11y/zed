@@ -177,3 +177,37 @@ aggregation 3, defaultValue 6, API 4, ownership/namespace 4, inherited capabilit
 5 e Component constraints 7. Log `/tmp/structural-owner-component-gate.log`;
 `git diff --check` passou. Esses números correspondem ao estado testado antes
 das ampliações posteriores de Component, não substituem o gate final por SHA.
+
+## Atualização focada: AssociationClass::cannot_be_defined — 2026-11-03
+
+A regra `AssociationClass-cannot_be_defined` (UML.xmi:3927–3938) agora verifica
+que nem os endTypes nem os allParents desses tipos contêm a própria
+AssociationClass. Reutiliza contratos de memberEnd/Type e consultas canônicas
+de herança. Uma violação local comprovada prevalece mesmo ao lado de end ou
+Type externo não resolvido; referências malformadas continuam inválidas.
+Não retorna coleções parciais como se fossem completas.
+
+A regra integra a validação global e é executada antes do fallback de suporte
+especializado no gate de associações. O aviso agregado de contratos restantes
+de AssociationClass foi preservado: a alteração não declara autoria completa
+nem remove bloqueios preexistentes a edições que dependem desses contratos.
+O fluxo comprova rejeição atômica de self-end e reparo por draft/reabertura;
+uma edição válida ainda bloqueada pelo fallback não foi contabilizada como
+comando de autoria aprovado.
+
+Código em `semantics/associations.rs`; três fluxos em
+`tests/association_class_constraints.rs` cobrem referência própria, ancestral
+direto/transitivo, estados inconclusivos, violação com externos em ambas
+ordens, malformados, API e reabertura JSON/Protobuf. Gate focado **11/11**:
+AssociationClass 3, association kernel 2, specialization 2 e API 4.
+Log local `/tmp/association-class-final.log`; sem alteração de UI ou geração.
+
+Revisão adversarial: a prova compartilhada `has_ancestor` preserva um caminho
+canônico conhecido quando outro ramo contém declarações externas sem resolução;
+`resolve_ancestry` continua inconclusiva nesses casos e nunca fornece fechamento
+parcial. Ausência de caminho com ramo desconhecido permanece não verificada;
+ciclos/entradas inválidas prevalecem. A validação global emite a regra específica
+uma única vez, mantendo sua execução no gate de comando e as outras verificações
+de Association. Teste adicional cobre ordens dos ramos, contagem exata, caminho
+removido e ciclo. Gate de revisão **33/33**: AssociationClass 4, association kernel
+2, specialization 2, API 4 e templates 21. Log `/tmp/association-class-review.log`.

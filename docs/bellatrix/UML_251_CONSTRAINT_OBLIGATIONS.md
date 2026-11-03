@@ -7,7 +7,9 @@ Levantamento de 2026-11-03 sobre o commit
 obrigações normativas, não um certificado de conformidade. Atualização do lote 1:
 o commit `62465b699f9ff9e8bd6da5a6aa2cdc1d73c13d53` publica Port::encapsulated_owner
 e as duas invariantes diretas de Component. Essas três linhas foram atualizadas
-com evidência específica; Enumeration e BehavioredClassifier continuam pendentes.
+com evidência específica. Enumeration::immutable também tem implementação no
+working tree e gate focado 8/8, descritos em E14, ainda sem SHA de publicação
+atribuído. BehavioredClassifier continua pendente.
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -123,7 +125,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12/E13 possuem os gates delimitados na seção seguinte.
+de execução nova. E12/E13/E14 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -181,6 +183,29 @@ de execução nova. E12/E13 possuem os gates delimitados na seção seguinte.
   owners não resolvidos preservam não verificado; consequente vazio pode decidir
   a implicação verdadeira sem resolver o antecedente. Erros estruturais continuam
   diagnosticados independentemente do resultado lógico.
+
+- **E14**: `semantics/enumerations.rs`, `immutable` e `validate`, ligado a
+  `root.rs::validate_contracts`; `enumeration_immutability.rs`, oito testes.
+  Apenas papéis que contribuem para DataType::ownedAttribute e atributos
+  diretamente possuídos participam da regra. Atributos herdados, ownedLiteral,
+  ownedOperation e outros papéis não são promovidos a ownedAttribute.
+  Default efetivo isReadOnly=false viola a regra; valor não booleano é erro de
+  representação, não uma falsa conclusão normativa. Atributo local mutável
+  decide o forAll falso mesmo com vizinho externo; coleção inválida não é
+  escondida por essa decisão. Coleção vazia comprovada satisfaz; coleção externa
+  incompleta permanece não verificada.
+
+### Evidência de Enumeration no working tree
+
+Implementação inspecionada no working tree sobre
+`02b4b90af53d2c4acca34d8093edd26d974b4fa1`, sem atribuir SHA final ao delta.
+O log local `/tmp/enumeration-immutability-role-final.log` foi lido e registra
+**8/8 testes aprovados** no alvo `enumeration_immutability`. Não houve nova
+execução para atualizar a matriz. O alvo cobre API com/sem raiz, defaults,
+malformados, referências externas, papéis não relacionados, herança, rollback,
+reparo e reabertura. Não representa gate integral nem publicação confirmada.
+A linha fica P/E14 até manter evidência do recorte e da publicação efetiva;
+publicar o commit, por si só, também não demonstrará conformidade integral.
 
 ### Evidência executada do incremento publicado
 
@@ -578,7 +603,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `Enumeration-immutable`
 
-- Metaclass: `Enumeration`. Estado: **L1**. Evidência: lote 1; não promover antes do gate final.
+- Metaclass: `Enumeration`. Estado: **P**. Evidência: E14; implementação no working tree, publicação ainda não atribuída a um commit.
 - OCL publicado: `ownedAttribute->forAll(isReadOnly)`.
 
 #### `Interface-visibility`
@@ -882,8 +907,9 @@ contagem de testes nem de descritores como cobertura normativa.
 ### Lote 1: ownership e predicados locais, fechamento parcial publicado
 
 Port e as duas regras de Component já têm implementação e gates descritos em
-E12/E13. Os itens abaixo registram o contrato e o trabalho restante; itens 4 e 5
-continuam pendentes. Não tratar este lote inteiro como concluído.
+E12/E13. Enumeration (item 4) tem implementação e gate no working tree em E14,
+ainda aguardando referência ao commit publicado. BehavioredClassifier (item 5)
+continua pendente. Não tratar este lote inteiro como concluído.
 
 1. `Port-encapsulated_owner`: derivar encapsulatedClassifier a partir do owner
    e dos papéis canônicos; não confiar numa cópia armazenada da inversa.

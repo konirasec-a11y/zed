@@ -53,6 +53,11 @@ impl ClassifierAncestry<'_> {
     }
 }
 
+struct ParentEvidence<'a> {
+    parents: Vec<ElementRef<'a>>,
+    unresolved: Option<QueryError>,
+}
+
 pub(crate) struct HierarchyQueries<'index, 'model> {
     references: &'index ReferenceIndex<'model>,
     completed: HashMap<&'model str, ClassifierAncestry<'model>>,
@@ -70,7 +75,7 @@ impl<'index, 'model> HierarchyQueries<'index, 'model> {
         self.completed.get(id)
     }
 
-    fn read_parents(&self, id: &str) -> Result<Vec<ElementRef<'model>>, QueryError> {
+    fn parent_evidence(&self, id: &str) -> Result<ParentEvidence<'model>, QueryError> {
         let classifier = self
             .references
             .element(id)
@@ -81,11 +86,12 @@ impl<'index, 'model> HierarchyQueries<'index, 'model> {
                 "generalization endpoints must be Classifiers",
             ));
         }
+        let mut unresolved = None;
         for key in ["general", "generalization"] {
             if classifier.properties().get(key).is_some_and(|value| {
                 !value.is_null() && !value.as_array().is_some_and(Vec::is_empty)
             }) {
-                return Err(QueryError::unsupported(
+                unresolved = Some(QueryError::unsupported(
                     id,
                     format!("{key} must be derived from canonical Generalization relationships"),
                 ));
@@ -100,13 +106,13 @@ impl<'index, 'model> HierarchyQueries<'index, 'model> {
                 matches!(child, ElementRef::Object(_)) && child.conforms_to("Generalization")
             })
         {
-            return Err(QueryError::unsupported(
+            unresolved = Some(QueryError::unsupported(
                 id,
                 "Generalization objects require a canonical relationship adapter",
             ));
         }
         let mut seen = HashSet::new();
-        self.references
+        let parents = self.references
             .model()
             .relationship_records()
             .filter(|relation| relation.kind == "uml.generalization" && relation.from == id)
@@ -143,7 +149,13 @@ impl<'index, 'model> HierarchyQueries<'index, 'model> {
                 Ok(parent) => seen.insert(parent.id()),
                 Err(_) => true,
             })
-            .collect()
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ParentEvidence { parents, unresolved })
+    }
+
+    fn read_parents(&self, id: &str) -> Result<Vec<ElementRef<'model>>, QueryError> {
+        let evidence = self.parent_evidence(id)?;
+        evidence.unresolved.map_or(Ok(evidence.parents), Err)
     }
 
     fn order_ancestors(
@@ -266,6 +278,46 @@ pub fn conforms_to(
         .element(other_id)
         .map_err(|error| QueryError::invalid(other_id, error))?;
     Ok(resolve_ancestry(references, classifier_id)?.conforms_to(other))
+}
+
+/// Decide allParents()->includes without claiming to enumerate a complete
+/// ancestry. A known canonical path survives unresolved neighboring branches;
+/// invalid paths and cycles still take precedence over the positive evidence.
+pub fn has_ancestor(
+    references: &ReferenceIndex<'_>,
+    classifier_id: &str,
+    ancestor_id: &str,
+) -> Result<bool, QueryError> {
+    let ancestor = references.element(ancestor_id)
+        .map_err(|error| QueryError::invalid(ancestor_id, error))?;
+    if !ancestor.conforms_to("Classifier") {
+        return Err(QueryError::invalid(ancestor_id, "ancestor must be a Classifier"));
+    }
+    let queries = HierarchyQueries::new(references);
+    let mut pending = vec![(classifier_id.to_owned(), false)];
+    let mut active = HashSet::new();
+    let mut completed = HashSet::new();
+    let mut found = false;
+    let mut unknown = None;
+    while let Some((id, exiting)) = pending.pop() {
+        if exiting {
+            active.remove(&id);
+            completed.insert(id);
+            continue;
+        }
+        if completed.contains(&id) { continue; }
+        if !active.insert(id.clone()) {
+            return Err(QueryError::invalid(&id, "cycle in UML generalization"));
+        }
+        let evidence = queries.parent_evidence(&id)?;
+        if let Some(error) = evidence.unresolved { unknown = Some(error); }
+        pending.push((id, true));
+        for parent in evidence.parents {
+            found |= parent.id() == ancestor_id;
+            pending.push((parent.id().to_owned(), false));
+        }
+    }
+    if found { Ok(true) } else { unknown.map_or(Ok(false), Err) }
 }
 
 fn substitution_reference<'a>(

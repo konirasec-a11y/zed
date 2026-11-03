@@ -386,6 +386,14 @@ fn validate_association(
         }
     }
     validate_specialization(references, association, &ends)?;
+    if association.conforms_to("AssociationClass") {
+        match association_class_cannot_be_defined(references, association) {
+            Ok(true) => {}
+            Ok(false) => return Err("AssociationClass-cannot_be_defined: endType or an end Type's allParents contains this AssociationClass".into()),
+            Err(classifiers::QueryError::Invalid { message, .. }) => return Err(format!("AssociationClass-cannot_be_defined: {message}")),
+            Err(error) => return Err(format!("Unsupported AssociationClass-cannot_be_defined: {error}")),
+        }
+    }
     if association.metaclass() != Some("Association") {
         return Err(format!(
             "Unsupported {} constraints: inherited Association rules were checked, but specialized metaclass contracts are not implemented",
@@ -441,6 +449,50 @@ fn validate_specialization(
     unsupported.map_or(Ok(()), Err)
 }
 
+// UML.xmi AssociationClass-cannot_be_defined. Evaluate known ends even when
+// another member is unresolved; this is a quantified rule, not a partial query
+// pretending to return the complete endType collection.
+fn association_class_cannot_be_defined(
+    references: &ReferenceIndex<'_>,
+    association: ElementRef<'_>,
+) -> Result<bool, classifiers::QueryError> {
+    use classifiers::QueryError;
+    use super::property_contracts::PropertyOutcome;
+    let property = schema::uml_property("Association", "memberEnd")
+        .map_err(|error| QueryError::unsupported(association.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(association.id(), "missing memberEnd contract"))?;
+    let value = association.properties().get("memberEnd")
+        .ok_or_else(|| QueryError::unsupported(association.id(), "memberEnd identities are not materialized"))?;
+    let mut checks = Vec::new();
+    match super::property_contracts::check_value(references, association, property, value) {
+        PropertyOutcome::Satisfied => {}
+        PropertyOutcome::Violation(message) => return Err(QueryError::invalid(association.id(), message)),
+        PropertyOutcome::Unverified(message) => checks.push(Err(QueryError::unsupported(association.id(), message))),
+    }
+    let values = value.as_array().ok_or_else(|| QueryError::invalid(association.id(), "memberEnd must be a collection"))?;
+    let member = schema::PropertyDescriptor { lower: "1", upper: "1", ..*property };
+    for value in values {
+        checks.push((|| {
+            match super::property_contracts::check_value(references, association, &member, value) {
+                PropertyOutcome::Satisfied => {}
+                PropertyOutcome::Violation(message) => return Err(QueryError::invalid(association.id(), message)),
+                PropertyOutcome::Unverified(message) => return Err(QueryError::unsupported(association.id(), message)),
+            }
+            let end = references.validate(&member, value)
+                .map_err(|error| QueryError::invalid(association.id(), error))?
+                .ok_or_else(|| QueryError::invalid(association.id(), "memberEnd cannot be absent"))?;
+            // Optional absent Types do not contribute to the derived endType
+            // collection; Association-ends_must_be_typed diagnoses them separately.
+            if end.properties().get("type").is_none_or(Value::is_null) { return Ok(true); }
+            let endpoint = super::feature_compatibility::resolve_feature_type(references, end)?;
+            if endpoint.id() == association.id() { return Ok(false); }
+            classifier_hierarchy::has_ancestor(references, endpoint.id(), association.id())
+                .map(|contains_self| !contains_self)
+        })());
+    }
+    super::feature_compatibility::require_all(checks)
+}
+
 pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     let mut membership = BTreeMap::<&str, &str>::new();
@@ -449,6 +501,22 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
         .elements()
         .filter(|element| element.conforms_to("Association"))
     {
+        if association.conforms_to("AssociationClass") {
+            let outcome = match association_class_cannot_be_defined(references, association) {
+                Ok(true) => None,
+                Ok(false) => Some((StructuralSeverity::Error,
+                    "UML_ASSOCIATION_CLASS_CANNOT_BE_DEFINED",
+                    "endType or an end Type's allParents contains this AssociationClass".to_owned())),
+                Err(classifiers::QueryError::Invalid { message, .. }) => Some((StructuralSeverity::Error,
+                    "UML_ASSOCIATION_CLASS_CANNOT_BE_DEFINED", message)),
+                Err(classifiers::QueryError::Unsupported { message, .. }) => Some((StructuralSeverity::Warning,
+                    "MDE_ASSOCIATION_CLASS_UNVERIFIED", message)),
+            };
+            if let Some((severity, code, message)) = outcome {
+                issues.push(StructuralDiagnostic { severity, code, subject_id:association.id().into(),
+                    message:format!("AssociationClass-cannot_be_defined: {message}") });
+            }
+        }
         if !association.properties().contains_key("memberEnd") {
             issues.push(StructuralDiagnostic {
                 severity: StructuralSeverity::Warning,
@@ -458,7 +526,11 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
             });
             continue;
         }
-        if let Err(message) = validate_association(references, association) {
+        // This specific rule already has its own diagnostic above. The command
+        // gate uses the same rule, but global output reports it only once.
+        if let Err(message) = validate_association(references, association)
+            && !message.contains("AssociationClass-cannot_be_defined:")
+        {
             if message.starts_with("Unsupported ") {
                 issues.push(StructuralDiagnostic {
                     severity: StructuralSeverity::Warning,
