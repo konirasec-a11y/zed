@@ -45,6 +45,8 @@ Powertype de GeneralizationSet e cardinalidade de TimeConstraint/DurationConstra
 têm recortes publicados em `76f4563735961a4e514d98be8f6e6593669840a7` (E36/E37).
 TemplateBinding::parameter_substitution_formal e DurationConstraint::first_event_multiplicity
 têm recortes publicados em `0fbaa23586648af57205b52e883795810674af77` (E38/E39).
+TemplateBinding::one_parameter_substitution e DurationObservation::first_event_multiplicity
+têm recortes publicados em `5845f273b5cfa4c6089d6457c91b9bf49f90d064` (E40/E41).
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -160,7 +162,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E39 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E41 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -568,6 +570,57 @@ de execução nova. E12–E39 possuem os gates delimitados nas seções seguinte
   `UML_DURATION_CONSTRAINT_FIRST_EVENT` e
   `MDE_DURATION_CONSTRAINT_FIRST_EVENT_UNVERIFIED`.
 
+- **E40**: `semantics/templates.rs`, `binding_unique_substitutions`,
+  `binding_signature_parameters`, `template_reference_evidence` e
+  `validate_bindings`; `template_binding_unique.rs`, doze testes. Para cada
+  parâmetro da assinatura, conta substituições cuja formal tem a mesma
+  identidade e exige no máximo uma, não exatamente uma. Formal estrangeiro
+  continua obrigação separada de E38. Contagens locais duplicadas de formal
+  conhecido da assinatura provam violação; ausência de projeção não vira zero.
+  Cada substituição ainda não resolvida pode acrescentar no máximo uma à
+  contagem: esse limite permite decidir alguns casos, sem fabricar identidade
+  ou declarar coleção parcial completa. Assinatura incompleta não autoriza
+  inferir se um formal duplicado pertence a ela. Malformados e target canônico
+  contraditório continuam inválidos mesmo quando contagens parecem suficientes.
+
+- **E41**: `semantics/value_specifications.rs`,
+  `duration_first_event_multiplicity` e `validate`, compartilhados com E39;
+  `duration_observation_first_event.rs`, oito testes. DurationObservation exige
+  dois firstEvent quando event tem tamanho 2 e nenhum nos demais casos.
+  Coleção event obrigatória ausente permanece não materializada/unknown,
+  distinta de vazio explícito; a coleção firstEvent opcional ausente é vazia.
+  Se firstEvent tem tamanho diferente de 0 e 2, ambas as alternativas do
+  condicional já são falsas, mesmo com event desconhecido. Contratos de
+  referência e Boolean/coleção preservam malformados; contagem correta não
+  resolve identidade externa. Não avalia ocorrências temporais em runtime.
+  Diagnósticos: `UML_DURATION_OBSERVATION_FIRST_EVENT` e
+  `MDE_DURATION_OBSERVATION_FIRST_EVENT_UNVERIFIED`.
+
+### Evidência publicada de unicidade de binding e DurationObservation
+
+Commit inspecionado: `5845f273b5cfa4c6089d6457c91b9bf49f90d064`.
+Logs finais lidos:
+
+- `/tmp/template-binding-unique-gate-final.log`: **57/57 aprovados**,
+  operation_template_default 11, template_binding_formal 13,
+  template_binding_unique 12 e template_signatures 21.
+- `/tmp/duration-observation-final-gate.log`: **191/191 aprovados**,
+  160 testes lib e 31 integrações (duration_first_event 7,
+  duration_observation_first_event 8, string_expression_operands 8 e
+  time_constraint_cardinality 8).
+
+As linhas ficam **P/E40–E41**. O gate de binding distingue identidade, limite
+superior de contagem e membership de formal; não certifica actual arguments,
+projeções não materializadas ou templates integralmente. O gate de observação
+preserva diferenças entre coleção obrigatória ausente, vazio e desconhecido,
+e reexecuta DurationConstraint; não demonstra edição pública irrestrita de
+firstEvent, criação de observações ou semântica de execução temporal.
+
+As execuções precedem a publicação e não são reruns no SHA remoto. A matriz
+não executou testes novos. Não somar alvos sobrepostos a gates anteriores nem
+confundir lib completa mais integrações selecionadas com suíte integral,
+conformidade UML, validação visual ou geração.
+
 ### Evidência publicada de TemplateBinding e DurationConstraint::firstEvent
 
 Commit inspecionado: `0fbaa23586648af57205b52e883795810674af77`.
@@ -588,9 +641,10 @@ booleanas, duplicatas, referência externa e exclusão atômica que preserva o
 modelo. A edição direta de firstEvent continua **read-only no adapter**;
 rejeição sem mutação não é evidência de autoria suportada dessa propriedade.
 
-As linhas ficam **P/E38–E39**. Não certificam one_parameter_substitution,
-validade dos argumentos actual, todas as projeções de templates, firstEvent de
-DurationObservation ou avaliação temporal em runtime. Os gates precedem a
+As linhas ficam **P/E38–E39**. one_parameter_substitution e firstEvent de
+DurationObservation têm incrementos posteriores em E40/E41. Esses gates não
+certificam validade dos argumentos actual, todas as projeções de templates ou
+avaliação temporal em runtime. Os gates precedem a
 publicação, não são reruns sobre o SHA remoto nem execução nova pela matriz.
 Lib completa com integrações selecionadas não significa suíte integral;
 não somar novamente alvos repetidos como cobertura normativa. UI, geração e
@@ -1158,7 +1212,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `TemplateBinding-one_parameter_substitution`
 
-- Metaclass: `TemplateBinding`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `TemplateBinding`. Estado: **P**. Evidência: E40; commit `5845f273b5cfa4c6089d6457c91b9bf49f90d064`.
 - OCL publicado: `signature.parameter->forAll(p | parameterSubstitution->select(b | b.formal = p)->size() <= 1)`.
 
 #### `TemplateParameter-must_be_compatible`
@@ -1671,7 +1725,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `DurationObservation-first_event_multiplicity`
 
-- Metaclass: `DurationObservation`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `DurationObservation`. Estado: **P**. Evidência: E41; commit `5845f273b5cfa4c6089d6457c91b9bf49f90d064`.
 - OCL publicado: `if (event->size() = 2) then (firstEvent->size() = 2) else (firstEvent->size() = 0) endif`.
 
 #### `OpaqueExpression-language_body_size`

@@ -533,6 +533,70 @@ fn duration_first_event_multiplicity(
     super::feature_compatibility::require_all(checks)
 }
 
+fn temporal_expression_observation(
+    references: &ReferenceIndex<'_>,
+    expression: ElementRef<'_>,
+    metaclass: &str,
+    expr_role: &'static str,
+    observation_type: &str,
+) -> Result<bool, super::classifiers::QueryError> {
+    use super::{classifiers::{self, QueryError}, feature_compatibility::{accept_any, require_all}, property_contracts::{self, PropertyOutcome}};
+    let contract = |name: &str, value: &Value| -> Result<bool, QueryError> {
+        let descriptor = schema::uml_property(metaclass, name)
+            .map_err(|error| QueryError::unsupported(expression.id(), error.to_string()))?
+            .ok_or_else(|| QueryError::unsupported(expression.id(), "missing temporal expression property contract"))?;
+        match property_contracts::check_value(references, expression, descriptor, value) {
+            PropertyOutcome::Satisfied => Ok(true),
+            PropertyOutcome::Violation(message) => Err(QueryError::invalid(expression.id(), message)),
+            PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(expression.id(), message)),
+        }
+    };
+    let mut expr_contract = Ok(true);
+    let mut presence = Vec::new();
+    if let Some(value) = expression.properties().get("expr") {
+        expr_contract = contract("expr", value);
+        presence.push(match external_reference_href(value) {
+            Ok(Some(_)) => Err(QueryError::unsupported(expression.id(), "expr reference has no loaded resolver")),
+            Ok(None) => reference_id(value).map(|id| id.is_some())
+                .map_err(|error| QueryError::invalid(expression.id(), error)),
+            Err(error) => Err(QueryError::invalid(expression.id(), error)),
+        });
+    }
+    let mut owned_exprs = 0;
+    for child in references.explicit_owned_elements(expression.id())
+        .map_err(|error| QueryError::invalid(expression.id(), error))?
+    {
+        match classifiers::contributes_to_owned_union(expression, child, expr_role) {
+            Ok(true) => { owned_exprs += 1; presence.push(Ok(true)); }
+            Ok(false) => {}
+            Err(error) => presence.push(Err(error)),
+        }
+    }
+    if owned_exprs > 1 {
+        presence.push(Err(QueryError::invalid(expression.id(), "expr permits at most one owned ValueSpecification")));
+    }
+    let expr_present = require_all([expr_contract, accept_any(presence)]);
+
+    let empty = Value::Array(Vec::new());
+    let observations = expression.properties().get("observation").unwrap_or(&empty);
+    let mut observation_checks = vec![contract("observation", observations)];
+    if let Some(values) = observations.as_array() {
+        observation_checks.push(Ok(values.len() == 1));
+        for value in values {
+            if let Ok(Some(id)) = reference_id(value) {
+                if let Ok(observation) = references.element(id) {
+                    observation_checks.push(if observation.metaclass().is_none() {
+                        Err(QueryError::unsupported(id, "observation metaclass is unresolved"))
+                    } else { Ok(observation.conforms_to(observation_type)) });
+                }
+            }
+        }
+    }
+    // expr <> null is the implication's exemption. A known true consequent
+    // can likewise decide an unresolved expr, but malformed contracts never do.
+    accept_any([expr_present, require_all(observation_checks)])
+}
+
 /// Structural results only. Callers decide whether an edit is semantic or a
 /// permissive visual draft; evaluation never changes the graph.
 pub fn validate(references: &ReferenceIndex<'_>) -> Vec<crate::StructuralDiagnostic> {
@@ -604,6 +668,22 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<crate::StructuralDiagnos
                 (crate::StructuralSeverity::Warning, unknown_code, message),
         };
         issues.push(crate::StructuralDiagnostic { severity, code, subject_id: element.id().into(), message: format!("{metaclass}-first_event_multiplicity: {message}") });
+    }
+    for expression in references.model().elements() {
+        let (metaclass, expr_role, observation_type, error_code, unknown_code) = if expression.conforms_to("Duration") {
+            ("Duration", "Duration-expr", "DurationObservation", "UML_DURATION_OBSERVATION_REQUIRED", "MDE_DURATION_OBSERVATION_REQUIRED_UNVERIFIED")
+        } else if expression.conforms_to("TimeExpression") {
+            ("TimeExpression", "TimeExpression-expr", "TimeObservation", "UML_TIME_EXPRESSION_OBSERVATION_REQUIRED", "MDE_TIME_EXPRESSION_OBSERVATION_REQUIRED_UNVERIFIED")
+        } else { continue; };
+        let (severity, code, message) = match temporal_expression_observation(references, expression, metaclass, expr_role, observation_type) {
+            Ok(true) => continue,
+            Ok(false) => (crate::StructuralSeverity::Error, error_code, format!("without expr, exactly one {observation_type} is required")),
+            Err(super::classifiers::QueryError::Invalid { message, .. }) =>
+                (crate::StructuralSeverity::Error, error_code, message),
+            Err(super::classifiers::QueryError::Unsupported { message, .. }) =>
+                (crate::StructuralSeverity::Warning, unknown_code, message),
+        };
+        issues.push(crate::StructuralDiagnostic { severity, code, subject_id: expression.id().into(), message: format!("{metaclass}-no_expr_requires_observation: {message}") });
     }
     issues
 }

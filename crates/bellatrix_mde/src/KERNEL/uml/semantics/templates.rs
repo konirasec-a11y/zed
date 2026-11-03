@@ -433,16 +433,95 @@ fn binding_formals(
     crate::uml::feature_compatibility::require_all(checks)
 }
 
+fn template_reference_is_kind(
+    references: &crate::uml::references::ReferenceIndex<'_>,
+    element: crate::uml::root::ElementRef<'_>,
+    property: &str,
+    metaclass: &str,
+) -> Result<bool, crate::uml::classifiers::QueryError> {
+    use crate::uml::classifiers::QueryError;
+    let evidence = template_reference_evidence(references, element, property)?;
+    let target = evidence.known.first().copied().ok_or_else(|| {
+        QueryError::unsupported(element.id(), format!("{property} identity is not resolved"))
+    })?;
+    if target.metaclass().is_none() {
+        return Err(QueryError::unsupported(
+            element.id(),
+            format!("{property} metaclass is not resolved"),
+        ));
+    }
+    Ok(target.conforms_to(metaclass))
+}
+
+fn classifier_template_actual(
+    references: &crate::uml::references::ReferenceIndex<'_>,
+    substitution: crate::uml::root::ElementRef<'_>,
+) -> Result<bool, crate::uml::classifiers::QueryError> {
+    // formal is the mandatory opposite of templateParameterSubstitution in
+    // A_formal_templateParameterSubstitution. Evaluate each canonical witness
+    // without manufacturing an inverse list on ClassifierTemplateParameter.
+    let not_classifier_parameter = template_reference_is_kind(
+        references,
+        substitution,
+        "formal",
+        "ClassifierTemplateParameter",
+    )
+    .map(|is_classifier_parameter| !is_classifier_parameter);
+    let classifier_actual =
+        template_reference_is_kind(references, substitution, "actual", "Classifier");
+    crate::uml::feature_compatibility::accept_any([not_classifier_parameter, classifier_actual])
+}
+
 pub(crate) fn validate_bindings(
     references: &crate::uml::references::ReferenceIndex<'_>,
 ) -> Vec<StructuralDiagnostic> {
     use crate::uml::classifiers::QueryError;
     let mut issues = Vec::new();
-    for binding in references
-        .model()
-        .elements()
-        .filter(|element| element.conforms_to("TemplateBinding"))
-    {
+    for binding in references.model().elements() {
+        if binding.conforms_to("ClassifierTemplateParameter")
+            && binding.properties().contains_key("templateParameterSubstitution")
+        {
+            // Forward formal links do not reconcile an independently authored
+            // inverse collection. Keep that representation explicitly unverified.
+            issues.push(StructuralDiagnostic {
+                severity: StructuralSeverity::Warning,
+                code: "MDE_CLASSIFIER_TEMPLATE_ACTUAL_UNVERIFIED",
+                subject_id: binding.id().into(),
+                message: "ClassifierTemplateParameter-actual_is_classifier: authored templateParameterSubstitution inverse projection is not reconciled; only canonical substitution.formal witnesses are evaluated".into(),
+            });
+        }
+        if binding.conforms_to("TemplateParameterSubstitution") {
+            let actual = match classifier_template_actual(references, binding) {
+                Ok(true) => None,
+                Ok(false) => Some((
+                    StructuralSeverity::Error,
+                    "UML_CLASSIFIER_TEMPLATE_ACTUAL",
+                    "The actual argument of a ClassifierTemplateParameter must be a Classifier"
+                        .to_owned(),
+                )),
+                Err(QueryError::Invalid { message, .. }) => Some((
+                    StructuralSeverity::Error,
+                    "MDE_CLASSIFIER_TEMPLATE_ACTUAL_INVALID",
+                    message,
+                )),
+                Err(QueryError::Unsupported { message, .. }) => Some((
+                    StructuralSeverity::Warning,
+                    "MDE_CLASSIFIER_TEMPLATE_ACTUAL_UNVERIFIED",
+                    message,
+                )),
+            };
+            if let Some((severity, code, message)) = actual {
+                issues.push(StructuralDiagnostic {
+                    severity,
+                    code,
+                    subject_id: binding.id().into(),
+                    message: format!("ClassifierTemplateParameter-actual_is_classifier: {message}"),
+                });
+            }
+        }
+        if !binding.conforms_to("TemplateBinding") {
+            continue;
+        }
         let unique = match binding_unique_substitutions(references, binding) {
             Ok(true) => None,
             Ok(false) => Some((
