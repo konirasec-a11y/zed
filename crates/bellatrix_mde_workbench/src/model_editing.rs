@@ -214,30 +214,6 @@ impl MdeWorkbenchItem {
         };
         cx.notify();
     }
-    pub fn rename_selected(&mut self, name: String, cx: &mut Context<Self>) {
-        if self.source.is_read_only() {
-            return;
-        }
-        let Some(id) = self.selected_element.clone() else {
-            self.feedback = "Select an element first".into();
-            cx.notify();
-            return;
-        };
-        let Ok(snapshot) = self.source.snapshot() else {
-            self.feedback = "Project snapshot unavailable".into();
-            cx.notify();
-            return;
-        };
-        self.submit(
-            MdeUiCommand::Rename(ModelingRenameRequested {
-                project_id: self.project_id().clone(),
-                element_id: id,
-                new_name: name,
-                expected_revision: snapshot.revision,
-            }),
-            cx,
-        );
-    }
     pub fn create_element(
         &mut self,
         kind: ModelingElementKind,
@@ -371,29 +347,4 @@ impl MdeWorkbenchItem {
         self.focus_handle.focus(window, cx);
     }
 
-    pub fn create_in_next_slot(&mut self, kind: ModelingElementKind, cx: &mut Context<Self>) {
-        if self.source.is_read_only() {
-            return;
-        }
-        let count = self
-            .source
-            .snapshot()
-            .ok()
-            .and_then(|snapshot| {
-                self.active_diagram
-                    .as_deref()
-                    .and_then(|id| {
-                        snapshot
-                            .section
-                            .diagrams
-                            .iter()
-                            .find(|diagram| diagram.id == id)
-                    })
-                    .or_else(|| snapshot.section.diagrams.first())
-                    .map(|diagram| diagram.views.len())
-            })
-            .unwrap_or(0);
-        let (x, y) = next_diagram_grid_position(count);
-        self.create_element(kind, x, y, cx);
-    }
 }

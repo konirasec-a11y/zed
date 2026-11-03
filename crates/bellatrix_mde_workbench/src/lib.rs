@@ -36,7 +36,7 @@ use bellatrix_mde_cordis::{
     MdeUiCommand, ModelingAddMemberRequested, ModelingCreateElementRequested,
     ModelingCreateRelationRequested, ModelingDeleteElementRequested,
     ModelingMoveParameterRequested, ModelingMoveViewRequested, ModelingQuickEditRequested,
-    ModelingRenameRequested, ModelingResizeViewRequested, ModelingSetNameExpressionRequested,
+    ModelingResizeViewRequested, ModelingSetNameExpressionRequested,
     ModelingSetPropertyRequested,
 };
 use bellatrix_project::ProjectId;

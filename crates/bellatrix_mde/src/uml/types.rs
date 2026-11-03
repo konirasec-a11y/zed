@@ -45,16 +45,6 @@ impl StandardPrimitiveType {
             Self::UnlimitedNatural => "UnlimitedNatural",
         }
     }
-
-    pub fn literal_metaclass(self) -> &'static str {
-        match self {
-            Self::Boolean => "LiteralBoolean",
-            Self::Integer => "LiteralInteger",
-            Self::Real => "LiteralReal",
-            Self::String => "LiteralString",
-            Self::UnlimitedNatural => "LiteralUnlimitedNatural",
-        }
-    }
 }
 
 // UML Integer is not limited to the host machine's integer range.

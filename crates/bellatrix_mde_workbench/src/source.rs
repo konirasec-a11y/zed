@@ -3,7 +3,7 @@ use crate::{MdeSnapshot, from_document};
 use bellatrix_mde_cordis::{MdeUiBridge, MdeUiCommand};
 use bellatrix_project::{ProjectDocument, ProjectId, ProjectService};
 use std::sync::{
-    Arc, RwLock,
+    Arc,
     atomic::{AtomicBool, Ordering},
 };
 use tokio::sync::{mpsc, watch};
@@ -27,7 +27,6 @@ pub struct MdeUiSource {
     read_only_snapshot: Option<Arc<MdeSnapshot>>,
     read_only_document: Option<Arc<ProjectDocument>>,
     presentation_suspended: Arc<AtomicBool>,
-    presentation_preview: Arc<RwLock<Option<String>>>,
 }
 
 impl MdeUiSource {
@@ -44,7 +43,6 @@ impl MdeUiSource {
             read_only_snapshot: None,
             read_only_document: None,
             presentation_suspended: Arc::new(AtomicBool::new(false)),
-            presentation_preview: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -70,7 +68,6 @@ impl MdeUiSource {
             read_only_snapshot: Some(Arc::new(snapshot)),
             read_only_document: Some(document),
             presentation_suspended: Arc::new(AtomicBool::new(false)),
-            presentation_preview: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -89,26 +86,14 @@ impl MdeUiSource {
     pub(crate) fn for_workspace(&self) -> Self {
         let mut source = self.clone();
         source.presentation_suspended = Arc::new(AtomicBool::new(false));
-        source.presentation_preview = Arc::new(RwLock::new(None));
         source
     }
 
     pub(crate) fn set_preview_context(&self, preview: Option<String>) -> bool {
         let suspended = preview.is_some();
-        *self
-            .presentation_preview
-            .write()
-            .expect("MDE presentation lock poisoned") = preview;
         self.presentation_suspended
             .swap(suspended, Ordering::AcqRel)
             != suspended
-    }
-
-    pub(crate) fn preview_context(&self) -> Option<String> {
-        self.presentation_preview
-            .read()
-            .expect("MDE presentation lock poisoned")
-            .clone()
     }
 
     pub(crate) fn is_presentation_suspended(&self) -> bool {
