@@ -426,6 +426,37 @@ pub fn multiplicity(
         .map_err(|error| EvaluationError::invalid(element.id(), error.to_string()))
 }
 
+// Both prose constraints apply only to nonliteral bounds. Their consequents
+// require separate semantic proofs; the literal evaluator proves neither for
+// an arbitrary expression, even when its text looks like a constant.
+fn bound_expression_guarantees(
+    references: &ReferenceIndex<'_>,
+    element: ElementRef<'_>,
+) -> Result<(), EvaluationError> {
+    let mut unknown = None;
+    for key in ["lowerValue", "upperValue"] {
+        let outcome = bound(references, element, key).and_then(|target| {
+            match target {
+                None => Ok(()),
+                Some(target) if target.conforms_to("LiteralSpecification") => Ok(()),
+                Some(target) => Err(EvaluationError::unsupported(
+                    target.id(),
+                    format!("{key}: constancy and absence of side effects of nonliteral expressions are not verified"),
+                )),
+            }
+        });
+        match outcome {
+            Err(error @ EvaluationError::Invalid { .. }) => return Err(error),
+            Err(error) => unknown = Some(error),
+            Ok(()) => {}
+        }
+    }
+    match unknown {
+        Some(error) => Err(error),
+        None => Ok(()),
+    }
+}
+
 fn string_expression_operands(
     references: &ReferenceIndex<'_>,
     expression: ElementRef<'_>,
@@ -676,6 +707,21 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<crate::StructuralDiagnos
             })
         })
         .collect::<Vec<_>>();
+    for element in references.model().elements().filter(|element| element.conforms_to("MultiplicityElement")) {
+        if let Err(error) = bound_expression_guarantees(references, element) {
+            for (rule, invalid_code, unknown_code) in [
+                ("value_specification_constant", "MDE_MULTIPLICITY_CONSTANT_INVALID", "MDE_MULTIPLICITY_CONSTANT_UNVERIFIED"),
+                ("value_specification_no_side_effects", "MDE_MULTIPLICITY_NO_SIDE_EFFECTS_INVALID", "MDE_MULTIPLICITY_NO_SIDE_EFFECTS_UNVERIFIED"),
+            ] {
+                issues.push(crate::StructuralDiagnostic {
+                    severity: if error.is_unsupported() { crate::StructuralSeverity::Warning } else { crate::StructuralSeverity::Error },
+                    code: if error.is_unsupported() { unknown_code } else { invalid_code },
+                    subject_id: element.id().into(),
+                    message: format!("MultiplicityElement-{rule}: {error}"),
+                });
+            }
+        }
+    }
     for expression in references.model().elements().filter(|element| element.conforms_to("StringExpression")) {
         let (severity, code, message) = match string_expression_operands(references, expression) {
             Ok(true) => continue,

@@ -406,3 +406,122 @@ fn extension_end_explicit_bounds_obey_inherited_value_invariants() -> Result {
     }
     Ok(())
 }
+
+fn expression_guarantee_issues(project: &Project) -> Result<Vec<Value>> {
+    let response: Value = serde_json::from_str(&validate_uml_model(
+        &json!({"api_version":1,"model":project}).to_string(),
+    )?)?;
+    Ok(response["diagnostics"].as_array().ok_or("diagnostics")?.iter()
+        .filter(|issue| issue["subject_id"] == "property" && issue["message"].as_str()
+            .is_some_and(|message| message.starts_with("MultiplicityElement-value_specification_")))
+        .cloned().collect())
+}
+
+#[test]
+fn multiplicity_constancy_and_purity_are_vacuous_for_absent_or_literal_bounds() -> Result {
+    for rooted in [false, true] {
+        let mut project = document(rooted)?;
+        assert!(expression_guarantee_issues(&project)?.is_empty());
+        // LiteralNull is not a legal numeric bound, but is still literal:
+        // these two implications must not be confused with numeric constraints.
+        kind(&mut project, "lower", "uml.literal_null")?;
+        assert!(expression_guarantee_issues(&project)?.is_empty());
+        expect(&project, INVALID)?;
+        for key in ["lowerValue", "upperValue"] {
+            author(&mut project, "property", key, Value::Null)?;
+        }
+        assert!(expression_guarantee_issues(&project)?.is_empty());
+    }
+    Ok(())
+}
+
+#[test]
+fn nonliteral_multiplicity_never_claims_constancy_or_purity_from_expression_text() -> Result {
+    for rooted in [false, true] {
+        for bound in ["lower", "upper"] {
+            for expression_kind in ["uml.opaque_expression", "uml.expression", "uml.future_value"] {
+                let mut project = document(rooted)?;
+                kind(&mut project, bound, expression_kind)?;
+                author(&mut project, bound, "body", json!(["1"]))?;
+                author(&mut project, bound, "language", json!(["OCL"]))?;
+                let found = expression_guarantee_issues(&project)?;
+                assert_eq!(found.len(), 2, "{found:#?}");
+                for (issue, code) in found.iter().zip([
+                    "MDE_MULTIPLICITY_CONSTANT_UNVERIFIED",
+                    "MDE_MULTIPLICITY_NO_SIDE_EFFECTS_UNVERIFIED",
+                ]) {
+                    assert_eq!(issue["code"], code, "{found:#?}");
+                    assert_eq!(issue["severity"], "warning", "{found:#?}");
+                }
+                for format in [Format::Json, Format::Protobuf] {
+                    assert_eq!(expression_guarantee_issues(&decode(&encode(&project, format)?, format)?)?, found);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn invalid_bound_contract_dominates_unknown_expression_guarantees_in_either_order() -> Result {
+    for unknown_lower in [false, true] {
+        let mut project = document(false)?;
+        let (unknown_key, invalid_key) = if unknown_lower {
+            ("lowerValue", "upperValue")
+        } else {
+            ("upperValue", "lowerValue")
+        };
+        author(&mut project, "property", unknown_key, json!({"href":"external.uml#Bound"}))?;
+        let unknown = expression_guarantee_issues(&project)?;
+        assert_eq!(unknown.len(), 2);
+        assert_eq!(unknown[0]["code"], "MDE_MULTIPLICITY_CONSTANT_UNVERIFIED");
+        for malformed in [json!(42), json!({"$ref":"missing"}), json!({"$ref":"class"}), json!({"href":42})] {
+            author(&mut project, "property", invalid_key, malformed)?;
+            let found = expression_guarantee_issues(&project)?;
+            assert_eq!(found.len(), 2, "{found:#?}");
+            assert_eq!(found[0]["code"], "MDE_MULTIPLICITY_CONSTANT_INVALID", "{found:#?}");
+            assert_eq!(found[1]["code"], "MDE_MULTIPLICITY_NO_SIDE_EFFECTS_INVALID", "{found:#?}");
+            assert!(found.iter().all(|issue| issue["severity"] == "error"), "{found:#?}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn multiplicity_expression_guarantees_recover_after_draft_repair() -> Result {
+    let mut project = document(true)?;
+    kind(&mut project, "upper", "uml.opaque_expression")?;
+    let before = project.clone();
+    assert_eq!(expression_guarantee_issues(&project)?.len(), 2);
+    assert_eq!(project.elements, before.elements);
+    assert_eq!(project.relations, before.relations);
+    kind(&mut project, "upper", "uml.literal_unlimited_natural")?;
+    assert!(expression_guarantee_issues(&project)?.is_empty());
+    for format in [Format::Json, Format::Protobuf] {
+        assert!(expression_guarantee_issues(&decode(&encode(&project, format)?, format)?)?.is_empty());
+    }
+    Ok(())
+}
+
+#[test]
+fn parameter_and_extension_end_inherit_nonliteral_bound_guarantees() -> Result {
+    for element_kind in ["uml.parameter", "uml.extension_end"] {
+        for rooted in [false, true] {
+            let mut project = document(rooted)?;
+            kind(&mut project, "property", element_kind)?;
+            assert!(expression_guarantee_issues(&project)?.is_empty());
+            kind(&mut project, "lower", "uml.opaque_expression")?;
+            let found = expression_guarantee_issues(&project)?;
+            assert_eq!(found.len(), 2, "{element_kind}: {found:#?}");
+            assert!(found.iter().all(|issue| issue["severity"] == "warning"));
+            project.relations.iter_mut().find(|relation| relation.id == "owns-upper")
+                .ok_or("upper ownership")?.from = "class".into();
+            let invalid = expression_guarantee_issues(&project)?;
+            assert_eq!(invalid.len(), 2, "{element_kind}: {invalid:#?}");
+            assert!(invalid.iter().all(|issue| issue["severity"] == "error"));
+            assert_eq!(invalid[0]["code"], "MDE_MULTIPLICITY_CONSTANT_INVALID");
+            assert_eq!(invalid[1]["code"], "MDE_MULTIPLICITY_NO_SIDE_EFFECTS_INVALID");
+        }
+    }
+    Ok(())
+}

@@ -83,6 +83,10 @@ Operation::only_body_for_query tem recorte publicado em
 `29bd166b536dc1f529ea145f1f12d7920c05aaa4` (E65).
 Quatro invariantes de limites de MultiplicityElement têm evidência e correção
 de Unknown publicadas em `fc150fb3c58c7dcfda427a8cc5c07e36f0226a33` (E66).
+Operation::at_most_one_return e as duas implicações de flags de derived_union
+têm evidência publicada em `a6ea98a11bb7f973bba08962003a34077d05a32b`
+(E67/E68). O gate amplo associado não está verde: 857 aprovados e três
+falhas reproduzidas no commit anterior, em diagram_visual_creation/indexing.
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -198,7 +202,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E66 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E68 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -1047,6 +1051,65 @@ de execução nova. E12–E66 possuem os gates delimitados nas seções seguinte
   constância nem ausência de efeitos colaterais, cujas linhas continuam A.
   Não certifica interpretação geral de ValueSpecification, autoria visual ou
   todos os contratos de multiplicidade das metaclasses especializadas.
+
+- **E67**: `semantics/operations.rs`, `owned_parameter_evidence`,
+  `checked_owned_parameters`, `at_most_one_return` e `validate`;
+  `operation_return_count.rs`, treze testes. Conta apenas Parameters possuídos
+  canonicamente com direction return; direction omitida usa o default in.
+  A projeção explícita de ownedParameter deve preservar ownership, membership
+  e ordem. Referências externas e metaclasses desconhecidas não viram coleção
+  vazia; dois retornos conhecidos bastam para refutar a obrigação mesmo diante
+  de incompletude. Valores malformados e contradições conhecidas continuam
+  Invalid, sem serem ocultados por dois retornos ou referências desconhecidas.
+  Os slots externos da projeção devem comportar os Parameters conhecidos antes,
+  entre e depois das âncoras locais; âncora local desconhecida não é slot livre.
+  Diagnósticos: `UML_OPERATION_AT_MOST_ONE_RETURN`,
+  `MDE_OPERATION_AT_MOST_ONE_RETURN_INVALID` e
+  `MDE_OPERATION_AT_MOST_ONE_RETURN_UNVERIFIED`. Tipo e multiplicidade do
+  parâmetro não alteram a contagem. O recorte não certifica Operation inteira.
+
+- **E68**: `semantics/property_contracts.rs`, `validate_property_rules`;
+  `property_derived_union.rs` e `property_invariants_flow.rs`. Evidência
+  individual das duas implicações `isDerivedUnion implies isReadOnly` e
+  `isDerivedUnion implies isDerived`, com os diagnósticos
+  `UML_PROPERTY_DERIVED_UNION_READ_ONLY` e
+  `UML_PROPERTY_DERIVED_UNION_DERIVED`. As tabelas-verdade cobrem ambas as
+  obrigações; flags omitidas usam false e escalares inválidos continuam erros
+  de contrato mesmo quando a implicação seria vacuamente verdadeira.
+  Validar os valores dessas flags não calcula a união derivada, seus membros
+  ou seus valores, nem prova a semântica geral de subsetting. Não certifica
+  Extension inteira: non_owned_end/metaclassEnd permanece U01/E28 Unsupported.
+
+### Evidência publicada de retornos de Operation e flags de união derivada
+
+Commit inspecionado: `a6ea98a11bb7f973bba08962003a34077d05a32b`.
+A linha Operation-at_most_one_return passa a **P/E67**, com **13/13 aprovados**
+no alvo operation_return_count do log `/tmp/return-count-final2-gate.log`.
+Os casos incluem modelos com/sem raiz, projeções parciais e externas,
+precedência de Invalid/violação diante de Unknown, rejeição atômica do segundo
+retorno, reparo e roundtrip.
+
+As duas linhas de derived_union passam de R/E06 a **P/E68**. O gate dedicado
+`/tmp/property-derived-union-final.log` tem **8/8 aprovados**:
+property_derived_union 3 e property_invariants_flow 5. Inclui defaults,
+escalares malformados, edição rejeitada, drafts importados com os dois
+diagnósticos, reparo e reabertura. São duas obrigações de flags, não uma
+implementação do cálculo de união derivada.
+
+O gate amplo `/tmp/return-count-final2-gate.log` registra **857 aprovados e
+3 falhas**, portanto **não está verde**. Falharam
+`fourteen_presentations_preserve_normative_diagram_identity_and_context` e
+`behavior_nodes_use_canonical_composite_owners_and_transactional_commands`
+em diagram_visual_creation, e
+`uml_root_namespace_edit_and_reopen_flow_preserves_canonical_identity`
+em indexing. As três falhas foram reproduzidas no commit anterior
+`fc150fb3c58c7dcfda427a8cc5c07e36f0226a33`, conforme
+`/tmp/return-count-baseline.log` e `/tmp/return-count-baseline-indexing.log`.
+A reprodução identifica falhas preexistentes, mas não transforma o gate amplo
+em aprovação. Gates anteriores à publicação, sem rerun no SHA publicado nem
+execução nova por esta matriz. Regressões repetidas não somam cobertura
+normativa; não se certificam suíte integral, Extension inteira, UI, geração,
+interchange ou conformidade UML completa.
 
 ### Evidência publicada dos limites de MultiplicityElement
 
@@ -2096,7 +2159,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `Operation-at_most_one_return`
 
-- Metaclass: `Operation`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `Operation`. Estado: **P**. Evidência: E67; commit `a6ea98a11bb7f973bba08962003a34077d05a32b`.
 - OCL publicado: `self.ownedParameter->select(direction = ParameterDirectionKind::return)->size() <= 1`.
 
 #### `Operation-only_body_for_query`
@@ -2161,7 +2224,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `Property-derived_union_is_read_only`
 
-- Metaclass: `Property`. Estado: **R**. Evidência: E06.
+- Metaclass: `Property`. Estado: **P**. Evidência: E68; commit `a6ea98a11bb7f973bba08962003a34077d05a32b`; apenas implicação de flags.
 - OCL publicado: `isDerivedUnion implies isReadOnly`.
 
 #### `Property-multiplicity_of_composite`
@@ -2186,7 +2249,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `Property-derived_union_is_derived`
 
-- Metaclass: `Property`. Estado: **R**. Evidência: E06.
+- Metaclass: `Property`. Estado: **P**. Evidência: E68; commit `a6ea98a11bb7f973bba08962003a34077d05a32b`; apenas implicação de flags.
 - OCL publicado: `isDerivedUnion implies isDerived`.
 
 #### `Property-deployment_target`
