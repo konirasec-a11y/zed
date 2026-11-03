@@ -1,0 +1,84 @@
+use bellatrix_mde::{RelationshipRouting, Style, commands::Command};
+use bellatrix_project::{ProjectId, ProjectService};
+use cordis::{Context, Event, event::responder};
+use std::{convert::Infallible, io, sync::Arc};
+
+#[derive(Clone, Debug)]
+pub struct ModelingSetViewStyleRequested {
+    pub project_id: ProjectId,
+    pub diagram_id: String,
+    pub view_id: String,
+    pub style: Style,
+    pub expected_revision: u64,
+}
+pub struct ModelingSetViewStyle;
+impl Event for ModelingSetViewStyle {
+    const NAME: &'static str = "bellatrix.mde.set-view-style.v1";
+    type Args = ModelingSetViewStyleRequested;
+    type Output = Result<u64, String>;
+}
+
+#[derive(Clone, Debug)]
+pub struct ModelingSetViewRoutingRequested {
+    pub project_id: ProjectId,
+    pub diagram_id: String,
+    pub view_id: String,
+    pub routing: RelationshipRouting,
+    pub expected_revision: u64,
+}
+pub struct ModelingSetViewRouting;
+impl Event for ModelingSetViewRouting {
+    const NAME: &'static str = "bellatrix.mde.set-view-routing.v1";
+    type Args = ModelingSetViewRoutingRequested;
+    type Output = Result<u64, String>;
+}
+
+pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Result<(), io::Error> {
+    let service = Arc::clone(&projects);
+    let _style = context
+        .on::<ModelingSetViewStyle, _>(responder(
+            move |context: Context, request: ModelingSetViewStyleRequested| {
+                let projects = Arc::clone(&service);
+                async move {
+                    let result = crate::mutation::execute(
+                        &context,
+                        &projects,
+                        request.project_id,
+                        request.expected_revision,
+                        Command::SetViewStyle {
+                            diagram_id: request.diagram_id,
+                            view_id: request.view_id,
+                            style: request.style,
+                        },
+                    )
+                    .await;
+                    Ok::<_, Infallible>(Some(result))
+                }
+            },
+        ))
+        .map_err(|error| io::Error::other(error.to_string()))?;
+    let service = Arc::clone(&projects);
+    let _routing = context
+        .on::<ModelingSetViewRouting, _>(responder(
+            move |context: Context, request: ModelingSetViewRoutingRequested| {
+                let projects = Arc::clone(&service);
+                async move {
+                    let result = crate::mutation::execute(
+                        &context,
+                        &projects,
+                        request.project_id,
+                        request.expected_revision,
+                        Command::SetViewRouting {
+                            diagram_id: request.diagram_id,
+                            view_id: request.view_id,
+                            routing: request.routing,
+                        },
+                    )
+                    .await;
+                    Ok::<_, Infallible>(Some(result))
+                }
+            },
+        ))
+        .map_err(|error| io::Error::other(error.to_string()))?;
+    Ok(())
+}

@@ -759,9 +759,15 @@ fn tool_entry(
 
 pub struct MdeRightPanel {
     state: PanelState,
-    name_input: Entity<InputField>,
     editing_id: Option<String>,
     property_inputs: HashMap<String, Entity<InputField>>,
+    property_drafts: HashMap<String, HashMap<String, Entity<InputField>>>,
+    style_target_id: Option<(String, String)>,
+    pub(crate) style_listeners: HashMap<(String, String), Vec<Subscription>>,
+    pub(crate) style_revisions: HashMap<(String, String), u64>,
+    pub(crate) style_baselines: HashMap<(String, String), bellatrix_mde::Style>,
+    pub(crate) style_inputs: HashMap<(String, String), HashMap<String, Entity<InputField>>>,
+    pub(crate) inspector_styles_open: bool,
     collapsed_elements: HashSet<String>,
     explorer_open: bool,
     inspector_open: bool,
@@ -771,20 +777,24 @@ pub struct MdeRightPanel {
 impl MdeRightPanel {
     pub fn new(
         item: Entity<MdeWorkbenchItem>,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let name_input =
-            cx.new(|cx| InputField::new(window, cx, "Element name").label_min_width(px(0.0)));
         Self {
             state: PanelState::new(item, DockPosition::Right, 230.0, cx),
-            name_input,
             editing_id: None,
             property_inputs: HashMap::new(),
+            property_drafts: HashMap::new(),
+            style_baselines: HashMap::new(),
+            style_inputs: HashMap::new(),
+            style_revisions: HashMap::new(),
+            style_target_id: None,
+            style_listeners: HashMap::new(),
+            inspector_styles_open: true,
             collapsed_elements: HashSet::new(),
             explorer_open: true,
             inspector_open: true,
-            inspector_documentation_open: false,
+            inspector_documentation_open: true,
             inspector_advanced_open: false,
         }
     }
@@ -1020,11 +1030,26 @@ impl Render for MdeRightPanel {
         }
         // Preserve in-progress editing when a model revision triggers a render.
         if self.editing_id != selected_id {
+            if self
+                .property_inputs
+                .values()
+                .any(|input| input.read(cx).focus_handle(cx).contains_focused(window, cx))
+            {
+                window.focus(&self.state.focus, cx);
+            }
+            if let Some(previous) = self.editing_id.take() {
+                self.property_drafts
+                    .insert(previous, std::mem::take(&mut self.property_inputs));
+            }
             self.editing_id = selected_id.clone();
-            self.property_inputs.clear();
+            self.property_inputs = selected_id
+                .as_ref()
+                .and_then(|id| self.property_drafts.remove(id))
+                .unwrap_or_default();
             if let Some(inspection) = &inspection {
                 for property in &inspection.properties {
-                    if !property.editable
+                    if self.property_inputs.contains_key(&property.path)
+                        || !property.editable
                         || !matches!(
                             property.editor,
                             PropertyEditor::Text
@@ -1034,23 +1059,136 @@ impl Render for MdeRightPanel {
                     {
                         continue;
                     }
-                    let editor = if property.path == "name" {
-                        self.name_input.clone()
-                    } else {
-                        cx.new(|cx| {
-                            InputField::new(window, cx, &property.label).label_min_width(px(0.0))
-                        })
-                    };
+                    let editor = cx.new(|cx| {
+                        InputField::new(window, cx, &property.label).label_min_width(px(0.0))
+                    });
                     let text = property
                         .value
                         .as_str()
                         .map_or_else(|| property.value.to_string(), str::to_owned);
-                    editor.update(cx, |field, cx| field.set_text(&text, window, cx));
+                    editor.update(cx, |field, cx| {
+                        if property.editor == PropertyEditor::Multiline {
+                            field.editor().set_multiline(Some(12), window, cx);
+                        }
+                        field.set_text(&text, window, cx);
+                    });
                     self.property_inputs.insert(property.path.clone(), editor);
                 }
             }
         }
-        let inspector_rows = render_inspector(
+        let selected_view = item.read(cx).selected_view.clone();
+        let style_target = snapshot.as_ref().and_then(|snapshot| {
+            let diagram = snapshot
+                .section
+                .diagrams
+                .iter()
+                .find(|diagram| Some(diagram.id.as_str()) == active_diagram.as_deref())?;
+            let view = diagram
+                .views
+                .iter()
+                .find(|view| Some(view.id.as_str()) == selected_view.as_deref())?;
+            let is_edge = snapshot
+                .section
+                .relations
+                .iter()
+                .any(|relation| view.subject.as_deref() == Some(relation.id.as_str()));
+            Some((diagram.id.as_str(), view, is_edge))
+        });
+        let style_target_id =
+            style_target.map(|(diagram_id, view, _)| (diagram_id.to_owned(), view.id.clone()));
+        if self.style_target_id != style_target_id {
+            if self
+                .style_target_id
+                .as_ref()
+                .and_then(|key| self.style_inputs.get(key))
+                .is_some_and(|inputs| {
+                    inputs
+                        .values()
+                        .any(|input| input.read(cx).focus_handle(cx).contains_focused(window, cx))
+                })
+            {
+                window.focus(&self.state.focus, cx);
+            }
+            self.style_target_id = style_target_id;
+        }
+        let mut inspector_rows = if let Some((diagram_id, view, _)) = style_target {
+            let key = (diagram_id.to_owned(), view.id.clone());
+            if !self.style_inputs.contains_key(&key) {
+                let inputs = crate::style_editor::inputs_for_style(&view.style, window, cx);
+                let listeners = inputs
+                    .values()
+                    .map(|input| {
+                        let owner = cx.weak_entity();
+                        input.read(cx).editor().clone().subscribe(
+                            Box::new(move |event, _, cx| {
+                                if event == ErasedEditorEvent::BufferEdited {
+                                    let owner = owner.clone();
+                                    cx.defer(move |cx| {
+                                        if let Err(error) = owner.update(cx, |_, cx| cx.notify()) {
+                                            eprintln!("MDE style input refresh failed: {error}");
+                                        }
+                                    });
+                                }
+                            }),
+                            window,
+                            cx,
+                        )
+                    })
+                    .collect();
+                self.style_listeners.insert(key.clone(), listeners);
+                self.style_inputs.insert(key.clone(), inputs);
+            }
+            let dirty = self.style_baselines.get(&key).is_some_and(|previous| {
+                self.style_inputs.get(&key).is_some_and(|inputs| {
+                    crate::style_editor::style_inputs_dirty(inputs, previous, cx)
+                        && crate::style_editor::style_inputs_dirty(inputs, &view.style, cx)
+                })
+            });
+            if !dirty {
+                if let (Some(previous), Some(inputs)) =
+                    (self.style_baselines.get(&key), self.style_inputs.get(&key))
+                {
+                    crate::style_editor::sync_style_inputs(
+                        inputs,
+                        previous,
+                        &view.style,
+                        window,
+                        cx,
+                    );
+                }
+                self.style_baselines.insert(key.clone(), view.style.clone());
+                self.style_revisions.insert(
+                    key.clone(),
+                    snapshot.as_ref().map_or(0, |snapshot| snapshot.revision),
+                );
+            }
+            let revision = self.style_revisions.get(&key).copied().unwrap_or(0);
+            let conflict = snapshot
+                .as_ref()
+                .is_some_and(|snapshot| snapshot.revision != revision);
+            crate::style_editor::render_styles(
+                style_target,
+                item.clone(),
+                self.style_inputs.get(&key).unwrap_or(&HashMap::new()),
+                revision,
+                conflict,
+                self.inspector_styles_open,
+                window,
+                cx,
+            )
+        } else {
+            crate::style_editor::render_styles(
+                None,
+                item.clone(),
+                &HashMap::new(),
+                0,
+                false,
+                self.inspector_styles_open,
+                window,
+                cx,
+            )
+        };
+        inspector_rows.extend(render_inspector(
             inspection.as_ref(),
             item.clone(),
             &self.property_inputs,
@@ -1058,7 +1196,7 @@ impl Render for MdeRightPanel {
             self.inspector_advanced_open,
             window,
             cx,
-        );
+        ));
         let delete_item = item.clone();
         let project_name = snapshot.as_ref().map_or_else(
             || "Project unavailable".to_owned(),

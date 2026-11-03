@@ -93,8 +93,18 @@ pub enum PathSegment {
     },
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RelationshipRouting {
+    Straight,
+    Automatic,
+    Curve,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Style {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub routing: Option<RelationshipRouting>,
     #[serde(default)]
     pub fill: Option<String>,
     #[serde(default)]

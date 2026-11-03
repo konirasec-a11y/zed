@@ -20,6 +20,7 @@ impl RenderOnce for UmlInterfaceBall {
         let classifier = self.classifier;
         let palette = Palette::current(cx);
         let scale = classifier.view_scale;
+        let appearance = classifier.appearance.clone();
         let interactions = classifier.member_interactions();
         let contents = ClassifierContents {
             attributes: classifier.attributes.len(),
@@ -41,14 +42,17 @@ impl RenderOnce for UmlInterfaceBall {
             )
             .into_any_element(),
             None => div()
-                .text_size(px(12.0 * scale))
-                .text_color(rgb(palette.text))
+                .text_size(px(appearance.font_size(12.0, scale)))
+                .text_color(appearance.text(palette.text))
                 .child(classifier.title)
                 .into_any_element(),
         };
         let edit_title = classifier.edit_title;
-        let stroke = rgb(palette.diagram_outline(classifier.selected));
+        let stroke = appearance.stroke(palette, classifier.selected);
         div()
+            .when_some(appearance.0.font_family.clone(), |element, family| {
+                element.font_family(family)
+            })
             .size_full()
             .relative()
             .when(classifier.selected, |root| {
@@ -69,9 +73,9 @@ impl RenderOnce for UmlInterfaceBall {
                     .w(units(layout.radius * 2.0))
                     .h(units(layout.radius * 2.0))
                     .rounded_full()
-                    .border_1()
+                    .border(px(appearance.width(1.0, scale, classifier.selected)))
                     .border_color(stroke)
-                    .bg(rgb(palette.canvas)),
+                    .bg(appearance.fill(palette.canvas)),
             )
             .when_some(classifier.header.applied_stereotype, |root, stereotype| {
                 root.child(
@@ -84,8 +88,8 @@ impl RenderOnce for UmlInterfaceBall {
                         .flex()
                         .items_center()
                         .justify_center()
-                        .text_size(px(10.0 * scale))
-                        .text_color(rgb(palette.muted))
+                        .text_size(px(appearance.font_size(10.0, scale)))
+                        .text_color(appearance.text(palette.muted))
                         .child(stereotype),
                 )
             })

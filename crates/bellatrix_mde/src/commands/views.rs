@@ -166,12 +166,12 @@ mod tests {
             "elements": [{"id": "a", "kind": "uml.class", "name": "A"},
                 {"id": "b", "kind": "uml.class", "name": "B"}],
             "relations": [{"id": "link", "kind": "uml.association", "from": "a", "to": "b",
-                "properties": {"routing": "automatic"}}],
+                "properties": {}}],
             "diagrams": [{"id": "one", "name": "One", "uml_di_type": "UMLClassDiagram", "views": [
                 {"id": "a-first", "subject": "a", "geometry": {"kind": "rect", "x": 10.0, "y": 20.0, "width": 180.0, "height": 100.0}},
                 {"id": "a-second", "subject": "a", "geometry": {"kind": "rect", "x": 10.0, "y": 220.0, "width": 180.0, "height": 100.0}},
                 {"id": "b-first", "subject": "b", "geometry": {"kind": "rect", "x": 400.0, "y": 20.0, "width": 180.0, "height": 100.0}},
-                {"id": "link-first", "subject": "link", "geometry": {"kind": "path", "start": {"x":190.0,"y":70.0},
+                {"id": "link-first", "subject": "link", "style": {"routing":"automatic"}, "geometry": {"kind": "path", "start": {"x":190.0,"y":70.0},
                     "segments": [{"kind":"line","to":{"x":400.0,"y":70.0}}]}}
             ]}]
         }))?;
@@ -263,13 +263,10 @@ mod tests {
 
     fn manual_copies() -> Result<Project, Box<dyn std::error::Error>> {
         let mut project = fixture()?;
-        project
-            .relations
-            .first_mut()
-            .ok_or("relation missing")?
-            .properties
-            .clear();
         let diagram = project.diagrams.first_mut().ok_or("diagram missing")?;
+        for view in &mut diagram.views {
+            view.style.routing = None;
+        }
         let mut edge = diagram
             .views
             .iter()

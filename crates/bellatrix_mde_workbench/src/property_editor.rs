@@ -3,7 +3,9 @@ use crate::{
     MdeWorkbenchItem, WorkbenchPalette,
     panels::{MdeRightPanel, element_glyph},
 };
-use bellatrix_mde::{ElementInspector, InspectorProperty, PropertyEditor, UmlType};
+use bellatrix_mde::{
+    ElementInspector, InspectorProperty, ModelingRelationKind, PropertyEditor, UmlType,
+};
 use bellatrix_ui_panels::PropertyRow;
 use bellatrix_ui_symbols::glyph;
 use gpui::{AnyElement, Context, Entity, Focusable, IntoElement, Window, div, prelude::*, px, svg};
@@ -24,6 +26,14 @@ fn display(value: &Value) -> String {
 fn display_kind(kind: &str) -> &str {
     UmlType::from_kind(kind)
         .and_then(UmlType::metaclass)
+        .or_else(|| {
+            ModelingRelationKind::BASIC
+                .iter()
+                .chain(ModelingRelationKind::ADVANCED)
+                .chain(ModelingRelationKind::PACKAGES)
+                .find(|relation| relation.model_kind() == kind)
+                .map(|relation| relation.label())
+        })
         .unwrap_or(kind)
 }
 
@@ -38,6 +48,27 @@ fn section_title(group: &str) -> AnyElement {
                 .size(LabelSize::XSmall)
                 .color(Color::Muted),
         )
+        .into_any_element()
+}
+
+pub(crate) fn compact_row(
+    label: impl Into<gpui::SharedString>,
+    control: impl IntoElement,
+) -> AnyElement {
+    div()
+        .w_full()
+        .flex()
+        .items_center()
+        .gap_2()
+        .px_3()
+        .child(
+            div().w(px(112.0)).flex_none().child(
+                Label::new(label)
+                    .size(LabelSize::XSmall)
+                    .color(Color::Muted),
+            ),
+        )
+        .child(div().flex_1().min_w_0().child(control))
         .into_any_element()
 }
 
@@ -60,6 +91,47 @@ fn property_row(
                 display_kind(&kind).to_owned(),
             ))
             .into_any_element();
+    }
+    if property.editor == PropertyEditor::Multiline && property.editable {
+        if let Some(input) = inputs.get(&path) {
+            let editor = input.clone();
+            let target = item.clone();
+            let palette = WorkbenchPalette::current(cx);
+            let text_area = input.read(cx).editor().render(window, cx);
+            return div()
+                .px_3()
+                .py_1()
+                .w_full()
+                .flex()
+                .flex_col()
+                .gap_1()
+                .child(
+                    div()
+                        .min_h(px(112.0))
+                        .w_full()
+                        .p_2()
+                        .border_1()
+                        .border_color(palette.border)
+                        .bg(palette.surface)
+                        .rounded_sm()
+                        .child(text_area),
+                )
+                .child(
+                    Button::new("mde-save-documentation", "Save documentation").on_click(
+                        move |_, _, cx| {
+                            let text = editor.read(cx).text(cx);
+                            target.update(cx, |workbench, cx| {
+                                workbench.set_selected_property(
+                                    path.clone(),
+                                    Value::String(text),
+                                    cx,
+                                )
+                            });
+                        },
+                    ),
+                )
+                .into_any_element();
+        }
     }
     let control: AnyElement = match property.editor {
         PropertyEditor::Text | PropertyEditor::Multiline | PropertyEditor::Number
@@ -149,11 +221,22 @@ fn property_row(
             .into_any_element()
         }
         _ => {
-            return PropertyRow::new(property.label.clone(), display(&property.value))
-                .into_any_element();
+            return compact_row(
+                property.label.clone(),
+                Label::new(display(&property.value)).size(LabelSize::Small),
+            );
         }
     };
-    PropertyRow::with_control(property.label.clone(), control).into_any_element()
+    if property.editor == PropertyEditor::Multiline {
+        div()
+            .px_3()
+            .py_1()
+            .w_full()
+            .child(control)
+            .into_any_element()
+    } else {
+        compact_row(property.label.clone(), control)
+    }
 }
 
 fn is_general(path: &str) -> bool {
@@ -177,6 +260,10 @@ fn is_general(path: &str) -> bool {
             | "properties.sourceRole"
             | "properties.targetRole"
             | "properties.navigable"
+            | "properties.isAbstract"
+            | "properties.isFinalSpecialization"
+            | "properties.isLeaf"
+            | "properties.isActive"
     )
 }
 
@@ -205,7 +292,7 @@ pub(crate) fn render_inspector(
     let mut children = vec![
         div()
             .px_3()
-            .py_3()
+            .py_1()
             .w_full()
             .min_w_0()
             .flex()
@@ -216,7 +303,7 @@ pub(crate) fn render_inspector(
             .child(
                 svg()
                     .data(glyph(element_glyph(&inspector.kind)))
-                    .size(px(28.0))
+                    .size(px(20.0))
                     .flex_none()
                     .text_color(palette.muted),
             )
@@ -235,13 +322,13 @@ pub(crate) fn render_inspector(
                     ),
             )
             .into_any_element(),
-        section_title("General"),
+        section_title("Properties"),
     ];
     // Keep every schema field reachable without letting uncommon metadata bury the primary controls.
     for property in inspector
         .properties
         .iter()
-        .filter(|property| is_general(&property.path))
+        .filter(|property| is_general(&property.path) && property.path != "kind")
     {
         children.push(property_row(property, &item, inputs, window, cx));
     }
@@ -372,6 +459,11 @@ mod tests {
         assert_eq!(display_kind("rust.trait"), "Interface");
         assert_eq!(display_kind("rust.function"), "Operation");
         assert_eq!(display_kind("custom.type"), "custom.type");
+        assert_eq!(display_kind("uml.association"), "Association");
+        assert_eq!(
+            display_kind("uml.interface_realization"),
+            "Interface Realization"
+        );
     }
 
     #[test]
@@ -390,15 +482,14 @@ mod tests {
             "properties.sourceMultiplicity",
             "properties.targetRole",
             "properties.navigable",
+            "properties.isAbstract",
+            "properties.isFinalSpecialization",
+            "properties.isLeaf",
+            "properties.isActive",
         ] {
             assert!(is_general(path));
         }
-        for path in [
-            "id",
-            "description",
-            "properties.isAbstract",
-            "properties.custom",
-        ] {
+        for path in ["id", "description", "properties.custom"] {
             assert!(!is_general(path));
         }
     }

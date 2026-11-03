@@ -6,6 +6,7 @@ mod members;
 mod name_expression;
 mod quick_edit;
 mod validation;
+mod view_style;
 mod views;
 
 pub use kinds::{ModelingElementKind, ModelingTool};
@@ -66,6 +67,16 @@ pub enum Command {
     RemoveView {
         diagram_id: String,
         view_id: String,
+    },
+    SetViewStyle {
+        diagram_id: String,
+        view_id: String,
+        style: Style,
+    },
+    SetViewRouting {
+        diagram_id: String,
+        view_id: String,
+        routing: crate::RelationshipRouting,
     },
     MoveView {
         view_id: String,
@@ -159,6 +170,16 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
             diagram_id,
             view_id,
         } => views::remove(&mut section, diagram_id, view_id)?,
+        Command::SetViewStyle {
+            diagram_id,
+            view_id,
+            style,
+        } => view_style::set_style(&mut section, diagram_id, view_id, style)?,
+        Command::SetViewRouting {
+            diagram_id,
+            view_id,
+            routing,
+        } => view_style::set_routing(&mut section, diagram_id, view_id, *routing)?,
         Command::MoveView { view_id, dx, dy } => move_view(&mut section, view_id, *dx, *dy)?,
         Command::ResizeView {
             view_id,
@@ -358,7 +379,6 @@ fn create_relation(
         project_id,
     )?;
     let mut properties = std::collections::BTreeMap::new();
-    properties.insert("routing".into(), serde_json::json!("automatic"));
     let (semantic_kind, aggregation) = relation_kind_for_creation(kind);
     if let Some(aggregation) = aggregation {
         properties.insert("end1Aggregation".into(), serde_json::json!(aggregation));
@@ -388,7 +408,10 @@ fn create_relation(
         subject: Some(id),
         label: None,
         geometry,
-        style: Style::default(),
+        style: Style {
+            routing: Some(crate::RelationshipRouting::Automatic),
+            ..Style::default()
+        },
         z_index,
     });
     reroute_relationships(section, diagram_id);

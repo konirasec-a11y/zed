@@ -1,10 +1,10 @@
 //! Non-classifier notations share editing, but not the classifier silhouette.
-use crate::inline_edit::UmlInlineNameEditor;
+use crate::{class::ViewAppearance, inline_edit::UmlInlineNameEditor};
 use bellatrix_design_system::Palette;
 use bellatrix_mde::{UmlNotation, folded_note_layout, uml_header, uml_notation};
 use gpui::{
     App, Bounds, Entity, InteractiveElement, IntoElement, MouseButton, PathBuilder, Pixels,
-    RenderOnce, SharedString, Window, canvas, div, point, prelude::*, px, rgb, svg,
+    RenderOnce, SharedString, Window, canvas, div, point, prelude::*, px,
 };
 use std::rc::Rc;
 use ui_input::InputField;
@@ -17,6 +17,7 @@ pub struct UmlFigure {
     applied_stereotype: Option<SharedString>,
     selected: bool,
     scale: f32,
+    appearance: ViewAppearance,
     edit: Option<Action>,
     editor: Option<(Entity<InputField>, Action, Action)>,
 }
@@ -39,9 +40,14 @@ impl UmlFigure {
             applied_stereotype: None,
             selected: false,
             scale: 1.0,
+            appearance: ViewAppearance::default(),
             edit: None,
             editor: None,
         }
+    }
+    pub fn view_style(mut self, style: &bellatrix_mde::Style) -> Self {
+        self.appearance = ViewAppearance(style.clone());
+        self
     }
     pub fn stereotype(mut self, value: impl Into<SharedString>) -> Self {
         let value = value.into();
@@ -79,6 +85,7 @@ fn paint_folded_paper(
     scale: f32,
     palette: Palette,
     selected: bool,
+    appearance: &ViewAppearance,
     window: &mut Window,
 ) {
     let layout = folded_note_layout(
@@ -97,14 +104,14 @@ fn paint_folded_paper(
             bounds.origin.y + px(position.y as f32 * scale),
         )
     });
-    let stroke = rgb(palette.diagram_outline(selected));
+    let stroke = appearance.stroke(palette, selected);
     let mut fill = PathBuilder::fill();
     fill.add_polygon(&outline, true);
     match fill.build() {
-        Ok(path) => window.paint_path(path, rgb(palette.panel)),
+        Ok(path) => window.paint_path(path, appearance.fill(palette.panel)),
         Err(error) => log::error!("UML paper fill: {error}"),
     }
-    let mut border = PathBuilder::stroke(px(scale));
+    let mut border = PathBuilder::stroke(px(appearance.width(1.0, scale, selected)));
     border.add_polygon(&outline, true);
     border.add_polygon(&fold, false);
     match border.build() {
@@ -117,7 +124,9 @@ impl RenderOnce for UmlFigure {
         let palette = Palette::current(cx);
         let scale = self.scale;
         let selected = self.selected;
-        let border = rgb(palette.diagram_outline(selected));
+        let appearance = self.appearance;
+        let font_family = appearance.0.font_family.clone();
+        let border = appearance.stroke(palette, selected);
         let title: gpui::AnyElement = if let Some((field, confirm, cancel)) = self.editor {
             UmlInlineNameEditor::new(
                 field,
@@ -132,8 +141,8 @@ impl RenderOnce for UmlFigure {
         let title_area = div()
             .id("uml-figure-title")
             .min_w_0()
-            .text_size(px(12.0 * scale))
-            .text_color(rgb(palette.text))
+            .text_size(px(appearance.font_size(12.0, scale)))
+            .text_color(appearance.text(palette.text))
             .font_weight(gpui::FontWeight::SEMIBOLD)
             .on_mouse_down(MouseButton::Left, move |event, window, cx| {
                 if event.click_count >= 2 {
@@ -144,7 +153,7 @@ impl RenderOnce for UmlFigure {
                 }
             })
             .child(title);
-        match uml_notation(&self.kind) {
+        let figure = match uml_notation(&self.kind) {
             UmlNotation::FoldedNote => div()
                 .size_full()
                 .relative()
@@ -152,7 +161,14 @@ impl RenderOnce for UmlFigure {
                     canvas(
                         move |_, _, _| (),
                         move |bounds, (), window, _| {
-                            paint_folded_paper(bounds, scale, palette, selected, window);
+                            paint_folded_paper(
+                                bounds,
+                                scale,
+                                palette,
+                                selected,
+                                &appearance,
+                                window,
+                            );
                         },
                     )
                     .absolute()
@@ -181,9 +197,9 @@ impl RenderOnce for UmlFigure {
                             .top(px(16.0 * scale))
                             .right_0()
                             .bottom_0()
-                            .border_1()
+                            .border(px(appearance.width(1.0, scale, selected)))
                             .border_color(border)
-                            .bg(rgb(palette.panel)),
+                            .bg(appearance.fill(palette.panel)),
                     )
                     .child(
                         div()
@@ -192,9 +208,9 @@ impl RenderOnce for UmlFigure {
                             .top_0()
                             .w(px(87.0 * scale))
                             .h(px(17.0 * scale))
-                            .border_1()
+                            .border(px(appearance.width(1.0, scale, selected)))
                             .border_color(border)
-                            .bg(rgb(palette.panel_alt)),
+                            .bg(appearance.fill(palette.panel_alt)),
                     )
                     .child(
                         div()
@@ -209,8 +225,8 @@ impl RenderOnce for UmlFigure {
                                 element.child(
                                     div()
                                         .whitespace_normal()
-                                        .text_size(px(10.0 * scale))
-                                        .text_color(rgb(palette.muted))
+                                        .text_size(px(appearance.font_size(10.0, scale)))
+                                        .text_color(appearance.text(palette.muted))
                                         .child(label),
                                 )
                             })
@@ -218,8 +234,8 @@ impl RenderOnce for UmlFigure {
                                 element.child(
                                     div()
                                         .whitespace_normal()
-                                        .text_size(px(10.0 * scale))
-                                        .text_color(rgb(palette.muted))
+                                        .text_size(px(appearance.font_size(10.0, scale)))
+                                        .text_color(appearance.text(palette.muted))
                                         .child(label),
                                 )
                             })
@@ -229,9 +245,9 @@ impl RenderOnce for UmlFigure {
             }
             UmlNotation::Port => div()
                 .size_full()
-                .border_1()
+                .border(px(appearance.width(1.0, scale, selected)))
                 .border_color(border)
-                .bg(rgb(palette.panel_alt))
+                .bg(appearance.fill(palette.panel_alt))
                 .child(
                     div()
                         .size_full()
@@ -246,15 +262,15 @@ impl RenderOnce for UmlFigure {
                 .size_full()
                 .flex()
                 .flex_col()
-                .border_1()
+                .border(px(appearance.width(1.0, scale, selected)))
                 .border_color(border)
-                .bg(rgb(palette.panel))
+                .bg(appearance.fill(palette.panel))
                 .child(
                     div()
                         .w_full()
                         .h(px(20.0 * scale))
                         .px_1()
-                        .border_b_1()
+                        .border_b(px(appearance.width(1.0, scale, false)))
                         .border_color(border)
                         .flex()
                         .items_center()
@@ -262,67 +278,105 @@ impl RenderOnce for UmlFigure {
                 )
                 .into_any_element(),
             UmlNotation::Frame => div()
+                .when(appearance.0.fill.is_some(), |element| {
+                    element.bg(appearance.fill(palette.canvas))
+                })
                 .size_full()
                 .relative()
-                .border_1()
+                .border(px(appearance.width(1.0, scale, selected)))
                 .border_color(border)
                 .child(
                     div()
                         .w(px(142.0 * scale))
                         .h(px(30.0 * scale))
-                        .border_r_1()
-                        .border_b_1()
+                        .border_r(px(appearance.width(1.0, scale, false)))
+                        .border_b(px(appearance.width(1.0, scale, false)))
                         .border_color(border)
                         .px_2()
                         .flex()
                         .items_center()
-                        .bg(rgb(palette.panel_alt))
+                        .bg(appearance.fill(palette.panel_alt))
                         .child(title_area),
                 )
                 .into_any_element(),
-            UmlNotation::AssociationDiamond => {
-                const DIAMOND: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><polygon points="50,4 96,50 50,96 4,50" fill="none" stroke="currentColor" stroke-width="3"/></svg>"#;
-                div()
-                    .size_full()
-                    .relative()
-                    .child(
-                        div()
-                            .absolute()
-                            .top_0()
-                            .left_0()
-                            .right_0()
-                            .bottom(px(22.0 * scale))
-                            .child(
-                                svg()
-                                    .data(DIAMOND)
-                                    .size_full()
-                                    .text_color(rgb(palette.diagram_outline(selected))),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .absolute()
-                            .left_0()
-                            .right_0()
-                            .bottom_0()
-                            .h(px(22.0 * scale))
-                            .flex()
-                            .justify_center()
-                            .items_center()
-                            .child(title_area),
-                    )
-                    .into_any_element()
-            }
+            UmlNotation::AssociationDiamond => div()
+                .size_full()
+                .relative()
+                .child(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .left_0()
+                        .right_0()
+                        .bottom(px(22.0 * scale))
+                        .child(
+                            canvas(
+                                |_, _, _| (),
+                                move |bounds, (), window, _| {
+                                    let width = f32::from(bounds.size.width);
+                                    let height = f32::from(bounds.size.height);
+                                    let vertices =
+                                        [(0.5, 0.04), (0.96, 0.5), (0.5, 0.96), (0.04, 0.5)].map(
+                                            |(x, y)| {
+                                                point(
+                                                    bounds.origin.x + px(x * width),
+                                                    bounds.origin.y + px(y * height),
+                                                )
+                                            },
+                                        );
+                                    if appearance.0.fill.is_some() {
+                                        let mut fill = PathBuilder::fill();
+                                        fill.add_polygon(&vertices, true);
+                                        match fill.build() {
+                                            Ok(path) => window
+                                                .paint_path(path, appearance.fill(palette.canvas)),
+                                            Err(error) => {
+                                                log::error!("UML association diamond fill: {error}")
+                                            }
+                                        }
+                                    }
+                                    let mut outline = PathBuilder::stroke(px(
+                                        appearance.width(1.0, scale, selected)
+                                    ));
+                                    outline.add_polygon(&vertices, true);
+                                    match outline.build() {
+                                        Ok(path) => window.paint_path(path, border),
+                                        Err(error) => {
+                                            log::error!("UML association diamond outline: {error}")
+                                        }
+                                    }
+                                },
+                            )
+                            .size_full(),
+                        ),
+                )
+                .child(
+                    div()
+                        .absolute()
+                        .left_0()
+                        .right_0()
+                        .bottom_0()
+                        .h(px(22.0 * scale))
+                        .flex()
+                        .justify_center()
+                        .items_center()
+                        .child(title_area),
+                )
+                .into_any_element(),
             _ => div()
                 .size_full()
-                .border_1()
+                .border(px(appearance.width(1.0, scale, selected)))
                 .border_color(border)
                 .flex()
                 .items_center()
                 .justify_center()
                 .child(title_area)
                 .into_any_element(),
-        }
+        };
+        div()
+            .size_full()
+            .when_some(font_family, |element, family| element.font_family(family))
+            .child(figure)
     }
 }
 

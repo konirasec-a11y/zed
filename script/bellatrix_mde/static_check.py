@@ -131,7 +131,11 @@ def check() -> None:
     assert ".child(figure)" in trigger
     for filename in ["class.rs", "figures.rs", "interface.rs"]:
         renderer = (ROOT / "crates/bellatrix_ui_uml/src" / filename).read_text(encoding="utf-8")
-        assert "palette.diagram_outline(" in renderer, filename
+        assert "appearance.stroke(" in renderer, filename
+    shared_style = (ROOT / "crates/bellatrix_ui_uml/src/class.rs").read_text(encoding="utf-8")
+    assert "palette.diagram_outline(false)" in shared_style
+    assert "rgb(palette.selection)" in shared_style
+    assert workbench.count(".view_style(&view.style)") == 3, "Every native shape/edge renderer must receive its View style"
 
     zed_main = (ROOT / "crates/zed/src/main.rs").read_text(encoding="utf-8")
     assert "initialize_workspace(app_state.clone(), cx);" in zed_main

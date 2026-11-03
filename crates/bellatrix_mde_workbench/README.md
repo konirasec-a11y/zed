@@ -56,3 +56,22 @@ Native acceptance remains required for this increment:
 
 Pure-helper tests, Cargo metadata and source checks do not establish native GPUI
 compilation or successful interaction. Keep that distinction in release reports.
+
+### View styles and routing
+
+Select a concrete canvas View to edit Styles. Fill, stroke, text color, font,
+font size, stroke width and opacity use the existing View style contract; blank
+fields inherit the theme. Apply uses the revision captured with the draft.
+Conflicting revisions preserve the draft and require explicit reload instead of
+silently overwriting a newer style. Selecting only a semantic model element does
+not choose an arbitrary representation to modify.
+
+Relationship Views offer Straight, Automatic and Curve routing. Curve authors a
+cubic path and moving an endpoint reanchors that representation without changing
+other Views of the same semantic relation. Orthogonal/rounded routing and direct
+control-point dragging remain pending. Straight self-relations retain a visible
+loop. UML arrowheads and relationship dashing remain derived from semantics.
+
+Documentation uses the native multiline editor; semantic properties still use
+the existing Inspector command boundary. These controls require the native
+acceptance scenarios above, independently of headless command tests.

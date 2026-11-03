@@ -30,6 +30,11 @@ mod delete_element;
 mod resize_view;
 mod set_property;
 mod view_edits;
+mod view_style;
+pub use view_style::{
+    ModelingSetViewRouting, ModelingSetViewRoutingRequested, ModelingSetViewStyle,
+    ModelingSetViewStyleRequested,
+};
 mod views;
 pub use delete_element::{ModelingDeleteElement, ModelingDeleteElementRequested};
 pub use resize_view::{ModelingResizeView, ModelingResizeViewRequested};

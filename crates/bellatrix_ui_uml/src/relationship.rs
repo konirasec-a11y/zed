@@ -1,4 +1,5 @@
 //! Paint the domain's relationship notation with native GPUI paths.
+use crate::class::ViewAppearance;
 use bellatrix_design_system::Palette;
 use bellatrix_mde::{RelationshipMarker, RelationshipPresentation, RelationshipStyle};
 use gpui::{
@@ -26,6 +27,7 @@ pub struct UmlRelationGlyph {
     selected: bool,
     labels: Option<RelationshipPresentation>,
     scale: f32,
+    appearance: ViewAppearance,
 }
 impl UmlRelationGlyph {
     pub fn new(
@@ -43,7 +45,12 @@ impl UmlRelationGlyph {
             selected: false,
             labels: None,
             scale: 1.0,
+            appearance: ViewAppearance::default(),
         }
+    }
+    pub fn view_style(mut self, style: &bellatrix_mde::Style) -> Self {
+        self.appearance = ViewAppearance(style.clone());
+        self
     }
     pub fn labels(mut self, presentation: RelationshipPresentation) -> Self {
         self.labels = Some(presentation);
@@ -72,6 +79,28 @@ impl UmlRelationGlyph {
         self
     }
 }
+
+fn relationship_dashes(dashed: bool, pattern: &[f64], scale: f32) -> Vec<Pixels> {
+    // UML 2.5.1 §7.7.4: presentation overrides must not erase the Dependency's
+    // dashed notation or change a solid Association/Generalization into one.
+    if !dashed {
+        return Vec::new();
+    }
+    let pattern = if !pattern.is_empty()
+        && pattern
+            .iter()
+            .all(|value| value.is_finite() && *value > 0.0 && *value <= 1000.0)
+    {
+        pattern
+    } else {
+        &[6.0, 5.0]
+    };
+    pattern
+        .iter()
+        .map(|value| px(*value as f32 * scale))
+        .collect()
+}
+
 fn tangent(start: (f32, f32), end: (f32, f32)) -> (f32, f32) {
     let dx = end.0 - start.0;
     let dy = end.1 - start.1;
@@ -155,8 +184,8 @@ fn path_label_anchors(
 fn label_block(
     anchor: LabelAnchor,
     lines: impl IntoIterator<Item = String>,
-    scale: f32,
-    color: u32,
+    color: gpui::Rgba,
+    font_size: f32,
 ) -> impl IntoElement {
     div()
         .absolute()
@@ -169,8 +198,8 @@ fn label_block(
                 .flex()
                 .flex_col()
                 .whitespace_nowrap()
-                .text_size(px(12.0 * scale))
-                .text_color(rgb(color))
+                .text_size(px(font_size))
+                .text_color(color)
                 .when(anchor.right_aligned, |element| {
                     element.right(px(0.0)).items_end()
                 })
@@ -246,13 +275,14 @@ fn paint_marker(
     stroke: gpui::Rgba,
     background: gpui::Rgba,
     width: f32,
+    scale: f32,
 ) {
     let (ux, uy) = direction;
     let perpendicular = (-uy, ux);
     let offset = |forward: f32, side: f32| {
         (
-            endpoint.0 + forward * ux + side * perpendicular.0,
-            endpoint.1 + forward * uy + side * perpendicular.1,
+            endpoint.0 + (forward * ux + side * perpendicular.0) * scale,
+            endpoint.1 + (forward * uy + side * perpendicular.1) * scale,
         )
     };
     use RelationshipMarker::*;
@@ -291,7 +321,7 @@ fn paint_marker(
                 bounds.origin.x + px(endpoint.0),
                 bounds.origin.y + px(endpoint.1),
             );
-            let radius = px(7.0);
+            let radius = px(7.0 * scale);
             outline.move_to(point(center.x + radius, center.y));
             outline.arc_to(
                 point(radius, radius),
@@ -332,11 +362,8 @@ fn paint_marker(
 impl RenderOnce for UmlRelationGlyph {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let palette = Palette::current(cx);
-        let stroke = rgb(if self.selected {
-            palette.selection
-        } else {
-            palette.text
-        });
+        let appearance = self.appearance;
+        let stroke = appearance.stroke(palette, self.selected);
         let background = rgb(palette.canvas);
         let RelationshipStyle {
             source_marker,
@@ -350,7 +377,14 @@ impl RenderOnce for UmlRelationGlyph {
         } else {
             self.segments
         };
-        let width = if self.selected { 2.6 } else { 1.8 };
+        let width = appearance.width(
+            if self.selected { 2.6 } else { 1.8 },
+            self.scale,
+            self.selected,
+        );
+        let dashes = relationship_dashes(dashed, &appearance.0.dash_pattern, self.scale);
+        let text_color = appearance.text(palette.text);
+        let font_size = appearance.font_size(12.0, self.scale);
         let (source_anchor, target_anchor, middle) =
             path_label_anchors(from, &segments, self.scale);
         let labels = self.labels;
@@ -365,8 +399,8 @@ impl RenderOnce for UmlRelationGlyph {
                     )
                 };
                 let mut builder = PathBuilder::stroke(px(width));
-                if dashed {
-                    builder = builder.dash_array(&[px(6.0), px(5.0)]);
+                if !dashes.is_empty() {
+                    builder = builder.dash_array(&dashes);
                 }
                 builder.move_to(absolute(from));
                 let mut last = from;
@@ -413,6 +447,7 @@ impl RenderOnce for UmlRelationGlyph {
                     stroke,
                     background,
                     width,
+                    scale,
                 );
                 paint_marker(
                     window,
@@ -423,12 +458,16 @@ impl RenderOnce for UmlRelationGlyph {
                     stroke,
                     background,
                     width,
+                    scale,
                 );
             },
         )
         .size_full();
         div()
             .relative()
+            .when_some(appearance.0.font_family, |element, family| {
+                element.font_family(family)
+            })
             .size_full()
             .child(glyph)
             .when_some(labels, |element, labels| {
@@ -440,8 +479,8 @@ impl RenderOnce for UmlRelationGlyph {
                             .role
                             .into_iter()
                             .chain(labels.source_labels.multiplicity),
-                        scale,
-                        palette.text,
+                        text_color,
+                        font_size,
                     ))
                     .child(label_block(
                         target_anchor,
@@ -450,8 +489,8 @@ impl RenderOnce for UmlRelationGlyph {
                             .role
                             .into_iter()
                             .chain(labels.target_labels.multiplicity),
-                        scale,
-                        palette.text,
+                        text_color,
+                        font_size,
                     ))
                     .when_some(
                         labels.name.filter(|name| !name.is_empty()),
@@ -463,8 +502,8 @@ impl RenderOnce for UmlRelationGlyph {
                                     above: true,
                                 },
                                 [name],
-                                scale,
-                                palette.text,
+                                text_color,
+                                font_size,
                             ))
                         },
                     )
@@ -475,6 +514,32 @@ impl RenderOnce for UmlRelationGlyph {
 mod tests {
     use super::*;
     use bellatrix_mde::relationship_style_for_notation;
+    #[test]
+    fn view_dashes_cannot_change_uml_relationship_semantics() {
+        assert!(relationship_dashes(false, &[2.0, 3.0], 2.0).is_empty());
+        assert_eq!(
+            relationship_dashes(true, &[2.0, 3.0], 2.0),
+            vec![px(4.0), px(6.0)]
+        );
+        assert_eq!(relationship_dashes(true, &[4.0], 1.0), vec![px(4.0)]);
+        for pattern in [vec![], vec![0.0, 0.0], vec![f64::NAN], vec![-1.0]] {
+            assert_eq!(
+                relationship_dashes(true, &pattern, 2.0),
+                vec![px(12.0), px(10.0)]
+            );
+        }
+        let dependency = relationship_style_for_notation("uml.dependency");
+        let association = relationship_style_for_notation("uml.association");
+        let styled = UmlRelationGlyph::new(dependency, 100.0, 100.0, (0.0, 0.0), (100.0, 100.0))
+            .view_style(&bellatrix_mde::Style {
+                dash_pattern: vec![2.0, 3.0],
+                ..Default::default()
+            });
+        assert!(styled.style.dashed);
+        assert_eq!(styled.style.target_marker, dependency.target_marker);
+        assert!(!association.dashed);
+    }
+
     #[test]
     fn endpoint_labels_follow_their_own_ends_and_view_scale() {
         let segments = [UmlLineSegment::Line { to: (200.0, 40.0) }];

@@ -7,6 +7,7 @@ mod property_editor;
 mod quick_edit_view;
 mod snapshot;
 mod source;
+mod style_editor;
 mod symbol_library;
 mod theme;
 pub use bellatrix_mde::MODELING_NAMESPACE;
@@ -1239,6 +1240,7 @@ impl Render for MdeWorkbenchItem {
                                     place(*start),
                                     place(end),
                                 )
+                                .view_style(&view.style)
                                 .segments(local_segments)
                                 .labels(presentation)
                                 .view_scale(zoom)
@@ -1401,6 +1403,7 @@ impl Render for MdeWorkbenchItem {
                         let select_owner = cx.weak_entity();
                         let edit_owner = cx.weak_entity();
                         let mut classifier = UmlClassifier::new(element.name.clone())
+                            .view_style(&view.style)
                             .model_kind(&element.kind)
                             .view_size(f64::from(local_width), f64::from(local_height), zoom)
                             .class_id(element.id.clone())
@@ -1516,6 +1519,7 @@ impl Render for MdeWorkbenchItem {
                                 element.name.clone()
                             };
                             let mut figure = UmlFigure::new(element.kind.clone(), label)
+                                .view_style(&view.style)
                                 .selected(is_selected)
                                 .view_scale(zoom)
                                 .on_title_edit(move |window, cx| {

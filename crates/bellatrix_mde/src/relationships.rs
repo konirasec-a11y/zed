@@ -1,6 +1,6 @@
 //! One relationship contract for model operations and diagram projections.
 //! GPUI paints and hit-tests; it does not define relationship semantics.
-use crate::{Geometry, ModelingSection, PathSegment, Point, Relation};
+use crate::{Geometry, ModelingSection, PathSegment, Point, Relation, RelationshipRouting, View};
 use crate::{InterfaceLayout, UmlType, classifier_contents, interface_layout};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -366,8 +366,7 @@ pub fn projected_relationship_paths(
                 .views
                 .iter()
                 .find(|v| v.subject.as_deref() == Some(relation.id.as_str()))?;
-            let geometry =
-                projected_relationship_view_path(section, diagram_id, relation, &view.geometry)?;
+            let geometry = projected_relationship_view_path(section, diagram_id, relation, view)?;
             Some((relation.id.clone(), geometry))
         })
         .collect()
@@ -377,29 +376,51 @@ fn projected_relationship_view_path(
     section: &ModelingSection,
     diagram_id: &str,
     relation: &Relation,
-    geometry: &Geometry,
+    view: &View,
 ) -> Option<Geometry> {
-    if !matches!(geometry, Geometry::Path { .. }) {
+    if !matches!(view.geometry, Geometry::Path { .. }) {
         return None;
     }
-    if relation
-        .properties
-        .get("routing")
-        .and_then(serde_json::Value::as_str)
-        == Some("automatic")
-    {
-        route_with_lane(
-            section,
-            diagram_id,
-            &relation.from,
-            &relation.to,
-            lane_for_relation(section, diagram_id, relation),
-        )
-        .ok()
-    } else {
-        // Each View owns its bends, even when several Views show one relation.
-        reanchor_path(section, diagram_id, relation, geometry).ok()
+    match view.style.routing {
+        Some(routing @ (RelationshipRouting::Automatic | RelationshipRouting::Straight)) => {
+            route_for_routing(section, diagram_id, relation, routing).ok()
+        }
+        Some(RelationshipRouting::Curve) | None => {
+            reanchor_path(section, diagram_id, relation, &view.geometry).ok()
+        }
     }
+}
+
+pub(crate) fn route_for_routing(
+    section: &ModelingSection,
+    diagram_id: &str,
+    relation: &Relation,
+    routing: RelationshipRouting,
+) -> Result<Geometry, String> {
+    let lane = match routing {
+        RelationshipRouting::Straight => 0.0,
+        RelationshipRouting::Automatic => lane_for_relation(section, diagram_id, relation),
+        RelationshipRouting::Curve => 48.0,
+    };
+    let mut geometry = route_with_lane(section, diagram_id, &relation.from, &relation.to, lane)?;
+    if routing == RelationshipRouting::Curve
+        && let Geometry::Path { start, segments } = &mut geometry
+        && let [PathSegment::Line { to }] = segments.as_slice()
+    {
+        let to = *to;
+        *segments = vec![PathSegment::Cubic {
+            control1: Point {
+                x: start.x + (to.x - start.x) / 3.0,
+                y: start.y + (to.y - start.y) / 3.0 - 48.0,
+            },
+            control2: Point {
+                x: start.x + (to.x - start.x) * 2.0 / 3.0,
+                y: start.y + (to.y - start.y) * 2.0 / 3.0 - 48.0,
+            },
+            to,
+        }];
+    }
+    Ok(geometry)
 }
 
 fn reanchor_path(
@@ -507,8 +528,7 @@ fn reroute_matching_relationships(
             if !matches(relation) {
                 return None;
             }
-            let geometry =
-                projected_relationship_view_path(section, diagram_id, relation, &view.geometry)?;
+            let geometry = projected_relationship_view_path(section, diagram_id, relation, view)?;
             Some((view.id.clone(), geometry))
         })
         .collect();
@@ -675,7 +695,7 @@ impl<'a> RelationshipGraph<'a> {
             .relations
             .iter()
             .find(|relation| relation.id == subject)?;
-        projected_relationship_view_path(self.section, self.diagram_id, relation, &view.geometry)
+        projected_relationship_view_path(self.section, self.diagram_id, relation, view)
     }
     pub fn paths(&self) -> std::collections::BTreeMap<String, Geometry> {
         projected_relationship_paths(self.section, self.diagram_id)

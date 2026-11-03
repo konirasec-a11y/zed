@@ -10,8 +10,9 @@ use crate::{
     ModelingRemoveView, ModelingRemoveViewRequested, ModelingRename, ModelingRenameDiagram,
     ModelingRenameDiagramRequested, ModelingRenameRequested, ModelingResizeView,
     ModelingResizeViewRequested, ModelingSetNameExpression, ModelingSetNameExpressionRequested,
-    ModelingSetProperty, ModelingSetPropertyRequested, ModelingValidateDiagram,
-    ModelingValidateDiagramRequested,
+    ModelingSetProperty, ModelingSetPropertyRequested, ModelingSetViewRouting,
+    ModelingSetViewRoutingRequested, ModelingSetViewStyle, ModelingSetViewStyleRequested,
+    ModelingValidateDiagram, ModelingValidateDiagramRequested,
 };
 use bellatrix_project::{
     ProjectId, ProjectSave, ProjectSaveRequested, ProjectStateChanged, ProjectStateChangedEvent,
@@ -23,6 +24,8 @@ use tokio::sync::{mpsc, watch};
 
 #[derive(Clone)]
 pub enum MdeUiCommand {
+    SetViewStyle(ModelingSetViewStyleRequested),
+    SetViewRouting(ModelingSetViewRoutingRequested),
     CreateDiagram(ModelingCreateDiagramRequested),
     RenameDiagram(ModelingRenameDiagramRequested),
     DeleteDiagram(ModelingDeleteDiagramRequested),
@@ -68,6 +71,18 @@ impl MdeUiBridge {
         let task = tokio::spawn(async move {
             while let Some(request) = command_rx.recv().await {
                 let message = match request {
+                    MdeUiCommand::SetViewStyle(request) => describe(
+                        "View style updated",
+                        cordis
+                            .query::<ModelingSetViewStyle>(Routing::Unscoped, request)
+                            .await,
+                    ),
+                    MdeUiCommand::SetViewRouting(request) => describe(
+                        "View routing updated",
+                        cordis
+                            .query::<ModelingSetViewRouting>(Routing::Unscoped, request)
+                            .await,
+                    ),
                     MdeUiCommand::ValidateDiagram(request) => describe_validation(
                         cordis
                             .query::<ModelingValidateDiagram>(Routing::Unscoped, request)

@@ -211,7 +211,6 @@ pub(super) fn apply(
     };
     let geometry = route_relationship(section, diagram_id, source, target)?;
     let mut properties = std::collections::BTreeMap::new();
-    properties.insert("routing".into(), serde_json::json!("automatic"));
     if let Some(aggregation) = rule.aggregation {
         properties.insert("end1Aggregation".into(), serde_json::json!(aggregation));
     }
@@ -233,7 +232,10 @@ pub(super) fn apply(
             subject: Some(relation_id),
             label: None,
             geometry,
-            style: Style::default(),
+            style: Style {
+                routing: Some(crate::RelationshipRouting::Automatic),
+                ..Style::default()
+            },
             z_index: edge_z_index,
         });
     if action == UmlQuickCreate::Constraint {

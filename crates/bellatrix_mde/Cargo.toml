@@ -12,6 +12,6 @@ path = "src/mde.rs"
 base64.workspace = true
 prost.workspace = true
 serde.workspace = true
-serde_json.workspace = true
+serde_json = { workspace = true, features = ["float_roundtrip"] }
 thiserror.workspace = true
 petgraph.workspace = true

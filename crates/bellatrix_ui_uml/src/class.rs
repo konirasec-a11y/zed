@@ -9,6 +9,41 @@ use gpui::{
 use std::rc::Rc;
 use ui_input::InputField;
 
+#[derive(Clone, Default)]
+pub(crate) struct ViewAppearance(pub(crate) bellatrix_mde::Style);
+impl ViewAppearance {
+    fn color(&self, value: Option<&str>, fallback: u32) -> gpui::Rgba {
+        value
+            .and_then(|value| gpui::Rgba::try_from(value).ok())
+            .unwrap_or_else(|| rgb(fallback))
+            .opacity(self.0.opacity.unwrap_or(1.0) as f32)
+    }
+    pub(crate) fn fill(&self, fallback: u32) -> gpui::Rgba {
+        self.color(self.0.fill.as_deref(), fallback)
+    }
+    pub(crate) fn stroke(&self, palette: Palette, selected: bool) -> gpui::Rgba {
+        // Selection is editor chrome, not part of the persisted presentation style.
+        if selected {
+            rgb(palette.selection)
+        } else {
+            self.color(self.0.stroke.as_deref(), palette.diagram_outline(false))
+        }
+    }
+    pub(crate) fn text(&self, fallback: u32) -> gpui::Rgba {
+        self.color(self.0.text_color.as_deref(), fallback)
+    }
+    pub(crate) fn width(&self, default: f32, scale: f32, selected: bool) -> f32 {
+        let width = self.0.stroke_width.map_or(default, |value| value as f32) * scale;
+        if selected { width.max(2.0) } else { width }
+    }
+    pub(crate) fn font_size(&self, default: f32, scale: f32) -> f32 {
+        self.0
+            .font_size
+            .map_or(default, |value| value as f32 * default / 12.0)
+            * scale
+    }
+}
+
 pub(crate) type ElementAction = Rc<dyn Fn(&str, &mut Window, &mut App)>;
 pub(crate) type Action = Rc<dyn Fn(&mut Window, &mut App)>;
 #[derive(Clone)]
@@ -24,6 +59,7 @@ pub(crate) struct MemberInteractions {
     pub confirm: Option<Action>,
     pub cancel: Option<Action>,
     pub scale: f32,
+    pub appearance: ViewAppearance,
 }
 
 #[derive(IntoElement)]
@@ -46,6 +82,7 @@ pub struct UmlClassifier {
     pub(crate) view_width: f64,
     pub(crate) view_height: f64,
     pub(crate) view_scale: f32,
+    pub(crate) appearance: ViewAppearance,
 }
 
 impl UmlClassifier {
@@ -69,7 +106,12 @@ impl UmlClassifier {
             view_width: 185.0,
             view_height: 112.0,
             view_scale: 1.0,
+            appearance: ViewAppearance::default(),
         }
+    }
+    pub fn view_style(mut self, style: &bellatrix_mde::Style) -> Self {
+        self.appearance = ViewAppearance(style.clone());
+        self
     }
     pub fn view_size(mut self, width: f64, height: f64, scale: f32) -> Self {
         if width.is_finite() && width > 0.0 {
@@ -197,6 +239,7 @@ impl UmlClassifier {
             confirm: self.confirm_edit.clone(),
             cancel: self.cancel_edit.clone(),
             scale: self.view_scale,
+            appearance: self.appearance.clone(),
         }
     }
 }
@@ -229,6 +272,7 @@ pub(crate) fn compartment(
     with_border: bool,
 ) -> gpui::AnyElement {
     let scale = interactions.scale;
+    let appearance = interactions.appearance.clone();
     div()
         .w_full()
         .flex()
@@ -237,8 +281,8 @@ pub(crate) fn compartment(
         .py(px(4.0 * scale))
         .when(with_border, |element| {
             element
-                .border_t(px(scale))
-                .border_color(rgb(palette.border))
+                .border_t(px(appearance.width(1.0, scale, false)))
+                .border_color(appearance.color(appearance.0.stroke.as_deref(), palette.border))
         })
         .children(rows.into_iter().enumerate().map(move |(index, member)| {
             let select = interactions.select.clone();
@@ -266,8 +310,8 @@ pub(crate) fn compartment(
                 .min_w_0()
                 .min_h(px(20.0 * scale))
                 .cursor_pointer()
-                .text_size(px(12.0 * scale))
-                .text_color(rgb(palette.text))
+                .text_size(px(appearance.font_size(12.0, scale)))
+                .text_color(appearance.text(palette.text))
                 .on_mouse_down(MouseButton::Left, move |event, window, cx| {
                     if let Some(id) = member.id.as_deref() {
                         if event.click_count >= 2 {
@@ -291,7 +335,8 @@ impl RenderOnce for UmlClassifier {
             return UmlInterfaceBall::new(self).into_any_element();
         }
         let palette = Palette::current(cx);
-        let line = rgb(palette.diagram_outline(self.selected));
+        let appearance = self.appearance.clone();
+        let line = appearance.stroke(palette, self.selected);
         let interactions = self.member_interactions();
         let scale = self.view_scale;
         let title_editor = self.editing.as_ref().and_then(|(subject, field)| {
@@ -310,10 +355,13 @@ impl RenderOnce for UmlClassifier {
             .size_full()
             .flex()
             .flex_col()
-            .border_1()
+            .border(px(appearance.width(1.0, scale, self.selected)))
             .border_color(line)
-            .rounded_sm()
-            .bg(rgb(palette.panel))
+            .rounded(px(appearance.0.corner_radius.unwrap_or(2.0) as f32 * scale))
+            .when_some(appearance.0.font_family.clone(), |element, family| {
+                element.font_family(family)
+            })
+            .bg(appearance.fill(palette.panel))
             .overflow_hidden()
             .child(
                 div()
@@ -325,12 +373,12 @@ impl RenderOnce for UmlClassifier {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .bg(rgb(palette.panel_alt))
-                    .border_b_1()
+                    .bg(appearance.fill(palette.panel_alt))
+                    .border_b(px(appearance.width(1.0, scale, false)))
                     .border_color(line)
-                    .text_size(px(12.0 * scale))
+                    .text_size(px(appearance.font_size(12.0, scale)))
                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(rgb(palette.text))
+                    .text_color(appearance.text(palette.text))
                     .on_mouse_down(MouseButton::Left, move |event, window, cx| {
                         if event.click_count >= 2 {
                             if let Some(handler) = &edit_title {
@@ -353,8 +401,8 @@ impl RenderOnce for UmlClassifier {
                                     div()
                                         .w_full()
                                         .text_center()
-                                        .text_size(px(10.0 * scale))
-                                        .text_color(rgb(palette.muted))
+                                        .text_size(px(appearance.font_size(10.0, scale)))
+                                        .text_color(appearance.text(palette.muted))
                                         .child(value),
                                 )
                             })
@@ -363,8 +411,8 @@ impl RenderOnce for UmlClassifier {
                                     div()
                                         .w_full()
                                         .text_center()
-                                        .text_size(px(10.0 * scale))
-                                        .text_color(rgb(palette.muted))
+                                        .text_size(px(appearance.font_size(10.0, scale)))
+                                        .text_color(appearance.text(palette.muted))
                                         .child(value),
                                 )
                             })
@@ -414,6 +462,65 @@ impl RenderOnce for UmlClassifier {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn view_style_defaults_follow_theme_roles_and_scale() {
+        let appearance = ViewAppearance::default();
+        for mode in [
+            bellatrix_design_system::ThemeMode::Dark,
+            bellatrix_design_system::ThemeMode::Light,
+        ] {
+            let palette = Palette::for_mode(mode);
+            assert_eq!(appearance.fill(palette.panel), rgb(palette.panel));
+            assert_eq!(appearance.text(palette.text), rgb(palette.text));
+            assert_eq!(
+                appearance.stroke(palette, false),
+                rgb(palette.diagram_outline(false))
+            );
+            assert_eq!(appearance.stroke(palette, true), rgb(palette.selection));
+        }
+        assert_eq!(appearance.font_size(12.0, 2.0), 24.0);
+        assert_eq!(appearance.width(1.0, 2.0, false), 2.0);
+    }
+
+    #[test]
+    fn style_overrides_are_cloned_per_view_and_selection_survives_transparency() {
+        let mut style = bellatrix_mde::Style {
+            fill: Some("#123456".into()),
+            stroke: Some("#abcdef".into()),
+            text_color: Some("#fedcba".into()),
+            stroke_width: Some(0.0),
+            font_size: Some(18.0),
+            opacity: Some(0.0),
+            ..Default::default()
+        };
+        let styled = UmlClassifier::new("Styled").view_style(&style);
+        style.fill = None;
+        let default = UmlClassifier::new("Default");
+        assert_eq!(styled.appearance.0.fill.as_deref(), Some("#123456"));
+        assert!(default.appearance.0.fill.is_none());
+        let appearance = styled.appearance;
+        let palette = Palette::for_mode(bellatrix_design_system::ThemeMode::Dark);
+        assert_eq!(appearance.fill(palette.panel).a, 0.0);
+        assert_eq!(appearance.text(palette.text).a, 0.0);
+        assert_eq!(appearance.stroke(palette, false).a, 0.0);
+        assert_eq!(appearance.stroke(palette, true), rgb(palette.selection));
+        assert_eq!(appearance.width(1.0, 0.5, true), 2.0);
+        assert_eq!(appearance.font_size(12.0, 2.0), 36.0);
+        assert_eq!(appearance.font_size(10.0, 2.0), 30.0);
+    }
+
+    #[test]
+    fn native_color_alpha_is_composed_with_view_opacity() {
+        let appearance = ViewAppearance(bellatrix_mde::Style {
+            fill: Some("#12345680".into()),
+            opacity: Some(0.5),
+            ..Default::default()
+        });
+        let color = appearance.fill(0xffffff);
+        assert!((color.a - 128.0 / 255.0 * 0.5).abs() < 0.0001);
+        assert!((color.r - 18.0 / 255.0).abs() < 0.0001);
+    }
 
     #[test]
     fn model_keyword_and_application_label_are_independent_in_either_builder_order() {
