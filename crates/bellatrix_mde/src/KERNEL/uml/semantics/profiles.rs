@@ -259,6 +259,79 @@ fn association_end_ownership(references: &ReferenceIndex<'_>, attribute: Element
     feature_compatibility::accept_any([Ok(association.conforms_to("Extension")), typed, owner])
 }
 
+// Profile imports have a narrower role than ordinary ElementImports. Only
+// explicit metaclassReference membership selects that role in this adapter.
+fn profile_metaclass_reference(references: &ReferenceIndex<'_>, profile: ElementRef<'_>) -> Result<bool, QueryError> {
+    let mut checks = Vec::new();
+    let mut imported = Vec::new();
+    let owned = references.explicit_owned_elements(profile.id())
+        .map_err(|error| QueryError::invalid(profile.id(), error))?;
+    if let Some(value) = profile.properties().get("metaclassReference") {
+        checks.push(property_check(references, profile, "metaclassReference"));
+        if let Some(values) = value.as_array() {
+            for value in values {
+                let Ok(Some(id)) = super::references::reference_id(value) else { continue; };
+                let Ok(import) = references.element(id) else { continue; };
+                if !import.conforms_to("ElementImport") { continue; }
+                let ElementRef::Relationship(record) = import else {
+                    checks.push(Err(QueryError::unsupported(id, "metaclassReference requires a canonical ElementImport relationship")));
+                    continue;
+                };
+                // The import endpoint is semantic (not a diagram endpoint).
+                let target = match references.element(&record.to) {
+                    Ok(target) => target,
+                    Err(error) => { checks.push(Err(QueryError::invalid(id, error))); continue; }
+                };
+                for (name, expected) in [("importedElement", target.id()), ("importingNamespace", profile.id())] {
+                    if let Some(stored) = import.properties().get(name) {
+                        checks.push(property_check(references, import, name));
+                        if let Ok(actual) = super::references::reference_id(stored) {
+                            if actual != Some(expected) {
+                                checks.push(Err(QueryError::invalid(id, format!("{name} contradicts canonical import endpoint"))));
+                            }
+                        }
+                    }
+                }
+                if target.metaclass().is_none() {
+                    checks.push(Err(QueryError::unsupported(id, "imported metaclass is unresolved")));
+                } else {
+                    checks.push(super::namespace_imports::validate_import_record(references, import).map(|_| true));
+                    if target.conforms_to("Classifier") { imported.push(target); }
+                }
+            }
+        }
+    } else if owned.iter().any(|child| child.metaclass().is_none() || child.conforms_to("ElementImport"))
+        || references.model().relationship_records().any(|record| record.kind == "uml.element_import" && record.from == profile.id())
+    {
+        checks.push(Err(QueryError::unsupported(profile.id(), "ElementImport records do not distinguish metaclassReference without explicit role membership")));
+    }
+    if profile.properties().contains_key("packagedElement") {
+        checks.push(property_check(references, profile, "packagedElement"));
+    }
+
+    for child in owned {
+        if child.metaclass().is_none() && !imported.is_empty() {
+            checks.push(Err(QueryError::unsupported(child.id(), "unknown owned element may be a Classifier")));
+        } else if child.conforms_to("Classifier") {
+            let membership = classifiers::contributes_to_owned_union(profile, child, "Package-packagedElement");
+            match membership {
+                Ok(true) => {
+                    for imported in &imported {
+                        // Both published conjuncts: neither the imported
+                        // Classifier nor a local packaged Classifier may have
+                        // the other among its allParents().
+                        checks.push(super::classifier_hierarchy::has_ancestor(references, imported.id(), child.id()).map(|found| !found));
+                        checks.push(super::classifier_hierarchy::has_ancestor(references, child.id(), imported.id()).map(|found| !found));
+                    }
+                }
+                Ok(false) => {}
+                Err(error) => checks.push(Err(error)),
+            }
+        }
+    }
+    feature_compatibility::require_all(checks)
+}
+
 pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     for end in references.model().elements().filter(|element| element.conforms_to("ExtensionEnd")) {
@@ -311,6 +384,15 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             Err(QueryError::Unsupported { message, .. }) => (StructuralSeverity::Warning, "MDE_STEREOTYPE_ASSOCIATION_END_OWNERSHIP_UNVERIFIED", message),
         };
         issues.push(StructuralDiagnostic { severity, code, subject_id:stereotype.id().into(), message:format!("Stereotype-associationEndOwnership: {message}") });
+    }
+    for profile in references.model().elements().filter(|element| element.conforms_to("Profile")) {
+        let (severity, code, message) = match profile_metaclass_reference(references, profile) {
+            Ok(true) => continue,
+            Ok(false) => (StructuralSeverity::Error, "UML_PROFILE_METACLASS_REFERENCE_SPECIALIZATION", "referenced metaclasses may not be generalized or specialized in the Profile".to_owned()),
+            Err(QueryError::Invalid { message, .. }) => (StructuralSeverity::Error, "UML_PROFILE_METACLASS_REFERENCE_SPECIALIZATION", message),
+            Err(QueryError::Unsupported { message, .. }) => (StructuralSeverity::Warning, "MDE_PROFILE_METACLASS_REFERENCE_SPECIALIZATION_UNVERIFIED", message),
+        };
+        issues.push(StructuralDiagnostic { severity, code, subject_id:profile.id().into(), message:format!("Profile-metaclass_reference_not_specialized: {message}") });
     }
     issues
 }
