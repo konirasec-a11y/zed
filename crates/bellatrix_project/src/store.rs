@@ -230,6 +230,22 @@ impl ProjectService {
     /// A close waits for any in-flight save of *this* bellatrix-project to finish.
     /// The Cordis responder executes it on Tokio's blocking pool.
     pub(crate) fn close(&self, id: &ProjectId, discard_unsaved: bool) -> Result<(), ProjectError> {
+        self.close_matching(id, discard_unsaved, None)
+    }
+
+    pub(crate) fn close_snapshot(
+        &self,
+        document: &Arc<ProjectDocument>,
+    ) -> Result<(), ProjectError> {
+        self.close_matching(document.id(), true, Some(document))
+    }
+
+    fn close_matching(
+        &self,
+        id: &ProjectId,
+        discard_unsaved: bool,
+        expected: Option<&Arc<ProjectDocument>>,
+    ) -> Result<(), ProjectError> {
         let save_lock = {
             let projects = self
                 .projects
@@ -253,6 +269,9 @@ impl ProjectService {
             .get(id)
             .ok_or_else(|| ProjectError::NotOpen(id.as_str().into()))?;
         if !Arc::ptr_eq(&current.save_lock, &save_lock) {
+            return Err(ProjectError::SessionChanged(id.as_str().into()));
+        }
+        if expected.is_some_and(|document| !Arc::ptr_eq(document, &current.document)) {
             return Err(ProjectError::SessionChanged(id.as_str().into()));
         }
         if current.external_save.upgrade().is_some() {
@@ -568,5 +587,43 @@ mod external_storage_tests {
         ));
         drop(guard);
         let _next = prepare(&service, &id);
+    }
+    #[test]
+    fn snapshot_cleanup_is_atomic_and_preserves_changed_or_reopened_identity() {
+        let (service, id) = setup(false);
+        let imported = service.snapshot(&id).expect("imported");
+        service
+            .replace(
+                &id,
+                "example.engine".into(),
+                0,
+                serde_json::json!({"changed": true}),
+            )
+            .expect("edit");
+        assert!(matches!(
+            service.close_snapshot(&imported),
+            Err(ProjectError::SessionChanged(_))
+        ));
+        assert_eq!(service.snapshot(&id).expect("retained").revision(), 1);
+        service.close(&id, true).expect("explicit close");
+        service.open((*imported).clone(), false).expect("reopened");
+        assert!(matches!(
+            service.close_snapshot(&imported),
+            Err(ProjectError::SessionChanged(_))
+        ));
+        let reopened = service.snapshot(&id).expect("new session");
+        let ticket = prepare(&service, &id);
+        assert!(matches!(
+            service.close_snapshot(&reopened),
+            Err(ProjectError::SaveInProgress)
+        ));
+        drop(ticket);
+        service
+            .close_snapshot(&reopened)
+            .expect("canceled preview cleanup");
+        assert!(matches!(
+            service.snapshot(&id),
+            Err(ProjectError::NotOpen(_))
+        ));
     }
 }

@@ -47,7 +47,11 @@ impl Drop for SavePathPromptGuard {
 /// Keep MDE discoverable without opening it in unconfigured Workspaces.
 ///
 /// Opening the action again focuses the existing item without duplicates.
-pub fn register_mde_workspace(cx: &mut App, source: MdeUiSource) {
+pub fn register_mde_workspace(
+    cx: &mut App,
+    source: MdeUiSource,
+    importer: crate::NativeDocumentImporter,
+) {
     let auto_open_configured_source = std::env::var_os("BELLATRIX_PROJECT_FILE").is_some()
         || std::env::var_os("BELLATRIX_MODEL_FILE").is_some();
     let show_status_button =
@@ -68,6 +72,8 @@ pub fn register_mde_workspace(cx: &mut App, source: MdeUiSource) {
 
     cx.observe_new(
         move |workspace: &mut Workspace, window: Option<&mut Window>, cx| {
+            let source = source.for_workspace();
+            crate::native_document::register_preview_action(workspace, importer.clone(), source.clone());
             // The full Bellatrix catalog is a native Zed Item. The Workbench
             // remains focused on supported Class and Interface editing gestures.
             workspace.register_action(|workspace, _: &OpenMdeSymbols, window, cx| {
@@ -83,9 +89,26 @@ pub fn register_mde_workspace(cx: &mut App, source: MdeUiSource) {
             // Entity on reopening so selection survives and Dock panels are not
             // registered twice under the same panel keys.
             let cached_item = Rc::new(RefCell::new(None::<Entity<MdeWorkbenchItem>>));
+            let observed_item = Rc::clone(&cached_item);
+            let presentation_source = source.clone();
+            cx.subscribe(&cx.entity(), move |workspace, _, event: &workspace::Event, cx| {
+                if matches!(event, workspace::Event::ActiveItemChanged | workspace::Event::ItemRemoved { .. }) {
+                    let preview = crate::native_document::active_preview_label(workspace, cx);
+                    if presentation_source.set_preview_context(preview) {
+                        if let Some(item) = observed_item.borrow().clone() {
+                            item.update(cx, |item, cx| item.refresh(cx));
+                        }
+                    }
+                    panels::refresh_context(workspace, cx);
+                }
+            }).detach();
             let save_item = Rc::clone(&cached_item);
             let save_prompt_pending = Rc::new(Cell::new(false));
             workspace.register_action(move |workspace, _: &SaveMdeProjectAs, window, cx| {
+                if crate::native_document::preview_is_active(workspace, cx) {
+                    workspace.show_error("The active MDE preview is read-only. Save source edits through the native editor.", cx);
+                    return;
+                }
                 if !workspace.project().read(cx).is_local() {
                     workspace.show_error(
                         "Bellatrix project saving currently requires a local workspace",

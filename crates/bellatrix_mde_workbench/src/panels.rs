@@ -7,8 +7,7 @@ use crate::{
 };
 use bellatrix_mde::commands::{ModelingElementKind, ModelingTool};
 use bellatrix_mde::{
-    ModelingRelationKind, PropertyEditor, RelationshipGraph, inspect_element,
-    relationship_presentation,
+    ModelingRelationKind, RelationshipGraph, inspect_element, relationship_presentation,
 };
 use bellatrix_ui_panels::PaneHeader;
 use bellatrix_ui_symbols::{ShapeKind, glyph};
@@ -255,6 +254,15 @@ impl Panel for MdeLeftPanel {
 }
 impl Render for MdeLeftPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self
+            .state
+            .item
+            .read(cx)
+            .source()
+            .is_presentation_suspended()
+        {
+            return preview_context_notice(&self.state.item, cx).into_any_element();
+        }
         let palette = WorkbenchPalette::current(cx);
         let item = self.state.item.clone();
         let state = item.read(cx);
@@ -291,6 +299,9 @@ impl Render for MdeLeftPanel {
                                     .tooltip(ui::Tooltip::text(diagram_kind))
                                     .toggle_state(active.as_deref() == Some(diagram_id.as_str()))
                                     .on_click(move |_, window, cx| {
+                                        if owner.read(cx).source().is_presentation_suspended() {
+                                            return;
+                                        }
                                         owner.update(cx, |workbench, cx| {
                                             workbench.select_diagram(diagram_id.clone(), cx)
                                         });
@@ -314,6 +325,9 @@ impl Render for MdeLeftPanel {
                         crate::diagram_kind_label(kind).to_owned()
                     };
                     menu.entry(label, None, move |window, cx| {
+                        if owner.read(cx).source().is_read_only() {
+                            return;
+                        }
                         owner.update(cx, |workbench, cx| workbench.create_diagram(kind, cx));
                         window.dispatch_action(Box::new(OpenMdeWorkbench), cx);
                     })
@@ -700,6 +714,7 @@ impl Render for MdeLeftPanel {
                         )
                     }),
             )
+            .into_any_element()
     }
 }
 
@@ -765,8 +780,8 @@ fn tool_entry(
 pub struct MdeRightPanel {
     state: PanelState,
     editing_id: Option<String>,
-    property_inputs: HashMap<String, Entity<InputField>>,
-    property_drafts: HashMap<String, HashMap<String, Entity<InputField>>>,
+    pub(crate) property_drafts:
+        HashMap<crate::inspector_drafts::DraftKey, crate::property_editor::InspectorDraft>,
     style_target_id: Option<(String, String)>,
     pub(crate) pending_theme_resets:
         HashMap<(String, String), crate::style_editor::PendingThemeReset>,
@@ -790,7 +805,6 @@ impl MdeRightPanel {
         Self {
             state: PanelState::new(item, DockPosition::Right, 230.0, cx),
             editing_id: None,
-            property_inputs: HashMap::new(),
             property_drafts: HashMap::new(),
             style_baselines: HashMap::new(),
             style_inputs: HashMap::new(),
@@ -856,6 +870,15 @@ impl Panel for MdeRightPanel {
 }
 impl Render for MdeRightPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self
+            .state
+            .item
+            .read(cx)
+            .source()
+            .is_presentation_suspended()
+        {
+            return preview_context_notice(&self.state.item, cx).into_any_element();
+        }
         let palette = WorkbenchPalette::current(cx);
         let panel_background = palette.panel;
         let panel_border = palette.border;
@@ -958,6 +981,9 @@ impl Render for MdeRightPanel {
                                             "Show in active diagram",
                                             None,
                                             move |window, cx| {
+                                                if show_owner.read(cx).source().is_read_only() {
+                                                    return;
+                                                }
                                                 show_owner.update(cx, |item, cx| {
                                                     item.show_element_in_active_diagram(
                                                         show_subject.clone(),
@@ -975,6 +1001,9 @@ impl Render for MdeRightPanel {
                                             "Delete from model",
                                             None,
                                             move |window, cx| {
+                                                if delete_owner.read(cx).source().is_read_only() {
+                                                    return;
+                                                }
                                                 delete_owner.update(cx, |item, cx| {
                                                     item.select_element(delete_subject.clone(), cx);
                                                     item.delete_selected_from_model(cx);
@@ -1063,54 +1092,27 @@ impl Render for MdeRightPanel {
                 );
             }
         }
-        // Preserve in-progress editing when a model revision triggers a render.
         if self.editing_id != selected_id {
-            if self
-                .property_inputs
-                .values()
-                .any(|input| input.read(cx).focus_handle(cx).contains_focused(window, cx))
-            {
+            if self.property_drafts.values().any(|draft| {
+                draft
+                    .input
+                    .read(cx)
+                    .focus_handle(cx)
+                    .contains_focused(window, cx)
+            }) {
                 window.focus(&self.state.focus, cx);
             }
-            if let Some(previous) = self.editing_id.take() {
-                self.property_drafts
-                    .insert(previous, std::mem::take(&mut self.property_inputs));
-            }
             self.editing_id = selected_id.clone();
-            self.property_inputs = selected_id
-                .as_ref()
-                .and_then(|id| self.property_drafts.remove(id))
-                .unwrap_or_default();
-            if let Some(inspection) = &inspection {
-                for property in &inspection.properties {
-                    if self.property_inputs.contains_key(&property.path)
-                        || !property.editable
-                        || !matches!(
-                            property.editor,
-                            PropertyEditor::Text
-                                | PropertyEditor::Multiline
-                                | PropertyEditor::Number
-                        )
-                    {
-                        continue;
-                    }
-                    let editor = cx.new(|cx| {
-                        InputField::new(window, cx, &property.label).label_min_width(px(0.0))
-                    });
-                    let text = property
-                        .value
-                        .as_str()
-                        .map_or_else(|| property.value.to_string(), str::to_owned);
-                    editor.update(cx, |field, cx| {
-                        if property.editor == PropertyEditor::Multiline {
-                            field.editor().set_multiline(Some(12), window, cx);
-                        }
-                        field.set_text(&text, window, cx);
-                    });
-                    self.property_inputs.insert(property.path.clone(), editor);
-                }
-            }
         }
+        let inspector_project = item.read(cx).project_id().clone();
+        crate::property_editor::reconcile_inputs(
+            &mut self.property_drafts,
+            inspector_project.as_str(),
+            inspection.as_ref(),
+            snapshot.as_ref().map_or(0, |snapshot| snapshot.revision),
+            window,
+            cx,
+        );
         let selected_view = item.read(cx).selected_view.clone();
         let style_target = snapshot.as_ref().and_then(|snapshot| {
             let diagram = snapshot
@@ -1249,7 +1251,8 @@ impl Render for MdeRightPanel {
         inspector_rows.extend(render_inspector(
             inspection.as_ref(),
             item.clone(),
-            &self.property_inputs,
+            &self.property_drafts,
+            snapshot.as_ref().map_or(0, |snapshot| snapshot.revision),
             self.inspector_documentation_open,
             self.inspector_advanced_open,
             window,
@@ -1426,6 +1429,7 @@ impl Render for MdeRightPanel {
                         )
                     }),
             )
+            .into_any_element()
     }
 }
 
@@ -1512,6 +1516,15 @@ impl Panel for MdeBottomPanel {
 }
 impl Render for MdeBottomPanel {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self
+            .state
+            .item
+            .read(cx)
+            .source()
+            .is_presentation_suspended()
+        {
+            return preview_context_notice(&self.state.item, cx).into_any_element();
+        }
         let palette = WorkbenchPalette::current(cx);
         let active = self.active;
         let handle = cx.weak_entity();
@@ -1571,6 +1584,35 @@ impl Render for MdeBottomPanel {
                         )
                     }),
             )
+            .into_any_element()
+    }
+}
+
+fn preview_context_notice(item: &Entity<MdeWorkbenchItem>, cx: &App) -> impl IntoElement {
+    let name = item
+        .read(cx)
+        .source()
+        .snapshot()
+        .map(|snapshot| snapshot.name)
+        .unwrap_or_else(|_| "previous Workbench".into());
+    let preview = item
+        .read(cx)
+        .source()
+        .preview_context()
+        .unwrap_or_else(|| "active document".into());
+    div().size_full().p_3().whitespace_normal()
+        .child(Label::new(format!("Read-only preview: {preview}. Editing panels for {name} are suspended, not bound to this preview. Use the MDE button to return to that Workbench.")))
+}
+
+pub(crate) fn refresh_context(workspace: &Workspace, cx: &mut App) {
+    if let Some(panel) = workspace.panel::<MdeLeftPanel>(cx) {
+        panel.update(cx, |_, cx| cx.notify());
+    }
+    if let Some(panel) = workspace.panel::<MdeRightPanel>(cx) {
+        panel.update(cx, |_, cx| cx.notify());
+    }
+    if let Some(panel) = workspace.panel::<MdeBottomPanel>(cx) {
+        panel.update(cx, |_, cx| cx.notify());
     }
 }
 

@@ -189,7 +189,7 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
             editor:PropertyEditor::ReadOnly, value:json!(element.kind), editable:false },
         InspectorProperty { path:"name".into(), label:"Name".into(), group:"Identity",
             editor:PropertyEditor::Text, value:json!(semantic_name), editable:true },
-        InspectorProperty { path:"label".into(), label:"Label".into(), group:"Identity",
+        InspectorProperty { path:"label".into(), label:"Label metadata (not diagram name)".into(), group:"Metadata",
             editor:PropertyEditor::Text, value:json!(element.label.clone().unwrap_or_default()), editable:true },
     ];
     let mut known = HashSet::new();

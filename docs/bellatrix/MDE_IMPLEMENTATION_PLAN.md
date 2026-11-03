@@ -354,6 +354,12 @@ alvos e extensões precisam de seus próprios testes antes de serem anunciados.
   estilos/identidade/notação/interação; persistência/cobertura; autoria e
   projeto completo; M2M/M2T/regeneração; execução e extensibilidade.
   UI/UX e testes acompanham todas as frentes, não ficam para o final.
+- Estratégia de testes: poucos cenários BDD por fluxo de feature, atravessando
+  contratos públicos e módulos reais. Priorizar edição, propagação da revisão
+  e persistência no mesmo percurso, com conflitos/cancelamento relevantes.
+  Evitar testes por função/método ou por texto/organização do código, frágeis
+  às refatorações. Unitários apenas para regras isoladas críticas; quantidade
+  de testes não é medida de progresso nem substitui evidência do fluxo.
 - Gate focado: catálogo/contratos, testes domínio/Cordis, persistência e
   geração. Reutilizar caches e evitar builds Zed repetitivos/desnecessários.
 - Gate nativo: build completo da integração Zed/GPUI e interação no ambiente

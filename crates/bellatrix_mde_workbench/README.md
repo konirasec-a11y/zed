@@ -10,6 +10,10 @@ The host owns the Cordis Project/MDE plugins and a `MdeUiBridge`. Every Workspac
 
 Setting `BELLATRIX_PROJECT_FILE` or `BELLATRIX_MODEL_FILE` before launching explicitly selects a startup source and automatically opens its MDE Workbench. With neither variable set, the button opens the host's existing demo source. It does **not** automatically load the JSON file selected in the native editor. There is no empty-workspace or restored-session auto-open heuristic. To hide only this status-bar entry, set `BELLATRIX_MDE_STATUS_BUTTON=false` before launch; the default is visible, and the command-palette action remains available. This Bellatrix-specific startup option does not change native editor/status-bar settings.
 
+The adjacent **Open project** dropdown offers **Open MDE project (read-only preview)**. It uses the native file dialog, Project/worktree and shared text Buffer, validates the selected Bellatrix document, and renders its captured model through the existing Workbench. The preview has its own diagram chooser and pure validation control; selection and pan/zoom remain available. It does not enable model editing or native MDE save. Changes to the source text, file identity, dirty/conflict state or imported semantic snapshot mark the preview stale without overwriting source text. Close and reopen after resolving source changes. A document ID already owned by a configured/demo source is rejected explicitly, without substituting the fixture or cloning its ID.
+
+While a preview is the active Item, existing editing panels show a notice naming that preview and the previous Workbench instead of showing the wrong model's controls. Their drafts are retained, and their mutation sources are suspended only in that Workspace. Returning to an ordinary Item restores the previous context; the primary **MDE** button intentionally returns to the configured/demo Workbench. This is a bounded preview path, not full active-document panel rebinding or editable persistence.
+
 The bridge relays typed Cordis commands and observes model revisions. The interim host still supplies one configured model or demo fixture; per-document `ProjectPath`/Buffer integration, native save acknowledgement and `SerializableItem` restoration remain incomplete. The visible-entry recovery does not claim those later integration gates passed.
 
 Implemented operation paths include Class/Interface creation, rename, view move/resize, project save and a drag-and-drop Toolbox. These use the MDE graph validation and versioned `bellatrix_project` service, rather than writing model data in the GUI.
@@ -30,18 +34,39 @@ cargo run -p zed
 
 The native code must still pass Windows build and interaction tests before the new Workbench is considered fully validated.
 
+Prefer a few feature-level behavior scenarios that exercise complete flows across
+public module boundaries, rather than a test for each helper or method. Assert
+observable results and preserved state so internal refactors do not require
+rewriting the scenarios. The focused `property_receipts` scenario covers editing,
+no-op acknowledgement, stale-revision rejection and independent targets through
+the public Cordis bridge. Extend a relevant flow for a concrete regression;
+do not grow a large suite of overlapping implementation tests.
+
 ## Existing-design frontend integration
 
 The visual source is `../bellatrix_design_system/docs/design/src/components/panels/`,
 with reference captures in that package's `preview/` directory. Its React controls
 are layout specimens, not permission to introduce unsupported model operations.
 
-The native workbench reuses `bellatrix_ui_panels::PropertyRow` for editable compact
-property rows and `PaneHeader` for panel disclosure/actions. Native Zed controls
-continue to submit the existing validated MDE commands. Text changes use the
-inline check action; boolean and choice controls commit directly. ID and type
-remain read-only. Documentation and less-common properties remain reachable in
-their collapsed sections; opening the Inspector does not mutate the model.
+The native workbench uses compact rows of native Zed controls and
+`bellatrix_ui_panels::PaneHeader` for panel disclosure/actions. Inspector text,
+number and documentation edits are transient drafts keyed by project, element
+and property, not another model store. Changed fields show **Not applied** with
+explicit **Apply** and **Cancel** controls. Cancel reloads the current canonical
+value. Clean fields follow model updates; a changed canonical value preserves a
+dirty draft, shows **Conflict**, and requires **Reload** before applying again.
+
+Apply captures the target and revision and submits the existing validated MDE
+command. **Applying…** remains visible until its typed receipt and corresponding
+snapshot arrive. Success, including a no-op, acknowledges only the submitted
+edit; later typing is retained. Rejection keeps the draft and displays its error.
+Changing selection cannot redirect a captured edit to the new selection.
+Boolean and choice controls submit immediately through the same target and
+revision guard, with failures reported as feedback. ID and type remain read-only.
+**Name** is the canonical diagram name; **Label metadata (not diagram name)**
+remains stored and editable under Advanced. Documentation and less-common
+properties stay reachable in their sections; opening the Inspector does not
+mutate the model.
 
 The toolbox presents supported quick tools, searchable categories and existing
 symbol glyphs. Collapse state belongs to the panel, not the semantic model.

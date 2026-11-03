@@ -165,3 +165,16 @@ impl Event for ProjectAcknowledgeExternalSave {
     type Args = ProjectAcknowledgeExternalSaveRequested;
     type Output = Result<u64, ProjectError>;
 }
+
+/// Release an imported preview only if the exact captured snapshot is still open.
+/// Changed or reopened identities are preserved; this never performs file I/O.
+#[derive(Clone)]
+pub struct ProjectCloseSnapshotRequested {
+    pub document: Arc<ProjectDocument>,
+}
+pub struct ProjectCloseSnapshot;
+impl Event for ProjectCloseSnapshot {
+    const NAME: &'static str = "bellatrix.bellatrix-project.close-snapshot.v1";
+    type Args = ProjectCloseSnapshotRequested;
+    type Output = Result<(), ProjectError>;
+}

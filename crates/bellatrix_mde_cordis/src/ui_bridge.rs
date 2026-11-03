@@ -43,6 +43,10 @@ pub enum MdeUiCommand {
     Rename(ModelingRenameRequested),
     DeleteElement(ModelingDeleteElementRequested),
     SetProperty(ModelingSetPropertyRequested),
+    SetPropertyTracked {
+        request: ModelingSetPropertyRequested,
+        completion: watch::Sender<Option<Result<u64, String>>>,
+    },
     AddMember(ModelingAddMemberRequested),
     QuickEdit(ModelingQuickEditRequested),
     SetNameExpression(ModelingSetNameExpressionRequested),
@@ -174,6 +178,22 @@ impl MdeUiBridge {
                             .query::<ModelingDeleteElement>(Routing::Unscoped, request)
                             .await,
                     ),
+                    MdeUiCommand::SetPropertyTracked {
+                        request,
+                        completion,
+                    } => {
+                        let result = cordis
+                            .query::<ModelingSetProperty>(Routing::Unscoped, request)
+                            .await;
+                        let receipt = match &result {
+                            Ok(QueryOutcome::Answer(Ok(revision))) => Ok(*revision),
+                            Ok(QueryOutcome::Answer(Err(error))) => Err(error.to_string()),
+                            Ok(QueryOutcome::Miss) => Err("Cordis responder unavailable".into()),
+                            Err(error) => Err(error.to_string()),
+                        };
+                        completion.send_replace(Some(receipt));
+                        describe("Property updated", result)
+                    }
                     MdeUiCommand::SetProperty(request) => describe(
                         "Property updated",
                         cordis

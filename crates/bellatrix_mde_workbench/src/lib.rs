@@ -1,7 +1,10 @@
 //! Engine-MDE as a native Zed Workspace Item.
 //! Zed owns presentation; bellatrix_mde owns semantics; Cordis publishes revisions.
 mod hierarchy;
+mod inspector_drafts;
 mod integration;
+mod native_document;
+mod native_document_guard;
 pub mod panels;
 mod property_editor;
 mod quick_edit_view;
@@ -13,6 +16,7 @@ mod symbol_library;
 mod theme;
 pub use bellatrix_mde::MODELING_NAMESPACE;
 pub use integration::register_mde_workspace;
+pub use native_document::{NativeDocumentImporter, NativeDocumentLease};
 pub use snapshot::{MdeSnapshot, from_document};
 pub use source::MdeUiSource;
 pub use symbol_library::MdeSymbolLibraryItem;
@@ -295,6 +299,9 @@ impl MdeWorkbenchItem {
     }
 
     pub fn remove_selected_view(&mut self, cx: &mut Context<Self>) {
+        if self.source.is_read_only() {
+            return;
+        }
         let Some((diagram_id, view_id)) = selected_view_target(
             self.active_diagram.as_deref(),
             self.selected_view.as_deref(),
@@ -307,6 +314,9 @@ impl MdeWorkbenchItem {
     }
 
     fn remove_view(&mut self, diagram_id: String, view_id: String, cx: &mut Context<Self>) {
+        if self.source.is_read_only() {
+            return;
+        }
         let Ok(snapshot) = self.source.snapshot() else {
             self.feedback = "Project snapshot unavailable".into();
             cx.notify();
@@ -341,6 +351,11 @@ impl MdeWorkbenchItem {
         owner.update(cx, |item, cx| {
             item.select_view(subject.clone(), view_id.clone(), cx)
         });
+        if owner.read(cx).source.is_read_only() {
+            return ui::ContextMenu::build(window, cx, |menu, _, _| {
+                menu.header("Read-only MDE preview")
+            });
+        }
         ui::ContextMenu::build(window, cx, move |menu, _, _| {
             let remove_owner = owner.clone();
             menu.entry(
@@ -417,6 +432,9 @@ impl MdeWorkbenchItem {
         );
     }
     fn begin_inline_edit(&mut self, id: String, window: &mut Window, cx: &mut Context<Self>) {
+        if self.source.is_read_only() {
+            return;
+        }
         let Ok(snapshot) = self.source.snapshot() else {
             return;
         };
@@ -457,6 +475,9 @@ impl MdeWorkbenchItem {
         cx.notify();
     }
     fn commit_inline_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.source.is_read_only() {
+            return;
+        }
         let (Some(id), Some(field)) = (self.editing_subject.clone(), self.inline_editor.clone())
         else {
             return;
@@ -558,6 +579,21 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         }
+        if self.source.is_read_only() {
+            if let Ok(kind) = diagram_validation_kind(&diagram.uml_di_type) {
+                let model = snapshot
+                    .section
+                    .to_model(snapshot.project_id.as_str(), &snapshot.name);
+                let issues = bellatrix_mde::validate_structural_diagram(&model, &diagram.id, kind);
+                self.feedback = if issues.is_empty() {
+                    "Read-only preview validation: no reported issues".into()
+                } else {
+                    format!("Read-only preview validation: {issues:?}")
+                };
+                cx.notify();
+            }
+            return;
+        }
         self.submit(
             MdeUiCommand::ValidateDiagram(bellatrix_mde_cordis::ModelingValidateDiagramRequested {
                 project_id: self.project_id().clone(),
@@ -572,6 +608,9 @@ impl MdeWorkbenchItem {
         kind: bellatrix_mde::StructuralDiagramKind,
         cx: &mut Context<Self>,
     ) {
+        if self.source.is_read_only() {
+            return;
+        }
         let Ok(snapshot) = self.source.snapshot() else {
             self.feedback = "Project snapshot unavailable".into();
             cx.notify();
@@ -609,6 +648,9 @@ impl MdeWorkbenchItem {
         cx.notify();
     }
     pub fn select_tool(&mut self, kind: ModelingTool, cx: &mut Context<Self>) {
+        if self.source.is_read_only() {
+            return;
+        }
         if self.selected_tool == Some(kind) {
             self.cancel_tool(cx);
         } else {
@@ -627,6 +669,9 @@ impl MdeWorkbenchItem {
         target: String,
         cx: &mut Context<Self>,
     ) {
+        if self.source.is_read_only() {
+            return;
+        }
         let from = match choose_relation_endpoint(&mut self.pending_relation_source, &target) {
             RelationClick::First => {
                 self.select_element(target, cx);
@@ -674,6 +719,9 @@ impl MdeWorkbenchItem {
         cx.notify();
     }
     pub fn arm_drag_tool(&mut self, tool: ModelingTool, cx: &mut Context<Self>) {
+        if self.source.is_read_only() {
+            return;
+        }
         self.gesture = None;
         self.inline_editor = None;
         self.editing_subject = None;
@@ -732,6 +780,9 @@ impl MdeWorkbenchItem {
         }
     }
     pub fn add_member_to_selected(&mut self, kind: ModelingMemberKind, cx: &mut Context<Self>) {
+        if self.source.is_read_only() {
+            return;
+        }
         let Some(owner_id) = self.selected_element.clone() else {
             self.feedback = "Select a classifier first".into();
             cx.notify();
@@ -752,12 +803,48 @@ impl MdeWorkbenchItem {
             cx,
         );
     }
+    pub(crate) fn set_inspector_property(
+        &mut self,
+        project_id: ProjectId,
+        element_id: String,
+        path: String,
+        value: serde_json::Value,
+        expected_revision: u64,
+        cx: &mut Context<Self>,
+    ) -> Result<tokio::sync::watch::Receiver<Option<Result<u64, String>>>, String> {
+        if self.source.is_read_only() {
+            return Err("This document is not currently editable; draft preserved".into());
+        }
+        if self.project_id() != &project_id
+            || self.selected_element.as_deref() != Some(element_id.as_str())
+        {
+            return Err("Inspector selection changed; draft preserved".into());
+        }
+        let (completion, receipt) = tokio::sync::watch::channel(None);
+        self.source.submit(MdeUiCommand::SetPropertyTracked {
+            request: ModelingSetPropertyRequested {
+                project_id,
+                element_id,
+                path,
+                value,
+                expected_revision,
+            },
+            completion,
+        })?;
+        self.feedback = "Updating inspected property…".into();
+        cx.notify();
+        Ok(receipt)
+    }
+
     pub fn set_selected_property(
         &mut self,
         path: String,
         value: serde_json::Value,
         cx: &mut Context<Self>,
     ) {
+        if self.source.is_read_only() {
+            return;
+        }
         let Some(element_id) = self.selected_element.clone() else {
             self.feedback = "Select a model element first".into();
             cx.notify();
@@ -780,6 +867,9 @@ impl MdeWorkbenchItem {
         );
     }
     pub fn delete_selected_from_model(&mut self, cx: &mut Context<Self>) {
+        if self.source.is_read_only() {
+            return;
+        }
         let Some(element_id) = self.selected_element.clone() else {
             self.feedback = "Select an element to delete".into();
             cx.notify();
@@ -832,6 +922,9 @@ impl MdeWorkbenchItem {
         cx.notify();
     }
     pub fn rename_selected(&mut self, name: String, cx: &mut Context<Self>) {
+        if self.source.is_read_only() {
+            return;
+        }
         let Some(id) = self.selected_element.clone() else {
             self.feedback = "Select an element first".into();
             cx.notify();
@@ -859,6 +952,9 @@ impl MdeWorkbenchItem {
         y: f64,
         cx: &mut Context<Self>,
     ) {
+        if self.source.is_read_only() {
+            return;
+        }
         let Ok(snapshot) = self.source.snapshot() else {
             self.feedback = "Project snapshot unavailable".into();
             cx.notify();
@@ -902,6 +998,9 @@ impl MdeWorkbenchItem {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.source.is_read_only() {
+            return;
+        }
         let Ok(snapshot) = self.source.snapshot() else {
             self.feedback = "Project snapshot unavailable".into();
             cx.notify();
@@ -945,6 +1044,9 @@ impl MdeWorkbenchItem {
     }
 
     pub fn create_in_next_slot(&mut self, kind: ModelingElementKind, cx: &mut Context<Self>) {
+        if self.source.is_read_only() {
+            return;
+        }
         let count = self
             .source
             .snapshot()
@@ -979,6 +1081,9 @@ impl MdeWorkbenchItem {
             return;
         }
         self.select_view(subject, view_id.clone(), cx);
+        if self.source.is_read_only() {
+            return;
+        }
         self.gesture = Some(CanvasGesture::Move {
             view_id,
             start: position,
@@ -996,6 +1101,9 @@ impl MdeWorkbenchItem {
         position: Point<Pixels>,
         cx: &mut Context<Self>,
     ) {
+        if self.source.is_read_only() {
+            return;
+        }
         self.gesture = Some(CanvasGesture::Resize {
             view_id,
             start: position,
@@ -1008,6 +1116,9 @@ impl MdeWorkbenchItem {
         cx.notify();
     }
     fn update_gesture(&mut self, event: &MouseMoveEvent, cx: &mut Context<Self>) {
+        if self.source.is_read_only() {
+            return;
+        }
         if !event.dragging() {
             return;
         }
@@ -1023,6 +1134,9 @@ impl MdeWorkbenchItem {
         cx.notify();
     }
     fn finish_gesture(&mut self, cx: &mut Context<Self>) {
+        if self.source.is_read_only() {
+            return;
+        }
         let Some(gesture) = self.gesture.take() else {
             return;
         };
@@ -1103,9 +1217,8 @@ impl Item for MdeWorkbenchItem {
     type Event = ();
     fn tab_content_text(&self, _: usize, _: &App) -> SharedString {
         self.source
-            .projects
-            .snapshot(&self.source.project_id)
-            .map(|document| format!("MDE · {}", document.name()).into())
+            .snapshot()
+            .map(|snapshot| format!("MDE · {}", snapshot.name).into())
             .unwrap_or_else(|_| "MDE Workbench".into())
     }
     fn show_toolbar(&self) -> bool {
@@ -1984,6 +2097,9 @@ impl Render for MdeWorkbenchItem {
                             f64::from(event.bounds.origin.y),
                         );
                         if let Err(error) = dragging_owner.update(cx, |item, _| {
+                            if item.source.is_read_only() {
+                                return;
+                            }
                             item.drop_point =
                                 Some(canvas_model_position(position, origin, item.pan, item.zoom));
                         }) {

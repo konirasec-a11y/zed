@@ -97,3 +97,73 @@ async fn external_storage_uses_cordis_lifecycle_and_emits_only_confirmed_save() 
         QueryOutcome::Miss
     ));
 }
+
+#[tokio::test]
+async fn snapshot_cleanup_emits_closed_only_for_the_captured_unchanged_document() {
+    let context = Context::new();
+    let service = Arc::new(ProjectService::new());
+    let plugin = ProjectPlugin::new(Arc::clone(&service));
+    let input = plugin.prepare(()).expect("plugin");
+    let fiber = context
+        .spawn(PreparedPlugin::from_input(plugin, input))
+        .await
+        .expect("activate");
+    let closed = Arc::new(Mutex::new(0));
+    let observed = Arc::clone(&closed);
+    let _listener = context
+        .on::<ProjectClosedEvent, _>(observer_sync(move |_, _: ProjectClosed| {
+            *observed.lock().expect("events") += 1;
+            Ok::<_, std::convert::Infallible>(())
+        }))
+        .expect("subscribe");
+    let id = ProjectId::new("preview-cleanup").expect("id");
+    let imported = context
+        .query::<ProjectImport>(
+            Routing::Unscoped,
+            ProjectImportRequested {
+                document: ProjectDocument::new(id.clone(), "Preview").expect("document"),
+                is_saved: false,
+            },
+        )
+        .await
+        .expect("import");
+    let QueryOutcome::Answer(Ok(imported)) = imported else {
+        panic!("import result")
+    };
+    let edited = context
+        .query::<ProjectReplace>(
+            Routing::Unscoped,
+            ProjectReplaceRequested {
+                id: id.clone(),
+                namespace: "example.engine".into(),
+                expected_revision: 0,
+                state: serde_json::json!({"edit":true}),
+            },
+        )
+        .await
+        .expect("edit");
+    assert!(matches!(edited, QueryOutcome::Answer(Ok(_))));
+    let failed = context
+        .query::<ProjectCloseSnapshot>(
+            Routing::Unscoped,
+            ProjectCloseSnapshotRequested { document: imported },
+        )
+        .await
+        .expect("stale cleanup");
+    assert!(matches!(
+        failed,
+        QueryOutcome::Answer(Err(ProjectError::SessionChanged(_)))
+    ));
+    assert_eq!(*closed.lock().expect("events"), 0);
+    let current = service.snapshot(&id).expect("preserved");
+    let closed_result = context
+        .query::<ProjectCloseSnapshot>(
+            Routing::Unscoped,
+            ProjectCloseSnapshotRequested { document: current },
+        )
+        .await
+        .expect("cleanup");
+    assert!(matches!(closed_result, QueryOutcome::Answer(Ok(()))));
+    assert_eq!(*closed.lock().expect("events"), 1);
+    fiber.dispose().await.expect("dispose");
+}

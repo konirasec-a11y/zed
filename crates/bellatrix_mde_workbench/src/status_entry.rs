@@ -1,6 +1,7 @@
 use crate::integration::OpenMdeWorkbench;
+use crate::native_document::OpenMdeProjectPreview;
 use gpui::App;
-use ui::{Tooltip, prelude::*};
+use ui::{ContextMenu, DropdownMenu, DropdownStyle, Tooltip, prelude::*};
 use workspace::{HideStatusItem, ItemHandle, StatusItemView};
 
 pub(crate) struct MdeStatusEntry;
@@ -10,15 +11,31 @@ pub(crate) fn status_button_enabled(value: Option<&str>) -> bool {
 }
 
 impl Render for MdeStatusEntry {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        Button::new("bellatrix-mde-status-entry", "MDE")
-            .label_size(LabelSize::Small)
-            .tab_index(0isize)
-            .aria_label("Open MDE Workbench")
-            .tooltip(|_window, cx| Tooltip::for_action("Open MDE Workbench", &OpenMdeWorkbench, cx))
-            .on_click(cx.listener(|_this, _, window, cx| {
-                window.dispatch_action(Box::new(OpenMdeWorkbench), cx);
-            }))
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let menu = ContextMenu::build(window, cx, |menu, _, _| {
+            menu.action(
+                "Open MDE project (read-only preview)",
+                Box::new(OpenMdeProjectPreview),
+            )
+        });
+        h_flex()
+            .child(
+                Button::new("bellatrix-mde-status-entry", "MDE")
+                    .label_size(LabelSize::Small)
+                    .tab_index(0isize)
+                    .aria_label("Open MDE Workbench")
+                    .tooltip(|_window, cx| {
+                        Tooltip::for_action("Open MDE Workbench", &OpenMdeWorkbench, cx)
+                    })
+                    .on_click(cx.listener(|_this, _, window, cx| {
+                        window.dispatch_action(Box::new(OpenMdeWorkbench), cx);
+                    })),
+            )
+            .child(
+                DropdownMenu::new("bellatrix-mde-open-project", "Open project", menu)
+                    .trigger_size(ButtonSize::Compact)
+                    .style(DropdownStyle::Subtle),
+            )
     }
 }
 

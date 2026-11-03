@@ -33,6 +33,7 @@ impl Plugin for ProjectPlugin {
         register_replace(&ctx, service)?;
         register_save(&ctx, service)?;
         register_close(&ctx, service)?;
+        register_close_snapshot(&ctx, service)?;
         Ok(())
     }
 }
@@ -261,5 +262,29 @@ fn register_external_storage(
             },
         ))
         .map_err(|e| io::Error::other(e.to_string()))?;
+    Ok(())
+}
+
+fn register_close_snapshot(ctx: &Context, service: &Arc<ProjectService>) -> Result<(), io::Error> {
+    let service = Arc::clone(service);
+    let _listener = ctx
+        .on::<ProjectCloseSnapshot, _>(responder(
+            move |ctx, args: ProjectCloseSnapshotRequested| {
+                let service = Arc::clone(&service);
+                async move {
+                    let id = args.document.id().clone();
+                    let result =
+                        tokio::task::spawn_blocking(move || service.close_snapshot(&args.document))
+                            .await
+                            .map_err(|error| ProjectError::Io(io::Error::other(error.to_string())))
+                            .and_then(|result| result);
+                    if result.is_ok() {
+                        notify::<ProjectClosedEvent>(&ctx, ProjectClosed { id }).await;
+                    }
+                    Ok::<_, Infallible>(Some(result))
+                }
+            },
+        ))
+        .map_err(|error| io::Error::other(error.to_string()))?;
     Ok(())
 }

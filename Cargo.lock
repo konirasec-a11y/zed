@@ -2236,6 +2236,7 @@ dependencies = [
  "bellatrix_ui_uml",
  "dugong",
  "gpui",
+ "language",
  "manatee",
  "merman-core",
  "merman-render",
