@@ -614,6 +614,7 @@ impl<'a> Model<'a> {
         issues.extend(super::namespace_imports::validate(&references));
         issues.extend(super::instances::validate(self, &references));
         issues.extend(super::operations::validate(&references));
+        issues.extend(crate::templates::validate_bindings(&references));
         issues.extend(super::value_specifications::validate(&references));
         issues.extend(super::associations::validate(&references));
         issues.extend(super::relationship_endpoints::validate(&references));

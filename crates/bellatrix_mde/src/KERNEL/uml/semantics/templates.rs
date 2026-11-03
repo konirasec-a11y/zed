@@ -159,6 +159,210 @@ fn issue(code: &'static str, subject: &str, message: &str) -> StructuralDiagnost
     }
 }
 
+struct TemplateReferenceEvidence<'a> {
+    known: Vec<crate::uml::root::ElementRef<'a>>,
+    unknown: bool,
+}
+
+fn template_reference_evidence<'a>(
+    references: &crate::uml::references::ReferenceIndex<'a>,
+    element: crate::uml::root::ElementRef<'a>,
+    property: &str,
+) -> Result<TemplateReferenceEvidence<'a>, crate::uml::classifiers::QueryError> {
+    use crate::uml::{
+        classifiers::QueryError,
+        property_contracts::{PropertyOutcome, check_value},
+        references::{external_reference_href, reference_id},
+        schema,
+    };
+    let metaclass = element.metaclass().ok_or_else(|| {
+        QueryError::unsupported(element.id(), "template reference metaclass is unresolved")
+    })?;
+    let descriptor = schema::uml_property(metaclass, property)
+        .map_err(|error| QueryError::unsupported(element.id(), error.to_string()))?
+        .ok_or_else(|| {
+            QueryError::unsupported(element.id(), "template reference contract is unavailable")
+        })?;
+    let value = element.properties().get(property).ok_or_else(|| {
+        QueryError::unsupported(
+            element.id(),
+            format!("{property} projection is not materialized"),
+        )
+    })?;
+    match check_value(references, element, descriptor, value) {
+        PropertyOutcome::Satisfied | PropertyOutcome::Unverified(_) => {}
+        PropertyOutcome::Violation(message) => {
+            return Err(QueryError::invalid(element.id(), message));
+        }
+    }
+    // Membership depends on identities, not the resolution of their metaclasses.
+    // Full property-contract validation independently retains type uncertainty.
+    let mut unknown = false;
+    let values = if matches!(descriptor.upper, "0" | "1") {
+        std::slice::from_ref(value)
+    } else {
+        value
+            .as_array()
+            .ok_or_else(|| {
+                QueryError::invalid(element.id(), "template references must be a collection")
+            })?
+            .as_slice()
+    };
+    let mut known = Vec::new();
+    for value in values {
+        if external_reference_href(value)
+            .map_err(|error| QueryError::invalid(element.id(), error))?
+            .is_some()
+        {
+            unknown = true;
+            continue;
+        }
+        if let Some(id) =
+            reference_id(value).map_err(|error| QueryError::invalid(element.id(), error))?
+        {
+            known.push(
+                references
+                    .element(id)
+                    .map_err(|error| QueryError::invalid(element.id(), error))?,
+            );
+        }
+    }
+    Ok(TemplateReferenceEvidence { known, unknown })
+}
+
+fn binding_formals(
+    references: &crate::uml::references::ReferenceIndex<'_>,
+    binding: crate::uml::root::ElementRef<'_>,
+) -> Result<bool, crate::uml::classifiers::QueryError> {
+    use crate::uml::classifiers::QueryError;
+    let substitutions = template_reference_evidence(references, binding, "parameterSubstitution");
+    if substitutions
+        .as_ref()
+        .is_ok_and(|substitutions| substitutions.known.is_empty() && !substitutions.unknown)
+    {
+        return Ok(true);
+    }
+    let unknown = || {
+        QueryError::unsupported(
+            binding.id(),
+            "TemplateBinding formal membership is not fully resolved",
+        )
+    };
+    let mut checks = Vec::new();
+    let substitutions = match substitutions {
+        Ok(substitutions) => substitutions,
+        Err(error) => {
+            checks.push(Err(error));
+            TemplateReferenceEvidence {
+                known: Vec::new(),
+                unknown: true,
+            }
+        }
+    };
+    if substitutions.unknown {
+        checks.push(Err(unknown()));
+    }
+    let parameters = (|| {
+        let signature = template_reference_evidence(references, binding, "signature")?;
+        if signature.unknown {
+            checks.push(Err(unknown()));
+        }
+        let signature = signature.known.first().copied().ok_or_else(unknown)?;
+        // Relationship endpoints are canonical; an authored local signature
+        // cannot silently replace a different target even if its type is unknown.
+        if let crate::uml::root::ElementRef::Relationship(relation) = binding
+            && signature.id() != relation.to
+        {
+            return Err(QueryError::invalid(
+                binding.id(),
+                "signature projection contradicts the canonical TemplateBinding target",
+            ));
+        }
+        if !signature.conforms_to("TemplateSignature") {
+            return Err(unknown());
+        }
+        template_reference_evidence(references, signature, "parameter")
+    })();
+    let parameters = match parameters {
+        Ok(parameters) => Some(parameters),
+        Err(error) => {
+            checks.push(Err(error));
+            None
+        }
+    };
+    for substitution in substitutions.known {
+        if !substitution.conforms_to("TemplateParameterSubstitution") {
+            checks.push(Err(unknown()));
+            continue;
+        }
+        match template_reference_evidence(references, substitution, "formal") {
+            Err(error) => checks.push(Err(error)),
+            Ok(formals) => {
+                if formals.unknown {
+                    checks.push(Err(unknown()));
+                }
+                for formal in formals.known {
+                    if let Some(parameters) = &parameters {
+                        if parameters
+                            .known
+                            .iter()
+                            .any(|parameter| parameter.id() == formal.id())
+                        {
+                            checks.push(Ok(true));
+                        } else if parameters.unknown {
+                            checks.push(Err(unknown()));
+                        } else {
+                            checks.push(Ok(false));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    crate::uml::feature_compatibility::require_all(checks)
+}
+
+pub(crate) fn validate_bindings(
+    references: &crate::uml::references::ReferenceIndex<'_>,
+) -> Vec<StructuralDiagnostic> {
+    use crate::uml::classifiers::QueryError;
+    let mut issues = Vec::new();
+    for binding in references
+        .model()
+        .elements()
+        .filter(|element| element.conforms_to("TemplateBinding"))
+    {
+        let outcome = match binding_formals(references, binding) {
+            Ok(true) => continue,
+            Ok(false) => (
+                StructuralSeverity::Error,
+                "UML_TEMPLATE_BINDING_FORMAL",
+                "Each substitution formal must belong to the target TemplateSignature".to_owned(),
+            ),
+            Err(QueryError::Invalid { message, .. }) => (
+                StructuralSeverity::Error,
+                "MDE_TEMPLATE_BINDING_FORMAL_INVALID",
+                message,
+            ),
+            Err(QueryError::Unsupported { message, .. }) => (
+                StructuralSeverity::Warning,
+                "MDE_TEMPLATE_BINDING_FORMAL_UNVERIFIED",
+                message,
+            ),
+        };
+        issues.push(StructuralDiagnostic {
+            severity: outcome.0,
+            code: outcome.1,
+            subject_id: binding.id().into(),
+            message: format!(
+                "TemplateBinding-parameter_substitution_formal: {}",
+                outcome.2
+            ),
+        });
+    }
+    issues
+}
+
 pub(crate) fn validate(project: &Project) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     let owned = |owner: &str| {

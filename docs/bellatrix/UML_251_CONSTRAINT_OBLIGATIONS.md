@@ -41,6 +41,8 @@ E32; Stereotype::generalize tem refinamento publicado em
 `588f704511f505112afe7632fad10519e4e58847` (E33).
 GeneralizationSet::generalization_same_classifier e StringExpression::operands
 têm recortes publicados em `b28872967fda3c9701e05c2f77fc772918f7a1fc` (E34/E35).
+Powertype de GeneralizationSet e cardinalidade de TimeConstraint/DurationConstraint
+têm recortes publicados em `76f4563735961a4e514d98be8f6e6593669840a7` (E36/E37).
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -156,7 +158,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E35 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E37 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -513,6 +515,58 @@ de execução nova. E12–E35 possuem os gates delimitados nas seções seguinte
   Diagnósticos: `UML_STRING_EXPRESSION_OPERANDS` e
   `MDE_STRING_EXPRESSION_OPERANDS_UNVERIFIED`.
 
+- **E36**: `semantics/classifiers.rs`, `generalization_set_powertype`,
+  `generalization_set_members`, `generalization_classifier` e `validate`;
+  `generalization_set_powertype.rs`, doze testes. Powertype ausente/null satisfaz
+  a implicação. Presente, exige identidade diferente de general e specific,
+  que powertype não seja ancestral de general e que specific não seja ancestral
+  de powertype. Preserva a assimetria do OCL, sem proibir direções inversas.
+  Projeções general/specific armazenadas não substituem endpoints canônicos.
+  Vazio materializado pode decidir o forAll com powertype externo, mas não
+  encobre referência inválida. Hierarquia local é inspecionada mesmo com
+  powertype externo para preservar malformados/ciclos; evidência de identidade
+  não exige fingir metaclasse resolvida. Generalization em objeto sem adapter
+  e fechamento externo de ancestralidade continuam limites.
+
+- **E37**: `semantics/value_specifications.rs`,
+  `constrained_element_cardinality` e `validate`; `time_constraint_cardinality.rs`,
+  oito testes. TimeConstraint exige exatamente um constrainedElement e
+  DurationConstraint exige um ou dois. Papel ausente representa zero neste
+  recorte e viola a cardinalidade; escalar/null não é coleção válida.
+  Contrato de referências, unicidade e representação é checado antes de
+  combinar o tamanho: duplicatas/malformados não são unknown. Referência externa
+  em tamanho permitido conserva não verificado; tamanho fora do limite já
+  prova violação mesmo com identidade externa. Não infere constrainedElement
+  de ownership, inversas ou campos visuais.
+
+### Evidência publicada de powertype e cardinalidade temporal
+
+Commit inspecionado: `76f4563735961a4e514d98be8f6e6593669840a7`.
+Logs locais lidos:
+
+- `/tmp/generalization-powertype-gate-final.log`: **34/34 aprovados**,
+  generalization_set_classifier 10, generalization_set_powertype 12,
+  namespace_distinguishability_flow 3, ownership_namespace_flow 4 e
+  property_invariants_flow 5.
+- `/tmp/time-constraint-final-gate.log`: **190/190 aprovados**,
+  160 testes lib e 30 integrações (extension_end_constraints 8,
+  port_default_value 6, string_expression_operands 8 e
+  time_constraint_cardinality 8).
+
+Powertype cobre identidades, ancestralidade transitiva nas duas direções
+normativas, direções inversas permitidas, projeções contraditórias, ciclos,
+unknowns, vazio explícito e reparo de snapshot. Cardinalidade cobre ausência,
+tamanhos válidos/inválidos, null/escalar, duplicatas, metaclasse local indefinida,
+referências externas, roundtrip e rejeição atômica ao excluir o único elemento.
+As três linhas ficam **P/E36–E37**. Não certificam Classifier::maps_to_generalization_set,
+isCovering/isDisjoint, DurationConstraint::first_event_multiplicity, avaliação
+de intervalos, observações ou semântica temporal em runtime.
+
+Gates executados antes da publicação, sem rerun no SHA remoto e sem novos testes
+pela matriz. A suíte lib mais integrações selecionadas não cobre todos os alvos;
+não somar novamente regressões de gates anteriores como cobertura normativa.
+Continuam separados autoria completa, UI, geração e interchange XMI.
+
 ### Evidência publicada de GeneralizationSet e StringExpression
 
 Commit inspecionado: `b28872967fda3c9701e05c2f77fc772918f7a1fc`.
@@ -534,8 +588,8 @@ indefinida, projeção general contraditória, membership externo, malformados,
 ordem dos ramos e limites do adapter. StringExpression inclui papéis explícitos
 versus inferidos, subExpression ambíguo, metaclasse versus texto, unknowns,
 malformados, roundtrip e rejeição atômica de reparent como operand.
-As duas linhas ficam **P/E34–E35**. Não certificam powertype/isCovering/isDisjoint
-ou StringExpression::subexpressions, avaliação geral de expressões, UI ou
+As duas linhas ficam **P/E34–E35**. Powertype tem incremento posterior em E36;
+esses gates não certificam isCovering/isDisjoint ou StringExpression::subexpressions, avaliação geral de expressões, UI ou
 geração. Os gates precedem a publicação e não são reruns no SHA remoto.
 Lib completa e integrações selecionadas não constituem suíte integral nem
 percentual de conformidade UML.
@@ -1133,7 +1187,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `GeneralizationSet-maps_to_generalization_set`
 
-- Metaclass: `GeneralizationSet`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `GeneralizationSet`. Estado: **P**. Evidência: E36; commit `76f4563735961a4e514d98be8f6e6593669840a7`.
 - OCL publicado: `powertype <> null implies generalization->forAll( gen | not (gen.general = powertype) and not gen.general.allParents()->includes(powertype) and not (gen.specific = powertype) and not powertype.allParents()->includes(gen.specific) )`.
 
 #### `InstanceSpecification-deployment_artifact`
@@ -1554,7 +1608,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `DurationConstraint-has_one_or_two_constrainedElements`
 
-- Metaclass: `DurationConstraint`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `DurationConstraint`. Estado: **P**. Evidência: E37; commit `76f4563735961a4e514d98be8f6e6593669840a7`.
 - OCL publicado: `constrainedElement->size() = 1 or constrainedElement->size()=2`.
 
 #### `DurationObservation-first_event_multiplicity`
@@ -1589,7 +1643,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `TimeConstraint-has_one_constrainedElement`
 
-- Metaclass: `TimeConstraint`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `TimeConstraint`. Estado: **P**. Evidência: E37; commit `76f4563735961a4e514d98be8f6e6593669840a7`.
 - OCL publicado: `constrainedElement->size() = 1`.
 
 #### `TimeExpression-no_expr_requires_observation`

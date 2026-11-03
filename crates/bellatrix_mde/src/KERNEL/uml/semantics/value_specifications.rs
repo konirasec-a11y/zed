@@ -495,6 +495,33 @@ fn constrained_element_cardinality(
     super::feature_compatibility::require_all([contract, Ok((1..=maximum).contains(&count))])
 }
 
+fn duration_first_event_multiplicity(
+    references: &ReferenceIndex<'_>,
+    constraint: ElementRef<'_>,
+) -> Result<bool, super::classifiers::QueryError> {
+    use super::{classifiers::QueryError, property_contracts::{self, PropertyOutcome}};
+    let empty = Value::Array(Vec::new());
+    let mut checks = Vec::new();
+    let mut lengths = [0; 2];
+    for (position, name) in ["constrainedElement", "firstEvent"].into_iter().enumerate() {
+        let value = constraint.properties().get(name).unwrap_or(&empty);
+        let descriptor = schema::uml_property("DurationConstraint", name)
+            .map_err(|error| QueryError::unsupported(constraint.id(), error.to_string()))?
+            .ok_or_else(|| QueryError::unsupported(constraint.id(), "missing DurationConstraint property contract"))?;
+        checks.push(match property_contracts::check_value(references, constraint, descriptor, value) {
+            PropertyOutcome::Satisfied => Ok(true),
+            PropertyOutcome::Violation(message) => Err(QueryError::invalid(constraint.id(), message)),
+            PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(constraint.id(), message)),
+        });
+        lengths[position] = value.as_array()
+            .ok_or_else(|| QueryError::invalid(constraint.id(), format!("{name} requires a collection")))?
+            .len();
+    }
+    let expected = if lengths[0] == 2 { 2 } else { 0 };
+    checks.push(Ok(lengths[1] == expected));
+    super::feature_compatibility::require_all(checks)
+}
+
 /// Structural results only. Callers decide whether an edit is semantic or a
 /// permissive visual draft; evaluation never changes the graph.
 pub fn validate(references: &ReferenceIndex<'_>) -> Vec<crate::StructuralDiagnostic> {
@@ -550,6 +577,17 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<crate::StructuralDiagnos
                 (crate::StructuralSeverity::Warning, unknown_code, message),
         };
         issues.push(crate::StructuralDiagnostic { severity, code, subject_id: constraint.id().into(), message: format!("{rule}: {message}") });
+    }
+    for constraint in references.model().elements().filter(|element| element.conforms_to("DurationConstraint")) {
+        let (severity, code, message) = match duration_first_event_multiplicity(references, constraint) {
+            Ok(true) => continue,
+            Ok(false) => (crate::StructuralSeverity::Error, "UML_DURATION_CONSTRAINT_FIRST_EVENT", "firstEvent must contain two values exactly when constrainedElement has two elements, and no values otherwise".to_owned()),
+            Err(super::classifiers::QueryError::Invalid { message, .. }) =>
+                (crate::StructuralSeverity::Error, "UML_DURATION_CONSTRAINT_FIRST_EVENT", message),
+            Err(super::classifiers::QueryError::Unsupported { message, .. }) =>
+                (crate::StructuralSeverity::Warning, "MDE_DURATION_CONSTRAINT_FIRST_EVENT_UNVERIFIED", message),
+        };
+        issues.push(crate::StructuralDiagnostic { severity, code, subject_id: constraint.id().into(), message: format!("DurationConstraint-first_event_multiplicity: {message}") });
     }
     issues
 }
