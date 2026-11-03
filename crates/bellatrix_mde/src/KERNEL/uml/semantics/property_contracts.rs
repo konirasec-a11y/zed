@@ -383,6 +383,17 @@ fn validate_property_rules(
 ) {
     use PropertyOutcome::{Satisfied, Unverified, Violation};
     if !element.conforms_to("Property") { return; }
+    if element.conforms_to("Port") {
+        // UML 2.5.1 Port-port_aggregation constrains the inherited default too.
+        let outcome = match schema::read_effective_scalar(element, "aggregation") {
+            Ok(value) if value.as_str() == Some("composite") => Satisfied,
+            Ok(_) => Violation("Port aggregation must be composite".into()),
+            // Invalid authored scalars are diagnosed by the property contract;
+            // they must not be replaced with an invented/default aggregation.
+            Err(error) => Unverified(error),
+        };
+        issues.extend(outcome.diagnostic(element, "Port-port_aggregation", "UML_PORT_AGGREGATION"));
+    }
     let derived_union = schema::read_effective_boolean(element, "isDerivedUnion");
     for (property, rule, code) in [
         ("isReadOnly", "Property-derived_union_is_read_only", "UML_PROPERTY_DERIVED_UNION_READ_ONLY"),

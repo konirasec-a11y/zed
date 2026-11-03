@@ -37,6 +37,7 @@ mod inspector;
 mod operation_graph;
 #[path = "KERNEL/I_O/generated_files.rs"]
 mod generated_files;
+mod ownership;
 #[path = "KERNEL/compiler/artifacts/path.rs"]
 mod path;
 #[path = "KERNEL/compiler/artifacts/plan.rs"]
@@ -148,4 +149,18 @@ mod ownership_manifest;
 
 #[path = "kernel-api/validation.rs"]
 mod kernel_api_validation;
-pub use kernel_api_validation::validate_uml_model;
+pub use kernel_api_validation::{validate_graph_model, validate_uml_model};
+
+#[path = "kernel-api/contract.rs"]
+mod kernel_api_contract;
+#[path = "kernel-api/graph.rs"]
+mod kernel_api_graph;
+pub use kernel_api_graph::{reachable_graph_nodes, shortest_graph_path};
+
+#[path = "kernel-api/document.rs"]
+mod kernel_api_document;
+pub use kernel_api_document::decode_model_document;
+
+#[path = "kernel-api/generation.rs"]
+mod kernel_api_generation;
+pub use kernel_api_generation::analyze_generation_dependencies;

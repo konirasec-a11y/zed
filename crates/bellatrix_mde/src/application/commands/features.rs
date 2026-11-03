@@ -436,6 +436,7 @@ pub(super) fn insert_feature(
     properties.insert("visibility".into(), serde_json::json!("public"));
     if action == UmlQuickCreate::Port {
         properties.insert("isService".into(), serde_json::json!(false));
+        properties.insert("aggregation".into(), serde_json::json!("composite"));
     }
     if action == UmlQuickCreate::Part {
         properties.insert("aggregation".into(), serde_json::json!("composite"));
@@ -529,6 +530,27 @@ mod tests {
         let project = serde_json::from_str(include_str!("../../../fixtures/todo.json")).unwrap();
         ModelingSection::from_model(&project)
     }
+    #[test]
+    fn created_port_is_composite_and_noncomposite_edits_are_atomic() {
+        let original = fixture().to_model("port-project", "Ports");
+        let diagram_id = original.diagrams.first().expect("diagram").id.clone();
+        let updated = crate::commands::apply(&original, &crate::commands::Command::QuickEdit {
+            diagram_id,
+            element_id: "type-task".into(),
+            action: UmlQuickCreate::Port,
+        }, 0).expect("create normative Port");
+        let port = updated.elements.iter().find(|element| element.kind == "uml.port").expect("created Port");
+        assert_eq!(port.properties.get("aggregation"), Some(&serde_json::json!("composite")));
+        let before = updated.clone();
+        for value in [serde_json::json!("none"), serde_json::json!("shared")] {
+            let result = crate::commands::apply(&updated, &crate::commands::Command::SetProperty {
+                element_id: port.id.clone(), path: "properties.aggregation".into(), value,
+            }, 1);
+            assert!(matches!(result, Err(ref error) if error.contains("UML_PORT_AGGREGATION")), "{result:?}");
+            assert_eq!(updated, before);
+        }
+    }
+
     #[test]
     fn contained_views_follow_class_move_and_port_reanchors_on_resize() {
         let mut section = fixture();

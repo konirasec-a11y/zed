@@ -173,7 +173,7 @@ pub(crate) fn apply_with_diagram_operations(project: &Project, command: &Command
                 let diagram = project.diagrams.iter().find(|diagram| diagram.id == *diagram_id).ok_or("diagram not found")?;
                 let mut properties = std::collections::BTreeMap::new();
                 properties.insert("semantic_creation_diagnostic".into(), Value::String(reason));
-                if *kind == ModelingElementKind::Part { properties.insert("aggregation".into(), serde_json::json!("composite")); }
+                if matches!(kind, ModelingElementKind::Part | ModelingElementKind::Port) { properties.insert("aggregation".into(), serde_json::json!("composite")); }
                 if let Some(pseudostate) = kind.resolve_pseudostate_kind() { properties.insert("kind".into(), Value::String(pseudostate.into())); }
                 if let Some(owner) = owner_id { properties.insert("requested_owner_id".into(), Value::String(owner.clone())); }
                 apply_with_diagram_operations(project, &Command::CreateVisualDraft { diagram_id: diagram_id.clone(),
@@ -523,7 +523,7 @@ fn create_element(
         properties.insert("isIndirectlyInstantiated".into(), serde_json::json!(true));
         properties.insert("isActive".into(), serde_json::json!(false));
     }
-    if *kind == ModelingElementKind::Part {
+    if matches!(kind, ModelingElementKind::Part | ModelingElementKind::Port) {
         properties.insert("aggregation".into(), serde_json::json!("composite"));
     }
     if let Some(pseudostate_kind) = kind.resolve_pseudostate_kind() {

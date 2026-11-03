@@ -96,3 +96,27 @@ Nota: `isService=false` não é valor proibido. Difere do default true de §11.8
 ## Saída mínima sugerida para o marco estrutural
 
 Para concluir primeiro o marco estrutural, sem reduzir o escopo UML solicitado, fechar cenários verificáveis de ponta a ponta para os sete tipos: criar os elementos próprios, editar referências tipadas e ownership, criar relações próprias, salvar/reabrir preservando semântica e múltiplas Views, e validar casos positivos e negativos vinculados às cláusulas acima. Primeiro corrigir a base comum (ownership/Containment, Property/Association e notações Interface/Port/Part), depois completar Component/Composite, Object, Package, Deployment e Profile. Validar no Windows a interação de cada fluxo; checks estáticos/headless não substituem isso. Declarar separadamente que XMI/UMLDI interchange não foi implementado, se continuar fora do marco.
+
+## Atualização focada: Port::port_aggregation — 2026-11-03
+
+A lacuna de `Port-port_aggregation` identificada acima foi tratada sobre a base
+`1fb60ef`, sem ampliar a UI ou declarar suporte completo a Port/CompositeStructure.
+O validador compartilhado aplica a regra de UML 2.5.1 §11.8.14.7 usando o valor
+escalar autorado ou o default herdado do metamodelo gerado: `composite` satisfaz
+a regra; `none`, `shared` e ausência (default `none`) recebem
+`UML_PORT_AGGREGATION`. Valor explicitamente malformado continua sendo erro do
+contrato escalar e não é substituído por default; a avaliação da regra fica
+não verificada quando a leitura do valor não é possível.
+
+QuickEdit Port e criação direta Port passam a materializar `aggregation=composite`; Part já fazia isso.
+A criação direta preserva as precondições existentes: owner compatível e sua
+View presente no diagrama. `CreateElementOrVisualDraft` cria Port semântico
+quando essas precondições são satisfeitas; owner incompatível continua
+rejeitado e o fallback mantém apenas uma View draft com diagnóstico.
+A correção não altera o default normativo global de Property, não reescreve
+rascunhos importados e não relaxa as outras regras UML. A API funcional existente
+`validate_uml_model` expõe os diagnósticos sem um novo formato ou tipo público.
+Testes focados: `tests/port_aggregation.rs` (3 casos, incluindo repetição A-B-A e
+concorrência) e `created_port_is_composite_and_noncomposite_edits_are_atomic`.
+Continuam fora deste fechamento as outras restrições de Port, suas interfaces
+provided/required, Connector/ConnectorEnd, notação e fluxo GUI completo.

@@ -38,6 +38,8 @@ pub struct GenerationModel {
 pub enum GenerationGraphError {
     #[error("generation dependency cycle involving {0}")]
     Cycle(String),
+    #[error("generation dependency {relation} targets {target}, which is not a source element")]
+    UnsupportedDependencyTarget { relation: String, target: String },
 }
 
 /// Only explicit compilation/typing dependencies impose generation order.
@@ -55,6 +57,19 @@ pub fn analyze_generation_graph(
     project: &Project,
     selected: &HashSet<String>,
 ) -> Result<GenerationModel, GenerationGraphError> {
+    // The current generation IR describes source Elements, not reified UML
+    // relationships. Reject unsupported targets rather than dropping references
+    // in the IR projection below, including dependencies outside the selection.
+    let mut unsupported = project.relations.iter().filter(|relation|
+        selected.contains(&relation.from) && ordering_edge(&relation.kind)
+            && project.element(&relation.to).is_none()
+    ).collect::<Vec<_>>();
+    unsupported.sort_by(|left, right| (&left.id, &left.to).cmp(&(&right.id, &right.to)));
+    if let Some(relation) = unsupported.first() {
+        return Err(GenerationGraphError::UnsupportedDependencyTarget {
+            relation: relation.id.clone(), target: relation.to.clone(),
+        });
+    }
     // Deterministic vertex creation makes independent-node ordering stable.
     let mut selected_ids = selected.iter().map(String::as_str).collect::<Vec<_>>();
     selected_ids.sort_unstable();

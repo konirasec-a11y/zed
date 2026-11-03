@@ -68,6 +68,16 @@ impl<'a> Graph<'a> {
     }
 
     pub fn validate(&self) -> Result<(), GraphError> {
+        self.validate_with_presentation(true)
+    }
+
+    // Topological queries must reject ambiguous identities and broken references,
+    // but a visual size or style error does not change graph connectivity.
+    pub(crate) fn validate_integrity(&self) -> Result<(), GraphError> {
+        self.validate_with_presentation(false)
+    }
+
+    fn validate_with_presentation(&self, check_presentation: bool) -> Result<(), GraphError> {
         let mut all = HashSet::new();
         for id in std::iter::once(&self.project.id)
             .chain(self.project.elements.iter().map(|element| &element.id))
@@ -114,7 +124,7 @@ impl<'a> Graph<'a> {
             }
         }
         for diagram in &self.project.diagrams {
-            if !(diagram.width.is_finite() && diagram.height.is_finite() && diagram.width > 0.0 && diagram.height > 0.0) {
+            if check_presentation && !(diagram.width.is_finite() && diagram.height.is_finite() && diagram.width > 0.0 && diagram.height > 0.0) {
                 return Err(GraphError::Geometry(diagram.id.clone()));
             }
             for view in &diagram.views {
@@ -123,8 +133,8 @@ impl<'a> Graph<'a> {
                 {
                     return Err(GraphError::MissingView { view: view.id.clone(), subject: subject.clone() });
                 }
-                if !valid_geometry(&view.geometry) || !valid_style(&view.style)
-                    || view.timing.as_ref().is_some_and(|timing| timing.validate().is_err())
+                if check_presentation && (!valid_geometry(&view.geometry) || !valid_style(&view.style)
+                    || view.timing.as_ref().is_some_and(|timing| timing.validate().is_err()))
                 {
                     return Err(GraphError::Geometry(view.id.clone()));
                 }
