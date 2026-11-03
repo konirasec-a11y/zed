@@ -489,6 +489,57 @@ fn validate_reception(
     }
 }
 
+fn validate_parameter_scalars(
+    references: &ReferenceIndex<'_>,
+    parameter: ElementRef<'_>,
+    issues: &mut Vec<StructuralDiagnostic>,
+) {
+    // Each rule is independent: a bad direction cannot hide a proven conflict
+    // between stream/exception, and an earlier violation cannot suppress later ones.
+    let direction = schema::read_effective_scalar(parameter, "direction")
+        .map_err(|message| QueryError::invalid(parameter.id(), message));
+    let exception = schema::read_effective_boolean(parameter, "isException")
+        .map_err(|message| QueryError::invalid(parameter.id(), message));
+    let stream = schema::read_effective_boolean(parameter, "isStream")
+        .map_err(|message| QueryError::invalid(parameter.id(), message));
+    let in_and_out = parameter_effect(references, parameter).and_then(|effect|
+        direction.as_ref().map_err(Clone::clone).map(|direction| {
+            (effect != Some("delete") || matches!(direction.as_str(), Some("in" | "inout")))
+                && (effect != Some("create") || matches!(direction.as_str(), Some("out" | "inout" | "return")))
+        }));
+    let not_exception = exception.as_ref().map_err(Clone::clone).and_then(|exception|
+        direction.as_ref().map_err(Clone::clone).map(|direction|
+            !exception || !matches!(direction.as_str(), Some("in" | "inout"))));
+    let stream_and_exception = exception.and_then(|exception| stream.map(|stream| !(exception && stream)));
+    for (rule, result) in [
+        ("in_and_out", in_and_out),
+        ("not_exception", not_exception),
+        ("stream_and_exception", stream_and_exception),
+    ] {
+        let (severity, code, message) = match result {
+            Ok(true) => continue,
+            Ok(false) => (StructuralSeverity::Error, "UML_PARAMETER_CONSTRAINT", "scalar constraint violated".to_owned()),
+            Err(QueryError::Invalid { message, .. }) => (StructuralSeverity::Error, "MDE_PARAMETER_SCALAR_INVALID", message),
+            Err(QueryError::Unsupported { message, .. }) => (StructuralSeverity::Warning, "MDE_PARAMETER_SCALAR_UNVERIFIED", message),
+        };
+        issues.push(StructuralDiagnostic { severity, code, subject_id: parameter.id().into(),
+            message: format!("Parameter::{rule}: {message}") });
+    }
+}
+
+fn parameter_effect<'a>(references: &ReferenceIndex<'a>, parameter: ElementRef<'a>) -> Result<Option<&'a str>, QueryError> {
+    use super::property_contracts::{check_value, PropertyOutcome};
+    let descriptor = schema::uml_property("Parameter", "effect")
+        .map_err(|error| QueryError::unsupported(parameter.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(parameter.id(), "missing Parameter::effect contract"))?;
+    let effect = parameter.properties().get("effect").unwrap_or(&Value::Null);
+    match check_value(references, parameter, descriptor, effect) {
+        PropertyOutcome::Satisfied => Ok(effect.as_str()),
+        PropertyOutcome::Violation(message) => Err(QueryError::invalid(parameter.id(), message)),
+        PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(parameter.id(), message)),
+    }
+}
+
 // UML Parameter-object_effect: validate both operands before deciding the
 // implication. An absent effect proves it even if the type is external, but
 // malformed operands remain Invalid rather than disappearing through .ok().
@@ -496,16 +547,7 @@ fn parameter_object_effect(
     references: &ReferenceIndex<'_>,
     parameter: ElementRef<'_>,
 ) -> Result<bool, QueryError> {
-    use super::property_contracts::{check_value, PropertyOutcome};
-    let descriptor = schema::uml_property("Parameter", "effect")
-        .map_err(|error| QueryError::unsupported(parameter.id(), error.to_string()))?
-        .ok_or_else(|| QueryError::unsupported(parameter.id(), "missing Parameter::effect contract"))?;
-    let effect = parameter.properties().get("effect").unwrap_or(&Value::Null);
-    let absent_effect = match check_value(references, parameter, descriptor, effect) {
-        PropertyOutcome::Satisfied => Ok(effect.is_null()),
-        PropertyOutcome::Violation(message) => Err(QueryError::invalid(parameter.id(), message)),
-        PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(parameter.id(), message)),
-    };
+    let absent_effect = parameter_effect(references, parameter).map(|effect| effect.is_none());
     let not_data_type = reception_reference(references, parameter, "type")
         .map(|target| target.is_none_or(|target| !target.conforms_to("DataType")));
     super::feature_compatibility::accept_any([not_data_type, absent_effect])
@@ -679,48 +721,7 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
                 issues.push(StructuralDiagnostic { severity, code, subject_id: element.id().into(),
                     message: format!("Parameter-object_effect: {message}") });
             }
-            let ElementRef::Object(parameter) = element else {
-                continue;
-            };
-            let problem = match direction(parameter) {
-                Err(error) => Some(error),
-                Ok(direction) => {
-                    let effect = parameter.properties.get("effect").and_then(Value::as_str);
-                    let is_exception = parameter
-                        .properties
-                        .get("isException")
-                        .and_then(Value::as_bool)
-                        == Some(true);
-                    let is_stream = parameter
-                        .properties
-                        .get("isStream")
-                        .and_then(Value::as_bool)
-                        == Some(true);
-                    if (effect == Some("delete") && !matches!(direction.as_str(), "in" | "inout"))
-                        || (effect == Some("create")
-                            && !matches!(direction.as_str(), "out" | "inout" | "return"))
-                    {
-                        Some(
-                            "Parameter::in_and_out restricts create/delete effects by direction"
-                                .into(),
-                        )
-                    } else if is_exception && matches!(direction.as_str(), "in" | "inout") {
-                        Some("Parameter::not_exception prohibits input exception Parameters".into())
-                    } else if is_exception && is_stream {
-                        Some("Parameter::stream_and_exception prohibits both flags together".into())
-                    } else {
-                        None
-                    }
-                }
-            };
-            if let Some(message) = problem {
-                issues.push(StructuralDiagnostic {
-                    severity: StructuralSeverity::Error,
-                    code: "UML_PARAMETER_CONSTRAINT",
-                    subject_id: element.id().into(),
-                    message,
-                });
-            }
+            validate_parameter_scalars(references, element, &mut issues);
         }
     }
     issues

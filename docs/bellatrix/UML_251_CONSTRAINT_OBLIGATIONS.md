@@ -34,6 +34,8 @@ InstanceSpecification::deployment_artifact e recortes de Extension têm
 implementação publicada em `062ef43162559c7d6d784543ecb28f1a82e8510f`
 (E27/E28). Stereotype::binaryAssociationsOnly tem recorte publicado em E29;
 ParameterSet::same_parameterized_entity tem recorte publicado em E30.
+Stereotype::associationEndOwnership foi publicada em
+`f9d7ce39b87cb983f5e0ccbe000fd52dd3b8e9ca` (E31).
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -149,7 +151,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E30 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E31 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -437,6 +439,41 @@ de execução nova. E12–E30 possuem os gates delimitados nas seções seguinte
   Referências externas preservam unknown quando necessárias; owner ambíguo,
   malformados e divergência local não desaparecem diante de membro desconhecido.
   Não inferir membership de ownership ou inversas armazenadas.
+
+- **E31**: `semantics/profiles.rs`, `stereotype_attributes_satisfy`,
+  `attribute_associations_satisfy`, `association_end_ownership`,
+  `opposite_cache_check` e `validate`; `stereotype_association_ownership.rs`,
+  dez testes. Para ownedAttribute direto participante de Association que não
+  seja Extension, cujo tipo não conforme a Stereotype, exige que opposite seja
+  possuído pela Association. Opposite deriva exclusivamente das identidades
+  canônicas memberEnd; cache armazenado não substitui a derivação e, quando
+  resolvido, deve concordar com ela. Endpoints visuais não provam tipo ou owner.
+  Tipo ausente/null segue o ramo não Stereotype; Extension e tipo Stereotype
+  são exceções ao predicado, sem apagar dados malformados. Consequente conhecido
+  verdadeiro decide diante de tipo externo; consequente falso com tipo externo
+  permanece desconhecido. Cache opposite externo não esconde owner local
+  comprovadamente incorreto. Diagnósticos:
+  `UML_STEREOTYPE_ASSOCIATION_END_OWNERSHIP` e
+  `MDE_STEREOTYPE_ASSOCIATION_END_OWNERSHIP_UNVERIFIED`.
+
+### Evidência publicada de Stereotype::associationEndOwnership
+
+Commit inspecionado: `f9d7ce39b87cb983f5e0ccbe000fd52dd3b8e9ca`.
+O log local `/tmp/stereotype-ownership-review-gate.log` registra
+**36/36 aprovados**: association_class_constraints 4, extension_contracts 6,
+extension_end_constraints 8, stereotype_association_ownership 10 e
+stereotype_associations 8. Gate focado da árvore de implementação, anterior à
+publicação, não rerun no SHA remoto nem suíte integral. A matriz não iniciou
+novos testes e não soma alvos repetidos como cobertura normativa.
+
+Os casos incluem tipo Stereotype e Extension, tipo ausente/null/externo,
+memberEnd não resolvido ou malformado, cache opposite divergente/externo,
+precedência em ambas as ordens, reabertura JSON/Protobuf e rejeição atômica de
+reparent da ponta oposta. A linha fica **P/E31**. Não certifica todas as
+representações de Property::opposite, todas as constraints de Stereotype ou
+autoria visual. Extension::non_owned_end/metaclassEnd continua Unsupported por
+divergência normativa; a exceção de Extension nesta regra não resolve esse
+contrato independente.
 
 ### Evidência de Stereotype e ParameterSet
 
@@ -1337,7 +1374,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `Stereotype-associationEndOwnership`
 
-- Metaclass: `Stereotype`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `Stereotype`. Estado: **P**. Evidência: E31; commit `f9d7ce39b87cb983f5e0ccbe000fd52dd3b8e9ca`.
 - OCL publicado: `ownedAttribute ->select(association->notEmpty() and not association.oclIsKindOf(Extension) and not type.oclIsKindOf(Stereotype)) ->forAll(opposite.owner = association)`.
 
 #### `Stereotype-base_property_upper_bound`
