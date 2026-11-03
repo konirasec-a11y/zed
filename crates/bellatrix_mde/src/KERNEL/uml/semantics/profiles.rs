@@ -1,5 +1,5 @@
 use super::{
-    classifiers::QueryError,
+    classifiers::{self, QueryError},
     feature_compatibility,
     property_contracts::{self, PropertyOutcome},
     references::ReferenceIndex,
@@ -116,6 +116,92 @@ pub fn is_required(references: &ReferenceIndex<'_>, extension: ElementRef<'_>) -
     lower
 }
 
+fn attribute_associations_binary(references: &ReferenceIndex<'_>, attribute: ElementRef<'_>) -> Result<bool, QueryError> {
+    let associations = references.association_membership_candidates(attribute.id())
+        .map_err(|error| QueryError::invalid(attribute.id(), error))?;
+    let mut checks = Vec::new();
+    if associations.len() > 1 {
+        checks.push(Err(QueryError::invalid(attribute.id(), "Property::association permits at most one Association")));
+    }
+    for association in &associations {
+        checks.push(binary(references, *association));
+    }
+    // The reverse index contains only explicit local identities. Missing or
+    // external member lists cannot establish that no further Association exists.
+    for association in references.model().elements().filter(|element| element.conforms_to("Association")) {
+        if associations.iter().any(|known| known.id() == association.id()) { continue; }
+        let members = association.properties().get("memberEnd");
+        if members.is_some_and(|value| super::references::reference_id(value).ok().flatten() == Some(attribute.id())) {
+            checks.push(property_check(references, association, "memberEnd"));
+        } else if members.and_then(serde_json::Value::as_array).is_none_or(|members|
+            members.iter().any(|value| super::references::reference_id(value).is_err()))
+        {
+            checks.push(Err(QueryError::unsupported(attribute.id(), "unresolved Association member lists prevent complete association membership")));
+        }
+    }
+    if let Some(stored) = attribute.properties().get("association") {
+        checks.push(property_check(references, attribute, "association"));
+        if let Ok(id) = super::references::reference_id(stored) {
+            if let Some(known) = associations.first() {
+                if id != Some(known.id()) {
+                    checks.push(Err(QueryError::invalid(attribute.id(), "association inverse contradicts canonical memberEnd membership")));
+                }
+            } else if let Some(id) = id {
+                match references.element(id) {
+                    Ok(association) if association.conforms_to("Association") => {
+                        let members = association.properties().get("memberEnd");
+                        checks.push(match members {
+                            Some(_) => property_check(references, association, "memberEnd"),
+                            None => Err(QueryError::unsupported(attribute.id(), "Association::memberEnd is not materialized")),
+                        });
+                        if members.and_then(serde_json::Value::as_array).is_some_and(|members|
+                            members.iter().all(|value| super::references::reference_id(value).is_ok()))
+                        {
+                            checks.push(Err(QueryError::invalid(attribute.id(), "association inverse has no corresponding memberEnd")));
+                        } else {
+                            checks.push(Err(QueryError::unsupported(attribute.id(), "association inverse cannot establish canonical membership")));
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(error) => checks.push(Err(QueryError::invalid(attribute.id(), error))),
+                }
+            }
+        }
+    }
+    feature_compatibility::require_all(checks)
+}
+
+fn stereotype_binary_associations(references: &ReferenceIndex<'_>, stereotype: ElementRef<'_>) -> Result<bool, QueryError> {
+    let mut checks = Vec::new();
+    // Inspect only direct attribute roles; inherited namespace members are not
+    // Stereotype::ownedAttribute and must not create this obligation.
+    for descriptor in classifiers::properties(stereotype)? {
+        if descriptor.aggregation != schema::Aggregation::Composite || descriptor.is_derived {
+            continue;
+        }
+        if classifiers::contributes(descriptor, "Classifier-attribute")
+            .map_err(|error| QueryError::unsupported(stereotype.id(), error))?
+            && stereotype.properties().contains_key(descriptor.name)
+        {
+            checks.push(property_check(references, stereotype, descriptor.name));
+        }
+    }
+    for child in references.explicit_owned_elements(stereotype.id())
+        .map_err(|error| QueryError::invalid(stereotype.id(), error))?
+    {
+        if child.metaclass().is_none() {
+            checks.push(Err(QueryError::unsupported(child.id(), "unknown owned metaclass may be an attribute")));
+        } else if child.conforms_to("Property") {
+            match classifiers::is_owned_attribute(stereotype, child) {
+                Ok(true) => checks.push(attribute_associations_binary(references, child)),
+                Ok(false) => {}
+                Err(error) => checks.push(Err(error)),
+            }
+        }
+    }
+    feature_compatibility::require_all(checks)
+}
+
 pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     for end in references.model().elements().filter(|element| element.conforms_to("ExtensionEnd")) {
@@ -146,6 +232,16 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             };
             issues.push(StructuralDiagnostic { severity, code, subject_id:extension.id().into(), message:format!("{rule}: {message}") });
         }
+    }
+    for stereotype in references.model().elements().filter(|element| element.conforms_to("Stereotype")) {
+        let outcome = stereotype_binary_associations(references, stereotype);
+        let (severity, code, message) = match outcome {
+            Ok(true) => continue,
+            Ok(false) => (StructuralSeverity::Error, "UML_STEREOTYPE_BINARY_ASSOCIATIONS", "owned attributes may participate only in binary Associations".to_owned()),
+            Err(QueryError::Invalid { message, .. }) => (StructuralSeverity::Error, "UML_STEREOTYPE_BINARY_ASSOCIATIONS", message),
+            Err(QueryError::Unsupported { message, .. }) => (StructuralSeverity::Warning, "MDE_STEREOTYPE_BINARY_ASSOCIATIONS_UNVERIFIED", message),
+        };
+        issues.push(StructuralDiagnostic { severity, code, subject_id:stereotype.id().into(), message:format!("Stereotype-binaryAssociationsOnly: {message}") });
     }
     issues
 }

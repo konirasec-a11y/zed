@@ -30,6 +30,9 @@ Property::deployment_target foi publicada em
 `4e88d1b9f71f62f2d216130f99b5c978b4c1474a` (E25). As duas invariantes de
 ExtensionEnd têm recorte publicado em
 `6188ddb14d09d2641fa188c58087f5056de5d18a` (E26).
+InstanceSpecification::deployment_artifact e recortes de Extension têm
+implementação publicada em `062ef43162559c7d6d784543ecb28f1a82e8510f`
+(E27/E28).
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -145,7 +148,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E26 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E28 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -384,6 +387,66 @@ de execução nova. E12–E26 possuem os gates delimitados nas seções seguinte
   convertida silenciosamente em composite. Diagnósticos próprios usam
   `UML_EXTENSION_END_MULTIPLICITY` e `UML_EXTENSION_END_AGGREGATION`, com
   variantes `MDE_EXTENSION_END_*_UNVERIFIED`.
+
+- **E27**: implementação publicada em `semantics/deployments.rs`,
+  `deployment_artifact_presence`, `instance_deployment_artifact` e `validate`;
+  `instance_deployment_artifact.rs`, oito testes. O antecedente é derivado das
+  referências canônicas Deployment::deployedArtifact no modelo; a inversa
+  deploymentForArtifact armazenada deve concordar e não cria membership sozinha.
+  Instância utilizada como artifact de deployment exige ao menos um classifier
+  cuja metaclasse conforme a Artifact. Herança entre classificadores do modelo
+  não substitui conformidade de metaclasse. Prova local de membership/Artifact
+  não é apagada por vizinho externo; malformados permanecem erros. Antecedente
+  vazio comprovado satisfaz a implicação, e consequente conhecido pode decidir
+  a implicação com antecedente desconhecido. Diagnósticos:
+  `UML_INSTANCE_SPECIFICATION_DEPLOYMENT_ARTIFACT`,
+  `MDE_INSTANCE_SPECIFICATION_DEPLOYMENT_ARTIFACT_INVALID` e
+  `MDE_INSTANCE_SPECIFICATION_DEPLOYMENT_ARTIFACT_UNVERIFIED`.
+
+- **E28**: implementação publicada em `semantics/profiles.rs`, `binary`,
+  `owned_end_projection`, `is_required` e `validate`; `extension_contracts.rs`,
+  seis testes. is_binary compara o tamanho de memberEnd materializado com 2;
+  cardinalidade explícita pode ser decidida sem resolver identidades externas,
+  mas envelope inválido ou duplicação proibida continuam erros. ownedEnd exige
+  uma referência canônica tipada ExtensionEnd e rejeita múltiplos ExtensionEnds
+  possuídos, inclusive ao lado de referência desconhecida. isRequired deriva
+  lowerBound(ownedEnd) = 1, ignora caches isRequired/metaclass e não depende do
+  upperBound; o contrato de ownedEnd precisa continuar verificado mesmo quando
+  o Boolean derivado seria falso. ownedEnd é contrato de propriedade e
+  isRequired é corpo de operação: não acrescentar invariantes ao inventário.
+  Diagnósticos usam `UML_EXTENSION_IS_BINARY`, `UML_EXTENSION_OWNED_END`,
+  `UML_EXTENSION_IS_REQUIRED` e variantes `MDE_EXTENSION_*_UNVERIFIED`.
+
+### Evidência publicada de InstanceSpecification e Extension
+
+Base documental: `3564623`; implementação testada antes da publicação e
+registrada no commit local `2efa079`. Publicada como
+`062ef43162559c7d6d784543ecb28f1a82e8510f`, com árvore confirmada idêntica à
+local. Os gates abaixo são da árvore correspondente, não reruns no SHA remoto.
+Logs locais lidos:
+
+- `/tmp/instance-deployment-extension-gate.log`: **53/53 integrações**,
+  deployment_deployed_elements 9, deployment_specification 10,
+  extension_contracts 6, extension_end_constraints 8,
+  instance_deployment_artifact 8 e property_deployment_target 12.
+- `/tmp/instance-deployment-unit-gate.log`: **1/1 unitário focado**, com 159
+  filtrados: `instance_deployment_artifact_gate_rejects_new_violation_and_accepts_repair`.
+
+Isso totaliza **54/54** nessa execução: 53 integrações mais um unitário.
+Não somar novamente o subtotal 53 nem os gates anteriores que repetem os mesmos
+alvos. O unitário verifica o gate semântico de mudança/reparo; não demonstra
+sozinho autoria pública completa. Os gates são focados, não suíte integral
+ou execução nova pela matriz. A publicação não amplia essa cobertura.
+
+InstanceSpecification::deployment_artifact e Extension::is_binary ficam
+**P/E27** e **P/E28**, respectivamente. Extension::non_owned_end permanece **U**:
+a prosa de metaclassEnd descreve a Property não possuída tipada por metaclasse,
+mas o OCL publicado aplica `p.oclAsType(ExtensionEnd)` a cada memberEnd durante
+a exclusão de ownedEnd, inclusive à Property não possuída. A implementação não
+corrige silenciosamente esse cast. `validate_association` mantém Unsupported
+específico para Extension-non_owned_end/metaclassEnd, bloqueando o gate completo
+de edição mesmo quando is_binary/ownedEnd/isRequired passam. Não declarar
+suporte integral a Extension, profiles ou autoria visual.
 
 ### Evidência de Property::deployment_target e ExtensionEnd
 
@@ -870,7 +933,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `InstanceSpecification-deployment_artifact`
 
-- Metaclass: `InstanceSpecification`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `InstanceSpecification`. Estado: **P**. Evidência: E27; commit `062ef43162559c7d6d784543ecb28f1a82e8510f`.
 - OCL publicado: `deploymentForArtifact->notEmpty() implies classifier->exists(oclIsKindOf(Artifact))`.
 
 #### `InstanceSpecification-structural_feature`
@@ -1172,12 +1235,12 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `Extension-non_owned_end`
 
-- Metaclass: `Extension`. Estado: **U**. Evidência: U01.
+- Metaclass: `Extension`. Estado: **U**. Evidência: U01/E28; divergência de metaclassEnd pendente de decisão normativa.
 - OCL publicado: `metaclassEnd()->notEmpty() and metaclassEnd().type.oclIsKindOf(Class)`.
 
 #### `Extension-is_binary`
 
-- Metaclass: `Extension`. Estado: **U**. Evidência: U01.
+- Metaclass: `Extension`. Estado: **P**. Evidência: E28; commit `062ef43162559c7d6d784543ecb28f1a82e8510f`.
 - OCL publicado: `memberEnd->size() = 2`.
 
 #### `ExtensionEnd-multiplicity`
@@ -1399,8 +1462,8 @@ InstanceSpecification::specification ainda não são avaliados.
 
 ### Lote 5: profiles e extensões
 
-ExtensionEnd tem predicados locais publicados (E26), mas Extension mantém
-Unsupported. Continuar Extension, limites de ExtensionEnd, referências de
+ExtensionEnd tem predicados locais publicados (E26). Extension tem recortes
+publicados em E28, mas non_owned_end/metaclassEnd mantém Unsupported. Continuar Extension, limites de ExtensionEnd, referências de
 Profile e demais constraints de Stereotype
 e aplicações. Stereotype::generalize existente é apenas uma obrigação.
 Semântica do modelo é distinta de renderização, edição visual e intercâmbio XMI.
