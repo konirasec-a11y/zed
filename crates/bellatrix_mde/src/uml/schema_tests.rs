@@ -32,6 +32,41 @@ fn pinned_sources_resolve_typed_inheritance_and_expose_normative_defects() -> Te
             count
         );
     }
+    for descriptor in metamodel::CLASSIFIERS {
+        assert_eq!(
+            classifier(descriptor.id).map(|found| found.id),
+            Some(descriptor.id)
+        );
+    }
+    let class = XmiId::new(Document::Uml, "Class");
+    let unknown = XmiId::new(Document::Uml, "MissingClassifier");
+    assert_eq!(
+        conforms_to(unknown, class),
+        Err(LookupError::UnknownClassifier)
+    );
+    assert_eq!(
+        conforms_to(class, unknown),
+        Err(LookupError::UnknownClassifier)
+    );
+    assert!(matches!(
+        property(unknown, "visibility"),
+        Err(LookupError::UnknownClassifier)
+    ));
+    let mut inherited = inherited_properties(class)?;
+    let inherited_ids = inherited
+        .properties
+        .iter()
+        .map(|property| property.id)
+        .collect::<Vec<_>>();
+    inherited.properties.clear();
+    assert_eq!(
+        inherited_properties(class)?
+            .properties
+            .iter()
+            .map(|property| property.id)
+            .collect::<Vec<_>>(),
+        inherited_ids,
+    );
     let visibility = contract("Class", "visibility")?;
     assert_eq!(
         visibility.id,
@@ -203,6 +238,10 @@ fn pinned_sources_resolve_typed_inheritance_and_expose_normative_defects() -> Te
                 .is_some_and(|text| text.contains("not interpreted"))))
     );
     for descriptor in metamodel::PROPERTIES {
+        assert_eq!(
+            property_by_id(descriptor.id).map(|found| found.id),
+            Some(descriptor.id)
+        );
         assert!(
             descriptor
                 .property_type
@@ -325,6 +364,8 @@ fn generated_contracts_drive_canonical_inspection_commands_validation_and_roundt
             .iter()
             .any(|issue| issue.subject_id == "class" && issue.code == "UML_PROPERTY_VALUE")
     );
+    assert!(crate::validate_structural_model(&changed).is_empty());
+    assert!(crate::validate_structural_model(&original).is_empty());
     assert_eq!(
         original
             .element("attribute")

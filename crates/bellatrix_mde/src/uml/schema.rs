@@ -8,7 +8,10 @@ use super::{
 };
 use crate::{StructuralDiagnostic, StructuralSeverity};
 use serde_json::Value;
-use std::collections::BTreeSet;
+use std::{
+    collections::{BTreeSet, HashMap},
+    sync::{LazyLock, OnceLock},
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum Document {
@@ -208,7 +211,7 @@ pub struct DocumentationDescriptor {
     pub body: Option<&'static str>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct InheritedProperties {
     pub properties: Vec<&'static PropertyDescriptor>,
     pub unresolved: Vec<XmiReference>,
@@ -226,24 +229,63 @@ pub enum LookupError {
     AmbiguousDefault,
 }
 
+struct ClassifierQueries {
+    descriptor: &'static ClassifierDescriptor,
+    ancestors: OnceLock<Ancestors>,
+    properties: OnceLock<Result<InheritedProperties, LookupError>>,
+}
+
+struct Ancestors {
+    ids: BTreeSet<XmiId>,
+    incomplete: bool,
+}
+
+// Only immutable normative descriptors are indexed here, never mutable user-model IDs.
+// Keep the first definition, matching the source-order lookup if the input repeats an ID.
+static CLASSIFIER_INDEX: LazyLock<HashMap<XmiId, ClassifierQueries>> = LazyLock::new(|| {
+    let mut index = HashMap::with_capacity(metamodel::CLASSIFIERS.len());
+    for descriptor in metamodel::CLASSIFIERS {
+        index
+            .entry(descriptor.id)
+            .or_insert_with(|| ClassifierQueries {
+                descriptor,
+                ancestors: OnceLock::new(),
+                properties: OnceLock::new(),
+            });
+    }
+    index
+});
+
+static UML_CLASSIFIER_INDEX: LazyLock<HashMap<&'static str, &'static ClassifierDescriptor>> =
+    LazyLock::new(|| {
+        let mut index = HashMap::new();
+        for descriptor in metamodel::CLASSIFIERS {
+            if descriptor.id.document == Document::Uml && descriptor.kind == ClassifierKind::Class {
+                index.entry(descriptor.name).or_insert(descriptor);
+            }
+        }
+        index
+    });
+
+static PROPERTY_INDEX: LazyLock<HashMap<XmiId, &'static PropertyDescriptor>> =
+    LazyLock::new(|| {
+        let mut index = HashMap::with_capacity(metamodel::PROPERTIES.len());
+        for descriptor in metamodel::PROPERTIES {
+            index.entry(descriptor.id).or_insert(descriptor);
+        }
+        index
+    });
+
 pub fn classifier(id: XmiId) -> Option<&'static ClassifierDescriptor> {
-    metamodel::CLASSIFIERS
-        .iter()
-        .find(|descriptor| descriptor.id == id)
+    CLASSIFIER_INDEX.get(&id).map(|queries| queries.descriptor)
 }
 
 pub fn uml_classifier(name: &str) -> Option<&'static ClassifierDescriptor> {
-    metamodel::CLASSIFIERS.iter().find(|descriptor| {
-        descriptor.id.document == Document::Uml
-            && descriptor.kind == ClassifierKind::Class
-            && descriptor.name == name
-    })
+    UML_CLASSIFIER_INDEX.get(name).copied()
 }
 
 pub fn property_by_id(id: XmiId) -> Option<&'static PropertyDescriptor> {
-    metamodel::PROPERTIES
-        .iter()
-        .find(|descriptor| descriptor.id == id)
+    PROPERTY_INDEX.get(&id).copied()
 }
 
 pub fn operation_by_id(id: XmiId) -> Option<&'static OperationDescriptor> {
@@ -277,25 +319,33 @@ pub fn documentation_for(id: XmiId) -> impl Iterator<Item = &'static Documentati
 }
 
 pub fn conforms_to(specific: XmiId, general: XmiId) -> Result<bool, LookupError> {
-    let mut pending = vec![classifier(specific).ok_or(LookupError::UnknownClassifier)?];
+    let queries = CLASSIFIER_INDEX
+        .get(&specific)
+        .ok_or(LookupError::UnknownClassifier)?;
     classifier(general).ok_or(LookupError::UnknownClassifier)?;
-    let mut visited = BTreeSet::new();
-    let mut incomplete = false;
-    while let Some(descriptor) = pending.pop() {
-        if !visited.insert(descriptor.id) {
-            continue;
-        }
-        if descriptor.id == general {
-            return Ok(true);
-        }
-        for reference in descriptor.generals {
-            match reference.target.and_then(classifier) {
-                Some(parent) => pending.push(parent),
-                None => incomplete = true,
+    let ancestors = queries.ancestors.get_or_init(|| {
+        let mut pending = vec![queries.descriptor];
+        let mut ancestors = Ancestors {
+            ids: BTreeSet::new(),
+            incomplete: false,
+        };
+        while let Some(descriptor) = pending.pop() {
+            if !ancestors.ids.insert(descriptor.id) {
+                continue;
+            }
+            for reference in descriptor.generals {
+                match reference.target.and_then(classifier) {
+                    Some(parent) => pending.push(parent),
+                    None => ancestors.incomplete = true,
+                }
             }
         }
-    }
-    if incomplete {
+        ancestors
+    });
+    // A known path still proves conformance when another branch is unresolved.
+    if ancestors.ids.contains(&general) {
+        Ok(true)
+    } else if ancestors.incomplete {
         Err(LookupError::IncompleteInheritance)
     } else {
         Ok(false)
@@ -303,8 +353,25 @@ pub fn conforms_to(specific: XmiId, general: XmiId) -> Result<bool, LookupError>
 }
 
 pub fn inherited_properties(id: XmiId) -> Result<InheritedProperties, LookupError> {
+    cached_inherited_properties(id).cloned()
+}
+
+fn cached_inherited_properties(id: XmiId) -> Result<&'static InheritedProperties, LookupError> {
+    let queries = CLASSIFIER_INDEX
+        .get(&id)
+        .ok_or(LookupError::UnknownClassifier)?;
+    queries
+        .properties
+        .get_or_init(|| collect_inherited_properties(queries.descriptor))
+        .as_ref()
+        .map_err(|error| *error)
+}
+
+fn collect_inherited_properties(
+    descriptor: &'static ClassifierDescriptor,
+) -> Result<InheritedProperties, LookupError> {
     let mut result = InheritedProperties::default();
-    let mut pending = vec![classifier(id).ok_or(LookupError::UnknownClassifier)?];
+    let mut pending = vec![descriptor];
     let mut visited = BTreeSet::new();
     while let Some(descriptor) = pending.pop() {
         if !visited.insert(descriptor.id) {
@@ -346,13 +413,14 @@ pub fn inherited_properties(id: XmiId) -> Result<InheritedProperties, LookupErro
 }
 
 pub fn property(id: XmiId, name: &str) -> Result<Option<&'static PropertyDescriptor>, LookupError> {
-    let inherited = inherited_properties(id)?;
+    let inherited = cached_inherited_properties(id)?;
     if !inherited.unresolved.is_empty() {
         return Err(LookupError::IncompleteInheritance);
     }
     let mut candidates = inherited
         .properties
-        .into_iter()
+        .iter()
+        .copied()
         .filter(|property| property.name == name);
     let candidate = candidates.next();
     if candidates.next().is_some() {

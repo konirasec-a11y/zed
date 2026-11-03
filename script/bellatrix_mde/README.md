@@ -176,3 +176,19 @@ make that boundary explicit. Finite JSON Real checking is a transport boundary,
 not a complete implementation of mathematical Real semantics. The descriptors
 cover behavioral metaclasses present in the sources, but do not implement
 behavioral execution.
+
+## Shared graph-query indexes
+
+Schema queries share immutable, source-qualified descriptor indexes and lazily
+cached ancestor/inherited-property results. These caches contain only pinned
+metamodel data; they do not cache user-model validity, copy a user graph, or
+implement incremental validation. Returned inherited-property collections
+remain isolated from callers' edits.
+
+A fixed release-mode fixture of 201 objects and 299 relations was measured
+before and after the change. The median complete structural-validation pass
+went from 189.6 ms to 50.6 ms across five warm runs, with identical diagnostics.
+An exhaustive conformance/inheritance/property/default result fingerprint
+also stayed unchanged. This is a scoped measurement, not a guaranteed speedup
+for every model or a native UI benchmark. Root ownership scans remain outside
+this optimization.
