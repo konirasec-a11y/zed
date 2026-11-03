@@ -116,7 +116,7 @@ pub fn is_required(references: &ReferenceIndex<'_>, extension: ElementRef<'_>) -
     lower
 }
 
-fn attribute_associations_binary(references: &ReferenceIndex<'_>, attribute: ElementRef<'_>) -> Result<bool, QueryError> {
+fn attribute_associations_satisfy(references: &ReferenceIndex<'_>, attribute: ElementRef<'_>, predicate: impl Fn(ElementRef<'_>) -> Result<bool, QueryError>) -> Result<bool, QueryError> {
     let associations = references.association_membership_candidates(attribute.id())
         .map_err(|error| QueryError::invalid(attribute.id(), error))?;
     let mut checks = Vec::new();
@@ -124,7 +124,7 @@ fn attribute_associations_binary(references: &ReferenceIndex<'_>, attribute: Ele
         checks.push(Err(QueryError::invalid(attribute.id(), "Property::association permits at most one Association")));
     }
     for association in &associations {
-        checks.push(binary(references, *association));
+        checks.push(predicate(*association));
     }
     // The reverse index contains only explicit local identities. Missing or
     // external member lists cannot establish that no further Association exists.
@@ -171,7 +171,7 @@ fn attribute_associations_binary(references: &ReferenceIndex<'_>, attribute: Ele
     feature_compatibility::require_all(checks)
 }
 
-fn stereotype_binary_associations(references: &ReferenceIndex<'_>, stereotype: ElementRef<'_>) -> Result<bool, QueryError> {
+fn stereotype_attributes_satisfy(references: &ReferenceIndex<'_>, stereotype: ElementRef<'_>, predicate: impl Fn(ElementRef<'_>) -> Result<bool, QueryError>) -> Result<bool, QueryError> {
     let mut checks = Vec::new();
     // Inspect only direct attribute roles; inherited namespace members are not
     // Stereotype::ownedAttribute and must not create this obligation.
@@ -193,13 +193,70 @@ fn stereotype_binary_associations(references: &ReferenceIndex<'_>, stereotype: E
             checks.push(Err(QueryError::unsupported(child.id(), "unknown owned metaclass may be an attribute")));
         } else if child.conforms_to("Property") {
             match classifiers::is_owned_attribute(stereotype, child) {
-                Ok(true) => checks.push(attribute_associations_binary(references, child)),
+                Ok(true) => checks.push(predicate(child)),
                 Ok(false) => {}
                 Err(error) => checks.push(Err(error)),
             }
         }
     }
     feature_compatibility::require_all(checks)
+}
+
+fn opposite_cache_check(references: &ReferenceIndex<'_>, attribute: ElementRef<'_>) -> Result<bool, QueryError> {
+    let Some(value) = attribute.properties().get("opposite") else { return Ok(true); };
+    let descriptor = schema::uml_property("Property", "opposite")
+        .map_err(|error| QueryError::unsupported(attribute.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(attribute.id(), "missing opposite contract"))?;
+    // Validate the reference envelope only. The cache is never evidence for
+    // the derived identity, which is checked against memberEnd separately.
+    let descriptor = schema::PropertyDescriptor { is_derived: false, ..*descriptor };
+    match property_contracts::check_value(references, attribute, &descriptor, value) {
+        PropertyOutcome::Satisfied => Ok(true),
+        PropertyOutcome::Violation(message) => Err(QueryError::invalid(attribute.id(), message)),
+        PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(attribute.id(), message)),
+    }
+}
+
+// This implication is about the attribute's Type, not the visual target of
+// an Association edge. The opposite comes only from ordered member identities.
+fn association_end_ownership(references: &ReferenceIndex<'_>, attribute: ElementRef<'_>, association: ElementRef<'_>) -> Result<bool, QueryError> {
+    let members = property_check(references, association, "memberEnd");
+    let typed = if attribute.properties().get("type").is_none_or(serde_json::Value::is_null) {
+        Ok(false)
+    } else {
+        feature_compatibility::resolve_feature_type(references, attribute)
+            .map(|target| target.conforms_to("Stereotype"))
+    };
+    // Malformed known operands remain invalid even if an antecedent is false.
+    for evidence in [&members, &typed] {
+        if let Err(error @ QueryError::Invalid { .. }) = evidence { return Err(error.clone()); }
+    }
+    let owner = (|| {
+        if attribute.properties().contains_key("opposite") {
+            let contract = opposite_cache_check(references, attribute);
+            if let Err(error @ QueryError::Invalid { .. }) = contract { return Err(error); }
+        }
+        members.clone()?;
+        let opposite = super::associations::opposite(references, attribute.id())
+            .map_err(|error| QueryError::invalid(attribute.id(), error))?;
+        let Some(opposite) = opposite else { return Ok(false); };
+        let opposite = ElementRef::Object(opposite);
+        let cache = if let Some(stored) = attribute.properties().get("opposite") {
+            let contract = opposite_cache_check(references, attribute);
+            if let Ok(id) = super::references::reference_id(stored) {
+                if id != Some(opposite.id()) {
+                    return Err(QueryError::invalid(attribute.id(), "opposite cache contradicts canonical memberEnd"));
+                }
+            }
+            contract
+        } else { Ok(true) };
+        let owner = references.model().owner(opposite)
+            .map_err(|error| QueryError::invalid(opposite.id(), error))?;
+        feature_compatibility::require_all([cache, Ok(owner.is_some_and(|owner| owner.id() == association.id()))])
+    })();
+    // not(Type is Stereotype) implies owner equality; a true consequent wins
+    // unresolved Type, but malformed evidence always wins both.
+    feature_compatibility::accept_any([Ok(association.conforms_to("Extension")), typed, owner])
 }
 
 pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
@@ -234,7 +291,7 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
         }
     }
     for stereotype in references.model().elements().filter(|element| element.conforms_to("Stereotype")) {
-        let outcome = stereotype_binary_associations(references, stereotype);
+        let outcome = stereotype_attributes_satisfy(references, stereotype, |attribute| attribute_associations_satisfy(references, attribute, |association| binary(references, association)));
         let (severity, code, message) = match outcome {
             Ok(true) => continue,
             Ok(false) => (StructuralSeverity::Error, "UML_STEREOTYPE_BINARY_ASSOCIATIONS", "owned attributes may participate only in binary Associations".to_owned()),
@@ -242,6 +299,18 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             Err(QueryError::Unsupported { message, .. }) => (StructuralSeverity::Warning, "MDE_STEREOTYPE_BINARY_ASSOCIATIONS_UNVERIFIED", message),
         };
         issues.push(StructuralDiagnostic { severity, code, subject_id:stereotype.id().into(), message:format!("Stereotype-binaryAssociationsOnly: {message}") });
+    }
+    for stereotype in references.model().elements().filter(|element| element.conforms_to("Stereotype")) {
+        let outcome = stereotype_attributes_satisfy(references, stereotype, |attribute|
+            attribute_associations_satisfy(references, attribute, |association|
+                association_end_ownership(references, attribute, association)));
+        let (severity, code, message) = match outcome {
+            Ok(true) => continue,
+            Ok(false) => (StructuralSeverity::Error, "UML_STEREOTYPE_ASSOCIATION_END_OWNERSHIP", "opposite end must be owned by its Association".to_owned()),
+            Err(QueryError::Invalid { message, .. }) => (StructuralSeverity::Error, "UML_STEREOTYPE_ASSOCIATION_END_OWNERSHIP", message),
+            Err(QueryError::Unsupported { message, .. }) => (StructuralSeverity::Warning, "MDE_STEREOTYPE_ASSOCIATION_END_OWNERSHIP_UNVERIFIED", message),
+        };
+        issues.push(StructuralDiagnostic { severity, code, subject_id:stereotype.id().into(), message:format!("Stereotype-associationEndOwnership: {message}") });
     }
     issues
 }
