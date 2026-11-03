@@ -9,7 +9,7 @@ use super::{
         accept_any, compare_resolved_types, compare_type_conformance, require_all,
         resolve_feature_type, resolve_feature_upper_bound,
     },
-    references::ReferenceIndex,
+    references::{ReferenceIndex, external_reference_href},
     root::{ElementRef, Model},
     schema,
 };
@@ -66,17 +66,9 @@ fn resolve_subsetted_properties<'a>(
     let mut external = HashSet::new();
     let mut local = Vec::new();
     for value in values {
-        if let Some(href) = value.get("href") {
-            let href = href
-                .as_str()
-                .filter(|href| !href.is_empty())
-                .filter(|_| value.as_object().is_some_and(|object| object.len() == 1))
-                .ok_or_else(|| {
-                    QueryError::invalid(
-                        property.id(),
-                        "external reference requires exactly one nonempty href",
-                    )
-                })?;
+        if let Some(href) = external_reference_href(value)
+            .map_err(|error| QueryError::invalid(property.id(), error))?
+        {
             let inserted = external.insert(href);
             if descriptor.is_unique && !inserted {
                 return Err(QueryError::invalid(

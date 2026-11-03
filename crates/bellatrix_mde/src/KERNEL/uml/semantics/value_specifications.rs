@@ -3,7 +3,7 @@
 //! authoritative. Nonliteral evaluation is deliberately not inferred from text.
 
 use super::{
-    references::{ReferenceIndex, reference_id},
+    references::{ReferenceIndex, external_reference_href, reference_id},
     root::ElementRef,
     schema,
     types::{
@@ -244,7 +244,9 @@ fn bound<'a>(
     else {
         return Ok(None);
     };
-    if value.get("href").is_some() {
+    if external_reference_href(value)
+        .map_err(|error| EvaluationError::invalid(element.id(), error))?.is_some()
+    {
         return Err(EvaluationError::unsupported(
             element.id(),
             format!("external {key} cannot be resolved locally"),

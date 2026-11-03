@@ -7,7 +7,7 @@
 
 use super::{
     classifier_hierarchy::HierarchyQueries,
-    references::{ReferenceIndex, reference_id},
+    references::{ReferenceIndex, external_reference_href, reference_id},
     root::{ElementRef, VisibilityKind},
     schema::{self, Aggregation, Document, PropertyDescriptor, XmiId},
 };
@@ -171,8 +171,10 @@ fn contains_reference(
     let mut seen = HashSet::new();
     let mut external = HashSet::new();
     for value in values {
-        if value.as_object().is_some_and(|value| value.contains_key("href")) {
-            if property.is_unique && !external.insert(value.get("href").map(Value::to_string)) {
+        if let Some(href) = external_reference_href(value)
+            .map_err(|error| QueryError::invalid(subject, error))?
+        {
+            if property.is_unique && !external.insert(href) {
                 return Err(QueryError::invalid(subject, "duplicate external composite reference"));
             }
             unknown = Some("external composite reference has no loaded resolver");
@@ -1341,4 +1343,25 @@ mod class_behavior_gate_tests {
         super::super::root::validate_changes(&candidate, &valid)?;
         Ok(())
     }
+
+    #[test]
+    fn composite_membership_rejects_malformed_external_envelopes_beside_local_proof() {
+        let descriptor = schema::uml_property("Class", "ownedAttribute")
+            .expect("schema").expect("ownedAttribute");
+        let external = json!({"href":"other.uml#Property"});
+        assert!(matches!(contains_reference(&json!([external.clone()]), "child", "owner", descriptor),
+            Err(QueryError::Unsupported { .. })));
+        assert_eq!(contains_reference(&json!([external.clone(), {"$ref":"child"}]), "child", "owner", descriptor), Ok(true));
+        for invalid in [json!({"href":false}), json!({"href":null}), json!({"href":1}),
+            json!({"href":""}), json!({"href":"other.uml#Property", "$ref":"child"})]
+        {
+            for values in [json!([invalid.clone(), {"$ref":"child"}]), json!([{"$ref":"child"}, invalid.clone()]),
+                json!([external.clone(), invalid.clone()]), json!([invalid, external.clone()])]
+            {
+                assert!(matches!(contains_reference(&values, "child", "owner", descriptor),
+                    Err(QueryError::Invalid { .. })), "{values}");
+            }
+        }
+    }
+
 }

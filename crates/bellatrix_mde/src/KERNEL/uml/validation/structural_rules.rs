@@ -176,12 +176,21 @@ mod tests {
     use serde_json::{Value, json};
 
 
-    fn assert_legacy_association_warnings(issues: Vec<StructuralDiagnostic>, subject: &str, aggregation: bool) {
+    fn assert_legacy_association_warnings(issues: Vec<StructuralDiagnostic>, subject: &str, aggregation: bool, association_class: bool) {
+        let distinguishability = format!("Unsupported UML namespace capability on {subject}: Association memberEnd identities are not materialized; migrate the legacy binary notation first");
+        let endpoints = format!("Unsupported UML graph representation at {subject}: Association memberEnd identities are not materialized; related Elements are unverified");
         let mut expected = vec![
+            ("UML_NAMESPACE_DISTINGUISHABILITY_UNSUPPORTED", distinguishability.as_str()),
             ("MDE_ASSOCIATION_ENDS_UNMATERIALIZED", "Association memberEnd identities are not materialized; legacy endpoint notation is not a complete Association kernel model"),
             ("UML_NAMESPACE_QUERY_UNSUPPORTED", "Association memberEnd identities are not materialized; migrate the legacy binary notation first"),
             ("MDE_PROPERTY_CONTRACT_UNVERIFIED", "Association-memberEnd: required reference/collection needs its canonical role projection"),
         ];
+        if association_class {
+            expected.extend([
+                ("MDE_ASSOCIATION_CLASS_UNVERIFIED", "AssociationClass-cannot_be_defined: memberEnd identities are not materialized"),
+                ("MDE_RELATIONSHIP_ENDPOINTS_UNVERIFIED", endpoints.as_str()),
+            ]);
+        }
         if aggregation {
             expected.push(("MDE_PROPERTY_CONTRACT_UNVERIFIED", "end1Aggregation: no normative property or registered extension contract"));
         }
@@ -281,7 +290,7 @@ mod tests {
             )?;
             let issues = validate_structural_model(&project);
             if source == "uml.association_class" {
-                assert_legacy_association_warnings(issues, "a", false);
+                assert_legacy_association_warnings(issues, "a", false, true);
             } else {
                 assert!(issues.is_empty(), "{source}: {issues:#?}");
             }
@@ -426,9 +435,15 @@ mod tests {
     -> serde_json::Result<()> {
         let mut project = fixture("uml.class", "uml.class", "uml.association", json!({}))?;
         project.relations[0].to = "a".into();
-        assert_legacy_association_warnings(validate_structural_model(&project), "r", false);
+        assert_legacy_association_warnings(validate_structural_model(&project), "r", false, false);
+        assert!(crate::Graph::new(&project).validate().is_ok());
         project.relations[0].to = "missing".into();
         assert!(validate(&project).is_empty());
+        assert!(matches!(
+            crate::Graph::new(&project).validate(),
+            Err(crate::GraphError::MissingEndpoint { relation, endpoint })
+                if relation == "r" && endpoint == "missing"
+        ));
         Ok(())
     }
 }

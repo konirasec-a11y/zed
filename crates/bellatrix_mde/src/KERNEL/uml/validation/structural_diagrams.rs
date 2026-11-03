@@ -453,12 +453,21 @@ mod tests {
     use super::*;
     use crate::{PathSegment, Point, Style, View};
 
-    fn assert_legacy_association_warnings(issues: Vec<StructuralDiagnostic>, subject: &str, aggregation: bool) {
+    fn assert_legacy_association_warnings(issues: Vec<StructuralDiagnostic>, subject: &str, aggregation: bool, association_class: bool) {
+        let distinguishability = format!("Unsupported UML namespace capability on {subject}: Association memberEnd identities are not materialized; migrate the legacy binary notation first");
+        let endpoints = format!("Unsupported UML graph representation at {subject}: Association memberEnd identities are not materialized; related Elements are unverified");
         let mut expected = vec![
+            ("UML_NAMESPACE_DISTINGUISHABILITY_UNSUPPORTED", distinguishability.as_str()),
             ("MDE_ASSOCIATION_ENDS_UNMATERIALIZED", "Association memberEnd identities are not materialized; legacy endpoint notation is not a complete Association kernel model"),
             ("UML_NAMESPACE_QUERY_UNSUPPORTED", "Association memberEnd identities are not materialized; migrate the legacy binary notation first"),
             ("MDE_PROPERTY_CONTRACT_UNVERIFIED", "Association-memberEnd: required reference/collection needs its canonical role projection"),
         ];
+        if association_class {
+            expected.extend([
+                ("MDE_ASSOCIATION_CLASS_UNVERIFIED", "AssociationClass-cannot_be_defined: memberEnd identities are not materialized"),
+                ("MDE_RELATIONSHIP_ENDPOINTS_UNVERIFIED", endpoints.as_str()),
+            ]);
+        }
         if aggregation {
             expected.push(("MDE_PROPERTY_CONTRACT_UNVERIFIED", "end1Aggregation: no normative property or registered extension contract"));
         }
@@ -880,7 +889,7 @@ mod tests {
             let project = context_project(kind, context_kind, &["context"])?;
             let issues = validate_structural_diagram(&project, "context-diagram", kind);
             if context_kind == "uml.association_class" {
-                assert_legacy_association_warnings(issues, "context", false);
+                assert_legacy_association_warnings(issues, "context", false, true);
             } else {
                 assert!(issues.is_empty(), "{context_kind}: {issues:#?}");
             }
@@ -987,7 +996,7 @@ mod tests {
                     Some(RootMetaclass::Relationship)
                 );
             }
-            assert_legacy_association_warnings(validate_structural_model(&project), "specialization", true);
+            assert_legacy_association_warnings(validate_structural_model(&project), "specialization", true, false);
         }
         Ok(())
     }

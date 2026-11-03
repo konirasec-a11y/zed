@@ -5,7 +5,7 @@
 use super::{
     classifier_hierarchy,
     classifiers::QueryError,
-    references::ReferenceIndex,
+    references::{ReferenceIndex, external_reference_href},
     root::ElementRef,
     schema,
     types::{MultiplicityRange, UnlimitedNatural},
@@ -36,7 +36,9 @@ pub fn resolve_feature_type<'a>(
         ));
     }
     let value = element.properties().get("type").unwrap_or(&Value::Null);
-    if value.is_string() || value.get("href").is_some() {
+    if value.is_string() || external_reference_href(value)
+        .map_err(|error| QueryError::invalid(element.id(), error))?.is_some()
+    {
         return Err(QueryError::unsupported(
             element.id(),
             "authored Type text and external Types cannot establish local Type conformance",

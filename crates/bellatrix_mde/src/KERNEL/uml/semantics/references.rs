@@ -14,6 +14,24 @@ pub struct ReferenceIndex<'a> {
     association_memberships: HashMap<&'a str, Vec<&'a str>>,
 }
 
+/// Recognize the canonical external-reference envelope without resolving its URI.
+/// URI syntax is left to a future document resolver, including relative references.
+pub(crate) fn external_reference_href(value: &Value) -> Result<Option<&str>, String> {
+    let Some(object) = value.as_object() else {
+        return Ok(None);
+    };
+    let Some(href) = object.get("href") else {
+        return Ok(None);
+    };
+    if object.len() != 1 {
+        return Err("external reference requires exactly one nonempty href".into());
+    }
+    href.as_str()
+        .filter(|href| !href.is_empty())
+        .map(Some)
+        .ok_or_else(|| "external reference requires exactly one nonempty href".into())
+}
+
 pub fn reference_id(value: &Value) -> Result<Option<&str>, String> {
     if value.is_null() {
         return Ok(None);

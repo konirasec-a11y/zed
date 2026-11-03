@@ -8,7 +8,7 @@ use super::{
     classifiers::{self, NamespaceQuery, QueryError},
     feature_compatibility::{require_all, resolve_feature_multiplicity},
     operations,
-    references::ReferenceIndex,
+    references::{ReferenceIndex, external_reference_href},
     root::{ElementRef, Model, VisibilityKind},
     schema,
 };
@@ -336,7 +336,9 @@ fn parameter_type<'a>(
             QueryError::unsupported(parameter.id(), "Parameter::type contract missing")
         })?;
     let value = parameter.properties().get("type").unwrap_or(&Value::Null);
-    if value.is_string() || value.get("href").is_some() {
+    if value.is_string() || external_reference_href(value)
+        .map_err(|error| QueryError::invalid(parameter.id(), error))?.is_some()
+    {
         return Err(QueryError::unsupported(
             parameter.id(),
             "Parameter signature Type identity requires a resolved local reference",

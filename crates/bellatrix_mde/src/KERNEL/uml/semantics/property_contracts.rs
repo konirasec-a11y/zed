@@ -8,7 +8,7 @@
 
 use super::{
     associations,
-    references::{ReferenceIndex, reference_id},
+    references::{ReferenceIndex, external_reference_href, reference_id},
     operations,
     value_specifications::{self, LiteralValue},
     root::ElementRef,
@@ -124,11 +124,12 @@ pub fn check_value(
                 unverified.get_or_insert_with(|| "text declaration is not a resolved UML reference".into());
                 continue;
             }
-            if value.as_object().is_some_and(|object| object.contains_key("href")) {
-                if property.is_unique
-                    && let Some(href) = value.get("href").and_then(Value::as_str)
-                    && !external_references.insert(href)
-                {
+            let external = match external_reference_href(value) {
+                Ok(external) => external,
+                Err(error) => return Violation(format!("reference[{position}]: {error}")),
+            };
+            if let Some(href) = external {
+                if property.is_unique && !external_references.insert(href) {
                     return Violation(format!("duplicate external reference at index {position}; isUnique is true"));
                 }
                 unverified.get_or_insert_with(|| "external model reference has no loaded document resolver".into());
