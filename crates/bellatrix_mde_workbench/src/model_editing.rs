@@ -274,6 +274,9 @@ impl MdeWorkbenchItem {
         if self.visual_draft_mode {
             let (width, height) = kind.initial_size();
             let mut properties = std::collections::BTreeMap::new();
+            if kind == ModelingElementKind::Part {
+                properties.insert("aggregation".into(), serde_json::json!("composite"));
+            }
             if let Some(pseudostate_kind) = kind.resolve_pseudostate_kind() {
                 properties.insert("kind".into(), serde_json::json!(pseudostate_kind));
             }

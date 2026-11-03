@@ -282,3 +282,22 @@ and cycles, repairs the graph, and reopens JSON/Protobuf. The existing Namespace
 hierarchy/import flow continues exercising diamond ordering and no stale cache.
 No new isolated test functions were added. Official sections: UML 2.5.1
 §§9.9.4.7, 9.9.9 and 9.9.20.
+
+## Element and NamedElement graph queries
+
+`uml/element_graph_queries.rs` implements the official UML 2.5.1 §7.8.6 and
+§7.8.9 query bodies from `UML.xmi`. The pinned uml4net NamedElement fixture was
+consulted to compare namespace order and exposed template parameters; no
+implementation code was adapted for this slice. The immutable ReferenceIndex
+and Model ownership projection are the source of graph identity and edges.
+`Model::qualified_name` shares the same `allNamespaces` query.
+
+The ownership query returns an identity set in deterministic traversal order;
+namespace order is inner to outer. Owning packages stop at the first non-Package,
+while exposed template parameters affect `allNamespaces` only. Dependency client
+lookup uses canonical relationship endpoints and includes Dependency subclasses.
+Unadapted object-form dependencies, populated alternate composite or derived
+slots, duplicate identities and cycles fail closed instead of returning a
+partial result. Multi-client dependency representations remain unsupported.
+The existing root graph and template-signature flows exercise ordinary queries,
+exposed parameters and serialization; they do not imply complete Kernel support.

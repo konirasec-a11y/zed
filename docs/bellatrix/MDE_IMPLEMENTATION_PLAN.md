@@ -28,7 +28,7 @@ registrando limitações por requisito. Priorizar o suporte necessário à MDE
 não reduz a especificação ao conjunto de exemplos ou símbolos existentes.
 
 **M2 — aplicação LOW CODE completa em Rust:** projeto, autoria específica,
-configuração, M2M/M2T, regeneração segura e execução pela UI, comprovados pelo
+configuração, M2M/M2T, regeneração determinística e execução pela UI, comprovados pelo
 percurso Customer do passo 11. M1 não substitui M2.
 
 **M3 — extensibilidade e outros alvos:** Rust primeiro; depois Zig, C#,
@@ -50,7 +50,7 @@ infraestrutura de desenvolvimento dentro da MDE; M1 precede o caso completo
 Rust; revisão UI/UX é aditiva, não redefine domínio ou objetivo. A política
 beta canônica **sem aliases/migração legada** substitui a promessa original
 de carregar formatos antigos Bellatrix. Rejeitar formato não suportado com
-diagnóstico não autoriza excluir ou sobrescrever arquivos do usuário.
+diagnóstico não autoriza excluir ou sobrescrever arquivos fora da saída gerada autorizada.
 Formatos/APIs nativos Zed não são alterados por essa decisão. Obrigações
 oficiais de intercâmbio XMI/DI são independentes dessa política beta.
 
@@ -302,25 +302,25 @@ Modelos-alvo e traces validáveis; testes de regras, plano, artefatos e build
 Rust gerado. Ampliação futura para outros alvos usa os mesmos contratos,
 não implementação fictícia inferida de um seletor de linguagem.
 
-## 8. Proteger a evolução do projeto
+## 8. Gerar e regenerar de forma determinística
 
-Ownership explícito: **gerado** (substituível após verificar edição externa),
-**autoral** (preservado por identidade), **misto** (somente com política de
-composição/conflito). Suportar arquivos autorais e contribuições no modelo;
-não pressupor reconstrução automática do modelo a partir de qualquer edição
-arbitrária de texto gerado.
+Nesta fase a geração é **unidirecional**: o modelo e a configuração são a
+entrada; a saída gerada pode ser sobrescrita. Usar Git para versionamento e
+recuperação, sem exigir reconciliação bidirecional, diff ou resolução de
+conflitos como pré-requisito de geração. Não criar commits automaticamente.
 
-Reaproveitar diff do Zed; MDE acrescenta origem, propriedade e decisão de
-publicação. Mostrar arquivos criados/alterados/removidos e conflitos antes
-de sobrescrever. Usar staging, checagem de caminhos e recuperação em falhas.
-Renomes preservam autoria; remoção com conteúdo autoral exige decisão.
-Mudanças externas/opacas não são reconciliadas por adivinhação.
+Carregar os templates de cada linguagem de um diretório ou do SQLite e
+renderizá-los com Tera.
+O mesmo UML, a mesma configuração e a mesma versão dos templates devem gerar
+exatamente a mesma saída. Materializar diretórios e arquivos do grafo de
+saída com funções nativas do Rust. Restringir a escrita ao destino de geração definido e
+validar caminhos; não tratar a autorização para sobrescrever a saída gerada
+como autorização para apagar arquivos fora desse destino.
 
-**Entrega/aceite P08:** regenerar sem alterações não modifica arquivos;
-editar externamente é detectado; falha/cancelamento não deixa projeto
-parcialmente sobrescrito. Testar colisão de caminhos, renome, remoção,
-rollback/recuperação e preservação gerado/autoral/misto. Política beta não
-é licença para apagar documentos ou código do usuário.
+**Entrega/aceite P08:** a mesma entrada e configuração produzem os mesmos
+arquivos e conteúdo; regenerar atualiza a saída definida, cria diretórios e
+reporta falhas de escrita. O projeto pode ser versionado e recuperado via Git.
+Sincronização do código editado de volta para UML não faz parte desta fase.
 
 ## Auditoria normativa e prioridade estrutural — 2026-11-03
 
@@ -420,11 +420,11 @@ Validar UML não prova compilação; compilar não prova comportamento.
 2. Criar `Customer`, propriedades e uma operação.
 3. Adicionar anotação/derive e configurar dependência/versão/features.
 4. Escrever corpo da operação no Editor nativo.
-5. Validar, visualizar plano/diff e gerar o projeto.
+5. Validar o modelo e gerar o projeto a partir do grafo de saída.
 6. Disparar build e executar um teste explicitamente.
-7. Renomear `Customer`, regenerar e preservar autoria/identidades.
-8. Renomear propriedade referenciada por código opaco: mostrar erro do alvo,
-   sem reescrita adivinhada; testar também conflito de modificação externa.
+7. Renomear `Customer` e regenerar deterministicamente a saída definida.
+8. Verificar que mudanças no modelo atualizam a saída gerada sem exigir
+   reconciliação bidirecional do código editado.
 9. Corrigir pela UI, salvar, fechar e reabrir sem perder configuração/código.
 10. Regenerar e repetir build/teste a partir do estado persistido.
 
@@ -486,7 +486,7 @@ linha deve receber evidência por requisito e SHA antes de aceite.
 | P03/P04 | [domínio](../../crates/bellatrix_mde/), [Cordis](../../crates/bellatrix_mde_cordis/) | ASG/comandos/revisões, catálogo/herança/restrições e quatro camadas | Positivos/negativos, rollback, cobertura normativa |
 | P05 | [Project](../../crates/project/), [Workspace](../../crates/workspace/), [Bellatrix Project](../../crates/bellatrix_project/) | ProjectPath/Buffer/SerializableItem, configuração completa e revisão semântica | Documento real, conflito externo, salvar/restaurar |
 | P06 | [Editor](../../crates/editor/), [Language](../../crates/language/) | Fonte única autoral, contexto LSP, macros/anotações/dependências | Corpo + recurso alvo, save/reopen/regenerate |
-| P07/P08 | [gerador Rust](../../crates/bellatrix_mde_rust_generator/), [Tera](../../crates/bellatrix_mde_templates/) | Target/Trace, planos/diff, ownership e publicação recuperável | Determinismo, conflitos, staging/recuperação, Rust gerado |
+| P07/P08 | [gerador Rust](../../crates/bellatrix_mde_rust_generator/), [Tera](../../crates/bellatrix_mde_templates/) | Grafo de saída e rastreio, Tera e materialização nativa | Determinismo, saída gerada, Git e Rust gerado |
 | P09 | [workbench](../../crates/bellatrix_mde_workbench/), [UML UI](../../crates/bellatrix_ui_uml/) | UX-01–UX-09, apresentação compartilhada, tema ativo e interação | M1 vazio, teclado/Dock, gate GUI |
 | P10/P11 | [Project](../../crates/project/), [terminal](../../crates/terminal/) | Tarefas/build/run explícitos, traces e regressão host | Customer completo + Zed normal, cancelamento |
 

@@ -46,6 +46,20 @@ impl MdeWorkbenchItem {
                 let figure = if UmlFigure::supports(&draft.notation_kind) {
                     UmlFigure::new(draft.notation_kind.clone(), label)
                         .diagram_presentation(diagram)
+                        .composite_role(
+                            draft
+                                .properties
+                                .get("aggregation")
+                                .and_then(serde_json::Value::as_str)
+                                == Some("composite"),
+                        )
+                        .interaction_operator(
+                            draft
+                                .properties
+                                .get("interactionOperator")
+                                .or(resolve_interaction_operator_default().as_ref())
+                                .and_then(serde_json::Value::as_str),
+                        )
                         .pseudostate_kind(
                             draft
                                 .properties
@@ -381,7 +395,12 @@ pub(super) fn format_figure_label(
         format!("{{{}}}", element.name)
     } else if matches!(
         element.kind.as_str(),
-        "uml.port" | "uml.part" | "uml.note" | "uml.comment" | "uml.instance_specification"
+        "uml.port"
+            | "uml.part"
+            | "uml.note"
+            | "uml.comment"
+            | "uml.instance_specification"
+            | "uml.collaboration_use"
     ) {
         bellatrix_mde::format_element_label_for_view(element, references, style)
     } else {

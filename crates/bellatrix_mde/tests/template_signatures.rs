@@ -65,6 +65,38 @@ fn template_creation_builds_signature_parameter_and_parametered_classifier() {
             .expect("parametered classifier");
         assert_eq!(classifier.kind, "uml.class");
         assert!(owns(&first, &parameter.id, &classifier.id));
+        let references = bellatrix_mde::uml::references::ReferenceIndex::new(
+            bellatrix_mde::uml::root::Model::from_project(&first),
+        );
+        let namespaces =
+            bellatrix_mde::uml::element_graph_queries::all_namespaces(&references, &classifier.id)
+                .expect("exposed template parameter namespaces");
+        assert_eq!(
+            namespaces
+                .iter()
+                .map(|element| element.id())
+                .collect::<Vec<_>>(),
+            vec!["owner"]
+        );
+        use bellatrix_mde::uml::root::NamedElement;
+        let model = bellatrix_mde::uml::root::Model::from_project(&first);
+        let named = model
+            .element(&classifier.id)
+            .expect("classifier")
+            .named()
+            .expect("named");
+        assert_eq!(
+            named.qualified_name(model).expect("qualified name"),
+            named.name().map(|name| format!("Owner::{name}"))
+        );
+        assert!(
+            bellatrix_mde::uml::element_graph_queries::all_owning_packages(
+                &references,
+                &classifier.id
+            )
+            .expect("template parameter is not a namespace")
+            .is_empty()
+        );
         assert!(
             !first
                 .relations

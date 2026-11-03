@@ -3,12 +3,18 @@ use super::*;
 fn tool_glyph(tool: ModelingTool) -> ShapeKind {
     match tool {
         ModelingTool::Element(kind) => match kind {
+            ModelingElementKind::Port => ShapeKind::Port,
+            ModelingElementKind::Part => ShapeKind::Class,
+            ModelingElementKind::DeploymentSpecification => ShapeKind::Document,
+            ModelingElementKind::CollaborationUse => ShapeKind::Collaboration,
+            ModelingElementKind::DestructionOccurrenceSpecification => ShapeKind::Terminate,
+            ModelingElementKind::Continuation => ShapeKind::State,
+
             ModelingElementKind::Choice => ShapeKind::Decision,
-            ModelingElementKind::Junction => ShapeKind::InitialNode,
+            ModelingElementKind::Junction => ShapeKind::Junction,
             ModelingElementKind::StateFork | ModelingElementKind::StateJoin => ShapeKind::Fork,
-            ModelingElementKind::ShallowHistory | ModelingElementKind::DeepHistory => {
-                ShapeKind::History
-            }
+            ModelingElementKind::ShallowHistory => ShapeKind::History,
+            ModelingElementKind::DeepHistory => ShapeKind::DeepHistory,
             ModelingElementKind::EntryPoint => ShapeKind::EntryPoint,
             ModelingElementKind::ExitPoint => ShapeKind::FlowFinal,
             ModelingElementKind::Terminate => ShapeKind::Terminate,
@@ -375,7 +381,7 @@ impl Render for MdeLeftPanel {
                     .collect(),
             ),
             (
-                "Pins & operands",
+                "Ports, roles & nested elements",
                 ModelingElementKind::DETAILS
                     .iter()
                     .copied()

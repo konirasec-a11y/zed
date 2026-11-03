@@ -1,4 +1,5 @@
 pub mod classifier_hierarchy;
+pub mod element_graph_queries;
 pub mod classifiers;
 pub mod associations;
 pub mod instances;

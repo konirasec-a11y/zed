@@ -2,6 +2,12 @@ use crate::ModelingRelationKind;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ModelingElementKind {
+    Port,
+    Part,
+    DeploymentSpecification,
+    CollaborationUse,
+    DestructionOccurrenceSpecification,
+    Continuation,
     Class,
     Interface,
     Component,
@@ -68,6 +74,7 @@ pub enum ModelingElementKind {
 }
 impl ModelingElementKind {
     pub const STRUCTURAL: &'static [Self] = &[
+        Self::DeploymentSpecification,
         Self::Component,
         Self::Artifact,
         Self::Node,
@@ -106,6 +113,8 @@ impl ModelingElementKind {
         Self::FinalState,
     ];
     pub const INTERACTION_NODES: &'static [Self] = &[
+        Self::DestructionOccurrenceSpecification,
+        Self::Continuation,
         Self::Lifeline,
         Self::BehaviorExecutionSpecification,
         Self::InteractionUse,
@@ -113,6 +122,9 @@ impl ModelingElementKind {
         Self::StateInvariant,
     ];
     pub const DETAILS: &'static [Self] = &[
+        Self::Port,
+        Self::Part,
+        Self::CollaborationUse,
         Self::InputPin,
         Self::OutputPin,
         Self::ValuePin,
@@ -169,6 +181,13 @@ impl ModelingElementKind {
     pub const ANNOTATIONS: &'static [Self] = &[Self::Comment];
     pub fn label(self) -> &'static str {
         match self {
+            Self::Port => "Port",
+            Self::Part => "Part",
+            Self::DeploymentSpecification => "Deployment Specification",
+            Self::CollaborationUse => "Collaboration Use",
+            Self::DestructionOccurrenceSpecification => "Destruction Occurrence",
+            Self::Continuation => "Continuation",
+
             Self::Component => "Component",
             Self::Artifact => "Artifact",
             Self::Class => "Class",
@@ -236,6 +255,13 @@ impl ModelingElementKind {
     }
     pub fn model_kind(self) -> &'static str {
         match self {
+            Self::Port => "uml.port",
+            Self::Part => "uml.part",
+            Self::DeploymentSpecification => "uml.deployment_specification",
+            Self::CollaborationUse => "uml.collaboration_use",
+            Self::DestructionOccurrenceSpecification => "uml.destruction_occurrence_specification",
+            Self::Continuation => "uml.continuation",
+
             // Existing wire identities and Rust generator profiles remain readable.
             Self::Component => "uml.component",
             Self::Artifact => "uml.artifact",
@@ -304,6 +330,13 @@ impl ModelingElementKind {
     }
     pub fn default_name(self) -> &'static str {
         match self {
+            Self::Port => "NewPort",
+            Self::Part => "NewPart",
+            Self::DeploymentSpecification => "NewDeploymentSpecification",
+            Self::CollaborationUse => "NewCollaborationUse",
+            Self::DestructionOccurrenceSpecification => "NewDestruction",
+            Self::Continuation => "NewContinuation",
+
             Self::Component => "NewComponent",
             Self::Artifact => "NewArtifact",
             Self::Class => "NewClass",
@@ -371,6 +404,9 @@ impl ModelingElementKind {
     }
     pub fn initial_size(self) -> (f64, f64) {
         match self {
+            Self::Port => (16.0, 16.0),
+            Self::DestructionOccurrenceSpecification => (38.0, 38.0),
+            Self::CollaborationUse => (185.0, 100.0),
             Self::InitialNode
             | Self::ActivityFinalNode
             | Self::FlowFinalNode
@@ -448,7 +484,7 @@ mod tests {
         {
             assert!(kinds.insert(kind.model_kind()));
         }
-        assert_eq!(kinds.len(), 75);
+        assert_eq!(kinds.len(), 81);
     }
 
     #[test]

@@ -373,7 +373,7 @@ pub(super) static UML: &[SymbolGroup] = &[
             Symbol {
                 id: "uml-state-4",
                 label: "Junction",
-                kind: ShapeKind::InitialNode,
+                kind: ShapeKind::Junction,
             },
             Symbol {
                 id: "uml-state-5",
@@ -429,7 +429,7 @@ pub(super) static UML: &[SymbolGroup] = &[
             Symbol {
                 id: "uml-components-2",
                 label: "Port",
-                kind: ShapeKind::Connector,
+                kind: ShapeKind::Port,
             },
             Symbol {
                 id: "uml-components-3",

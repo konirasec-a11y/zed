@@ -462,39 +462,24 @@ impl<'a> Model<'a> {
             .map_err(|error| error.to_string())?.then_some(namespace))
     }
     pub fn qualified_name(self, named: impl NamedElement<'a>) -> Result<Option<String>, String> {
+        let references = super::references::ReferenceIndex::new(self);
+        Self::qualified_name_with_index(named, &references)
+    }
+    pub fn qualified_name_with_index(
+        named: impl NamedElement<'a>,
+        references: &super::references::ReferenceIndex<'a>,
+    ) -> Result<Option<String>, String> {
         let Some(name) = named.name() else {
             return Ok(None);
         };
         let mut names = vec![name];
-        let mut current = named.as_element();
-        let mut visited = HashSet::from([current.id()]);
-        while let Some(mut owner) = self.owner(current)? {
-            // NamedElement::allNamespaces handles exposed template parameters specially.
-            let exposed_parameter = owner.conforms_to("TemplateParameter");
-            if exposed_parameter {
-                let Some(signature) = self.owner(owner)? else {
-                    break;
-                };
-                let Some(template) = self.owner(signature)? else {
-                    break;
-                };
-                owner = template;
-            }
-            let Some(namespace) = owner.namespace() else {
-                break;
-            };
-            if !exposed_parameter && !super::classifiers::is_owned_member(owner, current)
-                .map_err(|error| error.to_string())? {
-                break;
-            }
-            if !visited.insert(owner.id()) {
-                return Err("cycle in UML ownership".into());
-            }
-            let Some(name) = namespace.named().name() else {
+        for namespace in super::element_graph_queries::all_namespaces(references, named.id())
+            .map_err(|error| error.to_string())?
+        {
+            let Some(name) = namespace.named().and_then(NamedElementRef::name) else {
                 return Ok(None);
             };
             names.push(name);
-            current = owner;
         }
         names.reverse();
         Ok(Some(names.join("::")))

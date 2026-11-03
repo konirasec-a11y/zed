@@ -1017,7 +1017,11 @@
     },
     {
       "file": "crates/bellatrix_mde/src/uml/root.rs",
-      "scope": "Effective visibility defaults and scalar validation of canonical Elements; separate handwritten Root semantic rules."
+      "scope": "Effective visibility defaults, scalar validation and qualified names via the shared allNamespaces query; separate handwritten Root semantic rules."
+    },
+    {
+      "file": "crates/bellatrix_mde/src/uml/element_graph_queries.rs",
+      "scope": "Canonical Element ownership closure, NamedElement namespace/package chains and inverse Dependency clients; exposed template parameters, identity/cycle checks and explicit unsupported alternate representations."
     },
     {
       "file": "crates/bellatrix_mde/src/inspector.rs",

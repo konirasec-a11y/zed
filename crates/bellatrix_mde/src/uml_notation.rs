@@ -84,6 +84,10 @@ pub fn resolve_element_notation(element: &crate::Element) -> UmlNotation {
 pub fn uml_notation(kind: &str) -> UmlNotation {
     // These are presentation strategies, not executable behavior adapters.
     match kind {
+        "uml.deployment_specification" => return UmlNotation::ClassifierRectangle,
+        "uml.collaboration_use" => return UmlNotation::Collaboration,
+        "uml.destruction_occurrence_specification" => return UmlNotation::Terminate,
+        "uml.continuation" => return UmlNotation::State,
         "uml.actor" => return UmlNotation::Actor,
         "uml.use_case" => return UmlNotation::UseCase,
         "uml.instance_specification" => return UmlNotation::Instance,
@@ -197,7 +201,10 @@ pub fn uml_header(kind: &str, applied: Option<&str>) -> UmlHeader {
         Some(UmlType::Template) => Some("«template»"),
         Some(UmlType::Model) => Some("«model»"),
         Some(UmlType::Subsystem) => Some("«subsystem»"),
-        _ => None,
+        _ => match kind {
+            "uml.deployment_specification" => Some("«deployment spec»"),
+            _ => None,
+        },
     };
     UmlHeader {
         keyword,

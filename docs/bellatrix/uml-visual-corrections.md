@@ -17,3 +17,7 @@ Still incomplete: AssociationClass attachment to its association path; internal-
 - Validation mode selection is separate from placement. Configurable validation does not make unsupported Kernel contracts implemented, and a headless flow does not establish native visual acceptance.
 
 - §12.2.4 / §12.3.4: semantic and draft relationships share keyword/name projection, including ElementImport «import»/«access» and strict ProfileApplication «strict»/«apply». AssociationClass no longer receives an invented «associationClass» keyword; its separate dashed association attachment remains incomplete.
+
+## Additional direct placement tools
+
+Port and Part are now direct toolbox entries, alongside DeploymentSpecification (§19.2.4, printed654/PDF696), CollaborationUse (§11.7.4), DestructionOccurrenceSpecification and Continuation (§17.8 notation tables). They reuse existing square, role box, classifier, dashed ellipse, X and rounded-rectangle silhouettes. The deployment specification heading uses the optional official «deployment spec» keyword. Unsupported semantic ownership remains a persisted visual draft, not a reason to prohibit placement. Independent Port, deep-history H*, and junction glyphs correct the toolbox identities without copying proprietary StarUML artwork.

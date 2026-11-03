@@ -146,6 +146,11 @@ fn display_label(
     if element.kind == "uml.instance_specification" && let Some(references) = references {
         return crate::format_instance_heading(element, references, style);
     }
+    if element.kind == "uml.collaboration_use" {
+        return if style.should_show_type() {
+            type_label(element, references).map_or_else(|| element.name.clone(), |value_type| format!("{} : {value_type}", element.name))
+        } else { element.name.clone() };
+    }
     let kind = UmlType::from_kind(&element.kind);
     if kind == Some(UmlType::Parameter) {
         let mut label = match crate::uml::operations::direction(element) {

@@ -104,6 +104,7 @@ fn uml_root_namespace_edit_and_reopen_flow_preserves_canonical_identity() {
     use bellatrix_mde::uml::root::{
         DirectedRelationship, Element, Model, NamedElement, Namespace, Relationship, VisibilityKind,
     };
+    use bellatrix_mde::uml::{element_graph_queries as queries, references::ReferenceIndex};
     use bellatrix_mde::{Format, ModelingRelationKind, ModelingSection, UmlQuickCreate};
     use serde_json::json;
 
@@ -246,6 +247,44 @@ fn uml_root_namespace_edit_and_reopen_flow_preserves_canonical_identity() {
             .iter()
             .any(|element| element.id() == attribute_id)
     );
+    let references = ReferenceIndex::new(model);
+    let descendants = queries::all_owned_elements(&references, &root_id).expect("owned closure");
+    assert!(
+        descendants
+            .iter()
+            .any(|element| element.id() == attribute_id)
+    );
+    assert!(descendants.iter().any(|element| element.id() == note_id));
+    assert!(!descendants.iter().any(|element| element.id() == root_id));
+    assert_eq!(
+        queries::all_namespaces(&references, &class_id)
+            .expect("namespaces")
+            .iter()
+            .map(|element| element.id())
+            .collect::<Vec<_>>(),
+        vec![root_id.as_str()]
+    );
+    assert_eq!(
+        queries::all_owning_packages(&references, &class_id)
+            .expect("owning packages")
+            .iter()
+            .map(|element| element.id())
+            .collect::<Vec<_>>(),
+        vec![root_id.as_str()]
+    );
+    assert_eq!(
+        queries::client_dependencies(&references, &class_id)
+            .expect("client dependencies")
+            .iter()
+            .map(|element| element.id())
+            .collect::<Vec<_>>(),
+        vec![dependency_id.as_str()]
+    );
+    assert!(
+        queries::client_dependencies(&references, &other_id)
+            .expect("supplier dependencies")
+            .is_empty()
+    );
     let comment = class.owned_comments(model).expect("ownedComment")[0];
     assert_eq!(comment.body(), Some("Explains Order"));
     assert_eq!(
@@ -363,6 +402,28 @@ fn uml_root_namespace_edit_and_reopen_flow_preserves_canonical_identity() {
             .expect("derived"),
         Some("Model::Sales::Invoice".into())
     );
+    let references = ReferenceIndex::new(Model::from_project(&project));
+    assert_eq!(
+        queries::all_namespaces(&references, &class_id)
+            .expect("nested namespaces")
+            .iter()
+            .map(|element| element.id())
+            .collect::<Vec<_>>(),
+        vec![package_id.as_str(), root_id.as_str()]
+    );
+    assert_eq!(
+        queries::all_owning_packages(&references, &class_id)
+            .expect("nested packages")
+            .iter()
+            .map(|element| element.id())
+            .collect::<Vec<_>>(),
+        vec![package_id.as_str(), root_id.as_str()]
+    );
+    assert!(
+        queries::all_owning_packages(&references, &attribute_id)
+            .expect("class is not a package")
+            .is_empty()
+    );
     assert!(
         commands::apply(
             &project,
@@ -410,6 +471,23 @@ fn uml_root_namespace_edit_and_reopen_flow_preserves_canonical_identity() {
         .expect("reopen");
         assert_eq!(reopened, project);
         assert!(Model::from_project(&reopened).validate().is_empty());
+        let reopened_index = ReferenceIndex::new(Model::from_project(&reopened));
+        assert_eq!(
+            queries::all_namespaces(&reopened_index, &class_id)
+                .expect("reopened namespaces")
+                .iter()
+                .map(|element| element.id())
+                .collect::<Vec<_>>(),
+            vec![package_id.as_str(), root_id.as_str()]
+        );
+        assert_eq!(
+            queries::client_dependencies(&reopened_index, &class_id)
+                .expect("reopened dependencies")
+                .iter()
+                .map(|element| element.id())
+                .collect::<Vec<_>>(),
+            vec![dependency_id.as_str()]
+        );
     }
     let note_link = project
         .relations

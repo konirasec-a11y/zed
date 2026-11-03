@@ -299,13 +299,12 @@ fn inspect_element_with_references(
     id: &str,
     references: &crate::uml::references::ReferenceIndex<'_>,
 ) -> Option<ElementInspector> {
-    let model = crate::uml::root::Model::from_section(section);
     let mut reference_choices = references.element(id).ok()
         .and_then(|element| element.metaclass())
         .and_then(|metaclass| crate::uml::schema::uml_property(metaclass, "type").ok().flatten())
         .map(|property| references.candidates(property).into_iter().map(|target| {
             let name = target.named()
-                .and_then(|named| named.qualified_name(model).ok().flatten())
+                .and_then(|named| crate::uml::root::Model::qualified_name_with_index(named, references).ok().flatten())
                 .unwrap_or_else(|| target.named().and_then(|named| named.name())
                     .unwrap_or("(unnamed)").into());
             InspectorReferenceChoice {
