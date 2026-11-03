@@ -153,6 +153,85 @@ com uma implementação algébrica DPO/SPO/TGG concluída.
    primitivas, instaláveis/removíveis sem alterar o host Zed,
    respeitando os efeitos temporais do Cordis.
 
+### Frente obrigatória: revisão UI/UX e aceite do editor MDE
+
+Esta frente integra as etapas acima e bloqueia a declaração de aceite
+ponta a ponta do editor; não substitui o roteiro semântico/M2M/M2T.
+**Baseline histórica:** incremento nativo `b2ef40e`, estado
+`IMPLEMENTED_NOT_GUI_VALIDATED`. Código integrado não significa GUI
+aprovada. O aceite deve registrar o SHA efetivamente testado, sem fixar
+esse commit como requisito para versões futuras.
+
+**Fontes e precedência:** seguir a especificação completa
+[UML 2.5.1 (PDF oficial)](https://www.omg.org/spec/UML/2.5.1/PDF), junto aos
+arquivos salvos [UML.xmi](standards/uml/20161101/UML.xmi),
+[UMLDI.xmi](standards/uml/20161101/UMLDI.xmi),
+[PrimitiveTypes.xmi](standards/uml/20161101/PrimitiveTypes.xmi) e
+[StandardProfile.xmi](standards/uml/20161101/StandardProfile.xmi).
+Conforme a cláusula 2, os arquivos consumíveis por máquina prevalecem
+em conflitos com o texto. As **cinco imagens fornecidas são exemplos,
+não o limite de cobertura**; os exemplos/tabelas de notação do anexo B.6
+não são exaustivos nem definem obrigatoriedade/opcionalidade.
+
+Reutilizar o contrato visual existente nos
+[painéis React](../../crates/bellatrix_design_system/docs/design/src/components/panels/)
+e nas variantes `preview/v3*.png` do
+[preview](../../crates/bellatrix_design_system/docs/design/preview/).
+Mockup visual, implementação GPUI nativa, comportamento em runtime e gates
+verificados são evidências distintas. Funcionalidades apenas ilustradas
+no protótipo não autorizam mutações silenciosas do modelo. Símbolo na
+paleta não prova suporte semântico, persistência ou conformidade UML.
+
+#### Matriz de tarefas e critérios de aceitação
+
+Todas as tarefas abaixo permanecem **NÃO ACEITAS** até registrar suas
+próprias evidências; o baseline não altera esse estado.
+
+| ID / estado | Revisão e evidência exigida para aceite | Fontes de implementação |
+| --- | --- | --- |
+| UX-01 / PENDENTE | Working Diagrams: criar, abrir, alternar, renomear e fechar diagramas; seleção, estado vazio e reabertura coerentes com o projeto, sem confundir diagrama com elemento semântico. | [painéis nativos](../../crates/bellatrix_mde_workbench/src/panels.rs), [integração](../../crates/bellatrix_mde_workbench/src/integration.rs) |
+| UX-02 / PENDENTE | Toolbox e biblioteca: catálogo compartilhado, busca, agrupamento e disponibilidade por contexto/capacidade; ferramenta indisponível explica o motivo e não altera o modelo. Auditar capacidades herdadas transitivamente, sem listas locais divergentes. | [biblioteca](../../crates/bellatrix_mde_workbench/src/symbol_library.rs), [metamodelo](../../crates/bellatrix_mde/src/uml/metamodel.rs) |
+| UX-03 / PENDENTE | Model Explorer: árvore de ownership semântico, não de geometria; expandir, buscar e selecionar mantendo identidade e sincronização com Canvas/Inspector, inclusive elementos sem View. | [hierarquia nativa](../../crates/bellatrix_mde_workbench/src/hierarchy.rs), [hierarquia de domínio](../../crates/bellatrix_mde/src/hierarchy.rs) |
+| UX-04 / PENDENTE | Inspector compacto derivado de schema e QuickEdit: propriedades/capacidades herdadas, campos tipados, validação, confirmar/cancelar e consistência entre editores; rejeição não publica revisão nem alteração parcial. | [Inspector](../../crates/bellatrix_mde_workbench/src/property_editor.rs), [QuickEdit](../../crates/bellatrix_mde_workbench/src/quick_edit_view.rs), [schema de inspeção](../../crates/bellatrix_mde/src/inspector.rs) |
+| UX-05 / PENDENTE | Canvas: notação, compartimentos, rótulos, geometria, ancoragem, rotas e setas coerentes com source/target; testar zoom, seleção, hit testing, mover/redimensionar e persistir. Criar/editar curvas e pontos de controle pela UI; preservar segmentos ao reancorar, sem conversão silenciosa em reta. | [notação](../../crates/bellatrix_mde/src/uml_notation.rs), [geometria](../../crates/bellatrix_mde/src/uml_geometry.rs), [renderização UML](../../crates/bellatrix_ui_uml/src/), [contrato de relações](GRAPH_RELATIONSHIPS.md) |
+| UX-06 / PENDENTE | Acessibilidade e recuperação: navegação por teclado, foco visível e restaurado após fechar/cancelar, rótulos e contraste; erros legíveis, undo/redo e revisões consistentes entre árvore, Canvas e Inspector, inclusive ações repetidas e inválidas. | [workbench](../../crates/bellatrix_mde_workbench/src/), [eventos Cordis](../../crates/bellatrix_mde_cordis/src/) |
+| UX-07 / PENDENTE | Dock nativo: redimensionar, recolher e restaurar painéis, mantendo foco, tamanhos e área útil do Canvas; verificar janelas estreitas/largas e temas claro/escuro sem implementar um Dock paralelo ao Zed. | [painéis nativos](../../crates/bellatrix_mde_workbench/src/panels.rs), [Dock do host](../../crates/workspace/src/dock.rs) |
+| UX-08 / PENDENTE | Autoria real desde diagrama vazio: criar elementos e relações válidas, editar, remover, desfazer/refazer, salvar e reabrir, verificando IDs, ownership, notação e revisão. Cobrir cada categoria anunciada como suportada; fixtures pré-preenchidas são apenas regressão complementar. Rejeitar relações inválidas com rollback. | [comandos](../../crates/bellatrix_mde/src/commands/), [marco estrutural e fixtures](STRUCTURAL_UML_MILESTONE.md) |
+| UX-09 / PENDENTE | Gate nativo: além dos checks focados de domínio, catálogo e contratos, compilar o aplicativo Zed/GPUI completo com a integração MDE e executar os fluxos acima no ambiente nativo do mantenedor. Registrar comando, toolchain, plataforma, SHA, resultado e evidências visuais/interativas. Corrigir falhas e repetir o gate afetado antes do aceite. | [verificação existente](STRUCTURAL_UML_MILESTONE.md), [estado de consolidação](MDE_CONSOLIDATION_STATUS.md) |
+
+Em UX-04/05/08, incluir comportamentos herdados, Interface retangular e
+ball/socket com sua semântica, suporte a compartimentos versus supressão
+opcional de exibição, assinatura de template, frame com cabeçalho pentagonal, aba/nome
+de Package com formas aninhadas visíveis, rótulos externos de Port e
+ligação de AssociationClass. São casos de revisão, não uma lista exaustiva
+nem suporte já demonstrado pelas fixtures. Respeitar alternativas válidas
+de notação: não tornar obrigatório ícone de Component ou triângulo de
+Model onde a especificação admite keyword.
+
+Para cada linha, registrar requisito/cláusula UML, metaclasse/capacidade,
+cenário positivo e negativo, evidência de domínio, de UI nativa e de
+persistência, além das lacunas. Para UX-09, `cargo metadata`, checks
+estáticos, testes headless isolados ou um mockup React **não substituem**
+build completo nem interação no aplicativo. Etapas bloqueadas ou não
+executadas devem permanecer identificadas como tais, nunca como aprovadas.
+
+Manter rastreabilidade separada para os cinco eixos da cláusula 2:
+**sintaxe abstrata, sintaxe concreta, intercâmbio de modelos, intercâmbio
+de diagramas e semântica**, respeitando suas dependências. Testes visuais
+não aprovam intercâmbio XMI/UMLDI nem semântica; registrar cobertura e
+limitações por eixo, sem um selo agregado de “UML completo”. O aceite do
+editor depende dessa matriz e da validação local pelo mantenedor, não da
+quantidade de símbolos ou screenshots reproduzidos.
+
+**Intercâmbio não declarado conforme nesta baseline.** Antes de qualquer
+alegação, exigir evidência de importação/exportação e roundtrip XMI/DI,
+incluindo perfis e versões exigidas pela cláusula 2/anexo E (carregar e
+salvar UML 2.4.1 e 2.5 para intercâmbio de modelos). Intercâmbio de
+diagramas depende de sintaxe concreta e intercâmbio de modelos; semântica
+depende de sintaxe abstrata. A política beta sobre retrocompatibilidade
+da persistência própria Bellatrix não dispensa requisitos oficiais de
+intercâmbio nem exige, por si só, manter formatos Bellatrix antigos.
+
 **O que já existe hoje:** grafos/índices e validações parciais,
 ProjectDocument revisionado, eventos Cordis, projeções UML e geradores
 específicos. **O que não existe hoje:** prova de transformação
