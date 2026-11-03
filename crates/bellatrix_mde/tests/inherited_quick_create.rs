@@ -63,7 +63,7 @@ fn inherited_interface_creation_uses_behaviored_classifier_contract() {
                     assert_eq!(presentation.name.as_deref(), Some("«use»"));
                     assert_eq!(presentation.source_role, "client");
                     assert_eq!(presentation.target_role, "supplier");
-                    assert!(presentation.style.dashed);
+                    assert_eq!(presentation.style.line_mode, bellatrix_mde::LineMode::Dashed);
                     assert_eq!(
                         presentation.style.target_marker,
                         bellatrix_mde::RelationshipMarker::OpenArrow

@@ -122,11 +122,12 @@ fn path_label_anchors(
     from: (f32, f32),
     segments: &[UmlLineSegment],
     scale: f32,
-) -> (LabelAnchor, LabelAnchor, (f32, f32)) {
+) -> (LabelAnchor, LabelAnchor, (f32, f32), (f32, f32)) {
     let mut last = from;
     let mut initial_direction = (1.0, 0.0);
     let mut final_direction = initial_direction;
     let mut middle = from;
+    let mut middle_direction = initial_direction;
     for (index, segment) in segments.iter().enumerate() {
         let (next, start_direction, end_direction, midpoint) = match *segment {
             UmlLineSegment::Line { to } => {
@@ -157,6 +158,17 @@ fn path_label_anchors(
         }
         if index == segments.len() / 2 {
             middle = midpoint;
+            middle_direction = match *segment {
+                UmlLineSegment::Line { .. } => start_direction,
+                UmlLineSegment::Cubic {
+                    control1,
+                    control2,
+                    to,
+                } => tangent(
+                    (last.0 + control1.0, last.1 + control1.1),
+                    (control2.0 + to.0, control2.1 + to.1),
+                ),
+            };
         }
         final_direction = end_direction;
         last = next;
@@ -165,6 +177,7 @@ fn path_label_anchors(
         endpoint_label_anchor(from, initial_direction, scale),
         endpoint_label_anchor(last, (-final_direction.0, -final_direction.1), scale),
         middle,
+        middle_direction,
     )
 }
 fn label_block(
@@ -371,7 +384,8 @@ impl RenderOnce for UmlRelationGlyph {
         let RelationshipStyle {
             source_marker,
             target_marker,
-            dashed,
+            line_mode,
+            middle_marker,
         } = self.style;
         let from = self.from;
         let to = self.to;
@@ -386,11 +400,17 @@ impl RenderOnce for UmlRelationGlyph {
             self.selected,
         );
         let communication_message = self.communication_message;
-        let dashes =
-            appearance.resolve_stroke_pattern(dashed && !communication_message, self.scale);
+        let dashes = appearance.resolve_stroke_pattern(
+            if communication_message {
+                bellatrix_mde::LineMode::Solid
+            } else {
+                line_mode
+            },
+            self.scale,
+        );
         let text_color = appearance.text(palette.text);
         let font_size = appearance.font_size(12.0, self.scale);
-        let (source_anchor, target_anchor, middle) =
+        let (source_anchor, target_anchor, middle, middle_direction) =
             path_label_anchors(from, &segments, self.scale);
         let labels = self.labels;
         let scale = self.scale;
@@ -473,6 +493,19 @@ impl RenderOnce for UmlRelationGlyph {
                     width,
                     scale,
                 );
+                if middle_marker != RelationshipMarker::None {
+                    paint_marker(
+                        window,
+                        middle_marker,
+                        middle,
+                        (-middle_direction.0, -middle_direction.1),
+                        bounds,
+                        stroke,
+                        background,
+                        width,
+                        scale,
+                    );
+                }
                 if communication_message {
                     let direction = tangent(from, last);
                     let center = (middle.0 - 20.0 * scale, middle.1 - 18.0 * scale);
@@ -558,7 +591,7 @@ mod tests {
     #[test]
     fn endpoint_labels_follow_their_own_ends_and_view_scale() {
         let segments = [UmlLineSegment::Line { to: (200.0, 40.0) }];
-        let (source, target, middle) = path_label_anchors((0.0, 40.0), &segments, 1.0);
+        let (source, target, middle, _) = path_label_anchors((0.0, 40.0), &segments, 1.0);
         assert_eq!(source.position, (24.0, 32.0));
         assert_eq!(target.position, (176.0, 32.0));
         assert!(!source.right_aligned);
@@ -566,7 +599,7 @@ mod tests {
         assert!(source.above && target.above);
         assert_eq!(middle, (100.0, 40.0));
         let scaled = [UmlLineSegment::Line { to: (400.0, 80.0) }];
-        let (source, target, middle) = path_label_anchors((0.0, 80.0), &scaled, 2.0);
+        let (source, target, middle, _) = path_label_anchors((0.0, 80.0), &scaled, 2.0);
         assert_eq!(source.position, (48.0, 64.0));
         assert_eq!(target.position, (352.0, 64.0));
         assert_eq!(middle, (200.0, 80.0));
@@ -574,13 +607,13 @@ mod tests {
     #[test]
     fn reversed_and_vertical_routes_keep_source_and_target_labels_distinct() {
         let reversed = [UmlLineSegment::Line { to: (0.0, 40.0) }];
-        let (source, target, _) = path_label_anchors((200.0, 40.0), &reversed, 1.0);
+        let (source, target, _, _) = path_label_anchors((200.0, 40.0), &reversed, 1.0);
         assert_eq!(source.position, (176.0, 32.0));
         assert_eq!(target.position, (24.0, 32.0));
         assert!(source.right_aligned);
         assert!(!target.right_aligned);
         let vertical = [UmlLineSegment::Line { to: (40.0, 200.0) }];
-        let (source, target, _) = path_label_anchors((40.0, 0.0), &vertical, 1.0);
+        let (source, target, _, _) = path_label_anchors((40.0, 0.0), &vertical, 1.0);
         assert_eq!(source.position, (48.0, 24.0));
         assert_eq!(target.position, (32.0, 176.0));
         assert!(!source.above);
@@ -593,12 +626,12 @@ mod tests {
             control2: (40.0, 80.0),
             to: (0.0, 80.0),
         }];
-        let (source, target, middle) = path_label_anchors((0.0, 0.0), &segments, 1.0);
+        let (source, target, middle, _) = path_label_anchors((0.0, 0.0), &segments, 1.0);
         assert_eq!(source.position, (24.0, -8.0));
         assert_eq!(target.position, (24.0, 72.0));
         assert_eq!(middle, (30.0, 40.0));
         let zero = [UmlLineSegment::Line { to: (2.0, 3.0) }];
-        let (source, target, middle) = path_label_anchors((2.0, 3.0), &zero, 1.0);
+        let (source, target, middle, _) = path_label_anchors((2.0, 3.0), &zero, 1.0);
         assert_eq!(source.position, (26.0, -5.0));
         assert_eq!(target.position, (-22.0, -5.0));
         assert_eq!(middle, (2.0, 3.0));
@@ -612,7 +645,7 @@ mod tests {
         assert_eq!(association.source_marker, RelationshipMarker::None);
         assert_eq!(aggregation.source_marker, RelationshipMarker::Diamond);
         assert_eq!(generalization.target_marker, RelationshipMarker::Triangle);
-        assert!(!generalization.dashed);
+        assert_eq!(generalization.line_mode, bellatrix_mde::LineMode::Solid);
     }
     #[test]
     fn zero_length_edges_have_a_finite_tangent() {

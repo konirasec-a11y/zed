@@ -349,7 +349,7 @@ impl MdeWorkbenchItem {
                 cx.notify();
                 return;
             }
-            RelationClick::Repeat if kind.resolve_message_sort().is_some() => {
+            RelationClick::Repeat if kind.uses_occurrence_anchors() => {
                 self.pending_relation_source = None;
                 target.clone()
             }
@@ -391,8 +391,7 @@ impl MdeWorkbenchItem {
         };
         let mut properties = std::collections::BTreeMap::new();
         let source_point = self.pending_visual_point.take();
-        let label = if let Some(sort) = kind.resolve_message_sort() {
-            properties.insert("messageSort".into(), serde_json::json!(sort));
+        if kind.uses_occurrence_anchors() {
             for (key, view_id, point) in [
                 ("source_anchor", from.as_str(), source_point),
                 ("target_anchor", target.as_str(), point),
@@ -405,6 +404,9 @@ impl MdeWorkbenchItem {
                     properties.insert(key.into(), serde_json::json!({"x":anchor.x,"y":anchor.y}));
                 }
             }
+        }
+        let label = if let Some(sort) = kind.resolve_message_sort() {
+            properties.insert("messageSort".into(), serde_json::json!(sort));
             Some(
                 if diagram.interaction_kind.as_deref() == Some("communication") {
                     "1: message()".to_owned()

@@ -273,7 +273,7 @@ impl Style {
         self.stereotype_display != Some(StereotypeDisplay::Hidden)
     }
 
-    pub fn resolve_stroke_pattern(&self, notation_dashed: bool) -> &[f64] {
+    pub fn resolve_stroke_pattern(&self, notation_mode: LineMode) -> &[f64] {
         match self.line_mode {
             Some(LineMode::Solid) => return &[],
             Some(LineMode::Dotted) => return &[1.0, 3.0],
@@ -290,7 +290,8 @@ impl Style {
         }
         match self.line_mode {
             Some(LineMode::Dashed) => &[6.0, 4.0],
-            _ if notation_dashed => &[6.0, 5.0],
+            _ if notation_mode == LineMode::Dotted => &[1.0, 3.0],
+            _ if notation_mode == LineMode::Dashed => &[6.0, 5.0],
             _ => &[],
         }
     }

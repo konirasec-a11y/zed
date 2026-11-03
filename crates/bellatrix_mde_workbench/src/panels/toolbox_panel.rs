@@ -81,6 +81,7 @@ fn tool_glyph(tool: ModelingTool) -> ShapeKind {
             ModelingRelationKind::MessageSynchronous => ShapeKind::SynchronousMessage,
             ModelingRelationKind::MessageAsynchronous => ShapeKind::Message,
             ModelingRelationKind::MessageReply => ShapeKind::ReplyMessage,
+            ModelingRelationKind::GeneralOrdering => ShapeKind::GeneralOrdering,
 
             ModelingRelationKind::Extension => ShapeKind::Extension,
             ModelingRelationKind::Connector => ShapeKind::Association,
@@ -417,7 +418,7 @@ impl Render for MdeLeftPanel {
                     .collect(),
             ),
             (
-                "Messages · visual",
+                "Interaction links · visual",
                 ModelingRelationKind::MESSAGES
                     .iter()
                     .copied()

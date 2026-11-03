@@ -1,5 +1,5 @@
-use crate::Relation;
 use crate::uml::types::{RelationEnd, RelationEndMultiplicity};
+use crate::{LineMode, Relation};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RelationshipMarker {
@@ -16,7 +16,8 @@ pub enum RelationshipMarker {
 pub struct RelationshipStyle {
     pub source_marker: RelationshipMarker,
     pub target_marker: RelationshipMarker,
-    pub dashed: bool,
+    pub line_mode: LineMode,
+    pub middle_marker: RelationshipMarker,
 }
 pub fn relationship_style_for_notation(kind: &str) -> RelationshipStyle {
     use RelationshipMarker::*;
@@ -49,7 +50,18 @@ pub fn relationship_style_for_notation(kind: &str) -> RelationshipStyle {
     RelationshipStyle {
         source_marker,
         target_marker,
-        dashed,
+        line_mode: if kind == "uml.general_ordering" {
+            LineMode::Dotted
+        } else if dashed {
+            LineMode::Dashed
+        } else {
+            LineMode::Solid
+        },
+        middle_marker: if kind == "uml.general_ordering" {
+            FilledTriangle
+        } else {
+            None
+        },
     }
 }
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -73,7 +85,8 @@ impl RelationshipPresentation {
     pub fn describe(&self, from: &str, to: &str) -> String {
         if self.style.source_marker == RelationshipMarker::None
             && self.style.target_marker == RelationshipMarker::None
-            && !self.style.dashed
+            && self.style.middle_marker == RelationshipMarker::None
+            && self.style.line_mode == LineMode::Solid
         {
             format!("{from} —[{}]— {to}", self.label)
         } else {
@@ -228,7 +241,7 @@ pub fn resolve_relationship_style(
             "synchCall" => style.target_marker = RelationshipMarker::FilledTriangle,
             "reply" | "createMessage" => {
                 style.target_marker = RelationshipMarker::OpenArrow;
-                style.dashed = true;
+                style.line_mode = LineMode::Dashed;
             }
             "asynchCall" | "asynchSignal" | "deleteMessage" => {
                 style.target_marker = RelationshipMarker::OpenArrow

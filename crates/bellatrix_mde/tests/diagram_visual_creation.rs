@@ -274,7 +274,7 @@ fn behavior_nodes_use_canonical_composite_owners_and_transactional_commands()
                 Some(owner_id.as_str())
             );
             let presentation = bellatrix_mde::relationship_presentation(edge);
-            assert!(presentation.style.dashed);
+            assert_eq!(presentation.style.line_mode, bellatrix_mde::LineMode::Dashed);
             assert!(
                 presentation
                     .name
@@ -596,6 +596,28 @@ fn exercise_visual_drafts() -> Result<(), Box<dyn std::error::Error>> {
         if first.x == 138.0 && first.y == 58.0 && second.x == 138.0 && second.y == 98.0 && end.x == 90.0 && end.y == 98.0)
     );
     assert_eq!(connected.elements, before.elements);
+    let ordering_tool = ModelingRelationKind::GeneralOrdering;
+    assert!(ordering_tool.is_visual_only());
+    let connected = apply(&connected, &Command::CreateVisualDraft {
+        diagram_id: "diagram-tasks".into(), notation_kind: ordering_tool.model_kind().into(),
+        label: None, geometry: Geometry::Path {
+            start: bellatrix_mde::Point { x: 0.0, y: 0.0 }, segments: Vec::new(),
+        },
+        properties: serde_json::from_value(serde_json::json!({
+            "source_anchor":{"x":0.5,"y":0.25}, "target_anchor":{"x":0.5,"y":0.75}
+        }))?,
+        parent_view_id: None, source_view_id: Some(draft_id.clone()), target_view_id: Some("view-task".into()),
+    }, 6)?;
+    let ordering = connected.diagrams.iter().flat_map(|diagram| &diagram.views)
+        .find(|view| view.draft.as_ref().is_some_and(|draft| draft.notation_kind == ordering_tool.model_kind()))
+        .ok_or("missing visual ordering")?;
+    let draft = ordering.draft.as_ref().ok_or("missing ordering presentation")?;
+    let notation = bellatrix_mde::resolve_relationship_style(&draft.notation_kind, &draft.properties);
+    assert_eq!(notation.line_mode, bellatrix_mde::LineMode::Dotted);
+    assert_eq!(notation.target_marker, bellatrix_mde::RelationshipMarker::None);
+    assert_eq!(notation.middle_marker, bellatrix_mde::RelationshipMarker::FilledTriangle);
+    assert_eq!(connected.elements, before.elements);
+    assert_eq!(connected.relations, before.relations);
     let removed = apply(
         &connected,
         &Command::RemoveView {

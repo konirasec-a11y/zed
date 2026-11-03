@@ -12,6 +12,7 @@ pub enum Family {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum ShapeKind {
+    GeneralOrdering,
     SynchronousMessage,
     ReplyMessage,
     Extension,
@@ -104,6 +105,7 @@ pub fn count(family: Family) -> usize {
 
 pub fn glyph(kind: ShapeKind) -> &'static [u8] {
     match kind {
+        ShapeKind::GeneralOrdering => include_bytes!("../assets/general-ordering.svg"),
         ShapeKind::InputPin => include_bytes!("../assets/input-pin.svg"),
         ShapeKind::OutputPin => include_bytes!("../assets/output-pin.svg"),
         ShapeKind::InteractionOperand => include_bytes!("../assets/interaction-operand.svg"),

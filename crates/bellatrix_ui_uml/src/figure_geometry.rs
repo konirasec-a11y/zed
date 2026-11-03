@@ -1,6 +1,6 @@
 use crate::class::ViewAppearance;
 use bellatrix_design_system::Palette;
-use bellatrix_mde::{UmlNotation, folded_note_layout, frame_heading_layout};
+use bellatrix_mde::{UmlNotation, folded_note_layout};
 use gpui::{Bounds, PathBuilder, Pixels, Window, point, px};
 
 pub(crate) fn paint_folded_paper(
@@ -34,7 +34,7 @@ pub(crate) fn paint_folded_paper(
         Ok(path) => window.paint_path(path, appearance.fill(palette.panel)),
         Err(error) => log::error!("UML paper fill: {error}"),
     }
-    let dashes = appearance.resolve_stroke_pattern(false, scale);
+    let dashes = appearance.resolve_stroke_pattern(bellatrix_mde::LineMode::Solid, scale);
     let mut border = PathBuilder::stroke(px(appearance.width(1.0, scale, selected)));
     if !dashes.is_empty() {
         border = border.dash_array(&dashes);
@@ -44,41 +44,6 @@ pub(crate) fn paint_folded_paper(
     match border.build() {
         Ok(path) => window.paint_path(path, stroke),
         Err(error) => log::error!("UML paper outline: {error}"),
-    }
-}
-pub(crate) fn paint_frame_heading(
-    bounds: Bounds<Pixels>,
-    scale: f32,
-    palette: Palette,
-    selected: bool,
-    appearance: &ViewAppearance,
-    window: &mut Window,
-) {
-    let layout = frame_heading_layout(
-        f64::from(bounds.size.width) / f64::from(scale),
-        f64::from(bounds.size.height) / f64::from(scale),
-    );
-    let outline = layout.outline.map(|position| {
-        point(
-            bounds.origin.x + px(position.x as f32 * scale),
-            bounds.origin.y + px(position.y as f32 * scale),
-        )
-    });
-    let mut fill = PathBuilder::fill();
-    fill.add_polygon(&outline, true);
-    match fill.build() {
-        Ok(path) => window.paint_path(path, appearance.fill(palette.panel_alt)),
-        Err(error) => log::error!("UML frame heading fill: {error}"),
-    }
-    let dashes = appearance.resolve_stroke_pattern(false, scale);
-    let mut border = PathBuilder::stroke(px(appearance.width(1.0, scale, selected)));
-    if !dashes.is_empty() {
-        border = border.dash_array(&dashes);
-    }
-    border.add_polygon(&outline, true);
-    match border.build() {
-        Ok(path) => window.paint_path(path, appearance.stroke(palette, selected)),
-        Err(error) => log::error!("UML frame heading outline: {error}"),
     }
 }
 // UML 2.5.1 §§9, 11, 14–19: these are notation outlines, not executable model state.
@@ -227,7 +192,7 @@ fn build_figure_paths(
         )],
         Partition => vec![rectangle(), line(&[(0.02, 0.16), (0.98, 0.16)])],
         InteractionOperand => vec![line(&[(0.02, 0.02), (0.98, 0.02)]).dashed()],
-        InteractionUse | CombinedFragment => {
+        Frame | InteractionUse | CombinedFragment => {
             let left = (1.0 / width).min(0.25);
             let top = (1.0 / height).min(0.25);
             let right = (descriptor.0 / width).clamp(left, 1.0 - left);
@@ -303,7 +268,14 @@ pub(crate) fn paint_notation(
             }
         }
         let mut outline = PathBuilder::stroke(px(appearance.width(1.0, scale, selected)));
-        let dashes = appearance.resolve_stroke_pattern(path.dashed, scale);
+        let dashes = appearance.resolve_stroke_pattern(
+            if path.dashed {
+                bellatrix_mde::LineMode::Dashed
+            } else {
+                bellatrix_mde::LineMode::Solid
+            },
+            scale,
+        );
         if !dashes.is_empty() {
             outline = outline.dash_array(&dashes);
         }

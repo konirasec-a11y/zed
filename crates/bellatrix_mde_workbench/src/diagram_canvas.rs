@@ -467,6 +467,7 @@ impl Render for MdeWorkbenchItem {
                             let mut figure = UmlFigure::new(element.kind.clone(), label)
                                 .diagram_presentation(diagram)
                                 .timing_presentation(view.timing.as_ref())
+                                .diagram_subject(view.subject.as_deref(), diagram)
                                 .nested_views(has_nested_views)
                                 .composite_role(
                                     element

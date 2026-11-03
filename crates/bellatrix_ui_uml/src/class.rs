@@ -38,11 +38,11 @@ impl ViewAppearance {
     }
     pub(crate) fn resolve_stroke_pattern(
         &self,
-        notation_dashed: bool,
+        notation_mode: bellatrix_mde::LineMode,
         scale: f32,
     ) -> Vec<gpui::Pixels> {
         self.0
-            .resolve_stroke_pattern(notation_dashed)
+            .resolve_stroke_pattern(notation_mode)
             .iter()
             .map(|value| px(*value as f32 * scale))
             .collect()
@@ -76,7 +76,14 @@ impl ViewAppearance {
         let width = self.width(1.0, scale, selected);
         let radius = self.0.corner_radius.unwrap_or(default_radius) as f32 * scale;
         let color = self.stroke(palette, selected);
-        let pattern = self.resolve_stroke_pattern(notation_dashed, scale);
+        let pattern = self.resolve_stroke_pattern(
+            if notation_dashed {
+                bellatrix_mde::LineMode::Dashed
+            } else {
+                bellatrix_mde::LineMode::Solid
+            },
+            scale,
+        );
         let element = element.border(px(width)).rounded(px(radius));
         if pattern.is_empty() {
             return element.border_color(color);

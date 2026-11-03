@@ -1,5 +1,5 @@
 //! Non-classifier notations share editing, but not the classifier silhouette.
-use crate::figure_geometry::{paint_folded_paper, paint_frame_heading, paint_notation};
+use crate::figure_geometry::{paint_folded_paper, paint_notation};
 use crate::{
     class::{MemberInteractions, MemberRow, UmlClassifier, ViewAppearance, template_signature},
     inline_edit::UmlInlineNameEditor,
@@ -20,6 +20,7 @@ pub struct UmlFigure {
     kind: String,
     pseudostate_kind: Option<String>,
     interaction_presentation: Option<String>,
+    context_frame_kind: Option<&'static str>,
     timing_presentation: Option<bellatrix_mde::TimingPresentation>,
     name: SharedString,
     slot_labels: Vec<String>,
@@ -78,6 +79,7 @@ impl UmlFigure {
             kind: kind.into(),
             pseudostate_kind: None,
             interaction_presentation: None,
+            context_frame_kind: None,
             timing_presentation: None,
             name: name.into(),
             slot_labels: Vec::new(),
@@ -117,6 +119,20 @@ impl UmlFigure {
         }
         self
     }
+    pub fn diagram_subject(
+        mut self,
+        subject: Option<&str>,
+        diagram: &bellatrix_mde::Diagram,
+    ) -> Self {
+        if subject.is_some_and(|subject| diagram.model_elements.iter().any(|id| id == subject)) {
+            self.context_frame_kind = match (self.kind.as_str(), diagram.uml_di_type.as_str()) {
+                ("uml.activity", "UMLActivityDiagram") => Some("act"),
+                ("uml.state_machine", "UMLStateMachineDiagram") => Some("stm"),
+                _ => None,
+            };
+        }
+        self
+    }
     pub fn timing_presentation(
         mut self,
         presentation: Option<&bellatrix_mde::TimingPresentation>,
@@ -129,6 +145,9 @@ impl UmlFigure {
         self
     }
     fn notation(&self) -> UmlNotation {
+        if self.context_frame_kind.is_some() {
+            return UmlNotation::Frame;
+        }
         // §17.9 uses compact participant heads, not the sequence time axis.
         if self.kind == "uml.lifeline"
             && self.interaction_presentation.as_deref() == Some("communication")
@@ -204,19 +223,25 @@ impl RenderOnce for UmlFigure {
         let scale = self.scale;
         let port_label = port_label_layout(self.view_width);
         let selected = self.selected;
+        let frame_kind = self
+            .context_frame_kind
+            .or_else(|| (self.kind == "uml.interaction").then_some("sd"));
+        let is_diagram_frame = notation == UmlNotation::Frame || frame_kind.is_some();
         // Descriptor display is single-line; the canonical authored text stays unchanged.
         let descriptor_operator = self
             .interaction_operator
             .as_ref()
             .map(|text| text.replace(['\r', '\n'], " "));
-        let display_name: SharedString = if self.kind == "uml.interaction" {
+        let display_name: SharedString = if is_diagram_frame {
             self.name.replace(['\r', '\n'], " ").into()
         } else {
             self.name.clone()
         };
         // Shape the actual descriptor with the active font instead of a fixed-width tab.
-        let descriptor: SharedString = if self.kind == "uml.interaction" {
-            format!("sd {display_name}").into()
+        let descriptor: SharedString = if let Some(kind) = frame_kind {
+            format!("{kind} {display_name}").into()
+        } else if notation == UmlNotation::Frame {
+            display_name.clone()
         } else if notation == UmlNotation::CombinedFragment {
             descriptor_operator
                 .as_deref()
@@ -232,6 +257,27 @@ impl RenderOnce for UmlFigure {
         }
         descriptor_font.weight = gpui::FontWeight::SEMIBOLD;
         let descriptor_size = self.appearance.font_size(12.0, scale);
+        let frame_name_offset = if let Some(kind) = frame_kind {
+            let prefix: SharedString = format!("{kind} ").into();
+            8.0 * scale
+                + f32::from(
+                    window
+                        .text_system()
+                        .shape_line(
+                            prefix.clone(),
+                            px(descriptor_size),
+                            &[gpui::TextRun {
+                                len: prefix.len(),
+                                font: descriptor_font.clone(),
+                                ..Default::default()
+                            }],
+                            None,
+                        )
+                        .width,
+                )
+        } else {
+            8.0 * scale
+        };
         let descriptor_width = (f32::from(
             window
                 .text_system()
@@ -484,54 +530,6 @@ impl RenderOnce for UmlFigure {
                         .child(title_area),
                 )
                 .into_any_element(),
-            UmlNotation::Frame => div()
-                .when(appearance.0.fill.is_some(), |element| {
-                    element.bg(appearance.fill(palette.canvas))
-                })
-                .size_full()
-                .relative()
-                .map(|element| {
-                    appearance.apply_rectangle_border(element, palette, selected, scale, 0.0)
-                })
-                .child(
-                    div()
-                        .w(px(142.0 * scale))
-                        .h(px(30.0 * scale))
-                        .max_w_full()
-                        .max_h_full()
-                        .relative()
-                        .child(
-                            canvas(
-                                |_, _, _| (),
-                                move |bounds, (), window, _| {
-                                    paint_frame_heading(
-                                        bounds,
-                                        scale,
-                                        palette,
-                                        selected,
-                                        &appearance,
-                                        window,
-                                    );
-                                },
-                            )
-                            .absolute()
-                            .size_full(),
-                        )
-                        .child(
-                            div()
-                                .absolute()
-                                .left(px(8.0 * scale))
-                                .right(px(16.0 * scale))
-                                .top_0()
-                                .bottom_0()
-                                .flex()
-                                .items_center()
-                                .overflow_hidden()
-                                .map(|element| alignment.align_row(element))
-                                .child(title_area),
-                        ),
-                )
-                .into_any_element(),
             UmlNotation::AssociationDiamond => div()
                 .size_full()
                 .relative()
@@ -568,7 +566,10 @@ impl RenderOnce for UmlFigure {
                                             }
                                         }
                                     }
-                                    let dashes = appearance.resolve_stroke_pattern(false, scale);
+                                    let dashes = appearance.resolve_stroke_pattern(
+                                        bellatrix_mde::LineMode::Solid,
+                                        scale,
+                                    );
                                     let mut outline = PathBuilder::stroke(px(
                                         appearance.width(1.0, scale, selected)
                                     ));
@@ -619,7 +620,8 @@ impl RenderOnce for UmlFigure {
                 .map(|element| alignment.align_column(element))
                 .child(title_area)
                 .into_any_element(),
-            UmlNotation::Actor
+            UmlNotation::Frame
+            | UmlNotation::Actor
             | UmlNotation::UseCase
             | UmlNotation::DeploymentNode
             | UmlNotation::Collaboration
@@ -672,9 +674,10 @@ impl RenderOnce for UmlFigure {
                 let label_color = appearance.text(palette.text);
                 let label_size = appearance.font_size(10.0, scale);
                 let slot_font_size = appearance.font_size(12.0, scale);
-                let is_interaction = self.kind == "uml.interaction";
-                let frame_keyword = if is_interaction {
-                    "sd".to_owned()
+                let frame_keyword = if let Some(kind) = frame_kind {
+                    kind.to_owned()
+                } else if notation == UmlNotation::Frame {
+                    String::new()
                 } else if notation == UmlNotation::CombinedFragment {
                     descriptor_operator.unwrap_or_else(|| "[operator]".to_owned())
                 } else {
@@ -718,8 +721,10 @@ impl RenderOnce for UmlFigure {
                     .when(
                         matches!(
                             notation,
-                            UmlNotation::InteractionUse | UmlNotation::CombinedFragment
-                        ),
+                            UmlNotation::Frame
+                                | UmlNotation::InteractionUse
+                                | UmlNotation::CombinedFragment
+                        ) && !frame_keyword.is_empty(),
                         |element| {
                             element.child(
                                 div()
@@ -727,6 +732,7 @@ impl RenderOnce for UmlFigure {
                                     .left(px(8.0 * scale))
                                     .top(px(4.0 * scale))
                                     .text_size(px(descriptor_size))
+                                    .font_weight(gpui::FontWeight::SEMIBOLD)
                                     .text_color(label_color)
                                     .child(frame_keyword),
                             )
@@ -751,11 +757,14 @@ impl RenderOnce for UmlFigure {
                             .when(notation == UmlNotation::InteractionOperand, |element| {
                                 element.top(px(8.0 * scale)).items_start()
                             })
-                            .when(is_interaction, |element| {
+                            .when(is_diagram_frame, |element| {
                                 element
                                     .top(px(4.0 * scale))
-                                    .left(px(30.0 * scale))
-                                    .max_w(px((descriptor_width - 34.0 * scale).max(1.0)))
+                                    .left(px(frame_name_offset))
+                                    .max_w(px((descriptor_width
+                                        - frame_name_offset
+                                        - 12.0 * scale)
+                                        .max(1.0)))
                                     .max_h(px(descriptor_height - 6.0 * scale))
                                     .overflow_hidden()
                                     .items_start()
@@ -766,7 +775,7 @@ impl RenderOnce for UmlFigure {
                             .when(
                                 !external_label
                                     && !heading
-                                    && !is_interaction
+                                    && !is_diagram_frame
                                     && notation != UmlNotation::InteractionOperand,
                                 |element| element.top_0().bottom_0().items_center(),
                             )
@@ -808,7 +817,7 @@ impl RenderOnce for UmlFigure {
                             .flex_col()
                             .map(|element| alignment.align_column(element))
                             .when(
-                                (is_interaction || notation == UmlNotation::InteractionOperand)
+                                (is_diagram_frame || notation == UmlNotation::InteractionOperand)
                                     && alignment.0.text_align.is_none(),
                                 |element| element.items_start(),
                             )

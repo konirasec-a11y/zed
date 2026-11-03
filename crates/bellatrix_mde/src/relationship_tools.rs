@@ -10,6 +10,7 @@ pub enum ModelingRelationKind {
     MessageSynchronous,
     MessageAsynchronous,
     MessageReply,
+    GeneralOrdering,
     AssociationClassAttachment,
     Association,
     DirectedAssociation,
@@ -38,6 +39,7 @@ impl ModelingRelationKind {
         Self::MessageSynchronous,
         Self::MessageAsynchronous,
         Self::MessageReply,
+        Self::GeneralOrdering,
     ];
     pub fn resolve_message_sort(self) -> Option<&'static str> {
         match self {
@@ -46,6 +48,10 @@ impl ModelingRelationKind {
             Self::MessageReply => Some("reply"),
             _ => None,
         }
+    }
+
+    pub fn uses_occurrence_anchors(self) -> bool {
+        self.resolve_message_sort().is_some() || self == Self::GeneralOrdering
     }
 
     pub const BASIC: &'static [Self] = &[
@@ -95,6 +101,7 @@ impl ModelingRelationKind {
             Self::MessageSynchronous => "Synchronous message",
             Self::MessageAsynchronous => "Asynchronous message",
             Self::MessageReply => "Reply message",
+            Self::GeneralOrdering => "General ordering · visual",
             Self::AssociationClassAttachment => "Association-class attachment",
             Self::Association => "Association",
             Self::DirectedAssociation => "Directed Association",
@@ -130,6 +137,7 @@ impl ModelingRelationKind {
             Self::MessageSynchronous | Self::MessageAsynchronous | Self::MessageReply => {
                 "uml.message"
             }
+            Self::GeneralOrdering => "uml.general_ordering",
             Self::AssociationClassAttachment => "view.association_class_attachment",
             Self::Association => "uml.association",
             Self::DirectedAssociation => "uml.directed_association",
@@ -165,6 +173,9 @@ impl ModelingRelationKind {
             Self::ConstraintLink => "click constraint, then constrained view (visual only)",
             Self::MessageSynchronous | Self::MessageAsynchronous | Self::MessageReply => {
                 "click the source lifeline at send position, then the target at receive position"
+            }
+            Self::GeneralOrdering => {
+                "click the before occurrence position, then the after position (visual only)"
             }
             Self::AssociationClassAttachment => {
                 "click the association path, then its classifier box (visual attachment)"
@@ -209,6 +220,7 @@ impl ModelingRelationKind {
                 | Self::MessageSynchronous
                 | Self::MessageAsynchronous
                 | Self::MessageReply
+                | Self::GeneralOrdering
         )
     }
     pub fn validate_endpoints(self, source: &str, target: &str) -> Result<(), &'static str> {

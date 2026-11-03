@@ -29,21 +29,32 @@ fn render_view(
     let opacity = view.style.opacity.unwrap_or(1.0);
     let font_size = view.style.font_size.unwrap_or(13.0);
     let radius = view.style.corner_radius.unwrap_or(3.0);
-    let notation_dashed = view
-        .subject
+    let notation_mode = view
+        .draft
         .as_ref()
-        .and_then(|subject| {
-            project
-                .relations
-                .iter()
-                .find(|relation| &relation.id == subject)
+        .map(|draft| {
+            bellatrix_mde::resolve_relationship_style(&draft.notation_kind, &draft.properties)
+                .line_mode
         })
-        .is_some_and(|relation| {
-            bellatrix_mde::relationship_style_for_notation(&relation.kind).dashed
-        });
+        .or_else(|| {
+            view.subject.as_ref().and_then(|subject| {
+                project
+                    .relations
+                    .iter()
+                    .find(|relation| &relation.id == subject)
+                    .map(|relation| {
+                        bellatrix_mde::resolve_relationship_style(
+                            &relation.kind,
+                            &relation.properties,
+                        )
+                        .line_mode
+                    })
+            })
+        })
+        .unwrap_or(bellatrix_mde::LineMode::Solid);
     let dashes = view
         .style
-        .resolve_stroke_pattern(notation_dashed)
+        .resolve_stroke_pattern(notation_mode)
         .iter()
         .map(ToString::to_string)
         .collect::<Vec<_>>()
