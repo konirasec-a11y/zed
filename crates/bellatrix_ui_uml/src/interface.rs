@@ -1,5 +1,5 @@
 //! Circular notation of a classifier; shared members and editing live in class.rs.
-use crate::class::{UmlClassifier, compartment, inline_field};
+use crate::class::{UmlClassifier, compartment, inline_field, template_signature};
 use bellatrix_design_system::Palette;
 use bellatrix_mde::{ClassifierContents, interface_layout};
 use gpui::{
@@ -31,6 +31,13 @@ impl RenderOnce for UmlInterfaceBall {
         };
         let layout = interface_layout(classifier.view_width, classifier.view_height, contents);
         let units = |value: f64| px(value as f32 * scale);
+        let signature = template_signature(
+            classifier.template_parameters,
+            classifier.view_width,
+            interactions.clone(),
+            palette,
+            classifier.selected,
+        );
         let title_editor = classifier.editing.as_ref().and_then(|(subject, field)| {
             (classifier.class_id.as_deref() == Some(subject.as_str())).then(|| field.clone())
         });
@@ -153,5 +160,6 @@ impl RenderOnce for UmlInterfaceBall {
                         ))
                     }),
             )
+            .when_some(signature, |element, signature| element.child(signature))
     }
 }

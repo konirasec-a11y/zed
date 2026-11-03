@@ -345,7 +345,9 @@ pub fn validate_structural_model(project: &Project) -> Vec<StructuralDiagnostic>
                 "end1Aggregation belongs to Association and must be none, shared or composite",
             ));
         }
-        if relationship_root_kind(relation).is_none() && relation.kind.starts_with("uml.") {
+        // Template property references are not UML Relationship instances.
+        if relationship_root_kind(relation).is_none() && relation.kind.starts_with("uml.")
+            && !matches!(relation.kind.as_str(), "uml.parametered_element" | "uml.constraining_classifier") {
             issues.push(problem(
                 "UML_UNKNOWN_RELATIONSHIP",
                 &relation.id,
@@ -366,6 +368,7 @@ pub fn validate_structural_model(project: &Project) -> Vec<StructuralDiagnostic>
         ));
     }
     issues.extend(crate::structural_rules::validate(project));
+    issues.extend(crate::templates::validate(project));
     issues
 }
 

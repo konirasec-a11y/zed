@@ -26,6 +26,8 @@ pub mod uml;
 mod uml_geometry;
 mod uml_notation;
 mod uml_types;
+mod templates;
+pub use templates::{template_parameters, template_parameter_label, template_parametered_element};
 
 pub use generation::{
     GenerationGraphError, GenerationModel, GenerationReference, GenerationUnit,
@@ -59,7 +61,7 @@ pub use structural_diagrams::{
 };
 pub use uml_geometry::{
     ClassifierContents, FoldedNoteLayout, InterfaceLayout, classifier_contents, folded_note_layout,
-    interface_layout,
+    interface_layout, TemplateSignatureLayout, template_signature_layout,
 };
 pub use uml_types::{UmlCapability, UmlQuickCreate, UmlType};
 

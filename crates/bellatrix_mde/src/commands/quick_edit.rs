@@ -311,7 +311,7 @@ mod tests {
         for (action, expected_kind, relation_kind) in [
             (
                 UmlQuickCreate::TemplateParameter,
-                "uml.template_parameter",
+                "uml.classifier_template_parameter",
                 None,
             ),
             (
@@ -346,7 +346,12 @@ mod tests {
             let project = crate::commands::apply(&original, &command(action), 0).unwrap();
             assert_eq!(
                 project.elements.len(),
-                original.elements.len() + 1,
+                original.elements.len()
+                    + if action == UmlQuickCreate::TemplateParameter {
+                        3
+                    } else {
+                        1
+                    },
                 "{action:?}"
             );
             let child = project
@@ -382,14 +387,16 @@ mod tests {
                         .any(|view| view.subject.as_deref() == Some(edge.id.as_str()))
                 );
             } else {
-                assert!(
-                    project
-                        .relations
-                        .iter()
-                        .any(|relation| relation.kind == "owns"
-                            && relation.from == "type-task"
-                            && relation.to == child.id)
-                );
+                assert!(project.relations.iter().any(|relation| {
+                    relation.kind == "owns"
+                        && (relation.from == "type-task"
+                            || (action == UmlQuickCreate::TemplateParameter
+                                && project.elements.iter().any(|owner| {
+                                    owner.id == relation.from
+                                        && owner.kind == "uml.redefinable_template_signature"
+                                })))
+                        && relation.to == child.id
+                }));
                 assert_eq!(
                     project
                         .diagrams
@@ -412,7 +419,6 @@ mod tests {
             .kind = "rust.trait".into();
         let before = original.clone();
         for action in [
-            UmlQuickCreate::TemplateParameter,
             UmlQuickCreate::ProvidedInterface,
             UmlQuickCreate::RequiredInterface,
             UmlQuickCreate::Port,

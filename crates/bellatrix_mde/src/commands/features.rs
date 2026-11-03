@@ -178,6 +178,156 @@ pub(super) fn class_minimum_bounds(
     Some((minimum_width, minimum_height))
 }
 
+fn insert_template_parameter(
+    section: &mut ModelingSection,
+    owner_id: &str,
+    revision: u64,
+    project_id: &str,
+) -> Result<(), String> {
+    let owner = section
+        .elements
+        .iter()
+        .find(|element| element.id == owner_id)
+        .ok_or("template owner missing")?;
+    let owner_type = crate::UmlType::from_kind(&owner.kind).ok_or("unsupported template owner")?;
+    let signature_kind = if owner_type.is_classifier() {
+        "uml.redefinable_template_signature"
+    } else {
+        "uml.template_signature"
+    };
+    let signatures = section
+        .relations
+        .iter()
+        .filter(|relation| relation.kind == "owns" && relation.from == owner_id)
+        .filter_map(|relation| {
+            section
+                .elements
+                .iter()
+                .find(|element| element.id == relation.to)
+        })
+        .filter(|element| crate::templates::is_signature(&element.kind))
+        .collect::<Vec<_>>();
+    if signatures.len() > 1 {
+        return Err(
+            "template owner has multiple signatures; repair the model before adding parameters"
+                .into(),
+        );
+    }
+    if signatures
+        .first()
+        .is_some_and(|signature| signature.kind != signature_kind)
+    {
+        return Err("existing template signature has an incompatible UML metaclass".into());
+    }
+    // Extending inherited signatures needs parameter substitution and ordering, not a local copy.
+    let model = section.to_model(project_id, "Template validation");
+    let graph = crate::GraphIndex::new(&model);
+    for parent in section
+        .elements
+        .iter()
+        .filter(|candidate| candidate.id != owner_id)
+    {
+        if graph
+            .shortest_path(owner_id, &parent.id, Some("uml.generalization"))
+            .map_err(|error| error.to_string())?
+            .is_some()
+            && section.relations.iter().any(|relation| {
+                relation.kind == "owns"
+                    && relation.from == parent.id
+                    && section.elements.iter().any(|element| {
+                        element.id == relation.to && crate::templates::is_signature(&element.kind)
+                    })
+            })
+        {
+            return Err("inherited template signature extension is not implemented; refusing an incomplete signature".into());
+        }
+    }
+    let existing_signature = signatures.first().map(|signature| signature.id.clone());
+    let owner_name = owner.name.clone();
+    let signature_id = existing_signature
+        .clone()
+        .map(Ok)
+        .unwrap_or_else(|| fresh(section, "template-signature", revision, project_id))?;
+    let signature_ownership = fresh(section, "template-signature-owns", revision, project_id)?;
+    let parameter_id = fresh(section, "template-parameter", revision, project_id)?;
+    let parameter_ownership = fresh(section, "template-parameter-owns", revision, project_id)?;
+    let exposed_id = fresh(section, "parametered-classifier", revision, project_id)?;
+    let exposed_ownership = fresh(section, "parametered-classifier-owns", revision, project_id)?;
+    let reference_id = fresh(section, "parametered-element", revision, project_id)?;
+    let parameter_name = name(section, "T")?;
+    let make_element = |id: String, kind: &str, name: String, properties| Element {
+        id,
+        kind: kind.into(),
+        name,
+        label: None,
+        description: None,
+        properties,
+        annotations: Vec::new(),
+        implementations: Vec::new(),
+        content: None,
+    };
+    if existing_signature.is_none() {
+        section.elements.push(make_element(
+            signature_id.clone(),
+            signature_kind,
+            format!("{owner_name} template signature"),
+            std::collections::BTreeMap::from([(
+                crate::templates::GENERATED_SIGNATURE.into(),
+                serde_json::json!({"name": format!("{owner_name} template signature")}),
+            )]),
+        ));
+        section.relations.push(Relation {
+            id: signature_ownership,
+            kind: "owns".into(),
+            from: owner_id.into(),
+            to: signature_id.clone(),
+            properties: Default::default(),
+        });
+    }
+    section.elements.push(make_element(
+        parameter_id.clone(),
+        "uml.classifier_template_parameter",
+        parameter_name.clone(),
+        std::collections::BTreeMap::from([("allowSubstitutable".into(), serde_json::json!(false))]),
+    ));
+    section.elements.push(make_element(
+        exposed_id.clone(),
+        "uml.class",
+        parameter_name,
+        Default::default(),
+    ));
+    for (id, kind, from, to) in [
+        (
+            parameter_ownership,
+            "owns",
+            signature_id,
+            parameter_id.clone(),
+        ),
+        (
+            exposed_ownership,
+            "owns",
+            parameter_id.clone(),
+            exposed_id.clone(),
+        ),
+        (
+            reference_id,
+            "uml.parametered_element",
+            parameter_id,
+            exposed_id,
+        ),
+    ] {
+        section.relations.push(Relation {
+            id,
+            kind: kind.into(),
+            from,
+            to,
+            properties: Default::default(),
+        });
+    }
+    super::members::grow_classifier_views(section, owner_id);
+    Ok(())
+}
+
 pub(super) fn insert_feature(
     section: &mut ModelingSection,
     diagram_id: &str,
@@ -193,6 +343,16 @@ pub(super) fn insert_feature(
         .ok_or("feature owner missing")?;
     if !action.accepts(&owner.kind) {
         return Err("element type cannot own this feature kind".into());
+    }
+    if action == UmlQuickCreate::TemplateParameter {
+        if !section
+            .diagrams
+            .iter()
+            .any(|diagram| diagram.id == diagram_id)
+        {
+            return Err("diagram missing".into());
+        }
+        return insert_template_parameter(section, owner_id, revision, project_id);
     }
     let diagram = section
         .diagrams
@@ -222,7 +382,9 @@ pub(super) fn insert_feature(
         _ => return Err("feature owner geometry must be Rect".into()),
     };
     let (kind, prefix, shape) = match action {
-        UmlQuickCreate::TemplateParameter => ("uml.template_parameter", "TemplateParameter", None),
+        UmlQuickCreate::TemplateParameter => {
+            return Err("template parameters require a signature".into());
+        }
         UmlQuickCreate::Port => ("uml.port", "Port", Some((16.0, 16.0))),
         UmlQuickCreate::Part => ("uml.part", "Part", Some((86.0, 48.0))),
         _ => return Err("not a contained feature action".into()),
@@ -243,9 +405,6 @@ pub(super) fn insert_feature(
     let label = name(section, prefix)?;
     let mut properties = std::collections::BTreeMap::new();
     properties.insert("visibility".into(), serde_json::json!("public"));
-    if action == UmlQuickCreate::TemplateParameter {
-        properties.insert("parameterType".into(), serde_json::json!("UMLClassifier"));
-    }
     if action == UmlQuickCreate::Port {
         properties.insert("isService".into(), serde_json::json!(false));
     }
@@ -302,9 +461,6 @@ pub(super) fn insert_feature(
                 style: Style::default(),
                 z_index,
             });
-    }
-    if action == UmlQuickCreate::TemplateParameter {
-        super::members::grow_classifier_views(section, owner_id);
     }
     if action == UmlQuickCreate::Part
         && let Some((minimum_width, minimum_height)) =
@@ -458,26 +614,28 @@ mod tests {
             )
             .unwrap();
         }
-        for kind in ["uml.template_parameter", "uml.port", "uml.part"] {
+        for kind in ["uml.classifier_template_parameter", "uml.port", "uml.part"] {
             let element = section
                 .elements
                 .iter()
                 .find(|element| element.kind == kind)
                 .unwrap();
-            assert!(
-                section
-                    .relations
-                    .iter()
-                    .any(|relation| relation.kind == "owns"
-                        && relation.from == "type-task"
-                        && relation.to == element.id)
-            );
+            assert!(section.relations.iter().any(|relation| {
+                relation.kind == "owns"
+                    && (relation.from == "type-task"
+                        || (kind == "uml.classifier_template_parameter"
+                            && section.elements.iter().any(|owner| {
+                                owner.id == relation.from
+                                    && owner.kind == "uml.redefinable_template_signature"
+                            })))
+                    && relation.to == element.id
+            }));
             let has_view = section
                 .diagrams
                 .iter()
                 .flat_map(|diagram| &diagram.views)
                 .any(|view| view.subject.as_deref() == Some(element.id.as_str()));
-            assert_eq!(has_view, kind != "uml.template_parameter");
+            assert_eq!(has_view, kind != "uml.classifier_template_parameter");
         }
     }
 }

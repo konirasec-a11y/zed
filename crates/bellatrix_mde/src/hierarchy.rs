@@ -51,6 +51,12 @@ pub fn project_hierarchy(section: &ModelingSection) -> Vec<HierarchyRow> {
     let mut remaining = elements.values().copied().filter(|element| !seen.contains(&element.id)).collect::<Vec<_>>();
     sort(&mut remaining);
     for element in remaining { visit(element, 0, &children, &mut seen, &mut result); }
+    for row in &mut result {
+        if let Some(element) = elements.get(row.element_id.as_str())
+            && crate::templates::is_parameter(&element.kind) {
+            row.label = crate::template_parameter_label(section, element);
+        }
+    }
     result
 }
 #[cfg(test)]

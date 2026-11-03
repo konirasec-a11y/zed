@@ -11,12 +11,7 @@ pub struct ClassifierContents {
 }
 impl ClassifierContents {
     pub fn compartments_height(self) -> f64 {
-        let counts = [
-            self.attributes,
-            self.operations,
-            self.receptions,
-            self.template_parameters,
-        ];
+        let counts = [self.attributes, self.operations, self.receptions];
         let rows: usize = counts.iter().sum();
         let groups = counts.iter().filter(|count| **count > 0).count();
         rows as f64 * 20.0 + groups as f64 * 9.0
@@ -50,13 +45,49 @@ pub fn classifier_contents(section: &ModelingSection, owner: &str) -> Classifier
                 "rust.field" | "uml.attribute" => contents.attributes += 1,
                 "rust.function" | "uml.operation" => contents.operations += 1,
                 "uml.reception" => contents.receptions += 1,
-                "uml.template_parameter" => contents.template_parameters += 1,
+
                 _ => {}
             }
         }
     }
+    contents.template_parameters = crate::template_parameters(section, owner).len();
     contents
 }
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TemplateSignatureLayout {
+    pub left: f64,
+    pub top: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+impl TemplateSignatureLayout {
+    pub fn outsets(self, body_width: f64, body_height: f64) -> (f64, f64, f64) {
+        (
+            (-self.top).max(0.0),
+            (self.left + self.width - body_width).max(0.0),
+            (self.top + self.height - body_height).max(0.0),
+        )
+    }
+}
+
+pub fn template_signature_layout(
+    body_width: f64,
+    parameter_count: usize,
+) -> Option<TemplateSignatureLayout> {
+    if parameter_count == 0 || !body_width.is_finite() || body_width <= 0.0 {
+        return None;
+    }
+    let width = body_width.min(120.0);
+    let height = 12.0 + parameter_count as f64 * 20.0;
+    Some(TemplateSignatureLayout {
+        left: body_width - width + 16.0,
+        top: 8.0 - height,
+        width,
+        height,
+    })
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct InterfaceLayout {
     pub center: Point,

@@ -329,6 +329,79 @@ pub(crate) fn compartment(
         .into_any_element()
 }
 
+pub(crate) fn template_signature(
+    rows: Vec<MemberRow>,
+    body_width: f64,
+    interactions: MemberInteractions,
+    palette: Palette,
+    selected: bool,
+) -> Option<gpui::AnyElement> {
+    let layout = bellatrix_mde::template_signature_layout(body_width, rows.len())?;
+    let scale = interactions.scale;
+    let appearance = interactions.appearance.clone();
+    Some(
+        div()
+            .id("uml-template-signature")
+            .absolute()
+            .left(px(layout.left as f32 * scale))
+            .top(px(layout.top as f32 * scale))
+            .w(px(layout.width as f32 * scale))
+            .h(px(layout.height as f32 * scale))
+            .border(px(appearance.width(1.0, scale, selected)))
+            .border_dashed()
+            .border_color(appearance.stroke(palette, selected))
+            .bg(appearance.fill(palette.panel))
+            .px(px(6.0 * scale))
+            .py(px(6.0 * scale))
+            .flex()
+            .flex_col()
+            .overflow_hidden()
+            .when_some(appearance.0.font_family.clone(), |element, family| {
+                element.font_family(family)
+            })
+            .children(rows.into_iter().enumerate().map(move |(index, parameter)| {
+                let select = interactions.select.clone();
+                let edit = interactions.edit.clone();
+                let field = interactions.editing.as_ref().and_then(|(subject, field)| {
+                    (parameter.id.as_deref() == Some(subject.as_str())).then(|| field.clone())
+                });
+                let label = if let Some(field) = field {
+                    inline_field(
+                        field,
+                        interactions.confirm.clone(),
+                        interactions.cancel.clone(),
+                    )
+                    .into_any_element()
+                } else {
+                    div().child(parameter.title).into_any_element()
+                };
+                div()
+                    .id(format!("uml-template-parameter-{index}"))
+                    .h(px(20.0 * scale))
+                    .flex_none()
+                    .text_size(px(appearance.font_size(12.0, scale)))
+                    .text_color(appearance.text(palette.text))
+                    .whitespace_nowrap()
+                    .cursor_pointer()
+                    .on_mouse_down(MouseButton::Left, move |event, window, cx| {
+                        if let Some(id) = parameter.id.as_deref() {
+                            let handler = if event.click_count >= 2 {
+                                edit.as_ref()
+                            } else {
+                                select.as_ref()
+                            };
+                            if let Some(handler) = handler {
+                                handler(id, window, cx);
+                            }
+                        }
+                        cx.stop_propagation();
+                    })
+                    .child(label)
+            }))
+            .into_any_element(),
+    )
+}
+
 impl RenderOnce for UmlClassifier {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         if self.interface_ball {
@@ -339,6 +412,13 @@ impl RenderOnce for UmlClassifier {
         let line = appearance.stroke(palette, self.selected);
         let interactions = self.member_interactions();
         let scale = self.view_scale;
+        let signature = template_signature(
+            self.template_parameters,
+            self.view_width,
+            interactions.clone(),
+            palette,
+            self.selected,
+        );
         let title_editor = self.editing.as_ref().and_then(|(subject, field)| {
             (self.class_id.as_deref() == Some(subject.as_str())).then(|| field.clone())
         });
@@ -351,7 +431,7 @@ impl RenderOnce for UmlClassifier {
         let header_height = self.header.classifier_header_height();
         let keyword = self.header.keyword;
         let applied_stereotype = self.header.applied_stereotype;
-        div()
+        let body = div()
             .size_full()
             .flex()
             .flex_col()
@@ -419,15 +499,6 @@ impl RenderOnce for UmlClassifier {
                             .child(title),
                     ),
             )
-            .when(!self.template_parameters.is_empty(), |element| {
-                element.child(compartment(
-                    self.template_parameters,
-                    "template-parameter",
-                    interactions.clone(),
-                    palette,
-                    false,
-                ))
-            })
             .when(!self.attributes.is_empty(), |element| {
                 element.child(compartment(
                     self.attributes,
@@ -455,6 +526,12 @@ impl RenderOnce for UmlClassifier {
                     true,
                 ))
             })
+            .into_any_element();
+        div()
+            .size_full()
+            .relative()
+            .child(body)
+            .when_some(signature, |element, signature| element.child(signature))
             .into_any_element()
     }
 }
@@ -462,6 +539,20 @@ impl RenderOnce for UmlClassifier {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn template_rows_keep_semantic_ids_and_authoritative_labels_without_invented_syntax() {
+        let classifier = UmlClassifier::new("Container")
+            .template_parameter_with_id("formal-parameter", "Item: Classifier = DefaultItem");
+        let parameter = classifier
+            .template_parameters
+            .first()
+            .expect("formal parameter");
+        assert_eq!(parameter.id.as_deref(), Some("formal-parameter"));
+        assert_eq!(parameter.title.as_ref(), "Item: Classifier = DefaultItem");
+        assert!(classifier.attributes.is_empty());
+        assert!(classifier.operations.is_empty());
+    }
 
     #[test]
     fn view_style_defaults_follow_theme_roles_and_scale() {

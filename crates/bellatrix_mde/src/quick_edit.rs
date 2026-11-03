@@ -326,7 +326,7 @@ pub fn quick_edit_for(kind: &str) -> Vec<QuickEditAction> {
     let Some(kind) = UmlType::from_kind(kind) else {
         return Vec::new();
     };
-    match kind {
+    let mut actions = match kind {
         UmlType::Class => CLASS_ACTIONS.to_vec(),
         UmlType::Interface => INTERFACE_ACTIONS
             .iter()
@@ -377,7 +377,18 @@ pub fn quick_edit_for(kind: &str) -> Vec<QuickEditAction> {
             })
             .collect(),
         _ => Vec::new(),
+    };
+    if kind.supports(crate::UmlCapability::TemplateParameter)
+        && !actions
+            .iter()
+            .any(|action| action.id == "uml.add-template-parameter")
+        && let Some(action) = CLASS_ACTIONS
+            .iter()
+            .find(|action| action.id == "uml.add-template-parameter")
+    {
+        actions.push(*action);
     }
+    actions
 }
 
 #[cfg(test)]
@@ -396,7 +407,7 @@ mod tests {
             assert_eq!(shared.availability, Ready);
         }
         assert_eq!(class.len(), 17);
-        assert_eq!(interface.len(), 13);
+        assert_eq!(interface.len(), 14);
         assert!(
             class
                 .iter()

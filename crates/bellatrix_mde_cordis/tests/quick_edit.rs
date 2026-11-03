@@ -188,20 +188,16 @@ async fn class_specializations_use_the_same_versioned_cordis_event() {
             .clone(),
     )
     .unwrap();
-    for kind in ["uml.template_parameter", "uml.port", "uml.part"] {
+    for kind in ["uml.classifier_template_parameter", "uml.port", "uml.part"] {
         let node = section.elements.iter().find(|e| e.kind == kind).unwrap();
-        assert!(
-            section
-                .relations
-                .iter()
-                .any(|r| r.kind == "owns" && r.from == "type-task" && r.to == node.id)
-        );
+        assert!(section.relations.iter().any(|r| r.kind == "owns"
+            && (r.from == "type-task"
+                || (kind == "uml.classifier_template_parameter"
+                    && section.elements.iter().any(|owner| owner.id == r.from
+                        && owner.kind == "uml.redefinable_template_signature")))
+            && r.to == node.id));
     }
-    for kind in [
-        "uml.association",
-        "uml.interface_realization",
-        "uml.usage",
-    ] {
+    for kind in ["uml.association", "uml.interface_realization", "uml.usage"] {
         assert!(section.relations.iter().any(|r| r.kind == kind), "{kind}");
     }
     let associations = section

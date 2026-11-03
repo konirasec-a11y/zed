@@ -191,7 +191,17 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
             element_id,
             path,
             value,
-        } => crate::set_inspected_property(&mut section, element_id, path, value.clone())?,
+        } => {
+            if path != "name"
+                || !crate::templates::rename_parameter(
+                    &mut section,
+                    element_id,
+                    value.as_str().ok_or("expected string")?,
+                )?
+            {
+                crate::set_inspected_property(&mut section, element_id, path, value.clone())?;
+            }
+        }
         Command::SetNameExpression {
             element_id,
             expression,
@@ -200,12 +210,14 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
             if name.trim().is_empty() {
                 return Err("name must not be blank".into());
             }
-            section
-                .elements
-                .iter_mut()
-                .find(|element| element.id == *element_id)
-                .ok_or("MDE element not found")?
-                .name = name.clone();
+            if !crate::templates::rename_parameter(&mut section, element_id, name)? {
+                section
+                    .elements
+                    .iter_mut()
+                    .find(|element| element.id == *element_id)
+                    .ok_or("MDE element not found")?
+                    .name = name.clone();
+            }
         }
     }
     let mut updated = section.to_model(&project.id, &project.name);
@@ -214,6 +226,7 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
         .validate()
         .map_err(|error| error.to_string())?;
     validation::new_relationships(project, &updated)?;
+    crate::templates::validate_changes(project, &updated)?;
     Ok(updated)
 }
 
@@ -546,6 +559,7 @@ fn remove_element(section: &mut ModelingSection, id: &str) -> Result<(), String>
             break;
         }
     }
+    crate::templates::extend_deletion(section, &mut deleted)?;
     for diagram in &section.diagrams {
         if let Some(context) = diagram
             .model_elements

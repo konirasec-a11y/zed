@@ -440,7 +440,10 @@ impl MdeWorkbenchItem {
         let display = if classifier {
             Self::name_expression_text(target)
         } else {
-            target.name.clone()
+            bellatrix_mde::template_parametered_element(&snapshot.section, target)
+                .unwrap_or(target)
+                .name
+                .clone()
         };
         field.update(cx, |field, cx| field.set_text(&display, window, cx));
         self.select_element(id.clone(), cx);
@@ -483,7 +486,10 @@ impl MdeWorkbenchItem {
             != if classifier {
                 Self::name_expression_text(element)
             } else {
-                element.name.clone()
+                bellatrix_mde::template_parametered_element(&snapshot.section, element)
+                    .unwrap_or(element)
+                    .name
+                    .clone()
             };
         self.editing_subject = None;
         self.inline_editor = None;
@@ -1370,9 +1376,40 @@ impl Render for MdeWorkbenchItem {
                         } else {
                             0.0
                         };
+                        let template_parameters =
+                            bellatrix_mde::template_parameters(&snapshot.section, &element.id);
+                        let signature_layout = matches!(
+                            notation,
+                            bellatrix_mde::UmlNotation::ClassifierRectangle
+                                | bellatrix_mde::UmlNotation::InterfaceBall
+                                | bellatrix_mde::UmlNotation::PackageTab
+                        )
+                        .then(|| {
+                            bellatrix_mde::template_signature_layout(
+                                f64::from(local_width),
+                                template_parameters.len(),
+                            )
+                        })
+                        .flatten();
+                        let (signature_top, signature_right, signature_bottom) = signature_layout
+                            .map(|layout| {
+                                layout.outsets(f64::from(local_width), f64::from(local_height))
+                            })
+                            .unwrap_or_default();
+                        let signature_top = signature_top as f32 * zoom;
+                        let signature_right = signature_right as f32 * zoom;
+                        let signature_bottom = signature_bottom as f32 * zoom;
                         let selected_target = self.selected_element.as_deref().and_then(|id| {
                             if id == subject {
                                 Some(element)
+                            } else if template_parameters
+                                .iter()
+                                .any(|parameter| parameter.id == id)
+                            {
+                                template_parameters
+                                    .iter()
+                                    .find(|parameter| parameter.id == id)
+                                    .copied()
                             } else if snapshot.section.relations.iter().any(|relation| {
                                 relation.kind == "owns"
                                     && relation.from == element.id
@@ -1459,14 +1496,17 @@ impl Render for MdeWorkbenchItem {
                                     classifier =
                                         classifier.reception_with_id(member.id.clone(), text)
                                 }
-                                "uml.template_parameter" => {
-                                    classifier = classifier.template_parameter_with_id(
-                                        member.id.clone(),
-                                        format!("T: {}", member.name),
-                                    )
-                                }
                                 _ => {}
                             }
+                        }
+                        for parameter in template_parameters {
+                            classifier = classifier.template_parameter_with_id(
+                                parameter.id.clone(),
+                                bellatrix_mde::template_parameter_label(
+                                    &snapshot.section,
+                                    parameter,
+                                ),
+                            );
                         }
                         if editing.is_some() {
                             if let (Some(id), Some(field)) =
@@ -1499,6 +1539,7 @@ impl Render for MdeWorkbenchItem {
                                 element.name.clone()
                             };
                             let mut figure = UmlFigure::new(element.kind.clone(), label)
+                                .with_template_parameters_from(&classifier)
                                 .view_style(&view.style)
                                 .selected(is_selected)
                                 .view_scale(zoom)
@@ -1515,7 +1556,7 @@ impl Render for MdeWorkbenchItem {
                             {
                                 figure = figure.stereotype(value.to_owned());
                             }
-                            if editing.is_some() {
+                            if editing.is_some_and(|target| target.id == element.id) {
                                 if let Some(field) = self.inline_editor.clone() {
                                     let confirm = cx.weak_entity();
                                     let cancel = cx.weak_entity();
@@ -1570,9 +1611,9 @@ impl Render for MdeWorkbenchItem {
                                 .id(format!("mde-view-{}", view.id))
                                 .absolute()
                                 .left(px(local_x * zoom + pan.0))
-                                .top(px(local_y * zoom + pan.1))
-                                .w(px(local_width * zoom))
-                                .h(px(local_height * zoom))
+                                .top(px(local_y * zoom + pan.1 - signature_top))
+                                .w(px(local_width * zoom + signature_right))
+                                .h(px(local_height * zoom + signature_top + signature_bottom))
                                 .cursor_pointer()
                                 .on_mouse_down(
                                     MouseButton::Left,
@@ -1596,9 +1637,20 @@ impl Render for MdeWorkbenchItem {
                                             // The menu's auto-height layout cannot resolve the
                                             // figure's percentage height from the outer card.
                                             div()
-                                                .w(px(local_width * zoom))
-                                                .h(px(local_height * zoom))
-                                                .child(figure)
+                                                .relative()
+                                                .w(px(local_width * zoom + signature_right))
+                                                .h(px(local_height * zoom
+                                                    + signature_top
+                                                    + signature_bottom))
+                                                .child(
+                                                    div()
+                                                        .absolute()
+                                                        .left_0()
+                                                        .top(px(signature_top))
+                                                        .w(px(local_width * zoom))
+                                                        .h(px(local_height * zoom))
+                                                        .child(figure),
+                                                )
                                         })
                                         .menu(move |window, cx| {
                                             Self::view_context_menu(
@@ -1616,8 +1668,8 @@ impl Render for MdeWorkbenchItem {
                                         div()
                                             .id(format!("mde-quick-actions-{}", view.id))
                                             .absolute()
-                                            .left(px(local_width * zoom + 6.0))
-                                            .top(px(quick_top))
+                                            .left(px(local_width * zoom + signature_right + 6.0))
+                                            .top(px(quick_top + signature_top))
                                             .child(actions),
                                     )
                                 })
@@ -1627,7 +1679,7 @@ impl Render for MdeWorkbenchItem {
                                             .id(format!("mde-quick-left-actions-{}", view.id))
                                             .absolute()
                                             .left(px(-78.0))
-                                            .top(px(quick_top + 28.0))
+                                            .top(px(quick_top + signature_top + 28.0))
                                             .child(actions),
                                     )
                                 })
@@ -1637,7 +1689,7 @@ impl Render for MdeWorkbenchItem {
                                             .id(format!("mde-quick-visibility-{}", view.id))
                                             .absolute()
                                             .left(px(-34.0))
-                                            .top(px(quick_top))
+                                            .top(px(quick_top + signature_top))
                                             .child(picker),
                                     )
                                 })
@@ -1650,8 +1702,8 @@ impl Render for MdeWorkbenchItem {
                                             div()
                                                 .id(format!("mde-resize-{}", view.id))
                                                 .absolute()
-                                                .bottom_0()
-                                                .right_0()
+                                                .bottom(px(signature_bottom))
+                                                .right(px(signature_right))
                                                 .w(px(10.0))
                                                 .h(px(10.0))
                                                 .bg(selection)
@@ -1680,9 +1732,9 @@ impl Render for MdeWorkbenchItem {
                                         div()
                                             .id(format!("mde-connection-target-{}", view.id))
                                             .absolute()
-                                            .top_0()
-                                            .right_0()
-                                            .bottom_0()
+                                            .top(px(signature_top))
+                                            .right(px(signature_right))
+                                            .bottom(px(signature_bottom))
                                             .left_0()
                                             .cursor_crosshair()
                                             .on_mouse_down(

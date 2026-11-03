@@ -180,13 +180,15 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
         });
     }
     let element = section.elements.iter().find(|element| element.id == id)?;
+    let semantic_name = crate::template_parametered_element(section, element).map_or(element.name.as_str(), |exposed| exposed.name.as_str());
+    let display_label = if crate::templates::is_parameter(&element.kind) { crate::template_parameter_label(section, element) } else { crate::element_display_label(element) };
     let mut properties = vec![
         InspectorProperty { path:"id".into(), label:"ID".into(), group:"Identity",
             editor:PropertyEditor::ReadOnly, value:json!(element.id), editable:false },
         InspectorProperty { path:"kind".into(), label:"Type".into(), group:"Identity",
             editor:PropertyEditor::ReadOnly, value:json!(element.kind), editable:false },
         InspectorProperty { path:"name".into(), label:"Name".into(), group:"Identity",
-            editor:PropertyEditor::Text, value:json!(element.name), editable:true },
+            editor:PropertyEditor::Text, value:json!(semantic_name), editable:true },
         InspectorProperty { path:"label".into(), label:"Label".into(), group:"Identity",
             editor:PropertyEditor::Text, value:json!(element.label.clone().unwrap_or_default()), editable:true },
     ];
@@ -220,7 +222,10 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
     let mut attributes = Vec::new();
     let mut operations = Vec::new();
     let mut receptions = Vec::new();
-    let mut template_parameters=Vec::new();
+    let template_parameters = crate::template_parameters(section, &element.id).into_iter().map(|member| InspectorMember {
+        id:member.id.clone(), name:crate::template_parametered_element(section, member).unwrap_or(member).name.clone(), kind:member.kind.clone(),
+        display_label: crate::template_parameter_label(section, member),
+    }).collect();
     let mut ports=Vec::new();
     let mut parts=Vec::new();
     for relation in &section.relations {
@@ -234,7 +239,7 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
                 "rust.field" | "uml.attribute" => attributes.push(descriptor),
                 "rust.function" | "uml.operation" => operations.push(descriptor),
                 "uml.reception" => receptions.push(descriptor),
-                "uml.template_parameter" => template_parameters.push(descriptor),
+
                 "uml.port" => ports.push(descriptor),
                 "uml.part" => parts.push(descriptor),
                 _ => {},
@@ -242,7 +247,7 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
         }
     }
     Some(ElementInspector {element_id:element.id.clone(),kind:element.kind.clone(),
-        name:element.name.clone(),display_label:crate::element_display_label(element),properties,attributes,operations,receptions,
+        name:semantic_name.into(),display_label,properties,attributes,operations,receptions,
         template_parameters,ports,parts})
 }
 

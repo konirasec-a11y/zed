@@ -1,5 +1,8 @@
 //! Non-classifier notations share editing, but not the classifier silhouette.
-use crate::{class::ViewAppearance, inline_edit::UmlInlineNameEditor};
+use crate::{
+    class::{MemberInteractions, MemberRow, UmlClassifier, ViewAppearance, template_signature},
+    inline_edit::UmlInlineNameEditor,
+};
 use bellatrix_design_system::Palette;
 use bellatrix_mde::{UmlNotation, folded_note_layout, uml_header, uml_notation};
 use gpui::{
@@ -20,6 +23,7 @@ pub struct UmlFigure {
     appearance: ViewAppearance,
     edit: Option<Action>,
     editor: Option<(Entity<InputField>, Action, Action)>,
+    template_parameters: Option<(Vec<MemberRow>, MemberInteractions, f64)>,
 }
 impl UmlFigure {
     pub fn supports(kind: &str) -> bool {
@@ -43,10 +47,21 @@ impl UmlFigure {
             appearance: ViewAppearance::default(),
             edit: None,
             editor: None,
+            template_parameters: None,
         }
     }
     pub fn view_style(mut self, style: &bellatrix_mde::Style) -> Self {
         self.appearance = ViewAppearance(style.clone());
+        self
+    }
+    pub fn with_template_parameters_from(mut self, projection: &UmlClassifier) -> Self {
+        if uml_notation(&self.kind) == UmlNotation::PackageTab {
+            self.template_parameters = Some((
+                projection.template_parameters.clone(),
+                projection.member_interactions(),
+                projection.view_width,
+            ));
+        }
         self
     }
     pub fn stereotype(mut self, value: impl Into<SharedString>) -> Self {
@@ -124,6 +139,11 @@ impl RenderOnce for UmlFigure {
         let palette = Palette::current(cx);
         let scale = self.scale;
         let selected = self.selected;
+        let signature = self
+            .template_parameters
+            .and_then(|(rows, interactions, width)| {
+                template_signature(rows, width, interactions, palette, selected)
+            });
         let appearance = self.appearance;
         let font_family = appearance.0.font_family.clone();
         let border = appearance.stroke(palette, selected);
@@ -375,14 +395,39 @@ impl RenderOnce for UmlFigure {
         };
         div()
             .size_full()
+            .relative()
             .when_some(font_family, |element, family| element.font_family(family))
             .child(figure)
+            .when_some(signature, |element, signature| element.child(signature))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn package_and_model_reuse_the_same_signature_projection_and_body_width() {
+        let projection = UmlClassifier::new("Owner")
+            .view_size(220.0, 100.0, 2.0)
+            .template_parameter_with_id("formal", "Item");
+        for kind in ["uml.package", "uml.model"] {
+            let figure = UmlFigure::new(kind, "Owner").with_template_parameters_from(&projection);
+            let (rows, interactions, width) =
+                figure.template_parameters.expect("signature projection");
+            assert_eq!(width, 220.0);
+            assert_eq!(interactions.scale, 2.0);
+            let row = rows.first().expect("formal parameter");
+            assert_eq!(row.id.as_deref(), Some("formal"));
+            assert_eq!(row.title.as_ref(), "Item");
+        }
+        assert!(
+            UmlFigure::new("uml.note", "Note")
+                .with_template_parameters_from(&projection)
+                .template_parameters
+                .is_none()
+        );
+    }
 
     #[test]
     fn profile_reuses_package_figure_but_deferred_notations_do_not() {

@@ -28,6 +28,9 @@ pub enum UmlType {
     Operation,
     Reception,
     TemplateParameter,
+    ClassifierTemplateParameter,
+    TemplateSignature,
+    RedefinableTemplateSignature,
     Port,
     Part,
 }
@@ -95,6 +98,9 @@ impl UmlType {
             "rust.function" | "uml.operation" => Self::Operation,
             "uml.reception" => Self::Reception,
             "uml.template_parameter" => Self::TemplateParameter,
+            "uml.classifier_template_parameter" => Self::ClassifierTemplateParameter,
+            "uml.template_signature" => Self::TemplateSignature,
+            "uml.redefinable_template_signature" => Self::RedefinableTemplateSignature,
             "uml.port" => Self::Port,
             "uml.part" => Self::Part,
             _ => return None,
@@ -130,6 +136,9 @@ impl UmlType {
             Self::Operation => "Operation",
             Self::Reception => "Reception",
             Self::TemplateParameter => "TemplateParameter",
+            Self::ClassifierTemplateParameter => "ClassifierTemplateParameter",
+            Self::TemplateSignature => "TemplateSignature",
+            Self::RedefinableTemplateSignature => "RedefinableTemplateSignature",
             Self::Template | Self::Subsystem | Self::Frame => return None,
         })
     }
@@ -180,7 +189,7 @@ impl UmlType {
             UmlCapability::ClassAssociation => self
                 .metaclass()
                 .is_some_and(|name| crate::uml::metamodel::conforms_to(name, "Type")),
-            UmlCapability::TemplateParameter => self == Self::Class,
+            UmlCapability::TemplateParameter => self.has_property("ownedTemplateSignature"),
         }
     }
 }
@@ -293,6 +302,9 @@ mod tests {
             UmlType::Operation,
             UmlType::Reception,
             UmlType::TemplateParameter,
+            UmlType::ClassifierTemplateParameter,
+            UmlType::TemplateSignature,
+            UmlType::RedefinableTemplateSignature,
             UmlType::Port,
             UmlType::Part,
         ] {
@@ -327,11 +339,12 @@ mod tests {
     }
 
     #[test]
-    fn profile_is_a_package_not_a_classifier_or_a_new_command_surface() {
+    fn profile_templateability_does_not_make_it_a_classifier() {
         assert_eq!(UmlType::from_kind("uml.profile"), Some(UmlType::Profile));
         assert_eq!(UmlType::Profile.metaclass(), Some("Profile"));
         assert!(crate::uml::metamodel::conforms_to("Profile", "Package"));
         assert!(!UmlType::Profile.is_classifier());
+        assert!(UmlType::Profile.supports(UmlCapability::TemplateParameter));
         for capability in [
             UmlCapability::Annotation,
             UmlCapability::Attribute,
@@ -339,7 +352,6 @@ mod tests {
             UmlCapability::Reception,
             UmlCapability::Specialization,
             UmlCapability::RealizationTarget,
-            UmlCapability::TemplateParameter,
             UmlCapability::ClassInterfaces,
             UmlCapability::ClassAssociation,
             UmlCapability::Port,
