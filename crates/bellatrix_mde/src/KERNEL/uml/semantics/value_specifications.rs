@@ -470,6 +470,52 @@ fn string_expression_operands(
     super::feature_compatibility::require_all(checks)
 }
 
+fn string_expression_subexpressions(
+    references: &ReferenceIndex<'_>,
+    expression: ElementRef<'_>,
+) -> Result<bool, super::classifiers::QueryError> {
+    use super::{classifiers::{self, QueryError}, feature_compatibility::{accept_any, require_all}, property_contracts::{self, PropertyOutcome}};
+    let children = references.explicit_owned_elements(expression.id())
+        .map_err(|error| QueryError::invalid(expression.id(), error))?;
+    let mut contracts = Vec::new();
+    let mut presences = [Ok(false), Ok(false)];
+    for (position, (name, role)) in [("operand", "Expression-operand"), ("subExpression", "StringExpression-subExpression")].into_iter().enumerate() {
+        let mut presence = Vec::new();
+        if let Some(value) = expression.properties().get(name) {
+            let descriptor = schema::uml_property("StringExpression", name)
+                .map_err(|error| QueryError::unsupported(expression.id(), error.to_string()))?
+                .ok_or_else(|| QueryError::unsupported(expression.id(), "missing StringExpression collection contract"))?;
+            contracts.push(match property_contracts::check_value(references, expression, descriptor, value) {
+                PropertyOutcome::Satisfied => Ok(true),
+                PropertyOutcome::Violation(message) => Err(QueryError::invalid(expression.id(), message)),
+                PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(expression.id(), message)),
+            });
+            presence.push(value.as_array().map(|values| !values.is_empty())
+                .ok_or_else(|| QueryError::invalid(expression.id(), format!("{name} requires a collection"))));
+        }
+        for child in &children {
+            let membership = classifiers::contributes_to_owned_union(expression, *child, role);
+            if expression.properties().contains_key(name) {
+                // A stored collection establishes its cardinality even when a
+                // child's role is unresolved. Ownership still guards validity.
+                contracts.push(membership.map(|_| true));
+            } else {
+                presence.push(membership);
+            }
+        }
+        presences[position] = accept_any(presence);
+    }
+    // The published conditional requires exactly one nonempty collection,
+    // rather than merely forbidding two nonempty collections.
+    let [operands, subexpressions] = presences;
+    contracts.push(match (operands, subexpressions) {
+        (Ok(operands), Ok(subexpressions)) => Ok(operands != subexpressions),
+        (Err(error @ QueryError::Invalid { .. }), _) | (_, Err(error @ QueryError::Invalid { .. })) => Err(error),
+        (Err(error), _) | (_, Err(error)) => Err(error),
+    });
+    require_all(contracts)
+}
+
 fn constrained_element_cardinality(
     references: &ReferenceIndex<'_>,
     constraint: ElementRef<'_>,
@@ -684,6 +730,17 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<crate::StructuralDiagnos
                 (crate::StructuralSeverity::Warning, unknown_code, message),
         };
         issues.push(crate::StructuralDiagnostic { severity, code, subject_id: expression.id().into(), message: format!("{metaclass}-no_expr_requires_observation: {message}") });
+    }
+    for expression in references.model().elements().filter(|element| element.conforms_to("StringExpression")) {
+        let (severity, code, message) = match string_expression_subexpressions(references, expression) {
+            Ok(true) => continue,
+            Ok(false) => (crate::StructuralSeverity::Error, "UML_STRING_EXPRESSION_SUBEXPRESSIONS", "exactly one of operand and subExpression must be nonempty".to_owned()),
+            Err(super::classifiers::QueryError::Invalid { message, .. }) =>
+                (crate::StructuralSeverity::Error, "UML_STRING_EXPRESSION_SUBEXPRESSIONS", message),
+            Err(super::classifiers::QueryError::Unsupported { message, .. }) =>
+                (crate::StructuralSeverity::Warning, "MDE_STRING_EXPRESSION_SUBEXPRESSIONS_UNVERIFIED", message),
+        };
+        issues.push(crate::StructuralDiagnostic { severity, code, subject_id: expression.id().into(), message: format!("StringExpression-subexpressions: {message}") });
     }
     issues
 }

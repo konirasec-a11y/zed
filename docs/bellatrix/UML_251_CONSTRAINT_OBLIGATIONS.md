@@ -47,6 +47,9 @@ TemplateBinding::parameter_substitution_formal e DurationConstraint::first_event
 têm recortes publicados em `0fbaa23586648af57205b52e883795810674af77` (E38/E39).
 TemplateBinding::one_parameter_substitution e DurationObservation::first_event_multiplicity
 têm recortes publicados em `5845f273b5cfa4c6089d6457c91b9bf49f90d064` (E40/E41).
+ClassifierTemplateParameter::actual_is_classifier e as regras de observação sem
+expr de Duration/TimeExpression têm recortes publicados em
+`1d0843a1db2bb2bee6c22638cb15b159be2c4821` (E42/E43).
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -162,7 +165,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E41 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E43 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -595,6 +598,61 @@ de execução nova. E12–E41 possuem os gates delimitados nas seções seguinte
   resolve identidade externa. Não avalia ocorrências temporais em runtime.
   Diagnósticos: `UML_DURATION_OBSERVATION_FIRST_EVENT` e
   `MDE_DURATION_OBSERVATION_FIRST_EVENT_UNVERIFIED`.
+
+- **E42**: `semantics/templates.rs`, `template_reference_is_kind`,
+  `classifier_template_actual` e `validate_bindings`;
+  `classifier_template_actual.rs`, dez testes. Recorte parcial pelos witnesses
+  canônicos TemplateParameterSubstitution::formal: se formal conforma a
+  ClassifierTemplateParameter, actual deve conformar a Classifier. O predicado
+  não fabrica a inversa templateParameterSubstitution no formal. Uma coleção
+  inversa independentemente armazenada permanece explicitamente não reconciliada
+  e recebe `MDE_CLASSIFIER_TEMPLATE_ACTUAL_UNVERIFIED`, mesmo com witnesses
+  forward válidos. Formal conhecido de outra espécie torna a implicação
+  verdadeira, e actual Classifier conhecido pode decidir com formal desconhecido;
+  malformados não são ocultados pelas alternativas. Referências externas ou
+  metaclasses não resolvidas conservam unknown quando a decisão depende delas.
+  Diagnósticos adicionais: `UML_CLASSIFIER_TEMPLATE_ACTUAL` e
+  `MDE_CLASSIFIER_TEMPLATE_ACTUAL_INVALID`.
+
+- **E43**: `semantics/value_specifications.rs`,
+  `temporal_expression_observation` e `validate`;
+  `temporal_expression_observation.rs`, doze testes. Sem expr, Duration exige
+  exatamente uma DurationObservation e TimeExpression exatamente uma
+  TimeObservation. Presença de expr usa referência e papel composto canônico;
+  ownership ambíguo não inventa o papel, expr possuído por outro owner não é
+  aceito e múltiplos exprs violam o papel escalar. Expr conhecido presente
+  dispensa a condição de quantidade/subtipo das observações, sem ocultar
+  malformados. Consequente comprovado pode decidir com expr desconhecido;
+  caso contrário a incerteza permanece. A ausência de observation é coleção
+  vazia, não observação implícita. Diagnósticos:
+  `UML_DURATION_OBSERVATION_REQUIRED`, `UML_TIME_EXPRESSION_OBSERVATION_REQUIRED`
+  e respectivas variantes `MDE_*_UNVERIFIED`.
+
+### Evidência publicada de actual Classifier e observações temporais
+
+Commit inspecionado: `1d0843a1db2bb2bee6c22638cb15b159be2c4821`.
+Logs finais lidos:
+
+- `/tmp/classifier-template-actual-gate-final.log`: **67/67 aprovados**,
+  classifier_template_actual 10, operation_template_default 11,
+  template_binding_formal 13, template_binding_unique 12 e template_signatures 21.
+- `/tmp/temporal-expression-final-gate.log`: **203/203 aprovados**,
+  160 testes lib e 43 integrações (duration_first_event 7,
+  duration_observation_first_event 8, string_expression_operands 8,
+  temporal_expression_observation 12 e time_constraint_cardinality 8).
+
+As três linhas ficam **P/E42–E43**. O recorte de templates não fecha a inversa
+independentemente armazenada, constraining classifiers, actual/default
+compatibility nem autoria integral. Os testes temporais cobrem subtipos
+corretos/incorretos, coleções vazias, referências externas, metaclasses
+indefinidas, ownership, múltiplos exprs, roundtrip e rejeição atômica ao excluir
+o único expr. Isso não executa expressões, mede tempo ou certifica observações
+em runtime. Read-only e limites do adapter de firstEvent continuam vigentes.
+
+Gates anteriores à publicação, não reruns no SHA remoto nem novos testes pela
+matriz. Lib completa com integrações selecionadas não constitui suíte integral;
+não somar alvos repetidos a gates anteriores ou usar contagens como conformidade
+UML. Permanecem separados autoria completa, UI, geração e interchange.
 
 ### Evidência publicada de unicidade de binding e DurationObservation
 
@@ -1279,7 +1337,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `ClassifierTemplateParameter-actual_is_classifier`
 
-- Metaclass: `ClassifierTemplateParameter`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `ClassifierTemplateParameter`. Estado: **P**. Evidência: E42; commit `1d0843a1db2bb2bee6c22638cb15b159be2c4821`.
 - OCL publicado: `templateParameterSubstitution.actual->forAll(a | a.oclIsKindOf(Classifier))`.
 
 #### `ClassifierTemplateParameter-constraining_classifiers_constrain_args`
@@ -1710,7 +1768,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `Duration-no_expr_requires_observation`
 
-- Metaclass: `Duration`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `Duration`. Estado: **P**. Evidência: E43; commit `1d0843a1db2bb2bee6c22638cb15b159be2c4821`.
 - OCL publicado: `expr = null implies (observation->size() = 1 and observation->forAll(oclIsKindOf(DurationObservation)))`.
 
 #### `DurationConstraint-first_event_multiplicity`
@@ -1760,7 +1818,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `TimeExpression-no_expr_requires_observation`
 
-- Metaclass: `TimeExpression`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `TimeExpression`. Estado: **P**. Evidência: E43; commit `1d0843a1db2bb2bee6c22638cb15b159be2c4821`.
 - OCL publicado: `expr = null implies (observation->size() = 1 and observation->forAll(oclIsKindOf(TimeObservation)))`.
 
 ## Plano executável e dependências

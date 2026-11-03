@@ -433,6 +433,152 @@ fn binding_formals(
     crate::uml::feature_compatibility::require_all(checks)
 }
 
+fn template_reference_target<'a>(
+    references: &crate::uml::references::ReferenceIndex<'a>,
+    element: crate::uml::root::ElementRef<'a>,
+    property: &str,
+) -> Result<crate::uml::root::ElementRef<'a>, crate::uml::classifiers::QueryError> {
+    let evidence = template_reference_evidence(references, element, property)?;
+    evidence.known.first().copied().ok_or_else(|| {
+        crate::uml::classifiers::QueryError::unsupported(
+            element.id(),
+            format!("{property} identity is not resolved"),
+        )
+    })
+}
+
+fn checked_parametered_classifier<'a>(
+    references: &crate::uml::references::ReferenceIndex<'a>,
+    formal: crate::uml::root::ElementRef<'a>,
+) -> Result<crate::uml::root::ElementRef<'a>, crate::uml::classifiers::QueryError> {
+    use crate::uml::classifiers::QueryError;
+    let mut relations = references
+        .model()
+        .relationship_records()
+        .filter(|relation| {
+            relation.kind == "uml.parametered_element" && relation.from == formal.id()
+        });
+    let canonical = relations.next();
+    if relations.next().is_some() {
+        return Err(QueryError::invalid(
+            formal.id(),
+            "parameteredElement has ambiguous canonical references",
+        ));
+    }
+    let canonical = canonical
+        .map(|relation| {
+            references
+                .element(&relation.to)
+                .map_err(|error| QueryError::invalid(formal.id(), error))
+        })
+        .transpose()?;
+    let explicit = formal
+        .properties()
+        .contains_key("parameteredElement")
+        .then(|| template_reference_target(references, formal, "parameteredElement"));
+    if let Some(Err(error @ QueryError::Invalid { .. })) = &explicit {
+        return Err(error.clone());
+    }
+    if let (Some(canonical), Some(Ok(explicit))) = (canonical, &explicit)
+        && canonical.id() != explicit.id()
+    {
+        return Err(QueryError::invalid(
+            formal.id(),
+            "parameteredElement projection contradicts its canonical reference",
+        ));
+    }
+    let mut unresolved = None;
+    for target in canonical.into_iter().chain(
+        explicit
+            .as_ref()
+            .and_then(|value| value.as_ref().ok())
+            .copied(),
+    ) {
+        if target.metaclass().is_none() {
+            unresolved = Some(QueryError::unsupported(
+                formal.id(),
+                "parameteredElement metaclass is unresolved",
+            ));
+        } else if !target.conforms_to("Classifier") {
+            return Err(QueryError::invalid(
+                formal.id(),
+                "ClassifierTemplateParameter parameteredElement must be a Classifier",
+            ));
+        }
+    }
+    if let Some(error) = unresolved {
+        return Err(error);
+    }
+    match explicit {
+        Some(result) => result,
+        None => canonical.ok_or_else(|| {
+            QueryError::unsupported(
+                formal.id(),
+                "parameteredElement projection is not materialized",
+            )
+        }),
+    }
+}
+
+fn classifier_template_matching_abstract(
+    references: &crate::uml::references::ReferenceIndex<'_>,
+    substitution: crate::uml::root::ElementRef<'_>,
+) -> Result<bool, crate::uml::classifiers::QueryError> {
+    use crate::uml::{classifiers::QueryError, feature_compatibility::accept_any, schema};
+    let (specialized, exposed_abstract) =
+        match template_reference_target(references, substitution, "formal") {
+            Err(error @ QueryError::Invalid { .. }) => return Err(error),
+            Err(error) => (false, Err(error)),
+            Ok(formal) if formal.metaclass().is_none() => (
+                false,
+                Err(QueryError::unsupported(
+                    formal.id(),
+                    "formal metaclass is unresolved",
+                )),
+            ),
+            Ok(formal) if !formal.conforms_to("ClassifierTemplateParameter") => {
+                // Do not apply the Classifier cast to an unrelated formal kind.
+                return accept_any([
+                    Ok(true),
+                    template_reference_target(references, substitution, "actual").map(|_| true),
+                ]);
+            }
+            Ok(formal) => (
+                true,
+                checked_parametered_classifier(references, formal).and_then(|exposed| {
+                    schema::read_effective_boolean(exposed, "isAbstract")
+                        .map_err(|error| QueryError::invalid(exposed.id(), error))
+                }),
+            ),
+        };
+    let actual_not_abstract = template_reference_target(references, substitution, "actual")
+        .and_then(|actual| {
+            if actual.metaclass().is_none() {
+                return Err(QueryError::unsupported(
+                    actual.id(),
+                    "actual metaclass is unresolved",
+                ));
+            }
+            if !actual.conforms_to("Classifier") {
+                return Err(if specialized {
+                    QueryError::invalid(
+                        actual.id(),
+                        "matching_abstract requires a Classifier actual",
+                    )
+                } else {
+                    QueryError::unsupported(
+                        actual.id(),
+                        "formal applicability is unresolved for non-Classifier actual",
+                    )
+                });
+            }
+            schema::read_effective_boolean(actual, "isAbstract")
+                .map(|is_abstract| !is_abstract)
+                .map_err(|error| QueryError::invalid(actual.id(), error))
+        });
+    accept_any([exposed_abstract, actual_not_abstract])
+}
+
 fn template_reference_is_kind(
     references: &crate::uml::references::ReferenceIndex<'_>,
     element: crate::uml::root::ElementRef<'_>,
@@ -479,10 +625,18 @@ pub(crate) fn validate_bindings(
     let mut issues = Vec::new();
     for binding in references.model().elements() {
         if binding.conforms_to("ClassifierTemplateParameter")
-            && binding.properties().contains_key("templateParameterSubstitution")
+            && binding
+                .properties()
+                .contains_key("templateParameterSubstitution")
         {
             // Forward formal links do not reconcile an independently authored
             // inverse collection. Keep that representation explicitly unverified.
+            issues.push(StructuralDiagnostic {
+                severity: StructuralSeverity::Warning,
+                code: "MDE_CLASSIFIER_TEMPLATE_MATCHING_ABSTRACT_UNVERIFIED",
+                subject_id: binding.id().into(),
+                message: "ClassifierTemplateParameter-matching_abstract: authored templateParameterSubstitution inverse projection is not reconciled; only canonical substitution.formal witnesses are evaluated".into(),
+            });
             issues.push(StructuralDiagnostic {
                 severity: StructuralSeverity::Warning,
                 code: "MDE_CLASSIFIER_TEMPLATE_ACTUAL_UNVERIFIED",
@@ -491,6 +645,34 @@ pub(crate) fn validate_bindings(
             });
         }
         if binding.conforms_to("TemplateParameterSubstitution") {
+            let abstract_outcome = match classifier_template_matching_abstract(references, binding)
+            {
+                Ok(true) => None,
+                Ok(false) => Some((
+                    StructuralSeverity::Error,
+                    "UML_CLASSIFIER_TEMPLATE_MATCHING_ABSTRACT",
+                    "A nonabstract exposed Classifier requires a nonabstract actual Classifier"
+                        .to_owned(),
+                )),
+                Err(QueryError::Invalid { message, .. }) => Some((
+                    StructuralSeverity::Error,
+                    "MDE_CLASSIFIER_TEMPLATE_MATCHING_ABSTRACT_INVALID",
+                    message,
+                )),
+                Err(QueryError::Unsupported { message, .. }) => Some((
+                    StructuralSeverity::Warning,
+                    "MDE_CLASSIFIER_TEMPLATE_MATCHING_ABSTRACT_UNVERIFIED",
+                    message,
+                )),
+            };
+            if let Some((severity, code, message)) = abstract_outcome {
+                issues.push(StructuralDiagnostic {
+                    severity,
+                    code,
+                    subject_id: binding.id().into(),
+                    message: format!("ClassifierTemplateParameter-matching_abstract: {message}"),
+                });
+            }
             let actual = match classifier_template_actual(references, binding) {
                 Ok(true) => None,
                 Ok(false) => Some((
