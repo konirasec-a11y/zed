@@ -23,3 +23,34 @@ pub(crate) async fn add_member(context: &Context, projects: &ProjectService,
         owner_id: request.owner_id, kind: request.kind,
     }).await
 }
+
+#[derive(Clone, Debug)]
+pub struct ModelingMoveParameterRequested {
+    pub project_id: ProjectId,
+    pub parameter_id: String,
+    pub up: bool,
+    pub expected_revision: u64,
+}
+pub struct ModelingMoveParameter;
+impl Event for ModelingMoveParameter {
+    const NAME: &'static str = "bellatrix.mde.move-parameter.v1";
+    type Args = ModelingMoveParameterRequested;
+    type Output = Result<u64, String>;
+}
+pub(crate) async fn move_parameter(
+    context: &Context,
+    projects: &ProjectService,
+    request: ModelingMoveParameterRequested,
+) -> Result<u64, String> {
+    crate::mutation::execute(
+        context,
+        projects,
+        request.project_id,
+        request.expected_revision,
+        Command::MoveParameter {
+            parameter_id: request.parameter_id,
+            up: request.up,
+        },
+    )
+    .await
+}

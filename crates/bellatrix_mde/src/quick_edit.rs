@@ -276,6 +276,15 @@ const ATTRIBUTE_ACTIONS: &[QuickEditAction] = &[
 ];
 const OPERATION_ACTIONS: &[QuickEditAction] = &[
     act(
+        "uml.add-parameter",
+        "Add Parameter",
+        Button,
+        Right,
+        2,
+        Ready,
+        None,
+    ),
+    act(
         "uml.operation-expression",
         "Operation expression",
         Input,
@@ -342,6 +351,35 @@ pub fn quick_edit_for(kind: &str) -> Vec<QuickEditAction> {
             .collect(),
         UmlType::Attribute => ATTRIBUTE_ACTIONS.to_vec(),
         UmlType::Operation => OPERATION_ACTIONS.to_vec(),
+        UmlType::Parameter => vec![
+            act(
+                "uml.delete-parameter",
+                "Delete Parameter",
+                Button,
+                Right,
+                1,
+                Ready,
+                None,
+            ),
+            act(
+                "uml.move-parameter-up",
+                "Move Parameter Up",
+                Button,
+                Right,
+                2,
+                Ready,
+                None,
+            ),
+            act(
+                "uml.move-parameter-down",
+                "Move Parameter Down",
+                Button,
+                Right,
+                2,
+                Ready,
+                None,
+            ),
+        ],
         UmlType::Package | UmlType::Model | UmlType::Subsystem => PACKAGE_ACTIONS.to_vec(),
         kind if kind.is_classifier() || kind == UmlType::Template => CLASS_ACTIONS
             .iter()

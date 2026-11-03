@@ -296,6 +296,14 @@ rollback/recuperação e preservação gerado/autoral/misto. Política beta não
 
 ## Auditoria normativa e prioridade estrutural — 2026-11-03
 
+Prioridade imediata: fechar o Kernel compartilhado do motor — Element,
+NamedElement, Package, Class, Property, Operation e Association, com suas
+heranças/dependências normativas — antes de ampliar outros diagramas ou a UI.
+Reutilizar mecanismos gerais de grafo para tipagem, cardinalidades, conjuntos,
+ciclos e transações; implementar as interpretações UML específicas com referência
+ao PDF/XMI e ao código/testes revisados do uml4net. O upstream C# é referência
+para portes rastreáveis, não outro runtime ou fonte de estado autoritativa.
+
 Escopo final explicitado: regras para os 14 diagramas UML. **A primeira entrega
 continua sendo exclusivamente os sete estruturais**: Classes, Componentes,
 Estrutura Composta, Implantação, Objetos, Pacotes e Perfis. Atividades, Casos de

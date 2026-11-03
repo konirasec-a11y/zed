@@ -135,6 +135,21 @@ fn display_label(
         return body.to_owned();
     }
     let kind = UmlType::from_kind(&element.kind);
+    if kind == Some(UmlType::Parameter) {
+        let mut label = match crate::uml::operations::direction(element) {
+            Ok(direction) if direction == "in" => element.name.clone(),
+            Ok(direction) => format!("{direction} {}", element.name),
+            Err(_) => format!("[invalid direction] {}", element.name),
+        };
+        if let Some(value_type) = type_label(element, references) {
+            label.push_str(": ");
+            label.push_str(&value_type);
+        }
+        return label;
+    }
+    if kind == Some(UmlType::Operation) {
+        return operation_label(element, references);
+    }
     let member = matches!(
         kind,
         Some(
@@ -159,7 +174,6 @@ fn display_label(
         kind,
         Some(UmlType::Attribute | UmlType::Port | UmlType::Part)
     );
-    let operation = kind == Some(UmlType::Operation);
     let is_true = |key| element.properties.get(key).and_then(Value::as_bool) == Some(true);
     let derived = if property && is_true("isDerived") {
         "/"
@@ -167,14 +181,47 @@ fn display_label(
         ""
     };
     let mut label = format!("{prefix}{derived}{}", element.name);
-    if operation {
-        // §9.6.4 permits suppressing the parameter list, not the operation parentheses.
-        label.push_str("()");
-    }
     // Source declaration/signature fields may retain an earlier name. They belong
     // in their labeled inspector fields, never in the canonical semantic label.
+    let type_label = type_label(element, references);
+    let value_type = type_label.as_deref();
+    if let Some(value_type) = value_type {
+        label.push_str(": ");
+        label.push_str(value_type);
+    }
+    if property {
+        let bound = |key| match element.properties.get(key) {
+            Some(Value::Number(value)) if value.is_u64() => Some(value.to_string()),
+            value => text(value).map(str::to_owned),
+        };
+        if let (Some(lower), Some(upper)) = (bound("lower"), bound("upper")) {
+            label.push_str(" [");
+            label.push_str(&lower);
+            if lower != upper {
+                label.push_str("..");
+                label.push_str(&upper);
+            }
+            label.push(']');
+        }
+    }
+    if property {
+        if let Some(default) = text(element.properties.get("defaultValue")) {
+            label.push_str(" = ");
+            label.push_str(default);
+        }
+        if is_true("isReadOnly") {
+            label.push_str(" {readOnly}");
+        }
+    }
+    label
+}
+
+fn type_label(
+    element: &Element,
+    references: Option<&crate::uml::references::ReferenceIndex<'_>>,
+) -> Option<String> {
     let type_value = element.properties.get("type");
-    let type_label = match type_value {
+    match type_value {
         Some(value) if value.is_object() => {
             Some(match crate::uml::references::reference_id(value) {
                 Ok(Some(id)) => {
@@ -201,42 +248,51 @@ fn display_label(
             })
         }
         value => text(value).map(|text| format!("{text} {{type text}}")),
+    }
+}
+
+fn operation_label(
+    operation: &Element,
+    references: Option<&crate::uml::references::ReferenceIndex<'_>>,
+) -> String {
+    let prefix = match text(operation.properties.get("visibility")) {
+        Some("public") => "+",
+        Some("private") => "-",
+        Some("protected") => "#",
+        Some("package") => "~",
+        _ => "",
     };
-    let value_type = type_label.as_deref();
-    let mut has_return_details = value_type.is_some();
-    if let Some(value_type) = value_type {
+    let mut label = format!("{prefix}{}(", operation.name);
+    let mut result_type = None;
+    if let Some(references) = references {
+        match crate::uml::operations::owned_parameters(references, &operation.id) {
+            Ok(parameters) => {
+                let parameters = parameters
+                    .into_iter()
+                    .filter(|parameter| {
+                        crate::uml::operations::direction(parameter).as_deref() != Ok("return")
+                    })
+                    .map(|parameter| display_label(parameter, Some(references)))
+                    .collect::<Vec<_>>();
+                label.push_str(&parameters.join(", "));
+                result_type =
+                    match crate::uml::operations::return_parameter(references, &operation.id) {
+                        Ok(parameter) => {
+                            parameter.and_then(|parameter| type_label(parameter, Some(references)))
+                        }
+                        Err(_) => Some("[invalid return Parameters]".into()),
+                    };
+            }
+            Err(_) => label.push_str("[invalid Parameters]"),
+        }
+    }
+    label.push(')');
+    if let Some(result_type) = &result_type {
         label.push_str(": ");
-        label.push_str(value_type);
+        label.push_str(result_type);
     }
-    if property || operation {
-        let bound = |key| match element.properties.get(key) {
-            Some(Value::Number(value)) if value.is_u64() => Some(value.to_string()),
-            value => text(value).map(str::to_owned),
-        };
-        if let (Some(lower), Some(upper)) = (bound("lower"), bound("upper")) {
-            if operation && value_type.is_none() {
-                label.push(':');
-            }
-            has_return_details = true;
-            label.push_str(" [");
-            label.push_str(&lower);
-            if lower != upper {
-                label.push_str("..");
-                label.push_str(&upper);
-            }
-            label.push(']');
-        }
-    }
-    if property {
-        if let Some(default) = text(element.properties.get("defaultValue")) {
-            label.push_str(" = ");
-            label.push_str(default);
-        }
-        if is_true("isReadOnly") {
-            label.push_str(" {readOnly}");
-        }
-    } else if operation && is_true("isQuery") {
-        if !has_return_details {
+    if operation.properties.get("isQuery").and_then(Value::as_bool) == Some(true) {
+        if result_type.is_none() {
             label.push(':');
         }
         label.push_str(" {query}");

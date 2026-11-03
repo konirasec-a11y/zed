@@ -35,7 +35,21 @@ pub fn project_hierarchy(section: &ModelingSection) -> Vec<HierarchyRow> {
             .then_with(|| left.display_label().to_lowercase().cmp(&right.display_label().to_lowercase())).then_with(|| left.id().cmp(right.id())));
     };
     sort(&mut roots);
-    for siblings in children.values_mut() { sort(siblings); }
+    for (owner_id, siblings) in &mut children {
+        sort(siblings);
+        if elements
+            .get(owner_id)
+            .is_some_and(|owner| owner.conforms_to("Operation"))
+            && let Ok(parameters) = crate::uml::operations::owned_parameters(&references, owner_id)
+        {
+            siblings.sort_by_key(|element| {
+                parameters
+                    .iter()
+                    .position(|parameter| parameter.id == element.id())
+                    .unwrap_or(usize::MAX)
+            });
+        }
+    }
     fn visit<'a>(element: ElementRef<'a>, depth: usize, children: &HashMap<&str, Vec<ElementRef<'a>>>, seen: &mut HashSet<String>, result: &mut Vec<HierarchyRow>, references: &crate::uml::references::ReferenceIndex<'_>) {
         if !seen.insert(element.id().to_owned()) { return; }
         result.push(HierarchyRow { element_id: element.id().into(), label: match element { ElementRef::Object(object) => crate::element_display_label_with_references(object, references), ElementRef::Relationship(_) => element.display_label() }, kind: element.kind().into(), depth });

@@ -137,6 +137,19 @@ impl Plugin for MdePlugin {
                 },
             ))
             .map_err(|error| io::Error::other(error.to_string()))?;
+        let parameter_projects = Arc::clone(&projects);
+        let _move_parameter = ctx
+            .on::<crate::add_member::ModelingMoveParameter, _>(responder(
+                move |ctx: Context, request: crate::add_member::ModelingMoveParameterRequested| {
+                    let projects = Arc::clone(&parameter_projects);
+                    async move {
+                        let result =
+                            crate::add_member::move_parameter(&ctx, &projects, request).await;
+                        Ok::<_, Infallible>(Some(result))
+                    }
+                },
+            ))
+            .map_err(|error| io::Error::other(error.to_string()))?;
         let resizing_projects = Arc::clone(&projects);
         let _resize = ctx
             .on::<crate::resize_view::ModelingResizeView, _>(responder(

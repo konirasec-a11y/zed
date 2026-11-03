@@ -26,6 +26,7 @@ pub enum UmlType {
     NaryAssociation,
     Attribute,
     Operation,
+    Parameter,
     Reception,
     TemplateParameter,
     ClassifierTemplateParameter,
@@ -40,6 +41,7 @@ pub enum UmlCapability {
     Annotation,
     Attribute,
     Operation,
+    Parameter,
     Reception,
     Specialization,
     RealizationTarget,
@@ -97,6 +99,7 @@ impl UmlType {
             "rust.field" | "uml.attribute" => Self::Attribute,
             "rust.function" | "uml.operation" => Self::Operation,
             "uml.reception" => Self::Reception,
+            "uml.parameter" => Self::Parameter,
             "uml.template_parameter" => Self::TemplateParameter,
             "uml.classifier_template_parameter" => Self::ClassifierTemplateParameter,
             "uml.template_signature" => Self::TemplateSignature,
@@ -134,6 +137,7 @@ impl UmlType {
             Self::Attribute | Self::Part => "Property",
             Self::Port => "Port",
             Self::Operation => "Operation",
+            Self::Parameter => "Parameter",
             Self::Reception => "Reception",
             Self::TemplateParameter => "TemplateParameter",
             Self::ClassifierTemplateParameter => "ClassifierTemplateParameter",
@@ -180,6 +184,7 @@ impl UmlType {
             UmlCapability::Operation => {
                 self.has_property("ownedOperation") || self == Self::Template
             }
+            UmlCapability::Parameter => self == Self::Operation,
             UmlCapability::Reception => self.has_property("ownedReception"),
             UmlCapability::Port => self.has_property("ownedPort"),
             UmlCapability::Part => self.has_property("part"),

@@ -3,9 +3,10 @@ use bellatrix_mde::{
     inspect_element, member_presentation,
 };
 use bellatrix_mde_cordis::{
-    MdePlugin, ModelingAddMember, ModelingAddMemberRequested, ModelingMemberKind,
-    ModelingQuickEdit, ModelingQuickEditRequested, ModelingSetProperty,
-    ModelingSetPropertyRequested, UmlQuickCreate, with_model,
+    MdePlugin, ModelingAddMember, ModelingAddMemberRequested, ModelingDeleteElement,
+    ModelingDeleteElementRequested, ModelingMemberKind, ModelingMoveParameter,
+    ModelingMoveParameterRequested, ModelingQuickEdit, ModelingQuickEditRequested,
+    ModelingSetProperty, ModelingSetPropertyRequested, UmlQuickCreate, with_model,
 };
 use bellatrix_project::{
     ProjectCreate, ProjectCreateRequested, ProjectDocument, ProjectId, ProjectPlugin,
@@ -333,6 +334,338 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
         assert_eq!(element_display_label(member), expected);
         assert!(!member_presentation(member).underlined);
     }
+    // Continue the same public editing flow into Operation Parameters and persistence.
+    let read_section = || -> ModelingSection {
+        serde_json::from_value(
+            projects
+                .snapshot(&a)
+                .expect("project")
+                .section(bellatrix_mde::MODELING_NAMESPACE)
+                .expect("section")
+                .clone(),
+        )
+        .expect("model")
+    };
+    let raw_signature = operation.properties.get("signature").cloned();
+    let mut parameter_ids = Vec::new();
+    for number in 1..=3 {
+        let request = ModelingAddMemberRequested {
+            project_id: a.clone(),
+            owner_id: operation.id.clone(),
+            kind: ModelingMemberKind::Parameter,
+            expected_revision: revision,
+        };
+        assert!(
+            matches!(ctx.query::<ModelingAddMember>(Routing::Unscoped, request).await.expect("add parameter"),
+            QueryOutcome::Answer(Ok(value)) if value == revision + 1)
+        );
+        revision += 1;
+        let section = read_section();
+        let inspector = inspect_element(&section, &operation.id).expect("Operation inspector");
+        let parameter = inspector
+            .parameters
+            .iter()
+            .find(|parameter| parameter.name == format!("Parameter{number}"))
+            .expect("new Parameter identity");
+        let parameter_inspector =
+            inspect_element(&section, &parameter.id).expect("Parameter inspector");
+        let direction = parameter_inspector
+            .properties
+            .iter()
+            .find(|property| property.path == "properties.direction")
+            .expect("generated direction");
+        assert_eq!(direction.value, serde_json::json!("in"));
+        assert_eq!(
+            direction.editor,
+            bellatrix_mde::PropertyEditor::Choice(&["in", "inout", "out", "return"])
+        );
+        assert!(
+            parameter_inspector
+                .properties
+                .iter()
+                .any(|property| property.path == "properties.type"
+                    && property.editor == bellatrix_mde::PropertyEditor::Reference
+                    && property.editable)
+        );
+        parameter_ids.push(parameter.id.clone());
+    }
+    let [input, context, result] = parameter_ids.as_slice() else {
+        panic!("three Parameters");
+    };
+    for (element_id, path, value) in [
+        (input, "name", serde_json::json!("key")),
+        (
+            input,
+            "properties.type",
+            serde_json::json!({"$ref":"type-list"}),
+        ),
+        (
+            input,
+            "properties.type",
+            serde_json::json!({"$ref":type_id}),
+        ),
+        (context, "name", serde_json::json!("context")),
+        (context, "properties.direction", serde_json::json!("inout")),
+        (
+            context,
+            "properties.type",
+            serde_json::json!({"$ref":"type-list"}),
+        ),
+        (result, "name", serde_json::json!("result")),
+        (result, "properties.direction", serde_json::json!("return")),
+        (
+            result,
+            "properties.type",
+            serde_json::json!({"$ref":type_id}),
+        ),
+    ] {
+        assert!(
+            matches!(ctx.query::<ModelingSetProperty>(Routing::Unscoped, ModelingSetPropertyRequested {
+            project_id: a.clone(), element_id: element_id.clone(), path: path.into(), value,
+            expected_revision: revision,
+        }).await.expect("parameter edit"), QueryOutcome::Answer(Ok(value)) if value == revision + 1)
+        );
+        revision += 1;
+    }
+    let before_invalid = projects.snapshot(&a).expect("before invalid return");
+    for (element_id, path, value) in [
+        (context, "properties.direction", serde_json::json!("return")),
+        (
+            context,
+            "properties.direction",
+            serde_json::json!("sideways"),
+        ),
+        (
+            input,
+            "properties.type",
+            serde_json::json!({"$ref":"missing"}),
+        ),
+        (
+            input,
+            "properties.type",
+            serde_json::json!({"$ref":operation.id}),
+        ),
+        (
+            &operation.id,
+            "properties.type",
+            serde_json::json!({"$ref":type_id}),
+        ),
+    ] {
+        assert!(matches!(
+            ctx.query::<ModelingSetProperty>(
+                Routing::Unscoped,
+                ModelingSetPropertyRequested {
+                    project_id: a.clone(),
+                    element_id: element_id.clone(),
+                    path: path.into(),
+                    value,
+                    expected_revision: revision,
+                }
+            )
+            .await
+            .expect("rejected edit"),
+            QueryOutcome::Answer(Err(_))
+        ));
+        let after = projects.snapshot(&a).expect("atomic state");
+        assert_eq!(
+            serde_json::to_value(after.as_ref()).expect("after"),
+            serde_json::to_value(before_invalid.as_ref()).expect("before")
+        );
+    }
+    let section = read_section();
+    let inspector = inspect_element(&section, &operation.id).expect("derived return");
+    assert_eq!(
+        inspector.display_label,
+        "+findAgain(key: Integer, inout context: TaskList): Integer"
+    );
+    assert!(
+        inspector
+            .properties
+            .iter()
+            .any(|property| property.path == "properties.type"
+                && property.value == serde_json::json!({"$ref":type_id})
+                && !property.editable)
+    );
+    let mut invalid_loaded = section.to_model(a.as_str(), a.as_str());
+    invalid_loaded.root_model = None;
+    invalid_loaded
+        .elements
+        .iter_mut()
+        .find(|element| element.id == *context)
+        .expect("second return candidate")
+        .properties
+        .insert("direction".into(), serde_json::json!("return"));
+    assert!(
+        bellatrix_mde::validate_structural_model(&invalid_loaded)
+            .iter()
+            .any(|issue| issue.code == "UML_OPERATION_PARAMETERS")
+    );
+    let unrelated_edges = section
+        .relations
+        .iter()
+        .filter(|relation| !(relation.kind == "owns" && relation.from == operation.id))
+        .cloned()
+        .collect::<Vec<_>>();
+    let move_request = ModelingMoveParameterRequested {
+        project_id: a.clone(),
+        parameter_id: context.clone(),
+        up: true,
+        expected_revision: revision,
+    };
+    assert!(
+        matches!(ctx.query::<ModelingMoveParameter>(Routing::Unscoped, move_request.clone()).await.expect("reorder"),
+        QueryOutcome::Answer(Ok(value)) if value == revision + 1)
+    );
+    revision += 1;
+    assert!(matches!(
+        ctx.query::<ModelingMoveParameter>(Routing::Unscoped, move_request)
+            .await
+            .expect("stale reorder"),
+        QueryOutcome::Answer(Err(_))
+    ));
+    let section = read_section();
+    assert_eq!(
+        section
+            .relations
+            .iter()
+            .filter(|relation| !(relation.kind == "owns" && relation.from == operation.id))
+            .cloned()
+            .collect::<Vec<_>>(),
+        unrelated_edges
+    );
+    let project = section.to_model(a.as_str(), a.as_str());
+    for format in [bellatrix_mde::Format::Json, bellatrix_mde::Format::Protobuf] {
+        let reopened = bellatrix_mde::decode(
+            &bellatrix_mde::encode(&project, format).expect("encode"),
+            format,
+        )
+        .expect("reopen");
+        let reopened = ModelingSection::from_model(&reopened);
+        let references = bellatrix_mde::uml::references::ReferenceIndex::new(
+            bellatrix_mde::uml::root::Model::from_section(&reopened),
+        );
+        let parameters =
+            bellatrix_mde::uml::operations::owned_parameters(&references, &operation.id)
+                .expect("ordered parameters");
+        assert_eq!(
+            parameters
+                .iter()
+                .map(|parameter| parameter.id.as_str())
+                .collect::<Vec<_>>(),
+            vec![context.as_str(), input.as_str(), result.as_str()]
+        );
+        assert_eq!(
+            bellatrix_mde::uml::operations::return_type(&references, &operation.id)
+                .expect("return Type")
+                .expect("typed")
+                .id(),
+            type_id
+        );
+        let inspector = inspect_element(&reopened, &operation.id).expect("reopened Inspector");
+        assert_eq!(
+            inspector.display_label,
+            "+findAgain(inout context: TaskList, key: Integer): Integer"
+        );
+        let persisted = reopened
+            .elements
+            .iter()
+            .find(|element| element.id == operation.id)
+            .expect("Operation");
+        assert_eq!(
+            persisted.properties.get("signature"),
+            raw_signature.as_ref()
+        );
+        assert!(!persisted.properties.contains_key("type"));
+        assert!(!persisted.properties.contains_key("ownedParameter"));
+        assert!(
+            parameters
+                .iter()
+                .all(|parameter| !parameter.properties.contains_key("operation"))
+        );
+        let tree = bellatrix_mde::project_hierarchy(&reopened);
+        assert!(
+            tree.iter().position(|row| row.element_id == *context)
+                < tree.iter().position(|row| row.element_id == *input)
+        );
+        assert_eq!(
+            tree.iter()
+                .find(|row| row.element_id == operation.id)
+                .expect("tree Operation")
+                .label,
+            inspector.display_label
+        );
+        let classifier = inspect_element(&reopened, "type-list").expect("classifier");
+        assert_eq!(
+            classifier
+                .operations
+                .iter()
+                .find(|member| member.id == operation.id)
+                .expect("operation row")
+                .display_label,
+            inspector.display_label
+        );
+    }
+    for (element_id, path, value) in [
+        (&type_id, "name", serde_json::json!("Number")),
+        (result, "properties.type", serde_json::Value::Null),
+        (
+            result,
+            "properties.type",
+            serde_json::json!({"$ref":type_id}),
+        ),
+    ] {
+        assert!(
+            matches!(ctx.query::<ModelingSetProperty>(Routing::Unscoped, ModelingSetPropertyRequested {
+            project_id: a.clone(), element_id: element_id.clone(), path: path.into(), value,
+            expected_revision: revision,
+        }).await.expect("live type edit"), QueryOutcome::Answer(Ok(value)) if value == revision + 1)
+        );
+        revision += 1;
+        let inspector = inspect_element(&read_section(), &operation.id).expect("live Operation");
+        assert!(inspector.display_label.contains("key: Number"));
+        if element_id == result
+            && inspector
+                .properties
+                .iter()
+                .any(|property| property.path == "properties.type" && property.value.is_null())
+        {
+            assert!(inspector.display_label.ends_with(')'));
+        } else {
+            assert!(inspector.display_label.ends_with(": Number"));
+        }
+    }
+    for parameter_id in [result, input] {
+        assert!(
+            matches!(ctx.query::<ModelingDeleteElement>(Routing::Unscoped, ModelingDeleteElementRequested {
+            project_id: a.clone(), element_id: parameter_id.clone(), expected_revision: revision,
+        }).await.expect("delete Parameter"), QueryOutcome::Answer(Ok(value)) if value == revision + 1)
+        );
+        revision += 1;
+    }
+    let final_section = read_section();
+    let inspector = inspect_element(&final_section, &operation.id).expect("remaining Parameters");
+    assert_eq!(
+        inspector.display_label,
+        "+findAgain(inout context: TaskList)"
+    );
+    assert_eq!(
+        inspector
+            .parameters
+            .iter()
+            .map(|parameter| &parameter.id)
+            .collect::<Vec<_>>(),
+        vec![context]
+    );
+    assert!(
+        inspector
+            .properties
+            .iter()
+            .any(|property| property.path == "properties.type" && property.value.is_null())
+    );
+    assert_eq!(
+        projects.snapshot(&b).expect("isolated project").revision(),
+        0
+    );
     mde.dispose().await.unwrap();
     assert!(matches!(
         ctx.query::<ModelingAddMember>(

@@ -56,6 +56,7 @@ pub struct ElementInspector {
     /// Owned attributes/operations are model Elements, not strings in a form.
     pub attributes: Vec<InspectorMember>,
     pub operations: Vec<InspectorMember>,
+    pub parameters: Vec<InspectorMember>,
     pub receptions: Vec<InspectorMember>,
     pub template_parameters: Vec<InspectorMember>,
     pub ports: Vec<InspectorMember>,
@@ -94,9 +95,14 @@ const FIELD: &[Declared] = &[
     Declared { key:"isStatic", label:"Static", editor:PropertyEditor::Boolean, default:false_value },
     Declared { key:"isReadOnly", label:"Read only", editor:PropertyEditor::Boolean, default:false_value },
 ];
+const PARAMETER: &[Declared] = &[
+    Declared { key:"direction", label:"Direction", editor:PropertyEditor::ReadOnly, default:empty },
+    Declared { key:"type", label:"Type reference", editor:PropertyEditor::Reference, default:empty },
+];
 const FUNCTION: &[Declared] = &[
+    Declared { key:"type", label:"Return Type (derived)", editor:PropertyEditor::ReadOnly, default:empty },
     Declared { key:"visibility", label:"Visibility", editor:PropertyEditor::Choice(VISIBILITY), default:public },
-    Declared { key:"signature", label:"Signature", editor:PropertyEditor::Text, default:empty },
+    Declared { key:"signature", label:"Authored signature", editor:PropertyEditor::Text, default:empty },
     Declared { key:"isStatic", label:"Static", editor:PropertyEditor::Boolean, default:false_value },
     Declared { key:"isAbstract", label:"Abstract", editor:PropertyEditor::Boolean, default:false_value },
     Declared { key:"isQuery", label:"Query", editor:PropertyEditor::Boolean, default:false_value },
@@ -120,6 +126,7 @@ fn fields_for(kind: &str) -> impl Iterator<Item = &Declared> {
         "rust.field" | "uml.attribute" | "uml.part" | "uml.port" => FIELD,
         "uml.comment" | "uml.note" => COMMENT,
         "rust.function" | "uml.operation" => FUNCTION,
+        "uml.parameter" => PARAMETER,
         _ => &[],
     }.iter())
 }
@@ -137,12 +144,18 @@ fn apply_normative_contracts(element: crate::uml::root::ElementRef<'_>, properti
     for field in properties {
         let Some(key) = field.path.strip_prefix("properties.") else { continue; };
         let Ok(Some(descriptor)) = schema::uml_property(metaclass, key) else { continue; };
+        if (key == "ownedParameter" && element.conforms_to("Operation"))
+            || (key == "operation" && element.conforms_to("Parameter")) {
+            field.editor = PropertyEditor::ReadOnly;
+            field.editable = false;
+            continue;
+        }
         if descriptor.is_read_only || descriptor.is_derived {
             field.editor = PropertyEditor::ReadOnly;
             field.editable = false;
             continue;
         }
-        if key == "type" && element.conforms_to("Property") {
+        if key == "type" && (element.conforms_to("Property") || element.conforms_to("Parameter")) {
             field.editor = PropertyEditor::Reference;
             field.label = "Type reference".into();
             field.editable = true;
@@ -269,7 +282,7 @@ fn inspect_element_with_references(
             element_id:relation.id.clone(),kind:relation.kind.clone(),
             name:format!("{source} → {target}"),
             display_label:format!("{source} → {target}"),
-            reference_choices,properties,attributes:Vec::new(),operations:Vec::new(),receptions:Vec::new(),
+            reference_choices,properties,attributes:Vec::new(),operations:Vec::new(),parameters:Vec::new(),receptions:Vec::new(),
             template_parameters:Vec::new(),ports:Vec::new(),parts:Vec::new(),
         });
     }
@@ -333,6 +346,20 @@ fn inspect_element_with_references(
     let mut attributes = Vec::new();
     let mut operations = Vec::new();
     let mut receptions = Vec::new();
+    let parameters = if crate::uml::root::ElementRef::Object(element).conforms_to("Operation") {
+        crate::uml::operations::owned_parameters(references, id)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|member| InspectorMember {
+                id: member.id.clone(),
+                name: member.name.clone(),
+                kind: member.kind.clone(),
+                display_label: crate::element_display_label_with_references(member, references),
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
     let template_parameters = crate::template_parameters(section, &element.id).into_iter().map(|member| InspectorMember {
         id:member.id.clone(), name:crate::template_parametered_element(section, member).unwrap_or(member).name.clone(), kind:member.kind.clone(),
         display_label: crate::template_parameter_label_with_references(section, member, references),
@@ -358,8 +385,35 @@ fn inspect_element_with_references(
         }
     }
     apply_normative_contracts(crate::uml::root::ElementRef::Object(element), &mut properties);
+    if crate::uml::root::ElementRef::Object(element).conforms_to("Operation") {
+        if let Some(field) = properties
+            .iter_mut()
+            .find(|field| field.path == "properties.type")
+        {
+            field.value = match crate::uml::operations::return_type(references, id) {
+                Ok(Some(target)) => json!({"$ref": target.id()}),
+                Ok(None) => Value::Null,
+                Err(error) => json!(error),
+            };
+        }
+        if let Some(value) = element
+            .properties
+            .get("type")
+            .filter(|value| !value.is_string() && !value.is_null())
+        {
+            properties.push(InspectorProperty {
+                path: "legacy.operation.type".into(),
+                label: "Stored return Type (ignored; derived from Parameter)".into(),
+                group: "Authored text",
+                editor: PropertyEditor::ReadOnly,
+                value: value.clone(),
+                editable: false,
+            });
+        }
+    }
+
     Some(ElementInspector {element_id:element.id.clone(),kind:element.kind.clone(),
-        name:semantic_name.into(),display_label,reference_choices,properties,attributes,operations,receptions,
+        name:semantic_name.into(),display_label,reference_choices,properties,attributes,operations,parameters,receptions,
         template_parameters,ports,parts})
 }
 

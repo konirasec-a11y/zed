@@ -364,6 +364,7 @@ pub fn validate_structural_model(project: &Project) -> Vec<StructuralDiagnostic>
     } else {
         let references = crate::uml::references::ReferenceIndex::new(model);
         issues.extend(crate::uml::instances::validate(model, &references));
+        issues.extend(crate::uml::operations::validate(&references));
         issues.extend(references.validate_typed_elements());
     }
     issues.extend(crate::structural_rules::validate(project));

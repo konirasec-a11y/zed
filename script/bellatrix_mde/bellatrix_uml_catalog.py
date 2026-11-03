@@ -515,6 +515,7 @@ class Contracts:
                 {"file": "crates/bellatrix_mde/src/inspector.rs", "scope": "Canonical scalar/reference field editors, choices, defaults and edit-time guards; preserved unresolved type text and legacy defaultValue declarations."},
                 {"file": "crates/bellatrix_mde/src/uml/references.rs", "scope": "Snapshot-indexed local scalar TypedElement.type references, target conformance and graph diagnostics; collection and external references remain unsupported."},
                 {"file": "crates/bellatrix_mde/src/uml/instances.rs", "scope": "Bounded Slot ownership, classifier/definingFeature references and uniqueness through one canonical edge; direct classifier properties only, with explicit unsupported capabilities."},
+                {"file": "crates/bellatrix_mde/src/uml/operations.rs", "scope": "Ordered owned Parameters on canonical edges, generated direction/defaults, derived Operation return Type and selected handwritten Parameter/return constraints; full redefinition/pre/post semantics remain pending."},
             ],
             "not_executable_from_extraction": [
                 "OCL/opaque specification bodies and generated operation definitions are preserved, not interpreted or compiled into behavior.",

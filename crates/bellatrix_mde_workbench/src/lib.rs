@@ -30,9 +30,10 @@ use bellatrix_mde::{
 };
 use bellatrix_mde_cordis::{
     MdeUiCommand, ModelingAddMemberRequested, ModelingCreateElementRequested,
-    ModelingCreateRelationRequested, ModelingDeleteElementRequested, ModelingMoveViewRequested,
-    ModelingQuickEditRequested, ModelingRenameRequested, ModelingResizeViewRequested,
-    ModelingSetNameExpressionRequested, ModelingSetPropertyRequested,
+    ModelingCreateRelationRequested, ModelingDeleteElementRequested,
+    ModelingMoveParameterRequested, ModelingMoveViewRequested, ModelingQuickEditRequested,
+    ModelingRenameRequested, ModelingResizeViewRequested, ModelingSetNameExpressionRequested,
+    ModelingSetPropertyRequested,
 };
 use bellatrix_project::ProjectId;
 use bellatrix_ui_uml::{UmlClassifier, UmlFigure, UmlLineSegment, UmlRelationGlyph};
@@ -41,7 +42,7 @@ use gpui::{
     IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
     Point, Render, ScrollEvent, SharedString, Task, Window, div, prelude::*, px,
 };
-use quick_edit_view::quick_edit_for_element;
+use quick_edit_view::{ParameterAction, quick_edit_for_element};
 use ui::{Clickable, Label, LabelCommon};
 use ui_input::InputField;
 use workspace::{Workspace, item::Item};
@@ -811,6 +812,77 @@ impl MdeWorkbenchItem {
             cx,
         );
     }
+    pub(crate) fn run_parameter_action(
+        &mut self,
+        action: ParameterAction,
+        project_id: ProjectId,
+        element_id: String,
+        expected_revision: u64,
+        cx: &mut Context<Self>,
+    ) {
+        if self.source.is_read_only() {
+            return;
+        }
+        if self.project_id() != &project_id || self.selected_element() != Some(element_id.as_str())
+        {
+            self.feedback = "Parameter action not sent: the active selection changed".into();
+            cx.notify();
+            return;
+        }
+        let Ok(snapshot) = self.source.snapshot() else {
+            self.feedback = "Project snapshot unavailable".into();
+            cx.notify();
+            return;
+        };
+        if snapshot.revision != expected_revision {
+            self.feedback = "Parameter action not sent: the model changed; try again".into();
+            cx.notify();
+            return;
+        }
+        let Some(element) = snapshot
+            .section
+            .elements
+            .iter()
+            .find(|element| element.id == element_id)
+        else {
+            self.feedback = "Element was removed from the model".into();
+            cx.notify();
+            return;
+        };
+        if !quick_edit_view::parameter_actions(&element.kind)
+            .iter()
+            .any(|(_, available)| *available == action)
+        {
+            self.feedback = "This element does not support the parameter action".into();
+            cx.notify();
+            return;
+        }
+        let command = match action {
+            ParameterAction::Add => MdeUiCommand::AddMember(ModelingAddMemberRequested {
+                project_id,
+                owner_id: element_id,
+                kind: ModelingMemberKind::Parameter,
+                expected_revision,
+            }),
+            ParameterAction::Delete => {
+                MdeUiCommand::DeleteElement(ModelingDeleteElementRequested {
+                    project_id,
+                    element_id,
+                    expected_revision,
+                })
+            }
+            ParameterAction::Move { up } => {
+                MdeUiCommand::MoveParameter(ModelingMoveParameterRequested {
+                    project_id,
+                    parameter_id: element_id,
+                    up,
+                    expected_revision,
+                })
+            }
+        };
+        self.submit(command, cx);
+    }
+
     pub(crate) fn submit_admitted_inspector_property(
         &mut self,
         project_id: ProjectId,
@@ -1544,7 +1616,12 @@ impl Render for MdeWorkbenchItem {
                         });
                         let (quick_actions, left_actions, visibility_picker) =
                             if let Some(selected) = editing {
-                                quick_edit_for_element(selected, cx.entity())
+                                quick_edit_for_element(
+                                    selected,
+                                    cx.entity(),
+                                    self.project_id().clone(),
+                                    snapshot.revision,
+                                )
                             } else {
                                 (None, None, None)
                             };

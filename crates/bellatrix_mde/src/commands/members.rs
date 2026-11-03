@@ -7,6 +7,7 @@ use crate::{
 pub enum ModelingMemberKind {
     Attribute,
     Operation,
+    Parameter,
     Reception,
 }
 
@@ -67,6 +68,7 @@ pub(super) fn append_member(
         ModelingMemberKind::Attribute => UmlCapability::Attribute,
         ModelingMemberKind::Operation => UmlCapability::Operation,
         ModelingMemberKind::Reception => UmlCapability::Reception,
+        ModelingMemberKind::Parameter => UmlCapability::Parameter,
     };
     if !owner_type.supports(capability) {
         return Err("element type cannot own this member kind".into());
@@ -92,6 +94,7 @@ pub(super) fn append_member(
             "Operation",
         ),
         ModelingMemberKind::Reception => ("uml.reception", "reception", "Reception"),
+        ModelingMemberKind::Parameter => ("uml.parameter", "parameter", "Parameter"),
     };
     let mut name_sequence = 1_u64;
     let name = loop {
@@ -150,7 +153,17 @@ pub(super) fn append_member(
         to: member_id.clone(),
         properties: Default::default(),
     });
+    let classifier_id = section
+        .relations
+        .iter()
+        .find(|relation| relation.kind == "owns" && relation.to == owner_id)
+        .map(|relation| relation.from.clone());
     grow_classifier_views(section, owner_id);
+    if kind == ModelingMemberKind::Parameter
+        && let Some(classifier_id) = classifier_id
+    {
+        grow_classifier_views(section, &classifier_id);
+    }
     Ok(member_id)
 }
 #[cfg(test)]

@@ -55,6 +55,7 @@ pub enum Command {
         owner_id: String,
         kind: ModelingMemberKind,
     },
+    MoveParameter { parameter_id: String, up: bool },
     QuickEdit {
         diagram_id: String,
         element_id: String,
@@ -144,6 +145,7 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
         Command::AddMember { owner_id, kind } => {
             members::append_member(&mut section, owner_id, *kind, revision, &project.id)?;
         }
+        Command::MoveParameter { parameter_id, up } => crate::uml::operations::move_parameter(&mut section, parameter_id, *up)?,
         Command::QuickEdit {
             diagram_id,
             element_id,

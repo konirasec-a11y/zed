@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{StructuralDiagnostic, StructuralSeverity};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// A borrowed lookup for one immutable graph snapshot. Duplicate identities fail closed.
 pub struct ReferenceIndex<'a> {
@@ -42,6 +42,29 @@ impl<'a> ReferenceIndex<'a> {
                 .or_insert(Some(element));
         }
         Self { model, elements }
+    }
+
+    pub fn model(&self) -> Model<'a> {
+        self.model
+    }
+
+    /// Explicit `owns` targets in persisted edge order; excludes ownership derived
+    /// from specialized relationships, so this is not UML Element::ownedElement.
+    pub fn explicit_owned_elements(&self, owner_id: &str) -> Result<Vec<ElementRef<'a>>, String> {
+        self.element(owner_id)?;
+        let mut seen = HashSet::new();
+        self.model
+            .ownership_links()
+            .filter(|relation| relation.from == owner_id)
+            .map(|relation| {
+                if !seen.insert(relation.to.as_str()) {
+                    return Err("duplicate composite ownership edge".into());
+                }
+                let element = self.element(&relation.to)?;
+                self.model.owner(element)?;
+                Ok(element)
+            })
+            .collect()
     }
 
     pub fn element(&self, id: &str) -> Result<ElementRef<'a>, String> {
@@ -112,6 +135,9 @@ impl<'a> ReferenceIndex<'a> {
             .elements()
             .filter_map(|element| {
                 let property = schema::uml_property(element.metaclass()?, "type").ok()??;
+                if property.is_derived {
+                    return None;
+                }
                 let value = element.properties().get("type").unwrap_or(&Value::Null);
                 // Historical declarations are retained as text, never resolved by matching a name.
                 if value.is_string() {

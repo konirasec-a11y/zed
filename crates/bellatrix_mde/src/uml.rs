@@ -1,6 +1,7 @@
 pub mod instances;
 pub mod metamodel;
-pub mod root;
+pub mod operations;
 pub mod references;
+pub mod root;
 pub mod schema;
 pub mod types;

@@ -159,8 +159,14 @@ Graph validation protects commands such as Type deletion as well as field edits.
 The Property Inspector offers existing model Types through its realtime command
 queue. Model-aware labels resolve the current target name for Inspector, hierarchy,
 and diagram members/ports/parts. A Type rename never rewrites reference identities.
-Operation's derived return Type remains read-only until Parameter ownership and
-derivation are implemented.
+Operation's read-only return Type is now derived from its sole return Parameter.
+The existing Class Quick Edit flow covers ordered Parameter identities, generated
+direction defaults/choices, typed optional references, atomic second-return
+rejection, reordering/deletion, and JSON/Protobuf reopen. Parameter order is the
+canonical `owns` edge order; no parallel ownership list or stored Operation Type
+is introduced. Native Inspector navigation and shared labels consume the same
+queries. Full Operation/BehavioralFeature semantics remain outside this slice;
+see `docs/bellatrix/references/RUML.md` for exact contracts and boundaries.
 
 Historical `properties.type` strings are unresolved authored text, never matched
 to Types by name. They remain visibly distinguished and unchanged on read. The

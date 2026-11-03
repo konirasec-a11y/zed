@@ -377,6 +377,9 @@ impl<'a> Model<'a> {
     pub fn element(self, id: &str) -> Option<ElementRef<'a>> {
         self.elements().find(|element| element.id() == id)
     }
+    pub(crate) fn ownership_links(self) -> impl Iterator<Item = &'a Relation> {
+        self.relationships.iter().filter(|relation| relation.kind == "owns")
+    }
     pub fn root(self) -> Result<Option<NamespaceRef<'a>>, String> {
         self.root_model
             .map(|id| {
@@ -572,7 +575,7 @@ impl<'a> Model<'a> {
                     );
                 }
                 if let Some(namespace) = owner.and_then(ElementRef::namespace) {
-                    // BehavioralFeature defines signature-based distinguishability; Parameters are a later slice.
+                    // BehavioralFeature defines signature-based distinguishability; complete signature distinguishability remains a later slice.
                     if !element.conforms_to("BehavioralFeature")
                         && let Some(name) = named.name()
                     {
@@ -611,6 +614,7 @@ impl<'a> Model<'a> {
         }
         let references = super::references::ReferenceIndex::new(self);
         issues.extend(super::instances::validate(self, &references));
+        issues.extend(super::operations::validate(&references));
         issues.extend(references.validate_typed_elements());
         issues
     }

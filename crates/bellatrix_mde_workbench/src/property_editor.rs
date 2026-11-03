@@ -3,6 +3,7 @@ use crate::{
     MdeWorkbenchItem, WorkbenchPalette,
     inspector_drafts::{DraftKey, DraftState},
     panels::{MdeRightPanel, element_glyph},
+    quick_edit_view::parameter_actions,
 };
 use bellatrix_mde::{
     ElementInspector, InspectorProperty, InspectorReferenceChoice, PropertyEditor,
@@ -777,6 +778,7 @@ fn is_general(path: &str) -> bool {
             | "properties.declaration"
             | "properties.signature"
             | "properties.type"
+            | "properties.direction"
             | "legacy.type"
             | "properties.typeText"
             | "properties.defaultValue"
@@ -861,8 +863,81 @@ pub(crate) fn render_inspector(
                     ),
             )
             .into_any_element(),
-        section_title("Properties"),
     ];
+    if let Some(owner) = inspector
+        .properties
+        .iter()
+        .find(|property| property.path == "uml.owner")
+        .and_then(|property| property.value.as_str())
+    {
+        let target = item.clone();
+        let project = project.clone();
+        let selected = inspector.element_id.clone();
+        let owner = owner.to_owned();
+        children.push(
+            div()
+                .px_3()
+                .child(
+                    Button::new("mde-inspector-owner", "Back to owner")
+                        .start_icon(Icon::new(IconName::ArrowUp).size(IconSize::Small))
+                        .on_click(cx.listener(move |panel, _, _, cx| {
+                            navigate_inspector_element(
+                                panel, &target, &project, &selected, &owner, cx,
+                            );
+                        })),
+                )
+                .into_any_element(),
+        );
+    }
+    if !item.read(cx).source().is_read_only() {
+        let pending = drafts.iter().any(|(key, draft)| {
+            draft.pending.is_some() || (key.project == project.as_str() && draft.state.queued)
+        });
+        for (descriptor, action) in parameter_actions(&inspector.kind) {
+            let target = item.clone();
+            let project = project.clone();
+            let element = inspector.element_id.clone();
+            children.push(
+                div()
+                    .px_3()
+                    .child(
+                        Button::new(format!("mde-inspector-{}", descriptor.id), descriptor.title)
+                            .start_icon(Icon::new(action.icon()).size(IconSize::Small))
+                            .disabled(pending)
+                            .on_click(cx.listener(move |panel, _, _, cx| {
+                                if !panel.is_bound_to(&target) {
+                                    return;
+                                }
+                                if property_command_pending(panel)
+                                    || crate::style_editor::style_command_pending(panel)
+                                    || panel.property_drafts.iter().any(|(key, draft)| {
+                                        key.project == project.as_str() && draft.state.queued
+                                    })
+                                {
+                                    target.update(cx, |workbench, cx| {
+                                        workbench.feedback =
+                                            "Wait for pending edits before changing parameters"
+                                                .into();
+                                        cx.notify();
+                                    });
+                                    return;
+                                }
+                                target.update(cx, |workbench, cx| {
+                                    workbench.run_parameter_action(
+                                        action,
+                                        project.clone(),
+                                        element.clone(),
+                                        revision,
+                                        cx,
+                                    );
+                                });
+                            })),
+                    )
+                    .into_any_element(),
+            );
+        }
+    }
+    children.push(section_title("Properties"));
     // Keep every schema field reachable without letting uncommon metadata bury the primary controls.
     for property in inspector
         .properties
@@ -884,6 +959,7 @@ pub(crate) fn render_inspector(
     for (title, members) in [
         ("Attributes", &inspector.attributes),
         ("Operations", &inspector.operations),
+        ("Parameters", &inspector.parameters),
         ("Receptions", &inspector.receptions),
         ("Template parameters", &inspector.template_parameters),
         ("Ports", &inspector.ports),
@@ -895,6 +971,8 @@ pub(crate) fn render_inspector(
         children.push(section_title(&format!("{title} ({})", members.len())));
         for member in members {
             let target = item.clone();
+            let project = project.clone();
+            let selected = inspector.element_id.clone();
             let id = member.id.clone();
             children.push(
                 div()
@@ -904,11 +982,11 @@ pub(crate) fn render_inspector(
                             format!("mde-inspector-owned-{id}"),
                             member.display_label.clone(),
                         )
-                        .on_click(move |_, _, cx| {
-                            target.update(cx, |workbench, cx| {
-                                workbench.select_element(id.clone(), cx)
-                            });
-                        }),
+                        .on_click(cx.listener(move |panel, _, _, cx| {
+                            navigate_inspector_element(
+                                panel, &target, &project, &selected, &id, cx,
+                            );
+                        })),
                     )
                     .into_any_element(),
             );
@@ -1021,6 +1099,36 @@ pub(crate) fn render_inspector(
     children
 }
 
+fn navigate_inspector_element(
+    panel: &MdeRightPanel,
+    item: &Entity<MdeWorkbenchItem>,
+    project: &ProjectId,
+    selected: &str,
+    target: &str,
+    cx: &mut Context<MdeRightPanel>,
+) {
+    if !panel.is_bound_to(item)
+        || item.read(cx).project_id() != project
+        || item.read(cx).selected_element() != Some(selected)
+    {
+        return;
+    }
+    let Ok(snapshot) = item.read(cx).source().snapshot() else {
+        return;
+    };
+    if !snapshot
+        .section
+        .elements
+        .iter()
+        .any(|element| element.id == target)
+    {
+        return;
+    }
+    item.update(cx, |workbench, cx| {
+        workbench.select_element(target.to_owned(), cx);
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::{display_kind, is_general, property_label, reference_label, reference_options};
@@ -1106,6 +1214,7 @@ mod tests {
             "properties.declaration",
             "properties.signature",
             "properties.type",
+            "properties.direction",
             "legacy.type",
             "properties.typeText",
             "properties.defaultValue",

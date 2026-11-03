@@ -57,3 +57,56 @@ do upstream. Este incremento não implementa valores de Slots, todo
 diagrama de objetos. Referências de classifiers são validadas mesmo em instâncias
 sem Slots; `specification` e valores de Slots populados continuam produzindo
 diagnósticos explícitos de capacidade não suportada.
+
+## Operation Parameters: one canonical ordered graph
+
+The executable slice in `uml/operations.rs` uses the existing `Element` records
+and `owns` edges. `Operation-ownedParameter` redefines the ordered composite
+`BehavioralFeature-ownedParameter`; `Parameter-operation` is its opposite. Their
+only persisted representation is the sequence of `owns` records in
+`Project.relations`, filtered by Operation and Parameter. No `ownedParameter`
+array, `operation` field, position cache or inverse list is stored. Duplicate
+ownership edges fail closed. Reordering swaps the two relevant edge positions,
+leaving unrelated records and their relative order unchanged. JSON and Protobuf
+preserve this vector order.
+
+The official contracts are `Operation-at_most_one_return`,
+`Operation-returnResult`, `Operation-type.1`, `Parameter-direction`,
+`ParameterDirectionKind`, and inherited `TypedElement-type` in the pinned
+`20161101/UML.xmi`. The corresponding UML 2.5.1 PDF sections are 9.4.3–4, 9.6,
+9.9.2, 9.9.11 and 9.9.13–14. Direction choices and the absent-value `in` default
+come from the generated XMI schema, not another handwritten enum. Parameter
+Types are optional local `{ "$ref": "id" }` references, resolved by the shared
+reference index. `Operation.type` is a read-only projection of its sole return
+Parameter's Type, or null. Existing authored Rust `signature` text is preserved
+as metadata and is never parsed to infer Parameter identities or Type references.
+Stored historical Operation `type` data is shown separately and ignored by the
+derivation. Signature notation uses canonical Parameters in their owned order,
+with the return Parameter's Type after the parentheses; raw text stays separate.
+
+The upstream recipes reviewed were
+[`BehavioralFeature::add_owned_parameter` / `remove_owned_parameter`, lines 213–243](https://github.com/javapak/ruml-wasm/blob/5c90d7399acbce4c37847b272759ed85d677ba92/behavioral_feature.rs#L213-L243),
+[`Parameter::set_direction`, lines 198–204](https://github.com/javapak/ruml-wasm/blob/5c90d7399acbce4c37847b272759ed85d677ba92/parameter.rs#L198-L204),
+and the Operation creation fields in that same pinned snapshot. Their append,
+uniqueness, remove and typed-direction ideas map to the existing member,
+deletion and property-command machinery. No upstream source was copied for this
+slice: its registry-backed DTO lists would duplicate the graph, and its setters
+do not enforce the one-return invariant. The adapted workflow instead validates
+one candidate graph before the existing revisioned commit, so a second return,
+invalid Type, stale request or malformed direction cannot partially publish.
+The retained upstream files remain inspection-only and are not executed.
+
+The existing Class Quick Edit integration flow now creates real Parameters,
+renames and retypes them, derives the return Type, rejects a second return
+atomically, reorders and deletes Parameters, and reopens both JSON and Protobuf.
+The native Inspector navigates from classifiers to Operations to Parameters,
+including members without diagram views, and uses the existing realtime editing
+queue and captured-target/read-only guards. Parameters are also ordered in the
+semantic tree. Rooted and rootless model diagnostics use the same operations
+validator. Local Parameter direction/effect/exception constraints are checked;
+this is **not** complete Operation or BehavioralFeature conformance. Complete
+signature distinguishability, redefinition/pre/post/body constraints, parameter
+sets, Connector/Behavior streaming constraints, multiplicity/default-value
+ValueSpecifications and derived return multiplicity/order/uniqueness remain
+outside this slice. The notation omits these unsupported return details rather
+than treating old independent Operation fields as canonical results.

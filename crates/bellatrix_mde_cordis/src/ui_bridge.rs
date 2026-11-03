@@ -5,7 +5,8 @@ use crate::{
     ModelingCreateDiagramRequested, ModelingCreateElement, ModelingCreateElementRequested,
     ModelingCreateRelation, ModelingCreateRelationRequested, ModelingDeleteDiagram,
     ModelingDeleteDiagramRequested, ModelingDeleteElement, ModelingDeleteElementRequested,
-    ModelingMoveView, ModelingMoveViewRequested, ModelingPlaceElementView,
+    ModelingMoveParameter, ModelingMoveParameterRequested, ModelingMoveView,
+    ModelingMoveViewRequested, ModelingPlaceElementView,
     ModelingPlaceElementViewRequested, ModelingQuickEdit, ModelingQuickEditRequested,
     ModelingRemoveView, ModelingRemoveViewRequested, ModelingRename, ModelingRenameDiagram,
     ModelingRenameDiagramRequested, ModelingRenameRequested, ModelingResizeView,
@@ -52,6 +53,7 @@ pub enum MdeUiCommand {
         completion: watch::Sender<Option<Result<u64, String>>>,
     },
     AddMember(ModelingAddMemberRequested),
+    MoveParameter(ModelingMoveParameterRequested),
     QuickEdit(ModelingQuickEditRequested),
     SetNameExpression(ModelingSetNameExpressionRequested),
     SaveProject(ProjectSaveRequested),
@@ -224,6 +226,12 @@ impl MdeUiBridge {
                         "Member created",
                         cordis
                             .query::<ModelingAddMember>(Routing::Unscoped, request)
+                            .await,
+                    ),
+                    MdeUiCommand::MoveParameter(request) => describe(
+                        "Parameter order updated",
+                        cordis
+                            .query::<ModelingMoveParameter>(Routing::Unscoped, request)
                             .await,
                     ),
                     MdeUiCommand::QuickEdit(request) => describe(

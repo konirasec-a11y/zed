@@ -25,7 +25,10 @@ pub use create_relation::{
 };
 mod add_member;
 mod create_element;
-pub use add_member::{ModelingAddMember, ModelingAddMemberRequested, ModelingMemberKind};
+pub use add_member::{
+    ModelingAddMember, ModelingAddMemberRequested, ModelingMemberKind, ModelingMoveParameter,
+    ModelingMoveParameterRequested,
+};
 mod delete_element;
 mod resize_view;
 mod set_property;
