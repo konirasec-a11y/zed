@@ -691,6 +691,14 @@ fn ownership_property(owner: ElementRef<'_>, child: ElementRef<'_>) -> Option<&'
     if owner.instance_specification().is_some() && child.slot().is_some() {
         return Some("slot");
     }
+    if child.conforms_to("Pin") {
+        return if owner.conforms_to("OpaqueAction") {
+            Some(if child.conforms_to("OutputPin") { "outputValue" } else { "inputValue" })
+        } else { None };
+    }
+    if child.conforms_to("InteractionOperand") {
+        return owner.conforms_to("CombinedFragment").then_some("operand");
+    }
     // Diagram tools attach actual UML objects through their composite features,
     // rather than treating activity nodes or interaction fragments as packages.
     for (owner_type, child_type, property) in [

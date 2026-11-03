@@ -312,12 +312,12 @@ pub(super) static UML: &[SymbolGroup] = &[
             Symbol {
                 id: "uml-activity-10",
                 label: "Input pin",
-                kind: ShapeKind::Connector,
+                kind: ShapeKind::InputPin,
             },
             Symbol {
                 id: "uml-activity-11",
                 label: "Output pin",
-                kind: ShapeKind::Connector,
+                kind: ShapeKind::OutputPin,
             },
             Symbol {
                 id: "uml-activity-12",

@@ -581,9 +581,11 @@ impl RenderOnce for UmlClassifier {
                 .into_any_element(),
         };
         let edit_title = self.edit_title.clone();
-        let header_height = self.header.classifier_header_height();
-        let keyword = self.header.keyword;
-        let applied_stereotype = self.header.applied_stereotype;
+        let mut header = self.header;
+        if !appearance.0.should_show_stereotype() { header.applied_stereotype = None; }
+        let header_height = header.classifier_header_height();
+        let keyword = header.keyword;
+        let applied_stereotype = header.applied_stereotype;
         let body = div()
             .size_full()
             .flex()
@@ -656,7 +658,7 @@ impl RenderOnce for UmlClassifier {
                             .child(title),
                     ),
             )
-            .when(!self.attributes.is_empty(), |element| {
+            .when(appearance.0.suppress_attributes != Some(true) && !self.attributes.is_empty(), |element| {
                 element.child(compartment(
                     self.attributes,
                     "attribute",
@@ -665,7 +667,7 @@ impl RenderOnce for UmlClassifier {
                     false,
                 ))
             })
-            .when(!self.operations.is_empty(), |element| {
+            .when(appearance.0.suppress_operations != Some(true) && !self.operations.is_empty(), |element| {
                 element.child(compartment(
                     self.operations,
                     "operation",
@@ -674,7 +676,7 @@ impl RenderOnce for UmlClassifier {
                     true,
                 ))
             })
-            .when(!self.receptions.is_empty(), |element| {
+            .when(appearance.0.suppress_receptions != Some(true) && !self.receptions.is_empty(), |element| {
                 element.child(compartment(
                     self.receptions,
                     "reception",

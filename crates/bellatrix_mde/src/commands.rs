@@ -315,6 +315,10 @@ fn create_element(
     if !x.is_finite() || !y.is_finite() {
         return Err("element position must be finite".into());
     }
+    if ModelingElementKind::DETAILS.contains(kind) && !section.diagrams.iter().any(|diagram|
+        diagram.id == *diagram_id && diagram.views.iter().any(|view| view.subject.as_ref() == owner_id.as_ref())) {
+        return Err("place the containing Action or CombinedFragment in this diagram before adding its detail".into());
+    }
     let requested_name = name.as_deref();
     let mut chosen_name = requested_name.unwrap_or(kind.default_name()).to_owned();
     if kind.requires_owner() && owner_id.is_none() {
@@ -414,6 +418,8 @@ fn create_element(
     if let Some(owner_id) = resolved_owner {
         if kind.requires_nested_owner() {
             crate::uml::root::set_owner(section, project_id, &element_id, &owner_id)?;
+            features::reposition_boundary_nodes(section, diagram_id, &owner_id);
+            features::layout_interaction_operands(section, diagram_id, &owner_id);
         } else {
         section.relations.push(Relation {
             id: ownership_id,
@@ -621,7 +627,8 @@ fn resize_view(
         _ => return Err("only node Views can be resized with this command".into()),
     }
     if let Some(owner_id) = owner_id {
-        features::reposition_ports(section, &diagram_id, &owner_id);
+        features::reposition_boundary_nodes(section, &diagram_id, &owner_id);
+        features::layout_interaction_operands(section, &diagram_id, &owner_id);
     }
     reroute_relationships(section, &diagram_id);
     Ok(())

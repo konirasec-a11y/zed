@@ -128,6 +128,14 @@ pub enum TextVerticalAlignment {
     Bottom,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StereotypeDisplay {
+    #[serde(rename = "none")]
+    Hidden,
+    Label,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Style {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -160,9 +168,21 @@ pub struct Style {
     pub word_wrap: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub show_shadow: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stereotype_display: Option<StereotypeDisplay>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suppress_attributes: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suppress_operations: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suppress_receptions: Option<bool>,
 }
 
 impl Style {
+    pub fn should_show_stereotype(&self) -> bool {
+        self.stereotype_display != Some(StereotypeDisplay::Hidden)
+    }
+
     pub fn resolve_stroke_pattern(&self, notation_dashed: bool) -> &[f64] {
         match self.line_mode {
             Some(LineMode::Solid) => return &[],

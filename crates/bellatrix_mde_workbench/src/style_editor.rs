@@ -130,6 +130,10 @@ pub(crate) fn reconcile_style_inputs(
                         | "line_mode"
                         | "word_wrap"
                         | "show_shadow"
+                        | "stereotype_display"
+                        | "suppress_attributes"
+                        | "suppress_operations"
+                        | "suppress_receptions"
                 )
             })
             .map(|(field, _)| {
@@ -499,7 +503,86 @@ pub(crate) fn render_styles(
                 })),
         );
     }
+    if !is_edge {
+        for (field, description) in [
+            (
+                "suppress_attributes",
+                "Hide attribute compartment · semantic attributes are preserved",
+            ),
+            (
+                "suppress_operations",
+                "Hide operation compartment · semantic operations are preserved",
+            ),
+            (
+                "suppress_receptions",
+                "Hide reception compartment · semantic receptions are preserved",
+            ),
+        ] {
+            let enabled = draft
+                .state
+                .values
+                .get(field)
+                .is_some_and(|value| value == "true");
+            let item = item.clone();
+            let key = key.clone();
+            format = format.child(
+                Button::new(format!("mde-style-{field}"), "")
+                    .start_icon(
+                        Icon::from_path(format!("icons/bellatrix-{field}.svg"))
+                            .size(IconSize::Small),
+                    )
+                    .tooltip(Tooltip::text(description))
+                    .toggle_state(enabled)
+                    .disabled(draft.state.conflict)
+                    .on_click(cx.listener(move |panel, _, _, cx| {
+                        edit_style_choice(
+                            panel,
+                            &item,
+                            &key,
+                            field,
+                            if enabled { "false" } else { "true" },
+                            cx,
+                        )
+                    })),
+            );
+        }
+    }
     rows.push(format.into_any_element());
+    if !is_edge {
+        let mut stereotypes = div().px_3().py_1().flex().gap_1();
+        for (value, icon, description) in [
+            ("", IconName::RefreshTitle, "Inherit stereotype display"),
+            (
+                "label",
+                IconName::CaseSensitive,
+                "Show applied stereotype label",
+            ),
+            (
+                "none",
+                IconName::EyeOff,
+                "Hide applied stereotype label · UML keywords remain visible",
+            ),
+        ] {
+            let item = item.clone();
+            let key = key.clone();
+            stereotypes = stereotypes.child(
+                IconButton::new(format!("mde-style-stereotype-{value}"), icon)
+                    .tooltip(Tooltip::text(description))
+                    .toggle_state(
+                        draft
+                            .state
+                            .values
+                            .get("stereotype_display")
+                            .is_some_and(|current| current == value),
+                    )
+                    .disabled(draft.state.conflict)
+                    .on_click(cx.listener(move |panel, _, _, cx| {
+                        edit_style_choice(panel, &item, &key, "stereotype_display", value, cx)
+                    })),
+            );
+        }
+        rows.push(stereotypes.into_any_element());
+    }
     let mut patterns = div().px_3().py_1().flex().gap_1();
     for (value, glyph, description) in [
         ("", "inherit", "Inherit the notation's line pattern"),

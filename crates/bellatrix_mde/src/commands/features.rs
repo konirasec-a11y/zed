@@ -1,5 +1,5 @@
 use crate::{Element, Geometry, ModelingSection, Relation, Style, UmlQuickCreate, View};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 fn fresh(
     section: &ModelingSection,
@@ -37,7 +37,7 @@ fn contained_ids(section: &ModelingSection, owner_id: &str) -> HashSet<String> {
                 .iter()
                 .find(|element| element.id == relation.to)
         })
-        .filter(|element| matches!(element.kind.as_str(), "uml.port" | "uml.part"))
+        .filter(|element| matches!(element.kind.as_str(), "uml.port" | "uml.part" | "uml.input_pin" | "uml.output_pin" | "uml.value_pin" | "uml.interaction_operand"))
         .map(|element| element.id.clone())
         .collect()
 }
@@ -67,8 +67,8 @@ pub(super) fn translate_contained_views(
     }
 }
 
-pub(super) fn reposition_ports(section: &mut ModelingSection, diagram_id: &str, owner_id: &str) {
-    let port_ids: HashSet<_> = section
+pub(super) fn reposition_boundary_nodes(section: &mut ModelingSection, diagram_id: &str, owner_id: &str) {
+    let boundary_nodes: HashMap<_, _> = section
         .relations
         .iter()
         .filter(|relation| relation.kind == "owns" && relation.from == owner_id)
@@ -78,8 +78,8 @@ pub(super) fn reposition_ports(section: &mut ModelingSection, diagram_id: &str, 
                 .iter()
                 .find(|element| element.id == relation.to)
         })
-        .filter(|element| element.kind == "uml.port")
-        .map(|element| element.id.clone())
+        .filter(|element| matches!(element.kind.as_str(), "uml.port" | "uml.input_pin" | "uml.output_pin" | "uml.value_pin"))
+        .map(|element| (element.id.clone(), matches!(element.kind.as_str(), "uml.input_pin" | "uml.value_pin")))
         .collect();
     if let Some(diagram) = section
         .diagrams
@@ -104,7 +104,7 @@ pub(super) fn reposition_ports(section: &mut ModelingSection, diagram_id: &str, 
                 if !view
                     .subject
                     .as_ref()
-                    .is_some_and(|id| port_ids.contains(id))
+                    .is_some_and(|id| boundary_nodes.contains_key(id))
                 {
                     continue;
                 }
@@ -115,11 +115,30 @@ pub(super) fn reposition_ports(section: &mut ModelingSection, diagram_id: &str, 
                     height: child_height,
                 } = &mut view.geometry
                 {
-                    *child_x = x + width - *child_width / 2.0;
+                    let on_left = view.subject.as_ref().and_then(|id| boundary_nodes.get(id)).copied().unwrap_or(false);
+                    *child_x = x + if on_left { 0.0 } else { width } - *child_width / 2.0;
                     *child_y =
                         (*child_y).clamp(y - *child_height / 2.0, y + height - *child_height / 2.0);
                 }
             }
+        }
+    }
+}
+
+pub(super) fn layout_interaction_operands(section: &mut ModelingSection, diagram_id: &str, owner_id: &str) {
+    let operands = section.relations.iter().filter(|relation| relation.kind == "owns" && relation.from == owner_id)
+        .filter_map(|relation| section.elements.iter().find(|element| element.id == relation.to && element.kind == "uml.interaction_operand").map(|element| element.id.clone()))
+        .collect::<Vec<_>>();
+    if operands.is_empty() { return; }
+    let Some(diagram) = section.diagrams.iter_mut().find(|diagram| diagram.id == diagram_id) else { return; };
+    let bounds = diagram.views.iter().find(|view| view.subject.as_deref() == Some(owner_id))
+        .and_then(|view| match view.geometry { Geometry::Rect { x, y, width, height } => Some((x,y,width,height)), _ => None });
+    let Some((x,y,width,height)) = bounds else { return; };
+    let heading = 32.0_f64.min(height / 3.0);
+    let operand_height = (height - heading) / operands.len() as f64;
+    for view in &mut diagram.views {
+        if let Some(index) = view.subject.as_ref().and_then(|id| operands.iter().position(|operand| operand == id)) {
+            view.geometry = Geometry::Rect { x, y: y + heading + index as f64 * operand_height, width, height: operand_height };
         }
     }
 }
@@ -481,7 +500,7 @@ pub(super) fn insert_feature(
         *height = (*height).max(minimum_height);
     }
     if matches!(action, UmlQuickCreate::Port | UmlQuickCreate::Part) {
-        reposition_ports(section, diagram_id, owner_id);
+        reposition_boundary_nodes(section, diagram_id, owner_id);
         if action == UmlQuickCreate::Part {
             crate::reroute_relationships(section, diagram_id);
         }
@@ -564,7 +583,7 @@ mod tests {
                 *width += 90.0;
             }
         }
-        reposition_ports(&mut section, &diagram_id, "type-task");
+        reposition_boundary_nodes(&mut section, &diagram_id, "type-task");
         let class_right = section.diagrams[0]
             .views
             .iter()

@@ -252,5 +252,33 @@ fn behavior_nodes_use_canonical_composite_owners_and_transactional_commands()
             );
         }
     }
+    for pin in [ModelingElementKind::InputPin, ModelingElementKind::OutputPin, ModelingElementKind::ValuePin] {
+        let pinned = create(&graph, pin, Some(&source_node))?;
+        let pin_id = pinned.elements.last().ok_or("missing pin")?.id.clone();
+        let pin_view = pinned.diagrams.iter().flat_map(|diagram| &diagram.views)
+            .find(|view| view.subject.as_deref() == Some(&pin_id)).ok_or("missing pin view")?;
+        let before = pin_view.geometry.clone();
+        let action_view = pinned.diagrams.iter().flat_map(|diagram| &diagram.views)
+            .find(|view| view.subject.as_deref() == Some(&source_node)).ok_or("missing action view")?.id.clone();
+        let moved = apply(&pinned, &Command::MoveView { view_id: action_view, dx: 50.0, dy: 30.0 }, 0)?;
+        let after = &moved.diagrams.iter().flat_map(|diagram| &diagram.views).find(|view| view.id == pin_view.id).ok_or("missing moved pin")?.geometry;
+        let mut expected = before;
+        expected.translate(50.0, 30.0);
+        assert_eq!(after, &expected);
+        assert!(create(&graph, pin, Some(&activity_id)).is_err());
+    }
+    let interaction = create(&source, ModelingElementKind::Interaction, None)?;
+    let interaction_id = interaction.elements.last().ok_or("missing interaction")?.id.clone();
+    let fragment = create(&interaction, ModelingElementKind::CombinedFragment, Some(&interaction_id))?;
+    let fragment_id = fragment.elements.last().ok_or("missing fragment")?.id.clone();
+    let one = create(&fragment, ModelingElementKind::InteractionOperand, Some(&fragment_id))?;
+    let one_id = one.elements.last().ok_or("missing operand")?.id.clone();
+    let two = create(&one, ModelingElementKind::InteractionOperand, Some(&fragment_id))?;
+    let two_id = two.elements.last().ok_or("missing operand")?.id.clone();
+    let views = two.diagrams.iter().flat_map(|diagram| &diagram.views).filter(|view| view.subject.as_deref().is_some_and(|id| id == one_id || id == two_id)).collect::<Vec<_>>();
+    assert_eq!(views.len(), 2);
+    assert_ne!(views[0].geometry, views[1].geometry);
+    assert!(create(&interaction, ModelingElementKind::InteractionOperand, Some(&interaction_id)).is_err());
+    assert_eq!(decode(&encode(&two, Format::Protobuf)?, Format::Protobuf)?, two);
     Ok(())
 }

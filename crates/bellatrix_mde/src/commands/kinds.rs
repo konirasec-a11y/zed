@@ -52,6 +52,10 @@ pub enum ModelingElementKind {
     InteractionUse,
     CombinedFragment,
     StateInvariant,
+    InputPin,
+    OutputPin,
+    ValuePin,
+    InteractionOperand,
 }
 impl ModelingElementKind {
     pub const STRUCTURAL: &'static [Self] = &[
@@ -99,10 +103,17 @@ impl ModelingElementKind {
         Self::CombinedFragment,
         Self::StateInvariant,
     ];
+    pub const DETAILS: &'static [Self] = &[
+        Self::InputPin,
+        Self::OutputPin,
+        Self::ValuePin,
+        Self::InteractionOperand,
+    ];
     pub fn requires_nested_owner(self) -> bool {
         Self::ACTIVITY_NODES.contains(&self)
             || Self::STATE_NODES.contains(&self)
             || Self::INTERACTION_NODES.contains(&self)
+            || Self::DETAILS.contains(&self)
     }
     pub fn requires_owner(self) -> bool {
         Self::STRUCTURAL.contains(&self) || self.requires_nested_owner()
@@ -172,6 +183,10 @@ impl ModelingElementKind {
             Self::InteractionUse => "Interaction Use",
             Self::CombinedFragment => "Combined Fragment",
             Self::StateInvariant => "State Invariant",
+            Self::InputPin => "Input Pin",
+            Self::OutputPin => "Output Pin",
+            Self::ValuePin => "Value Pin",
+            Self::InteractionOperand => "Interaction Operand",
         }
     }
     pub fn model_kind(self) -> &'static str {
@@ -227,6 +242,10 @@ impl ModelingElementKind {
             Self::InteractionUse => "uml.interaction_use",
             Self::CombinedFragment => "uml.combined_fragment",
             Self::StateInvariant => "uml.state_invariant",
+            Self::InputPin => "uml.input_pin",
+            Self::OutputPin => "uml.output_pin",
+            Self::ValuePin => "uml.value_pin",
+            Self::InteractionOperand => "uml.interaction_operand",
         }
     }
     pub fn default_name(self) -> &'static str {
@@ -281,6 +300,10 @@ impl ModelingElementKind {
             Self::InteractionUse => "NewInteractionUse",
             Self::CombinedFragment => "NewCombinedFragment",
             Self::StateInvariant => "NewStateInvariant",
+            Self::InputPin => "NewInputPin",
+            Self::OutputPin => "NewOutputPin",
+            Self::ValuePin => "NewValuePin",
+            Self::InteractionOperand => "NewInteractionOperand",
         }
     }
     pub fn initial_size(self) -> (f64, f64) {
@@ -295,6 +318,8 @@ impl ModelingElementKind {
             Self::Lifeline => (140.0, 300.0),
             Self::BehaviorExecutionSpecification => (24.0, 110.0),
             Self::ActivityPartition | Self::Region | Self::CombinedFragment => (300.0, 220.0),
+            Self::InputPin | Self::OutputPin | Self::ValuePin => (16.0, 16.0),
+            Self::InteractionOperand => (250.0, 90.0),
             Self::Actor => (85.0, 135.0),
             Self::UseCase | Self::Collaboration => (185.0, 100.0),
             Self::Activity | Self::StateMachine => (220.0, 140.0),
@@ -339,6 +364,7 @@ mod tests {
             .chain(ModelingElementKind::ACTIVITY_NODES)
             .chain(ModelingElementKind::STATE_NODES)
             .chain(ModelingElementKind::INTERACTION_NODES)
+            .chain(ModelingElementKind::DETAILS)
         {
             assert!(kinds.insert(kind.model_kind()));
         }
@@ -351,7 +377,7 @@ mod tests {
         {
             assert!(kinds.insert(kind.model_kind()));
         }
-        assert_eq!(kinds.len(), 71);
+        assert_eq!(kinds.len(), 75);
     }
 
     #[test]

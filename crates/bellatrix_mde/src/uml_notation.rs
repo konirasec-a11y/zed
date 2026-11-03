@@ -27,6 +27,7 @@ pub enum UmlNotation {
     Execution,
     InteractionUse,
     CombinedFragment,
+    InteractionOperand,
     ObjectNode,
     SendSignal,
     AcceptEvent,
@@ -47,6 +48,7 @@ impl UmlNotation {
             | Self::Terminate => (20.0, 20.0),
             Self::Fork => (20.0, 8.0),
             Self::Execution => (12.0, 24.0),
+            Self::Port => (12.0, 12.0),
             Self::Decision => (32.0, 32.0),
             _ => (80.0, 48.0),
         }
@@ -76,12 +78,11 @@ pub fn uml_notation(kind: &str) -> UmlNotation {
         }
         "uml.interaction" | "uml.interaction_use" => return UmlNotation::InteractionUse,
         "uml.combined_fragment" => return UmlNotation::CombinedFragment,
-        "uml.central_buffer_node"
-        | "uml.data_store_node"
-        | "uml.activity_parameter_node"
-        | "uml.input_pin"
-        | "uml.output_pin"
-        | "uml.value_pin" => return UmlNotation::ObjectNode,
+        "uml.interaction_operand" => return UmlNotation::InteractionOperand,
+        "uml.input_pin" | "uml.output_pin" | "uml.value_pin" => return UmlNotation::Port,
+        "uml.central_buffer_node" | "uml.data_store_node" | "uml.activity_parameter_node" => {
+            return UmlNotation::ObjectNode;
+        }
         "uml.send_signal_action" => return UmlNotation::SendSignal,
         "uml.accept_event_action" => return UmlNotation::AcceptEvent,
         "uml.activity_partition" | "uml.region" => return UmlNotation::Partition,

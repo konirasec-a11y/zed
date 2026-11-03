@@ -221,6 +221,7 @@ fn build_figure_paths(notation: UmlNotation, width: f32, height: f32) -> Vec<Fig
             true,
         )],
         Partition => vec![rectangle(), line(&[(0.02, 0.16), (0.98, 0.16)])],
+        InteractionOperand => vec![line(&[(0.02, 0.02), (0.98, 0.02)]).dashed()],
         InteractionUse | CombinedFragment => vec![
             rectangle(),
             line(&[(0.02, 0.18), (0.28, 0.18), (0.34, 0.12), (0.34, 0.02)]),

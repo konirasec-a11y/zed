@@ -56,6 +56,7 @@ impl UmlFigure {
                     | UmlNotation::Execution
                     | UmlNotation::InteractionUse
                     | UmlNotation::CombinedFragment
+                    | UmlNotation::InteractionOperand
                     | UmlNotation::ObjectNode
                     | UmlNotation::SendSignal
                     | UmlNotation::AcceptEvent
@@ -93,7 +94,9 @@ impl UmlFigure {
     }
     fn notation(&self) -> UmlNotation {
         // §17.9 uses compact participant heads, not the sequence time axis.
-        if self.kind == "uml.lifeline" && self.interaction_presentation.as_deref() == Some("communication") {
+        if self.kind == "uml.lifeline"
+            && self.interaction_presentation.as_deref() == Some("communication")
+        {
             return UmlNotation::Instance;
         }
         if self.kind != "uml.pseudostate" {
@@ -174,6 +177,9 @@ impl RenderOnce for UmlFigure {
             });
         let appearance = self.appearance;
         let alignment = appearance.clone();
+        let applied_stereotype = self
+            .applied_stereotype
+            .filter(|_| alignment.0.should_show_stereotype());
         let font_family = appearance.0.font_family.clone();
         let border = appearance.stroke(palette, selected);
         let title: gpui::AnyElement = if let Some((field, confirm, cancel)) = self.editor {
@@ -254,7 +260,8 @@ impl RenderOnce for UmlFigure {
                             .right_0()
                             .bottom_0()
                             .map(|element| {
-                                appearance.apply_rectangle_border(element, palette, selected, scale, 0.0)
+                                appearance
+                                    .apply_rectangle_border(element, palette, selected, scale, 0.0)
                             })
                             .bg(appearance.fill(palette.panel)),
                     )
@@ -266,7 +273,8 @@ impl RenderOnce for UmlFigure {
                             .w(px(87.0 * scale))
                             .h(px(17.0 * scale))
                             .map(|element| {
-                                appearance.apply_rectangle_border(element, palette, selected, scale, 0.0)
+                                appearance
+                                    .apply_rectangle_border(element, palette, selected, scale, 0.0)
                             })
                             .bg(appearance.fill(palette.panel_alt)),
                     )
@@ -289,7 +297,7 @@ impl RenderOnce for UmlFigure {
                                         .child(label),
                                 )
                             })
-                            .when_some(self.applied_stereotype, |element, label| {
+                            .when_some(applied_stereotype, |element, label| {
                                 element.child(
                                     div()
                                         .whitespace_normal()
@@ -308,7 +316,9 @@ impl RenderOnce for UmlFigure {
             UmlNotation::Port => div()
                 .size_full()
                 .relative()
-                .map(|element| appearance.apply_rectangle_border(element, palette, selected, scale, 0.0))
+                .map(|element| {
+                    appearance.apply_rectangle_border(element, palette, selected, scale, 0.0)
+                })
                 .bg(appearance.fill(palette.panel_alt))
                 .child(
                     div()
@@ -326,7 +336,9 @@ impl RenderOnce for UmlFigure {
                 .size_full()
                 .flex()
                 .flex_col()
-                .map(|element| appearance.apply_rectangle_border(element, palette, selected, scale, 0.0))
+                .map(|element| {
+                    appearance.apply_rectangle_border(element, palette, selected, scale, 0.0)
+                })
                 .bg(appearance.fill(palette.panel))
                 .child(
                     div()
@@ -347,7 +359,9 @@ impl RenderOnce for UmlFigure {
                 })
                 .size_full()
                 .relative()
-                .map(|element| appearance.apply_rectangle_border(element, palette, selected, scale, 0.0))
+                .map(|element| {
+                    appearance.apply_rectangle_border(element, palette, selected, scale, 0.0)
+                })
                 .child(
                     div()
                         .w(px(142.0 * scale))
@@ -461,7 +475,9 @@ impl RenderOnce for UmlFigure {
             UmlNotation::Action | UmlNotation::State => div()
                 .size_full()
                 .relative()
-                .map(|element| appearance.apply_rectangle_border(element, palette, selected, scale, 14.0))
+                .map(|element| {
+                    appearance.apply_rectangle_border(element, palette, selected, scale, 14.0)
+                })
                 .bg(appearance.fill(palette.panel))
                 .flex()
                 .items_center()
@@ -486,6 +502,7 @@ impl RenderOnce for UmlFigure {
             | UmlNotation::Execution
             | UmlNotation::InteractionUse
             | UmlNotation::CombinedFragment
+            | UmlNotation::InteractionOperand
             | UmlNotation::ObjectNode
             | UmlNotation::SendSignal
             | UmlNotation::AcceptEvent
@@ -618,7 +635,7 @@ impl RenderOnce for UmlFigure {
                                         .child(label),
                                 )
                             })
-                            .when_some(self.applied_stereotype, |element, label| {
+                            .when_some(applied_stereotype, |element, label| {
                                 element.child(
                                     div()
                                         .text_size(px(label_size))
@@ -689,5 +706,4 @@ mod tests {
             assert!(UmlFigure::supports(kind));
         }
     }
-
 }

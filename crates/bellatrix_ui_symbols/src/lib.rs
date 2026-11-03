@@ -12,6 +12,10 @@ pub enum Family {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum ShapeKind {
+    InputPin,
+    OutputPin,
+    InteractionOperand,
+
     InitialNode,
     FinalNode,
     FlowFinal,
@@ -92,6 +96,10 @@ pub fn count(family: Family) -> usize {
 
 pub fn glyph(kind: ShapeKind) -> &'static [u8] {
     match kind {
+        ShapeKind::InputPin => include_bytes!("../assets/input-pin.svg"),
+        ShapeKind::OutputPin => include_bytes!("../assets/output-pin.svg"),
+        ShapeKind::InteractionOperand => include_bytes!("../assets/interaction-operand.svg"),
+
         ShapeKind::InitialNode => include_bytes!("../assets/initial-node.svg"),
         ShapeKind::FinalNode => include_bytes!("../assets/final-node.svg"),
         ShapeKind::FlowFinal => include_bytes!("../assets/flow-final.svg"),

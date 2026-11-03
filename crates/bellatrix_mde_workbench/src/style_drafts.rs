@@ -1,5 +1,6 @@
 use bellatrix_mde::{
-    LineMode, RelationshipRouting, Style, TextAlignment, TextVerticalAlignment, commands::ViewOrder,
+    LineMode, RelationshipRouting, StereotypeDisplay, Style, TextAlignment, TextVerticalAlignment,
+    commands::ViewOrder,
 };
 use std::collections::HashMap;
 
@@ -11,6 +12,10 @@ pub(crate) const FIELDS: &[(&str, &str)] = &[
     ("font_size", "Font size"),
     ("stroke_width", "Line width"),
     ("opacity", "Opacity"),
+    ("stereotype_display", "Stereotype display"),
+    ("suppress_attributes", "Hide attribute compartment"),
+    ("suppress_operations", "Hide operation compartment"),
+    ("suppress_receptions", "Hide reception compartment"),
     ("word_wrap", "Wrap text"),
     ("show_shadow", "Show shadow"),
     ("line_mode", "Line pattern"),
@@ -20,6 +25,16 @@ pub(crate) const FIELDS: &[(&str, &str)] = &[
 
 pub(crate) fn style_value(style: &Style, key: &str) -> String {
     match key {
+        "stereotype_display" => style.stereotype_display.map(|value| {
+            match value {
+                StereotypeDisplay::Hidden => "none",
+                StereotypeDisplay::Label => "label",
+            }
+            .into()
+        }),
+        "suppress_attributes" => style.suppress_attributes.map(|value| value.to_string()),
+        "suppress_operations" => style.suppress_operations.map(|value| value.to_string()),
+        "suppress_receptions" => style.suppress_receptions.map(|value| value.to_string()),
         "word_wrap" => style.word_wrap.map(|value| value.to_string()),
         "show_shadow" => style.show_shadow.map(|value| value.to_string()),
         "line_mode" => style.line_mode.map(|value| {
@@ -87,7 +102,14 @@ pub(crate) fn field_error(key: &str, text: &str) -> Option<&'static str> {
         return None;
     }
     match key {
-        "word_wrap" | "show_shadow" => {
+        "stereotype_display" => {
+            (!matches!(text, "none" | "label")).then_some("Choose stereotype label or hidden")
+        }
+        "word_wrap"
+        | "show_shadow"
+        | "suppress_attributes"
+        | "suppress_operations"
+        | "suppress_receptions" => {
             (!matches!(text, "true" | "false")).then_some("Choose enabled or disabled")
         }
         "line_mode" => {
@@ -279,6 +301,16 @@ impl StyleEditState {
                 }
                 let value = (!text.is_empty()).then(|| text.to_owned());
                 match *key {
+                    "stereotype_display" => {
+                        style.stereotype_display = match text {
+                            "none" => Some(StereotypeDisplay::Hidden),
+                            "label" => Some(StereotypeDisplay::Label),
+                            _ => None,
+                        }
+                    }
+                    "suppress_attributes" => style.suppress_attributes = text.parse().ok(),
+                    "suppress_operations" => style.suppress_operations = text.parse().ok(),
+                    "suppress_receptions" => style.suppress_receptions = text.parse().ok(),
                     "word_wrap" => style.word_wrap = text.parse().ok(),
                     "show_shadow" => style.show_shadow = text.parse().ok(),
                     "line_mode" => {

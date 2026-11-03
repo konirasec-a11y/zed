@@ -237,6 +237,10 @@ fn presentation_alignment_and_stack_are_view_local_and_ignore_unrelated_semantic
     let style = Style {
         text_align: Some(TextAlignment::Right),
         text_vertical_align: Some(TextVerticalAlignment::Bottom),
+        stereotype_display: Some(StereotypeDisplay::Hidden),
+        suppress_attributes: Some(true),
+        suppress_operations: Some(true),
+        suppress_receptions: Some(true),
         fill: Some("#112233".into()),
         ..Style::default()
     };
