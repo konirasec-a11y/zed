@@ -189,3 +189,19 @@ fn given_stored_connector_inverse_then_canonical_ownership_cannot_be_overridden(
     }
     Ok(())
 }
+
+#[test]
+fn given_invalid_connector_membership_then_external_role_or_empty_part_cannot_hide_it() -> Result {
+    for role in [json!({"href":"external.uml#Role"}), json!({"$ref":"r1"})] {
+        for part in [Value::Null, json!({"href":"external.uml#Part"})] {
+            let mut model = document()?;
+            author(&mut model, "e1", "role", role.clone());
+            author(&mut model, "e1", "partWithPort", part);
+            for membership in [json!(false), json!([{"$ref":"e2"}])] {
+                author(&mut model, "connector", "end", membership);
+                assert!(has(&model, "part_with_port_empty", "error")? && !has(&model, "part_with_port_empty", "warning")?);
+            }
+        }
+    }
+    Ok(())
+}

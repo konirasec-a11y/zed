@@ -1,9 +1,10 @@
 //! Executable Connector and ConnectorEnd constraints over canonical references.
-//! ConnectorEnd multiplicity and definingEnd derivation remain separate.
+//! Ordered definingEnd derivation never uses stored caches or ownership order.
 use super::{
     classifier_hierarchy,
     classifiers::{self, QueryError},
     feature_compatibility,
+    value_specifications::{self, EvaluationError},
     property_contracts::{self, PropertyOutcome},
     references::ReferenceIndex,
     root::ElementRef,
@@ -262,40 +263,50 @@ fn role_and_part_with_port(references: &ReferenceIndex<'_>, end: ElementRef<'_>)
     ])
 }
 
+fn owning_connector<'a>(references: &ReferenceIndex<'a>, end: ElementRef<'a>) -> Result<(ElementRef<'a>, Result<bool, QueryError>), QueryError> {
+    let connector = references.model().owner(end)
+        .map_err(|error| QueryError::invalid(end.id(), error))?
+        .ok_or_else(|| QueryError::invalid(end.id(), "ConnectorEnd requires a canonical owning Connector"))?;
+    if let Some(stored) = end.properties().get("connector") {
+        let descriptor = schema::property_by_id(schema::XmiId::new(schema::Document::Uml, "A_end_connector-connector"))
+            .ok_or_else(|| QueryError::unsupported(end.id(), "missing connector inverse contract"))?;
+        invalid_input(&check(references, end, descriptor, stored))?;
+        if let Ok(id) = super::references::reference_id(stored) {
+            if id != Some(connector.id()) {
+                return Err(QueryError::invalid(end.id(), "connector inverse contradicts canonical ownership"));
+            }
+        }
+    }
+    if connector.metaclass().is_none() {
+        return Err(QueryError::unsupported(end.id(), "ConnectorEnd owner metaclass is unresolved"));
+    }
+    if !connector.conforms_to("Connector") {
+        return Err(QueryError::invalid(end.id(), "ConnectorEnd owner must conform to Connector"));
+    }
+    let membership = classifiers::contributes_to_owned_union(connector, end, "Connector-end")
+        .and_then(|belongs| if belongs { Ok(true) } else {
+            Err(QueryError::invalid(end.id(), "ConnectorEnd must belong to Connector::end"))
+        });
+    Ok((connector, membership))
+}
+
 fn part_with_port_empty(references: &ReferenceIndex<'_>, end: ElementRef<'_>) -> Result<bool, QueryError> {
     let role = end_reference(references, end, "role");
     let part = end_reference(references, end, "partWithPort");
     let port = role.as_ref().map(|role| role.is_some_and(|role| role.conforms_to("Port"))).map_err(Clone::clone);
     let same_owner = (|| {
-        let connector = references.model().owner(end)
-            .map_err(|error| QueryError::invalid(end.id(), error))?
-            .ok_or_else(|| QueryError::invalid(end.id(), "ConnectorEnd requires a canonical owning Connector"))?;
-        if let Some(stored) = end.properties().get("connector") {
-            let descriptor = schema::property_by_id(schema::XmiId::new(schema::Document::Uml, "A_end_connector-connector"))
-                .ok_or_else(|| QueryError::unsupported(end.id(), "missing connector inverse contract"))?;
-            invalid_input(&check(references, end, descriptor, stored))?;
-            if let Ok(id) = super::references::reference_id(stored) {
-                if id != Some(connector.id()) {
-                    return Err(QueryError::invalid(end.id(), "connector inverse contradicts canonical ownership"));
-                }
-            }
-        }
-        if connector.metaclass().is_none() {
-            return Err(QueryError::unsupported(end.id(), "ConnectorEnd owner metaclass is unresolved"));
-        }
-        if !connector.conforms_to("Connector") {
-            return Err(QueryError::invalid(end.id(), "ConnectorEnd owner must conform to Connector"));
-        }
-        if !classifiers::contributes_to_owned_union(connector, end, "Connector-end")? {
-            return Err(QueryError::invalid(end.id(), "ConnectorEnd must belong to Connector::end"));
-        }
+        let (connector, membership) = owning_connector(references, end)?;
+        invalid_input(&membership)?;
         let connector_owner = references.model().owner(connector)
             .map_err(|error| QueryError::invalid(connector.id(), error))?;
         let role = role.as_ref().map_err(Clone::clone)?.as_ref()
             .ok_or_else(|| QueryError::invalid(end.id(), "ConnectorEnd::role is required"))?;
         let role_owner = references.model().owner(*role)
             .map_err(|error| QueryError::invalid(role.id(), error))?;
-        Ok(role_owner.map(|owner| owner.id()) == connector_owner.map(|owner| owner.id()))
+        feature_compatibility::require_all([
+            membership,
+            Ok(role_owner.map(|owner| owner.id()) == connector_owner.map(|owner| owner.id())),
+        ])
     })();
     let empty = end.properties().get("partWithPort").is_none_or(Value::is_null);
     feature_compatibility::require_all([
@@ -310,6 +321,115 @@ fn part_with_port_empty(references: &ReferenceIndex<'_>, end: ElementRef<'_>) ->
 fn self_part_with_port(references: &ReferenceIndex<'_>, end: ElementRef<'_>) -> Result<bool, QueryError> {
     end_reference(references, end, "partWithPort")
         .map(|part| part.is_none_or(|part| !part.conforms_to("Port")))
+}
+
+struct DefiningEnd<'a> {
+    element: Option<ElementRef<'a>>,
+    outcome: Result<bool, QueryError>,
+}
+
+fn defining_end_projection<'a>(references: &ReferenceIndex<'a>, end: ElementRef<'a>) -> Result<DefiningEnd<'a>, QueryError> {
+    let (connector, membership) = owning_connector(references, end)?;
+    let association = end_reference(references, connector, "type");
+    if matches!(association, Ok(None)) {
+        return Ok(DefiningEnd { element: None, outcome: membership });
+    }
+    let descriptor = property(connector, "end")?;
+    let ends = connector.properties().get("end");
+    let mut checks = vec![membership, match ends {
+        Some(ends) => check(references, connector, descriptor, ends),
+        None => Err(QueryError::unsupported(connector.id(), "ordered Connector::end is not materialized")),
+    }];
+    let mut position = None;
+    if let Some(ends) = ends.and_then(Value::as_array) {
+        position = ends.iter().position(|value| super::references::reference_id(value).ok().flatten() == Some(end.id()));
+        if position.is_none() {
+            checks.push(if ends.iter().any(|value| value.get("href").is_some()) {
+                Err(QueryError::unsupported(end.id(), "unresolved end identities prevent indexOf(self)"))
+            } else {
+                Err(QueryError::invalid(end.id(), "owning Connector::end does not contain this ConnectorEnd"))
+            });
+        }
+    }
+    let mut element = None;
+    match association {
+        Ok(Some(association)) => {
+            let descriptor = property(association, "memberEnd")?;
+            let members = association.properties().get("memberEnd");
+            checks.push(match members {
+                Some(members) => check(references, association, descriptor, members),
+                None => Err(QueryError::unsupported(association.id(), "ordered Association::memberEnd is not materialized")),
+            });
+            if let (Some(position), Some(members)) = (position, members.and_then(Value::as_array)) {
+                if let Some(member) = members.get(position) {
+                    let single = PropertyDescriptor { lower:"1", upper:"1", ..*descriptor };
+                    match reference(references, association, &single, member) {
+                        Ok(target) => element = target,
+                        Err(error) => checks.push(Err(error)),
+                    }
+                } else {
+                    checks.push(Err(QueryError::invalid(end.id(), "definingEnd index exceeds Association::memberEnd")));
+                }
+            }
+        }
+        Err(error) => checks.push(Err(error)),
+        Ok(None) => {}
+    }
+    Ok(DefiningEnd { element, outcome: feature_compatibility::require_all(checks) })
+}
+
+/// Derive the corresponding Association end from canonical, explicit order.
+/// Stored definingEnd values and ownership edge order are never substitutes.
+pub fn defining_end<'a>(references: &ReferenceIndex<'a>, end: ElementRef<'a>) -> Result<Option<ElementRef<'a>>, QueryError> {
+    let projection = defining_end_projection(references, end)?;
+    projection.outcome?;
+    Ok(projection.element)
+}
+
+fn bound_result<T>(result: Result<T, EvaluationError>) -> Result<T, QueryError> {
+    result.map_err(|error| match error {
+        EvaluationError::Invalid { subject_id, message } => QueryError::invalid(&subject_id, message),
+        EvaluationError::Unsupported { subject_id, message } => QueryError::unsupported(&subject_id, message),
+    })
+}
+
+fn compare_bounds<T>(left: Result<T, QueryError>, right: Result<T, QueryError>, compare: impl FnOnce(T, T) -> bool) -> Result<bool, QueryError> {
+    match (left, right) {
+        (Err(error @ QueryError::Invalid { .. }), _) | (_, Err(error @ QueryError::Invalid { .. })) => Err(error),
+        (Err(error), _) | (_, Err(error)) => Err(error),
+        (Ok(left), Ok(right)) => Ok(compare(left, right)),
+    }
+}
+
+fn compatible_multiplicity(references: &ReferenceIndex<'_>, specific: ElementRef<'_>, general: ElementRef<'_>) -> Result<bool, QueryError> {
+    let general_upper = bound_result(value_specifications::upper_bound(references, general));
+    let unlimited = general_upper.as_ref().map(|bound| bound.is_unlimited()).map_err(Clone::clone);
+    feature_compatibility::require_all([
+        invalid_input(&feature_compatibility::resolve_feature_multiplicity(references, specific)),
+        invalid_input(&feature_compatibility::resolve_feature_multiplicity(references, general)),
+        compare_bounds(bound_result(value_specifications::lower_bound(references, general)),
+            bound_result(value_specifications::lower_bound(references, specific)), |general, specific| general <= specific),
+        feature_compatibility::accept_any([
+            unlimited,
+            compare_bounds(bound_result(value_specifications::upper_bound(references, specific)), general_upper, |specific, general| specific.fits_within(&general)),
+        ]),
+    ])
+}
+
+fn end_multiplicity(references: &ReferenceIndex<'_>, end: ElementRef<'_>) -> Result<bool, QueryError> {
+    let specific = feature_compatibility::resolve_feature_multiplicity(references, end);
+    let projection = defining_end_projection(references, end);
+    let mut checks = vec![invalid_input(&specific)];
+    match projection {
+        Err(error) => checks.push(Err(error)),
+        Ok(projection) => {
+            checks.push(projection.outcome);
+            if let Some(general) = projection.element {
+                checks.push(compatible_multiplicity(references, end, general));
+            }
+        }
+    }
+    feature_compatibility::require_all(checks)
 }
 
 pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
@@ -333,6 +453,7 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
             ("ConnectorEnd-role_and_part_with_port", "UML_CONNECTOR_END_ROLE_AND_PART_WITH_PORT", "MDE_CONNECTOR_END_ROLE_AND_PART_WITH_PORT_UNVERIFIED", role_and_part_with_port(references, end)),
             ("ConnectorEnd-part_with_port_empty", "UML_CONNECTOR_END_PART_WITH_PORT_EMPTY", "MDE_CONNECTOR_END_PART_WITH_PORT_EMPTY_UNVERIFIED", part_with_port_empty(references, end)),
             ("ConnectorEnd-self_part_with_port", "UML_CONNECTOR_END_SELF_PART_WITH_PORT", "MDE_CONNECTOR_END_SELF_PART_WITH_PORT_UNVERIFIED", self_part_with_port(references, end)),
+            ("ConnectorEnd-multiplicity", "UML_CONNECTOR_END_MULTIPLICITY", "MDE_CONNECTOR_END_MULTIPLICITY_UNVERIFIED", end_multiplicity(references, end)),
         ] {
             let (severity, code, message) = match result {
                 Ok(true) => continue,

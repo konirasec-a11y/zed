@@ -382,7 +382,7 @@ pub fn multiplicity(
         return literal_multiplicity(element.properties())
             .map_err(|error| classify_multiplicity_error(element.id(), error));
     }
-    let lower = bound(references, element, "lowerValue")?
+    let lower = (|| bound(references, element, "lowerValue")?
         .map(|target| match evaluate(references, target.id())? {
             LiteralValue::Integer(value) => Ok(value),
             _ => Err(EvaluationError::invalid(
@@ -390,8 +390,20 @@ pub fn multiplicity(
                 "MultiplicityElement::lower_is_integer requires a non-null integerValue()",
             )),
         })
-        .transpose()?;
-    let upper = Some(evaluate_upper_bound(references, element)?);
+        .transpose())();
+    let lower = lower.and_then(|lower| {
+        if lower.as_ref().is_some_and(Integer::is_negative) {
+            Err(EvaluationError::invalid(element.id(), "lower bound cannot be negative"))
+        } else { Ok(lower) }
+    });
+    // Evaluate both bounds before selecting Unknown; an invalid opposite bound
+    // remains a violation even when its neighbor is an opaque expression.
+    let upper = evaluate_upper_bound(references, element).map(Some);
+    let (lower, upper) = match (lower, upper) {
+        (Err(error @ EvaluationError::Invalid { .. }), _) | (_, Err(error @ EvaluationError::Invalid { .. })) => return Err(error),
+        (Err(error), _) | (_, Err(error)) => return Err(error),
+        (Ok(lower), Ok(upper)) => (lower, upper),
+    };
     MultiplicityRange::from_bounds(lower, upper)
         .map_err(|error| EvaluationError::invalid(element.id(), error.to_string()))
 }

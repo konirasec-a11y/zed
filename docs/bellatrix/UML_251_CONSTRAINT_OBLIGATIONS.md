@@ -18,7 +18,9 @@ foi publicada em `867c6afa2a99906936ec23a398a54278ebf5266e`, com gate focado
 Connector::roles e DeploymentSpecification::deployment_target foram publicadas em
 `17e237ada11fe92e4689b77bdae9f10b7787cd4d`, com recortes e gates focados em
 E18/E19. A leitura dessas duas regras usa esse commit, não os deltas posteriores
-do working tree.
+do working tree. Três invariantes de ConnectorEnd e
+DeploymentSpecification::deployed_elements têm recortes publicados em
+`c09553f7b0fb11a3580f91bc6e95c553d1582e2b`, descritos em E20/E21.
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -134,7 +136,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E19 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E21 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -269,6 +271,65 @@ de execução nova. E12–E19 possuem os gates delimitados nas seções seguinte
   `MDE_DEPLOYMENT_SPECIFICATION_OWNERSHIP` e
   `MDE_DEPLOYMENT_SPECIFICATION_UNVERIFIED`.
 
+- **E20**: `semantics/connectors.rs`, `role_and_part_with_port`,
+  `part_with_port_empty`, `self_part_with_port` e `validate`;
+  `connector_end_constraints.rs`, nove testes. partWithPort presente exige role
+  Port e membership no Namespace do tipo da parte, consultado pelo motor de
+  namespace com herança e visibilidade. Port cujo owner coincide com o owner
+  do Connector exige partWithPort vazio; a inversa connector armazenada não
+  pode substituir ownership canônico. A própria parte não pode ser Port.
+  As implicações preservam antecedente comprovadamente falso sem inventar
+  warning pelo outro input desconhecido, mas malformados continuam erros.
+  Referências externas e consultas incompletas conservam resultados não
+  verificados quando necessários à prova. Os diagnósticos dedicados usam
+  `UML_CONNECTOR_END_ROLE_AND_PART_WITH_PORT`,
+  `UML_CONNECTOR_END_PART_WITH_PORT_EMPTY` e
+  `UML_CONNECTOR_END_SELF_PART_WITH_PORT`, com variantes
+  `MDE_CONNECTOR_END_*_UNVERIFIED` para resultados desconhecidos.
+
+- **E21**: `semantics/deployments.rs`, `deployed_components`,
+  `reference_targets`, `composite_targets` e `validate`;
+  `deployment_deployed_elements.rs`, nove testes. A projeção parte da location
+  canônica e percorre todos os seus deployments, incluindo irmãos, seus
+  deployedArtifact que conformam a Artifact, manifestações canônicas e
+  utilizedElement. Cada elemento resultante deve conformar a Component.
+  Objetos deployedArtifact que não são Artifact e Artifact sem manifestações
+  não acrescentam elementos à projeção. Papéis referenciais ausentes não são
+  inventados por endpoints visuais nem pelo cache derivado deployedElement.
+  Coleção comprovadamente vazia pode satisfazer a regra; metaclasses externas
+  ou não resolvidas não provam vazio. Evidência local de não Component e
+  malformados não desaparecem diante de ramos externos.
+  Diagnósticos: `UML_DEPLOYMENT_SPECIFICATION_DEPLOYED_ELEMENTS`,
+  `MDE_DEPLOYMENT_SPECIFICATION_DEPLOYED_ELEMENTS_INVALID` e
+  `MDE_DEPLOYMENT_SPECIFICATION_DEPLOYED_ELEMENTS_UNVERIFIED`.
+
+### Evidência de ConnectorEnd e deployed_elements
+
+Commit publicado: `c09553f7b0fb11a3580f91bc6e95c553d1582e2b`.
+A implementação foi inspecionada no commit local
+`0c448caf056d7518a82d2d079488ad35bfba5992`; a revisão confirmou a mesma árvore
+`d885d518eb280c42832b902a637250151085c6d0` nos dois commits. O log local
+`/tmp/connector-end-deployment-gate-final.log` registra **42/42 aprovados**:
+connector_end_constraints 9, connector_roles 9, connector_types 5,
+deployment_deployed_elements 9 e deployment_specification 10. É um gate focado
+executado na árvore de código correspondente antes da publicação, não um
+rerun no SHA remoto, suíte integral nem execução nova pela matriz. O log não
+registra fingerprint completo da árvore testada; a igualdade das árvores dos
+commits não substitui esse registro histórico.
+
+Os casos incluem namespace/visibilidade de Port herdado, partes proibidas,
+inversas contraditórias, desconhecidos versus malformados, implicações com
+antecedente falso, rejeição atômica de mudanças de owner e roundtrip
+JSON/Protobuf. Deployment cobre API com/sem raiz, localização compartilhada,
+papéis ausentes, cache derivado não autoritativo, ramos externos, projeções
+vazias e reparo após rejeição de reparent.
+
+As quatro linhas ficam **P/E20–E21**, sem certificar todas as representações ou
+fluxos de autoria. `ConnectorEnd-multiplicity`, a derivação de definingEnd e
+suas dependências de compatibleWith continuam pendentes, assim como
+Node::internal_structure. Esses gates não comprovam UI, geração, interchange
+XMI nem fechamento integral de Connectors ou Deployments.
+
 ### Evidência transversal de envelopes externos no working tree
 
 Ajustes inspecionados no working tree sobre
@@ -340,9 +401,9 @@ ownership/inversas inválidas ou desconhecidas, rejeição atômica de reparent,
 reparo de draft e roundtrip JSON/Protobuf. Isso não certifica todos os fluxos
 de autoria nem todas as representações do catálogo.
 
-As duas linhas permanecem **P**. As quatro invariantes próprias de ConnectorEnd,
-DeploymentSpecification::deployed_elements e Node::internal_structure continuam
-pendentes. Kind/adapter binário, autoria visual de Connector e semântica integral
+As duas linhas permanecem **P**. Três invariantes próprias de ConnectorEnd e
+DeploymentSpecification::deployed_elements têm incremento posterior em E20/E21.
+ConnectorEnd::multiplicity e Node::internal_structure continuam pendentes. Kind/adapter binário, autoria visual de Connector e semântica integral
 de deployment não são demonstrados; não houve build de UI nem geração.
 
 ### Evidência publicada de Connector::types
@@ -358,7 +419,8 @@ verificam null, escalar, membro malformado, duplicação e href na coleção opo
 quando uma coleção está ausente. A linha permanece P/E17.
 Esse gate isolado não comprovava `Connector-roles` ou
 `StructuredClassifier::allRoles`; o incremento posterior está delimitado em E18.
-As quatro invariantes próprias de ConnectorEnd continuam pendentes. Derivação de kind, adapter binário
+As invariantes próprias de ConnectorEnd não são provadas por esse gate;
+três delas têm recorte posterior em E20, mantendo multiplicity pendente. Derivação de kind, adapter binário
 e autoria visual de Connector também não são certificados por este incremento.
 Não alegar suporte completo a Connectors ou Composite Structure.
 
@@ -904,12 +966,12 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `ConnectorEnd-role_and_part_with_port`
 
-- Metaclass: `ConnectorEnd`. Estado: **N**. Evidência: sem predicado dedicado identificado nos passes inspecionados.
+- Metaclass: `ConnectorEnd`. Estado: **P**. Evidência: E20; limites e gate na seção ConnectorEnd/deployed_elements.
 - OCL publicado: `partWithPort->notEmpty() implies (role.oclIsKindOf(Port) and partWithPort.type.oclAsType(Namespace).member->includes(role))`.
 
 #### `ConnectorEnd-part_with_port_empty`
 
-- Metaclass: `ConnectorEnd`. Estado: **N**. Evidência: sem predicado dedicado identificado nos passes inspecionados.
+- Metaclass: `ConnectorEnd`. Estado: **P**. Evidência: E20; limites e gate na seção ConnectorEnd/deployed_elements.
 - OCL publicado: `(role.oclIsKindOf(Port) and role.owner = connector.owner) implies partWithPort->isEmpty()`.
 
 #### `ConnectorEnd-multiplicity`
@@ -919,7 +981,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `ConnectorEnd-self_part_with_port`
 
-- Metaclass: `ConnectorEnd`. Estado: **N**. Evidência: sem predicado dedicado identificado nos passes inspecionados.
+- Metaclass: `ConnectorEnd`. Estado: **P**. Evidência: E20; limites e gate na seção ConnectorEnd/deployed_elements.
 - OCL publicado: `partWithPort->notEmpty() implies not partWithPort.oclIsKindOf(Port)`.
 
 #### `Port-port_aggregation`
@@ -1027,7 +1089,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `DeploymentSpecification-deployed_elements`
 
-- Metaclass: `DeploymentSpecification`. Estado: **N**. Evidência: sem predicado dedicado identificado nos passes inspecionados.
+- Metaclass: `DeploymentSpecification`. Estado: **P**. Evidência: E21; limites e gate na seção ConnectorEnd/deployed_elements.
 - OCL publicado: `deployment->forAll (location.deployedElement->forAll (oclIsKindOf(Component)))`.
 
 #### `Node-internal_structure`
@@ -1131,7 +1193,8 @@ viram vazio/false; erro estrutural não desaparece diante de outro unknown.
 AssociationClass::cannot_be_defined já tem recorte publicado em E15 e
 AssociationClass::disjoint_attributes_ends tem recorte em E05. Fechar os limites
 e contratos restantes sem remover Unsupported prematuramente. Continuar com
-CommunicationPath e ConnectorEnd. Connector::roles tem recorte publicado em
+CommunicationPath e ConnectorEnd::multiplicity/definingEnd; três invariantes
+de ConnectorEnd têm recorte em E20. Connector::roles tem recorte publicado em
 E18, incluindo allRoles e membership conservador; fechar os limites restantes.
 Connector::types já tem recorte publicado em E17; preservar seus limites e testar as dependências
 adicionadas sem transformar a implicação de type em validação de todos os roles.
@@ -1151,8 +1214,8 @@ atual do parameteredElement para actual arguments.
 ### Lote 4: deployment e instâncias
 
 DeploymentSpecification::deployment_target tem recorte publicado em E19.
-Continuar Node::internal_structure, DeploymentSpecification::deployed_elements,
-InstanceSpecification e Property relacionados a deployment; completar
+DeploymentSpecification::deployed_elements tem recorte em E21.
+Continuar Node::internal_structure, InstanceSpecification e Property relacionados a deployment; completar
 specification/values e slots. O caminho
 `instances.rs::validate_instance` declara explicitamente que valores de
 InstanceSpecification::specification ainda não são avaliados.
