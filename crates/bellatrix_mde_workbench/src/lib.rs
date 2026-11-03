@@ -3,18 +3,22 @@
 mod diagram_canvas;
 mod execution_dashboard;
 mod hierarchy;
+#[path = "view-model/inspector_drafts.rs"]
 mod inspector_drafts;
 mod integration;
 mod model_editing;
 mod native_document;
+#[path = "view-model/native_document_guard.rs"]
 mod native_document_guard;
 pub mod panels;
 mod property_editor;
 mod quick_edit_view;
 mod relationship_creation;
+#[path = "view-model/snapshot.rs"]
 mod snapshot;
 mod source;
 mod status_entry;
+#[path = "view-model/style_drafts.rs"]
 mod style_drafts;
 mod style_editor;
 mod timing_editor;

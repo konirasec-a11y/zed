@@ -59,7 +59,7 @@ mod tests {
     use super::*;
     use crate::commands::{Command, apply};
     fn fixture() -> serde_json::Result<Project> {
-        serde_json::from_str(include_str!("../../fixtures/todo.json"))
+        serde_json::from_str(include_str!("../../../fixtures/todo.json"))
     }
 
     #[test]

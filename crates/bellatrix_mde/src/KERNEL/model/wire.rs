@@ -354,7 +354,7 @@ mod tests {
 
     #[test]
     fn wire_rejects_missing_and_blank_diagram_type() -> Result<(), ModelIoError> {
-        let project: Project = serde_json::from_str(include_str!("../../fixtures/todo.json"))?;
+        let project: Project = serde_json::from_str(include_str!("../../../fixtures/todo.json"))?;
         for invalid in [None, Some(String::new()), Some("  ".to_owned())] {
             let mut data = WireProject::decode(encode(&project)?.as_slice())?;
             for diagram in &mut data.diagrams {

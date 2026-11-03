@@ -172,7 +172,7 @@ mod tests {
     #[test]
     fn shared_member_command_accepts_classifiers_and_rejects_files() {
         for owner_kind in ["rust.struct", "rust.trait", "uml.class", "uml.interface"] {
-            let model = serde_json::from_str(include_str!("../../fixtures/todo.json")).unwrap();
+            let model = serde_json::from_str(include_str!("../../../fixtures/todo.json")).unwrap();
             let mut section = ModelingSection::from_model(&model);
             section
                 .elements

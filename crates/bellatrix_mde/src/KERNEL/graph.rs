@@ -192,7 +192,7 @@ impl Graph<'_> {
 mod tests {
     use super::*;
     use crate::Relation;
-    fn fixture() -> Project { serde_json::from_str(include_str!("../fixtures/todo.json")).unwrap() }
+    fn fixture() -> Project { serde_json::from_str(include_str!("../../fixtures/todo.json")).unwrap() }
     #[test]
     fn validates_todo_fixture() { Graph::new(&fixture()).validate().unwrap(); }
     #[test]

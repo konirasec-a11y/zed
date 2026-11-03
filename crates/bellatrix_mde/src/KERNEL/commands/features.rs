@@ -526,7 +526,7 @@ pub(super) fn insert_feature(
 mod tests {
     use super::*;
     fn fixture() -> ModelingSection {
-        let project = serde_json::from_str(include_str!("../../fixtures/todo.json")).unwrap();
+        let project = serde_json::from_str(include_str!("../../../fixtures/todo.json")).unwrap();
         ModelingSection::from_model(&project)
     }
     #[test]

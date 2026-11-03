@@ -244,7 +244,8 @@ fn required_role<'a>(
             .map(|specification| specification.map(|specification| json!({"$ref": specification.id()}))),
         "Slot-owningInstance" => references.model().owner(element)
             .map(|owner| Some(owner.map_or(Value::Null, |owner| json!({"$ref": owner.id()})))),
-        "Slot-definingFeature" | "Association-memberEnd" =>
+        "Association-memberEnd" => Ok(None),
+        "Slot-definingFeature" =>
             Err(format!("{} requires explicit canonical reference identities", property.id.fragment)),
         _ => Ok(None),
     }

@@ -63,82 +63,39 @@ pub struct ElementInspector {
     pub parts: Vec<InspectorMember>,
 }
 
-const VISIBILITY: &[&str] = &["public", "private", "protected", "package"];
+use crate::property_edit::{fields_for, PropertyValueType};
 
-#[derive(Clone, Copy)]
-struct Declared {
-    key: &'static str,
-    label: &'static str,
-    editor: PropertyEditor,
-    default: fn() -> Value,
-}
-fn empty() -> Value { json!("") }
-fn public() -> Value { json!("public") }
-fn false_value() -> Value { json!(false) }
-fn one_value() -> Value { json!("1") }
-
-const COMMON_CLASSIFIER: &[Declared] = &[
-    Declared { key:"stereotype", label:"Stereotype", editor:PropertyEditor::Text, default:empty },
-    Declared { key:"visibility", label:"Visibility", editor:PropertyEditor::Choice(VISIBILITY), default:public },
-    Declared { key:"isAbstract", label:"Abstract", editor:PropertyEditor::Boolean, default:false_value },
-    Declared { key:"isLeaf", label:"Leaf", editor:PropertyEditor::Boolean, default:false_value },
-];
-const CLASS: &[Declared] = &[
-    Declared { key:"isFinalSpecialization", label:"Final specialization", editor:PropertyEditor::Boolean, default:false_value },
-    Declared { key:"isActive", label:"Active", editor:PropertyEditor::Boolean, default:false_value },
-];
-const COMMENT: &[Declared] = &[Declared { key: "body", label: "Body", editor: PropertyEditor::Multiline, default: empty }];
-const FIELD: &[Declared] = &[
-    Declared { key:"aggregation", label:"Aggregation", editor:PropertyEditor::Choice(&["none", "shared", "composite"]), default:empty },
-    Declared { key:"multiplicity", label:"Multiplicity notation", editor:PropertyEditor::Text, default:empty },
-    Declared { key:"visibility", label:"Visibility", editor:PropertyEditor::Choice(VISIBILITY), default:public },
-    Declared { key:"declaration", label:"Declaration", editor:PropertyEditor::Text, default:empty },
-    Declared { key:"type", label:"Type", editor:PropertyEditor::Text, default:empty },
-    Declared { key:"defaultValue", label:"Default value", editor:PropertyEditor::Text, default:empty },
-    Declared { key:"isStatic", label:"Static", editor:PropertyEditor::Boolean, default:false_value },
-    Declared { key:"isReadOnly", label:"Read only", editor:PropertyEditor::Boolean, default:false_value },
-];
-const PARAMETER: &[Declared] = &[
-    Declared { key:"isOrdered", label:"Ordered", editor:PropertyEditor::Boolean, default:false_value },
-    Declared { key:"isUnique", label:"Unique", editor:PropertyEditor::Boolean, default:false_value },
-    Declared { key:"multiplicity", label:"Multiplicity notation", editor:PropertyEditor::Text, default:one_value },
-    Declared { key:"direction", label:"Direction", editor:PropertyEditor::ReadOnly, default:empty },
-    Declared { key:"type", label:"Type reference", editor:PropertyEditor::Reference, default:empty },
-];
-const FUNCTION: &[Declared] = &[
-    Declared { key:"isOrdered", label:"Return ordered (derived)", editor:PropertyEditor::ReadOnly, default:empty },
-    Declared { key:"isUnique", label:"Return unique (derived)", editor:PropertyEditor::ReadOnly, default:empty },
-    Declared { key:"lower", label:"Return lower (derived)", editor:PropertyEditor::ReadOnly, default:empty },
-    Declared { key:"upper", label:"Return upper (derived)", editor:PropertyEditor::ReadOnly, default:empty },
-    Declared { key:"type", label:"Return Type (derived)", editor:PropertyEditor::ReadOnly, default:empty },
-    Declared { key:"visibility", label:"Visibility", editor:PropertyEditor::Choice(VISIBILITY), default:public },
-    Declared { key:"signature", label:"Authored signature", editor:PropertyEditor::Text, default:empty },
-    Declared { key:"isStatic", label:"Static", editor:PropertyEditor::Boolean, default:false_value },
-    Declared { key:"isAbstract", label:"Abstract", editor:PropertyEditor::Boolean, default:false_value },
-    Declared { key:"isQuery", label:"Query", editor:PropertyEditor::Boolean, default:false_value },
-];
-
-fn fields_for(kind: &str) -> impl Iterator<Item = &Declared> {
-    let semantic_type = crate::UmlType::from_kind(kind);
-    COMMON_CLASSIFIER.iter().chain(CLASS.iter()).filter(move |field| {
-        semantic_type.is_some_and(|kind| {
-            // The legacy editor template alias is not a normative metaclass.
-            if kind == crate::UmlType::Template {
-                return COMMON_CLASSIFIER.iter().any(|declared| declared.key == field.key);
-            }
-            if field.key == "stereotype" {
-                kind.is_classifier()
-            } else {
-                kind.has_property(field.key)
-            }
-        })
-    }).chain(match kind {
-        "rust.field" | "uml.attribute" | "uml.part" | "uml.port" => FIELD,
-        "uml.comment" | "uml.note" => COMMENT,
-        "rust.function" | "uml.operation" => FUNCTION,
-        "uml.parameter" => PARAMETER,
-        _ => &[],
-    }.iter())
+fn declared_label(kind: &str, key: &str) -> &'static str {
+    match (kind, key) {
+        ("rust.function" | "uml.operation", "isOrdered") => "Return ordered (derived)",
+        ("rust.function" | "uml.operation", "isUnique") => "Return unique (derived)",
+        ("rust.function" | "uml.operation", "lower") => "Return lower (derived)",
+        ("rust.function" | "uml.operation", "upper") => "Return upper (derived)",
+        ("rust.function" | "uml.operation", "type") => "Return Type (derived)",
+        ("uml.parameter", "type") => "Type reference",
+        (_, "stereotype") => "Stereotype",
+        (_, "visibility") => "Visibility",
+        (_, "isAbstract") => "Abstract",
+        (_, "isLeaf") => "Leaf",
+        (_, "isFinalSpecialization") => "Final specialization",
+        (_, "isActive") => "Active",
+        (_, "body") => "Body",
+        (_, "aggregation") => "Aggregation",
+        (_, "multiplicity") => "Multiplicity notation",
+        (_, "declaration") => "Declaration",
+        (_, "type") => "Type",
+        (_, "defaultValue") => "Default value",
+        (_, "isStatic") => "Static",
+        (_, "isReadOnly") => "Read only",
+        (_, "isOrdered") => "Ordered",
+        (_, "isUnique") => "Unique",
+        (_, "direction") => "Direction",
+        (_, "lower") => "Return lower (derived)",
+        (_, "upper") => "Return upper (derived)",
+        (_, "signature") => "Authored signature",
+        (_, "isQuery") => "Query",
+        _ => "Property",
+    }
 }
 
 fn inherited_value(element: &Element, key: &str, fallback: fn() -> Value) -> Value {
@@ -147,49 +104,35 @@ fn inherited_value(element: &Element, key: &str, fallback: fn() -> Value) -> Val
     })
 }
 
+fn editor_for_value_type(value_type: PropertyValueType, multiline: bool) -> PropertyEditor {
+    match value_type {
+        PropertyValueType::String if multiline => PropertyEditor::Multiline,
+        PropertyValueType::String => PropertyEditor::Text,
+        PropertyValueType::Boolean => PropertyEditor::Boolean,
+        PropertyValueType::Number => PropertyEditor::Number,
+        PropertyValueType::Choice(options) => PropertyEditor::Choice(options),
+        PropertyValueType::Reference => PropertyEditor::Reference,
+        PropertyValueType::ReadOnly => PropertyEditor::ReadOnly,
+    }
+}
+
 fn apply_normative_contracts(element: crate::uml::root::ElementRef<'_>, properties: &mut [InspectorProperty]) {
-    use crate::uml::schema::{self, ScalarKind};
-    use crate::uml::types::StandardPrimitiveType;
-    let Some(metaclass) = element.metaclass() else { return; };
     for field in properties {
         let Some(key) = field.path.strip_prefix("properties.") else { continue; };
-        let Ok(Some(descriptor)) = schema::uml_property(metaclass, key) else { continue; };
-        if (key == "ownedParameter" && element.conforms_to("Operation"))
-            || (key == "operation" && element.conforms_to("Parameter")) {
-            field.editor = PropertyEditor::ReadOnly;
-            field.editable = false;
-            continue;
-        }
-        if descriptor.is_read_only || descriptor.is_derived {
-            field.editor = PropertyEditor::ReadOnly;
-            field.editable = false;
-            continue;
-        }
-        if key == "type" && (element.conforms_to("Property") || element.conforms_to("Parameter")) {
-            field.editor = PropertyEditor::Reference;
-            field.label = "Type reference".into();
-            field.editable = true;
-            if field.value.is_string() { field.value = Value::Null; }
-            continue;
-        }
-        if schema::uses_legacy_text_adapter(descriptor, &field.value) { continue; }
-        let Ok(kind) = schema::scalar_kind(descriptor) else { continue; };
-        field.editable = true;
-        field.editor = match kind {
-            ScalarKind::Enumeration(literals) => PropertyEditor::Choice(literals),
-            ScalarKind::Primitive(StandardPrimitiveType::Boolean) => PropertyEditor::Boolean,
-            ScalarKind::Primitive(StandardPrimitiveType::Integer | StandardPrimitiveType::UnlimitedNatural) => PropertyEditor::Text,
-            ScalarKind::Primitive(StandardPrimitiveType::Real) => PropertyEditor::Number,
-            ScalarKind::Primitive(StandardPrimitiveType::String) => if field.editor == PropertyEditor::Multiline { PropertyEditor::Multiline } else { PropertyEditor::Text },
+        let fallback = match field.editor {
+            PropertyEditor::Text | PropertyEditor::Multiline => PropertyValueType::String,
+            PropertyEditor::Boolean => PropertyValueType::Boolean,
+            PropertyEditor::Number => PropertyValueType::Number,
+            PropertyEditor::Choice(options) => PropertyValueType::Choice(options),
+            PropertyEditor::Reference => PropertyValueType::Reference,
+            PropertyEditor::ReadOnly => PropertyValueType::ReadOnly,
         };
-        if !element.properties().contains_key(key) {
-            match schema::effective_default(descriptor) {
-                Ok(Some(default)) => {
-                    if let Some(value) = default.scalar_json() { field.value = value; }
-                },
-                Ok(None) if descriptor.lower == "0" && key != "body" => field.value = Value::Null,
-                _ => {},
-            }
+        let contract = crate::property_edit::normalize_property_contract(element, key, fallback, field.value.clone());
+        field.editor = editor_for_value_type(contract.value_type, field.editor == PropertyEditor::Multiline);
+        field.editable = contract.value_type != PropertyValueType::ReadOnly;
+        field.value = contract.value;
+        if key == "type" && contract.value_type == PropertyValueType::Reference {
+            field.label = "Type reference".into();
         }
     }
 }
@@ -316,7 +259,7 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
     inspect_element_with_references(section, id, &references)
 }
 
-fn inspect_element_with_references(
+pub(crate) fn inspect_element_with_references(
     section: &ModelingSection,
     id: &str,
     references: &crate::uml::references::ReferenceIndex<'_>,
@@ -358,34 +301,29 @@ fn inspect_element_with_references(
         append_namespace_properties(references, id, &mut properties);
         append_association_properties(references, id, &mut properties);
         let semantic_named = crate::uml::root::Model::from_section(section).element(id).and_then(|element| element.named()).is_some();
-        let common = [
-            ("name",if semantic_named { "Name" } else { "Editor label (not a UML name)" },PropertyEditor::Text,Value::String(String::new())),
-            ("sourceMultiplicity","Source multiplicity",PropertyEditor::Text,json!("")),
-            ("targetMultiplicity","Target multiplicity",PropertyEditor::Text,json!("")),
-            ("sourceRole","Source role",PropertyEditor::Text,json!("")),
-            ("targetRole","Target role",PropertyEditor::Text,json!("")),
-            ("navigable","Navigable",PropertyEditor::Boolean,json!(false)),
-            ("stereotype","Stereotype",PropertyEditor::Text,json!("")),
-        ];
         let mut known=HashSet::new();
-        for (key,label,editor,default) in common {
+        for definition in crate::property_edit::relationship_fields(crate::uml::root::ElementRef::Relationship(relation)) {
+            let key = definition.key;
             known.insert(key);
+            let label = match key {
+                "name" if semantic_named => "Name",
+                "name" => "Editor label (not a UML name)",
+                "sourceMultiplicity" => "Source multiplicity",
+                "targetMultiplicity" => "Target multiplicity",
+                "sourceRole" => "Source role",
+                "targetRole" => "Target role",
+                "navigable" => "Navigable",
+                "stereotype" => "Stereotype",
+                "end1Aggregation" => "Source diamond",
+                "end2Aggregation" => "Target diamond",
+                _ => "Property",
+            };
             properties.push(InspectorProperty {
-                path:format!("properties.{key}"),label:label.into(),
-                group:"Relationship",editor,
-                value:relation.properties.get(key).cloned().unwrap_or(default),
+                path:format!("properties.{key}"), label:label.into(), group:"Relationship",
+                editor:editor_for_value_type(definition.value_type, false),
+                value:relation.properties.get(key).cloned().unwrap_or_else(definition.default),
                 editable:true,
             });
-        }
-        if crate::uml::root::relationship_metaclass(&relation.kind) == Some("Association") {
-            for (key, label) in [("end1Aggregation", "Source diamond"), ("end2Aggregation", "Target diamond")] {
-                known.insert(key);
-                properties.push(InspectorProperty {
-                    path: format!("properties.{key}"), label: label.into(), group: "Relationship",
-                    editor: PropertyEditor::Choice(&["none", "shared", "composite"]),
-                    value: relation.properties.get(key).cloned().unwrap_or_else(|| json!("none")), editable: true,
-                });
-            }
         }
         for (key,value) in &relation.properties {
             if known.contains(key.as_str()) {continue;}
@@ -439,8 +377,8 @@ fn inspect_element_with_references(
         if !known.insert(definition.key) { continue; }
         properties.push(InspectorProperty {
             path: format!("properties.{}", definition.key),
-            label:definition.label.into(), group:"Specialized",
-            editor:definition.editor,
+            label:declared_label(&element.kind, definition.key).into(), group:"Specialized",
+            editor:editor_for_value_type(definition.value_type, definition.key == "body"),
             value:inherited_value(element, definition.key, definition.default),
             editable:true,
         });
@@ -582,117 +520,32 @@ fn inspect_element_with_references(
         template_parameters,ports,parts})
 }
 
-/// Only described, editable properties may change; identities cannot be edited via a JSON path.
-pub fn set_inspected_property(
-    section: &mut ModelingSection, id: &str, path: &str, value: Value
-) -> Result<(), String> {
-    let mut updated = section.clone();
-    set_inspected_property_inner(&mut updated, id, path, value)?;
-    crate::uml::associations::synchronize_changes(section, &mut updated)?;
-    crate::uml::associations::validate_changes(section, &updated)?;
-    *section = updated;
-    Ok(())
-}
-
-fn set_inspected_property_inner(
-    section: &mut ModelingSection, id: &str, path: &str, value: Value
-) -> Result<(), String> {
-    let references = crate::uml::references::ReferenceIndex::new(
-        crate::uml::root::Model::from_section(section),
-    );
-    let inspected = inspect_element_with_references(section, id, &references).ok_or("element not found")?;
-    let field = inspected.properties.iter().find(|f| f.path == path)
-        .ok_or("property is not declared")?;
-    if !field.editable { return Err("property is read-only".into()); }
-    let optional_null = value.is_null() && path.strip_prefix("properties.").is_some_and(|key| {
-        references.element(id).ok().is_some_and(|element| {
-            element.metaclass()
-                .and_then(|metaclass| crate::uml::schema::uml_property(metaclass, key).ok().flatten())
-                .is_some_and(|descriptor| matches!(
-                    crate::uml::property_contracts::check_value(&references, element, descriptor, &value),
-                    crate::uml::property_contracts::PropertyOutcome::Satisfied,
-                ))
-        })
-    });
-    match field.editor {
-        _ if optional_null => {},
-        PropertyEditor::ReadOnly => return Err("property is read-only".into()),
-        PropertyEditor::Text | PropertyEditor::Multiline => {
-            value.as_str().ok_or("expected string")?;
-        },
-        PropertyEditor::Boolean if !value.is_boolean() => return Err("expected boolean".into()),
-        PropertyEditor::Number if !value.is_number() => return Err("expected number".into()),
-        PropertyEditor::Choice(options) if !value.as_str()
-            .is_some_and(|candidate| options.contains(&candidate)) => {
-            return Err("invalid option".into());
-        },
-        _ => {},
-    }
-    let mut canonical_type = false;
-    if let Some(key) = path.strip_prefix("properties.")
-        && let Some(element) = crate::uml::root::Model::from_section(section).element(id)
-        && let Some(metaclass) = element.metaclass() {
-        crate::uml::schema::validate_edit(metaclass, key, &value)?;
-        if key == "type"
-            && let Some(descriptor) = crate::uml::schema::uml_property(metaclass, key)
-                .map_err(|error| error.to_string())? {
-
-            canonical_type = true;
-            references.validate(descriptor, &value)?;
-            if let Some(text) = element.properties().get("type").filter(|value| value.is_string())
-                && let Some(preserved) = element.properties().get("typeText")
-                && preserved != text {
-                return Err("existing typeText differs from the legacy type declaration; preserve both before choosing a Type".into());
-            }
-        }
-    }
-    if crate::uml::associations::set_projection_property(section, id, path, &value)? {
-        return Ok(());
-    }
-    let diagram_relation = section.diagrams.iter().any(|diagram|
-        diagram.views.iter().any(|view| view.subject.as_deref() == Some(id)));
-    if let Some(relation) = section.relations.iter_mut().find(|r|
-        r.id == id && (crate::uml::root::relationship_metaclass(&r.kind).is_some() || r.kind.starts_with("uml.") || diagram_relation)) {
-        let key=path.strip_prefix("properties.").ok_or("relationship identity is read-only")?;
-        relation.properties.insert(key.into(),value);
-        return Ok(());
-    }
-    let element = section.elements.iter_mut().find(|e| e.id == id).ok_or("element not found")?;
-    match path {
-        "name" => element.name = value.as_str().ok_or("expected string")?.to_owned(),
-        "label" => {
-            let s = value.as_str().ok_or("expected string")?;
-            element.label = if s.is_empty() {None} else {Some(s.into())};
-        },
-        "description" => {
-            let s = value.as_str().ok_or("expected string")?;
-            element.description = if s.is_empty() {None} else {Some(s.into())};
-        },
-        _ => {
-            let key = path.strip_prefix("properties.").ok_or("invalid property path")?;
-            if canonical_type {
-                if let Some(text) = element.properties.get("type")
-                    .filter(|value| value.is_string()).cloned() {
-                    element.properties.insert("typeText".into(), text);
-                }
-                if value.is_null() {
-                    element.properties.remove(key);
-                    return Ok(());
-                }
-            }
-            element.properties.insert(key.to_owned(),value);
-        },
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::set_inspected_property;
+    use crate::property_edit::VISIBILITY;
     fn fixture() -> ModelingSection {
-        let model: crate::Project = serde_json::from_str(include_str!("../fixtures/todo.json")).unwrap();
+        let model: crate::Project = serde_json::from_str(include_str!("../../fixtures/todo.json")).unwrap();
         ModelingSection::from_model(&model)
     }
+    #[test]
+    fn projected_editors_use_the_domain_edit_contract() {
+        let project: crate::Project = serde_json::from_str(include_str!("../../fixtures/todo.json")).expect("fixture");
+        let section = ModelingSection::from_model(&project);
+        for id in section.elements.iter().map(|element| element.id.as_str())
+            .chain(section.relations.iter().map(|relation| relation.id.as_str())) {
+            let Some(inspected) = inspect_element(&section, id) else { continue; };
+            for field in inspected.properties {
+                let contract = crate::property_edit::property_contract(&section, id, &field.path)
+                    .unwrap_or_else(|error| panic!("{id} {}: {error}", field.path));
+                let expected = editor_for_value_type(contract.value_type, field.editor == PropertyEditor::Multiline);
+                assert_eq!(field.editor, expected, "{id} {}", field.path);
+                assert_eq!(field.editable, contract.value_type != PropertyValueType::ReadOnly, "{id} {}", field.path);
+            }
+        }
+    }
+
     #[test]
     fn class_inherits_common_properties_and_owns_attributes_and_operations() {
         let section=fixture();

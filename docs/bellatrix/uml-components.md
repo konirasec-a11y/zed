@@ -157,7 +157,7 @@ mantenedor. Não abrir PR nem disparar CI como substituto dessa validação.
 | `crates/bellatrix_ui_uml/src/relationship.rs` | Apresentação SVG de relações UML e decoração de extremidades; não conhece Cordis |
 | `crates/bellatrix_ui_uml/src/inline_edit.rs` | Input Zed posicionado **no lugar do nome**; Enter confirma, Escape cancela; ícones mínimos de aceitar/cancelar |
 | `crates/bellatrix_ui_uml/src/quick_edit.rs` | Ações contextuais em botões **somente ícones**, tooltip, acessibilidade e controle de visibilidade via menu nativo Zed |
-| `crates/bellatrix_mde/src/quick_edit.rs` | Descritores tipados por `Element.kind`, disponibilidade e comando de cada ação; sem GPUI |
+| `crates/bellatrix_mde/src/view-model/quick_edit.rs` | Descritores tipados por `Element.kind`, disponibilidade e comando de cada ação; sem GPUI |
 | `crates/bellatrix_mde_workbench/src/quick_edit_view.rs` | Adapter **sem renderização própria**: ações do modelo → controles visuais de `bellatrix_ui_uml`; callbacks tipados |
 | `crates/bellatrix_mde_workbench/src/lib.rs` | Canvas `workspace::Item`, seleção, hit testing, pan/zoom, edição temporária e integração com Zed |
 | `crates/bellatrix_mde_cordis` | Eventos `ModelingSetProperty`, `ModelingAddMember`, validação, controle de revisão e persistência por `ProjectService` |

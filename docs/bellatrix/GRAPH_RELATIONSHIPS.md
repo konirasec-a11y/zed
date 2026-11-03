@@ -9,14 +9,14 @@ Zed nem um EventBus da plataforma Bellatrix. A fonte de verdade é sempre
 
 ## Responsabilidades, sem duplicação
 
-- `crates/bellatrix_mde/src/model/graph.rs`, `crates/bellatrix_mde/src/model/diagram.rs`: tipos persistidos
+- `crates/bellatrix_mde/src/KERNEL/model/graph.rs`, `crates/bellatrix_mde/src/KERNEL/model/diagram.rs`: tipos persistidos
   `Element`, `Relation {id,kind,from,to,properties}`, `Diagram`,
   `View {subject,geometry}`. IDs são estáveis.
-- `crates/bellatrix_mde/src/relationships.rs`: **único contrato**
+- `crates/bellatrix_mde/src/view-model/relationships.rs`: **único contrato**
   de papéis source/target, tipo de relação, regras de criação, notação UML,
   roteamento, conexão de endpoints, lanes e projeções de relações legadas.
   `RelationshipGraph` consulta as arestas visíveis no diagrama.
-- `crates/bellatrix_mde/src/graph.rs` e `index.rs`: integridade
+- `crates/bellatrix_mde/src/KERNEL/graph.rs` e `index.rs`: integridade
   de IDs, estrutura, ciclos e índice `petgraph` para consultas.
 - `crates/bellatrix_mde_cordis/`: transações, eventos públicos, permissões
   futuras, revisão esperada e `ProjectReplace`. Criação via Toolbox e Quick

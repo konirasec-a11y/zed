@@ -108,7 +108,7 @@ build cache. It does not replace native workspace acceptance.
 ## Represented structural relationship rules
 
 The shared `validate_structural_model` entry point also runs
-`crates/bellatrix_mde/src/structural_rules.rs`. This is a bounded interpretation
+`crates/bellatrix_mde/src/KERNEL/structural_rules.rs`. This is a bounded interpretation
 of the existing generic model, not full UML conformance or a new OCL runtime.
 Official references below are in `standards/uml/20161101/UML.xmi` and the OMG
 UML 2.5.1 specification.
@@ -254,7 +254,7 @@ dialog and existing `smol` for CLI tests, without changing package versions.
 ## Automatic official XMI-to-Rust coverage
 
 `script/bellatrix_mde/bellatrix_uml_catalog.py` reads the versioned official
-UML.xmi and deterministically generates `crates/bellatrix_mde/src/uml/metamodel.rs`.
+UML.xmi and deterministically generates `crates/bellatrix_mde/src/KERNEL/uml/metamodel.rs`.
 Its `--check` mode verifies exact output and records the source SHA-256. Current
 output covers all 242 metaclass identities and direct generalizations; the Rust
 query evaluates transitive inheritance with cycle protection.

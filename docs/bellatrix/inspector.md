@@ -61,7 +61,7 @@ Os defaults tipados não alteram o documento ao abrir o Inspector. Editar um cam
 
 ### Projeto de API já publicado
 
-- `crates/bellatrix_mde/src/inspector.rs`: `InspectorProperty`, `PropertyEditor`, `ElementInspector`, `inspect_element(section, id)`, `set_inspected_property(section, id, path, value)`.
+- `crates/bellatrix_mde/src/view-model/inspector.rs`: `InspectorProperty`, `PropertyEditor`, `ElementInspector`, `inspect_element(section, id)`, `set_inspected_property(section, id, path, value)`.
 - `crates/bellatrix_mde_cordis/src/set_property.rs`: `ModelingSetPropertyRequested`, evento `bellatrix.mde.set-property.v1`, validação e `ProjectReplace` com revisão esperada.
 - `crates/bellatrix_mde_workbench/src/property_editor.rs`: Zed GPUI consome os descritores e escolhe controles; a edição usa `MdeUiBridge` e não modifica `ModelingSection` diretamente.
 

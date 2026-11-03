@@ -740,7 +740,7 @@ mod graph_relationship_contract_tests {
     }
     #[test]
     fn moving_class_reanchors_existing_cubic_dependency_without_losing_its_shape() {
-        let project = serde_json::from_str(include_str!("../fixtures/todo.json")).unwrap();
+        let project = serde_json::from_str(include_str!("../../fixtures/todo.json")).unwrap();
         let mut section = ModelingSection::from_model(&project);
         let diagram_id = "diagram-tasks";
         let original_view = section.diagrams[0]
@@ -794,7 +794,7 @@ mod graph_relationship_contract_tests {
     }
     #[test]
     fn model_explorer_and_canvas_query_identical_visible_edges() {
-        let project = serde_json::from_str(include_str!("../fixtures/todo.json")).unwrap();
+        let project = serde_json::from_str(include_str!("../../fixtures/todo.json")).unwrap();
         let section = ModelingSection::from_model(&project);
         let graph = RelationshipGraph::new(&section, "diagram-tasks");
         let ids = graph

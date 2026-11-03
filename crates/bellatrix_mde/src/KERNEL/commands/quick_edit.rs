@@ -275,7 +275,7 @@ mod tests {
     use super::*;
     use crate::{Graph, Project, commands::Command};
     fn fixture() -> Project {
-        serde_json::from_str(include_str!("../../fixtures/todo.json")).unwrap()
+        serde_json::from_str(include_str!("../../../fixtures/todo.json")).unwrap()
     }
     fn command(action: UmlQuickCreate) -> Command {
         Command::QuickEdit {

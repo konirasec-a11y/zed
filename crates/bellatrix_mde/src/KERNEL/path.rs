@@ -82,7 +82,7 @@ mod placement_tests {
     #[test]
     fn absent_parent_places_file_at_root() {
         let project: Project =
-            serde_json::from_str(include_str!("../fixtures/todo.json")).unwrap();
+            serde_json::from_str(include_str!("../../fixtures/todo.json")).unwrap();
         assert_eq!(
             physical_path(&project, "file-clippy").unwrap(),
             PathBuf::from("clippy.toml")

@@ -448,7 +448,7 @@ mod tests {
     fn realtime_style_editing_preserves_typing_through_receipts_conflicts_and_reset()
     -> Result<(), Box<dyn std::error::Error>> {
         let mut model: Project =
-            serde_json::from_str(include_str!("../../bellatrix_mde/fixtures/todo.json"))?;
+            serde_json::from_str(include_str!("../../../bellatrix_mde/fixtures/todo.json"))?;
         let style = |model: &Project| -> Result<Style, Box<dyn std::error::Error>> {
             model
                 .diagrams

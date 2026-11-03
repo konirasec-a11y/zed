@@ -7,15 +7,25 @@ pub enum ViewOrder {
     SendBackward,
 }
 
+#[path = "commands/association_ends.rs"]
 mod association_ends;
+#[path = "commands/diagrams.rs"]
 mod diagrams;
+#[path = "commands/features.rs"]
 mod features;
+#[path = "commands/kinds.rs"]
 mod kinds;
+#[path = "commands/members.rs"]
 mod members;
+#[path = "commands/name_expression.rs"]
 mod name_expression;
+#[path = "commands/quick_edit.rs"]
 mod quick_edit;
+#[path = "commands/validation.rs"]
 mod validation;
+#[path = "commands/view_style.rs"]
 mod view_style;
+#[path = "commands/views.rs"]
 mod views;
 
 pub use association_ends::{AssociationEndDraft, AssociationEndEdit, AssociationEndOwner, RemovedAssociationEnd};
@@ -219,7 +229,7 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
         crate::uml::associations::migrate(&mut section, &project.id, element_id)?;
     }
     match command {
-        Command::SetExplorerParent { subject_id, parent_id } => crate::hierarchy::set_explorer_parent(&mut section, subject_id, parent_id.as_deref())?,
+        Command::SetExplorerParent { subject_id, parent_id } => crate::explorer_placement::set_explorer_parent(&mut section, subject_id, parent_id.as_deref())?,
         Command::SetOwner { element_id, owner_id } => crate::uml::root::reparent(&mut section, &project.id, element_id, owner_id.as_deref())?,
         Command::AdoptRootModel => { crate::uml::root::adopt_root_model(&mut section, &project.id, &project.name)?; }
         Command::CreateDiagram {
@@ -837,7 +847,7 @@ fn remove_element(section: &mut ModelingSection, id: &str) -> Result<(), String>
 mod tests {
     use super::*;
     fn fixture() -> Project {
-        serde_json::from_str(include_str!("../fixtures/todo.json")).unwrap()
+        serde_json::from_str(include_str!("../../fixtures/todo.json")).unwrap()
     }
     #[test]
     fn failed_command_cannot_partially_change_its_source() {
@@ -932,10 +942,13 @@ mod tests {
 }
 
 #[cfg(test)]
+#[path = "commands/deletion_tests.rs"]
 mod deletion_tests;
 
 #[cfg(test)]
+#[path = "commands/placement_tests.rs"]
 mod placement_tests;
 
 #[cfg(test)]
+#[path = "commands/structural_creation_tests.rs"]
 mod structural_creation_tests;

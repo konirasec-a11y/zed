@@ -18,7 +18,7 @@ commit `8ef13af2c68ae1994c8fa4f5b3e231dee7e6715d`:
 
 Copyright 2019–2026 Starion Group S.A. The adjacent `LICENSE` and `NOTICE` are
 copied unchanged from that source. Bellatrix's modified Rust implementation is
-`crates/bellatrix_mde/src/uml/associations.rs`; adapted tests are in
+`crates/bellatrix_mde/src/KERNEL/uml/associations.rs`; adapted tests are in
 `crates/bellatrix_mde/tests/association_kernel.rs`.
 The upstream code and tests were inspected, not executed.
 
@@ -160,7 +160,7 @@ reopen without adding isolated unit tests.
 
 ## Namespace and Classifier queries
 
-`crates/bellatrix_mde/src/uml/classifiers.rs` adapts the derived-union and
+`crates/bellatrix_mde/src/KERNEL/uml/classifiers.rs` adapts the derived-union and
 inheritance query patterns in the same pinned source's
 `uml4net/Extend/NamespaceExtensions.cs` and
 `uml4net/Extend/ClassifierExtensions.cs`. The parent/public/private and
@@ -231,7 +231,7 @@ alternate graph.
 
 ## Namespace and Package imports
 
-`crates/bellatrix_mde/src/uml/namespace_imports.rs` adapts import and name
+`crates/bellatrix_mde/src/KERNEL/uml/namespace_imports.rs` adapts import and name
 patterns from the pinned `NamespaceExtensions.cs`, `PackageExtensions.cs`,
 `ElementImportExtensions.cs`, and `NamedElementExtensions.cs`. The retained
 Apache-2.0 attribution applies. The finite graph solver is new; it does not

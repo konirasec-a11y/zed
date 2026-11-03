@@ -276,7 +276,7 @@ mod tests {
 
     #[test]
     fn port_label_projection_does_not_change_views_or_connector_anchors() {
-        let project = serde_json::from_str(include_str!("../fixtures/todo.json")).expect("fixture");
+        let project = serde_json::from_str(include_str!("../../fixtures/todo.json")).expect("fixture");
         let mut section = ModelingSection::from_model(&project);
         let port = section
             .elements

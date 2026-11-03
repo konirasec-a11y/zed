@@ -459,11 +459,11 @@ mod tests {
     use super::*;
     use crate::{PathSegment, Point, Style, View};
     fn fixture() -> Project {
-        serde_json::from_str(include_str!("../fixtures/todo.json")).unwrap()
+        serde_json::from_str(include_str!("../../fixtures/todo.json")).unwrap()
     }
     #[test]
     fn structural_diagrams_are_the_seven_uml_di_classes() {
-        const XML: &str = include_str!("../../../docs/bellatrix/standards/uml/20161101/UMLDI.xmi");
+        const XML: &str = include_str!("../../../../docs/bellatrix/standards/uml/20161101/UMLDI.xmi");
         for kind in StructuralDiagramKind::ALL {
             assert!(XML.contains(&format!("xmi:id=\"{}\"", kind.uml_di_type())));
             assert_eq!(
@@ -478,7 +478,7 @@ mod tests {
     }
     #[test]
     fn root_specialization_matches_uml_251() {
-        const XML: &str = include_str!("../../../docs/bellatrix/standards/uml/20161101/UML.xmi");
+        const XML: &str = include_str!("../../../../docs/bellatrix/standards/uml/20161101/UML.xmi");
         for name in ["Element", "Relationship", "DirectedRelationship", "Comment"] {
             assert!(XML.contains(&format!("xmi:id=\"{name}\"")));
         }

@@ -14,7 +14,7 @@ Useful missing structural contracts are inventoried in [structural-contracts-to-
 
 ## Reutilização executável: proprietário de Slot
 
-`crates/bellatrix_mde/src/uml/instances.rs` e o caminho existente
+`crates/bellatrix_mde/src/KERNEL/uml/instances.rs` e o caminho existente
 `Command::SetOwner` → `uml::root::reparent` adaptam a transição de
 [`Slot::set_owning_instance`, linhas 167–188](https://github.com/javapak/ruml-wasm/blob/5c90d7399acbce4c37847b272759ed85d677ba92/slot.rs#L167-L188).
 O algoritmo upstream remove a referência do proprietário anterior, atribui o novo

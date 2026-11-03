@@ -8,7 +8,7 @@ This consultation inventory is extracted from the retained official UML.xmi, not
 
 - Normative input: `../standards/uml/20161101/UML.xmi`.
 - Removed native sketches remain recoverable in Git at `9de0d1cd58b485d671b8338137f36d09fdbacbb6`,
-  under `crates/bellatrix_mde/src/uml/structural/{classifiers,deployments,common_structure,values}.rs`.
+  under `crates/bellatrix_mde/src/KERNEL/uml/structural/{classifiers,deployments,common_structure,values}.rs`.
 - The retained RUML snapshot is partial and does not contain every corresponding original file.
 - String-encoded booleans and capitalized enum serialization in the old sketches must not be copied into the canonical format.
 

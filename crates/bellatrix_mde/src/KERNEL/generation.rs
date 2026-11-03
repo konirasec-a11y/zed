@@ -142,7 +142,7 @@ mod tests {
     use crate::Relation;
 
     fn fixture() -> Project {
-        serde_json::from_str(include_str!("../fixtures/todo.json")).unwrap()
+        serde_json::from_str(include_str!("../../fixtures/todo.json")).unwrap()
     }
     #[test]
     fn dependency_precedes_client_and_preserves_reference_identity() {

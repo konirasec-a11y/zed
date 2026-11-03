@@ -719,12 +719,24 @@ fn public_association_flow_creates_edits_reparents_navigates_rejects_and_reopens
     assert!(draft_diagnostics.iter().any(|diagnostic| diagnostic.subject_id == nary_id
         && diagnostic.code == "MDE_RELATIONSHIP_ENDPOINTS_UNVERIFIED"
         && diagnostic.severity == bellatrix_mde::StructuralSeverity::Warning));
-    let mut invalid_ends = nary.clone();
-    invalid_ends.elements.iter_mut().find(|element| element.id == nary_id)
-        .expect("Association draft").properties.insert("memberEnd".into(), json!([]));
-    assert!(Model::from_project(&invalid_ends).validate().iter().any(|diagnostic|
-        diagnostic.subject_id == nary_id && diagnostic.code == "UML_RELATIONSHIP_ENDPOINTS"
-            && diagnostic.severity == bellatrix_mde::StructuralSeverity::Error));
+    assert!(!draft_diagnostics.iter().any(|diagnostic| diagnostic.subject_id == nary_id
+        && diagnostic.severity == bellatrix_mde::StructuralSeverity::Error));
+    for value in [
+        json!(null), json!([]), json!(false),
+        json!([{"$ref":"missing"}, {"$ref":"a"}]),
+        json!([{"$ref":"a"}, {"$ref":"b"}]),
+    ] {
+        let mut invalid_ends = nary.clone();
+        invalid_ends.elements.iter_mut().find(|element| element.id == nary_id)
+            .expect("Association draft").properties.insert("memberEnd".into(), value.clone());
+        let diagnostics = Model::from_project(&invalid_ends).validate();
+        for code in ["UML_PROPERTY_CONTRACT", "UML_RELATIONSHIP_ENDPOINTS"] {
+            assert!(diagnostics.iter().any(|diagnostic|
+                diagnostic.subject_id == nary_id && diagnostic.code == code
+                    && diagnostic.severity == bellatrix_mde::StructuralSeverity::Error),
+                "explicit invalid memberEnd {value} must retain {code}: {diagnostics:?}");
+        }
+    }
     nary = apply(
         &nary,
         &Command::EditAssociationEnds {
