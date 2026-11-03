@@ -626,6 +626,7 @@ impl<'a> Model<'a> {
         let references = super::references::ReferenceIndex::new(self);
         issues.extend(super::instances::validate(self, &references));
         issues.extend(super::operations::validate(&references));
+        issues.extend(super::value_specifications::validate(&references));
         issues.extend(super::associations::validate(&references));
         issues.extend(super::classifiers::validate(&references));
         issues.extend(references.validate_typed_elements());
@@ -666,6 +667,7 @@ fn fresh_id(section: &ModelingSection, project_id: &str, prefix: &str) -> Result
 }
 
 fn ownership_property(owner: ElementRef<'_>, child: ElementRef<'_>) -> Option<&'static str> {
+    if let Some(role) = super::value_specifications::bound_role(owner, child) { return Some(role); }
     let has = |property| {
         owner
             .metaclass()

@@ -235,6 +235,201 @@ fn public_association_flow_creates_edits_reparents_navigates_rejects_and_reopens
         assert_eq!(end_ids(&reopened, &association), ends);
         assert!(Model::from_project(&reopened).validate().is_empty());
     }
+    // Reopen identity-based literal bounds, edit their values through the public
+    // command path, and keep the same graph usable by Association and Operation.
+    let mut bounded = model.clone();
+    for (id, kind, value, owner) in [
+        (
+            "bound-lower",
+            "uml.literal_integer",
+            Some(json!(0)),
+            ends[1].as_str(),
+        ),
+        (
+            "bound-upper",
+            "uml.literal_unlimited_natural",
+            Some(json!("*")),
+            ends[1].as_str(),
+        ),
+        (
+            "parameter-lower",
+            "uml.literal_integer",
+            None,
+            "literal-result",
+        ),
+    ] {
+        let mut element: bellatrix_mde::Element = serde_json::from_value(
+            json!({"id": id, "kind": kind, "name": id, "properties": {"visibility":"public"}}),
+        )
+        .expect("literal record");
+        if let Some(value) = value {
+            element.properties.insert("value".into(), value);
+        }
+        if owner != "root" {
+            element
+                .properties
+                .insert("visibility".into(), serde_json::Value::Null);
+        }
+        bounded.elements.push(element);
+        bounded.relations.push(
+            serde_json::from_value(
+                json!({"id":format!("owns-{id}"), "kind":"owns", "from":owner, "to":id}),
+            )
+            .expect("literal owner"),
+        );
+    }
+    bounded.elements.push(
+        serde_json::from_value(
+            json!({"id":"literal-operation", "kind":"uml.operation", "name":"Read literals"}),
+        )
+        .expect("Operation"),
+    );
+    bounded.elements.push(serde_json::from_value(json!({"id":"literal-result", "kind":"uml.parameter", "name":"result", "properties":{"direction":"return", "lowerValue":{"$ref":"parameter-lower"}}})).expect("return Parameter"));
+    for (id, from, to) in [
+        ("owns-literal-operation", "a", "literal-operation"),
+        ("owns-literal-result", "literal-operation", "literal-result"),
+    ] {
+        bounded.relations.push(
+            serde_json::from_value(json!({"id":id, "kind":"owns", "from":from, "to":to}))
+                .expect("Operation ownership"),
+        );
+    }
+    let property = bounded
+        .elements
+        .iter_mut()
+        .find(|element| element.id == ends[1])
+        .expect("Property");
+    property
+        .properties
+        .insert("lowerValue".into(), json!({"$ref":"bound-lower"}));
+    property
+        .properties
+        .insert("upperValue".into(), json!({"$ref":"bound-upper"}));
+    bounded = decode(
+        &encode(&bounded, Format::Json).expect("save identity bounds"),
+        Format::Json,
+    )
+    .expect("load identity bounds");
+    let references = ReferenceIndex::new(Model::from_project(&bounded));
+    use bellatrix_mde::uml::value_specifications::{self, EvaluationError};
+    let returned =
+        bellatrix_mde::uml::operations::return_properties(&references, "literal-operation")
+            .expect("literal return");
+    assert_eq!(
+        returned
+            .lower()
+            .expect("lower")
+            .expect("return")
+            .to_string(),
+        "0"
+    );
+    assert_eq!(
+        returned
+            .upper()
+            .expect("upper")
+            .expect("return")
+            .to_string(),
+        "1"
+    );
+    let huge = "1000000000000000000000000000000000000000000000000000000000000";
+    bounded = edit(&bounded, "bound-lower", "properties.value", json!(huge));
+    assert_eq!(
+        bounded
+            .relations
+            .iter()
+            .find(|relation| relation.id == association)
+            .expect("projected relation")
+            .properties
+            .get("targetMultiplicity"),
+        Some(&json!(format!("{huge}..*")))
+    );
+    assert_eq!(
+        bounded
+            .element(&ends[1])
+            .expect("authored Property")
+            .properties
+            .get("multiplicity"),
+        Some(&json!("0..*")),
+        "old notation survives as ignored authored data"
+    );
+    for command in [
+        Command::SetProperty {
+            element_id: "bound-upper".into(),
+            path: "properties.value".into(),
+            value: json!(1),
+        },
+        Command::SetProperty {
+            element_id: ends[1].clone(),
+            path: "properties.multiplicity".into(),
+            value: json!("1"),
+        },
+        Command::SetProperty {
+            element_id: association.clone(),
+            path: "properties.targetMultiplicity".into(),
+            value: json!("1"),
+        },
+    ] {
+        let before = bounded.clone();
+        assert!(apply(&bounded, &command, 10).is_err());
+        assert_eq!(bounded, before);
+    }
+    let mut unknown = bounded.clone();
+    unknown
+        .elements
+        .iter_mut()
+        .find(|element| element.id == "bound-lower")
+        .expect("lower")
+        .kind = "uml.opaque_expression".into();
+    let references = ReferenceIndex::new(Model::from_project(&unknown));
+    assert!(matches!(
+        value_specifications::multiplicity(
+            &references,
+            references.element(&ends[1]).expect("Property")
+        ),
+        Err(EvaluationError::Unsupported { .. })
+    ));
+    assert!(
+        Model::from_project(&unknown)
+            .validate()
+            .iter()
+            .all(|issue| issue.severity != bellatrix_mde::StructuralSeverity::Error),
+        "an unevaluated bound is not proof of an invalid interval or projection: {:?}",
+        Model::from_project(&unknown).validate()
+    );
+    let mut invalid = bounded.clone();
+    invalid
+        .elements
+        .iter_mut()
+        .find(|element| element.id == "bound-lower")
+        .expect("lower")
+        .kind = "uml.literal_unlimited_natural".into();
+    let references = ReferenceIndex::new(Model::from_project(&invalid));
+    assert!(matches!(
+        value_specifications::multiplicity(
+            &references,
+            references.element(&ends[1]).expect("Property")
+        ),
+        Err(EvaluationError::Invalid { .. })
+    ));
+    for format in [Format::Json, Format::Protobuf] {
+        let reopened = decode(
+            &encode(&bounded, format).expect("save literal graph"),
+            format,
+        )
+        .expect("reopen literal graph");
+        assert_eq!(reopened, bounded);
+        let references = ReferenceIndex::new(Model::from_project(&reopened));
+        assert_eq!(
+            value_specifications::multiplicity(
+                &references,
+                references.element(&ends[1]).expect("Property")
+            )
+            .expect("evaluated bounds")
+            .lower_bound()
+            .to_string(),
+            huge
+        );
+    }
     model = edit(
         &model,
         &ends[0],

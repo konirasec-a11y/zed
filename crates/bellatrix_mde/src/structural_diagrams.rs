@@ -443,6 +443,7 @@ pub fn validate_structural_model(project: &Project) -> Vec<StructuralDiagnostic>
         let references = crate::uml::references::ReferenceIndex::new(model);
         issues.extend(crate::uml::instances::validate(model, &references));
         issues.extend(crate::uml::operations::validate(&references));
+        issues.extend(crate::uml::value_specifications::validate(&references));
         issues.extend(crate::uml::associations::validate(&references));
         issues.extend(crate::uml::classifiers::validate(&references));
         issues.extend(references.validate_typed_elements());

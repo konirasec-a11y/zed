@@ -7,13 +7,12 @@
 // Contracts: UML 2.5.1 9.9.2, 9.9.11 and 9.9.13; provenance and bounded
 // comparison with RUML mutation recipes: docs/bellatrix/references/RUML.md.
 
+use super::value_specifications::{self, EvaluationError};
 use super::{
     references::ReferenceIndex,
     root::ElementRef,
     schema,
-    types::{
-        Integer, MultiplicityError, MultiplicityRange, UnlimitedNatural, literal_multiplicity,
-    },
+    types::{Integer, MultiplicityRange, UnlimitedNatural},
 };
 use crate::{Element, ModelingSection, StructuralDiagnostic, StructuralSeverity};
 use serde_json::Value;
@@ -103,22 +102,22 @@ pub fn return_type<'a>(
 pub struct ReturnProperties {
     pub is_ordered: bool,
     pub is_unique: bool,
-    pub multiplicity: Result<Option<MultiplicityRange>, MultiplicityError>,
+    pub multiplicity: Result<Option<MultiplicityRange>, EvaluationError>,
 }
 
 impl ReturnProperties {
-    pub fn lower(&self) -> Result<Option<&Integer>, MultiplicityError> {
+    pub fn lower(&self) -> Result<Option<&Integer>, EvaluationError> {
         self.multiplicity
             .as_ref()
             .map(|range| range.as_ref().map(MultiplicityRange::lower_bound))
-            .map_err(|error| *error)
+            .map_err(Clone::clone)
     }
 
-    pub fn upper(&self) -> Result<Option<&UnlimitedNatural>, MultiplicityError> {
+    pub fn upper(&self) -> Result<Option<&UnlimitedNatural>, EvaluationError> {
         self.multiplicity
             .as_ref()
             .map(|range| range.as_ref().map(MultiplicityRange::upper_bound))
-            .map_err(|error| *error)
+            .map_err(Clone::clone)
     }
 }
 
@@ -138,7 +137,8 @@ pub fn return_properties(
     Ok(ReturnProperties {
         is_ordered: effective_boolean(ElementRef::Object(parameter), "isOrdered")?,
         is_unique: effective_boolean(ElementRef::Object(parameter), "isUnique")?,
-        multiplicity: literal_multiplicity(&parameter.properties).map(Some),
+        multiplicity: value_specifications::multiplicity(references, ElementRef::Object(parameter))
+            .map(Some),
     })
 }
 
@@ -259,23 +259,6 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
             let ElementRef::Object(parameter) = element else {
                 continue;
             };
-            if let Err(error) = literal_multiplicity(&parameter.properties) {
-                let unsupported = error == MultiplicityError::UnsupportedValueSpecification;
-                issues.push(StructuralDiagnostic {
-                    severity: if unsupported {
-                        StructuralSeverity::Warning
-                    } else {
-                        StructuralSeverity::Error
-                    },
-                    code: if unsupported {
-                        "MDE_PARAMETER_MULTIPLICITY_UNSUPPORTED"
-                    } else {
-                        "UML_PARAMETER_MULTIPLICITY"
-                    },
-                    subject_id: parameter.id.clone(),
-                    message: error.to_string(),
-                });
-            }
             let problem = match direction(parameter) {
                 Err(error) => Some(error),
                 Ok(direction) => {

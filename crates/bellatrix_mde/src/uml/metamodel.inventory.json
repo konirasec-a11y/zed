@@ -1036,12 +1036,16 @@
       "scope": "Canonical Slot ownership, classifier/definingFeature references and uniqueness; shared slottable-feature resolution includes inherited private attributes and direct redefinitions. Values and ambiguous ancestor redefinitions remain explicit unsupported capabilities."
     },
     {
+      "file": "crates/bellatrix_mde/src/uml/value_specifications.rs",
+      "scope": "Pure evaluation of canonical Integer/UnlimitedNatural/Boolean/String/Null literal identities and generated defaults; owned lowerValue/upperValue role resolution shared by Property, Parameter, Operation return and redefinition checks. External references, opaque/nonliteral expressions, Real and unassigned owned-value roles remain explicit unsupported capabilities."
+    },
+    {
       "file": "crates/bellatrix_mde/src/uml/types.rs",
-      "scope": "Arbitrary-precision Integer, UnlimitedNatural and evaluated multiplicity intervals; Property and Parameter share one literal-notation adapter. Nonliteral bounds and ValueSpecification identities are not evaluated."
+      "scope": "Arbitrary-precision Integer, UnlimitedNatural and evaluated multiplicity intervals; one retained literal-notation adapter, with reference-aware ValueSpecification evaluation supplied by the separate shared consumer."
     },
     {
       "file": "crates/bellatrix_mde/src/uml/operations.rs",
-      "scope": "Ordered canonical Parameters; generated scalar defaults; derived return Type, ordering, uniqueness and literal multiplicity; selected Parameter constraints and only_body_for_query with owned Constraint references. Unevaluated ValueSpecifications, condition expressions and full redefinition consistency remain explicit limits."
+      "scope": "Ordered canonical Parameters; generated scalar defaults; derived return Type, ordering, uniqueness and reference-aware multiplicity; selected Parameter constraints and only_body_for_query with owned Constraint references. Nonliteral ValueSpecifications, condition expressions and full Operation redefinition consistency remain explicit limits."
     },
     {
       "file": "crates/bellatrix_mde/src/uml/associations.rs",
@@ -1068,7 +1072,7 @@
     "OCL/opaque specification bodies and generated operation definitions are preserved, not interpreted or compiled into behavior.",
     "Descriptor extraction alone does not execute collection/relationship constraints or complete subset/redefinition consistency; the bounded handwritten consumers above implement only their stated contracts. External user-model references remain unsupported.",
     "Derived-property maintenance requires handwritten implementations; unsupported derived setters are blocked independently of isReadOnly.",
-    "Stereotype application, complete UMLDI rendering/validation, ValueSpecification evaluation and behavioral execution are not implemented by these descriptors.",
+    "Stereotype application, complete UMLDI rendering/validation, general ValueSpecification expression evaluation and behavioral execution are not implemented by these descriptors.",
     "Ambiguous source definitions are excluded from typed tables and remain available in the pinned source with this ambiguity ledger.",
     "Package/Profile container definitions, package-import object identities and MOF extension tags are provenance/reference-audited only; their missing typed representation is listed per source.",
     "Finite JSON Real validation is a transport boundary, not a complete mathematical Real implementation."

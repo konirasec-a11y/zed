@@ -10,7 +10,8 @@ use super::{
     references::{ReferenceIndex, reference_id},
     root::{ElementRef, Model},
     schema,
-    types::{Integer, MultiplicityError, MultiplicityRange},
+    types::{Integer, MultiplicityRange},
+    value_specifications::{self, EvaluationError},
 };
 use crate::{
     Element, ModelingSection, Project, Relation, StructuralDiagnostic, StructuralSeverity,
@@ -148,9 +149,11 @@ pub fn is_composite(property: &Element) -> Result<bool, String> {
     Ok(aggregation(property)? == "composite")
 }
 
-/// Literal notation is retained verbatim; this adapter does not invent ValueSpecification identities.
-pub fn multiplicity(property: &Element) -> Result<MultiplicityRange, MultiplicityError> {
-    super::types::literal_multiplicity(&property.properties)
+pub fn multiplicity(
+    references: &ReferenceIndex<'_>,
+    property: &Element,
+) -> Result<MultiplicityRange, EvaluationError> {
+    value_specifications::multiplicity(references, ElementRef::Object(property))
 }
 
 fn validate_association(
@@ -228,16 +231,17 @@ fn validate_association(
                 }
             }
         }
-        match multiplicity(end) {
-            Ok(_) | Err(MultiplicityError::UnsupportedValueSpecification) => {}
+        match multiplicity(references, end) {
+            Ok(_) => {}
+            Err(error) if error.is_unsupported() => {}
             Err(error) => return Err(format!("Property {} multiplicity: {error}", end.id)),
         }
         if is_composite(end)? {
             let other = ends
                 .get(1 - index)
                 .ok_or("composite Association must be binary")?;
-            let range = multiplicity(other).map_err(|error| match error {
-                MultiplicityError::UnsupportedValueSpecification => format!(
+            let range = multiplicity(references, other).map_err(|error| match error {
+                error if error.is_unsupported() => format!(
                     "Unsupported Property::multiplicity_of_composite evaluation of opposite bound: {error}"
                 ),
                 _ => format!("Property::multiplicity_of_composite invalid opposite bound: {error}"),
@@ -256,11 +260,21 @@ fn validate_association(
             return Err("Unsupported binary Relation notation: use an n-ary Association element for more than two member ends".into());
         }
         let projection = binary_projection(references, relation)?;
+        let unchecked_ranges = ends
+            .iter()
+            .zip(["sourceMultiplicity", "targetMultiplicity"])
+            .filter(|(end, _)| {
+                value_specifications::has_bound_references(ElementRef::Object(end))
+                    && multiplicity(references, end).is_err_and(|error| error.is_unsupported())
+            })
+            .map(|(_, key)| key)
+            .collect::<HashSet<_>>();
         if relation.from != projection.from
             || relation.to != projection.to
-            || PROJECTION_KEYS
-                .iter()
-                .any(|key| relation.properties.get(*key) != projection.properties.get(*key))
+            || PROJECTION_KEYS.iter().any(|key| {
+                !unchecked_ranges.contains(key)
+                    && relation.properties.get(*key) != projection.properties.get(*key)
+            })
         {
             return Err(
                 "Association binary projection is inconsistent with canonical memberEnd Properties"
@@ -314,14 +328,6 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
         }
         if let Ok(ends) = member_ends(references, association.id()) {
             for end in ends {
-                if multiplicity(end) == Err(MultiplicityError::UnsupportedValueSpecification) {
-                    issues.push(StructuralDiagnostic {
-                        severity: StructuralSeverity::Warning,
-                        code: "MDE_PROPERTY_MULTIPLICITY_UNSUPPORTED",
-                        subject_id: end.id.clone(),
-                        message: "Association-end multiplicity contains authored notation or ValueSpecifications not evaluated by the literal adapter".into(),
-                    });
-                }
                 if membership.insert(&end.id, association.id()).is_some() {
                     issues.push(issue(
                         "UML_PROPERTY_ASSOCIATION",
@@ -404,7 +410,22 @@ fn binary_projection(
         if !end.name.is_empty() {
             result.properties.insert(role.into(), json!(end.name));
         }
-        if let Some(value) = end.properties.get("multiplicity") {
+        if value_specifications::has_bound_references(ElementRef::Object(end)) {
+            match multiplicity(references, end) {
+                Ok(bounds) => {
+                    result.properties.insert(
+                        range.into(),
+                        json!(format!(
+                            "{}..{}",
+                            bounds.lower_bound(),
+                            bounds.upper_bound()
+                        )),
+                    );
+                }
+                Err(error) if error.is_unsupported() => {}
+                Err(error) => return Err(error.to_string()),
+            }
+        } else if let Some(value) = end.properties.get("multiplicity") {
             result.properties.insert(range.into(), value.clone());
         }
         let kind = aggregation(end)?;
@@ -651,6 +672,11 @@ pub(crate) fn set_projection_property(
         .iter_mut()
         .find(|element| element.id == id)
         .ok_or("Association member end disappeared")?;
+    if property == "multiplicity"
+        && value_specifications::has_bound_references(ElementRef::Object(end))
+    {
+        return Err("Multiplicity is derived from lowerValue/upperValue identities; edit the bound ValueSpecification instead".into());
+    }
     if property == "name" {
         end.name = value.as_str().ok_or("expected string")?.into();
     } else {
@@ -704,7 +730,33 @@ fn canonical_inputs_changed(
                             .map(|relation| relation.from.clone())
                             .collect::<Vec<_>>()
                     };
-                    properties_changed || owners(before) != owners(after)
+                    let bound_inputs_changed = [previous, current]
+                        .into_iter()
+                        .flatten()
+                        .flat_map(|end| {
+                            ["lowerValue", "upperValue"].into_iter().filter_map(|key| {
+                                end.properties
+                                    .get(key)
+                                    .and_then(|value| reference_id(value).ok().flatten())
+                            })
+                        })
+                        .any(|id| {
+                            before.elements.iter().find(|element| element.id == id)
+                                != after.elements.iter().find(|element| element.id == id)
+                                || before
+                                    .relations
+                                    .iter()
+                                    .filter(|relation| relation.kind == "owns" && relation.to == id)
+                                    .collect::<Vec<_>>()
+                                    != after
+                                        .relations
+                                        .iter()
+                                        .filter(|relation| {
+                                            relation.kind == "owns" && relation.to == id
+                                        })
+                                        .collect::<Vec<_>>()
+                        });
+                    properties_changed || bound_inputs_changed || owners(before) != owners(after)
                 })
         })
 }

@@ -11,3 +11,4 @@ pub mod references;
 pub mod root;
 pub mod schema;
 pub mod types;
+pub mod value_specifications;

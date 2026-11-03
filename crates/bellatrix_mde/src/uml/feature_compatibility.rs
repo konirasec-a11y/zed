@@ -8,7 +8,8 @@ use super::{
     references::ReferenceIndex,
     root::ElementRef,
     schema,
-    types::{MultiplicityError, MultiplicityRange, literal_multiplicity},
+    types::MultiplicityRange,
+    value_specifications::{self, EvaluationError},
 };
 use serde_json::Value;
 
@@ -71,29 +72,11 @@ pub fn resolve_feature_multiplicity(
     references: &ReferenceIndex<'_>,
     element: ElementRef<'_>,
 ) -> Result<MultiplicityRange, QueryError> {
-    if !element.conforms_to("MultiplicityElement") {
-        return Err(QueryError::invalid(
-            element.id(),
-            "multiplicity comparison requires MultiplicityElements",
-        ));
-    }
-    if references
-        .model()
-        .owned_elements(element)
-        .map_err(|error| QueryError::invalid(element.id(), error))?
-        .iter()
-        .any(|child| child.conforms_to("ValueSpecification"))
-    {
-        return Err(QueryError::unsupported(
-            element.id(),
-            "owned ValueSpecifications require bound/role evaluation; literal notation is not proof",
-        ));
-    }
-    literal_multiplicity(element.properties()).map_err(|error| match error {
-        MultiplicityError::UnsupportedValueSpecification => {
-            QueryError::unsupported(element.id(), error.to_string())
+    value_specifications::multiplicity(references, element).map_err(|error| match error {
+        EvaluationError::Invalid { message, .. } => QueryError::invalid(element.id(), message),
+        EvaluationError::Unsupported { message, .. } => {
+            QueryError::unsupported(element.id(), message)
         }
-        _ => QueryError::invalid(element.id(), error.to_string()),
     })
 }
 

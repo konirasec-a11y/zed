@@ -490,6 +490,23 @@ fn inspect_element_with_references(
         }
     }
     apply_normative_contracts(crate::uml::root::ElementRef::Object(element), &mut properties);
+    if crate::uml::value_specifications::has_bound_references(crate::uml::root::ElementRef::Object(element)) {
+        if let Some(field) = properties.iter_mut().find(|field| field.path == "properties.multiplicity") {
+            field.editor = PropertyEditor::ReadOnly;
+            field.editable = false;
+            field.group = "Authored text";
+            field.label = "Preserved multiplicity notation (bound identities are authoritative)".into();
+        }
+        let bounds = crate::uml::value_specifications::multiplicity(references, crate::uml::root::ElementRef::Object(element));
+        for (path, label, lower) in [("uml.lower", "Lower bound (derived)", true), ("uml.upper", "Upper bound (derived)", false)] {
+            let value = match &bounds {
+                Ok(bounds) if lower => json!(bounds.lower_bound().to_string()),
+                Ok(bounds) => json!(bounds.upper_bound().to_string()),
+                Err(error) => json!(error.to_string()),
+            };
+            properties.push(InspectorProperty { path: path.into(), label: label.into(), group: "UML derived", editor: PropertyEditor::ReadOnly, value, editable: false });
+        }
+    }
     if crate::uml::root::ElementRef::Object(element).conforms_to("Operation") {
         let result = crate::uml::operations::return_properties(references, id);
         for key in ["isOrdered", "isUnique", "lower", "upper"] {

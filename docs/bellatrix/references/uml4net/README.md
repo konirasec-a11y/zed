@@ -55,9 +55,55 @@ Pure Association objects can represent n-ary membership and queries return no
 single opposite. The existing binary Relation adapter refuses more than two
 ends as its implementation limit, not a UML prohibition. N-ary diagram edge
 rendering, AssociationClass ownership-slot differentiation, navigability,
-qualifiers, specialization, redefinition and owned ValueSpecification evaluation
-remain outside this slice. Literal multiplicity notation is a declared adapter,
-not a claim that lowerValue/upperValue model identities exist.
+qualifiers and specialized Association semantics remain outside this slice.
+Literal ValueSpecification bounds and Property redefinition consistency have
+subsequent bounded implementations documented below; unevaluated expressions
+remain unsupported.
+
+## Literal ValueSpecifications and identity bounds
+
+`uml/value_specifications.rs` is a pure in-memory evaluator using the shared
+ReferenceIndex and generated scalar/default contracts. It evaluates
+LiteralInteger, LiteralUnlimitedNatural, LiteralBoolean, LiteralString and
+LiteralNull identities. Integer and UnlimitedNatural retain arbitrary precision;
+`*` is not replaced by a machine maximum. Missing Integer/UnlimitedNatural values
+use their generated zero defaults, Boolean uses false, and an absent optional
+LiteralString value remains absent rather than becoming an empty string.
+
+The authoritative sources are UML 2.5.1 §7.8.8 and §§8.6.8–8.6.14, plus XMI
+`MultiplicityElement-lower_is_integer`, `upper_is_unlimitedNatural`,
+`lower_ge_0`, `upper_ge_lower`, and each literal's value query/default.
+`uml4net/Extend/MultiplicityElementExtensions.cs` and generated LiteralInteger /
+LiteralUnlimitedNatural definitions were consulted, not copied. Its tolerant
+cross-conversions between Integer and UnlimitedNatural are deliberately not
+adopted: the semantic `integerValue()` / `unlimitedValue()` result must satisfy
+the official bound predicate. A future evaluator can return the same typed
+values from other ValueSpecifications without restricting valid UML to literals.
+
+Property and Parameter multiplicities resolve lowerValue/upperValue local
+references and verify the canonical owns relation. A reference identifies the
+bound role; it does not create another owner list. A missing bound defaults to
+one independently of the other bound. Old multiplicity notation remains an
+adapter when identity bounds are absent; once bound references exist, it is
+preserved as read-only authored data and cannot override evaluated bounds.
+Binary Association compatibility projections track changes to bound literals.
+Operation return derivation and Property redefinition checks reuse this same
+resolver and the existing interval-containment mathematics.
+
+Malformed/dangling local references, invalid scalar representations, wrong
+known semantic value types and invalid intervals produce Invalid diagnostics.
+External references, opaque/other unevaluated expressions and unsupported
+literal categories (including Real) produce Unsupported diagnostics, not false
+claims of invalid UML. Unassigned owned ValueSpecification roles remain
+unsupported. Computation performs no filesystem/network access and does not
+mutate the graph. Editing policy for semantic models and permissive visual
+drafts remains outside the evaluator. A literal-creation UI, arbitrary
+expression interpreter and general ValueSpecification execution are not added.
+
+The existing public Association flow imports identity-bound Property/Parameter
+records, edits an unbounded-size literal through commands, checks projections,
+retains old notation, rejects invalid edits, distinguishes unknown expressions,
+and reopens JSON/Protobuf. No new test function is introduced.
 
 ## Derived Operation return properties
 
@@ -68,10 +114,10 @@ Without a return Parameter, the results are false, true, null and null.
 With a return Parameter, ordering/uniqueness use its generated scalar defaults;
 missing multiplicity notation is 1..1. The existing shared BigInt Integer and
 UnlimitedNatural interval adapter evaluates literal notation without a machine
-integer limit. Property and Parameter use that same adapter. Present authored
-ValueSpecifications or nonliteral bounds remain explicitly unsupported and
-never masquerade as absent/default bounds. No ValueSpecification identities or
-expression evaluator are invented.
+integer limit. Property and Parameter use that same adapter. Canonical literal ValueSpecifications now resolve through the shared evaluator
+described above. Unevaluated expressions remain explicitly unsupported and
+never masquerade as absent/default bounds; no general expression interpreter is
+claimed.
 
 `uml/operations.rs::return_properties` and the read-only Inspector projection
 ignore historical stored Operation return fields, while preserving and showing
