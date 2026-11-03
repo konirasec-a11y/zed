@@ -15,19 +15,19 @@ mod inspector;
 mod ownership;
 mod path;
 mod plan;
-mod publish;
 mod presentation;
+mod publish;
 mod quick_edit;
 mod relationships;
 mod scope;
 mod structural_diagrams;
 mod structural_rules;
+mod templates;
 pub mod uml;
 mod uml_geometry;
 mod uml_notation;
 mod uml_types;
-mod templates;
-pub use templates::{template_parameters, template_parameter_label, template_parametered_element};
+pub use templates::{template_parameter_label, template_parametered_element, template_parameters};
 
 pub use generation::{
     GenerationGraphError, GenerationModel, GenerationReference, GenerationUnit,
@@ -42,8 +42,11 @@ pub use inspector::{
 };
 pub use path::{PathError, physical_path, validate_segment};
 pub use plan::{Artifact, Diagnostic, Plan, PlanError};
+pub use presentation::{
+    ClassifierPresentation, ClassifierPresentationOptions, SemanticIdentity,
+    classifier_presentation, element_display_label, semantic_identity,
+};
 pub use publish::{publish_new, publish_replace};
-pub use presentation::{SemanticIdentity, semantic_identity, element_display_label};
 pub use quick_edit::{
     QuickEditAction, QuickEditAvailability, QuickEditControl, QuickEditSide, quick_edit_for,
 };
@@ -60,8 +63,8 @@ pub use structural_diagrams::{
     validate_structural_model,
 };
 pub use uml_geometry::{
-    ClassifierContents, FoldedNoteLayout, InterfaceLayout, classifier_contents, folded_note_layout,
-    interface_layout, TemplateSignatureLayout, template_signature_layout,
+    ClassifierContents, FoldedNoteLayout, InterfaceLayout, TemplateSignatureLayout,
+    classifier_contents, folded_note_layout, interface_layout, template_signature_layout,
 };
 pub use uml_types::{UmlCapability, UmlQuickCreate, UmlType};
 

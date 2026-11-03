@@ -57,6 +57,41 @@ pub fn semantic_identity(kind: &str) -> SemanticIdentity<'_> {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ClassifierPresentationOptions {
+    /// Optional active-Class notation (UML 2.5.1 §11.4.4), not semantic state.
+    pub show_active_class_sides: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ClassifierPresentation {
+    pub name_is_italic: bool,
+    pub double_sided: bool,
+}
+
+pub fn classifier_presentation(
+    element: &Element,
+    options: ClassifierPresentationOptions,
+) -> ClassifierPresentation {
+    let Some(kind) = UmlType::from_kind(&element.kind).filter(|kind| kind.is_classifier()) else {
+        return ClassifierPresentation::default();
+    };
+    let property_is_true = |property: &str| {
+        kind.has_property(property)
+            && element.properties.get(property).and_then(Value::as_bool) == Some(true)
+    };
+    // §9.2.4 permits italic names instead of an additional {abstract} annotation.
+    // UMLDI B.7.7 permits double sides only for an active Class (including subclasses).
+    ClassifierPresentation {
+        name_is_italic: property_is_true("isAbstract"),
+        double_sided: options.show_active_class_sides
+            && kind
+                .metaclass()
+                .is_some_and(|name| crate::uml::metamodel::conforms_to(name, "Class"))
+            && property_is_true("isActive"),
+    }
+}
+
 fn text(value: Option<&Value>) -> Option<&str> {
     value
         .and_then(Value::as_str)
@@ -105,6 +140,145 @@ mod tests {
             json!({"id":"member", "kind":kind,"name":"anything", "properties":properties}),
         )
         .expect("fixture")
+    }
+
+    #[test]
+    fn inspector_changes_immediately_drive_classifier_presentation() {
+        let project = serde_json::from_str(include_str!("../fixtures/todo.json")).expect("fixture");
+        let mut section = crate::ModelingSection::from_model(&project);
+        let options = ClassifierPresentationOptions {
+            show_active_class_sides: true,
+        };
+        for kind in ["uml.class", "uml.component"] {
+            section
+                .elements
+                .iter_mut()
+                .find(|element| element.id == "type-list")
+                .expect("class")
+                .kind = kind.into();
+            for active in [true, false, true] {
+                for property in ["isAbstract", "isActive"] {
+                    crate::set_inspected_property(
+                        &mut section,
+                        "type-list",
+                        &format!("properties.{property}"),
+                        json!(active),
+                    )
+                    .expect("typed inherited property");
+                }
+                let classifier = section
+                    .elements
+                    .iter()
+                    .find(|element| element.id == "type-list")
+                    .expect("class");
+                assert_eq!(
+                    classifier_presentation(classifier, options),
+                    ClassifierPresentation {
+                        name_is_italic: active,
+                        double_sided: active
+                    }
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn classifier_notation_reads_strict_semantic_booleans() {
+        let options = ClassifierPresentationOptions {
+            show_active_class_sides: true,
+        };
+        for kind in [
+            "uml.class",
+            "rust.struct",
+            "uml.component",
+            "uml.association_class",
+            "uml.node",
+            "uml.stereotype",
+        ] {
+            let mut classifier = element(kind, json!({"isAbstract":true, "isActive":true}));
+            let presentation = classifier_presentation(&classifier, options);
+            assert_eq!(
+                presentation,
+                ClassifierPresentation {
+                    name_is_italic: true,
+                    double_sided: true
+                },
+                "{kind}"
+            );
+            classifier.name = "Renamed without changing its semantics".into();
+            assert_eq!(classifier_presentation(&classifier, options), presentation);
+            assert!(
+                !classifier_presentation(&classifier, ClassifierPresentationOptions::default())
+                    .double_sided
+            );
+            for value in [
+                json!(false),
+                json!("true"),
+                json!("yes"),
+                json!(1),
+                json!(null),
+                json!({}),
+                json!([]),
+            ] {
+                classifier
+                    .properties
+                    .insert("isAbstract".into(), value.clone());
+                classifier.properties.insert("isActive".into(), value);
+                assert_eq!(
+                    classifier_presentation(&classifier, options),
+                    ClassifierPresentation::default(),
+                    "{kind}"
+                );
+            }
+            classifier.properties.clear();
+            assert_eq!(
+                classifier_presentation(&classifier, options),
+                ClassifierPresentation::default()
+            );
+        }
+    }
+
+    #[test]
+    fn classifier_presentation_never_grants_class_features_to_other_types() {
+        let options = ClassifierPresentationOptions {
+            show_active_class_sides: true,
+        };
+        for kind in [
+            "uml.interface",
+            "uml.signal",
+            "uml.data_type",
+            "uml.enumeration",
+            "uml.artifact",
+            "uml.collaboration",
+        ] {
+            let presentation = classifier_presentation(
+                &element(kind, json!({"isAbstract":true,"isActive":true})),
+                options,
+            );
+            assert!(presentation.name_is_italic, "{kind}");
+            assert!(!presentation.double_sided, "{kind}");
+        }
+        for kind in [
+            "uml.operation",
+            "uml.attribute",
+            "uml.package",
+            "uml.template",
+            "uml.subsystem",
+            "uml.frame",
+            "uml.unknown",
+            "Class",
+            "custom.widget",
+            "",
+        ] {
+            assert_eq!(
+                classifier_presentation(
+                    &element(kind, json!({"isAbstract":true,"isActive":true})),
+                    options
+                ),
+                ClassifierPresentation::default(),
+                "{kind}"
+            );
+        }
     }
 
     #[test]

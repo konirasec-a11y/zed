@@ -1440,6 +1440,13 @@ impl Render for MdeWorkbenchItem {
                         let select_owner = cx.weak_entity();
                         let edit_owner = cx.weak_entity();
                         let mut classifier = UmlClassifier::new(element.name.clone())
+                            .presentation(bellatrix_mde::classifier_presentation(
+                                element,
+                                bellatrix_mde::ClassifierPresentationOptions {
+                                    // The editor chooses the optional active-Class notation.
+                                    show_active_class_sides: true,
+                                },
+                            ))
                             .view_style(&view.style)
                             .model_kind(&element.kind)
                             .view_size(f64::from(local_width), f64::from(local_height), zoom)

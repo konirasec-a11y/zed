@@ -49,6 +49,9 @@ impl RenderOnce for UmlInterfaceBall {
             )
             .into_any_element(),
             None => div()
+                .when(classifier.presentation.name_is_italic, |title| {
+                    title.italic()
+                })
                 .text_size(px(appearance.font_size(12.0, scale)))
                 .text_color(appearance.text(palette.text))
                 .child(classifier.title)

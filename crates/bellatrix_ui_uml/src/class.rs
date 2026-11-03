@@ -1,7 +1,7 @@
 //! Shared classifier labels, compartments and editing. The notation selects the silhouette.
 use crate::{inline_edit::UmlInlineNameEditor, interface::UmlInterfaceBall};
 use bellatrix_design_system::Palette;
-use bellatrix_mde::{UmlHeader, UmlNotation, uml_header, uml_notation};
+use bellatrix_mde::{ClassifierPresentation, UmlHeader, UmlNotation, uml_header, uml_notation};
 use gpui::{
     App, Entity, InteractiveElement, IntoElement, MouseButton, RenderOnce, SharedString, Window,
     div, prelude::*, px, rgb,
@@ -67,6 +67,7 @@ pub struct UmlClassifier {
     pub(crate) class_id: Option<String>,
     pub(crate) title: SharedString,
     pub(crate) header: UmlHeader,
+    pub(crate) presentation: ClassifierPresentation,
     pub(crate) interface_ball: bool,
     pub(crate) attributes: Vec<MemberRow>,
     pub(crate) operations: Vec<MemberRow>,
@@ -91,6 +92,7 @@ impl UmlClassifier {
             class_id: None,
             title: title.into(),
             header: uml_header("", None),
+            presentation: ClassifierPresentation::default(),
             interface_ball: false,
             attributes: Vec::new(),
             operations: Vec::new(),
@@ -108,6 +110,10 @@ impl UmlClassifier {
             view_scale: 1.0,
             appearance: ViewAppearance::default(),
         }
+    }
+    pub fn presentation(mut self, presentation: ClassifierPresentation) -> Self {
+        self.presentation = presentation;
+        self
     }
     pub fn view_style(mut self, style: &bellatrix_mde::Style) -> Self {
         self.appearance = ViewAppearance(style.clone());
@@ -425,7 +431,10 @@ impl RenderOnce for UmlClassifier {
         let title = match title_editor {
             Some(field) => inline_field(field, self.confirm_edit.clone(), self.cancel_edit.clone())
                 .into_any_element(),
-            None => div().child(self.title).into_any_element(),
+            None => div()
+                .when(self.presentation.name_is_italic, |title| title.italic())
+                .child(self.title)
+                .into_any_element(),
         };
         let edit_title = self.edit_title.clone();
         let header_height = self.header.classifier_header_height();
@@ -531,6 +540,19 @@ impl RenderOnce for UmlClassifier {
             .size_full()
             .relative()
             .child(body)
+            .when(self.presentation.double_sided, |element| {
+                element.child(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .bottom_0()
+                        .left(px(5.0 * scale))
+                        .right(px(5.0 * scale))
+                        .border_l(px(appearance.width(1.0, scale, self.selected)))
+                        .border_r(px(appearance.width(1.0, scale, self.selected)))
+                        .border_color(line),
+                )
+            })
             .when_some(signature, |element, signature| element.child(signature))
             .into_any_element()
     }
@@ -539,6 +561,31 @@ impl RenderOnce for UmlClassifier {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn semantic_presentation_is_independent_of_style_and_notation_builder_order() {
+        let presentation = ClassifierPresentation {
+            name_is_italic: true,
+            double_sided: true,
+        };
+        let style = bellatrix_mde::Style {
+            stroke_width: Some(3.0),
+            font_size: Some(18.0),
+            ..Default::default()
+        };
+        let classifier = UmlClassifier::new("Renamed")
+            .presentation(presentation)
+            .model_kind("uml.component")
+            .view_style(&style)
+            .stereotype("Service")
+            .view_size(200.0, 130.0, 2.0);
+        assert_eq!(classifier.presentation, presentation);
+        assert_eq!(classifier.title.as_ref(), "Renamed");
+        assert_eq!(classifier.appearance.0.stroke_width, Some(3.0));
+        assert_eq!(classifier.appearance.0.font_size, Some(18.0));
+        assert_eq!(classifier.view_width, 200.0);
+        assert_eq!(classifier.view_height, 130.0);
+    }
 
     #[test]
     fn template_rows_keep_semantic_ids_and_authoritative_labels_without_invented_syntax() {
