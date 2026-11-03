@@ -63,8 +63,9 @@ pub use structural_diagrams::{
     validate_structural_model,
 };
 pub use uml_geometry::{
-    ClassifierContents, FoldedNoteLayout, InterfaceLayout, TemplateSignatureLayout,
-    classifier_contents, folded_note_layout, interface_layout, template_signature_layout,
+    ClassifierContents, FoldedNoteLayout, FrameHeadingLayout, InterfaceLayout, PortLabelLayout,
+    TemplateSignatureLayout, classifier_contents, folded_note_layout, frame_heading_layout,
+    interface_layout, port_label_layout, template_signature_layout,
 };
 pub use uml_types::{UmlCapability, UmlQuickCreate, UmlType};
 

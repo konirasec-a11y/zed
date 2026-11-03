@@ -4,7 +4,10 @@ use crate::{
     inline_edit::UmlInlineNameEditor,
 };
 use bellatrix_design_system::Palette;
-use bellatrix_mde::{UmlNotation, folded_note_layout, uml_header, uml_notation};
+use bellatrix_mde::{
+    UmlNotation, folded_note_layout, frame_heading_layout, port_label_layout, uml_header,
+    uml_notation,
+};
 use gpui::{
     App, Bounds, Entity, InteractiveElement, IntoElement, MouseButton, PathBuilder, Pixels,
     RenderOnce, SharedString, Window, canvas, div, point, prelude::*, px,
@@ -20,6 +23,7 @@ pub struct UmlFigure {
     applied_stereotype: Option<SharedString>,
     selected: bool,
     scale: f32,
+    view_width: f64,
     appearance: ViewAppearance,
     edit: Option<Action>,
     editor: Option<(Entity<InputField>, Action, Action)>,
@@ -44,6 +48,7 @@ impl UmlFigure {
             applied_stereotype: None,
             selected: false,
             scale: 1.0,
+            view_width: 16.0,
             appearance: ViewAppearance::default(),
             edit: None,
             editor: None,
@@ -80,6 +85,12 @@ impl UmlFigure {
             self.scale = scale;
         }
         self
+    }
+    pub fn view_size(mut self, width: f64, _height: f64, scale: f32) -> Self {
+        if width.is_finite() && width > 0.0 {
+            self.view_width = width;
+        }
+        self.view_scale(scale)
     }
     pub fn on_title_edit(mut self, handler: impl Fn(&mut Window, &mut App) + 'static) -> Self {
         self.edit = Some(Rc::new(handler));
@@ -134,10 +145,42 @@ fn paint_folded_paper(
         Err(error) => log::error!("UML paper outline: {error}"),
     }
 }
+fn paint_frame_heading(
+    bounds: Bounds<Pixels>,
+    scale: f32,
+    palette: Palette,
+    selected: bool,
+    appearance: &ViewAppearance,
+    window: &mut Window,
+) {
+    let layout = frame_heading_layout(
+        f64::from(bounds.size.width) / f64::from(scale),
+        f64::from(bounds.size.height) / f64::from(scale),
+    );
+    let outline = layout.outline.map(|position| {
+        point(
+            bounds.origin.x + px(position.x as f32 * scale),
+            bounds.origin.y + px(position.y as f32 * scale),
+        )
+    });
+    let mut fill = PathBuilder::fill();
+    fill.add_polygon(&outline, true);
+    match fill.build() {
+        Ok(path) => window.paint_path(path, appearance.fill(palette.panel_alt)),
+        Err(error) => log::error!("UML frame heading fill: {error}"),
+    }
+    let mut border = PathBuilder::stroke(px(appearance.width(1.0, scale, selected)));
+    border.add_polygon(&outline, true);
+    match border.build() {
+        Ok(path) => window.paint_path(path, appearance.stroke(palette, selected)),
+        Err(error) => log::error!("UML frame heading outline: {error}"),
+    }
+}
 impl RenderOnce for UmlFigure {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let palette = Palette::current(cx);
         let scale = self.scale;
+        let port_label = port_label_layout(self.view_width);
         let selected = self.selected;
         let signature = self
             .template_parameters
@@ -265,16 +308,16 @@ impl RenderOnce for UmlFigure {
             }
             UmlNotation::Port => div()
                 .size_full()
+                .relative()
                 .border(px(appearance.width(1.0, scale, selected)))
                 .border_color(border)
                 .bg(appearance.fill(palette.panel_alt))
                 .child(
                     div()
-                        .size_full()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .text_size(px(8.0 * scale))
+                        .absolute()
+                        .left(px(port_label.left as f32 * scale))
+                        .top(px(port_label.top as f32 * scale))
+                        .whitespace_nowrap()
                         .child(title_area),
                 )
                 .into_any_element(),
@@ -309,14 +352,38 @@ impl RenderOnce for UmlFigure {
                     div()
                         .w(px(142.0 * scale))
                         .h(px(30.0 * scale))
-                        .border_r(px(appearance.width(1.0, scale, false)))
-                        .border_b(px(appearance.width(1.0, scale, false)))
-                        .border_color(border)
-                        .px_2()
-                        .flex()
-                        .items_center()
-                        .bg(appearance.fill(palette.panel_alt))
-                        .child(title_area),
+                        .max_w_full()
+                        .max_h_full()
+                        .relative()
+                        .child(
+                            canvas(
+                                |_, _, _| (),
+                                move |bounds, (), window, _| {
+                                    paint_frame_heading(
+                                        bounds,
+                                        scale,
+                                        palette,
+                                        selected,
+                                        &appearance,
+                                        window,
+                                    );
+                                },
+                            )
+                            .absolute()
+                            .size_full(),
+                        )
+                        .child(
+                            div()
+                                .absolute()
+                                .left(px(8.0 * scale))
+                                .right(px(16.0 * scale))
+                                .top_0()
+                                .bottom_0()
+                                .flex()
+                                .items_center()
+                                .overflow_hidden()
+                                .child(title_area),
+                        ),
                 )
                 .into_any_element(),
             UmlNotation::AssociationDiamond => div()

@@ -1543,6 +1543,8 @@ impl Render for MdeWorkbenchItem {
                             let edit_id = element.id.clone();
                             let label = if element.kind == "uml.constraint" {
                                 format!("{{{}}}", element.name)
+                            } else if element.kind == "uml.port" {
+                                bellatrix_mde::element_display_label(element)
                             } else {
                                 element.name.clone()
                             };
@@ -1550,7 +1552,7 @@ impl Render for MdeWorkbenchItem {
                                 .with_template_parameters_from(&classifier)
                                 .view_style(&view.style)
                                 .selected(is_selected)
-                                .view_scale(zoom)
+                                .view_size(f64::from(local_width), f64::from(local_height), zoom)
                                 .on_title_edit(move |window, cx| {
                                     let id = edit_id.clone();
                                     let _ = edit_owner.update(cx, |item, cx| {

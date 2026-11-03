@@ -195,9 +195,117 @@ pub fn folded_note_layout(width: f64, height: f64) -> FoldedNoteLayout {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FrameHeadingLayout {
+    pub outline: [Point; 5],
+}
+
+pub fn frame_heading_layout(width: f64, height: f64) -> FrameHeadingLayout {
+    let width = finite_size(width);
+    let height = finite_size(height);
+    let inset = 0.5_f64.min(width / 4.0).min(height / 4.0);
+    let cut = 10.0_f64.min(width / 4.0).min(height / 3.0);
+    let right = width - inset;
+    let bottom = height - inset;
+    FrameHeadingLayout {
+        outline: [
+            Point { x: inset, y: inset },
+            Point { x: right, y: inset },
+            Point {
+                x: right,
+                y: bottom - cut,
+            },
+            Point {
+                x: right - cut,
+                y: bottom,
+            },
+            Point {
+                x: inset,
+                y: bottom,
+            },
+        ],
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PortLabelLayout {
+    pub left: f64,
+    pub top: f64,
+}
+
+pub fn port_label_layout(body_width: f64) -> PortLabelLayout {
+    // The label is decoration, not part of the View bounds used for routing.
+    PortLabelLayout {
+        left: finite_size(body_width) + 4.0,
+        top: 0.0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn frame_heading_cuts_only_the_lower_right_corner_within_bounds() {
+        for (width, height) in [(142.0, 30.0), (284.0, 60.0), (8.0, 4.0), (1.0, 1.0)] {
+            let layout = frame_heading_layout(width, height);
+            let [top_left, top_right, cut_top, cut_bottom, bottom_left] = layout.outline;
+            assert_eq!(top_left.y, top_right.y);
+            assert_eq!(top_right.x, cut_top.x);
+            assert_eq!(cut_bottom.y, bottom_left.y);
+            assert!(cut_top.y < cut_bottom.y);
+            assert!(cut_bottom.x < cut_top.x);
+            for scale in [0.25, 1.0, 3.0] {
+                for point in layout.outline {
+                    assert!((0.0..=width * scale).contains(&(point.x * scale)));
+                    assert!((0.0..=height * scale).contains(&(point.y * scale)));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn port_label_is_outside_the_unchanged_body_at_every_scale() {
+        for width in [1.0, 16.0, 32.0, 100.0] {
+            let layout = port_label_layout(width);
+            for scale in [0.25, 1.0, 3.0] {
+                assert!(layout.left * scale > width * scale);
+                assert_eq!(layout.top, 0.0);
+            }
+        }
+    }
+
+    #[test]
+    fn port_label_projection_does_not_change_views_or_connector_anchors() {
+        let project = serde_json::from_str(include_str!("../fixtures/todo.json")).expect("fixture");
+        let mut section = ModelingSection::from_model(&project);
+        let port = section
+            .elements
+            .iter_mut()
+            .find(|element| element.id == "type-list")
+            .expect("owner");
+        port.kind = "uml.port".into();
+        port.properties
+            .insert("type".into(), serde_json::json!("Service"));
+        let before = section.clone();
+        let anchors =
+            crate::relationships::route(&section, "diagram-tasks", "type-list", "type-task")
+                .expect("route");
+        let port = section
+            .elements
+            .iter()
+            .find(|element| element.id == "type-list")
+            .expect("port");
+        assert!(crate::element_display_label(port).ends_with(": Service"));
+        let label = port_label_layout(16.0);
+        assert!(label.left > 16.0);
+        assert_eq!(section, before);
+        assert_eq!(
+            crate::relationships::route(&section, "diagram-tasks", "type-list", "type-task")
+                .expect("route"),
+            anchors
+        );
+    }
+
     #[test]
     fn interface_resize_changes_circle_and_keeps_anchor_on_circumference() {
         let contents = ClassifierContents::default();
