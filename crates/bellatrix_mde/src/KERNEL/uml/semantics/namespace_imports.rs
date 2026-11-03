@@ -594,6 +594,10 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
         let results = match member_distinctions(references, namespace.id()) {
             Ok(results) => results,
             Err(error) => {
+                let cause_id = match &error {
+                    QueryError::Invalid { subject_id, .. }
+                    | QueryError::Unsupported { subject_id, .. } => subject_id.clone(),
+                };
                 let (severity, code) = if matches!(error, QueryError::Unsupported { .. }) {
                     (
                         StructuralSeverity::Warning,
@@ -605,7 +609,9 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
                 issues.push(StructuralDiagnostic {
                     severity,
                     code,
-                    subject_id: namespace.id().into(),
+                    // A failed inherited query belongs to its causal element;
+                    // another dependent namespace does not introduce that defect.
+                    subject_id: cause_id,
                     message: error.to_string(),
                 });
                 continue;
@@ -885,4 +891,37 @@ pub(crate) fn set_namespace_import(
     }
     *section = candidate;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Project;
+
+    #[test]
+    fn inherited_namespace_failure_keeps_the_causal_subject_identity() -> serde_json::Result<()> {
+        let project: Project = serde_json::from_value(json!({
+            "id": "project", "name": "Causal diagnostics",
+            "elements": [
+                {"id": "ancestor", "kind": "uml.class", "name": "Ancestor"},
+                {"id": "dependent", "kind": "uml.class", "name": "Dependent"}
+            ],
+            "relations": [
+                {"id": "existing-cycle", "kind": "uml.generalization", "from": "ancestor", "to": "ancestor"},
+                {"id": "inherits", "kind": "uml.generalization", "from": "dependent", "to": "ancestor"}
+            ]
+        }))?;
+        let references = ReferenceIndex::new(Model::from_project(&project));
+        let inherited_failure = member_distinctions(&references, "dependent");
+        assert!(matches!(inherited_failure,
+            Err(QueryError::Invalid { ref subject_id, .. }) if subject_id == "ancestor"));
+        let issues = validate(&references);
+        assert_eq!(issues.len(), 2, "{issues:#?}");
+        assert!(issues.iter().all(|issue|
+            issue.subject_id == "ancestor"
+                && issue.code == "UML_NAMESPACE_DISTINGUISHABILITY"
+                && issue.severity == StructuralSeverity::Error), "{issues:#?}");
+        assert_eq!(issues.first(), issues.last());
+        Ok(())
+    }
 }

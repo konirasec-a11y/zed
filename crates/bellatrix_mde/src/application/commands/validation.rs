@@ -208,7 +208,8 @@ mod tests {
         edge(&mut model, "old-c-d", "c", "d");
         rejected_without_mutation(&model, create("d", "c"), "UML_GENERALIZATION_CYCLE");
         rejected_without_mutation(&model, create("c", "c"), "UML_GENERALIZATION_CYCLE");
-        assert!(apply(&model, &create("c", "a"), 0).is_ok());
+        let result = apply(&model, &create("c", "a"), 0);
+        assert!(result.is_ok(), "{result:?}");
         Ok(())
     }
 
@@ -230,7 +231,8 @@ mod tests {
                 dy: 20.0,
             },
         ] {
-            assert!(apply(&model, &command, 0).is_ok());
+            let result = apply(&model, &command, 0);
+            assert!(result.is_ok(), "{command:?}: {result:?}");
         }
         Ok(())
     }
@@ -300,6 +302,30 @@ mod tests {
     }
 
     #[test]
+    fn interface_realization_has_no_visibility_without_namespace() -> serde_json::Result<()> {
+        let model = project(["uml.class", "uml.interface", "uml.class", "uml.class"])?;
+        let command = Command::CreateRelation {
+            diagram_id: "diagram".into(),
+            kind: ModelingRelationKind::InterfaceRealization,
+            from: "a".into(),
+            to: "b".into(),
+        };
+        let result = apply(&model, &command, 0);
+        assert!(result.is_ok(), "{result:?}");
+        let mut updated = result.unwrap();
+        let relation = updated.relations.iter_mut()
+            .find(|relation| relation.kind == "uml.interface_realization").unwrap();
+        assert_eq!(relation.properties.get("visibility"), Some(&serde_json::Value::Null));
+        let relation_id = relation.id.clone();
+        relation.properties.insert("visibility".into(), serde_json::json!("public"));
+        assert!(crate::uml::root::Model::from_project(&updated).validate().iter().any(|issue|
+            issue.code == "UML_VISIBILITY_NEEDS_OWNERSHIP"
+                && issue.subject_id == relation_id
+                && issue.severity == StructuralSeverity::Error));
+        Ok(())
+    }
+
+    #[test]
     fn existing_invalid_association_does_not_block_unrelated_new_relationships_or_rename()
     -> serde_json::Result<()> {
         let mut model = project(["uml.package", "uml.class", "uml.class", "uml.interface"])?;
@@ -322,7 +348,8 @@ mod tests {
                 name: "Draft package".into(),
             },
         ] {
-            assert!(apply(&model, &command, 0).is_ok());
+            let result = apply(&model, &command, 0);
+            assert!(result.is_ok(), "{command:?}: {result:?}");
         }
         Ok(())
     }

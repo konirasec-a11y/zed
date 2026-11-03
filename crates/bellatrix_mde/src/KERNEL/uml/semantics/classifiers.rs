@@ -128,7 +128,7 @@ pub(crate) fn properties(
     let descriptor = element
         .metaclass()
         .and_then(schema::uml_classifier)
-        .ok_or_else(|| QueryError::invalid(element.id(), "a UML Namespace is required"))?;
+        .ok_or_else(|| QueryError::unsupported(element.id(), "normative metaclass properties are unavailable"))?;
     let inherited = schema::inherited_properties(descriptor.id)
         .map_err(|error| QueryError::unsupported(element.id(), error.to_string()))?;
     if !inherited.unresolved.is_empty() {

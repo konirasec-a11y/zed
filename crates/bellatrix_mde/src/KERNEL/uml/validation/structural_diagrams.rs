@@ -458,6 +458,23 @@ pub fn validate_structural_model(project: &Project) -> Vec<StructuralDiagnostic>
 mod tests {
     use super::*;
     use crate::{PathSegment, Point, Style, View};
+
+    fn assert_legacy_association_warnings(issues: Vec<StructuralDiagnostic>, subject: &str, aggregation: bool) {
+        let mut expected = vec![
+            ("MDE_ASSOCIATION_ENDS_UNMATERIALIZED", "Association memberEnd identities are not materialized; legacy endpoint notation is not a complete Association kernel model"),
+            ("UML_NAMESPACE_QUERY_UNSUPPORTED", "Association memberEnd identities are not materialized; migrate the legacy binary notation first"),
+            ("MDE_PROPERTY_CONTRACT_UNVERIFIED", "Association-memberEnd: required reference/collection needs its canonical role projection"),
+        ];
+        if aggregation {
+            expected.push(("MDE_PROPERTY_CONTRACT_UNVERIFIED", "end1Aggregation: no normative property or registered extension contract"));
+        }
+        assert!(issues.iter().all(|issue| issue.severity == StructuralSeverity::Warning && issue.subject_id == subject), "{issues:#?}");
+        let mut actual = issues.iter().map(|issue| (issue.code, issue.message.as_str())).collect::<Vec<_>>();
+        actual.sort_unstable();
+        expected.sort_unstable();
+        assert_eq!(actual, expected);
+    }
+
     fn fixture() -> Project {
         serde_json::from_str(include_str!("../../../../fixtures/todo.json")).unwrap()
     }
@@ -493,10 +510,13 @@ mod tests {
     }
     #[test]
     fn explicitly_typed_class_diagram_validates() {
-        assert!(
-            validate_structural_diagram(&fixture(), "diagram-tasks", StructuralDiagramKind::Class)
-                .is_empty()
-        );
+        let issues = validate_structural_diagram(&fixture(), "diagram-tasks", StructuralDiagramKind::Class);
+        assert!(issues.iter().all(|issue| issue.severity == StructuralSeverity::Warning && issue.code == "MDE_PROPERTY_CONTRACT_UNVERIFIED"), "{issues:#?}");
+        let mut actual = issues.iter().map(|issue| (issue.subject_id.as_str(), issue.message.as_str())).collect::<Vec<_>>();
+        actual.sort_unstable();
+        let declaration = "declaration: no normative property or registered extension contract";
+        let signature = "signature: no normative property or registered extension contract";
+        assert_eq!(actual, vec![("field-completed", declaration), ("field-tasks", declaration), ("field-title", declaration), ("fn-add", signature), ("fn-complete", signature)]);
     }
     #[test]
     fn edges_must_be_paths_not_class_rectangles() {
@@ -864,12 +884,12 @@ mod tests {
             "uml.collaboration",
         ] {
             let project = context_project(kind, context_kind, &["context"])?;
-            assert!(
-                validate_structural_diagram(&project, "context-diagram", kind).iter().all(|issue|
-                    issue.severity == StructuralSeverity::Warning && matches!(issue.code,
-                        "MDE_ASSOCIATION_ENDS_UNMATERIALIZED" | "UML_NAMESPACE_QUERY_UNSUPPORTED")),
-                "{context_kind}"
-            );
+            let issues = validate_structural_diagram(&project, "context-diagram", kind);
+            if context_kind == "uml.association_class" {
+                assert_legacy_association_warnings(issues, "context", false);
+            } else {
+                assert!(issues.is_empty(), "{context_kind}: {issues:#?}");
+            }
         }
         for context_kind in [
             "uml.package",
@@ -973,9 +993,7 @@ mod tests {
                     Some(RootMetaclass::Relationship)
                 );
             }
-            assert!(validate_structural_model(&project).iter().all(|issue|
-                issue.severity == StructuralSeverity::Warning && matches!(issue.code,
-                    "MDE_ASSOCIATION_ENDS_UNMATERIALIZED" | "UML_NAMESPACE_QUERY_UNSUPPORTED")));
+            assert_legacy_association_warnings(validate_structural_model(&project), "specialization", true);
         }
         Ok(())
     }

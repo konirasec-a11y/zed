@@ -175,6 +175,23 @@ mod tests {
     use crate::validate_structural_model;
     use serde_json::{Value, json};
 
+
+    fn assert_legacy_association_warnings(issues: Vec<StructuralDiagnostic>, subject: &str, aggregation: bool) {
+        let mut expected = vec![
+            ("MDE_ASSOCIATION_ENDS_UNMATERIALIZED", "Association memberEnd identities are not materialized; legacy endpoint notation is not a complete Association kernel model"),
+            ("UML_NAMESPACE_QUERY_UNSUPPORTED", "Association memberEnd identities are not materialized; migrate the legacy binary notation first"),
+            ("MDE_PROPERTY_CONTRACT_UNVERIFIED", "Association-memberEnd: required reference/collection needs its canonical role projection"),
+        ];
+        if aggregation {
+            expected.push(("MDE_PROPERTY_CONTRACT_UNVERIFIED", "end1Aggregation: no normative property or registered extension contract"));
+        }
+        assert!(issues.iter().all(|issue| issue.severity == StructuralSeverity::Warning && issue.subject_id == subject), "{issues:#?}");
+        let mut actual = issues.iter().map(|issue| (issue.code, issue.message.as_str())).collect::<Vec<_>>();
+        actual.sort_unstable();
+        expected.sort_unstable();
+        assert_eq!(actual, expected);
+    }
+
     fn fixture(
         source: &str,
         target: &str,
@@ -262,9 +279,12 @@ mod tests {
                 "uml.interface_realization",
                 json!({}),
             )?;
-            assert!(validate_structural_model(&project).iter().all(|issue|
-                issue.severity == StructuralSeverity::Warning && matches!(issue.code,
-                    "MDE_ASSOCIATION_ENDS_UNMATERIALIZED" | "UML_NAMESPACE_QUERY_UNSUPPORTED")), "{source}");
+            let issues = validate_structural_model(&project);
+            if source == "uml.association_class" {
+                assert_legacy_association_warnings(issues, "a", false);
+            } else {
+                assert!(issues.is_empty(), "{source}: {issues:#?}");
+            }
         }
         Ok(())
     }
@@ -406,9 +426,7 @@ mod tests {
     -> serde_json::Result<()> {
         let mut project = fixture("uml.class", "uml.class", "uml.association", json!({}))?;
         project.relations[0].to = "a".into();
-        assert!(validate_structural_model(&project).iter().all(|issue|
-            issue.severity == StructuralSeverity::Warning && matches!(issue.code,
-                "MDE_ASSOCIATION_ENDS_UNMATERIALIZED" | "UML_NAMESPACE_QUERY_UNSUPPORTED")));
+        assert_legacy_association_warnings(validate_structural_model(&project), "r", false);
         project.relations[0].to = "missing".into();
         assert!(validate(&project).is_empty());
         Ok(())

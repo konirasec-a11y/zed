@@ -626,6 +626,10 @@ fn create_relation(
     if kind == ModelingRelationKind::PackageImport {
         properties.insert("visibility".into(), serde_json::json!("public"));
     }
+    if kind == ModelingRelationKind::InterfaceRealization {
+        // implementingClassifier is an owner, not a derived namespace.
+        properties.insert("visibility".into(), serde_json::Value::Null);
+    }
     let (semantic_kind, aggregation) = relation_kind_for_creation(kind);
     if let Some(aggregation) = aggregation {
         properties.insert("end1Aggregation".into(), serde_json::json!(aggregation));
