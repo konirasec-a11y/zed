@@ -103,6 +103,11 @@ compartilhada publicada em `75367884a6e44bf34041179968149287f56f5f42`
 completo posterior de `-p bellatrix_mde` passa **874/874, zero falhas e
 ignorados**. As duas obrigações são adicionais ao inventário inicial de 127
 IDs, sem ampliar silenciosamente aquele denominador.
+FinalState::cannot_reference_submachine tem recorte publicado em
+`94364915625c7d775b9acbfcf497a6126cfa2339` (E72), incluindo evidência do
+inverso submachineState. Nove integrações e um teste unitário novos passam;
+o gate completo posterior de `-p bellatrix_mde` passa **884/884, zero falhas
+e ignorados**. submachine permanece read-only no editor.
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -218,7 +223,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E71 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E72 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -1157,6 +1162,47 @@ de execução nova. E12–E71 possuem os gates delimitados nas seções seguinte
   Diagnósticos: `UML_STATE_MACHINE_CONNECTION_POINTS`,
   `MDE_STATE_MACHINE_CONNECTION_POINTS_UNVERIFIED`,
   `UML_STATE_ENTRY_OR_EXIT` e `MDE_STATE_ENTRY_OR_EXIT_UNVERIFIED`.
+
+- **E72**: `semantics/state_machines.rs`, `final_state_submachine` e
+  `validate`, no validador compartilhado; `final_state_submachine.rs`, nove
+  testes de integração, e o teste unitário
+  `final_state_transaction_gate_rejects_new_submachine_and_accepts_repair`.
+  Ausência/null de submachine satisfaz o predicado apenas na ausência de
+  evidência contrária. Referência presente local ou externa comprova coleção
+  não vazia; incerteza do tipo externo não transforma essa violação em warning.
+  O inverso explicitamente armazenado StateMachine::submachineState também
+  fornece evidência da associação: inclusão do FinalState prova a violação,
+  mesmo sem referência direta. Não usar containment ou cache isSubmachineState
+  como substitutos da associação normativa.
+  Os contratos direto e inverso são verificados. Referência malformada/local
+  inexistente, alvo conhecido incompatível, duplicatas, contradições entre
+  pontas e múltiplos inversos que indicam máquinas diferentes são Invalid.
+  Inverso incompleto com referências externas permanece Unknown quando não
+  existe testemunho independente de violação. Identidades locais completas
+  permitem decidir exclusão mesmo com tipo de outro membro desconhecido;
+  o warning de contrato desse membro é preservado, e referências inválidas
+  não são suprimidas. Diagnósticos da regra:
+  `UML_FINAL_STATE_CANNOT_REFERENCE_SUBMACHINE` e
+  `MDE_FINAL_STATE_SUBMACHINE_UNVERIFIED`.
+
+### Evidência publicada de submachine em FinalState
+
+Commit inspecionado: `94364915625c7d775b9acbfcf497a6126cfa2339`.
+O log `/tmp/final-state-submachine-identities-gate.log` registra **884/884
+aprovados, zero falhas e zero ignorados** no gate completo de
+`-p bellatrix_mde`: 164 testes lib e 720 integrações, incluindo **9/9** no
+novo alvo final_state_submachine e o teste unitário do gate transacional.
+
+A regra é exercitada por snapshots importados, roundtrip e API pública de
+validação. O teste unitário de validate_changes rejeita introdução de
+referência direta local/externa ou evidência apenas inversa e aceita reparo,
+sem mutação da origem. Isso não comprova autoria por SetProperty: submachine
+continua read-only no editor, e o teste propõe snapshots ao gate transacional
+interno. Não remover essa limitação nem anunciar edição habilitada.
+
+Gate anterior à publicação, sem rerun no SHA publicado nem execução nova por
+esta matriz. Este recorte não certifica FinalState/StateMachine integralmente,
+execução comportamental, UI, geração, interchange ou conformidade UML completa.
 
 ### Evidência publicada de connectionPoint em State e StateMachine
 
@@ -2766,7 +2812,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 ## Obrigações adicionais ao inventário estrutural inicial
 
-Estas duas linhas de StateMachines têm evidência própria. Não alteram a
+Estas três linhas de StateMachines têm evidência própria. Não alteram a
 extração histórica das 127 invariantes diretas dos sete pacotes selecionados
 nem constituem inventário completo de StateMachines.
 
@@ -2781,6 +2827,12 @@ nem constituem inventário completo de StateMachines.
 - Metaclass: `State`. Estado: **P**. Evidência: E71; commit `75367884a6e44bf34041179968149287f56f5f42`.
 - OCL publicado: `connectionPoint->forAll(kind = PseudostateKind::entryPoint or kind = PseudostateKind::exitPoint)`.
 - Referências externas/metaclasses desconhecidas e membership não resolvido permanecem Unknown; vértices de Region não são connectionPoint desta regra.
+
+### `FinalState-cannot_reference_submachine`
+
+- Metaclass: `FinalState`. Estado: **P**. Evidência: E72; commit `94364915625c7d775b9acbfcf497a6126cfa2339`.
+- OCL publicado: `submachine->isEmpty()`.
+- Referência direta e inverso submachineState são verificados; inverso incompleto sem testemunho independente permanece Unknown. submachine continua read-only no editor.
 
 ## Plano executável e dependências
 

@@ -122,6 +122,69 @@ fn final_state_submachine(references: &ReferenceIndex<'_>, state: ElementRef<'_>
     require_all(checks)
 }
 
+fn region_owned(references: &ReferenceIndex<'_>, region: ElementRef<'_>) -> Result<bool, QueryError> {
+    let mut checks = Vec::new();
+    let owner = references.model().owner(region)
+        .map_err(|error| QueryError::invalid(region.id(), error))?;
+    if references.model().ownership_links().filter(|edge| edge.to == region.id()).count() > 1 {
+        return Err(QueryError::invalid(region.id(), "duplicate canonical Region ownership"));
+    }
+    let mut canonical_role = None;
+    let mut unresolved_owner = false;
+    if let Some(owner) = owner {
+        references.element(owner.id()).map_err(|error| QueryError::invalid(region.id(), error))?;
+        let role = if owner.conforms_to("StateMachine") {
+            Some(("stateMachine", "StateMachine-region"))
+        } else if owner.conforms_to("State") {
+            Some(("state", "State-region"))
+        } else if owner.metaclass().is_none() {
+            unresolved_owner = true;
+            checks.push(Err(QueryError::unsupported(region.id(), "canonical owner metaclass is unresolved")));
+            None
+        } else { None };
+        if let Some((role, composite)) = role {
+            // Region has exactly one composite role under each known owner
+            // type. Unresolved forward references cannot erase that canonical
+            // ownership witness when testing the two inverse roles.
+            canonical_role = Some(role);
+            match classifiers::contributes_to_owned_union(owner, region, composite) {
+                Ok(true) => {}
+                Ok(false) => checks.push(Err(QueryError::invalid(region.id(), "canonical owner excludes the Region composite role"))),
+                Err(error) => checks.push(Err(error)),
+            }
+        }
+    }
+    let mut present = Vec::new();
+    for role in ["state", "stateMachine"] {
+        let descriptor = schema::uml_property("Region", role)
+            .map_err(|error| QueryError::unsupported(region.id(), error.to_string()))?
+            .ok_or_else(|| QueryError::unsupported(region.id(), format!("missing Region::{role} contract")))?;
+        let authored = region.properties().get(role);
+        present.push(canonical_role == Some(role) || authored.is_some_and(|value| !value.is_null()));
+        let Some(value) = authored else { continue; };
+        checks.push(match property_contracts::check_value(references, region, descriptor, value) {
+            PropertyOutcome::Satisfied => Ok(true),
+            PropertyOutcome::Violation(message) => Err(QueryError::invalid(region.id(), message)),
+            PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(region.id(), message)),
+        });
+        if let Ok(target) = reference_id(value) {
+            if let Some(target) = target {
+                // A local identity different from the canonical owner is a
+                // contradiction even if that owner's metaclass is unresolved.
+                if owner.map(ElementRef::id) != Some(target)
+                    || (!unresolved_owner && canonical_role != Some(role))
+                {
+                    checks.push(Err(QueryError::invalid(region.id(), format!("{role} contradicts canonical Region ownership"))));
+                }
+            } else if canonical_role == Some(role) {
+                checks.push(Err(QueryError::invalid(region.id(), format!("null {role} contradicts canonical Region ownership"))));
+            }
+        }
+    }
+    checks.push(Ok(present.iter().filter(|present| **present).count() <= 1));
+    require_all(checks)
+}
+
 pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     for element in references.model().elements() {
@@ -134,6 +197,11 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             constraints.push((connection_points(references, element),
                 "UML_STATE_ENTRY_OR_EXIT", "MDE_STATE_ENTRY_OR_EXIT_UNVERIFIED",
                 "State-entry_or_exit", "connection points must have kind entryPoint or exitPoint"));
+        }
+        if element.conforms_to("Region") {
+            constraints.push((region_owned(references, element),
+                "UML_REGION_OWNED", "MDE_REGION_OWNED_UNVERIFIED",
+                "Region-owned", "a Region cannot have both state and stateMachine owners"));
         }
         if element.conforms_to("FinalState") {
             constraints.push((final_state_submachine(references, element),
