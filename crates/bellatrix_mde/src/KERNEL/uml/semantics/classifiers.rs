@@ -153,14 +153,47 @@ pub(crate) struct OwnershipRoles {
     pub is_resolved: bool,
 }
 
-fn contains_reference(value: &Value, id: &str) -> Result<bool, String> {
-    let values = value.as_array().map(Vec::as_slice)
-        .unwrap_or_else(|| std::slice::from_ref(value));
+fn contains_reference(
+    value: &Value,
+    id: &str,
+    subject: &str,
+    property: &PropertyDescriptor,
+) -> Result<bool, QueryError> {
+    let collection = !matches!(property.upper, "0" | "1");
+    let values = if collection {
+        value.as_array().map(Vec::as_slice).ok_or_else(||
+            QueryError::invalid(subject, format!("{} requires a reference collection", property.id.fragment)))?
+    } else {
+        std::slice::from_ref(value)
+    };
     let mut contains = false;
+    let mut unknown = None;
+    let mut seen = HashSet::new();
+    let mut external = HashSet::new();
     for value in values {
-        contains |= reference_id(value)? == Some(id);
+        if value.as_object().is_some_and(|value| value.contains_key("href")) {
+            if property.is_unique && !external.insert(value.get("href").map(Value::to_string)) {
+                return Err(QueryError::invalid(subject, "duplicate external composite reference"));
+            }
+            unknown = Some("external composite reference has no loaded resolver");
+            continue;
+        }
+        let target = reference_id(value).map_err(|error| QueryError::invalid(subject, error))?;
+        match target {
+            Some(target) => {
+                if property.is_unique && !seen.insert(target) {
+                    return Err(QueryError::invalid(subject, "duplicate composite reference"));
+                }
+                contains |= target == id;
+            }
+            None if !collection && property.lower == "0" => {}
+            None => return Err(QueryError::invalid(subject, "composite reference cannot be null")),
+        }
     }
-    Ok(contains)
+    // Existential membership can be proved without resolving every neighbor;
+    // malformed/duplicate entries were still inspected before accepting it.
+    if contains { Ok(true) }
+    else { unknown.map_or(Ok(false), |message| Err(QueryError::unsupported(subject, message))) }
 }
 
 pub(crate) fn ownership_roles(
@@ -196,8 +229,7 @@ pub(crate) fn ownership_roles(
                 }
                 continue;
             }
-            let contains = contains_reference(value, child.id())
-                .map_err(|error| QueryError::unsupported(owner.id(), error))?;
+            let contains = contains_reference(value, child.id(), owner.id(), property)?;
             if contains {
                 if !type_is_resolved {
                     return Err(QueryError::unsupported(owner.id(),
@@ -219,8 +251,10 @@ pub(crate) fn ownership_roles(
     if owner.conforms_to("Association") && child.conforms_to("Property")
         && let Some(member_ends) = owner.properties().get("memberEnd")
     {
-        let is_end = contains_reference(member_ends, child.id())
-            .map_err(|error| QueryError::invalid(owner.id(), error))?;
+        let member_end = schema::uml_property("Association", "memberEnd")
+            .map_err(|error| QueryError::unsupported(owner.id(), error.to_string()))?
+            .ok_or_else(|| QueryError::unsupported(owner.id(), "missing Association::memberEnd contract"))?;
+        let is_end = contains_reference(member_ends, child.id(), owner.id(), member_end)?;
         let mut filtered = Vec::new();
         for property in candidates {
             if contributes(property, "Association-ownedEnd")
@@ -987,6 +1021,28 @@ fn validate_feature_rules(
             subject_id: element.id().into(), message,
         });
     };
+    if element.conforms_to("Port") {
+        report("Port-encapsulated_owner", (|| {
+            // UML.xmi ownedPort.1 derives ownedPort from ownedAttribute Ports;
+            // its opposite encapsulatedClassifier is therefore the canonical
+            // owner only when that owner/role satisfies this projection.
+            // No diagram placement or stored inverse establishes ownership.
+            let Some(owner) = references.model().owner(element)
+                .map_err(|error| QueryError::invalid(element.id(), error))?
+            else {
+                // The equality is null = null; Element::mustBeOwned diagnoses
+                // an ownerless Port independently, not by inventing this rule.
+                return Ok(false);
+            };
+            if owner.metaclass().is_none() {
+                return Err(QueryError::unsupported(element.id(),
+                    "Port owner has no resolved normative metaclass"));
+            }
+            if !owner.conforms_to("EncapsulatedClassifier") { return Ok(true); }
+            contributes_to_owned_union(owner, element, "StructuredClassifier-ownedAttribute")
+                .map(|owned_attribute| !owned_attribute)
+        })());
+    }
     if element.conforms_to("Class") {
         report("Class-passive_class", (|| {
             if schema::read_effective_boolean(element, "isActive")

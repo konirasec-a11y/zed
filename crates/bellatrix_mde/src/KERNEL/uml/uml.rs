@@ -36,3 +36,6 @@ pub mod schema;
 pub mod types;
 #[path = "semantics/value_specifications.rs"]
 pub mod value_specifications;
+
+#[path = "semantics/components.rs"]
+pub mod components;

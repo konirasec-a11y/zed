@@ -141,3 +141,39 @@ rejeita objetos `$ref` antes da validação semântica (`expected string`). O te
 registra essa rejeição sem mutação; o rollback normativo é exercitado pela troca
 do tipo de um Port com default existente de Class para Interface. Este fechamento
 não resolve a autoria de referências defaultValue pelo editor legado.
+
+## Atualização focada: Port::encapsulated_owner — 2026-11-03
+
+A validação compartilhada agora executa `Port-encapsulated_owner`
+(UML.xmi:4786–4796), usando a derivação de `EncapsulatedClassifier::ownedPort`
+(XMI:4736–4744): ownedAttributes cujo tipo de metaclasse é Port. O proprietário
+semântico canônico precisa coincidir com essa projeção; posição visual e
+`encapsulatedClassifier` autorado não substituem `owns`. Herança de metaclasses
+permite Class/Component/Node/Device/ExecutionEnvironment sem uma lista especial
+por tipo. Owner não encapsulado gera violação; owner ou papel sem resolução
+permanece não verificado. Port sem owner não viola artificialmente a igualdade
+null=null, mas continua inválido pela regra independente Element::mustBeOwned.
+
+Código em `semantics/classifiers.rs`, com três fluxos em
+`tests/port_ownership.rs`: API funcional, estados positivos/negativos,
+referências de papel não resolvidas, tentativa de forjar a inversa, reabertura
+JSON/Protobuf, rejeição atômica da mudança de owner e reparo de draft. O teste
+atômico usa Interface com Feature pública para exigir rejeição pela regra de
+Port, sem confundi-la com erro genérico de ownership ou visibilidade.
+
+Gate focado: ownership **3/3**, aggregation **3/3**, defaultValue **6/6** e
+API **4/4**; log local `/tmp/port-owner-final.log`. Sem mudança de UI ou geração.
+Esta regra não conclui os demais contratos de Port, interfaces e Connectors.
+
+Revisão da prova de membership: o helper compartilhado de papéis compostos
+agora distingue inclusão local comprovada de resolução integral da coleção.
+`ownedAttribute` com Port local e `href`, em ambas ordens, comprova o papel sem
+apagar o warning da referência externa. Coleções malformadas, null proibido e
+referências duplicadas continuam inválidos, mesmo com um membro local válido.
+O fluxo adicional de Port inclui essas combinações e reabertura.
+
+Gate combinado após a revisão de membership: **33/33** — Port ownership 4,
+aggregation 3, defaultValue 6, API 4, ownership/namespace 4, inherited capabilities
+5 e Component constraints 7. Log `/tmp/structural-owner-component-gate.log`;
+`git diff --check` passou. Esses números correspondem ao estado testado antes
+das ampliações posteriores de Component, não substituem o gate final por SHA.
