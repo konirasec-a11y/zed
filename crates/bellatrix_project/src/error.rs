@@ -16,6 +16,12 @@ pub enum ProjectError {
     NotOpen(String),
     #[error("revision mismatch (expected {expected}, current {current})")]
     Conflict { expected: u64, current: u64 },
+    #[error("a project save is already in progress")]
+    SaveInProgress,
+    #[error("external save ticket was consumed or is not active")]
+    InvalidSaveTicket,
+    #[error("written bytes differ from the prepared project snapshot")]
+    SaveContentMismatch,
     #[error("revision counter exhausted")]
     RevisionOverflow,
     #[error("bellatrix-project contains unsaved changes: {0}")]

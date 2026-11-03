@@ -1,4 +1,4 @@
-use crate::{ProjectDocument, ProjectError, ProjectId};
+use crate::{ProjectDocument, ProjectError, ProjectId, ProjectSaveTicket};
 use cordis::Event;
 use serde_json::Value;
 use std::{path::PathBuf, sync::Arc};
@@ -113,4 +113,55 @@ impl Event for ProjectClosedEvent {
     const NAME: &'static str = "bellatrix.bellatrix-project.closed.v1";
     type Args = ProjectClosed;
     type Output = ();
+}
+
+/// Import already-loaded bytes without doing file I/O or replacing an open identity.
+#[derive(Clone)]
+pub struct ProjectImportRequested {
+    pub document: ProjectDocument,
+    /// True only when the external buffer represents successfully persisted contents.
+    pub is_saved: bool,
+}
+pub struct ProjectImport;
+impl Event for ProjectImport {
+    const NAME: &'static str = "bellatrix.bellatrix-project.import.v1";
+    type Args = ProjectImportRequested;
+    type Output = Result<Arc<ProjectDocument>, ProjectError>;
+}
+
+/// Reserve one write for this open document session; other saves and close of this
+/// same project are rejected until acknowledgement or every ticket clone is dropped.
+/// This is not a destination lock: paths remain opaque, with no filesystem lookup
+/// or canonicalization. The adapter must coordinate destination ownership across
+/// projects and native/CLI writers, including symlinks and path aliases, and check
+/// native buffer conflicts before I/O. Do not treat a ticket as permission to
+/// overwrite an existing destination.
+#[derive(Clone)]
+pub struct ProjectPrepareExternalSaveRequested {
+    pub id: ProjectId,
+    pub expected_revision: u64,
+    pub path: PathBuf,
+}
+pub struct ProjectPrepareExternalSave;
+impl Event for ProjectPrepareExternalSave {
+    const NAME: &'static str = "bellatrix.bellatrix-project.prepare-external-save.v1";
+    type Args = ProjectPrepareExternalSaveRequested;
+    type Output = Result<ProjectSaveTicket, ProjectError>;
+}
+
+/// Submit only after the adapter has completed its native write successfully.
+/// Bytes are an exact receipt, not proof of disk I/O; the adapter owns that guarantee.
+/// A valid-session acknowledgement is consumed even on byte/revision mismatch;
+/// those failures leave the document dirty and emit no saved notification.
+/// Stop or finish I/O before acknowledging or dropping the last ticket clone.
+#[derive(Clone)]
+pub struct ProjectAcknowledgeExternalSaveRequested {
+    pub ticket: ProjectSaveTicket,
+    pub written_bytes: Arc<[u8]>,
+}
+pub struct ProjectAcknowledgeExternalSave;
+impl Event for ProjectAcknowledgeExternalSave {
+    const NAME: &'static str = "bellatrix.bellatrix-project.acknowledge-external-save.v1";
+    type Args = ProjectAcknowledgeExternalSaveRequested;
+    type Output = Result<u64, ProjectError>;
 }

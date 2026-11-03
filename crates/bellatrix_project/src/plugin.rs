@@ -28,6 +28,7 @@ impl Plugin for ProjectPlugin {
             .provide(Arc::clone(service))
             .map_err(|e| io::Error::other(e.to_string()))?;
         register_create(&ctx, service)?;
+        register_external_storage(&ctx, service)?;
         register_open(&ctx, service)?;
         register_replace(&ctx, service)?;
         register_save(&ctx, service)?;
@@ -195,4 +196,70 @@ where
     if let Err(error) = ctx.emit_parallel::<E>(Routing::Unscoped, message).await {
         eprintln!("Bellatrix Cordis observer failure: {error}");
     }
+}
+
+fn register_external_storage(
+    ctx: &Context,
+    service: &Arc<ProjectService>,
+) -> Result<(), io::Error> {
+    let import_service = Arc::clone(service);
+    let _listener = ctx
+        .on::<ProjectImport, _>(responder(move |ctx, args: ProjectImportRequested| {
+            let service = Arc::clone(&import_service);
+            async move {
+                let result = service.open(args.document, args.is_saved);
+                if let Ok(document) = &result {
+                    notify::<ProjectOpenedEvent>(
+                        &ctx,
+                        ProjectOpened {
+                            document: Arc::clone(document),
+                            from_disk: args.is_saved,
+                        },
+                    )
+                    .await;
+                }
+                Ok::<_, Infallible>(Some(result))
+            }
+        }))
+        .map_err(|e| io::Error::other(e.to_string()))?;
+    let prepare_service = Arc::clone(service);
+    let _listener = ctx
+        .on::<ProjectPrepareExternalSave, _>(responder(
+            move |_, args: ProjectPrepareExternalSaveRequested| {
+                let service = Arc::clone(&prepare_service);
+                async move {
+                    Ok::<_, Infallible>(Some(service.prepare_external_save(
+                        &args.id,
+                        args.expected_revision,
+                        args.path,
+                    )))
+                }
+            },
+        ))
+        .map_err(|e| io::Error::other(e.to_string()))?;
+    let service = Arc::clone(service);
+    let _listener = ctx
+        .on::<ProjectAcknowledgeExternalSave, _>(responder(
+            move |ctx, args: ProjectAcknowledgeExternalSaveRequested| {
+                let service = Arc::clone(&service);
+                async move {
+                    let result =
+                        service.acknowledge_external_save(&args.ticket, &args.written_bytes);
+                    if let Ok(revision) = &result {
+                        notify::<ProjectSavedEvent>(
+                            &ctx,
+                            ProjectSaved {
+                                id: args.ticket.document().id().clone(),
+                                path: args.ticket.path().to_path_buf(),
+                                revision: *revision,
+                            },
+                        )
+                        .await;
+                    }
+                    Ok::<_, Infallible>(Some(result))
+                }
+            },
+        ))
+        .map_err(|e| io::Error::other(e.to_string()))?;
+    Ok(())
 }
