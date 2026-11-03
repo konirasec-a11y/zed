@@ -96,24 +96,35 @@ pub(super) fn set_routing(
     diagram_id: &str,
     view_id: &str,
     routing: RelationshipRouting,
+    operations: &dyn crate::diagram_operations::DiagramOperations,
 ) -> Result<(), String> {
     let current = view(section, diagram_id, view_id)?;
     if !matches!(current.geometry, Geometry::Path { .. }) {
         return Err("routing requires a relationship Path View".into());
     }
-    let relation = section
-        .relations
-        .iter()
+    let relation = section.relations.iter()
         .find(|relation| Some(relation.id.as_str()) == current.subject.as_deref())
         .ok_or("view does not represent a relationship")?;
-    let endpoints = match &current.endpoints {
-        Some(endpoints) => endpoints.clone(),
-        None => crate::relationships::resolve_view_endpoints(section, diagram_id, &relation.from, &relation.to)?,
-    };
-    let geometry = crate::relationships::route_for_routing(section, diagram_id, relation, Some(&endpoints), routing)?;
+    let projection = operations.project_routing(section, diagram_id, view_id, routing)?;
+    if !matches!(projection.geometry, Geometry::Path { .. }) {
+        return Err("routing projection must produce a Path geometry".into());
+    }
+    let diagram = section.diagrams.iter().find(|diagram| diagram.id == diagram_id)
+        .ok_or("diagram not found")?;
+    for (endpoint, subject) in [
+        (&projection.endpoints.source_view_id, relation.from.as_str()),
+        (&projection.endpoints.target_view_id, relation.to.as_str()),
+    ] {
+        let endpoint = endpoint.as_deref().ok_or("routing projection has an unattached endpoint")?;
+        let endpoint_view = diagram.views.iter().find(|view| view.id == endpoint)
+            .ok_or("routing projection endpoint is not in the diagram")?;
+        if endpoint_view.subject.as_deref() != Some(subject) {
+            return Err("routing projection endpoint does not represent its semantic endpoint".into());
+        }
+    }
     let current = view_mut(section, diagram_id, view_id)?;
-    current.endpoints = Some(endpoints);
-    current.geometry = geometry;
+    current.endpoints = Some(projection.endpoints);
+    current.geometry = projection.geometry;
     current.style.routing = Some(routing);
     Ok(())
 }

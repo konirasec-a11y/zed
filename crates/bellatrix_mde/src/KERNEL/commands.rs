@@ -40,6 +40,8 @@ use crate::{
 };
 use serde_json::Value;
 use std::collections::HashSet;
+#[cfg(test)]
+use crate::commands::apply;
 
 #[derive(Clone, Debug)]
 pub enum Command {
@@ -161,11 +163,11 @@ pub enum Command {
 
 /// Failure never changes the input. `revision` seeds IDs; it is NOT a lock.
 /// The adapter must check its revision and publish with compare-and-swap.
-pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Project, String> {
+pub(crate) fn apply_with_diagram_operations(project: &Project, command: &Command, revision: u64, diagram_operations: &dyn crate::diagram_operations::DiagramOperations) -> Result<Project, String> {
     if let Command::CreateElementOrVisualDraft { diagram_id, owner_id, kind, name, x, y } = command {
         let semantic = Command::CreateElement { diagram_id: diagram_id.clone(), owner_id: owner_id.clone(), kind: *kind,
             name: name.clone(), x: *x, y: *y };
-        return match apply(project, &semantic, revision) {
+        return match apply_with_diagram_operations(project, &semantic, revision, diagram_operations) {
             Ok(updated) => Ok(updated),
             Err(reason) => {
                 let diagram = project.diagrams.iter().find(|diagram| diagram.id == *diagram_id).ok_or("diagram not found")?;
@@ -174,9 +176,9 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
                 if *kind == ModelingElementKind::Part { properties.insert("aggregation".into(), serde_json::json!("composite")); }
                 if let Some(pseudostate) = kind.resolve_pseudostate_kind() { properties.insert("kind".into(), Value::String(pseudostate.into())); }
                 if let Some(owner) = owner_id { properties.insert("requested_owner_id".into(), Value::String(owner.clone())); }
-                apply(project, &Command::CreateVisualDraft { diagram_id: diagram_id.clone(),
+                apply_with_diagram_operations(project, &Command::CreateVisualDraft { diagram_id: diagram_id.clone(),
                     notation_kind: kind.model_kind().into(), label: name.clone(), geometry: views::initial_geometry_in_diagram(*kind, diagram, *x, *y),
-                    properties, parent_view_id: None, source_view_id: None, target_view_id: None }, revision)
+                    properties, parent_view_id: None, source_view_id: None, target_view_id: None }, revision, diagram_operations)
             }
         };
     }
@@ -189,9 +191,9 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
         }
         let endpoints = crate::ViewEndpoints { source_view_id: Some(source_view_id.clone()), target_view_id: Some(target_view_id.clone()) };
         let semantic = match (from, to) {
-            (Some(from), Some(to)) => apply(project, &Command::CreateRelationAtViews {
+            (Some(from), Some(to)) => apply_with_diagram_operations(project, &Command::CreateRelationAtViews {
                 diagram_id: diagram_id.clone(), kind: *kind, from: from.clone(), to: to.clone(), endpoints,
-            }, revision),
+            }, revision, diagram_operations),
             _ => Err("relationship endpoint has no semantic subject".into()),
         };
         return match semantic {
@@ -203,9 +205,9 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
                 if let Some(to) = to { properties.insert("requested_target_id".into(), Value::String(to.clone())); }
                 let center = crate::resolve_visual_center(&source.geometry).ok_or("source View has no center")?;
                 let geometry = Geometry::Path { start: center, segments: Vec::new() };
-                apply(project, &Command::CreateVisualDraft { diagram_id: diagram_id.clone(), notation_kind: kind.model_kind().into(),
+                apply_with_diagram_operations(project, &Command::CreateVisualDraft { diagram_id: diagram_id.clone(), notation_kind: kind.model_kind().into(),
                     label: None, geometry, properties, parent_view_id: None,
-                    source_view_id: Some(source_view_id.clone()), target_view_id: Some(target_view_id.clone()) }, revision)
+                    source_view_id: Some(source_view_id.clone()), target_view_id: Some(target_view_id.clone()) }, revision, diagram_operations)
             }
         };
     }
@@ -213,10 +215,10 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
         let diagram = project.diagrams.iter().find(|diagram| diagram.id == *diagram_id).ok_or("diagram not found")?;
         let source = diagram.views.iter().find(|view| view.subject.as_ref() == Some(from)).ok_or("source view not found")?;
         let target = diagram.views.iter().find(|view| view.subject.as_ref() == Some(to)).ok_or("target view not found")?;
-        return apply(project, &Command::CreateRelationAtViewsOrVisualDraft {
+        return apply_with_diagram_operations(project, &Command::CreateRelationAtViewsOrVisualDraft {
             diagram_id: diagram_id.clone(), kind: *kind, from: Some(from.clone()), to: Some(to.clone()),
             source_view_id: source.id.clone(), target_view_id: target.id.clone(),
-        }, revision);
+        }, revision, diagram_operations);
     }
     let previous_section = ModelingSection::from_model(project);
     let mut section = previous_section.clone();
@@ -323,7 +325,7 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
             diagram_id,
             view_id,
             routing,
-        } => view_style::set_routing(&mut section, diagram_id, view_id, *routing)?,
+        } => view_style::set_routing(&mut section, diagram_id, view_id, *routing, diagram_operations)?,
         Command::MoveView { view_id, dx, dy } => move_view(&mut section, view_id, *dx, *dy)?,
         Command::ResizeView {
             view_id,
@@ -846,9 +848,35 @@ fn remove_element(section: &mut ModelingSection, id: &str) -> Result<(), String>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::apply;
     fn fixture() -> Project {
         serde_json::from_str(include_str!("../../fixtures/todo.json")).unwrap()
     }
+    #[test]
+    fn routing_policy_failure_keeps_the_source_transaction_unchanged() {
+        struct RejectRouting;
+        impl crate::diagram_operations::DiagramOperations for RejectRouting {
+            fn project_routing(&self, _: &ModelingSection, _: &str, _: &str, _: crate::RelationshipRouting) -> Result<crate::diagram_operations::RoutingProjection, String> {
+                Err("routing policy rejected operation".into())
+            }
+        }
+        let mut project = fixture();
+        let relation_id = project.relations.first().expect("fixture relationship").id.clone();
+        let diagram = project.diagrams.first_mut().expect("fixture diagram");
+        let view = diagram.views.first_mut().expect("fixture view");
+        view.subject = Some(relation_id);
+        view.geometry = Geometry::Path { start: crate::Point { x: 0.0, y: 0.0 }, segments: Vec::new() };
+        let diagram_id = diagram.id.clone();
+        let view_id = view.id.clone();
+        let before = project.clone();
+        let error = apply_with_diagram_operations(&project, &Command::SetViewRouting {
+            diagram_id, view_id,
+            routing: crate::RelationshipRouting::Automatic,
+        }, 0, &RejectRouting).expect_err("policy rejects the operation");
+        assert_eq!(error, "routing policy rejected operation");
+        assert_eq!(project, before);
+    }
+
     #[test]
     fn failed_command_cannot_partially_change_its_source() {
         let project = fixture();

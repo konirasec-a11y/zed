@@ -43,3 +43,17 @@ while layout and notation algorithms live in `view-model/`.
 The generated metamodel and inventory retain their generator:
 `script/bellatrix_mde/bellatrix_uml_catalog.py`. Moving the source does not make a
 handwritten copy of the normative catalog.
+
+## Routing boundary
+
+`view-model/commands.rs` preserves the public command entry point and supplies
+renderer-independent geometry projections. `KERNEL/diagram_operations.rs`
+defines an immutable routing query and a typed result containing only geometry
+and endpoint View identities. `KERNEL/commands/view_style.rs` checks the target,
+Path shape and endpoint identity/diagram scope, then applies that result inside
+the existing command transaction. The geometry provider cannot mutate the model.
+
+This boundary currently covers `SetViewRouting`. Move/resize, creation, feature
+layout and Association endpoint synchronization still call presentation helpers
+from kernel command code. Their extraction is pending; the routing checkpoint
+does not establish complete kernel/view-model isolation.

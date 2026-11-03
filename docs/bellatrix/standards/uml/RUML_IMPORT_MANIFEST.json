@@ -34,7 +34,7 @@
     {
       "source_path": "slot.rs",
       "source_symbol": "Slot::set_owning_instance",
-      "target_module": "crates/bellatrix_mde/src/uml/instances.rs",
+      "target_module": "crates/bellatrix_mde/src/KERNEL/uml/instances.rs",
       "command_path": [
         "Command::SetOwner",
         "uml::root::reparent"

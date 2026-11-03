@@ -8,7 +8,13 @@ pub(crate) use model::wire;
 pub use model::*;
 
 #[path = "KERNEL/commands.rs"]
+mod kernel_commands;
+#[path = "view-model/commands.rs"]
 pub mod commands;
+#[path = "KERNEL/diagram_operations.rs"]
+mod diagram_operations;
+#[path = "view-model/diagram_operations.rs"]
+mod diagram_operation_policy;
 #[path = "KERNEL/construction_script.rs"]
 mod construction_script;
 #[path = "KERNEL/execution_trace.rs"]
