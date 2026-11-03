@@ -421,6 +421,30 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
         };
         issues.push(StructuralDiagnostic { severity, code, subject_id:stereotype.id().into(), message:format!("Stereotype-associationEndOwnership: {message}") });
     }
+    // UML's Stereotype-base_property_upper_bound supplies normative prose,
+    // not an OCL body: the upper bound of base-properties is exactly one.
+    for stereotype in references.model().elements().filter(|element| element.conforms_to("Stereotype")) {
+        let outcome = stereotype_attributes_satisfy(references, stereotype, |attribute|
+            attribute_associations_satisfy(references, attribute, |association| {
+                if !association.conforms_to("Extension") {
+                    return Ok(true);
+                }
+                // Base-property identity comes from canonical ownership and
+                // Extension membership, never the display name's base_ prefix.
+                feature_compatibility::require_all([
+                    property_check(references, association, "memberEnd"),
+                    query_value(value_specifications::upper_bound(references, attribute))
+                        .map(|upper| upper == UnlimitedNatural::from(1)),
+                ])
+            }));
+        let (severity, code, message) = match outcome {
+            Ok(true) => continue,
+            Ok(false) => (StructuralSeverity::Error, "UML_STEREOTYPE_BASE_PROPERTY_UPPER_BOUND", "base-properties must have upper bound exactly 1".to_owned()),
+            Err(QueryError::Invalid { message, .. }) => (StructuralSeverity::Error, "UML_STEREOTYPE_BASE_PROPERTY_UPPER_BOUND", message),
+            Err(QueryError::Unsupported { message, .. }) => (StructuralSeverity::Warning, "MDE_STEREOTYPE_BASE_PROPERTY_UPPER_BOUND_UNVERIFIED", message),
+        };
+        issues.push(StructuralDiagnostic { severity, code, subject_id:stereotype.id().into(), message:format!("Stereotype-base_property_upper_bound: {message}") });
+    }
     for profile in references.model().elements().filter(|element| element.conforms_to("Profile")) {
         let (severity, code, message) = match profile_metaclass_reference(references, profile) {
             Ok(true) => continue,
@@ -431,4 +455,41 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
         issues.push(StructuralDiagnostic { severity, code, subject_id:profile.id().into(), message:format!("Profile-metaclass_reference_not_specialized: {message}") });
     }
     issues
+}
+
+#[cfg(test)]
+mod base_property_gate_tests {
+    use serde_json::json;
+
+    #[test]
+    fn base_property_upper_gate_rejects_zero_and_accepts_repair()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let before: crate::Project = serde_json::from_value(json!({
+            "id":"project", "name":"Base-property upper gate",
+            "elements":[
+                {"id":"profile","kind":"uml.profile","name":"Profile"},
+                {"id":"class","kind":"uml.class","name":"Metaclass"},
+                {"id":"stereotype","kind":"uml.stereotype","name":"Stereotype"},
+                {"id":"extension","kind":"uml.extension","name":"Extension","properties":{"memberEnd":[{"$ref":"base"},{"$ref":"end"}],"ownedEnd":{"$ref":"end"}}},
+                {"id":"base","kind":"uml.attribute","name":"base_Class","properties":{"type":{"$ref":"class"}}},
+                {"id":"end","kind":"uml.extension_end","name":"extension_Stereotype","properties":{"type":{"$ref":"stereotype"},"aggregation":"composite"}}
+            ],
+            "relations":[
+                {"id":"owns-stereotype","kind":"owns","from":"profile","to":"stereotype"},
+                {"id":"owns-extension","kind":"owns","from":"profile","to":"extension"},
+                {"id":"owns-base","kind":"owns","from":"stereotype","to":"base"},
+                {"id":"owns-end","kind":"owns","from":"extension","to":"end"}
+            ]
+        }))?;
+        let unchanged = crate::encode(&before, crate::Format::Json)?;
+        let mut after = before.clone();
+        after.elements.iter_mut().find(|element| element.id == "base")
+            .ok_or("base")?.properties.insert("multiplicity".into(), json!("0"));
+        let error = super::super::root::validate_changes(&before, &after)
+            .expect_err("base-properties require upper exactly one");
+        assert!(error.contains("Stereotype-base_property_upper_bound"), "{error}");
+        assert_eq!(crate::encode(&before, crate::Format::Json)?, unchanged);
+        super::super::root::validate_changes(&after, &before)?;
+        Ok(())
+    }
 }

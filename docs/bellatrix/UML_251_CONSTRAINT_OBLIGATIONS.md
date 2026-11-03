@@ -63,6 +63,9 @@ recortes publicados em `f6caa47d39cff8da5bef4f351a555af68a32902b` (E50/E51).
 Property::redefined_property_inherited e o recorte materializado de
 TemplateSignature::unique_parameters foram publicados em
 `d1fc01c9939333caeeeeb229f1a569bb8ef1214f` (E52/E53).
+ParameterSet::input e as duas invariantes de qualifiedName de NamedElement
+têm recortes publicados em `4da8a8c77c50c0b8876d22eff794f5b8200b16d7`
+(E54/E55).
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -178,7 +181,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E53 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E55 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -769,6 +772,66 @@ de execução nova. E12–E53 possuem os gates delimitados nas seções seguinte
   unicidade; duplicata local conhecida sobrevive a membro externo. Contratos
   inválidos, inclusive name em relacionamento, continuam erros. Não amplia o
   suporte de compatibilidade, overrides ou projeções inversas de templates.
+
+- **E54**: `semantics/parameter_sets.rs`, `input`, `streaming_consequence`
+  e `belongs_to_set`, integrado a `root.rs::validate_contracts`;
+  `parameter_set_input.rs`, quinze testes. As implicações publicadas tratam
+  apenas direções in/out, com defaults efetivos direction=in e isStream=false;
+  inout/return não são promovidas a esses antecedentes. O consequente navega
+  pelo BehavioralFeature derivado do owner e papel ownedParameterSet e pelos
+  ownedParameters canônicos. A navegação não é inventada para owner Behavior.
+  Membership usa ParameterSet::parameter forward; inversa armazenada não pode
+  apagar membership conhecido, e contradições comprovadas são erros. Inversa
+  para conjunto incompleto não prova nem membership nem contradição. Coleções
+  ausentes/externas e metaclasses não resolvidas preservam unknown, salvo prova
+  lógica local suficiente, como consequente streaming verdadeiro. Violação
+  conhecida não desaparece diante de outra implicação desconhecida; contratos
+  malformados inspecionados não são satisfeitos por membership ou streaming.
+  Diagnósticos: `UML_PARAMETER_SET_INPUT` e
+  `MDE_PARAMETER_SET_INPUT_UNVERIFIED`. Não implementa two_parameter_sets nem
+  certifica todos os contratos de ParameterSet.
+
+- **E55**: `semantics/element_graph_queries.rs`, `validate_qualified_names`,
+  `projected_qualified_name`, `checked_name` e `namespace`, integrado a
+  `root.rs::validate_contracts`; `named_element_qualified_name.rs`, treze testes.
+  Compara somente qualifiedName materializado com a derivação canônica: nomes
+  do namespace externo ao interno, seguidos do nome local, separados por `::`.
+  Nome ausente exige null, não string vazia; owner não Namespace não vira
+  prefixo. Inclui exposição de parâmetro de template pela navegação canônica.
+  Projeção ausente não é erro de autoria e não recebe esse check dedicado;
+  a consulta derivada existente permanece distinta da comparação armazenada.
+  Namespace/owner/inversas autorados não substituem ownership canônico e podem
+  permanecer não verificados. Nome comprovadamente ausente pode decidir null
+  diante de namespace desconhecido, mas ciclos/corrupção da cadeia canônica e
+  tipos inválidos inspecionados continuam erros. Usa
+  `UML_NAMED_ELEMENT_HAS_QUALIFIED_NAME`,
+  `UML_NAMED_ELEMENT_HAS_NO_QUALIFIED_NAME`,
+  `MDE_NAMED_ELEMENT_QUALIFIED_NAME_INVALID` e
+  `MDE_NAMED_ELEMENT_QUALIFIED_NAME_UNVERIFIED`. Não é avaliação geral de OCL
+  nem prova integral de toda representação possível de allNamespaces.
+
+### Evidência publicada de ParameterSet::input e qualifiedName
+
+Commit inspecionado: `4da8a8c77c50c0b8876d22eff794f5b8200b16d7`.
+Logs finais lidos:
+
+- `/tmp/parameter-set-input-related-gate.log`: **45/45 aprovados**,
+  parameter_set_input 15 novos e 30 relacionados (class_behavior 6,
+  parameter_object_effect 7, parameter_scalar_constraints 7 e
+  parameter_set_entity 10).
+- `/tmp/parameter-set-input-library-gate.log`: **160/160 aprovados** na lib.
+- `/tmp/named-element-qualified-reviewed.log`: **38/38 aprovados**,
+  named_element_qualified_name 13 novos, ownership_namespace_flow 4 e
+  template_signatures 21.
+
+As três linhas ficam **P/E54–E55**. Os casos incluem modelos com/sem raiz,
+unknown, malformados, contradições de inversas, roundtrip e rejeição atômica;
+qualifiedName inclui renomeação com projeção obsoleta e reparo de draft.
+São gates anteriores à publicação, não rerun no SHA publicado nem execução
+nova por esta matriz. A contagem de regressões não mede cobertura normativa;
+não certifica suíte integral, UI, geração, interchange ou conformidade UML
+completa. O log inicial de ParameterSet com 11 testes é superado pelo gate
+final de 15 e não deve ser somado a ele.
 
 ### Evidência publicada de propriedades herdadas e unicidade de parâmetros
 
@@ -1501,12 +1564,12 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `NamedElement-has_qualified_name`
 
-- Metaclass: `NamedElement`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `NamedElement`. Estado: **P**. Evidência: E55; commit `4da8a8c77c50c0b8876d22eff794f5b8200b16d7`.
 - OCL publicado: `(name <> null and allNamespaces()->select(ns | ns.name = null)->isEmpty()) implies qualifiedName = allNamespaces()->iterate( ns : Namespace; agg: String = name | ns.name.concat(self.separator()).concat(agg))`.
 
 #### `NamedElement-has_no_qualified_name`
 
-- Metaclass: `NamedElement`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `NamedElement`. Estado: **P**. Evidência: E55; commit `4da8a8c77c50c0b8876d22eff794f5b8200b16d7`.
 - OCL publicado: `name=null or allNamespaces()->select( ns | ns.name=null )->notEmpty() implies qualifiedName = null`.
 
 #### `Namespace-members_distinguishable`
@@ -1703,7 +1766,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `ParameterSet-input`
 
-- Metaclass: `ParameterSet`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `ParameterSet`. Estado: **P**. Evidência: E54; commit `4da8a8c77c50c0b8876d22eff794f5b8200b16d7`.
 - OCL publicado: `((parameter->exists(direction = ParameterDirectionKind::_'in')) implies behavioralFeature.ownedParameter->select(p | p.direction = ParameterDirectionKind::_'in' and p.parameterSet->isEmpty())->forAll(isStream)) and ((parameter->exists(direction = ParameterDirectionKind::out)) implies behavioralFeature.ownedParameter->select(p | p.direction = ParameterDirectionKind::out and p.parameterSet->isEmpty())->forAll(isStream))`.
 
 #### `ParameterSet-two_parameter_sets`

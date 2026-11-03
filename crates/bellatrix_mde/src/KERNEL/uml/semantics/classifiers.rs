@@ -1398,6 +1398,15 @@ fn generalization_set_powertype(
                 .map_err(|error| QueryError::invalid(set.id(), error))?,
         )
     };
+    powertype_constraints(references, set, power, power_checks)
+}
+
+fn powertype_constraints(
+    references: &ReferenceIndex<'_>,
+    set: ElementRef<'_>,
+    power: Option<ElementRef<'_>>,
+    power_checks: Vec<Result<bool, QueryError>>,
+) -> Result<bool, QueryError> {
     let GeneralizationSetEvidence {
         generalizations,
         mut checks,
@@ -1447,10 +1456,114 @@ fn generalization_set_powertype(
     super::feature_compatibility::require_all(checks)
 }
 
+fn classifier_powertype_extent(
+    references: &ReferenceIndex<'_>,
+    classifier: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    use super::property_contracts::{PropertyOutcome, check_value};
+    let mut checks = Vec::new();
+    let mut canonical = HashSet::new();
+    let mut unresolved = false;
+    for set in references.model().elements().filter(|element| element.conforms_to("GeneralizationSet")) {
+        let Some(value) = set.properties().get("powertype") else { continue; };
+        if value.is_null() { continue; }
+        match reference_id(value) {
+            Ok(Some(id)) if id == classifier.id() => {
+                canonical.insert(set.id());
+                checks.push(generalization_set_powertype(references, set));
+            }
+            Ok(_) => {}
+            Err(_) => {
+                // An unknown powertype cannot matter when this set has a
+                // proven empty generalization collection. Still inspect the
+                // reference contract so malformed values never become vacuous.
+                match generalization_set_powertype(references, set) {
+                    Ok(true) => {}
+                    Err(error @ QueryError::Invalid { .. }) => checks.push(Err(error)),
+                    _ => unresolved = true,
+                }
+            }
+        }
+    }
+    if unresolved {
+        checks.push(Err(QueryError::unsupported(classifier.id(), "unresolved GeneralizationSet powertype prevents complete powertypeExtent membership")));
+    }
+    if let Some(value) = classifier.properties().get("powertypeExtent") {
+        let descriptor = schema::uml_property("Classifier", "powertypeExtent")
+            .map_err(|error| QueryError::unsupported(classifier.id(), error.to_string()))?
+            .ok_or_else(|| QueryError::unsupported(classifier.id(), "missing powertypeExtent contract"))?;
+        match check_value(references, classifier, descriptor, value) {
+            PropertyOutcome::Satisfied => {}
+            PropertyOutcome::Violation(message) => checks.push(Err(QueryError::invalid(classifier.id(), message))),
+            PropertyOutcome::Unverified(message) => checks.push(Err(QueryError::unsupported(classifier.id(), message))),
+        }
+        if let Some(values) = value.as_array() {
+            let mut authored = HashSet::new();
+            let mut external = false;
+            for value in values {
+                match reference_id(value) {
+                    Ok(Some(id)) => {
+                        authored.insert(id);
+                        if let Ok(set) = references.element(id) {
+                            if set.metaclass().is_none() { continue; }
+                            if !set.conforms_to("GeneralizationSet") { continue; }
+                            // Both association ends are authored in UML. An
+                            // omitted opposite is not an explicit null: local
+                            // extent membership still supplies the powertype.
+                            for other in references.model().elements().filter(|other| other.id() != classifier.id() && other.conforms_to("Classifier")) {
+                                if other.properties().get("powertypeExtent").and_then(Value::as_array).is_some_and(|values| values.iter().any(|value| reference_id(value).ok().flatten() == Some(id))) {
+                                    checks.push(Err(QueryError::invalid(classifier.id(), "GeneralizationSet has multiple authored powertype Classifiers")));
+                                }
+                            }
+                            if let Some(opposite) = set.properties().get("powertype") {
+                                let descriptor = schema::uml_property("GeneralizationSet", "powertype")
+                                    .map_err(|error| QueryError::unsupported(set.id(), error.to_string()))?
+                                    .ok_or_else(|| QueryError::unsupported(set.id(), "missing powertype contract"))?;
+                                match check_value(references, set, descriptor, opposite) {
+                                    PropertyOutcome::Violation(message) => checks.push(Err(QueryError::invalid(set.id(), message))),
+                                    PropertyOutcome::Unverified(message) => checks.push(Err(QueryError::unsupported(set.id(), message))),
+                                    PropertyOutcome::Satisfied => {}
+                                }
+                                match reference_id(opposite) {
+                                    Ok(actual) if actual != Some(classifier.id()) => checks.push(Err(QueryError::invalid(classifier.id(), "powertypeExtent contradicts explicit GeneralizationSet::powertype"))),
+                                    Err(_) => checks.push(Err(QueryError::unsupported(classifier.id(), "explicit powertype opposite is unresolved"))),
+                                    _ => {}
+                                }
+                            }
+                            if !canonical.contains(id) {
+                                checks.push(powertype_constraints(references, set, Some(classifier), Vec::new()));
+                            }
+                        }
+                    }
+                    _ => external = true,
+                }
+            }
+            if !external && !canonical.is_subset(&authored) {
+                checks.push(Err(QueryError::invalid(classifier.id(), "powertypeExtent omits a canonical GeneralizationSet")));
+            } else if external && !canonical.is_subset(&authored) {
+                checks.push(Err(QueryError::unsupported(classifier.id(), "external extent entries cannot establish canonical inverse coverage")));
+            }
+        }
+    }
+    super::feature_compatibility::require_all(checks)
+}
+
 pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut queries = Queries::new(references);
     let mut issues = super::classifier_hierarchy::validate_substitutions(references);
     for element in references.model().elements() {
+        if element.conforms_to("Classifier") {
+            let outcome = match classifier_powertype_extent(references, element) {
+                Ok(true) => None,
+                Ok(false) => Some((StructuralSeverity::Error, "UML_CLASSIFIER_POWERTYPE_EXTENT", "powertypeExtent violates the published endpoint or ancestry exclusions".to_owned())),
+                Err(QueryError::Invalid { message, .. }) => Some((StructuralSeverity::Error, "MDE_CLASSIFIER_POWERTYPE_EXTENT_INVALID", message)),
+                Err(QueryError::Unsupported { message, .. }) => Some((StructuralSeverity::Warning, "MDE_CLASSIFIER_POWERTYPE_EXTENT_UNVERIFIED", message)),
+            };
+            if let Some((severity, code, message)) = outcome {
+                issues.push(StructuralDiagnostic { severity, code, subject_id: element.id().into(),
+                    message: format!("Classifier-maps_to_generalization_set: {message}") });
+            }
+        }
         if element.conforms_to("Property") {
             let outcome = match super::redefinition_contexts::property_redefined_inherited(references, element) {
                 Ok(true) => None,
