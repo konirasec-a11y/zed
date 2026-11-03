@@ -174,11 +174,13 @@ impl UmlType {
             UmlCapability::Reception => self.has_property("ownedReception"),
             UmlCapability::Port => self.has_property("ownedPort"),
             UmlCapability::Part => self.has_property("part"),
-            UmlCapability::Specialization => matches!(self, Self::Class | Self::Interface),
+            UmlCapability::Specialization => self.has_property("generalization"),
             UmlCapability::RealizationTarget => self == Self::Interface,
-            UmlCapability::TemplateParameter
-            | UmlCapability::ClassInterfaces
-            | UmlCapability::ClassAssociation => self == Self::Class,
+            UmlCapability::ClassInterfaces => self.has_property("interfaceRealization"),
+            UmlCapability::ClassAssociation => self
+                .metaclass()
+                .is_some_and(|name| crate::uml::metamodel::conforms_to(name, "Type")),
+            UmlCapability::TemplateParameter => self == Self::Class,
         }
     }
 }

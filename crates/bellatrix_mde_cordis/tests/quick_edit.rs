@@ -200,7 +200,7 @@ async fn class_specializations_use_the_same_versioned_cordis_event() {
     for kind in [
         "uml.association",
         "uml.interface_realization",
-        "uml.dependency",
+        "uml.usage",
     ] {
         assert!(section.relations.iter().any(|r| r.kind == kind), "{kind}");
     }

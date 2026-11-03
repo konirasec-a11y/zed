@@ -328,7 +328,18 @@ pub fn quick_edit_for(kind: &str) -> Vec<QuickEditAction> {
     };
     match kind {
         UmlType::Class => CLASS_ACTIONS.to_vec(),
-        UmlType::Interface => INTERFACE_ACTIONS.to_vec(),
+        UmlType::Interface => INTERFACE_ACTIONS
+            .iter()
+            .copied()
+            .chain(CLASS_ACTIONS.iter().copied().filter(|action| {
+                matches!(
+                    action.id,
+                    "uml.add-associated-class"
+                        | "uml.add-aggregated-class"
+                        | "uml.add-composited-class"
+                )
+            }))
+            .collect(),
         UmlType::Attribute => ATTRIBUTE_ACTIONS.to_vec(),
         UmlType::Operation => OPERATION_ACTIONS.to_vec(),
         UmlType::Package | UmlType::Model | UmlType::Subsystem => PACKAGE_ACTIONS.to_vec(),
@@ -355,6 +366,15 @@ pub fn quick_edit_for(kind: &str) -> Vec<QuickEditAction> {
                 };
                 kind.supports(capability)
             })
+            .map(|mut action| {
+                // These commands preserve the selected metaclass, not always Class.
+                if action.id == "uml.add-subclass" {
+                    action.title = "Add Subtype";
+                } else if action.id == "uml.add-superclass" {
+                    action.title = "Add Supertype";
+                }
+                action
+            })
             .collect(),
         _ => Vec::new(),
     }
@@ -376,7 +396,7 @@ mod tests {
             assert_eq!(shared.availability, Ready);
         }
         assert_eq!(class.len(), 17);
-        assert_eq!(interface.len(), 10);
+        assert_eq!(interface.len(), 13);
         assert!(
             class
                 .iter()

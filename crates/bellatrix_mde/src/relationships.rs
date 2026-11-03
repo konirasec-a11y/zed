@@ -566,7 +566,7 @@ pub fn relationship_style_for_notation(kind: &str) -> RelationshipStyle {
         "uml.generalization" => (None, Triangle, false),
         "uml.interface_realization" | "uml.realization" => (None, Triangle, true),
         "uml.directed_association" => (None, OpenArrow, false),
-        "uml.dependency" | "uml.template_binding" | "depends_on" => (None, OpenArrow, true),
+        "uml.dependency" | "uml.usage" | "uml.template_binding" | "depends_on" => (None, OpenArrow, true),
         "uml.aggregation" => (Diamond, None, false),
         "uml.composition" => (FilledDiamond, None, false),
         "uml.containment" => (Containment, None, false),
@@ -633,7 +633,7 @@ pub fn relationship_presentation(relation: &Relation) -> RelationshipPresentatio
         "uml.generalization" => ("subtype", "supertype"),
         "uml.interface_realization" => ("implementer", "interface"),
         "uml.realization" => ("implementation", "specification"),
-        "uml.dependency" | "uml.template_binding" => ("client", "supplier"),
+        "uml.dependency" | "uml.usage" | "uml.template_binding" => ("client", "supplier"),
         "uml.aggregation" | "uml.composition" => ("whole", "part"),
         "uml.containment" => ("container", "contained"),
         "uml.association" => ("end1", "end2"),
@@ -647,7 +647,12 @@ pub fn relationship_presentation(relation: &Relation) -> RelationshipPresentatio
             .map(str::to_owned)
     };
     RelationshipPresentation {
-        name: text("name"),
+        name: if notation == "uml.usage" {
+            Some(text("name").filter(|name| !name.is_empty())
+                .map_or_else(|| "«use»".into(), |name| format!("«use» {name}")))
+        } else {
+            text("name")
+        },
         source_labels: RelationshipEndpointLabels {
             role: text("sourceRole"),
             multiplicity: text("sourceMultiplicity"),
@@ -752,7 +757,7 @@ pub fn quick_relation_rule(action: crate::UmlQuickCreate) -> Option<QuickRelatio
             aggregation: None,
         },
         A::RequiredInterface => QuickRelationRule {
-            kind: "uml.dependency",
+            kind: "uml.usage",
             child_is_source: false,
             aggregation: None,
         },

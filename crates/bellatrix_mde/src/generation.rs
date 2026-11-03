@@ -45,7 +45,7 @@ pub enum GenerationGraphError {
 /// generation cyclic. Ownership and filesystem edges are not build edges.
 fn ordering_edge(kind: &str) -> bool {
     matches!(kind,
-        "depends_on" | "uml.dependency" | "uml.generalization" |
+        "depends_on" | "uml.dependency" | "uml.usage" | "uml.generalization" |
         "uml.interface_realization" | "uml.realization" |
         "uml.template_binding" | "build.depends_on"
     )

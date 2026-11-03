@@ -102,7 +102,9 @@ pub(super) fn apply(
             };
             (
                 kind.as_str(),
-                if interface { "Interface" } else { "Class" },
+                subject_type
+                    .metaclass()
+                    .ok_or("Quick Edit subject has no UML metaclass")?,
                 offset,
                 size,
             )
@@ -320,7 +322,7 @@ mod tests {
             (
                 UmlQuickCreate::RequiredInterface,
                 "rust.trait",
-                Some("uml.dependency"),
+                Some("uml.usage"),
             ),
             (
                 UmlQuickCreate::AssociatedClass,
@@ -413,9 +415,6 @@ mod tests {
             UmlQuickCreate::TemplateParameter,
             UmlQuickCreate::ProvidedInterface,
             UmlQuickCreate::RequiredInterface,
-            UmlQuickCreate::AssociatedClass,
-            UmlQuickCreate::AggregatedClass,
-            UmlQuickCreate::CompositedClass,
             UmlQuickCreate::Port,
             UmlQuickCreate::Part,
         ] {

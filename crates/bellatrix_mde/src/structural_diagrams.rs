@@ -88,6 +88,7 @@ pub fn relationship_root_kind(relation: &Relation) -> Option<RootMetaclass> {
         "uml.association" => RootMetaclass::Relationship,
         "uml.generalization"
         | "uml.dependency"
+        | "uml.usage"
         | "uml.directed_association"
         | "uml.interface_realization"
         | "uml.realization"
