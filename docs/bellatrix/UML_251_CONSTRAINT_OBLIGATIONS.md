@@ -36,6 +36,9 @@ implementação publicada em `062ef43162559c7d6d784543ecb28f1a82e8510f`
 ParameterSet::same_parameterized_entity tem recorte publicado em E30.
 Stereotype::associationEndOwnership foi publicada em
 `f9d7ce39b87cb983f5e0ccbe000fd52dd3b8e9ca` (E31).
+OperationTemplateParameter::match_default_signature tem recorte publicado em
+E32; Stereotype::generalize tem refinamento publicado em
+`588f704511f505112afe7632fad10519e4e58847` (E33).
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -151,7 +154,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E31 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E33 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -455,6 +458,64 @@ de execução nova. E12–E31 possuem os gates delimitados nas seções seguinte
   comprovadamente incorreto. Diagnósticos:
   `UML_STEREOTYPE_ASSOCIATION_END_OWNERSHIP` e
   `MDE_STEREOTYPE_ASSOCIATION_END_OWNERSHIP_UNVERIFIED`.
+
+- **E32**: `semantics/operations.rs`, `operation_template_default_signature`,
+  `equal_signature_values` e `validate`; `operation_template_default.rs`, onze
+  testes. Default ausente satisfaz a implicação; presente exige Operation e
+  comparação posicional exata dos ownedParameter com os de parameteredElement.
+  Compara contagem, identidade de type, upper, lower, direction, isOrdered e
+  isUnique, usando defaults normativos. Conformidade de tipos e contenção de
+  multiplicidade não substituem igualdade. Tipos ausentes comparam como null;
+  bounds não avaliáveis e referências externas permanecem não verificados,
+  salvo diferença conhecida decisiva. Malformados prevalecem em ambos os lados.
+  Projeções ausentes não são inventadas a partir de ownership.
+
+- **E33**: refinamento publicado de `semantics/profiles.rs`,
+  `stereotype_specializations` e `validate`, com
+  `semantics/classifier_hierarchy.rs::has_ancestor_matching`;
+  `stereotype_generalize.rs`, onze testes. A primeira conjunção usa os ancestrais
+  do próprio Stereotype: pai ruim/desconhecido de outro Stereotype não contamina
+  esse resultado. A segunda conjunção é global: Classifier não Stereotype com
+  ancestral Stereotype viola a obrigação para cada Stereotype avaliado.
+  Evidência conhecida pode provar violação ao lado de ramo externo sem declarar
+  fechamento completo de allParents. Ciclos, endpoints incorretos e coleções
+  de ancestralidade malformadas continuam erros; metaclasses desconhecidas
+  conservam unknown. Substitui a verificação apenas por arestas em
+  structural_diagrams pelo passe semântico comum. Diagnósticos:
+  `UML_STEREOTYPE_GENERALIZATION` e `MDE_STEREOTYPE_GENERALIZATION_UNVERIFIED`.
+
+### Evidência de default de OperationTemplateParameter e Stereotype::generalize
+
+OperationTemplateParameter::match_default_signature: commit publicado
+`42243e3e96f7bbbcd32be2f33b8671beaf8383ea`. O log local
+`/tmp/operation-template-gate-final.log` registra **35/35 aprovados**:
+operation_template_default 11, parameter_object_effect 7,
+parameter_scalar_constraints 7 e parameter_set_entity 10. A linha fica **P/E32**.
+Os testes discriminam ordem, cada campo exato, default ausente, tipos nulos,
+valores não avaliáveis, defaults normativos, referência malformada, roundtrip,
+rollback e reparo de snapshot. O adapter de autoria de OperationTemplateParameter
+continua limitado/Unsupported; o gate não certifica templates integralmente.
+
+Stereotype::generalize: refinamento testado no working tree sobre
+`42243e3e96f7bbbcd32be2f33b8671beaf8383ea`, registrado localmente em `3c1f13a`
+e publicado em `588f704511f505112afe7632fad10519e4e58847`. Os resultados
+abaixo são do gate anterior à publicação, não de rerun sobre o SHA remoto. O log
+`/tmp/stereotype-generalize-gate.log` registra **202/202 aprovados**:
+160 testes lib e 42 integrações (profile_metaclass_reference 13,
+stereotype_association_ownership 10, stereotype_associations 8 e
+stereotype_generalize 11). A linha passa de R/E03 para **P/E33**, explicitando
+limites de resolução; isso não é alegação de regressão de cobertura.
+O log inicial `/tmp/stereotype-generalize.log` registra uma falha e não é gate
+aprovado; a execução final inclui sua correção e regressões por sujeito.
+
+Os casos cobrem cláusulas local/global, ancestralidade direta/transitiva,
+unknowns, ciclos, coleções malformadas, independência entre sujeitos, roundtrip
+e rejeição atômica. A suíte lib completa mais integrações selecionadas não é
+suíte integral de todos os alvos. Não somar novamente testes sobrepostos a
+gates anteriores, nem converter contagens em cobertura normativa. A matriz não
+iniciou novos testes; os gates são anteriores à publicação e não demonstram
+execução nos SHAs remotos. Permanecem limites de documentos externos, autoria,
+UI e geração.
 
 ### Evidência publicada de Stereotype::associationEndOwnership
 
@@ -1051,7 +1112,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `OperationTemplateParameter-match_default_signature`
 
-- Metaclass: `OperationTemplateParameter`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `OperationTemplateParameter`. Estado: **P**. Evidência: E32; commit `42243e3e96f7bbbcd32be2f33b8671beaf8383ea`.
 - OCL publicado: `default->notEmpty() implies (default.oclIsKindOf(Operation) and (let defaultOp : Operation = default.oclAsType(Operation) in defaultOp.ownedParameter->size() = parameteredElement.ownedParameter->size() and Sequence{1.. defaultOp.ownedParameter->size()}->forAll( ix | let p1: Parameter = defaultOp.ownedParameter->at(ix), p2 : Parameter = parameteredElement.ownedParameter->at(ix) in p1.type = p2.type and p1.upper = p2.upper and p1.lower = p2.lower and p1.direction = p2.direction and p1.isOrdered = p2.isOrdered and p1.isUnique = p2.isUnique)))`.
 
 #### `Parameter-in_and_out`
@@ -1363,7 +1424,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `Stereotype-generalize`
 
-- Metaclass: `Stereotype`. Estado: **R**. Evidência: E03.
+- Metaclass: `Stereotype`. Estado: **P**. Evidência: E33; commit `588f704511f505112afe7632fad10519e4e58847`.
 - OCL publicado: `allParents()->forAll(oclIsKindOf(Stereotype)) and Classifier.allInstances()->forAll(c | c.allParents()->exists(oclIsKindOf(Stereotype)) implies c.oclIsKindOf(Stereotype))`.
 
 #### `Stereotype-name_not_clash`
