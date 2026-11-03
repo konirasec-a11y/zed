@@ -622,6 +622,7 @@ impl<'a> Model<'a> {
         issues.extend(super::connectors::validate(&references));
         issues.extend(super::enumerations::validate(&references));
         issues.extend(super::deployments::validate(&references));
+        issues.extend(super::profiles::validate(&references));
         issues.extend(super::property_subsetting::validate(&references));
         issues.extend(references.validate_typed_elements());
         issues

@@ -315,6 +315,10 @@ fn evaluate_upper_bound(
     })
 }
 
+fn default_lower_bound(element: ElementRef<'_>) -> Integer {
+    if element.conforms_to("ExtensionEnd") { 0.into() } else { 1.into() }
+}
+
 /// UML lowerBound() does not depend on whether upperValue can be evaluated.
 pub fn lower_bound(
     references: &ReferenceIndex<'_>,
@@ -324,9 +328,12 @@ pub fn lower_bound(
         return Err(EvaluationError::invalid(element.id(), "a MultiplicityElement is required"));
     }
     if has_bound_references(element) {
-        return bound(references, element, "lowerValue")?.map_or(Ok(1.into()), |target| {
+        return bound(references, element, "lowerValue")?.map_or(Ok(default_lower_bound(element)), |target| {
             match evaluate(references, target.id())? {
                 LiteralValue::Integer(value) => Ok(value),
+                _ if element.conforms_to("ExtensionEnd") => Err(EvaluationError::invalid(
+                    target.id(), "ExtensionEnd::lowerBound requires an Integer value",
+                )),
                 // lowerBound's fallback is distinct from lower_is_integer.
                 // A computable value with no Integer projection yields 1;
                 // multiplicity() still diagnoses the violated invariant.
@@ -335,6 +342,9 @@ pub fn lower_bound(
         });
     }
     require_assigned_values(references, element)?;
+    if !element.properties().contains_key("multiplicity") {
+        return Ok(default_lower_bound(element));
+    }
     literal_lower_bound(element.properties())
         .map_err(|error| classify_multiplicity_error(element.id(), error))
 }
@@ -379,6 +389,10 @@ pub fn multiplicity(
     }
     if !has_bound_references(element) {
         require_assigned_values(references, element)?;
+        if !element.properties().contains_key("multiplicity") {
+            return MultiplicityRange::from_bounds(Some(default_lower_bound(element)), None)
+                .map_err(|error| EvaluationError::invalid(element.id(), error.to_string()));
+        }
         return literal_multiplicity(element.properties())
             .map_err(|error| classify_multiplicity_error(element.id(), error));
     }
@@ -404,7 +418,7 @@ pub fn multiplicity(
         (Err(error), _) | (_, Err(error)) => return Err(error),
         (Ok(lower), Ok(upper)) => (lower, upper),
     };
-    MultiplicityRange::from_bounds(lower, upper)
+    MultiplicityRange::from_bounds(Some(lower.unwrap_or_else(|| default_lower_bound(element))), upper)
         .map_err(|error| EvaluationError::invalid(element.id(), error.to_string()))
 }
 

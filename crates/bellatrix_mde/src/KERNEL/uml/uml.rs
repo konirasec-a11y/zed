@@ -48,3 +48,6 @@ pub mod connectors;
 
 #[path = "semantics/deployments.rs"]
 pub mod deployments;
+
+#[path = "semantics/profiles.rs"]
+pub mod profiles;
