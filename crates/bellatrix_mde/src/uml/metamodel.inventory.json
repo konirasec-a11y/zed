@@ -1060,6 +1060,10 @@
       "scope": "Canonical Property subset targets, different names, shared Type conformance and upper-bound restriction; attribute and n-ary Association-end context conformance. Consumed by semantic command, structural validation and Inspector; no lower-bound restriction or feature replacement, and unresolved contexts/Types/expressions remain explicit unsupported diagnostics."
     },
     {
+      "file": "crates/bellatrix_mde/src/uml/redefinition_contexts.rs",
+      "scope": "Generated ownership-subset derivation of RedefinableElement contexts and the default allParents/includesAll predicate; consumed before Property/Operation consistency and by Inspector. Association-owned end redefinition uses ancestor allFeatures rather than attributes. Behavior/state-machine specialized contexts and alternate stored context lists remain explicit unsupported capabilities."
+    },
+    {
       "file": "crates/bellatrix_mde/src/uml/operation_signatures.rs",
       "scope": "Official Operation signature consistency over ordered canonical Parameters: equal count/direction/ordering/uniqueness, bidirectional Type conformance and direction-dependent interval containment. Consumed by redefinition commands, validation and Inspector; unsupported Type/bound and behavioral/template contract evaluation remain explicit capability diagnostics."
     },

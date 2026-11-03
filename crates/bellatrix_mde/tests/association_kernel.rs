@@ -745,7 +745,119 @@ fn public_association_flow_creates_edits_reparents_navigates_rejects_and_reopens
             nary
         );
     }
-}
+    // Specialize the Association and redefine its owned end. ownedEnd is a
+    // Feature, not an attribute, and its redefinition context is the Association.
+    let mut specialized = nary.clone();
+    for element in [
+        json!({"id":"specialized-association","kind":"uml.nary_association","name":"SpecializedParticipants","properties":{"memberEnd":[{"$ref":"specialized-a"},{"$ref":"specialized-c"}]}}),
+        json!({"id":"specialized-a","kind":"uml.attribute","name":"refinedA","properties":{"type":{"$ref":"a"}}}),
+        json!({"id":"specialized-c","kind":"uml.attribute","name":"refinedC","properties":{"type":{"$ref":"c"}}}),
+    ] {
+        specialized
+            .elements
+            .push(serde_json::from_value(element).expect("import specialization"));
+    }
+    for (kind, from, to) in [
+        ("owns", "root", "specialized-association"),
+        ("owns", "specialized-association", "specialized-a"),
+        ("owns", "specialized-association", "specialized-c"),
+        (
+            "uml.generalization",
+            "specialized-association",
+            nary_id.as_str(),
+        ),
+    ] {
+        specialized.relations.push(bellatrix_mde::Relation {
+            id: format!("specialization-{kind}-{to}"),
+            kind: kind.into(),
+            from: from.into(),
+            to: to.into(),
+            properties: Default::default(),
+        });
+    }
+    let redefine_end = Command::SetRedefinedElements {
+        element_id: "specialized-a".into(),
+        redefined_ids: vec![nary_ids[0].clone()],
+    };
+    specialized =
+        apply(&specialized, &redefine_end, 13).expect("redefine inherited Association-owned end");
+    let snapshot = encode(&specialized, Format::Json).expect("snapshot");
+    assert!(
+        apply(
+            &specialized,
+            &Command::SetOwner {
+                element_id: "specialized-a".into(),
+                owner_id: Some("c".into())
+            },
+            14
+        )
+        .is_err(),
+        "end reparenting must preserve a valid redefinition context"
+    );
+    assert_eq!(
+        encode(&specialized, Format::Json).expect("atomic"),
+        snapshot
+    );
+    let mut cyclic = specialized.clone();
+    cyclic.relations.push(bellatrix_mde::Relation {
+        id: "association-cycle".into(),
+        kind: "uml.generalization".into(),
+        from: nary_id.clone(),
+        to: "specialized-association".into(),
+        properties: Default::default(),
+    });
+    assert!(
+        apply(&cyclic, &redefine_end, 15)
+            .expect_err("cycle")
+            .contains("cycle in UML generalization")
+    );
+    for format in [Format::Json, Format::Protobuf] {
+        let reopened = decode(
+            &encode(&specialized, format).expect("save specialization"),
+            format,
+        )
+        .expect("reopen specialization");
+        let references = ReferenceIndex::new(Model::from_project(&reopened));
+        let result = bellatrix_mde::uml::classifiers::query(&references, "specialized-association")
+            .expect("specialized members");
+        let classifier = result.classifier.expect("Association Classifier");
+        assert!(classifier.attributes.is_empty());
+        assert!(
+            classifier
+                .all_features
+                .iter()
+                .any(|feature| feature.id() == "specialized-a")
+        );
+        assert!(
+            !classifier
+                .all_features
+                .iter()
+                .any(|feature| feature.id() == nary_ids[0])
+        );
+        let inspector = inspect_element(&ModelingSection::from_model(&reopened), "specialized-a")
+            .expect("end Inspector");
+        assert_eq!(
+            inspector
+                .properties
+                .iter()
+                .find(|property| property.path == "uml.redefinitionContext")
+                .expect("derived context")
+                .value,
+            json!([{"$ref":"specialized-association"}])
+        );
+        assert!(
+            Model::from_project(&reopened)
+                .validate()
+                .iter()
+                .all(|issue| issue.severity != bellatrix_mde::StructuralSeverity::Error)
+        );
+        assert!(
+            reopened
+                .elements
+                .iter()
+                .all(|element| !element.properties.contains_key("redefinitionContext"))
+        );
+    }}
 
 #[test]
 fn legacy_migration_preserves_authored_data_and_uses_the_opposite_composite_bound() {

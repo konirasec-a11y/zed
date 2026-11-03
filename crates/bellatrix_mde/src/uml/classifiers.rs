@@ -94,7 +94,10 @@ fn populated(value: &Value) -> bool {
     !value.is_null() && !value.as_array().is_some_and(Vec::is_empty)
 }
 
-fn contributes(property: &PropertyDescriptor, target: &'static str) -> Result<bool, String> {
+pub(crate) fn contributes(
+    property: &PropertyDescriptor,
+    target: &'static str,
+) -> Result<bool, String> {
     let target = XmiId::new(Document::Uml, target);
     let mut pending = vec![property.id];
     let mut visited = HashSet::new();
@@ -119,7 +122,9 @@ fn contributes(property: &PropertyDescriptor, target: &'static str) -> Result<bo
     Ok(false)
 }
 
-fn properties(element: ElementRef<'_>) -> Result<Vec<&'static PropertyDescriptor>, QueryError> {
+pub(crate) fn properties(
+    element: ElementRef<'_>,
+) -> Result<Vec<&'static PropertyDescriptor>, QueryError> {
     let descriptor = element
         .metaclass()
         .and_then(schema::uml_classifier)
@@ -157,7 +162,7 @@ pub(crate) fn is_owned_attribute(
     contributes_to_owned_union(owner, child, "Classifier-attribute")
 }
 
-fn contributes_to_owned_union(
+pub(crate) fn contributes_to_owned_union(
     owner: ElementRef<'_>,
     child: ElementRef<'_>,
     target: &'static str,
@@ -414,55 +419,25 @@ impl<'index, 'model> Queries<'index, 'model> {
         let mut redefined = HashSet::new();
         for member in &direct.owned_members {
             for target in redefinitions(self.references, *member)? {
-                let owner = self
-                    .references
-                    .model()
-                    .owner(target)
-                    .map_err(|error| QueryError::invalid(target.id(), error))?
-                    .ok_or_else(|| {
-                        QueryError::invalid(
-                            member.id(),
-                            "redefined member requires a Classifier owner",
-                        )
-                    })?;
-                if owner.id() == direct.element.id()
-                    || !ancestry.is_some_and(|ancestry| ancestry.conforms_to(owner))
+                // Property adds a separate condition: its target must occur in
+                // an ancestor's allFeatures, not merely in its attributes.
+                // Association::ownedEnd is a Feature with an Association context.
+                if member.conforms_to("Property")
+                    && !ancestors.iter().any(|ancestor| {
+                        self.completed
+                            .get(ancestor.id())
+                            .and_then(|query| query.classifier.as_ref())
+                            .is_some_and(|query| {
+                                query
+                                    .all_features
+                                    .iter()
+                                    .any(|feature| feature.id() == target.id())
+                            })
+                    })
                 {
                     return Err(QueryError::invalid(
                         member.id(),
-                        format!(
-                            "redefinition target {} must belong to an ancestor Classifier",
-                            target.id(),
-                        ),
-                    ));
-                }
-                let target_query = self
-                    .completed
-                    .get(owner.id())
-                    .and_then(|query| query.classifier.as_ref())
-                    .ok_or_else(|| {
-                        QueryError::invalid(member.id(), "redefinition context is not a Classifier")
-                    })?;
-                let source_direct = if member.conforms_to("Property") {
-                    &direct.attributes
-                } else {
-                    &direct.features
-                };
-                let target_direct = if target.conforms_to("Property") {
-                    &target_query.attributes
-                } else {
-                    &target_query.features
-                };
-                if !source_direct
-                    .iter()
-                    .any(|source| source.id() == member.id())
-                    || !target_direct
-                        .iter()
-                        .any(|candidate| candidate.id() == target.id())
-                {
-                    return Err(QueryError::unsupported(
-                        member.id(),
-                        "only direct classifier attributes and Operations have supported redefinition contexts",
+                        "a redefined Property must be inherited from an ancestor Classifier's features",
                     ));
                 }
                 redefined.insert(target.id());
@@ -719,6 +694,17 @@ fn redefinitions<'a>(
                 return Err(QueryError::invalid(
                     element.id(),
                     format!("{id} isLeaf prohibits redefinition"),
+                ));
+            }
+            if !super::redefinition_contexts::compare_redefinition_contexts(
+                references, element, target,
+            )? {
+                return Err(QueryError::invalid(
+                    element.id(),
+                    format!(
+                        "redefinition target {} requires a context in an ancestor Classifier",
+                        target.id(),
+                    ),
                 ));
             }
             match compare_redefinition_consistency(references, element, target) {

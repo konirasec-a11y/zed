@@ -470,3 +470,47 @@ valid contexts, edits names/Types/finite and unlimited bounds, keeps an unknown
 expression with Inspector diagnostics, adds a n-ary end using the same rule,
 diagnoses a generalization cycle, and reopens JSON/Protobuf. No test function or
 isolated unit test was added.
+
+
+## RedefinableElement contexts and Association-end inheritance
+
+`uml/redefinition_contexts.rs` adapts the derived-union selection pattern from
+pinned `uml4net/Extend/RedefinableElementExtensions.cs::QueryRedefinitionContext`
+and `IsRedefinableElementOf`. The authoritative source is the original XMI
+`RedefinableElement-redefinitionContext`, its opposite subsets and
+`RedefinableElement-isRedefinitionContextValid`, plus UML 2.5.1 §9.9.18.7.
+Bellatrix uses its existing generated subset/redefinition walker to identify
+ownership contributions, rather than copying a metaclass switch or storing
+another context list. The upstream code and fixtures were inspected, not run.
+
+A Classifier owner contributes only through a property in the redefinition
+context union: attributes, Association-owned ends, Operations, nested
+Classifiers, owned Connectors and redefinable template signatures can contribute.
+Arbitrary ownership does not: a Reception or ActivityNode is not assigned its
+owner as a context merely because that owner is a Classifier. Derived Behavior
+contexts and specialized state-machine context queries/predicates remain
+explicit Unsupported capabilities; authored context/owner-reference lists do
+not replace canonical ownership.
+
+The default predicate follows the OCL precisely: at least one source context's
+`allParents` must include every target context. It does not use metaclass equality
+or allow the same source/target context. An empty source context yields false;
+with a source context, the empty target set follows the OCL's vacuous includesAll.
+The existing cycle-safe user-model ancestry implementation is reused. The
+context precondition is established before Property or Operation consistency is
+compared, so an unevaluated context cannot become a false consistency verdict.
+
+Property has the additional `Property-redefined_property_inherited` condition:
+the target must occur in an ancestor's allFeatures. The consumer previously
+restricted Properties to attributes; it now correctly allows an Association's
+ownedEnd, which is a Feature but not an attribute. Context derivation remains
+separate from subsetting context, where an Association end instead uses the
+Types at its other ends. The existing redefinition command, structural queries
+and Inspector consume the same computations; no new UI prohibition is added.
+General specialized redefinedElement unions and their consistency predicates
+are not claimed by this bounded slice.
+
+The existing public Association lifecycle now imports a specialization,
+redefines an owned end, rejects a context-breaking reparent and a generalization
+cycle atomically, and reopens JSON/Protobuf while checking inherited Features and
+derived Inspector context. No new test function or isolated unit test was added.

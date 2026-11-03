@@ -211,6 +211,12 @@ pub(crate) fn append_namespace_properties(
     properties: &mut Vec<InspectorProperty>,
 ) {
     let Ok(element) = references.element(id) else { return; };
+    if element.conforms_to("RedefinableElement") {
+        let value = crate::uml::redefinition_contexts::resolve_redefinition_contexts(references, element)
+            .map(|contexts| json!(contexts.iter().map(|context| json!({"$ref": context.id()})).collect::<Vec<_>>()))
+            .unwrap_or_else(|error| json!(error.to_string()));
+        properties.push(InspectorProperty { path: "uml.redefinitionContext".into(), label: "Redefinition contexts".into(), group: "UML members", editor: PropertyEditor::ReadOnly, value, editable: false });
+    }
     if let Some(warning) = crate::uml::classifiers::redefinition_consistency_diagnostic(references, element) {
         properties.push(InspectorProperty {
             path: "uml.redefinition.status".into(), label: "Redefinition consistency status".into(),
