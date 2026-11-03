@@ -3,6 +3,13 @@ use super::*;
 fn tool_glyph(tool: ModelingTool) -> ShapeKind {
     match tool {
         ModelingTool::Element(kind) => match kind {
+            ModelingElementKind::Choice => ShapeKind::Decision,
+            ModelingElementKind::Junction => ShapeKind::InitialNode,
+            ModelingElementKind::StateFork | ModelingElementKind::StateJoin => ShapeKind::Fork,
+            ModelingElementKind::ShallowHistory | ModelingElementKind::DeepHistory => ShapeKind::History,
+            ModelingElementKind::EntryPoint => ShapeKind::EntryPoint,
+            ModelingElementKind::ExitPoint => ShapeKind::FlowFinal,
+            ModelingElementKind::Terminate => ShapeKind::Terminate,
             ModelingElementKind::InputPin | ModelingElementKind::ValuePin => ShapeKind::InputPin,
             ModelingElementKind::OutputPin => ShapeKind::OutputPin,
             ModelingElementKind::InteractionOperand => ShapeKind::InteractionOperand,
@@ -261,7 +268,7 @@ impl Render for MdeLeftPanel {
                     })
                 })
         });
-        let tool_groups: [(&str, Vec<ModelingTool>); 15] = [
+        let tool_groups: [(&str, Vec<ModelingTool>); 16] = [
             (
                 "Classes · basic",
                 ModelingElementKind::BASIC
@@ -380,6 +387,7 @@ impl Render for MdeLeftPanel {
                     .map(ModelingTool::Element)
                     .collect(),
             ),
+            ("State pseudostates", ModelingElementKind::PSEUDOSTATES.iter().copied().map(ModelingTool::Element).collect()),
             (
                 "Annotations",
                 ModelingElementKind::ANNOTATIONS

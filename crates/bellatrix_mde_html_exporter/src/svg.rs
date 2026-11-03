@@ -17,7 +17,11 @@ fn color(input: Option<&str>, fallback: &str) -> String {
         fallback.into()
     }
 }
-fn render_view(project: &Project, view: &View) -> String {
+fn render_view(
+    project: &Project,
+    view: &View,
+    references: &bellatrix_mde::uml::references::ReferenceIndex<'_>,
+) -> String {
     let fill = color(view.style.fill.as_deref(), "#303641");
     let stroke = color(view.style.stroke.as_deref(), "#788397");
     let text_fill = color(view.style.text_color.as_deref(), "#f2f5f9");
@@ -52,15 +56,22 @@ fn render_view(project: &Project, view: &View) -> String {
     let font_family = esc(view.style.font_family.as_deref().unwrap_or("system-ui"));
     let name = view
         .label
-        .as_deref()
+        .clone()
         .or_else(|| {
-            view.subject.as_ref().and_then(|id| {
-                project
-                    .element(id)
-                    .map(|element| element.label.as_deref().unwrap_or(&element.name))
-            })
+            view.subject
+                .as_ref()
+                .and_then(|id| project.element(id))
+                .map(|element| {
+                    element.label.clone().unwrap_or_else(|| {
+                        bellatrix_mde::format_element_label_for_view(
+                            element,
+                            references,
+                            &view.style,
+                        )
+                    })
+                })
         })
-        .unwrap_or("");
+        .unwrap_or_default();
     let shape = match &view.geometry {
         Geometry::Rect {
             x,
@@ -72,7 +83,7 @@ fn render_view(project: &Project, view: &View) -> String {
             text = render_text(
                 view,
                 (*x, *y, *width, *height),
-                name,
+                &name,
                 font_size,
                 &font_family,
                 &text_fill
@@ -83,7 +94,7 @@ fn render_view(project: &Project, view: &View) -> String {
             text = render_text(
                 view,
                 (cx - rx, cy - ry, rx * 2.0, ry * 2.0),
-                name,
+                &name,
                 font_size,
                 &font_family,
                 &text_fill
@@ -161,6 +172,9 @@ fn render_text(
     )
 }
 pub fn draw(project: &Project, diagram: &Diagram) -> String {
+    let references = bellatrix_mde::uml::references::ReferenceIndex::new(
+        bellatrix_mde::uml::root::Model::from_project(project),
+    );
     let mut result = format!(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {} {}\" role=\"img\" aria-label=\"{}\">",
         diagram.width,
@@ -172,7 +186,7 @@ pub fn draw(project: &Project, diagram: &Diagram) -> String {
     let mut views = diagram.views.iter().collect::<Vec<_>>();
     views.sort_by_key(|view| view.z_index);
     for view in views {
-        result.push_str(&render_view(project, view));
+        result.push_str(&render_view(project, view, &references));
     }
     result.push_str("</svg>");
     result

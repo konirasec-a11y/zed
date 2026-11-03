@@ -56,6 +56,15 @@ pub enum ModelingElementKind {
     OutputPin,
     ValuePin,
     InteractionOperand,
+    Choice,
+    Junction,
+    StateFork,
+    StateJoin,
+    ShallowHistory,
+    DeepHistory,
+    EntryPoint,
+    ExitPoint,
+    Terminate,
 }
 impl ModelingElementKind {
     pub const STRUCTURAL: &'static [Self] = &[
@@ -109,11 +118,38 @@ impl ModelingElementKind {
         Self::ValuePin,
         Self::InteractionOperand,
     ];
+    pub const PSEUDOSTATES: &'static [Self] = &[
+        Self::Choice,
+        Self::Junction,
+        Self::StateFork,
+        Self::StateJoin,
+        Self::ShallowHistory,
+        Self::DeepHistory,
+        Self::EntryPoint,
+        Self::ExitPoint,
+        Self::Terminate,
+    ];
+    pub fn resolve_pseudostate_kind(self) -> Option<&'static str> {
+        match self {
+            Self::Pseudostate => Some("initial"),
+            Self::Choice => Some("choice"),
+            Self::Junction => Some("junction"),
+            Self::StateFork => Some("fork"),
+            Self::StateJoin => Some("join"),
+            Self::ShallowHistory => Some("shallowHistory"),
+            Self::DeepHistory => Some("deepHistory"),
+            Self::EntryPoint => Some("entryPoint"),
+            Self::ExitPoint => Some("exitPoint"),
+            Self::Terminate => Some("terminate"),
+            _ => None,
+        }
+    }
     pub fn requires_nested_owner(self) -> bool {
         Self::ACTIVITY_NODES.contains(&self)
             || Self::STATE_NODES.contains(&self)
             || Self::INTERACTION_NODES.contains(&self)
             || Self::DETAILS.contains(&self)
+            || Self::PSEUDOSTATES.contains(&self)
     }
     pub fn requires_owner(self) -> bool {
         Self::STRUCTURAL.contains(&self) || self.requires_nested_owner()
@@ -176,7 +212,7 @@ impl ModelingElementKind {
             Self::ActivityPartition => "Activity Partition",
             Self::Region => "State Region",
             Self::State => "State",
-            Self::Pseudostate => "Pseudostate",
+            Self::Pseudostate => "Initial Pseudostate",
             Self::FinalState => "Final State",
             Self::Lifeline => "Lifeline",
             Self::BehaviorExecutionSpecification => "Execution",
@@ -187,6 +223,15 @@ impl ModelingElementKind {
             Self::OutputPin => "Output Pin",
             Self::ValuePin => "Value Pin",
             Self::InteractionOperand => "Interaction Operand",
+            Self::Choice => "Choice",
+            Self::Junction => "Junction",
+            Self::StateFork => "State Fork",
+            Self::StateJoin => "State Join",
+            Self::ShallowHistory => "Shallow History",
+            Self::DeepHistory => "Deep History",
+            Self::EntryPoint => "Entry Point",
+            Self::ExitPoint => "Exit Point",
+            Self::Terminate => "Terminate",
         }
     }
     pub fn model_kind(self) -> &'static str {
@@ -246,6 +291,15 @@ impl ModelingElementKind {
             Self::OutputPin => "uml.output_pin",
             Self::ValuePin => "uml.value_pin",
             Self::InteractionOperand => "uml.interaction_operand",
+            Self::Choice => "uml.pseudostate",
+            Self::Junction => "uml.pseudostate",
+            Self::StateFork => "uml.pseudostate",
+            Self::StateJoin => "uml.pseudostate",
+            Self::ShallowHistory => "uml.pseudostate",
+            Self::DeepHistory => "uml.pseudostate",
+            Self::EntryPoint => "uml.pseudostate",
+            Self::ExitPoint => "uml.pseudostate",
+            Self::Terminate => "uml.pseudostate",
         }
     }
     pub fn default_name(self) -> &'static str {
@@ -304,6 +358,15 @@ impl ModelingElementKind {
             Self::OutputPin => "NewOutputPin",
             Self::ValuePin => "NewValuePin",
             Self::InteractionOperand => "NewInteractionOperand",
+            Self::Choice => "NewChoice",
+            Self::Junction => "NewJunction",
+            Self::StateFork => "NewStateFork",
+            Self::StateJoin => "NewStateJoin",
+            Self::ShallowHistory => "NewShallowHistory",
+            Self::DeepHistory => "NewDeepHistory",
+            Self::EntryPoint => "NewEntryPoint",
+            Self::ExitPoint => "NewExitPoint",
+            Self::Terminate => "NewTerminate",
         }
     }
     pub fn initial_size(self) -> (f64, f64) {
@@ -320,6 +383,14 @@ impl ModelingElementKind {
             Self::ActivityPartition | Self::Region | Self::CombinedFragment => (300.0, 220.0),
             Self::InputPin | Self::OutputPin | Self::ValuePin => (16.0, 16.0),
             Self::InteractionOperand => (250.0, 90.0),
+            Self::StateFork | Self::StateJoin => (140.0, 20.0),
+            Self::Choice => (60.0, 60.0),
+            Self::Junction => (24.0, 24.0),
+            Self::ShallowHistory
+            | Self::DeepHistory
+            | Self::EntryPoint
+            | Self::ExitPoint
+            | Self::Terminate => (38.0, 38.0),
             Self::Actor => (85.0, 135.0),
             Self::UseCase | Self::Collaboration => (185.0, 100.0),
             Self::Activity | Self::StateMachine => (220.0, 140.0),

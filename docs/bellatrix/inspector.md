@@ -152,7 +152,7 @@ Current implementation status (not a full parity claim):
 | Auto resize | Pending shared view-format command and renderer-measured bounds. |
 | Show shadow and word wrap | Common optional Style flags with live icon controls and shared native surface/text helpers. Shadow applies to the view frame; SVG exports a drop-shadow filter. Native wrapping uses renderer text layout; SVG word wrapping is not implemented and is documented as an export limitation. |
 | Stereotype display (none/label/decoration/icon variants) | Common inherited/label/hidden modes implemented for applied labels; required UML keywords remain visible. Decoration/icon variants remain pending actual stereotype image mapping. |
-| Show visibility, namespace, property, type | Pending view-format toggles; semantic values must stay unchanged. |
+| Show visibility, namespace, property, type | Visibility/type/property-annotation flags share the existing typed member/operation formatter in native canvas and SVG; original semantic values remain unchanged. Namespace remains pending its separate header-line projection, rather than being spliced into names. |
 | Suppress attributes, operations, receptions, literals, columns | Common attribute/operation/reception flags filter existing classifier compartments without changing members or view bounds. Literal/column compartments are not yet projected and their controls remain pending. |
 | Align selected objects left/center/right/top/middle/bottom | Pending multi-view selection and geometry transaction. Text alignment is distinct and does not implement these operations. |
 | Equal horizontal/vertical spacing | Pending multi-view geometry transaction. |

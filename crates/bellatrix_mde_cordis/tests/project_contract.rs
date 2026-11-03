@@ -1,6 +1,9 @@
-use bellatrix_mde_cordis::{MdePlugin, ModelingRename, ModelingRenameRequested, with_model};
-use bellatrix_mde_cordis::{ModelingRun, ModelingRunRequested, ModelingTaskKind};
 use bellatrix_mde::{Project, Scope};
+use bellatrix_mde_cordis::{
+    MdePlugin, ModelingRename, ModelingRenameRequested, ModelingSetOwner,
+    ModelingSetOwnerRequested, with_model,
+};
+use bellatrix_mde_cordis::{ModelingRun, ModelingRunRequested, ModelingTaskKind};
 use bellatrix_project::{
     ProjectClose, ProjectCloseRequested, ProjectCreate, ProjectCreateRequested, ProjectDocument,
     ProjectId, ProjectOpen, ProjectOpenRequested, ProjectPlugin, ProjectReplace,
@@ -92,6 +95,65 @@ async fn public_event_updates_only_requested_project_and_survives_modeling_dispo
         assert_eq!(changes[0].id, a_id);
         assert_eq!(changes[0].revision, 1);
     }
+
+    // The same public event path moves an existing element without duplicating its edge.
+    let hierarchy: Project = serde_json::from_value(serde_json::json!({
+        "id": "hierarchy", "name": "Hierarchy", "root_model": "model",
+        "elements": [
+            {"id": "model", "kind": "uml.model", "name": "Model"},
+            {"id": "package", "kind": "uml.package", "name": "Package"},
+            {"id": "class", "kind": "uml.class", "name": "Class"}
+        ],
+        "relations": [
+            {"id": "owns-package", "kind": "owns", "from": "model", "to": "package"},
+            {"id": "owns-class", "kind": "owns", "from": "model", "to": "class"}
+        ]
+    }))
+    .unwrap();
+    let hierarchy_id = ProjectId::new("hierarchy").unwrap();
+    ctx.query::<ProjectCreate>(
+        Routing::Unscoped,
+        ProjectCreateRequested {
+            document: make_document(&hierarchy),
+        },
+    )
+    .await
+    .unwrap();
+    let ownership = |owner: &str, expected_revision| ModelingSetOwnerRequested {
+        project_id: hierarchy_id.clone(),
+        element_id: "class".into(),
+        owner_id: Some(owner.into()),
+        expected_revision,
+    };
+    assert!(matches!(
+        ctx.query::<ModelingSetOwner>(Routing::Unscoped, ownership("package", 0))
+            .await
+            .unwrap(),
+        QueryOutcome::Answer(Ok(1))
+    ));
+    assert!(matches!(
+        ctx.query::<ModelingSetOwner>(Routing::Unscoped, ownership("model", 0))
+            .await
+            .unwrap(),
+        QueryOutcome::Answer(Err(_))
+    ));
+    assert!(matches!(
+        ctx.query::<ModelingSetOwner>(Routing::Unscoped, ownership("class", 1))
+            .await
+            .unwrap(),
+        QueryOutcome::Answer(Err(_))
+    ));
+    let snapshot = service.snapshot(&hierarchy_id).unwrap();
+    assert_eq!(snapshot.revision(), 1);
+    let section = snapshot.section("bellatrix.mde").unwrap();
+    let edges = section["relations"].as_array().unwrap();
+    let class_edges: Vec<_> = edges
+        .iter()
+        .filter(|edge| edge["kind"] == "owns" && edge["to"] == "class")
+        .collect();
+    assert_eq!(class_edges.len(), 1);
+    assert_eq!(class_edges[0]["id"], "owns-class");
+    assert_eq!(class_edges[0]["from"], "package");
 
     engine.dispose().await.unwrap();
     let missed = ctx

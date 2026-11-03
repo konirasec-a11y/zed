@@ -20,6 +20,8 @@ pub struct UmlFigure {
     pseudostate_kind: Option<String>,
     interaction_presentation: Option<String>,
     name: SharedString,
+    slot_labels: Vec<String>,
+    interaction_operator: Option<String>,
     applied_stereotype: Option<SharedString>,
     selected: bool,
     scale: f32,
@@ -72,6 +74,8 @@ impl UmlFigure {
             pseudostate_kind: None,
             interaction_presentation: None,
             name: name.into(),
+            slot_labels: Vec::new(),
+            interaction_operator: None,
             applied_stereotype: None,
             selected: false,
             scale: 1.0,
@@ -81,6 +85,14 @@ impl UmlFigure {
             editor: None,
             template_parameters: None,
         }
+    }
+    pub fn interaction_operator(mut self, operator: Option<&str>) -> Self {
+        self.interaction_operator = operator.map(str::to_owned);
+        self
+    }
+    pub fn slot_labels(mut self, labels: Vec<String>) -> Self {
+        self.slot_labels = labels;
+        self
     }
     pub fn diagram_presentation(mut self, diagram: &bellatrix_mde::Diagram) -> Self {
         if diagram.uml_di_type == "UMLInteractionDiagram" {
@@ -102,16 +114,11 @@ impl UmlFigure {
         if self.kind != "uml.pseudostate" {
             return uml_notation(&self.kind);
         }
-        match self.pseudostate_kind.as_deref().unwrap_or("initial") {
-            "initial" | "junction" => UmlNotation::InitialNode,
-            "choice" => UmlNotation::Decision,
-            "shallowHistory" | "deepHistory" | "entryPoint" => UmlNotation::History,
-            "exitPoint" => UmlNotation::FlowFinal,
-            "terminate" => UmlNotation::Terminate,
-            "fork" | "join" => UmlNotation::Fork,
-            _ => UmlNotation::Unsupported,
-        }
+        bellatrix_mde::resolve_pseudostate_notation(
+            self.pseudostate_kind.as_deref().unwrap_or("initial"),
+        )
     }
+
     pub fn view_style(mut self, style: &bellatrix_mde::Style) -> Self {
         self.appearance = ViewAppearance(style.clone());
         self
@@ -540,10 +547,15 @@ impl RenderOnce for UmlFigure {
                 let keyword = uml_header(&self.kind, None).keyword;
                 let label_color = appearance.text(palette.text);
                 let label_size = appearance.font_size(10.0, scale);
-                let frame_keyword = if self.kind == "uml.interaction" {
-                    "sd"
+                let slot_font_size = appearance.font_size(12.0, scale);
+                let is_interaction = self.kind == "uml.interaction";
+                let frame_keyword = if is_interaction {
+                    "sd".to_owned()
+                } else if notation == UmlNotation::CombinedFragment {
+                    self.interaction_operator
+                        .unwrap_or_else(|| "[operator]".to_owned())
                 } else {
-                    "ref"
+                    "ref".to_owned()
                 };
                 div()
                     .size_full()
@@ -579,17 +591,23 @@ impl RenderOnce for UmlFigure {
                                 .child(history_label),
                         )
                     })
-                    .when(notation == UmlNotation::InteractionUse, |element| {
-                        element.child(
-                            div()
-                                .absolute()
-                                .left(px(8.0 * scale))
-                                .top(px(4.0 * scale))
-                                .text_size(px(10.0 * scale))
-                                .text_color(border)
-                                .child(frame_keyword),
-                        )
-                    })
+                    .when(
+                        matches!(
+                            notation,
+                            UmlNotation::InteractionUse | UmlNotation::CombinedFragment
+                        ),
+                        |element| {
+                            element.child(
+                                div()
+                                    .absolute()
+                                    .left(px(8.0 * scale))
+                                    .top(px(4.0 * scale))
+                                    .text_size(px(10.0 * scale))
+                                    .text_color(border)
+                                    .child(frame_keyword),
+                            )
+                        },
+                    )
                     .child(
                         div()
                             .absolute()
@@ -606,7 +624,16 @@ impl RenderOnce for UmlFigure {
                                     .top(gpui::relative(0.20))
                                     .right(gpui::relative(0.20))
                             })
-                            .when(!external_label && !heading, |element| {
+                            .when(is_interaction, |element| {
+                                element
+                                    .top(px(4.0 * scale))
+                                    .left(px(30.0 * scale))
+                                    .items_start()
+                            })
+                            .when(notation == UmlNotation::CombinedFragment, |element| {
+                                element.top(px(32.0 * scale))
+                            })
+                            .when(!external_label && !heading && !is_interaction, |element| {
                                 element.top_0().bottom_0().items_center()
                             })
                             .when(
@@ -646,7 +673,31 @@ impl RenderOnce for UmlFigure {
                             .flex()
                             .flex_col()
                             .map(|element| alignment.align_column(element))
-                            .child(title_area),
+                            .when(
+                                is_interaction && alignment.0.text_align.is_none(),
+                                |element| element.items_start(),
+                            )
+                            .child(title_area)
+                            .when(
+                                notation == UmlNotation::Instance && !self.slot_labels.is_empty(),
+                                |element| {
+                                    element.child(
+                                        div()
+                                            .w_full()
+                                            .mt(px(6.0 * scale))
+                                            .pt(px(4.0 * scale))
+                                            .border_t_1()
+                                            .border_color(border)
+                                            .text_size(px(slot_font_size))
+                                            .text_color(label_color)
+                                            .children(
+                                                self.slot_labels
+                                                    .into_iter()
+                                                    .map(|label| div().child(label)),
+                                            ),
+                                    )
+                                },
+                            ),
                     )
                     .into_any_element()
             }

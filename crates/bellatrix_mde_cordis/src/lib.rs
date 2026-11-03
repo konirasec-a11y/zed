@@ -23,6 +23,8 @@ mod create_relation;
 pub use create_relation::{
     ModelingCreateRelation, ModelingCreateRelationRequested, projected_automatic_routes,
 };
+mod association_ends;
+pub use association_ends::{ModelingEditAssociationEnds, ModelingEditAssociationEndsRequested};
 mod add_member;
 mod create_element;
 pub use add_member::{
@@ -35,8 +37,8 @@ mod set_property;
 mod view_edits;
 mod view_style;
 pub use view_style::{
-    ModelingSetViewRouting, ModelingSetViewRoutingRequested, ModelingSetViewStyle,
-    ModelingSetViewStyleRequested, ModelingReorderView, ModelingReorderViewRequested,
+    ModelingReorderView, ModelingReorderViewRequested, ModelingSetViewRouting,
+    ModelingSetViewRoutingRequested, ModelingSetViewStyle, ModelingSetViewStyleRequested,
 };
 mod views;
 pub use delete_element::{ModelingDeleteElement, ModelingDeleteElementRequested};
@@ -51,7 +53,10 @@ use bellatrix_mde::Scope;
 use cordis::event::{ListenerRegistrationError, observer_sync};
 use cordis::{Context, Event, Plugin};
 pub use create_element::{ModelingCreateElement, ModelingCreateElementRequested};
-pub use project_integration::{MdePlugin, ModelingRename, ModelingRenameRequested, with_model};
+pub use project_integration::{
+    MdePlugin, ModelingRename, ModelingRenameRequested, ModelingSetOwner,
+    ModelingSetOwnerRequested, with_model,
+};
 use std::convert::Infallible;
 use tokio::sync::mpsc;
 pub use ui_bridge::{MdeUiBridge, MdeUiCommand};

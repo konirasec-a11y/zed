@@ -131,6 +131,9 @@ pub(crate) fn reconcile_style_inputs(
                         | "word_wrap"
                         | "show_shadow"
                         | "stereotype_display"
+                        | "show_visibility"
+                        | "show_type"
+                        | "show_property"
                         | "suppress_attributes"
                         | "suppress_operations"
                         | "suppress_receptions"
@@ -583,6 +586,46 @@ pub(crate) fn render_styles(
         }
         rows.push(stereotypes.into_any_element());
     }
+    if !is_edge {
+        let mut labels = div().px_3().py_1().flex().gap_1();
+        for (field, description) in [
+            ("show_visibility", "Show member visibility"),
+            ("show_type", "Show member and parameter types"),
+            (
+                "show_property",
+                "Show property annotations such as readOnly and query",
+            ),
+        ] {
+            let enabled = draft
+                .state
+                .values
+                .get(field)
+                .is_none_or(|value| value != "false");
+            let item = item.clone();
+            let key = key.clone();
+            labels = labels.child(
+                Button::new(format!("mde-style-{field}"), "")
+                    .start_icon(
+                        Icon::from_path(format!("icons/bellatrix-{field}.svg"))
+                            .size(IconSize::Small),
+                    )
+                    .tooltip(Tooltip::text(description))
+                    .toggle_state(enabled)
+                    .disabled(draft.state.conflict)
+                    .on_click(cx.listener(move |panel, _, _, cx| {
+                        edit_style_choice(
+                            panel,
+                            &item,
+                            &key,
+                            field,
+                            if enabled { "false" } else { "true" },
+                            cx,
+                        )
+                    })),
+            );
+        }
+        rows.push(labels.into_any_element());
+    }
     let mut patterns = div().px_3().py_1().flex().gap_1();
     for (value, glyph, description) in [
         ("", "inherit", "Inherit the notation's line pattern"),
@@ -609,16 +652,20 @@ pub(crate) fn render_styles(
                 })),
         );
     }
-    if draft
-        .state
-        .values
-        .get("line_mode")
-        .is_some_and(|value| !value.is_empty())
+    if ["line_mode", "text_align", "text_vertical_align"]
+        .iter()
+        .any(|field| {
+            draft
+                .state
+                .values
+                .get(*field)
+                .is_some_and(|value| !value.is_empty())
+        })
         || !draft.state.baseline.dash_pattern.is_empty()
     {
         patterns = patterns.child(IconButton::new("mde-custom-notation-warning", IconName::Warning)
             .icon_color(Color::Warning)
-            .tooltip(Tooltip::text("Custom line appearance may differ from standard UML notation. Model meaning is unchanged; inherit restores notation defaults.")));
+            .tooltip(Tooltip::text("Custom line or text placement may differ from standard UML notation. Semantic meaning is unchanged. Restore IDE theme / inherit to return to the renderer’s notation defaults.")));
     }
     rows.push(patterns.into_any_element());
     let mut alignment = div().px_3().py_1().flex().gap_1();

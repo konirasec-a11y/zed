@@ -7,9 +7,12 @@
 
 use bellatrix_mde::{
     Format, ModelingRelationKind, ModelingSection, Project,
-    commands::{Command, apply},
+    commands::{
+        AssociationEndDraft, AssociationEndEdit, AssociationEndOwner, Command, ModelingElementKind,
+        RemovedAssociationEnd, apply,
+    },
     decode, encode, inspect_element, relationship_presentation,
-    uml::{associations, references::ReferenceIndex, root::Model},
+    uml::{associations, references::ReferenceIndex, root::Model, schema::Aggregation},
 };
 use serde_json::json;
 
@@ -232,34 +235,322 @@ fn public_association_flow_creates_edits_reparents_navigates_rejects_and_reopens
         assert_eq!(end_ids(&reopened, &association), ends);
         assert!(Model::from_project(&reopened).validate().is_empty());
     }
+    model = edit(
+        &model,
+        &ends[0],
+        "label",
+        json!("Preserve this end metadata"),
+    );
+    let undo_snapshot = model.clone();
+    let retained_record = model.element(&ends[0]).expect("old owned end").clone();
+    let replacement = apply(
+        &model,
+        &Command::EditAssociationEnds {
+            association_id: association.clone(),
+            edits: vec![
+                AssociationEndEdit::Remove {
+                    property_id: ends[0].clone(),
+                    disposition: RemovedAssociationEnd::ReparentToClassifier("c".into()),
+                },
+                AssociationEndEdit::Insert {
+                    position: 0,
+                    end: AssociationEndDraft {
+                        name: "newOwner".into(),
+                        type_id: "a".into(),
+                        owner: AssociationEndOwner::Association,
+                        aggregation: Aggregation::None,
+                        multiplicity: Some("1".into()),
+                    },
+                },
+            ],
+        },
+        5,
+    )
+    .expect("replace owned end atomically, retaining the old Property as an attribute");
+    assert_eq!(
+        model, undo_snapshot,
+        "the entire pre-edit snapshot remains available for undo"
+    );
+    model = replacement;
+    let replacement_ids = end_ids(&model, &association);
+    assert_ne!(replacement_ids[0], ends[0]);
+    assert_eq!(replacement_ids[1], ends[1]);
+    assert_eq!(model.element(&ends[0]), Some(&retained_record));
+    assert_eq!(
+        Model::from_project(&model)
+            .owner(
+                Model::from_project(&model)
+                    .element(&ends[0])
+                    .expect("retained end")
+            )
+            .expect("owner")
+            .expect("classifier")
+            .id(),
+        "c"
+    );
+    let mut with_navigation = model.clone();
+    with_navigation
+        .relations
+        .iter_mut()
+        .find(|relation| relation.id == association)
+        .expect("Association")
+        .properties
+        .insert(
+            "navigableOwnedEnd".into(),
+            json!([{"$ref": replacement_ids[0]}]),
+        );
+    assert!(
+        Model::from_project(&with_navigation)
+            .validate()
+            .iter()
+            .all(|diagnostic| diagnostic.severity != bellatrix_mde::StructuralSeverity::Error)
+    );
+    assert!(
+        apply(
+            &with_navigation,
+            &Command::EditAssociationEnds {
+                association_id: association.clone(),
+                edits: vec![AssociationEndEdit::Reparent {
+                    property_id: replacement_ids[0].clone(),
+                    owner: AssociationEndOwner::Classifier("c".into()),
+                }],
+            },
+            5,
+        )
+        .is_err(),
+        "reparenting must not leave a navigableOwnedEnd outside ownedEnd"
+    );
+    let retired_id = replacement_ids[0].clone();
+    model = apply(
+        &model,
+        &Command::EditAssociationEnds {
+            association_id: association.clone(),
+            edits: vec![
+                AssociationEndEdit::Remove {
+                    property_id: retired_id.clone(),
+                    disposition: RemovedAssociationEnd::DeleteAssociationOwned,
+                },
+                AssociationEndEdit::Insert {
+                    position: 0,
+                    end: AssociationEndDraft {
+                        name: "newOwner".into(),
+                        type_id: "a".into(),
+                        owner: AssociationEndOwner::Association,
+                        aggregation: Aggregation::None,
+                        multiplicity: Some("1".into()),
+                    },
+                },
+            ],
+        },
+        5,
+    )
+    .expect("delete and replace an owned end in one atomic command");
+    let replacement_ids = end_ids(&model, &association);
+    assert_ne!(
+        replacement_ids[0], retired_id,
+        "a replacement must not recycle the deleted identity"
+    );
+    assert!(model.element(&retired_id).is_none());
+    for edits in [
+        vec![AssociationEndEdit::Remove {
+            property_id: replacement_ids[0].clone(),
+            disposition: RemovedAssociationEnd::DeleteAssociationOwned,
+        }],
+        vec![AssociationEndEdit::Insert {
+            position: 2,
+            end: AssociationEndDraft {
+                name: "third".into(),
+                type_id: "a".into(),
+                owner: AssociationEndOwner::Association,
+                aggregation: Aggregation::None,
+                multiplicity: None,
+            },
+        }],
+    ] {
+        let before = model.clone();
+        assert!(
+            apply(
+                &model,
+                &Command::EditAssociationEnds {
+                    association_id: association.clone(),
+                    edits
+                },
+                6
+            )
+            .is_err()
+        );
+        assert_eq!(
+            model, before,
+            "no partial deletion or insertion is published"
+        );
+    }
+    model = apply(
+        &model,
+        &Command::EditAssociationEnds {
+            association_id: association.clone(),
+            edits: vec![
+                AssociationEndEdit::Retype {
+                    property_id: replacement_ids[0].clone(),
+                    type_id: "b".into(),
+                },
+                AssociationEndEdit::Reparent {
+                    property_id: ends[1].clone(),
+                    owner: AssociationEndOwner::Classifier("b".into()),
+                },
+            ],
+        },
+        7,
+    )
+    .expect("change opposite Type and classifier owner in the same transaction");
+    assert_eq!(end_ids(&model, &association), replacement_ids);
+    let detached_record = model.element(&ends[1]).expect("class-owned end").clone();
+    model = apply(
+        &model,
+        &Command::EditAssociationEnds {
+            association_id: association.clone(),
+            edits: vec![
+                AssociationEndEdit::Remove {
+                    property_id: ends[1].clone(),
+                    disposition: RemovedAssociationEnd::KeepClassifierOwned,
+                },
+                AssociationEndEdit::Attach {
+                    position: 1,
+                    property_id: ends[0].clone(),
+                    owner: Some(AssociationEndOwner::Classifier("b".into())),
+                },
+                AssociationEndEdit::Retype {
+                    property_id: ends[0].clone(),
+                    type_id: "c".into(),
+                },
+                AssociationEndEdit::Move {
+                    property_id: ends[0].clone(),
+                    position: 0,
+                },
+            ],
+        },
+        8,
+    )
+    .expect("detach a class-owned end without deleting it and reuse another Property identity");
+    assert_eq!(model.element(&ends[1]), Some(&detached_record));
+    assert_eq!(
+        end_ids(&model, &association),
+        vec![ends[0].clone(), replacement_ids[0].clone()]
+    );
+    for format in [Format::Json, Format::Protobuf] {
+        let reopened = decode(&encode(&model, format).expect("save replaced ends"), format)
+            .expect("reopen replacement");
+        assert_eq!(reopened, model);
+        let restored = decode(
+            &encode(&undo_snapshot, format).expect("save undo state"),
+            format,
+        )
+        .expect("restore prior snapshot");
+        assert_eq!(restored, undo_snapshot);
+        assert_eq!(end_ids(&restored, &association), ends);
+    }
     let deleted = apply(
         &model,
         &Command::DeleteElement {
             element_id: association,
         },
-        5,
+        9,
     )
     .expect("delete Association");
     assert!(
-        deleted.element(&ends[0]).is_none(),
-        "Association-owned end cascades"
+        deleted.element(&replacement_ids[0]).is_none(),
+        "current Association-owned end cascades"
     );
     assert!(
-        deleted.element(&ends[1]).is_some(),
-        "Classifier-owned Property survives"
+        deleted.element(&ends[0]).is_some() && deleted.element(&ends[1]).is_some(),
+        "retained classifier-owned Properties survive"
     );
     assert!(
         associations::association_of(
             &ReferenceIndex::new(Model::from_project(&deleted)),
-            &ends[1]
+            &ends[0]
         )
         .expect("inverse after deletion")
         .is_none()
     );
+
+    let mut nary = apply(
+        &deleted,
+        &Command::CreateElement {
+            diagram_id: "diagram".into(),
+            owner_id: Some("root".into()),
+            kind: ModelingElementKind::NaryAssociation,
+            name: Some("Participants".into()),
+            x: 100.0,
+            y: 250.0,
+        },
+        10,
+    )
+    .expect("create n-ary Association draft");
+    let nary_id = nary
+        .elements
+        .iter()
+        .find(|element| element.kind == "uml.nary_association")
+        .expect("n-ary identity")
+        .id
+        .clone();
+    nary = apply(
+        &nary,
+        &Command::EditAssociationEnds {
+            association_id: nary_id.clone(),
+            edits: ["a", "b", "c"]
+                .into_iter()
+                .enumerate()
+                .map(|(position, type_id)| AssociationEndEdit::Insert {
+                    position,
+                    end: AssociationEndDraft {
+                        name: format!("participant{position}"),
+                        type_id: type_id.into(),
+                        owner: AssociationEndOwner::Association,
+                        aggregation: Aggregation::None,
+                        multiplicity: None,
+                    },
+                })
+                .collect(),
+        },
+        11,
+    )
+    .expect("materialize all three ends atomically without pretending binary rendering");
+    let nary_ids = end_ids(&nary, &nary_id);
+    assert_eq!(nary_ids.len(), 3);
+    assert!(
+        associations::opposite(
+            &ReferenceIndex::new(Model::from_project(&nary)),
+            &nary_ids[0]
+        )
+        .expect("n-ary query")
+        .is_none()
+    );
+    nary = apply(
+        &nary,
+        &Command::EditAssociationEnds {
+            association_id: nary_id.clone(),
+            edits: vec![AssociationEndEdit::Remove {
+                property_id: nary_ids[1].clone(),
+                disposition: RemovedAssociationEnd::DeleteAssociationOwned,
+            }],
+        },
+        12,
+    )
+    .expect("remove one owned end while preserving the two-end minimum");
+    assert!(nary.element(&nary_ids[1]).is_none());
+    assert_eq!(
+        end_ids(&nary, &nary_id),
+        vec![nary_ids[0].clone(), nary_ids[2].clone()]
+    );
+    assert!(Model::from_project(&nary).validate().is_empty());
+    for format in [Format::Json, Format::Protobuf] {
+        assert_eq!(
+            decode(&encode(&nary, format).expect("save n-ary edit"), format)
+                .expect("reopen n-ary edit"),
+            nary
+        );
+    }
 }
-
-
-
 
 #[test]
 fn legacy_migration_preserves_authored_data_and_uses_the_opposite_composite_bound() {
@@ -356,4 +647,3 @@ fn legacy_migration_preserves_authored_data_and_uses_the_opposite_composite_boun
         );
     }
 }
-

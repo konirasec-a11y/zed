@@ -228,7 +228,7 @@ impl Render for MdeWorkbenchItem {
                                 view_id, dx, dy, ..
                             }) if view_id == &view.id => {
                                 let (minimum_width, minimum_height) =
-                                    bellatrix_mde::uml_notation(&element.kind).minimum_size();
+                                    bellatrix_mde::resolve_element_notation(element).minimum_size();
                                 local_width = (width + dx).max(minimum_width) as f32;
                                 local_height = (height + dy).max(minimum_height) as f32;
                             }
@@ -374,9 +374,10 @@ impl Render for MdeWorkbenchItem {
                             else {
                                 continue;
                             };
-                            let text = bellatrix_mde::element_display_label_with_references(
+                            let text = bellatrix_mde::format_element_label_for_view(
                                 member,
                                 &references,
+                                &view.style,
                             );
                             match member.kind.as_str() {
                                 "rust.field" | "uml.attribute" => {
@@ -439,17 +440,45 @@ impl Render for MdeWorkbenchItem {
                                 format!("{{{}}}", element.name)
                             } else if matches!(
                                 element.kind.as_str(),
-                                "uml.port" | "uml.part" | "uml.note" | "uml.comment"
+                                "uml.port"
+                                    | "uml.part"
+                                    | "uml.note"
+                                    | "uml.comment"
+                                    | "uml.instance_specification"
                             ) {
-                                bellatrix_mde::element_display_label_with_references(
+                                bellatrix_mde::format_element_label_for_view(
                                     element,
                                     &references,
+                                    &view.style,
                                 )
                             } else {
                                 element.name.clone()
                             };
+                            let operator_default = bellatrix_mde::uml::schema::uml_property(
+                                "CombinedFragment",
+                                "interactionOperator",
+                            )
+                            .ok()
+                            .flatten()
+                            .and_then(|property| {
+                                bellatrix_mde::uml::schema::effective_default(property)
+                                    .ok()
+                                    .flatten()
+                            })
+                            .and_then(bellatrix_mde::uml::schema::DefaultValue::scalar_json);
                             let mut figure = UmlFigure::new(element.kind.clone(), label)
                                 .diagram_presentation(diagram)
+                                .interaction_operator(
+                                    element
+                                        .properties
+                                        .get("interactionOperator")
+                                        .or(operator_default.as_ref())
+                                        .and_then(serde_json::Value::as_str),
+                                )
+                                .slot_labels(bellatrix_mde::collect_instance_slot_labels(
+                                    element,
+                                    &references,
+                                ))
                                 .with_template_parameters_from(&classifier)
                                 .view_style(&view.style)
                                 .selected(is_selected)

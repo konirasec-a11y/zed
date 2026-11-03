@@ -178,7 +178,9 @@ fn label_block(
                 .flex()
                 .flex_col()
                 .whitespace_nowrap()
-                .when(appearance.0.word_wrap == Some(true), |element| element.w(px(font_size * 16.0)))
+                .when(appearance.0.word_wrap == Some(true), |element| {
+                    element.w(px(font_size * 16.0))
+                })
                 .text_size(px(font_size))
                 .text_color(color)
                 .when(anchor.right_aligned, |element| {
@@ -254,14 +256,15 @@ fn paint_marker(
     window: &mut Window,
     marker: RelationshipMarker,
     endpoint: (f32, f32),
-    direction: (f32, f32),
+    inward_direction: (f32, f32),
     bounds: Bounds<Pixels>,
     stroke: gpui::Rgba,
     background: gpui::Rgba,
     width: f32,
     scale: f32,
 ) {
-    let (ux, uy) = direction;
+    // Marker bodies point toward the relationship, independently of endpoint.
+    let (ux, uy) = inward_direction;
     let perpendicular = (-uy, ux);
     let offset = |forward: f32, side: f32| {
         (
@@ -273,12 +276,12 @@ fn paint_marker(
     match marker {
         None => {}
         OpenArrow => {
-            stroke_line(window, offset(-12.0, 6.0), endpoint, bounds, stroke, width);
-            stroke_line(window, endpoint, offset(-12.0, -6.0), bounds, stroke, width);
+            stroke_line(window, offset(12.0, 6.0), endpoint, bounds, stroke, width);
+            stroke_line(window, endpoint, offset(12.0, -6.0), bounds, stroke, width);
         }
         Triangle | FilledTriangle => polygon(
             window,
-            &[endpoint, offset(-17.0, 8.0), offset(-17.0, -8.0)],
+            &[endpoint, offset(17.0, 8.0), offset(17.0, -8.0)],
             bounds,
             stroke,
             background,
@@ -446,7 +449,7 @@ impl RenderOnce for UmlRelationGlyph {
                     window,
                     target_marker,
                     last,
-                    final_tangent,
+                    (-final_tangent.0, -final_tangent.1),
                     bounds,
                     stroke,
                     background,

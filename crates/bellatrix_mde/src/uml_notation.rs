@@ -55,6 +55,32 @@ impl UmlNotation {
     }
 }
 
+pub fn resolve_pseudostate_notation(kind: &str) -> UmlNotation {
+    match kind {
+        "initial" | "junction" => UmlNotation::InitialNode,
+        "choice" => UmlNotation::Decision,
+        "shallowHistory" | "deepHistory" | "entryPoint" => UmlNotation::History,
+        "exitPoint" => UmlNotation::FlowFinal,
+        "terminate" => UmlNotation::Terminate,
+        "fork" | "join" => UmlNotation::Fork,
+        _ => UmlNotation::Unsupported,
+    }
+}
+
+pub fn resolve_element_notation(element: &crate::Element) -> UmlNotation {
+    if element.kind == "uml.pseudostate" {
+        resolve_pseudostate_notation(
+            element
+                .properties
+                .get("kind")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("initial"),
+        )
+    } else {
+        uml_notation(&element.kind)
+    }
+}
+
 pub fn uml_notation(kind: &str) -> UmlNotation {
     // These are presentation strategies, not executable behavior adapters.
     match kind {

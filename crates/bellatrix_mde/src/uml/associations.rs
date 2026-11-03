@@ -179,6 +179,18 @@ fn validate_association(
     }
     let ends = member_ends(references, association.id())?;
     let owned = owned_ends(references, association.id())?;
+    if let Some(value) = association.properties().get("navigableOwnedEnd") {
+        let descriptor = schema::uml_property("Association", "navigableOwnedEnd")
+            .map_err(|error| error.to_string())?
+            .ok_or("Association::navigableOwnedEnd contract is missing")?;
+        for navigable in references.validate_many(descriptor, value)? {
+            if !owned.iter().any(|end| end.id == navigable.id()) {
+                return Err(
+                    "Association::navigableOwnedEnd must subset Association::ownedEnd".into(),
+                );
+            }
+        }
+    }
     if ends.len() > 2 && owned.len() != ends.len() {
         return Err(
             "Association::association_ends requires all n-ary member ends to be Association-owned"

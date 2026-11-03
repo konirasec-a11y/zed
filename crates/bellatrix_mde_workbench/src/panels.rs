@@ -1,14 +1,15 @@
 //! Panels owned by the Zed Workspace Dock, consuming the single MDE domain.
 mod toolbox_panel;
+pub(crate) use crate::hierarchy::element_glyph;
 use crate::{
     MdeToolDrag, MdeWorkbenchItem, WorkbenchPalette,
-    hierarchy::project_hierarchy,
+    hierarchy::project_explorer,
     integration::{OpenMdeSymbols, OpenMdeWorkbench},
     property_editor::render_inspector,
 };
 use bellatrix_mde::commands::{ModelingElementKind, ModelingTool};
 use bellatrix_mde::{
-    ModelingRelationKind, RelationshipGraph, inspect_element, relationship_presentation,
+    ModelingRelationKind, inspect_element,
 };
 use bellatrix_ui_panels::PaneHeader;
 use bellatrix_ui_symbols::{ShapeKind, glyph};
@@ -251,9 +252,24 @@ impl Render for MdeRightPanel {
         });
         let mut rows = Vec::new();
         if let Some(snapshot) = &snapshot {
-            let tree = project_hierarchy(&snapshot.section);
+            let tree = project_explorer(&snapshot.section);
+            let root_key = format!("project:{}", snapshot.project_id.as_str());
+            let root_expanded = !self.collapsed_elements.contains(&root_key);
+            let root_panel = cx.weak_entity();
+            rows.push(div().id("mde-explorer-project").flex().items_center().gap_1()
+
+                .child(svg().data(glyph(ShapeKind::Package)).size(px(14.0)).flex_none().text_color(palette.muted))
+                .child(TreeViewItem::new(root_key.clone(), snapshot.name.clone())
+                    .root_item(!tree.is_empty()).expanded(root_expanded)
+                    .on_toggle(move |_, _, cx| {
+                        let _ = root_panel.update(cx, |panel, cx| {
+                            if !panel.collapsed_elements.insert(root_key.clone()) { panel.collapsed_elements.remove(&root_key); }
+                            cx.notify();
+                        });
+                    })));
             let mut hidden_by_depth: Option<usize> = None;
             for (index, row) in tree.iter().enumerate() {
+                if !root_expanded { break; }
                 if let Some(ancestor_depth) = hidden_by_depth {
                     if row.depth > ancestor_depth {
                         continue;
@@ -263,6 +279,28 @@ impl Render for MdeRightPanel {
                 let has_children = tree
                     .get(index + 1)
                     .is_some_and(|next| next.depth > row.depth);
+                if row.diagram {
+                    let id = row.element_id.clone();
+                    let owner = item.clone();
+                    let is_active = active_diagram.as_deref() == Some(id.as_str());
+                    rows.push(
+                        div()
+                            .id(format!("mde-explorer-diagram-{id}"))
+                            .pl(px((row.depth.min(15) + 2) as f32 * 14.0))
+                            .flex().items_center().gap_1()
+                            .when(is_active, |row| row.bg(palette.surface))
+                            .child(svg().data(glyph(ShapeKind::Document)).size(px(14.0)).flex_none().text_color(if is_active { palette.selection } else { palette.muted }))
+                            .child(div().flex_1().min_w_0().overflow_hidden().child(
+                                TreeViewItem::new(id.clone(), row.label.clone())
+                                    .toggle_state(is_active)
+                                    .on_click(move |_, _, cx| {
+                                        owner.update(cx, |workbench, cx| workbench.select_diagram(id.clone(), cx));
+                                    })
+                            ))
+                            .child(Label::new(row.kind.clone()).size(LabelSize::XSmall).color(Color::Muted)),
+                    );
+                    continue;
+                }
                 let expanded = !self.collapsed_elements.contains(&row.element_id);
                 let id = row.element_id.clone();
                 let owner = item.clone();
@@ -291,7 +329,8 @@ impl Render for MdeRightPanel {
                 rows.push(
                     div()
                         .id(format!("mde-explorer-row-{}", row.element_id))
-                        .pl(px((row.depth.min(15) + 1) as f32 * 14.0))
+
+                        .pl(px((row.depth.min(15) + 2) as f32 * 14.0))
                         .flex()
                         .items_center()
                         .gap_1()
@@ -391,58 +430,7 @@ impl Render for MdeRightPanel {
                     hidden_by_depth = Some(row.depth);
                 }
             }
-            let relations = active_diagram
-                .as_deref()
-                .or_else(|| {
-                    snapshot
-                        .section
-                        .diagrams
-                        .first()
-                        .map(|diagram| diagram.id.as_str())
-                })
-                .map(|id| RelationshipGraph::new(&snapshot.section, id).visible_relations())
-                .unwrap_or_default();
-            if !relations.is_empty() {
-                rows.push(
-                    div()
-                        .id("mde-relationships-heading")
-                        .p_2()
-                        .text_size(px(11.0))
-                        .text_color(palette.muted)
-                        .child("Relationships"),
-                );
-            }
-            for relation in relations {
-                let presentation = relationship_presentation(relation);
-                let from = snapshot
-                    .section
-                    .elements
-                    .iter()
-                    .find(|element| element.id == relation.from)
-                    .map_or(relation.from.as_str(), |element| element.name.as_str());
-                let to = snapshot
-                    .section
-                    .elements
-                    .iter()
-                    .find(|element| element.id == relation.to)
-                    .map_or(relation.to.as_str(), |element| element.name.as_str());
-                let id = relation.id.clone();
-                let owner = item.clone();
-                rows.push(
-                    div()
-                        .id(format!("mde-explorer-relation-{id}"))
-                        .pl(px(14.0))
-                        .child(
-                            TreeViewItem::new(id.clone(), presentation.describe(from, to))
-                                .toggle_state(selected_id.as_deref() == Some(id.as_str()))
-                                .on_click(move |_, _, cx| {
-                                    owner.update(cx, |workbench, cx| {
-                                        workbench.select_element(id.clone(), cx)
-                                    });
-                                }),
-                        ),
-                );
-            }
+
         }
         if !read_only && self.editing_id != selected_id {
             if self.property_drafts.values().any(|draft| {
@@ -633,7 +621,7 @@ impl Render for MdeRightPanel {
                                 .children(rows)
                                 .when(
                                     snapshot.as_ref().is_some_and(|snapshot| {
-                                        project_hierarchy(&snapshot.section).is_empty()
+                                        project_explorer(&snapshot.section).is_empty()
                                     }),
                                     |pane| {
                                         pane.child(
@@ -724,23 +712,6 @@ impl Render for MdeRightPanel {
     }
 }
 
-pub(crate) fn element_glyph(kind: &str) -> ShapeKind {
-    let identity = bellatrix_mde::semantic_identity(kind);
-    if identity.type_label == "Frame" {
-        return ShapeKind::Boundary;
-    }
-    let label = if kind == "rust.module" {
-        "Package"
-    } else {
-        identity.type_label
-    };
-    bellatrix_ui_symbols::groups(bellatrix_ui_symbols::Family::Uml)
-        .iter()
-        .flat_map(|group| group.items)
-        .find(|symbol| symbol.label.eq_ignore_ascii_case(label))
-        .map(|symbol| symbol.kind)
-        .unwrap_or(ShapeKind::Topic)
-}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum BottomTab {

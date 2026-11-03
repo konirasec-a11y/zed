@@ -26,6 +26,17 @@ fn name(section: &ModelingSection, prefix: &str) -> Result<String, String> {
     Err("member name overflow".into())
 }
 
+fn resolve_boundary_side(element: &Element) -> Option<bool> {
+    match element.kind.as_str() {
+        "uml.input_pin" | "uml.value_pin" => Some(true),
+        "uml.port" | "uml.output_pin" => Some(false),
+        "uml.pseudostate" => match element.properties.get("kind").and_then(serde_json::Value::as_str) {
+            Some("entryPoint") => Some(true), Some("exitPoint") => Some(false), _ => None,
+        },
+        _ => None,
+    }
+}
+
 fn contained_ids(section: &ModelingSection, owner_id: &str) -> HashSet<String> {
     section
         .relations
@@ -37,7 +48,7 @@ fn contained_ids(section: &ModelingSection, owner_id: &str) -> HashSet<String> {
                 .iter()
                 .find(|element| element.id == relation.to)
         })
-        .filter(|element| matches!(element.kind.as_str(), "uml.port" | "uml.part" | "uml.input_pin" | "uml.output_pin" | "uml.value_pin" | "uml.interaction_operand"))
+        .filter(|element| resolve_boundary_side(element).is_some() || matches!(element.kind.as_str(), "uml.part" | "uml.interaction_operand"))
         .map(|element| element.id.clone())
         .collect()
 }
@@ -78,8 +89,7 @@ pub(super) fn reposition_boundary_nodes(section: &mut ModelingSection, diagram_i
                 .iter()
                 .find(|element| element.id == relation.to)
         })
-        .filter(|element| matches!(element.kind.as_str(), "uml.port" | "uml.input_pin" | "uml.output_pin" | "uml.value_pin"))
-        .map(|element| (element.id.clone(), matches!(element.kind.as_str(), "uml.input_pin" | "uml.value_pin")))
+        .filter_map(|element| resolve_boundary_side(element).map(|left| (element.id.clone(), left)))
         .collect();
     if let Some(diagram) = section
         .diagrams

@@ -55,6 +55,30 @@ qualifiers, specialization, redefinition and owned ValueSpecification evaluation
 remain outside this slice. Literal multiplicity notation is a declared adapter,
 not a claim that lowerValue/upperValue model identities exist.
 
+## Atomic Association-end editing
+
+`commands/association_ends.rs` adds `Command::EditAssociationEnds`. One ordered
+batch can insert a new Property, attach an existing Property, move an end,
+change its Type or owner, and remove an end. Replacement combines removal and
+insertion without publishing an intermediate one-end Association. The final
+state uses the existing generated collection contracts, ownership helpers,
+Association validators and binary projections.
+
+Removal explicitly retains a classifier-owned Property, reparents and retains
+it, or deletes an Association-owned Property through the existing owned-subtree
+deletion helper. Unrequested Property identities, authored metadata and other
+classifier attributes survive. A Property cannot be silently taken from another
+Association. N-ary Association objects can gain and remove ends; binary Relation
+notation still refuses a third end as an adapter limitation.
+
+The Cordis `ModelingEditAssociationEnds` event delegates the complete batch to
+the existing revision-checked mutation path, yielding one project replacement.
+Failure leaves the input snapshot unchanged. Snapshot-based undo/redo retains
+exact identities and metadata; this command does not introduce separate history
+storage. The existing public Association feature flow covers replacement,
+retention, coordinated Type/owner edits, removal, ordering and JSON/Protobuf
+reopen without adding isolated unit tests.
+
 ## Namespace and Classifier queries
 
 `crates/bellatrix_mde/src/uml/classifiers.rs` adapts the derived-union and

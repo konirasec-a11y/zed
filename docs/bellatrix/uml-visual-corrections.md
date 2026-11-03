@@ -1,0 +1,10 @@
+# UML canvas notation corrections
+
+Reference: OMG UML 2.5.1, formal/2017-12-05. PDF pages below are one-based file pages, not printed page numbers. These changes concern presentation, not executable behavior.
+
+- §11.5.4, printed 202–203 / PDF 244–245: relationship endpoint marker bodies now extend inward along the relationship at either end. Source arrows point at the source; target aggregation diamonds no longer protrude into the target classifier. Shared `paint_marker` in `bellatrix_ui_uml/src/relationship.rs` handles both endpoints.
+- §9.8.4, printed 128 / PDF 170: `instance_presentation.rs` resolves classifier identities for the underlined `instance : Classifier` heading and canonical Slot defining-feature/value references for compartment rows. `figures.rs` separates un-underlined slot rows from the heading. Stored literal values are displayed without evaluation. Unresolved data is marked rather than invented. Slot authoring/evaluation remains bounded by the Kernel capabilities.
+- §17.6.4.3, printed 585 / PDF 627: CombinedFragment operator comes from `interactionOperator` and appears in the frame descriptor, rather than replacing it with the fragment name. An absent operator uses the official XMI default `seq` (UML.xmi `CombinedFragment-interactionOperator-_defaultValue`).
+- §17.2.4.1, printed 568 / PDF 610: Interaction frame names appear alongside `sd`, rather than at the center of the body. InteractionUse retains `ref` with its reference label in the body.
+
+Still incomplete: AssociationClass attachment to its association path; internal-structure compartments and role-vs-part borders; package tab name when members are displayed; full guard/operand labeling; timing data-driven traces; message creation and numbered communication labels. SVG currently emits basic paths without UML endpoint markers, so native/export visual parity is not claimed. Explicit line-style overrides can deliberately depart from normative UML strokes; the editor warns about this rather than removing user control. Native GUI acceptance remains pending; headless feature flows are not visual screenshot acceptance.

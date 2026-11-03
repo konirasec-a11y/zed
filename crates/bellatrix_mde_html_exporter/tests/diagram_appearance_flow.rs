@@ -6,13 +6,42 @@ use bellatrix_mde::{
 
 #[test]
 fn styled_diagram_survives_save_reload_and_html_export() -> Result<(), Box<dyn std::error::Error>> {
-    let project: Project =
+    let mut project: Project =
         serde_json::from_str(include_str!("../../bellatrix_mde/fixtures/skeleton.json"))?;
+    let member = project
+        .elements
+        .iter_mut()
+        .find(|element| element.id == "field-title")
+        .ok_or("member missing")?;
+    member.kind = "uml.attribute".into();
+    member
+        .properties
+        .insert("visibility".into(), serde_json::json!("public"));
+    member
+        .properties
+        .insert("isReadOnly".into(), serde_json::json!(true));
+    let mut member_view = project
+        .diagrams
+        .first()
+        .and_then(|diagram| diagram.views.first())
+        .ok_or("view missing")?
+        .clone();
+    member_view.id = "member-label-view".into();
+    member_view.subject = Some(member.id.clone());
+    member_view.label = None;
+    project
+        .diagrams
+        .first_mut()
+        .ok_or("diagram missing")?
+        .views
+        .push(member_view);
     let diagram = project.diagrams.first().ok_or("diagram missing")?;
     let view = diagram
         .views
         .iter()
-        .find(|view| matches!(view.geometry, Geometry::Rect { .. }))
+        .find(|view| {
+            view.id == "member-label-view" && matches!(view.geometry, Geometry::Rect { .. })
+        })
         .ok_or("rectangular view missing")?;
     let styled = apply(
         &project,
@@ -25,6 +54,9 @@ fn styled_diagram_survives_save_reload_and_html_export() -> Result<(), Box<dyn s
                 line_mode: Some(LineMode::Dotted),
                 show_shadow: Some(true),
                 word_wrap: Some(true),
+                show_visibility: Some(false),
+                show_type: Some(false),
+                show_property: Some(false),
                 ..view.style.clone()
             },
         },
@@ -44,6 +76,9 @@ fn styled_diagram_survives_save_reload_and_html_export() -> Result<(), Box<dyn s
         .map(|bytes| String::from_utf8_lossy(bytes))
         .collect::<Vec<_>>()
         .join("\n");
+    assert!(svg.contains(">title</text>"));
+    assert!(!svg.contains("+title"));
+    assert!(!svg.contains("{readOnly}"));
     assert!(svg.contains("filter=\"url(#view-shadow)\""));
     assert!(svg.contains("stroke-dasharray=\"1,3\""));
     assert!(svg.contains("text-anchor=\"end\" dominant-baseline=\"text-after-edge\""));

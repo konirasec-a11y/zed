@@ -11,9 +11,9 @@ use crate::{
     ModelingRename, ModelingRenameDiagram, ModelingRenameDiagramRequested, ModelingRenameRequested,
     ModelingReorderView, ModelingReorderViewRequested, ModelingResizeView,
     ModelingResizeViewRequested, ModelingSetNameExpression, ModelingSetNameExpressionRequested,
-    ModelingSetProperty, ModelingSetPropertyRequested, ModelingSetViewRouting,
-    ModelingSetViewRoutingRequested, ModelingSetViewStyle, ModelingSetViewStyleRequested,
-    ModelingValidateDiagram, ModelingValidateDiagramRequested,
+    ModelingSetOwner, ModelingSetOwnerRequested, ModelingSetProperty, ModelingSetPropertyRequested,
+    ModelingSetViewRouting, ModelingSetViewRoutingRequested, ModelingSetViewStyle,
+    ModelingSetViewStyleRequested, ModelingValidateDiagram, ModelingValidateDiagramRequested,
 };
 use bellatrix_project::{
     ProjectId, ProjectSave, ProjectSaveRequested, ProjectStateChanged, ProjectStateChangedEvent,
@@ -50,6 +50,7 @@ pub enum MdeUiCommand {
     RemoveView(ModelingRemoveViewRequested),
     PlaceElementView(ModelingPlaceElementViewRequested),
     Rename(ModelingRenameRequested),
+    SetOwner(ModelingSetOwnerRequested),
     DeleteElement(ModelingDeleteElementRequested),
     SetProperty(ModelingSetPropertyRequested),
     SetPropertyTracked {
@@ -212,6 +213,12 @@ impl MdeUiBridge {
                         "Element renamed",
                         cordis
                             .query::<ModelingRename>(Routing::Unscoped, request)
+                            .await,
+                    ),
+                    MdeUiCommand::SetOwner(request) => describe(
+                        "Element ownership updated",
+                        cordis
+                            .query::<ModelingSetOwner>(Routing::Unscoped, request)
                             .await,
                     ),
                     MdeUiCommand::DeleteElement(request) => describe(

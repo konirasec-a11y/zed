@@ -16,6 +16,8 @@ mod ownership;
 mod path;
 mod plan;
 mod presentation;
+mod instance_presentation;
+pub use instance_presentation::{format_instance_heading, collect_instance_slot_labels};
 mod publish;
 mod quick_edit;
 mod relationships;
@@ -49,7 +51,7 @@ pub use plan::{Artifact, Diagnostic, Plan, PlanError};
 pub use presentation::{
     ClassifierPresentation, ClassifierPresentationOptions, MemberPresentation, SemanticIdentity,
     classifier_presentation, element_display_label, element_display_label_with_references,
-    member_presentation, semantic_identity,
+    format_element_label_for_view, member_presentation, semantic_identity,
 };
 pub use publish::{publish_new, publish_replace};
 pub use quick_edit::{
@@ -74,4 +76,4 @@ pub use uml_geometry::{
 };
 pub use uml_types::{UmlCapability, UmlQuickCreate, UmlType};
 
-pub use uml_notation::{UmlHeader, UmlNotation, uml_header, uml_notation};
+pub use uml_notation::{UmlHeader, UmlNotation, resolve_element_notation, resolve_pseudostate_notation, uml_header, uml_notation};

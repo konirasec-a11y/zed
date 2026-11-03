@@ -1,4 +1,4 @@
-use crate::{Element, ModelingRelationKind, UmlType};
+use crate::{Element, ModelingRelationKind, Style, UmlType};
 use serde_json::Value;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -114,25 +114,37 @@ pub fn member_presentation(element: &Element) -> MemberPresentation {
 }
 
 pub fn element_display_label(element: &Element) -> String {
-    display_label(element, None)
+    display_label(element, None, &Style::default())
 }
 
 pub fn element_display_label_with_references(
     element: &Element,
     references: &crate::uml::references::ReferenceIndex<'_>,
 ) -> String {
-    display_label(element, Some(references))
+    display_label(element, Some(references), &Style::default())
+}
+
+pub fn format_element_label_for_view(
+    element: &Element,
+    references: &crate::uml::references::ReferenceIndex<'_>,
+    style: &Style,
+) -> String {
+    display_label(element, Some(references), style)
 }
 
 fn display_label(
     element: &Element,
     references: Option<&crate::uml::references::ReferenceIndex<'_>>,
+    style: &Style,
 ) -> String {
     if let Some(body) = crate::uml::root::ElementRef::Object(element)
         .comment()
         .and_then(|comment| comment.body())
     {
         return body.to_owned();
+    }
+    if element.kind == "uml.instance_specification" && let Some(references) = references {
+        return crate::format_instance_heading(element, references, style);
     }
     let kind = UmlType::from_kind(&element.kind);
     if kind == Some(UmlType::Parameter) {
@@ -141,14 +153,16 @@ fn display_label(
             Ok(direction) => format!("{direction} {}", element.name),
             Err(_) => format!("[invalid direction] {}", element.name),
         };
-        if let Some(value_type) = type_label(element, references) {
+        if style.should_show_type()
+            && let Some(value_type) = type_label(element, references)
+        {
             label.push_str(": ");
             label.push_str(&value_type);
         }
         return label;
     }
     if kind == Some(UmlType::Operation) {
-        return operation_label(element, references);
+        return operation_label(element, references, style);
     }
     let member = matches!(
         kind,
@@ -163,7 +177,9 @@ fn display_label(
     if !member {
         return element.name.clone();
     }
-    let prefix = match text(element.properties.get("visibility")) {
+    let prefix = match text(element.properties.get("visibility"))
+        .filter(|_| style.should_show_visibility())
+    {
         Some("public") => "+",
         Some("private") => "-",
         Some("protected") => "#",
@@ -185,7 +201,9 @@ fn display_label(
     // in their labeled inspector fields, never in the canonical semantic label.
     let type_label = type_label(element, references);
     let value_type = type_label.as_deref();
-    if let Some(value_type) = value_type {
+    if style.should_show_type()
+        && let Some(value_type) = value_type
+    {
         label.push_str(": ");
         label.push_str(value_type);
     }
@@ -209,7 +227,7 @@ fn display_label(
             label.push_str(" = ");
             label.push_str(default);
         }
-        if is_true("isReadOnly") {
+        if style.should_show_property() && is_true("isReadOnly") {
             label.push_str(" {readOnly}");
         }
     }
@@ -254,8 +272,11 @@ fn type_label(
 fn operation_label(
     operation: &Element,
     references: Option<&crate::uml::references::ReferenceIndex<'_>>,
+    style: &Style,
 ) -> String {
-    let prefix = match text(operation.properties.get("visibility")) {
+    let prefix = match text(operation.properties.get("visibility"))
+        .filter(|_| style.should_show_visibility())
+    {
         Some("public") => "+",
         Some("private") => "-",
         Some("protected") => "#",
@@ -272,7 +293,7 @@ fn operation_label(
                     .filter(|parameter| {
                         crate::uml::operations::direction(parameter).as_deref() != Ok("return")
                     })
-                    .map(|parameter| display_label(parameter, Some(references)))
+                    .map(|parameter| display_label(parameter, Some(references), style))
                     .collect::<Vec<_>>();
                 label.push_str(&parameters.join(", "));
                 result_type =
@@ -287,12 +308,16 @@ fn operation_label(
         }
     }
     label.push(')');
-    if let Some(result_type) = &result_type {
+    if style.should_show_type()
+        && let Some(result_type) = &result_type
+    {
         label.push_str(": ");
         label.push_str(result_type);
     }
-    if operation.properties.get("isQuery").and_then(Value::as_bool) == Some(true) {
-        if result_type.is_none() {
+    if style.should_show_property()
+        && operation.properties.get("isQuery").and_then(Value::as_bool) == Some(true)
+    {
+        if style.should_show_type() && result_type.is_none() {
             label.push(':');
         }
         label.push_str(" {query}");

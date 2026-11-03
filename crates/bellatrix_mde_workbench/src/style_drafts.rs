@@ -12,6 +12,9 @@ pub(crate) const FIELDS: &[(&str, &str)] = &[
     ("font_size", "Font size"),
     ("stroke_width", "Line width"),
     ("opacity", "Opacity"),
+    ("show_visibility", "Show visibility"),
+    ("show_type", "Show type"),
+    ("show_property", "Show property annotations"),
     ("stereotype_display", "Stereotype display"),
     ("suppress_attributes", "Hide attribute compartment"),
     ("suppress_operations", "Hide operation compartment"),
@@ -25,6 +28,9 @@ pub(crate) const FIELDS: &[(&str, &str)] = &[
 
 pub(crate) fn style_value(style: &Style, key: &str) -> String {
     match key {
+        "show_visibility" => style.show_visibility.map(|value| value.to_string()),
+        "show_type" => style.show_type.map(|value| value.to_string()),
+        "show_property" => style.show_property.map(|value| value.to_string()),
         "stereotype_display" => style.stereotype_display.map(|value| {
             match value {
                 StereotypeDisplay::Hidden => "none",
@@ -105,7 +111,10 @@ pub(crate) fn field_error(key: &str, text: &str) -> Option<&'static str> {
         "stereotype_display" => {
             (!matches!(text, "none" | "label")).then_some("Choose stereotype label or hidden")
         }
-        "word_wrap"
+        "show_visibility"
+        | "show_type"
+        | "show_property"
+        | "word_wrap"
         | "show_shadow"
         | "suppress_attributes"
         | "suppress_operations"
@@ -301,6 +310,9 @@ impl StyleEditState {
                 }
                 let value = (!text.is_empty()).then(|| text.to_owned());
                 match *key {
+                    "show_visibility" => style.show_visibility = text.parse().ok(),
+                    "show_type" => style.show_type = text.parse().ok(),
+                    "show_property" => style.show_property = text.parse().ok(),
                     "stereotype_display" => {
                         style.stereotype_display = match text {
                             "none" => Some(StereotypeDisplay::Hidden),

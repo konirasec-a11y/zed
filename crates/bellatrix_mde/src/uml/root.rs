@@ -691,6 +691,10 @@ fn ownership_property(owner: ElementRef<'_>, child: ElementRef<'_>) -> Option<&'
     if owner.instance_specification().is_some() && child.slot().is_some() {
         return Some("slot");
     }
+    if child.conforms_to("Pseudostate") && child.properties().get("kind").and_then(Value::as_str)
+        .is_some_and(|kind| matches!(kind, "entryPoint" | "exitPoint")) {
+        return (owner.conforms_to("State") || owner.conforms_to("StateMachine")).then_some("connectionPoint");
+    }
     if child.conforms_to("Pin") {
         return if owner.conforms_to("OpaqueAction") {
             Some(if child.conforms_to("OutputPin") { "outputValue" } else { "inputValue" })

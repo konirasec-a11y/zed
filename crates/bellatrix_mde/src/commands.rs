@@ -7,6 +7,7 @@ pub enum ViewOrder {
     SendBackward,
 }
 
+mod association_ends;
 mod diagrams;
 mod features;
 mod kinds;
@@ -17,6 +18,7 @@ mod validation;
 mod view_style;
 mod views;
 
+pub use association_ends::{AssociationEndDraft, AssociationEndEdit, AssociationEndOwner, RemovedAssociationEnd};
 pub use kinds::{ModelingElementKind, ModelingTool};
 pub use members::ModelingMemberKind;
 pub use name_expression::format as name_expression_text;
@@ -67,6 +69,7 @@ pub enum Command {
     MigrateAssociation { association_id: String },
     SetRedefinedElements { element_id: String, redefined_ids: Vec<String> },
     SetAssociationMemberEnds { association_id: String, member_end_ids: Vec<String> },
+    EditAssociationEnds { association_id: String, edits: Vec<AssociationEndEdit> },
     QuickEdit {
         diagram_id: String,
         element_id: String,
@@ -174,6 +177,7 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
         Command::SetRedefinedElements { element_id, redefined_ids } => crate::uml::classifiers::set_redefined_elements(&mut section, element_id, redefined_ids)?,
         Command::MigrateAssociation { association_id } => crate::uml::associations::migrate(&mut section, &project.id, association_id)?,
         Command::SetAssociationMemberEnds { association_id, member_end_ids } => crate::uml::associations::set_member_ends(&mut section, association_id, member_end_ids)?,
+        Command::EditAssociationEnds { association_id, edits } => association_ends::apply(&mut section, association_id, edits, revision, &project.id)?,
         Command::QuickEdit {
             diagram_id,
             element_id,
@@ -398,8 +402,8 @@ fn create_element(
         properties.insert("isIndirectlyInstantiated".into(), serde_json::json!(true));
         properties.insert("isActive".into(), serde_json::json!(false));
     }
-    if *kind == ModelingElementKind::Pseudostate {
-        properties.insert("kind".into(), serde_json::json!("initial"));
+    if let Some(pseudostate_kind) = kind.resolve_pseudostate_kind() {
+        properties.insert("kind".into(), serde_json::json!(pseudostate_kind));
     }
     if crate::uml::root::object_metaclass(kind.model_kind()) == Some("Comment") {
         properties.insert("body".into(), Value::String(chosen_name.clone()));
@@ -588,7 +592,7 @@ fn resize_view(
         .and_then(|id| features::class_minimum_bounds(section, &diagram_id, id));
     let notation_minimum = owner_id.as_deref()
         .and_then(|id| section.elements.iter().find(|element| element.id == id))
-        .map(|element| crate::uml_notation(&element.kind).minimum_size())
+        .map(|element| crate::resolve_element_notation(element).minimum_size())
         .unwrap_or((80.0, 48.0));
     let minimum_height = owner_id
         .as_deref()
@@ -604,7 +608,7 @@ fn resize_view(
                         .get("stereotype")
                         .and_then(serde_json::Value::as_str),
                 )
-                .minimum_height(crate::uml_notation(&element.kind))
+                .minimum_height(crate::resolve_element_notation(element))
             }
         })
         .unwrap_or(48.0);

@@ -37,6 +37,19 @@ impl Event for ModelingRename {
     type Args = ModelingRenameRequested;
     type Output = Result<u64, String>;
 }
+#[derive(Clone, Debug)]
+pub struct ModelingSetOwnerRequested {
+    pub project_id: ProjectId,
+    pub element_id: String,
+    pub owner_id: Option<String>,
+    pub expected_revision: u64,
+}
+pub struct ModelingSetOwner;
+impl Event for ModelingSetOwner {
+    const NAME: &'static str = "bellatrix.mde.set-owner.v1";
+    type Args = ModelingSetOwnerRequested;
+    type Output = Result<u64, String>;
+}
 pub struct MdePlugin;
 impl Plugin for MdePlugin {
     type Config = ();
@@ -137,6 +150,18 @@ impl Plugin for MdePlugin {
                 },
             ))
             .map_err(|error| io::Error::other(error.to_string()))?;
+        let association_projects = Arc::clone(&projects);
+        let _edit_association_ends = ctx
+            .on::<crate::association_ends::ModelingEditAssociationEnds, _>(responder(
+                move |ctx: Context, request: crate::association_ends::ModelingEditAssociationEndsRequested| {
+                    let projects = Arc::clone(&association_projects);
+                    async move {
+                        let result = crate::association_ends::edit_association_ends(&ctx, &projects, request).await;
+                        Ok::<_, Infallible>(Some(result))
+                    }
+                },
+            ))
+            .map_err(|error| io::Error::other(error.to_string()))?;
         let parameter_projects = Arc::clone(&projects);
         let _move_parameter = ctx
             .on::<crate::add_member::ModelingMoveParameter, _>(responder(
@@ -170,6 +195,28 @@ impl Plugin for MdePlugin {
                     let projects = Arc::clone(&movement_projects);
                     async move {
                         let result = move_view(&ctx, &projects, request).await;
+                        Ok::<_, Infallible>(Some(result))
+                    }
+                },
+            ))
+            .map_err(|error| io::Error::other(error.to_string()))?;
+        let ownership_projects = Arc::clone(&projects);
+        let _ownership = ctx
+            .on::<ModelingSetOwner, _>(responder(
+                move |ctx: Context, request: ModelingSetOwnerRequested| {
+                    let projects = Arc::clone(&ownership_projects);
+                    async move {
+                        let result = crate::mutation::execute(
+                            &ctx,
+                            &projects,
+                            request.project_id,
+                            request.expected_revision,
+                            Command::SetOwner {
+                                element_id: request.element_id,
+                                owner_id: request.owner_id,
+                            },
+                        )
+                        .await;
                         Ok::<_, Infallible>(Some(result))
                     }
                 },
