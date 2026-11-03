@@ -229,3 +229,67 @@ fn package_and_model_ownership_and_defaults_survive_roundtrip_and_cascade_deleti
     }
     Ok(())
 }
+
+
+#[test]
+fn direct_port_creation_and_semantic_dispatch_materialize_composite_aggregation()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut source = fixture()?;
+    source.diagrams.first_mut().ok_or("diagram missing")?.views.push(
+        serde_json::from_value(serde_json::json!({
+            "id": "class-view", "subject": "class",
+            "geometry": {"kind":"rect", "x":0.0, "y":0.0, "width":180.0, "height":120.0}
+        }))?
+    );
+    let before = source.clone();
+    for command in [
+        create(ModelingElementKind::Port, Some("class")),
+        Command::CreateElementOrVisualDraft {
+            diagram_id: "diagram".into(), owner_id: Some("class".into()),
+            kind: ModelingElementKind::Port, name: None, x: 20.0, y: 40.0,
+        },
+    ] {
+        let updated = apply(&source, &command, 0)?;
+        let port = updated.elements.iter().find(|element| element.kind == "uml.port")
+            .ok_or("semantic Port missing; valid creation must not silently become a visual draft")?;
+        assert_eq!(port.properties.get("aggregation"), Some(&serde_json::json!("composite")));
+        assert!(updated.relations.iter().any(|relation|
+            relation.kind == "owns" && relation.from == "class" && relation.to == port.id));
+        let view = updated.diagrams.iter().flat_map(|diagram| &diagram.views)
+            .find(|view| view.subject.as_deref() == Some(port.id.as_str())).ok_or("Port View missing")?;
+        assert!(view.draft.is_none());
+        assert!(!crate::validate_structural_model(&updated).iter().any(|issue|
+            issue.code == "UML_PORT_AGGREGATION"));
+        assert_eq!(source, before);
+    }
+    Ok(())
+}
+
+#[test]
+fn port_visual_fallback_preserves_intent_without_claiming_semantic_creation()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut source = fixture()?;
+    source.diagrams.first_mut().ok_or("diagram missing")?.views.push(
+        serde_json::from_value(serde_json::json!({
+            "id": "package-view", "subject": "package",
+            "geometry": {"kind":"rect", "x":0.0, "y":0.0, "width":180.0, "height":120.0}
+        }))?
+    );
+    let direct = apply(&source, &create(ModelingElementKind::Port, Some("package")), 0);
+    assert!(matches!(direct, Err(ref error) if error.contains("no supported UML composite ownership property")), "{direct:?}");
+    let updated = apply(&source, &Command::CreateElementOrVisualDraft {
+        diagram_id: "diagram".into(), owner_id: Some("package".into()),
+        kind: ModelingElementKind::Port, name: None, x: 20.0, y: 40.0,
+    }, 0)?;
+    assert_eq!(updated.elements, source.elements);
+    assert_eq!(updated.relations, source.relations);
+    let view = updated.diagrams.iter().flat_map(|diagram| &diagram.views)
+        .find(|view| view.draft.is_some()).ok_or("visual fallback missing")?;
+    assert!(view.subject.is_none());
+    let draft = view.draft.as_ref().ok_or("draft missing")?;
+    assert_eq!(draft.notation_kind, "uml.port");
+    assert_eq!(draft.properties.get("aggregation"), Some(&serde_json::json!("composite")));
+    assert!(draft.properties.get("semantic_creation_diagnostic").and_then(serde_json::Value::as_str)
+        .is_some_and(|reason| reason.contains("no supported UML composite ownership property")));
+    Ok(())
+}

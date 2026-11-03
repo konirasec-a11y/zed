@@ -159,3 +159,7 @@ pub use kernel_api_graph::{reachable_graph_nodes, shortest_graph_path};
 #[path = "kernel-api/document.rs"]
 mod kernel_api_document;
 pub use kernel_api_document::decode_model_document;
+
+#[path = "kernel-api/generation.rs"]
+mod kernel_api_generation;
+pub use kernel_api_generation::analyze_generation_dependencies;

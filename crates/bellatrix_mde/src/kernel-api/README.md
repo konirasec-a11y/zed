@@ -153,3 +153,45 @@ Protobuf can encode non-finite diagram dimensions; JSON cannot. The decoder
 returns `RESPONSE_SERIALIZATION_FAILED` for that case instead of silently replacing
 numbers with null. This representation limitation must be handled explicitly by
 future CLI migration; the legacy protobuf decoder itself is unchanged.
+
+## Generation dependency analysis
+
+`analyze_generation_dependencies(input_json: &str) -> Result<String, String>`
+accepts exactly `api_version:1`, `model`, and `selected_ids` (source element IDs).
+It reuses the existing pure dependency analysis without exposing its Rust IR.
+Selection is exact, not a scope-expansion request: duplicate IDs collapse, empty
+selection yields no units, and unknown IDs (including relation/diagram IDs) return
+`UNKNOWN_SELECTION`. No dependency or ownership closure is added automatically.
+
+The response contains `api_version:1`, coverage `generation_dependency_analysis`,
+and `units` in prerequisite-first order; independent ties are ordered by source
+ID. A unit has `id`, `kind`, `name`, and `requires`, whose entries have `id`,
+`kind`, `name`, and `relation_kind`. Requirements retain external dependencies
+outside the selection, sorted and deduplicated by `(id, relation_kind)`.
+
+Ordering edges are the existing `depends_on`, `uml.dependency`, `uml.usage`,
+`uml.generalization`, `uml.interface_realization`, `uml.realization`,
+`uml.template_binding`, and `build.depends_on`. Source edges point from client to
+supplier; scheduling reverses that direction. Association, ownership and physical
+containment do not become compilation dependencies. Only selected-to-selected
+edges impose order, so cycles outside that subgraph are not errors for this call.
+Selected dependency cycles return `GENERATION_CYCLE` with a stable message, not
+an insertion-order-dependent internal cycle witness.
+
+The function requires reference/identity/hierarchy graph integrity, excluding
+numeric presentation checks. It does not run structural UML rules or certify a
+model can generate a target project. Other errors use the established
+`INVALID_REQUEST`, `UNSUPPORTED_API_VERSION`, `INVALID_MODEL`, `GRAPH_INTEGRITY`
+contract. No files, paths, templates, processes, clocks, sinks or callbacks are
+used; all state is invocation-local and input is unchanged. Tests cover A-B-A,
+concurrent calls, reordered inputs, selection errors, cycles and external
+requirements. This is dependency analysis only, not complete target-graph,
+trace-graph, DPO/SPO/TGG transformation, artifact planning or publication. See
+`docs/bellatrix/MDE_GRAPH_TRANSFORMATION_ARCHITECTURE.md` for the remaining stages.
+
+A graph-valid ordering dependency may target a semantic UML relationship identity
+rather than a source Element. The current generation IR cannot represent that
+requirement. For selected clients, this returns `GENERATION_UNSUPPORTED_TARGET`
+(including external targets outside the selection), rather than silently omitting
+it from `requires`. The shared analyzer enforces this rule for legacy consumers
+as well. Unsupported dependencies of unselected clients do not expand the scope.
