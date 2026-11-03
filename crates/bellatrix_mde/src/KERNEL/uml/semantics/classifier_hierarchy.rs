@@ -80,6 +80,9 @@ impl<'index, 'model> HierarchyQueries<'index, 'model> {
             .references
             .element(id)
             .map_err(|error| QueryError::invalid(id, error))?;
+        if classifier.metaclass().is_none() {
+            return Err(QueryError::unsupported(id, "Classifier metaclass is unresolved"));
+        }
         if !classifier.conforms_to("Classifier") {
             return Err(QueryError::invalid(
                 id,
@@ -88,6 +91,19 @@ impl<'index, 'model> HierarchyQueries<'index, 'model> {
         }
         let mut unresolved = None;
         for key in ["general", "generalization"] {
+            if let Some(value) = classifier.properties().get(key) {
+                let descriptor = schema::uml_property("Classifier", key)
+                    .map_err(|error| QueryError::unsupported(id, error.to_string()))?
+                    .ok_or_else(|| QueryError::unsupported(id, "missing ancestry property contract"))?;
+                let descriptor = schema::PropertyDescriptor { is_derived: false, ..*descriptor };
+                match super::property_contracts::check_value(self.references, classifier, &descriptor, value) {
+                    super::property_contracts::PropertyOutcome::Violation(message) =>
+                        return Err(QueryError::invalid(id, message)),
+                    super::property_contracts::PropertyOutcome::Unverified(message) =>
+                        unresolved = Some(QueryError::unsupported(id, message)),
+                    super::property_contracts::PropertyOutcome::Satisfied => {}
+                }
+            }
             if classifier.properties().get(key).is_some_and(|value| {
                 !value.is_null() && !value.as_array().is_some_and(Vec::is_empty)
             }) {
@@ -124,6 +140,9 @@ impl<'index, 'model> HierarchyQueries<'index, 'model> {
                     .references
                     .element(&relation.to)
                     .map_err(|error| QueryError::invalid(&relation.id, error))?;
+                if parent.metaclass().is_none() {
+                    return Err(QueryError::unsupported(parent.id(), "parent metaclass is unresolved"));
+                }
                 if !parent.conforms_to("Classifier") {
                     return Err(QueryError::invalid(
                         &relation.id,
@@ -148,6 +167,13 @@ impl<'index, 'model> HierarchyQueries<'index, 'model> {
             .filter(|result| match result {
                 Ok(parent) => seen.insert(parent.id()),
                 Err(_) => true,
+            })
+            .filter_map(|result| match result {
+                Err(error @ QueryError::Unsupported { .. }) => {
+                    unresolved = Some(error);
+                    None
+                }
+                other => Some(other),
             })
             .collect::<Result<Vec<_>, _>>()?;
         Ok(ParentEvidence { parents, unresolved })
@@ -293,6 +319,14 @@ pub fn has_ancestor(
     if !ancestor.conforms_to("Classifier") {
         return Err(QueryError::invalid(ancestor_id, "ancestor must be a Classifier"));
     }
+    has_ancestor_matching(references, classifier_id, |parent| parent.id() == ancestor_id)
+}
+
+pub(crate) fn has_ancestor_matching(
+    references: &ReferenceIndex<'_>,
+    classifier_id: &str,
+    predicate: impl Fn(ElementRef<'_>) -> bool,
+) -> Result<bool, QueryError> {
     let queries = HierarchyQueries::new(references);
     let mut pending = vec![(classifier_id.to_owned(), false)];
     let mut active = HashSet::new();
@@ -313,7 +347,7 @@ pub fn has_ancestor(
         if let Some(error) = evidence.unresolved { unknown = Some(error); }
         pending.push((id, true));
         for parent in evidence.parents {
-            found |= parent.id() == ancestor_id;
+            found |= predicate(parent);
             pending.push((parent.id().to_owned(), false));
         }
     }

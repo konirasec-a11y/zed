@@ -332,8 +332,44 @@ fn profile_metaclass_reference(references: &ReferenceIndex<'_>, profile: Element
     feature_compatibility::require_all(checks)
 }
 
+// The second conjunct quantifies over all Classifiers, not just direct
+// children of this Stereotype. Canonical paths can decide it despite unresolved
+// neighboring branches, but cannot excuse malformed ancestry or cycles.
+fn stereotype_specializations(references: &ReferenceIndex<'_>) -> Result<bool, QueryError> {
+    let mut checks = Vec::new();
+    for classifier in references.model().elements() {
+        if classifier.metaclass().is_none() {
+            checks.push(Err(QueryError::unsupported(classifier.id(), "unknown metaclass may be a Classifier")));
+        } else if classifier.conforms_to("Classifier") && !classifier.conforms_to("Stereotype") {
+            checks.push(super::classifier_hierarchy::has_ancestor_matching(
+                references, classifier.id(), |parent| parent.conforms_to("Stereotype"),
+            ).map(|found| !found));
+        }
+    }
+    feature_compatibility::require_all(checks)
+}
+
 pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
+    let stereotypes = references.model().elements().filter(|element| element.conforms_to("Stereotype")).collect::<Vec<_>>();
+    if !stereotypes.is_empty() {
+        let specializations = stereotype_specializations(references);
+        for stereotype in stereotypes {
+            // Only the first conjunct uses self. A different Stereotype's
+            // bad parents must not invalidate this one's allParents().
+            let parents = super::classifier_hierarchy::has_ancestor_matching(
+                references, stereotype.id(), |parent| !parent.conforms_to("Stereotype"),
+            ).map(|found| !found);
+            let result = feature_compatibility::require_all([parents, specializations.clone()]);
+            let (severity, code, message) = match &result {
+                Ok(true) => continue,
+                Ok(false) => (StructuralSeverity::Error, "UML_STEREOTYPE_GENERALIZATION", "Stereotypes may only generalize or specialize Stereotypes".to_owned()),
+                Err(QueryError::Invalid { message, .. }) => (StructuralSeverity::Error, "UML_STEREOTYPE_GENERALIZATION", message.clone()),
+                Err(QueryError::Unsupported { message, .. }) => (StructuralSeverity::Warning, "MDE_STEREOTYPE_GENERALIZATION_UNVERIFIED", message.clone()),
+            };
+            issues.push(StructuralDiagnostic { severity, code, subject_id: stereotype.id().into(), message: format!("Stereotype-generalize: {message}") });
+        }
+    }
     for end in references.model().elements().filter(|element| element.conforms_to("ExtensionEnd")) {
         for (rule, error_code, unknown_code, result) in [
             ("ExtensionEnd-multiplicity", "UML_EXTENSION_END_MULTIPLICITY", "MDE_EXTENSION_END_MULTIPLICITY_UNVERIFIED", end_multiplicity(references, end)),

@@ -352,8 +352,8 @@ pub fn validate_structural_model(project: &Project) -> Vec<StructuralDiagnostic>
             continue;
         };
         if relation.kind == "uml.generalization"
-            && (!UmlType::from_kind(&source.kind).is_some_and(UmlType::is_classifier)
-                || !UmlType::from_kind(&target.kind).is_some_and(UmlType::is_classifier))
+            && (UmlType::from_kind(&source.kind).is_some_and(|kind| !kind.is_classifier())
+                || UmlType::from_kind(&target.kind).is_some_and(|kind| !kind.is_classifier()))
         {
             issues.push(problem(
                 "UML_GENERALIZATION_CLASSIFIERS",
@@ -364,21 +364,12 @@ pub fn validate_structural_model(project: &Project) -> Vec<StructuralDiagnostic>
         if relation.kind == "uml.generalization" {
             let source_type = UmlType::from_kind(&source.kind);
             let target_type = UmlType::from_kind(&target.kind);
-            // UML.xmi Stereotype-generalize applies in both directions.
-            if (source_type == Some(UmlType::Stereotype))
-                != (target_type == Some(UmlType::Stereotype))
-            {
-                issues.push(problem(
-                    "UML_STEREOTYPE_GENERALIZATION",
-                    &relation.id,
-                    "Stereotype may only generalize or specialize another Stereotype",
-                ));
-            }
             // UML.xmi Classifier-specialize_type / Classifier-maySpecializeType-spec.
             if let (Some(specific), Some(general)) = (source_type, target_type)
                 && specific.may_specialize_type(general) == Some(false)
             {
-                issues.push(problem("UML_GENERALIZATION_TYPE", &relation.id,
+                issues.push(problem(
+                    if general == UmlType::Stereotype { "UML_STEREOTYPE_GENERALIZATION" } else { "UML_GENERALIZATION_TYPE" }, &relation.id,
                     "The specific Classifier metaclass must conform to the general Classifier metaclass"));
             }
             // UML.xmi Classifier-non_final_parents. Do not substitute isLeaf:
