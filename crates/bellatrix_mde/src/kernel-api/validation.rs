@@ -1,8 +1,8 @@
-use crate::{Format, Graph, StructuralSeverity, decode, validate_structural_model};
+use crate::{Graph, StructuralSeverity, validate_structural_model};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-const API_VERSION: u32 = 1;
+use crate::kernel_api_contract::{API_VERSION, decode_model, error_response, invalid_request};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -25,14 +25,6 @@ struct Diagnostic {
     code: String,
     subject_id: String,
     message: String,
-}
-
-fn error_response(code: &str, message: impl Into<String>) -> String {
-    serde_json::json!({
-        "api_version": API_VERSION,
-        "error": { "code": code, "message": message.into() },
-    })
-    .to_string()
 }
 
 /// Validate a model through the versioned, function-only kernel boundary.
@@ -65,17 +57,8 @@ fn error_response(code: &str, message: impl Into<String>) -> String {
 /// or diagnostic type is part of this function's public signature.
 pub fn validate_uml_model(input_json: &str) -> Result<String, String> {
     let request: ValidationRequest = serde_json::from_str(input_json)
-        .map_err(|error| error_response("INVALID_REQUEST", error.to_string()))?;
-    if request.api_version != API_VERSION {
-        return Err(error_response(
-            "UNSUPPORTED_API_VERSION",
-            format!("expected api_version {API_VERSION}, received {}", request.api_version),
-        ));
-    }
-    let model_json = serde_json::to_vec(&request.model)
-        .map_err(|error| error_response("INVALID_MODEL", error.to_string()))?;
-    let model = decode(&model_json, Format::Json)
-        .map_err(|error| error_response("INVALID_MODEL", error.to_string()))?;
+        .map_err(invalid_request)?;
+    let model = decode_model(request.api_version, &request.model)?;
     let mut diagnostics = match Graph::new(&model).validate() {
         Err(error) => vec![Diagnostic {
             severity: "error",
@@ -108,4 +91,41 @@ pub fn validate_uml_model(input_json: &str) -> Result<String, String> {
     };
     serde_json::to_string(&response)
         .map_err(|error| error_response("RESPONSE_SERIALIZATION_FAILED", error.to_string()))
+}
+
+/// Validate graph integrity and presentation without structural UML rule evaluation.
+///
+/// Input uses the same versioned `{api_version:1, model:...}` envelope as
+/// `validate_uml_model`. Output has the same diagnostic shape, with coverage
+/// `graph_integrity_and_presentation`. This deliberately preserves the complete
+/// legacy Graph::validate behavior used by the CLI, including geometry/style,
+/// rather than the topology-only precondition used by graph queries.
+///
+/// # Errors
+/// Contract errors are versioned JSON errors. A decoded but invalid graph returns
+/// Ok with `has_errors:true` and the first `GRAPH_INTEGRITY` diagnostic.
+///
+/// # Effects and determinism
+/// No external effects, I/O, clock, sink or callbacks. No caller mutation or state
+/// retention; the same input yields identical output independently of prior calls.
+pub fn validate_graph_model(input_json: &str) -> Result<String, String> {
+    let request: ValidationRequest = serde_json::from_str(input_json).map_err(invalid_request)?;
+    let model = decode_model(request.api_version, &request.model)?;
+    let diagnostics = match Graph::new(&model).validate() {
+        Ok(()) => Vec::new(),
+        Err(error) => vec![Diagnostic {
+            severity: "error",
+            code: "GRAPH_INTEGRITY".into(),
+            subject_id: model.id.clone(),
+            message: error.to_string(),
+        }],
+    };
+    let response = ValidationResponse {
+        api_version: API_VERSION,
+        coverage: "graph_integrity_and_presentation",
+        has_errors: !diagnostics.is_empty(),
+        diagnostics,
+    };
+    serde_json::to_string(&response)
+        .map_err(|_| error_response("RESPONSE_SERIALIZATION_FAILED", "validation response cannot be encoded as JSON"))
 }
