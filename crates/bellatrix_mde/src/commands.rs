@@ -512,7 +512,7 @@ fn create_element(
 fn diagram_relation_owner(section: &ModelingSection, kind: ModelingRelationKind, from: &str, to: &str) -> Result<Option<String>, String> {
     use ModelingRelationKind::*;
     match kind {
-        Include | Extend | PackageImport | PackageMerge | Manifestation => return Ok(Some(from.into())),
+        Include | Extend | ElementImport | PackageImport | PackageMerge | Manifestation => return Ok(Some(from.into())),
         Deployment => return Ok(Some(to.into())),
         _ => {}
     }

@@ -39,3 +39,8 @@ Port and Part are now direct toolbox entries, alongside DeploymentSpecification 
 - §17.4.4.1 and §17.9.1, Table17.4, printed600/PDF642: Communication messages render an arrowless link with a separate small open directional arrow beside the label, instead of a sequence arrowhead at the target object. Canonical and View-only message paths use the same renderer mode and shared styles.
 - New Communication visual messages begin with the editable label `1: message()`. This is a presentation placeholder, not a computed semantic sequence. The user can author nested sequence expressions through the existing label editor. Endpoint routing clips at object heads; sequence event-height anchors are not applied in this diagram context.
 - Grouping multiple directional messages on a single shared link and independent label placement remain pending. No sequence-expression execution or ordering validation is claimed.
+
+## Structural relationship toolbox coverage
+
+- §12.2.4/12.3.4: ElementImport, ProfileApplication and Extension are now direct toolbox choices. Extension has a solid line and filled triangle toward the metaclass, with an independently drawn matching icon. ElementImport uses the existing canonical namespace-import adapter; ProfileApplication and Extension remain explicitly View-only while their authoring adapters are incomplete.
+- §11.2.4 and §7.7.4: Connector and comment/constraint links are directly placeable using existing solid/dashed arrowless geometry. They are explicitly unverified visual links, not untyped semantic records. Unsupported endpoint arrangements remain drawable. ConnectorEnd authoring, ExtensionEnd binding, required-extension labels and profile reference distinctions remain pending.

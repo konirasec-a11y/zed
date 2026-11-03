@@ -140,6 +140,31 @@ fn behavior_nodes_use_canonical_composite_owners_and_transactional_commands()
             );
         }
     }
+    let namespace = create(&source, ModelingElementKind::Package, None)?;
+    let namespace_id = namespace
+        .elements
+        .last()
+        .ok_or("missing namespace")?
+        .id
+        .clone();
+    let imported = connect(
+        &namespace,
+        ModelingRelationKind::ElementImport,
+        &namespace_id,
+        "type-list",
+    )?;
+    let import = imported
+        .relations
+        .iter()
+        .find(|relation| relation.kind == "uml.element_import")
+        .ok_or("missing canonical ElementImport")?;
+    let model = bellatrix_mde::uml::root::Model::from_project(&imported);
+    assert_eq!(
+        model
+            .owner(model.element(&import.id).ok_or("missing import identity")?)?
+            .map(|owner| owner.id().to_owned()),
+        Some(namespace_id)
+    );
     let machine = create(&source, ModelingElementKind::StateMachine, None)?;
     let machine_id = machine.elements.last().ok_or("missing machine")?.id.clone();
     let region = create(&machine, ModelingElementKind::Region, Some(&machine_id))?;

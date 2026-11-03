@@ -14,6 +14,8 @@ pub enum Family {
 pub enum ShapeKind {
     SynchronousMessage,
     ReplyMessage,
+    Extension,
+    DashedLink,
     AssociationClassAttachment,
     Port,
     DeepHistory,
@@ -109,6 +111,8 @@ pub fn glyph(kind: ShapeKind) -> &'static [u8] {
         ShapeKind::InitialNode => include_bytes!("../assets/initial-node.svg"),
         ShapeKind::FinalNode => include_bytes!("../assets/final-node.svg"),
         ShapeKind::FlowFinal => include_bytes!("../assets/flow-final.svg"),
+        ShapeKind::DashedLink => include_bytes!("../assets/dashed-link.svg"),
+        ShapeKind::Extension => include_bytes!("../assets/extension.svg"),
         ShapeKind::AssociationClassAttachment => {
             include_bytes!("../assets/association-class-attachment.svg")
         }

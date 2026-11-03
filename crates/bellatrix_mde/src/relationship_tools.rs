@@ -1,6 +1,12 @@
 //! Toolbox intent and endpoint contracts; visual-only tools never claim semantic relationships.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ModelingRelationKind {
+    ElementImport,
+    ProfileApplication,
+    Extension,
+    Connector,
+    NoteLink,
+    ConstraintLink,
     MessageSynchronous,
     MessageAsynchronous,
     MessageReply,
@@ -64,6 +70,12 @@ impl ModelingRelationKind {
         Self::Transition,
     ];
     pub const STRUCTURAL: &'static [Self] = &[
+        Self::ElementImport,
+        Self::ProfileApplication,
+        Self::Extension,
+        Self::Connector,
+        Self::NoteLink,
+        Self::ConstraintLink,
         Self::Usage,
         Self::Abstraction,
         Self::PackageImport,
@@ -74,6 +86,12 @@ impl ModelingRelationKind {
     pub const PACKAGES: &'static [Self] = &[Self::Containment];
     pub fn label(self) -> &'static str {
         match self {
+            Self::ElementImport => "Element import",
+            Self::ProfileApplication => "Profile application · visual",
+            Self::Extension => "Extension · visual",
+            Self::Connector => "Connector · visual",
+            Self::NoteLink => "Comment link · visual",
+            Self::ConstraintLink => "Constraint link · visual",
             Self::MessageSynchronous => "Synchronous message",
             Self::MessageAsynchronous => "Asynchronous message",
             Self::MessageReply => "Reply message",
@@ -103,6 +121,12 @@ impl ModelingRelationKind {
     }
     pub fn model_kind(self) -> &'static str {
         match self {
+            Self::ElementImport => "uml.element_import",
+            Self::ProfileApplication => "uml.profile_application",
+            Self::Extension => "uml.extension",
+            Self::Connector => "uml.connector",
+            Self::NoteLink => "uml.note_link",
+            Self::ConstraintLink => "uml.constraint_link",
             Self::MessageSynchronous | Self::MessageAsynchronous | Self::MessageReply => {
                 "uml.message"
             }
@@ -133,6 +157,12 @@ impl ModelingRelationKind {
     /// The first click is Relation.from, not necessarily the arrowhead end.
     pub fn endpoint_instruction(self) -> &'static str {
         match self {
+            Self::ElementImport => "click importing namespace, then imported element",
+            Self::ProfileApplication => "click applying package, then profile (visual only)",
+            Self::Extension => "click stereotype, then metaclass (filled triangle at metaclass)",
+            Self::Connector => "click a role or port, then another role or port (visual only)",
+            Self::NoteLink => "click comment, then annotated view (visual only)",
+            Self::ConstraintLink => "click constraint, then constrained view (visual only)",
             Self::MessageSynchronous | Self::MessageAsynchronous | Self::MessageReply => {
                 "click the source lifeline at send position, then the target at receive position"
             }
@@ -170,7 +200,12 @@ impl ModelingRelationKind {
     pub fn is_visual_only(self) -> bool {
         matches!(
             self,
-            Self::AssociationClassAttachment
+            Self::ProfileApplication
+                | Self::Extension
+                | Self::Connector
+                | Self::NoteLink
+                | Self::ConstraintLink
+                | Self::AssociationClassAttachment
                 | Self::MessageSynchronous
                 | Self::MessageAsynchronous
                 | Self::MessageReply
@@ -187,6 +222,9 @@ impl ModelingRelationKind {
             }
             Self::PackageImport => {
                 Some(conforms(source, "Namespace") && conforms(target, "Package"))
+            }
+            Self::ElementImport => {
+                Some(conforms(source, "Namespace") && conforms(target, "PackageableElement"))
             }
             Self::PackageMerge => Some(conforms(source, "Package") && conforms(target, "Package")),
             Self::Deployment => {

@@ -540,7 +540,7 @@ pub(super) static UML: &[SymbolGroup] = &[
             Symbol {
                 id: "uml-others-9",
                 label: "Extension",
-                kind: ShapeKind::Relation,
+                kind: ShapeKind::Extension,
             },
             Symbol {
                 id: "uml-others-10",

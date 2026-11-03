@@ -82,6 +82,14 @@ fn tool_glyph(tool: ModelingTool) -> ShapeKind {
             ModelingRelationKind::MessageAsynchronous => ShapeKind::Message,
             ModelingRelationKind::MessageReply => ShapeKind::ReplyMessage,
 
+            ModelingRelationKind::Extension => ShapeKind::Extension,
+            ModelingRelationKind::Connector => ShapeKind::Association,
+            ModelingRelationKind::NoteLink | ModelingRelationKind::ConstraintLink => {
+                ShapeKind::DashedLink
+            }
+            ModelingRelationKind::ElementImport | ModelingRelationKind::ProfileApplication => {
+                ShapeKind::Dependency
+            }
             ModelingRelationKind::AssociationClassAttachment => {
                 ShapeKind::AssociationClassAttachment
             }
