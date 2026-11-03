@@ -79,6 +79,8 @@ InstanceSpecification::defining_feature e Property::subsetting_rules têm
 recortes publicados em `2d5db0de9184619907ff27729d7500f7babc0ff5` (E62/E63).
 Property::subsetting_context_conforms tem recorte publicado em
 `b2beb7bdcabc2646eaca900b4282e46e6406262d` (E64).
+Operation::only_body_for_query tem recorte publicado em
+`29bd166b536dc1f529ea145f1f12d7920c05aaa4` (E65).
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -194,7 +196,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E64 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E65 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -996,6 +998,42 @@ de execução nova. E12–E64 possuem os gates delimitados nas seções seguinte
   `MDE_PROPERTY_SUBSETTING_CONTEXT_CONFORMS_INVALID` e
   `MDE_PROPERTY_SUBSETTING_CONTEXT_CONFORMS_UNVERIFIED`. Não certifica todas
   as regras de subsetting nem resolve modelos externos.
+
+- **E65**: `semantics/operations.rs`, `only_body_for_query`,
+  `body_condition_contract`, `validate_body_condition` e `validate`;
+  `operation_body_condition.rs`, oito testes. bodyCondition não null exige
+  isQuery=true, com default efetivo false. Ausência/null satisfaz a implicação;
+  Constraint apenas possuída não é inferida como bodyCondition. Referência
+  não null bem formada prova presença mesmo quando externa ou com metaclasse
+  local desconhecida, sem provar resolução, ownership ou avaliação do corpo.
+  Contrato inválido da referência/ownership e isQuery malformado continuam
+  Invalid, inclusive com corpo ausente/null. O check dedicado usa
+  `UML_OPERATION_ONLY_BODY_FOR_QUERY`,
+  `MDE_OPERATION_ONLY_BODY_FOR_QUERY_INVALID` e
+  `MDE_OPERATION_ONLY_BODY_FOR_QUERY_UNVERIFIED`. A satisfação da implicação
+  não elimina `MDE_OPERATION_BODY_CONDITION_UNVERIFIED` quando o contrato é
+  desconhecido. Corpo local resolvido ainda recebe
+  `MDE_OPERATION_CONDITION_UNSUPPORTED`: a expressão da Constraint não é
+  avaliada, nem se certificam resultado Boolean, ausência de efeitos colaterais
+  ou semântica operacional completa. Edição para nonquery é rejeitada sem
+  mutação e snapshot importado inválido pode ser reparado.
+
+### Evidência publicada de bodyCondition em Operation query
+
+Commit inspecionado: `29bd166b536dc1f529ea145f1f12d7920c05aaa4`.
+Log final lido: `/tmp/operation-body-condition-final-gate.log`,
+**212/212 aprovados**, 161 lib e 51 integrações: inherited_capabilities 5,
+inspector_optional_null 1, operation_body_condition 8,
+operation_template_default 11, ownership_namespace_flow 4,
+parameter_scalar_constraints 7 e parameter_set_input 15.
+
+A linha passa a **P/E65**. Casos incluem modelos com/sem raiz, default false,
+null/ausência, referência externa, metaclasse desconhecida, malformados,
+ownership incorreto, roundtrip e rejeição atômica/reparo. Gate anterior à
+publicação, sem rerun no SHA publicado nem execução nova por esta matriz;
+regressões repetidas não somam cobertura normativa. Não certifica suíte
+integral, UI, geração, interchange ou conformidade UML completa. As linhas de
+MultiplicityElement não são promovidas por este incremento.
 
 ### Evidência publicada de conformance de contextos de subsetting
 
@@ -2014,7 +2052,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `Operation-only_body_for_query`
 
-- Metaclass: `Operation`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `Operation`. Estado: **P**. Evidência: E65; commit `29bd166b536dc1f529ea145f1f12d7920c05aaa4`.
 - OCL publicado: `bodyCondition <> null implies isQuery`.
 
 #### `OperationTemplateParameter-match_default_signature`

@@ -76,15 +76,15 @@ fn evaluate_literal(
     id: &str,
 ) -> Result<Option<LiteralValue>, EvaluationError> {
     let element = resolve(references, id)?;
+    let metaclass = element
+        .metaclass()
+        .ok_or_else(|| EvaluationError::unsupported(id, "missing metaclass"))?;
     if !element.conforms_to("ValueSpecification") {
         return Err(EvaluationError::invalid(
             id,
             "a ValueSpecification is required",
         ));
     }
-    let metaclass = element
-        .metaclass()
-        .ok_or_else(|| EvaluationError::unsupported(id, "missing metaclass"))?;
     if metaclass == "LiteralNull" {
         return Ok(Some(LiteralValue::Null));
     }
@@ -259,9 +259,9 @@ fn bound<'a>(
     let descriptor = schema::uml_property("MultiplicityElement", key)
         .map_err(|error| EvaluationError::unsupported(element.id(), error.to_string()))?
         .ok_or_else(|| EvaluationError::unsupported(element.id(), "bound contract missing"))?;
-    references
-        .validate(descriptor, value)
-        .map_err(|error| EvaluationError::invalid(element.id(), error))?;
+    let contract = super::property_contracts::check_value(references, element, descriptor, value);
+    // Ownership is known independently of the target's unresolved metaclass.
+    // Its contradictions must remain invalid before selecting Unknown.
     if references
         .model()
         .owner(target)
@@ -273,7 +273,11 @@ fn bound<'a>(
             format!("{key} must be owned by {}", element.id()),
         ));
     }
-    Ok(Some(target))
+    match contract {
+        super::property_contracts::PropertyOutcome::Satisfied => Ok(Some(target)),
+        super::property_contracts::PropertyOutcome::Violation(message) => Err(EvaluationError::invalid(element.id(), message)),
+        super::property_contracts::PropertyOutcome::Unverified(message) => Err(EvaluationError::unsupported(element.id(), message)),
+    }
 }
 
 fn require_assigned_values(
