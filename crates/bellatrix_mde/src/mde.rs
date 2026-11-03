@@ -35,7 +35,7 @@ mod index;
 mod inspector;
 #[path = "KERNEL/compiler/operations/operation_graph.rs"]
 mod operation_graph;
-#[path = "KERNEL/compiler/emission/ownership.rs"]
+#[path = "KERNEL/I_O/ownership.rs"]
 mod ownership;
 #[path = "KERNEL/compiler/artifacts/path.rs"]
 mod path;
@@ -49,7 +49,7 @@ mod instance_presentation;
 mod interaction_presentation;
 pub use interaction_presentation::format_operand_guard;
 pub use instance_presentation::{format_instance_heading, collect_instance_slot_labels};
-#[path = "KERNEL/compiler/emission/publish.rs"]
+#[path = "KERNEL/I_O/publish.rs"]
 mod publish;
 #[path = "view-model/authoring/quick_edit.rs"]
 mod quick_edit;
@@ -142,3 +142,6 @@ pub use template_presentation::{template_parameter_label, template_parameter_lab
 #[path = "application/edits/explorer_placement.rs"]
 mod explorer_placement;
 pub use explorer_placement::explorer_parent_map;
+
+#[path = "KERNEL/compiler/artifacts/ownership_manifest.rs"]
+mod ownership_manifest;

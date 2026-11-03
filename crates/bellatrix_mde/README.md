@@ -28,8 +28,12 @@ artifacts and emission; it is not limited to passive validation.
   dependencies and execution of the operation graph into an artifact plan.
 - `KERNEL/compiler/artifacts/`: the output artifact IR, path derivation, collision
   detection and output-tree constraints.
-- `KERNEL/compiler/emission/`: construction-script generation and project output
-  materialization, including staged publication and generated-file ownership.
+- `KERNEL/compiler/emission/`: pure construction-script generation from artifact
+  plans, without executing the generated program.
+- `KERNEL/I_O/`: explicit filesystem effects: project materialization, staged
+  publication, ownership-manifest reads/writes and output-tree inspection.
+  Manifest encoding, decoding and path membership remain pure functions in
+  `KERNEL/compiler/artifacts/ownership_manifest.rs`.
 - `observability/`: execution events and explicitly traced entry points.
 - `view-model/`: renderer-independent projections grouped by `inspector/`,
   `hierarchy/`, `notation/`, `diagram/` and `authoring/`. These do not depend on GPUI.
@@ -96,3 +100,8 @@ complete transformation from every valid UML diagram to an executable project.
 Its graph-integrity check and bounded generation stages remain distinct from
 full semantic acceptance and target-language compilation. The layout preserves
 those implementation limits rather than claiming future compiler work exists.
+
+`persistence/io.rs` is a memory codec despite its name and is not filesystem I/O.
+Likewise, the Python source emitted by the compiler contains filesystem calls,
+but composing that source does not execute them. Public publication functions
+in `KERNEL/I_O/` document their actual effects and partial-failure limitations.

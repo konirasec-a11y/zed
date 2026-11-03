@@ -1,37 +1,9 @@
 //! Tracks which files Bellatrix may replace without deleting unrelated user data.
-use crate::Plan;
-use serde::{Deserialize, Serialize};
-use std::{
-    collections::BTreeSet,
-    fs, io,
-    path::{Path, PathBuf},
-};
-
-pub(crate) const MARKER: &str = ".bellatrix-generated.json";
-
-#[derive(Serialize, Deserialize)]
-struct Ownership {
-    format: String,
-    version: u32,
-    files: BTreeSet<String>,
-}
-
-fn key(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/").to_lowercase()
-}
+use crate::{Plan, ownership_manifest::{self, MARKER}};
+use std::{fs, io, path::{Path, PathBuf}};
 
 pub(crate) fn write(root: &Path, plan: &Plan) -> io::Result<()> {
-    let files = plan
-        .artifacts()
-        .filter(|a| a.contents.is_some())
-        .map(|a| key(&a.path))
-        .collect();
-    let marker = Ownership {
-        format: "bellatrix.generated".into(),
-        version: 1,
-        files,
-    };
-    let bytes = serde_json::to_vec_pretty(&marker).map_err(io::Error::other)?;
+    let bytes = ownership_manifest::encode(plan).map_err(io::Error::other)?;
     fs::write(root.join(MARKER), bytes)
 }
 
@@ -41,8 +13,8 @@ pub(crate) fn verify(root: &Path) -> io::Result<()> {
     let marker = fs::read(root.join(MARKER)).map_err(|_| {
         io::Error::other("no Bellatrix generation manifest; refusing to replace this directory")
     })?;
-    let ownership: Ownership = serde_json::from_slice(&marker).map_err(io::Error::other)?;
-    if ownership.format != "bellatrix.generated" || ownership.version != 1 {
+    let ownership = ownership_manifest::decode(&marker).map_err(io::Error::other)?;
+    if !ownership.is_supported() {
         return Err(io::Error::other("unsupported generation manifest"));
     }
     let mut pending = vec![PathBuf::new()];
@@ -61,7 +33,7 @@ pub(crate) fn verify(root: &Path) -> io::Result<()> {
                 pending.push(rel);
             } else if ft.is_file()
                 && rel != Path::new(MARKER)
-                && !ownership.files.contains(&key(&rel))
+                && !ownership.owns_file(&rel)
             {
                 return Err(io::Error::other(format!(
                     "unknown file in generated output: {}",
