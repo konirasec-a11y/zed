@@ -1,8 +1,8 @@
 //! Panels owned by the Zed Workspace Dock, consuming the single MDE domain.
 mod toolbox_panel;
 mod view_inspector;
-pub(crate) use crate::ui::hierarchy::element_glyph;
-use crate::ui::{
+pub(crate) use crate::workbench_ui::hierarchy::element_glyph;
+use crate::workbench_ui::{
     MdeToolDrag, MdeWorkbenchItem, WorkbenchPalette,
     hierarchy::{project_explorer, ExplorerDrag},
     integration::{OpenMdeSymbols, OpenMdeWorkbench},
@@ -142,12 +142,12 @@ pub struct MdeRightPanel {
     state: PanelState,
     editing_id: Option<String>,
     pub(crate) property_drafts:
-        HashMap<crate::ui::inspector_drafts::DraftKey, crate::ui::property_editor::InspectorDraft>,
-    style_target_id: Option<crate::ui::style_editor::StyleKey>,
+        HashMap<crate::workbench_ui::inspector_drafts::DraftKey, crate::workbench_ui::property_editor::InspectorDraft>,
+    style_target_id: Option<crate::workbench_ui::style_editor::StyleKey>,
     pub(crate) style_drafts:
-        HashMap<crate::ui::style_editor::StyleKey, crate::ui::style_editor::StyleDraft>,
+        HashMap<crate::workbench_ui::style_editor::StyleKey, crate::workbench_ui::style_editor::StyleDraft>,
     pub(crate) inspector_styles_open: bool,
-    pub(crate) timing_drafts: HashMap<(String, String, String), crate::ui::timing_editor::TimingDraft>,
+    pub(crate) timing_drafts: HashMap<(String, String, String), crate::workbench_ui::timing_editor::TimingDraft>,
     collapsed_elements: HashSet<String>,
     last_revealed_view: Option<(gpui::EntityId, String)>,
     explorer_scroll: gpui::ScrollHandle,
@@ -284,7 +284,7 @@ impl Render for MdeRightPanel {
             let root_drop_owner = item.clone();
             rows.push(div().id("mde-explorer-project").flex().items_center().gap_1()
                 .when(!read_only, |row| row.on_drop(move |drag: &ExplorerDrag, _, cx| {
-                    crate::ui::hierarchy::submit_explorer_placement(&root_drop_owner, drag, None, cx);
+                    crate::workbench_ui::hierarchy::submit_explorer_placement(&root_drop_owner, drag, None, cx);
                 }))
                 .child(svg().data(glyph(ShapeKind::Package)).size(px(14.0)).flex_none().text_color(palette.muted))
                 .child(TreeViewItem::new(root_key.clone(), snapshot.name.clone())
@@ -320,7 +320,7 @@ impl Render for MdeRightPanel {
                     rows.push(div().id(format!("mde-explorer-view-{}", row.element_id))
                         .pl(px((row.depth.min(15) + 2) as f32 * 14.0)).flex().items_center().gap_1()
                         .when(selected, |row| row.bg(palette.surface))
-                        .child(crate::ui::hierarchy::explorer_view_icon(&row.element_id, &row.kind, selected, &palette))
+                        .child(crate::workbench_ui::hierarchy::explorer_view_icon(&row.element_id, &row.kind, selected, &palette))
                         .child(div().flex_1().min_w_0().overflow_hidden().child(
                             TreeViewItem::new(row.element_id.clone(), row.label.clone())
                                 .root_item(has_children).expanded(expanded).toggle_state(selected)
@@ -334,7 +334,7 @@ impl Render for MdeRightPanel {
                                     owner.update(cx, |workbench, cx| workbench.select_diagram_view(diagram_id.clone(), view_id.clone(), cx));
                                 })
                         ))
-                        .child(Label::new(crate::ui::hierarchy::explorer_type_label(&row.kind, view.subject_id.as_deref().is_some_and(|id| snapshot.section.relations.iter().any(|relation| relation.id == id)))).size(LabelSize::XSmall).color(Color::Muted)));
+                        .child(Label::new(crate::workbench_ui::hierarchy::explorer_type_label(&row.kind, view.subject_id.as_deref().is_some_and(|id| snapshot.section.relations.iter().any(|relation| relation.id == id)))).size(LabelSize::XSmall).color(Color::Muted)));
                     if has_children && !expanded { hidden_by_depth = Some(row.depth); }
                     continue;
                 }
@@ -354,7 +354,7 @@ impl Render for MdeRightPanel {
                             .when(!read_only, |row| row
                                 .on_drag(drag, |drag: &ExplorerDrag, _, _, cx| cx.new(|_| drag.clone()))
                                 .on_drop(move |drag: &ExplorerDrag, _, cx| {
-                                    crate::ui::hierarchy::submit_explorer_placement(&drop_owner, drag, Some(&drop_target), cx);
+                                    crate::workbench_ui::hierarchy::submit_explorer_placement(&drop_owner, drag, Some(&drop_target), cx);
                                 }))
                             .pl(px((row.depth.min(15) + 2) as f32 * 14.0))
                             .flex().items_center().gap_1()
@@ -415,7 +415,7 @@ impl Render for MdeRightPanel {
                         .when(!read_only, |row| row
                             .on_drag(drag, |drag: &ExplorerDrag, _, _, cx| cx.new(|_| drag.clone()))
                             .on_drop(move |drag: &ExplorerDrag, _, cx| {
-                                crate::ui::hierarchy::submit_explorer_placement(&drop_owner, drag, Some(&drop_target), cx);
+                                crate::workbench_ui::hierarchy::submit_explorer_placement(&drop_owner, drag, Some(&drop_target), cx);
                             }))
                         .pl(px((row.depth.min(15) + 2) as f32 * 14.0))
                         .flex()
@@ -504,7 +504,7 @@ impl Render for MdeRightPanel {
                                 .bg(palette.surface)
                                 .child(
                                     Label::new(
-                                        crate::ui::hierarchy::explorer_type_label(&row.kind, snapshot.section.relations.iter().any(|relation| relation.id == row.element_id)),
+                                        crate::workbench_ui::hierarchy::explorer_type_label(&row.kind, snapshot.section.relations.iter().any(|relation| relation.id == row.element_id)),
                                     )
                                     .size(LabelSize::XSmall)
                                     .color(Color::Muted),
@@ -529,7 +529,7 @@ impl Render for MdeRightPanel {
         }
         let inspector_project = item.read(cx).project_id().clone();
         if !read_only {
-            crate::ui::property_editor::reconcile_inputs(
+            crate::workbench_ui::property_editor::reconcile_inputs(
                 &mut self.property_drafts,
                 item.clone(),
                 inspector_project.as_str(),
@@ -609,7 +609,7 @@ impl Render for MdeRightPanel {
                                 header.action(Button::new("mde-save-project", "Save As…").on_click(
                                     move |_, window, cx| {
                                         window.dispatch_action(
-                                            Box::new(crate::ui::integration::SaveMdeProjectAs),
+                                            Box::new(crate::workbench_ui::integration::SaveMdeProjectAs),
                                             cx,
                                         );
                                     },
@@ -937,8 +937,8 @@ pub(crate) fn bind_panels(
                     };
                     if let Err(error) = owner.update(cx, |panel, cx| {
                         if panel.is_bound_to(&item) && !item.read(cx).source().is_read_only() {
-                            crate::ui::property_editor::flush_property_edits(panel, &item, cx);
-                            crate::ui::style_editor::flush_style_edits(panel, &item, cx);
+                            crate::workbench_ui::property_editor::flush_property_edits(panel, &item, cx);
+                            crate::workbench_ui::style_editor::flush_style_edits(panel, &item, cx);
                         }
                     }) {
                         eprintln!("MDE document queue resume failed: {error}");
@@ -950,7 +950,7 @@ pub(crate) fn bind_panels(
     if let Some(panel) = workspace.panel::<MdeBottomPanel>(cx) {
         panel.update(cx, |panel, cx| panel.state.bind(item.as_ref(), cx));
     }
-    if let Some(panel) = workspace.panel::<crate::ui::execution_dashboard::MdeExecutionDashboard>(cx) {
+    if let Some(panel) = workspace.panel::<crate::workbench_ui::execution_dashboard::MdeExecutionDashboard>(cx) {
         panel.update(cx, |panel, cx| panel.bind(item.as_ref(), cx));
     }
 }
@@ -965,8 +965,8 @@ pub fn attach_panels(
         bind_panels(workspace, Some(item), window, cx);
         return;
     }
-    workspace.register_action(|workspace, _: &crate::ui::execution_dashboard::ToggleMdeExecutionDashboard, window, cx| {
-        workspace.toggle_panel_focus::<crate::ui::execution_dashboard::MdeExecutionDashboard>(window, cx);
+    workspace.register_action(|workspace, _: &crate::workbench_ui::execution_dashboard::ToggleMdeExecutionDashboard, window, cx| {
+        workspace.toggle_panel_focus::<crate::workbench_ui::execution_dashboard::MdeExecutionDashboard>(window, cx);
     });
     workspace.register_action(|workspace, _: &ToggleMdeLeft, window, cx| {
         workspace.toggle_panel_focus::<MdeLeftPanel>(window, cx);
@@ -988,7 +988,7 @@ pub fn attach_panels(
     });
     let left = cx.new(|cx| MdeLeftPanel::new(item.clone(), window, cx));
     let right = cx.new(|cx| MdeRightPanel::new(item.clone(), window, cx));
-    let execution = cx.new(|cx| crate::ui::execution_dashboard::MdeExecutionDashboard::new(item.clone(), window, cx));
+    let execution = cx.new(|cx| crate::workbench_ui::execution_dashboard::MdeExecutionDashboard::new(item.clone(), window, cx));
     let bottom = cx.new(|cx| MdeBottomPanel::new(item, cx));
     workspace.add_panel(left, window, cx);
     workspace.add_panel(right, window, cx);

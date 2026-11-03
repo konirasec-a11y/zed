@@ -161,7 +161,7 @@ impl gpui::Render for ExplorerDrag {
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
         use gpui::prelude::*;
-        let palette = crate::ui::WorkbenchPalette::current(cx);
+        let palette = crate::workbench_ui::WorkbenchPalette::current(cx);
         gpui::div()
             .px_2()
             .py_1()
@@ -177,7 +177,7 @@ pub(crate) fn explorer_type_label(kind: &str, relationship: bool) -> String {
     if label == kind { "Element".into() } else { label.into() }
 }
 
-pub(crate) fn explorer_view_icon(id: &str, kind: &str, selected: bool, palette: &crate::ui::WorkbenchPalette) -> impl gpui::IntoElement {
+pub(crate) fn explorer_view_icon(id: &str, kind: &str, selected: bool, palette: &crate::workbench_ui::WorkbenchPalette) -> impl gpui::IntoElement {
     use gpui::{div, prelude::*, px, svg};
     use bellatrix_ui_symbols::glyph;
     div().id(format!("mde-explorer-view-icon-{id}"))
@@ -217,7 +217,7 @@ pub(crate) fn element_glyph(kind: &str) -> bellatrix_ui_symbols::ShapeKind {
 }
 
 pub fn submit_explorer_placement(
-    owner: &gpui::Entity<crate::ui::MdeWorkbenchItem>,
+    owner: &gpui::Entity<crate::workbench_ui::MdeWorkbenchItem>,
     drag: &ExplorerDrag,
     parent: Option<&str>,
     cx: &mut gpui::App,

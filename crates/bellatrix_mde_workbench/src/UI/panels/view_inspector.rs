@@ -5,7 +5,7 @@ impl MdeRightPanel {
     pub(super) fn render_view_presentation(
         &mut self,
         item: Entity<MdeWorkbenchItem>,
-        snapshot: &Option<crate::ui::snapshot::MdeSnapshot>,
+        snapshot: &Option<crate::workbench_ui::snapshot::MdeSnapshot>,
         active_diagram: &Option<String>,
         read_only: bool,
         window: &mut Window,
@@ -61,7 +61,7 @@ impl MdeRightPanel {
         }
         if !read_only {
             if let Some((diagram_id, view, _)) = style_target {
-                crate::ui::style_editor::reconcile_style_inputs(
+                crate::workbench_ui::style_editor::reconcile_style_inputs(
                     &mut self.style_drafts,
                     &item,
                     diagram_id,
@@ -72,7 +72,7 @@ impl MdeRightPanel {
                 );
             }
         }
-        let mut inspector_rows = crate::ui::style_editor::render_styles(
+        let mut inspector_rows = crate::workbench_ui::style_editor::render_styles(
             style_target,
             item.clone(),
             if read_only {
@@ -109,7 +109,7 @@ impl MdeRightPanel {
                 timing_diagram && kind == Some("uml.lifeline")
             });
             if is_timing_lifeline {
-                let key = crate::ui::timing_editor::reconcile_timing_inputs(
+                let key = crate::workbench_ui::timing_editor::reconcile_timing_inputs(
                     &mut self.timing_drafts,
                     &item,
                     diagram_id,
@@ -119,7 +119,7 @@ impl MdeRightPanel {
                     cx,
                 );
                 if let Some(draft) = self.timing_drafts.get(&key) {
-                    inspector_rows.push(crate::ui::timing_editor::render_timing_editor(
+                    inspector_rows.push(crate::workbench_ui::timing_editor::render_timing_editor(
                         draft, &key, &item, cx,
                     ));
                 }

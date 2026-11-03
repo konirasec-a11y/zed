@@ -1,5 +1,5 @@
 //! A typed, lifecycle-owned source for Zed Items and Panels.
-use crate::ui::{MdeSnapshot, from_document};
+use crate::workbench_ui::{MdeSnapshot, from_document};
 use bellatrix_mde_cordis::{MdeUiBridge, MdeUiCommand};
 use bellatrix_project::{ProjectDocument, ProjectId, ProjectService};
 use std::sync::{

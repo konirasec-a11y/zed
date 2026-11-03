@@ -16,7 +16,7 @@
   `view-model/` source boundaries. The workbench is the native UI adapter, not
   another kernel.
 
-The private `ui` module keeps widget implementation and state together, while
+The private `workbench_ui` module keeps widget implementation and state together, while
 root reexports preserve the crate API. The pure view-model files still belong
 to this GPUI-dependent crate; this layout does not provide a separately
 compilable view-model package or claim that every MDE dependency is one-way.

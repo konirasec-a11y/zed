@@ -118,7 +118,7 @@ def check() -> None:
 
     # RightClickMenu inserts an auto-height layout node: size_full on its trigger
     # alone collapses figures to their title or zero when children are absolute.
-    workbench = (ROOT / "crates/bellatrix_mde_workbench/src/diagram_canvas.rs").read_text(encoding="utf-8")
+    workbench = (ROOT / "crates/bellatrix_mde_workbench/src/UI/diagram_canvas.rs").read_text(encoding="utf-8")
     figure_trigger = re.search(
         r'ui::right_click_menu\(format!\("mde-view-menu-.*?\.trigger\(move \|_, _, _\| \{(.*?)\}\)',
         workbench,

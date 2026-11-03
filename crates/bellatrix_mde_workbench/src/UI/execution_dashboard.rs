@@ -1,5 +1,5 @@
 //! Native, bounded view of execution events emitted by the MDE runtime.
-use crate::ui::{MdeWorkbenchItem, WorkbenchPalette};
+use crate::workbench_ui::{MdeWorkbenchItem, WorkbenchPalette};
 use bellatrix_mde_cordis::{ExecutionJournal, ExecutionJournalSnapshot};
 use gpui::{
     Action, App, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement,

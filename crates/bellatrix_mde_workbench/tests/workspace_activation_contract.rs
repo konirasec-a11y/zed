@@ -1,7 +1,7 @@
 //! Source-contract checks; these deliberately do not claim GPUI runtime coverage.
 //! Can run independently with `rustc --test` without linking the GUI workspace.
 
-const INTEGRATION: &str = include_str!("../src/integration.rs");
+const INTEGRATION: &str = include_str!("../src/UI/integration.rs");
 
 fn workbench_action() -> (&'static str, &'static str, &'static str) {
     let start = INTEGRATION
@@ -48,7 +48,7 @@ fn status_entry_is_deduplicated_and_uses_visible_text_and_existing_action() {
         .find("status_bar.add_left_item(button, window, cx)")
         .expect("native status entry");
     assert!(gate < dedup && dedup < add);
-    let status = include_str!("../src/status_entry.rs");
+    let status = include_str!("../src/UI/status_entry.rs");
     assert!(status.contains("Button::new(\"bellatrix-mde-status-entry\", \"MDE\")"));
     assert!(status.contains("Tooltip::for_action(\"Open MDE Workbench\", &OpenMdeWorkbench, cx)"));
     assert!(status.contains("window.dispatch_action(Box::new(OpenMdeWorkbench), cx)"));
