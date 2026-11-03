@@ -599,6 +599,14 @@ impl<'a> Model<'a> {
             }
         }
         issues.extend(unresolved_namespaces);
+        issues.extend(self.validate_contracts());
+        issues
+    }
+
+    // Rootless authoring drafts still execute the same property and semantic
+    // contracts, without requiring complete document ownership.
+    pub(crate) fn validate_contracts(self) -> Vec<StructuralDiagnostic> {
+        let mut issues = Vec::new();
         for element in self.elements() {
             issues.extend(super::schema::validate_element(element));
         }
