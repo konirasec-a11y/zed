@@ -23,6 +23,9 @@ DeploymentSpecification::deployed_elements têm recortes publicados em
 `c09553f7b0fb11a3580f91bc6e95c553d1582e2b`, descritos em E20/E21.
 ConnectorEnd::multiplicity e definingEnd têm recorte publicado em
 `211a333d2e4c0b9f468b884a3e77623d868364e2`, descrito em E22.
+Connector::kind e CommunicationPath::association_ends têm incrementos publicados
+em `bb795fa764adaf5d9724a5a6c4a041557e58d694` e
+`f152917ce28279467e1339e9b683ac846bd16cd7`, delimitados em E23/E24.
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -138,7 +141,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E22 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E24 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -181,7 +184,10 @@ de execução nova. E12–E22 possuem os gates delimitados nas seções seguinte
 - **U01**: `semantics/associations.rs`, final de `validate_association`:
   regras herdadas são verificadas, mas contratos especializados restantes
   retornam Unsupported. Isso não apaga predicados específicos existentes de
-  AssociationClass (E05/E15) nem autoriza autoria completa.
+  AssociationClass (E05/E15) nem autoriza autoria completa. CommunicationPath
+  tem agora predicado próprio em E24 e deixa esse fallback específico quando
+  seus papéis canônicos e contratos herdados são verificados; isso não remove
+  o warning independente do adapter legado de metaclasses.
   `association_specialization_flow.rs` testa a fronteira.
 
 - **E12**: `semantics/classifiers.rs`, `validate_feature_rules` e
@@ -320,6 +326,59 @@ de execução nova. E12–E22 possuem os gates delimitados nas seções seguinte
   Diagnósticos: `UML_CONNECTOR_END_MULTIPLICITY` e
   `MDE_CONNECTOR_END_MULTIPLICITY_UNVERIFIED`.
 
+- **E23**: `semantics/connectors.rs`, `delegation_end`, `kind` e `validate`;
+  `connector_kind.rs`, oito testes. A operação `Connector-kind.1-spec` deriva
+  Delegation quando existe ponta com role Port, partWithPort vazio e
+  isBehavior efetivo falso; sem tal ponta comprovadamente, deriva Assembly.
+  O default normativo de isBehavior é aplicado, mas booleano malformado não
+  vira default. Examina todas as pontas: uma testemunha local de Delegation
+  decide exists mesmo com ramo externo, sem ocultar erro em outra ponta.
+  Ausência de prova diante de referências não resolvidas não prova Assembly.
+  Cache kind armazenado e ordem de ownership não substituem os papéis
+  canônicos. Diagnósticos: `UML_CONNECTOR_KIND_DERIVATION` e
+  `MDE_CONNECTOR_KIND_UNVERIFIED`. Estado do recorte: **P**; é corpo de operação,
+  não nova invariante a acrescentar às 127 linhas.
+
+- **E24**: `semantics/associations.rs`, `communication_path_association_ends`,
+  `validate_association` e `validate`; `communication_path.rs`, sete testes.
+  Cada tipo resolvido das Properties canônicas em memberEnd deve conformar a
+  DeploymentTarget. Usa identidades do kernel, não endpoints visuais nem cache
+  endType. Tipo opcional ausente não integra endType; a regra herdada de pontas
+  tipadas continua rejeitando a associação sem tipo. Todos os membros são
+  inspecionados para preservar erro local diante de unknown; coleção incompleta
+  não é apresentada como completa. O gate de comandos compartilha o predicado
+  e a validação global evita duplicar o diagnóstico da regra específica.
+  Diagnósticos: `UML_COMMUNICATION_PATH_ASSOCIATION_ENDS`,
+  `MDE_COMMUNICATION_PATH_ASSOCIATION_ENDS_INVALID` e
+  `MDE_COMMUNICATION_PATH_ASSOCIATION_ENDS_UNVERIFIED`.
+
+### Evidência publicada de Connector::kind e CommunicationPath
+
+Commits inspecionados: `bb795fa764adaf5d9724a5a6c4a041557e58d694` (kind) e
+`f152917ce28279467e1339e9b683ac846bd16cd7` (CommunicationPath). Logs locais lidos:
+
+- `/tmp/connector-kind-gate-final.log`: **42/42 aprovados**,
+  connector_end_constraints 10, connector_end_multiplicity 10, connector_kind 8,
+  connector_roles 9 e connector_types 5.
+- `/tmp/communication-path-gate.log`: **15/15 aprovados**,
+  association_class_constraints 4, association_kernel 2,
+  association_specialization_flow 2 e communication_path 7.
+
+São gates focados anteriores à publicação, não reruns sobre os SHAs remotos nem
+suíte integral. Não houve execução nova pela matriz. Kind cobre default,
+branches externos em ambas as ordens, input malformado, cache não autoritativo
+e rederivação sem mutação. CommunicationPath cobre API com/sem raiz, tipos
+DeploymentTarget, cardinalidade n-ária, tipos duplicados, ausência de tipo,
+papéis não materializados, unknowns, malformados, rollback, reparo e
+roundtrip JSON/Protobuf.
+
+CommunicationPath passa de U para **P/E24**: o fallback especializado é removido
+para esse contrato canônico, mas o warning legado `MDE_UML_METACLASS_UNSUPPORTED`
+continua. Isso não significa suporte completo à metaclasse no adapter de
+autoria ou aos fluxos visuais. Kind permanece consulta semântica derivada:
+não implementa adapter binário ou autoria visual de Connector. Nenhum desses
+gates comprova renderização, geração ou interchange XMI.
+
 ### Evidência publicada de ConnectorEnd::multiplicity/definingEnd
 
 Commit inspecionado: `211a333d2e4c0b9f468b884a3e77623d868364e2`.
@@ -449,8 +508,9 @@ de autoria nem todas as representações do catálogo.
 As duas linhas permanecem **P**. Três invariantes próprias de ConnectorEnd e
 DeploymentSpecification::deployed_elements têm incremento posterior em E20/E21.
 ConnectorEnd::multiplicity tem recorte posterior em E22;
-Node::internal_structure continua pendente. Kind/adapter binário, autoria visual de Connector e semântica integral
-de deployment não são demonstrados; não houve build de UI nem geração.
+Node::internal_structure continua pendente. Kind tem recorte posterior em E23;
+adapter binário, autoria visual de Connector e semântica integral de deployment
+não são demonstrados; não houve build de UI nem geração.
 
 ### Evidência publicada de Connector::types
 
@@ -466,8 +526,9 @@ quando uma coleção está ausente. A linha permanece P/E17.
 Esse gate isolado não comprovava `Connector-roles` ou
 `StructuredClassifier::allRoles`; o incremento posterior está delimitado em E18.
 As invariantes próprias de ConnectorEnd não são provadas por esse gate;
-três delas têm recorte posterior em E20 e multiplicity em E22. Derivação de kind, adapter binário
-e autoria visual de Connector também não são certificados por este incremento.
+três delas têm recorte posterior em E20 e multiplicity em E22. Kind tem recorte
+posterior em E23; adapter binário e autoria visual de Connector não são
+certificados por esses incrementos.
 Não alegar suporte completo a Connectors ou Composite Structure.
 
 ### Evidência publicada de BehavioredClassifier
@@ -1125,7 +1186,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `CommunicationPath-association_ends`
 
-- Metaclass: `CommunicationPath`. Estado: **U**. Evidência: U01.
+- Metaclass: `CommunicationPath`. Estado: **P**. Evidência: E24; commit `f152917ce28279467e1339e9b683ac846bd16cd7`.
 - OCL publicado: `endType->forAll (oclIsKindOf(DeploymentTarget))`.
 
 #### `DeploymentSpecification-deployment_target`
@@ -1245,7 +1306,7 @@ viram vazio/false; erro estrutural não desaparece diante de outro unknown.
 AssociationClass::cannot_be_defined já tem recorte publicado em E15 e
 AssociationClass::disjoint_attributes_ends tem recorte em E05. Fechar os limites
 e contratos restantes sem remover Unsupported prematuramente. Continuar com
-CommunicationPath e o fechamento dos limites de ConnectorEnd; três invariantes
+O fechamento dos limites de CommunicationPath (E24) e ConnectorEnd; três invariantes
 de ConnectorEnd têm recorte em E20, multiplicity/definingEnd em E22. Connector::roles tem recorte publicado em
 E18, incluindo allRoles e membership conservador; fechar os limites restantes.
 Connector::types já tem recorte publicado em E17; preservar seus limites e testar as dependências
