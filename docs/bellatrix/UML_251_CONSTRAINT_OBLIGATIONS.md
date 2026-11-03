@@ -39,6 +39,8 @@ Stereotype::associationEndOwnership foi publicada em
 OperationTemplateParameter::match_default_signature tem recorte publicado em
 E32; Stereotype::generalize tem refinamento publicado em
 `588f704511f505112afe7632fad10519e4e58847` (E33).
+GeneralizationSet::generalization_same_classifier e StringExpression::operands
+têm recortes publicados em `b28872967fda3c9701e05c2f77fc772918f7a1fc` (E34/E35).
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -154,7 +156,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E33 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E35 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -165,7 +167,8 @@ de execução nova. E12–E33 possuem os gates delimitados nas seções seguinte
   Imports externos e consultas incompletas podem permanecer Unsupported.
 - **E03**: `validation/structural_diagrams.rs`,
   `validate_structural_model`; `graph_rules.rs` e testes internos do módulo.
-  A presença de GeneralizationSet no catálogo não implementa suas invariantes.
+  A presença de GeneralizationSet no catálogo não implementa suas invariantes;
+  o recorte posterior de generalization_same_classifier está em E34.
 - **E04**: `semantics/classifiers.rs`, `validate_feature_rules`;
   `property_invariants_flow.rs`, teste
   `classifier_feature_rules_reject_edits_preserve_drafts_and_reopen`.
@@ -483,6 +486,59 @@ de execução nova. E12–E33 possuem os gates delimitados nas seções seguinte
   conservam unknown. Substitui a verificação apenas por arestas em
   structural_diagrams pelo passe semântico comum. Diagnósticos:
   `UML_STEREOTYPE_GENERALIZATION` e `MDE_STEREOTYPE_GENERALIZATION_UNVERIFIED`.
+
+- **E34**: `semantics/classifiers.rs`, `generalization_set_same_classifier`
+  e `validate`; `generalization_set_classifier.rs`, dez testes. Exige coleção
+  generalization materializada e no máximo uma identidade general distinta,
+  usando o target canônico das relações Generalization. Projeção general
+  armazenada deve concordar com esse target; endpoints errados e referências
+  malformadas são erros. Duas identidades locais diferentes provam violação
+  mesmo se a metaclasse de um general for desconhecida. Um único general com
+  tipo não resolvido não prova validade, e coleções externas permanecem
+  incompletas. Generalization representada como objeto, sem adapter canônico
+  de relação, continua Unsupported. Diagnósticos:
+  `UML_GENERALIZATION_SET_SAME_CLASSIFIER`,
+  `MDE_GENERALIZATION_SET_SAME_CLASSIFIER_INVALID` e
+  `MDE_GENERALIZATION_SET_SAME_CLASSIFIER_UNVERIFIED`.
+
+- **E35**: `semantics/value_specifications.rs`, `string_expression_operands`
+  e `validate`; `string_expression_operands.rs`, oito testes. Todo operand
+  selecionado pelo papel canônico deve conformar a LiteralString. Inspeciona
+  referências explícitas e filhos que contribuem para Expression::operand;
+  ownership isolado não promove subExpression/nameExpression a operand.
+  Texto, nome ou resultado computável de um valor não substituem sua metaclasse.
+  Operands comprovadamente ausentes satisfazem o forAll vazio; metaclasse
+  desconhecida ou referência externa preserva unknown. Não LiteralString local
+  decide falso ao lado de unknown, sem ocultar erro de representação/ownership.
+  Diagnósticos: `UML_STRING_EXPRESSION_OPERANDS` e
+  `MDE_STRING_EXPRESSION_OPERANDS_UNVERIFIED`.
+
+### Evidência publicada de GeneralizationSet e StringExpression
+
+Commit inspecionado: `b28872967fda3c9701e05c2f77fc772918f7a1fc`.
+Logs locais lidos, sem nova execução pela matriz:
+
+- `/tmp/generalization-set-gate-final.log`: **22/22 aprovados**,
+  generalization_set_classifier 10, namespace_distinguishability_flow 3,
+  ownership_namespace_flow 4 e property_invariants_flow 5.
+- `/tmp/string-expression-operands.log`: **168/168 aprovados**,
+  160 testes lib e 8 string_expression_operands.
+- `/tmp/string-expression-regressions.log`: **22/22 aprovados**,
+  extension_end_constraints 8, port_default_value 6 e
+  string_expression_operands 8 repetidos. As duas execuções de StringExpression
+  representam **182 testes distintos aprovados**, não 190: 160 lib + 8 do novo
+  alvo + 14 regressões adicionais. Não somar novamente os oito repetidos.
+
+A revisão de GeneralizationSet inclui identidade local com metaclasse
+indefinida, projeção general contraditória, membership externo, malformados,
+ordem dos ramos e limites do adapter. StringExpression inclui papéis explícitos
+versus inferidos, subExpression ambíguo, metaclasse versus texto, unknowns,
+malformados, roundtrip e rejeição atômica de reparent como operand.
+As duas linhas ficam **P/E34–E35**. Não certificam powertype/isCovering/isDisjoint
+ou StringExpression::subexpressions, avaliação geral de expressões, UI ou
+geração. Os gates precedem a publicação e não são reruns no SHA remoto.
+Lib completa e integrações selecionadas não constituem suíte integral nem
+percentual de conformidade UML.
 
 ### Evidência de default de OperationTemplateParameter e Stereotype::generalize
 
@@ -1072,7 +1128,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `GeneralizationSet-generalization_same_classifier`
 
-- Metaclass: `GeneralizationSet`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `GeneralizationSet`. Estado: **P**. Evidência: E34; commit `b28872967fda3c9701e05c2f77fc772918f7a1fc`.
 - OCL publicado: `generalization->collect(general)->asSet()->size() <= 1`.
 
 #### `GeneralizationSet-maps_to_generalization_set`
@@ -1523,7 +1579,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `StringExpression-operands`
 
-- Metaclass: `StringExpression`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `StringExpression`. Estado: **P**. Evidência: E35; commit `b28872967fda3c9701e05c2f77fc772918f7a1fc`.
 - OCL publicado: `operand->forAll (oclIsKindOf (LiteralString))`.
 
 #### `StringExpression-subexpressions`

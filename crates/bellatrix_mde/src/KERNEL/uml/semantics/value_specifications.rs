@@ -470,6 +470,31 @@ fn string_expression_operands(
     super::feature_compatibility::require_all(checks)
 }
 
+fn constrained_element_cardinality(
+    references: &ReferenceIndex<'_>,
+    constraint: ElementRef<'_>,
+    maximum: usize,
+) -> Result<bool, super::classifiers::QueryError> {
+    use super::{classifiers::QueryError, property_contracts::{self, PropertyOutcome}};
+    let Some(value) = constraint.properties().get("constrainedElement") else {
+        return Ok(false);
+    };
+    let descriptor = schema::uml_property("Constraint", "constrainedElement")
+        .map_err(|error| QueryError::unsupported(constraint.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(constraint.id(), "missing constrainedElement contract"))?;
+    let contract = match property_contracts::check_value(references, constraint, descriptor, value) {
+        PropertyOutcome::Satisfied => Ok(true),
+        PropertyOutcome::Violation(message) => Err(QueryError::invalid(constraint.id(), message)),
+        PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(constraint.id(), message)),
+    };
+    let count = value.as_array()
+        .ok_or_else(|| QueryError::invalid(constraint.id(), "constrainedElement requires a collection"))?
+        .len();
+    // An external identity cannot repair an already disproven cardinality;
+    // malformed or duplicate references still invalidate the collection itself.
+    super::feature_compatibility::require_all([contract, Ok((1..=maximum).contains(&count))])
+}
+
 /// Structural results only. Callers decide whether an edit is semantic or a
 /// permissive visual draft; evaluation never changes the graph.
 pub fn validate(references: &ReferenceIndex<'_>) -> Vec<crate::StructuralDiagnostic> {
@@ -509,6 +534,22 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<crate::StructuralDiagnos
                 (crate::StructuralSeverity::Warning, "MDE_STRING_EXPRESSION_OPERANDS_UNVERIFIED", message),
         };
         issues.push(crate::StructuralDiagnostic { severity, code, subject_id: expression.id().into(), message: format!("StringExpression-operands: {message}") });
+    }
+    for constraint in references.model().elements() {
+        let (maximum, rule, error_code, unknown_code) = if constraint.conforms_to("TimeConstraint") {
+            (1, "TimeConstraint-has_one_constrainedElement", "UML_TIME_CONSTRAINT_CONSTRAINED_ELEMENTS", "MDE_TIME_CONSTRAINT_CONSTRAINED_ELEMENTS_UNVERIFIED")
+        } else if constraint.conforms_to("DurationConstraint") {
+            (2, "DurationConstraint-has_one_or_two_constrainedElements", "UML_DURATION_CONSTRAINT_CONSTRAINED_ELEMENTS", "MDE_DURATION_CONSTRAINT_CONSTRAINED_ELEMENTS_UNVERIFIED")
+        } else { continue; };
+        let (severity, code, message) = match constrained_element_cardinality(references, constraint, maximum) {
+            Ok(true) => continue,
+            Ok(false) => (crate::StructuralSeverity::Error, error_code, format!("requires 1..={maximum} constrainedElements")),
+            Err(super::classifiers::QueryError::Invalid { message, .. }) =>
+                (crate::StructuralSeverity::Error, error_code, message),
+            Err(super::classifiers::QueryError::Unsupported { message, .. }) =>
+                (crate::StructuralSeverity::Warning, unknown_code, message),
+        };
+        issues.push(crate::StructuralDiagnostic { severity, code, subject_id: constraint.id().into(), message: format!("{rule}: {message}") });
     }
     issues
 }

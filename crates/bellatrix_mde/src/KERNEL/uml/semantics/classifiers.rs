@@ -1185,10 +1185,15 @@ fn validate_feature_rules(
     }
 }
 
-fn generalization_set_same_classifier(
-    references: &ReferenceIndex<'_>,
-    set: ElementRef<'_>,
-) -> Result<bool, QueryError> {
+struct GeneralizationSetEvidence<'a> {
+    generalizations: Vec<&'a crate::Relation>,
+    checks: Vec<Result<bool, QueryError>>,
+}
+
+fn generalization_set_members<'a>(
+    references: &ReferenceIndex<'a>,
+    set: ElementRef<'a>,
+) -> Result<GeneralizationSetEvidence<'a>, QueryError> {
     use super::property_contracts::{PropertyOutcome, check_value};
     let descriptor = schema::uml_property("GeneralizationSet", "generalization")
         .map_err(|error| QueryError::unsupported(set.id(), error.to_string()))?
@@ -1212,7 +1217,7 @@ fn generalization_set_same_classifier(
     let values = value
         .as_array()
         .ok_or_else(|| QueryError::invalid(set.id(), "generalization must be a collection"))?;
-    let mut generals = HashSet::new();
+    let mut generalizations = Vec::new();
     for value in values {
         if external_reference_href(value)
             .map_err(|error| QueryError::invalid(set.id(), error))?
@@ -1235,54 +1240,174 @@ fn generalization_set_same_classifier(
             )));
             continue;
         };
-        if !generalization.conforms_to("Generalization") {
-            continue;
+        if generalization.conforms_to("Generalization") {
+            generalizations.push(relation);
         }
-        if let Some(value) = generalization.properties().get("general") {
-            let descriptor = schema::uml_property("Generalization", "general")
-                .map_err(|error| QueryError::unsupported(id, error.to_string()))?
-                .ok_or_else(|| {
-                    QueryError::unsupported(id, "missing Generalization::general contract")
-                })?;
-            match check_value(references, generalization, descriptor, value) {
-                PropertyOutcome::Violation(message) => {
-                    return Err(QueryError::invalid(id, message));
-                }
-                PropertyOutcome::Unverified(message) => {
-                    checks.push(Err(QueryError::unsupported(id, message)))
-                }
-                PropertyOutcome::Satisfied => {}
+    }
+    Ok(GeneralizationSetEvidence {
+        generalizations,
+        checks,
+    })
+}
+
+fn generalization_classifier<'a>(
+    references: &ReferenceIndex<'a>,
+    relation: &'a crate::Relation,
+    property: &str,
+    target_id: &str,
+    checks: &mut Vec<Result<bool, QueryError>>,
+) -> Result<ElementRef<'a>, QueryError> {
+    use super::property_contracts::{PropertyOutcome, check_value};
+    let id = relation.id.as_str();
+    let generalization = ElementRef::Relationship(relation);
+    if let Some(value) = generalization.properties().get(property) {
+        let descriptor = schema::uml_property("Generalization", property)
+            .map_err(|error| QueryError::unsupported(id, error.to_string()))?
+            .ok_or_else(|| {
+                QueryError::unsupported(id, format!("missing Generalization::{property} contract"))
+            })?;
+        match check_value(references, generalization, descriptor, value) {
+            PropertyOutcome::Violation(message) => {
+                return Err(QueryError::invalid(id, message));
             }
-            // A local identity can contradict the canonical endpoint even when
-            // its metaclass is unresolved. External references provide no such ID.
-            if external_reference_href(value)
-                .map_err(|error| QueryError::invalid(id, error))?.is_none()
-                && reference_id(value).map_err(|error| QueryError::invalid(id, error))?
-                    != Some(relation.to.as_str())
-            {
-                return Err(QueryError::invalid(id,
-                    "general projection contradicts the canonical Generalization target"));
+            PropertyOutcome::Unverified(message) => {
+                checks.push(Err(QueryError::unsupported(id, message)))
             }
+            PropertyOutcome::Satisfied => {}
         }
-        let general = references
-            .element(&relation.to)
-            .map_err(|error| QueryError::invalid(id, error))?;
-        if general.metaclass().is_none() {
-            checks.push(Err(QueryError::unsupported(
-                id,
-                "general Classifier metaclass is unresolved",
-            )));
-        } else if !general.conforms_to("Classifier") {
+        // A local identity can contradict the canonical endpoint even when
+        // its metaclass is unresolved. External references provide no such ID.
+        if external_reference_href(value)
+            .map_err(|error| QueryError::invalid(id, error))?
+            .is_none()
+            && reference_id(value).map_err(|error| QueryError::invalid(id, error))?
+                != Some(target_id)
+        {
             return Err(QueryError::invalid(
                 id,
-                "Generalization::general must be a Classifier",
+                "endpoint projection contradicts the canonical Generalization endpoint",
             ));
         }
-        // Identity is known even when the Classifier's metaclass is unresolved.
-        // Two distinct local generals already falsify the cardinality bound.
+    }
+    let general = references
+        .element(target_id)
+        .map_err(|error| QueryError::invalid(id, error))?;
+    if general.metaclass().is_none() {
+        checks.push(Err(QueryError::unsupported(
+            id,
+            format!("{property} Classifier metaclass is unresolved"),
+        )));
+    } else if !general.conforms_to("Classifier") {
+        return Err(QueryError::invalid(
+            id,
+            format!("Generalization::{property} must be a Classifier"),
+        ));
+    }
+    Ok(general)
+}
+
+fn generalization_set_same_classifier(
+    references: &ReferenceIndex<'_>,
+    set: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let GeneralizationSetEvidence {
+        generalizations,
+        mut checks,
+    } = generalization_set_members(references, set)?;
+    let mut generals = HashSet::new();
+    for relation in generalizations {
+        let general =
+            generalization_classifier(references, relation, "general", &relation.to, &mut checks)?;
+        // Identity remains evidence even if the target metaclass is unresolved.
         generals.insert(general.id());
     }
     checks.push(Ok(generals.len() <= 1));
+    super::feature_compatibility::require_all(checks)
+}
+
+fn generalization_set_powertype(
+    references: &ReferenceIndex<'_>,
+    set: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    use super::property_contracts::{PropertyOutcome, check_value};
+    let value = set.properties().get("powertype").unwrap_or(&Value::Null);
+    let descriptor = schema::uml_property("GeneralizationSet", "powertype")
+        .map_err(|error| QueryError::unsupported(set.id(), error.to_string()))?
+        .ok_or_else(|| {
+            QueryError::unsupported(set.id(), "missing GeneralizationSet::powertype contract")
+        })?;
+    let mut power_checks = Vec::new();
+    match check_value(references, set, descriptor, value) {
+        PropertyOutcome::Violation(message) => return Err(QueryError::invalid(set.id(), message)),
+        PropertyOutcome::Unverified(message) => {
+            power_checks.push(Err(QueryError::unsupported(set.id(), message)))
+        }
+        PropertyOutcome::Satisfied => {}
+    }
+    if value.is_null() {
+        return Ok(true);
+    }
+    let power = if external_reference_href(value)
+        .map_err(|error| QueryError::invalid(set.id(), error))?
+        .is_some()
+    {
+        None
+    } else {
+        let id = reference_id(value)
+            .map_err(|error| QueryError::invalid(set.id(), error))?
+            .ok_or_else(|| QueryError::invalid(set.id(), "powertype identity is missing"))?;
+        Some(
+            references
+                .element(id)
+                .map_err(|error| QueryError::invalid(set.id(), error))?,
+        )
+    };
+    let GeneralizationSetEvidence {
+        generalizations,
+        mut checks,
+    } = generalization_set_members(references, set)?;
+    // A proven empty set makes forAll true without resolving the powertype.
+    // Malformed powertype references have already been rejected above.
+    if generalizations.is_empty() && checks.is_empty() {
+        return Ok(true);
+    }
+    checks.extend(power_checks);
+    for relation in generalizations {
+        let general =
+            generalization_classifier(references, relation, "general", &relation.to, &mut checks)?;
+        let specific = generalization_classifier(
+            references,
+            relation,
+            "specific",
+            &relation.from,
+            &mut checks,
+        )?;
+        // Validate known ancestry even when powertype is external: its unknown
+        // identity cannot hide a malformed or cyclic local general hierarchy.
+        checks.push(
+            super::classifier_hierarchy::has_ancestor_matching(
+                references,
+                general.id(),
+                |ancestor| power.is_some_and(|power| ancestor.id() == power.id()),
+            )
+            .map(|contains| !contains),
+        );
+        let Some(power) = power else {
+            continue;
+        };
+        checks.push(Ok(general.id() != power.id()));
+        checks.push(Ok(specific.id() != power.id()));
+        // The OCL is asymmetric: power must not be an ancestor of general,
+        // and specific must not be an ancestor of power (not the reverse).
+        checks.push(
+            super::classifier_hierarchy::has_ancestor_matching(
+                references,
+                power.id(),
+                |ancestor| ancestor.id() == specific.id(),
+            )
+            .map(|contains| !contains),
+        );
+    }
     super::feature_compatibility::require_all(checks)
 }
 
@@ -1291,6 +1416,19 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = super::classifier_hierarchy::validate_substitutions(references);
     for element in references.model().elements() {
         if element.conforms_to("GeneralizationSet") {
+            let power_outcome = match generalization_set_powertype(references, element) {
+                Ok(true) => None,
+                Ok(false) => Some((StructuralSeverity::Error, "UML_GENERALIZATION_SET_POWERTYPE",
+                    "The powertype must not equal either endpoint, be an ancestor of the general, or descend from the specific".to_owned())),
+                Err(QueryError::Invalid { message, .. }) => Some((StructuralSeverity::Error,
+                    "MDE_GENERALIZATION_SET_POWERTYPE_INVALID", message)),
+                Err(QueryError::Unsupported { message, .. }) => Some((StructuralSeverity::Warning,
+                    "MDE_GENERALIZATION_SET_POWERTYPE_UNVERIFIED", message)),
+            };
+            if let Some((severity, code, message)) = power_outcome {
+                issues.push(StructuralDiagnostic { severity, code, subject_id: element.id().into(),
+                    message: format!("GeneralizationSet-maps_to_generalization_set: {message}") });
+            }
             let outcome = match generalization_set_same_classifier(references, element) {
                 Ok(true) => None,
                 Ok(false) => Some((StructuralSeverity::Error, "UML_GENERALIZATION_SET_SAME_CLASSIFIER",
