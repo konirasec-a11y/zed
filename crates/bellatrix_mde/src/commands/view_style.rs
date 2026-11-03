@@ -106,8 +106,13 @@ pub(super) fn set_routing(
         .iter()
         .find(|relation| Some(relation.id.as_str()) == current.subject.as_deref())
         .ok_or("view does not represent a relationship")?;
-    let geometry = crate::relationships::route_for_routing(section, diagram_id, relation, routing)?;
+    let endpoints = match &current.endpoints {
+        Some(endpoints) => endpoints.clone(),
+        None => crate::relationships::resolve_view_endpoints(section, diagram_id, &relation.from, &relation.to)?,
+    };
+    let geometry = crate::relationships::route_for_routing(section, diagram_id, relation, Some(&endpoints), routing)?;
     let current = view_mut(section, diagram_id, view_id)?;
+    current.endpoints = Some(endpoints);
     current.geometry = geometry;
     current.style.routing = Some(routing);
     Ok(())

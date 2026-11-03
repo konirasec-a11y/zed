@@ -126,7 +126,7 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
         .chain(ModelingRelationKind::ADVANCED)
         .chain(ModelingRelationKind::PACKAGES);
     let mut connector_ids = Vec::new();
-    for kind in types.copied() {
+    for kind in types.copied().filter(|kind| !kind.is_visual_only()) {
         let (from, to) = match kind {
             ModelingRelationKind::Generalization => (class.clone(), "type-task".into()),
             ModelingRelationKind::InterfaceRealization => (class.clone(), interface.clone()),
@@ -422,6 +422,28 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
             }
         }
     }
+    let before_visual = service.snapshot(&id).unwrap();
+    let before_section: ModelingSection = serde_json::from_value(before_visual.section(bellatrix_mde::MODELING_NAMESPACE).unwrap().clone()).unwrap();
+    let diagram = before_section.diagrams.iter().find(|diagram| diagram.id == diagram_id).unwrap();
+    let source_view = diagram.views.iter().find(|view| view.subject.as_deref() == Some(class.as_str())).unwrap();
+    let target_view = diagram.views.iter().find(|view| view.subject.as_deref() == Some(interface.as_str())).unwrap();
+    let exact_endpoints = bellatrix_mde::ViewEndpoints { source_view_id: Some(source_view.id.clone()), target_view_id: Some(target_view.id.clone()) };
+    assert!(matches!(cx.query::<bellatrix_mde_cordis::ModelingCreateRelationAtViewsOrVisualDraft>(Routing::Unscoped,
+        bellatrix_mde_cordis::ModelingCreateRelationAtViewsRequested {
+            project_id: id.clone(), diagram_id: diagram_id.clone(), kind: ModelingRelationKind::AssociationClassAttachment,
+            source_view_id: source_view.id.clone(), target_view_id: target_view.id.clone(),
+            from: Some(class.clone()), to: Some(interface.clone()), expected_revision: revision,
+        }).await.unwrap(), QueryOutcome::Answer(Ok(value)) if value == revision + 1));
+    revision += 1;
+    let after_visual = service.snapshot(&id).unwrap();
+    let after_section: ModelingSection = serde_json::from_value(after_visual.section(bellatrix_mde::MODELING_NAMESPACE).unwrap().clone()).unwrap();
+    assert_eq!(after_section.elements, before_section.elements);
+    assert_eq!(after_section.relations, before_section.relations);
+    let attachment = after_section.diagrams.iter().find(|diagram| diagram.id == diagram_id).unwrap().views.last().unwrap();
+    assert!(attachment.subject.is_none());
+    assert_eq!(attachment.draft.as_ref().unwrap().notation_kind, "view.association_class_attachment");
+    assert_eq!(attachment.endpoints.as_ref(), Some(&exact_endpoints));
+    assert!(matches!(&attachment.geometry, Geometry::Path { segments, .. } if !segments.is_empty()));
     assert_eq!(service.snapshot(&id).unwrap().revision(), revision);
     plugin.dispose().await.unwrap();
     provider.dispose().await.unwrap();

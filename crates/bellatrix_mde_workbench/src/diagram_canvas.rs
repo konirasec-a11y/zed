@@ -172,14 +172,16 @@ impl Render for MdeWorkbenchItem {
                                         .h(px(height))
                                         .cursor_pointer()
                                         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                                            let _ = edge_owner.update(cx, |item, cx| {
+                                            if let Err(error) = edge_owner.update(cx, |item, cx| {
                                                 item.select_or_connect_edge(
                                                     edge_id.clone(),
                                                     edge_view_id.clone(),
                                                     cx,
                                                 );
                                                 cx.focus_self(window);
-                                            });
+                                            }) {
+                                                eprintln!("MDE relationship selection failed: {error}");
+                                            }
                                             cx.stop_propagation();
                                         })
                                         .child(
@@ -555,7 +557,6 @@ impl Render for MdeWorkbenchItem {
                         let connection_mode =
                             matches!(self.selected_tool, Some(ModelingTool::Relation(_)));
                         let connect_owner = cx.weak_entity();
-                        let connect_target = subject.to_owned();
                         let connect_view = view.id.clone();
                         let connection_origin = canvas_origin.clone();
                         let resize_owner = cx.weak_entity();
@@ -699,7 +700,6 @@ impl Render for MdeWorkbenchItem {
                                                         connect_owner.update(cx, |item, cx| {
                                                             item.connect_view_at_pointer(
                                                                 connect_view.clone(),
-                                                                Some(connect_target.clone()),
                                                                 event.position,
                                                                 connection_origin.get(),
                                                                 cx,

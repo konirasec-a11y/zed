@@ -202,6 +202,7 @@ pub(super) fn apply(
         .ok_or("diagram not found")?
         .views
         .push(View {
+            endpoints: None,
             timing: None,
             draft: None,
             id: new_view_id,
@@ -240,6 +241,7 @@ pub(super) fn apply(
         .ok_or("diagram not found")?
         .views
         .push(View {
+            endpoints: None,
             timing: None,
             draft: None,
             id: relation_view_id,

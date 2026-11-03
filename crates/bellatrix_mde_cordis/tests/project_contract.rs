@@ -195,6 +195,72 @@ async fn public_event_updates_only_requested_project_and_survives_modeling_dispo
         .unwrap();
     assert_eq!(class_edge["from"], "package");
 
+    // The Quick Tool event path publishes a View that the shared Explorer inventory sees.
+    let mut quick_project = fixture();
+    quick_project.id = "quick-tool-flow".into();
+    let diagram = quick_project.diagrams.iter_mut().find(|diagram| diagram.id == "diagram-tasks").unwrap();
+    let mut repeated = diagram.views.iter().find(|view| view.id == "view-task").unwrap().clone();
+    repeated.id = "view-task-repeat".into();
+    repeated.geometry.translate(300.0, 150.0);
+    diagram.views.push(repeated);
+    diagram.views.push(serde_json::from_value(serde_json::json!({
+        "id":"visual-only", "geometry":{"kind":"rect","x":700.0,"y":100.0,"width":80.0,"height":50.0},
+        "draft":{"notation_kind":"uml.class"}
+    })).unwrap());
+    let quick_id = ProjectId::new(quick_project.id.clone()).unwrap();
+    assert!(matches!(ctx.query::<ProjectCreate>(Routing::Unscoped, ProjectCreateRequested {
+        document: make_document(&quick_project),
+    }).await.unwrap(), QueryOutcome::Answer(Ok(_))));
+    assert!(matches!(ctx.query::<bellatrix_mde_cordis::ModelingCreateElementOrVisualDraft>(Routing::Unscoped,
+        bellatrix_mde_cordis::ModelingCreateElementRequested {
+            project_id: quick_id.clone(), diagram_id: "diagram-tasks".into(),
+            kind: bellatrix_mde::commands::ModelingElementKind::Class, name: Some("Quick class".into()),
+            owner_id: None, x: 80.0, y: 90.0, expected_revision: 0,
+        }).await.unwrap(), QueryOutcome::Answer(Ok(1))));
+    assert!(matches!(ctx.query::<bellatrix_mde_cordis::ModelingCreateRelationOrVisualDraft>(Routing::Unscoped,
+        bellatrix_mde_cordis::ModelingCreateRelationRequested {
+            project_id: quick_id.clone(), diagram_id: "diagram-tasks".into(),
+            kind: bellatrix_mde::ModelingRelationKind::Association, from: "type-list".into(),
+            to: "type-task".into(), expected_revision: 1,
+        }).await.unwrap(), QueryOutcome::Answer(Ok(2))));
+    let quick_snapshot = service.snapshot(&quick_id).unwrap();
+    let quick_section: bellatrix_mde::ModelingSection = serde_json::from_value(
+        quick_snapshot.section("bellatrix.mde").unwrap().clone()).unwrap();
+    let diagram = quick_section.diagrams.iter().find(|diagram| diagram.id == "diagram-tasks").unwrap();
+    let inventory = bellatrix_mde::visual_components(&quick_section);
+    assert_eq!(inventory.iter().filter(|component| component.diagram_id == diagram.id).count(), diagram.views.len());
+    assert!(inventory.iter().any(|component| component.diagram_id == diagram.id && component.label == "Quick class"));
+    let new_edge = diagram.views.last().unwrap();
+    assert!(matches!(&new_edge.geometry, bellatrix_mde::Geometry::Path { segments, .. } if !segments.is_empty()));
+    assert!(inventory.iter().any(|component| component.view_id == new_edge.id));
+
+    let exact_request = |source: &str, target: &str, from: Option<&str>, to: Option<&str>, revision| {
+        bellatrix_mde_cordis::ModelingCreateRelationAtViewsRequested {
+            project_id: quick_id.clone(), diagram_id: "diagram-tasks".into(),
+            kind: bellatrix_mde::ModelingRelationKind::Association,
+            source_view_id: source.into(), target_view_id: target.into(),
+            from: from.map(str::to_owned), to: to.map(str::to_owned), expected_revision: revision,
+        }
+    };
+    assert!(matches!(ctx.query::<bellatrix_mde_cordis::ModelingCreateRelationAtViewsOrVisualDraft>(Routing::Unscoped,
+        exact_request("view-task-repeat", "visual-only", Some("type-task"), None, 2)).await.unwrap(), QueryOutcome::Answer(Ok(3))));
+    assert!(matches!(ctx.query::<bellatrix_mde_cordis::ModelingCreateRelationAtViewsOrVisualDraft>(Routing::Unscoped,
+        exact_request("visual-only", "view-task-repeat", None, Some("type-task"), 3)).await.unwrap(), QueryOutcome::Answer(Ok(4))));
+    assert!(matches!(ctx.query::<bellatrix_mde_cordis::ModelingCreateRelationAtViewsOrVisualDraft>(Routing::Unscoped,
+        exact_request("missing", "visual-only", Some("type-task"), None, 4)).await.unwrap(), QueryOutcome::Answer(Err(_))));
+    assert!(matches!(ctx.query::<bellatrix_mde_cordis::ModelingCreateRelationAtViewsOrVisualDraft>(Routing::Unscoped,
+        exact_request("view-task", "visual-only", Some("type-task"), None, 2)).await.unwrap(), QueryOutcome::Answer(Err(_))));
+    let exact_snapshot = service.snapshot(&quick_id).unwrap();
+    assert_eq!(exact_snapshot.revision(), 4);
+    let exact_section: bellatrix_mde::ModelingSection = serde_json::from_value(exact_snapshot.section("bellatrix.mde").unwrap().clone()).unwrap();
+    let exact_diagram = exact_section.diagrams.iter().find(|diagram| diagram.id == "diagram-tasks").unwrap();
+    let edges = &exact_diagram.views[exact_diagram.views.len() - 2..];
+    assert_eq!(edges[0].endpoints.as_ref().and_then(|ends| ends.source_view_id.as_deref()), Some("view-task-repeat"));
+    assert_eq!(edges[0].endpoints.as_ref().and_then(|ends| ends.target_view_id.as_deref()), Some("visual-only"));
+    assert_eq!(edges[1].endpoints.as_ref().and_then(|ends| ends.source_view_id.as_deref()), Some("visual-only"));
+    assert_eq!(edges[1].endpoints.as_ref().and_then(|ends| ends.target_view_id.as_deref()), Some("view-task-repeat"));
+    assert_eq!(exact_section.relations, quick_section.relations);
+
     engine.dispose().await.unwrap();
     let missed = ctx
         .query::<ModelingRename>(

@@ -21,7 +21,8 @@ mod quick_edit_commands;
 pub use quick_edit_commands::{ModelingQuickEdit, ModelingQuickEditRequested};
 mod create_relation;
 pub use create_relation::{
-    ModelingCreateRelation, ModelingCreateRelationOrVisualDraft, ModelingCreateRelationRequested, projected_automatic_routes,
+    ModelingCreateRelation, ModelingCreateRelationOrVisualDraft, ModelingCreateRelationRequested,
+    ModelingCreateRelationAtViewsOrVisualDraft, ModelingCreateRelationAtViewsRequested, projected_automatic_routes,
 };
 mod association_ends;
 pub use association_ends::{ModelingEditAssociationEnds, ModelingEditAssociationEndsRequested};

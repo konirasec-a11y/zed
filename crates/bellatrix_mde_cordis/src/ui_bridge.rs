@@ -4,7 +4,8 @@ use crate::{
     ModelingAddMember, ModelingAddMemberRequested, ModelingCreateDiagram,
     ModelingCreateDiagramRequested, ModelingCreateElement, ModelingCreateElementOrVisualDraft,
     ModelingCreateElementRequested, ModelingCreateRelation, ModelingCreateRelationOrVisualDraft,
-    ModelingCreateRelationRequested, ModelingCreateVisualDraft, ModelingCreateVisualDraftRequested,
+    ModelingCreateRelationRequested, ModelingCreateRelationAtViewsOrVisualDraft,
+    ModelingCreateRelationAtViewsRequested, ModelingCreateVisualDraft, ModelingCreateVisualDraftRequested,
     ModelingDeleteDiagram, ModelingDeleteDiagramRequested, ModelingDeleteElement,
     ModelingDeleteElementRequested, ModelingMoveParameter, ModelingMoveParameterRequested,
     ModelingMoveView, ModelingMoveViewRequested, ModelingPlaceElementView,
@@ -69,6 +70,7 @@ pub enum MdeUiCommand {
     CreateElementOrVisualDraft(ModelingCreateElementRequested),
     CreateElement(ModelingCreateElementRequested),
     CreateRelationOrVisualDraft(ModelingCreateRelationRequested),
+    CreateRelationAtViewsOrVisualDraft(ModelingCreateRelationAtViewsRequested),
     CreateRelation(ModelingCreateRelationRequested),
     MoveView(ModelingMoveViewRequested),
     ResizeView(ModelingResizeViewRequested),
@@ -269,6 +271,10 @@ impl MdeUiBridge {
                         cordis
                             .query::<ModelingCreateElement>(Routing::Unscoped, request)
                             .await,
+                    ),
+                    MdeUiCommand::CreateRelationAtViewsOrVisualDraft(request) => describe(
+                        "Relationship or visual draft created",
+                        cordis.query::<ModelingCreateRelationAtViewsOrVisualDraft>(Routing::Unscoped, request).await,
                     ),
                     MdeUiCommand::CreateRelationOrVisualDraft(request) => describe(
                         "Relationship or visual draft created",

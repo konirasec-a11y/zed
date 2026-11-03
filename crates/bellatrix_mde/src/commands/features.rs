@@ -479,6 +479,7 @@ pub(super) fn insert_feature(
             .ok_or("diagram missing")?
             .views
             .push(View {
+                endpoints: None,
                 timing: None,
             draft: None,
                 id: view_id,

@@ -106,6 +106,13 @@ impl Plugin for MdePlugin {
                 async move { Ok::<_, Infallible>(Some(crate::create_element::create_element_or_visual_draft(&ctx, &projects, request).await)) }
             },
         )).map_err(|error| io::Error::other(error.to_string()))?;
+        let exact_relation_projects = Arc::clone(&projects);
+        let _exact_visual_relation = ctx.on::<crate::ModelingCreateRelationAtViewsOrVisualDraft, _>(responder(
+            move |ctx: Context, request: crate::ModelingCreateRelationAtViewsRequested| {
+                let projects = Arc::clone(&exact_relation_projects);
+                async move { Ok::<_, Infallible>(Some(crate::create_relation::create_relation_at_views_or_visual_draft(&ctx, &projects, request).await)) }
+            },
+        )).map_err(|error| io::Error::other(error.to_string()))?;
         let draft_relation_projects = Arc::clone(&projects);
         let _visual_relation = ctx.on::<crate::create_relation::ModelingCreateRelationOrVisualDraft, _>(responder(
             move |ctx: Context, request: crate::create_relation::ModelingCreateRelationRequested| {

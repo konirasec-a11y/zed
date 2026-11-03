@@ -165,7 +165,8 @@ pub fn validate_structural_diagram(
                     subject_id: view.id.clone(),
                     message: format!("Visual draft {} has not been validated as a semantic UML element or relationship", draft.notation_kind),
                 });
-                for identifier in [&draft.parent_view_id, &draft.source_view_id, &draft.target_view_id].into_iter().flatten() {
+                for identifier in draft.parent_view_id.iter().chain(view.endpoints.iter().flat_map(|endpoints|
+                    endpoints.source_view_id.iter().chain(endpoints.target_view_id.iter()))) {
                     if !diagram.views.iter().any(|candidate| &candidate.id == identifier) {
                         issues.push(StructuralDiagnostic { severity: StructuralSeverity::Warning,
                             code: "VISUAL_DRAFT_ORPHANED_LINK", subject_id: view.id.clone(),
@@ -564,6 +565,7 @@ mod tests {
             properties: Default::default(),
         });
         project.diagrams[0].views.push(View {
+            endpoints: None,
             timing: None,
             draft: None,
             id: "view-inverse".into(),
@@ -818,6 +820,7 @@ mod tests {
             let mut project = context_project(kind, "uml.class", &[])?;
             for diagram in &mut project.diagrams {
                 diagram.views.push(View {
+                    endpoints: None,
                     timing: None,
             draft: None,
                     id: "visible-context".into(),

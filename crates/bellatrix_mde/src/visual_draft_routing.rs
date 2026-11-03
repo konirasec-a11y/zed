@@ -94,15 +94,16 @@ pub fn reroute_visual_drafts(diagram: &mut Diagram) {
     let order = resolve_routing_order(diagram);
     for index in order {
         let view = &mut diagram.views[index];
-        let Some(draft) = &view.draft else { continue };
-        let Some(source) = draft
+        let Some(draft) = &mut view.draft else { continue };
+        let Some(attachments) = &view.endpoints else { continue };
+        let Some(source) = attachments
             .source_view_id
             .as_ref()
             .and_then(|id| endpoints.get(id))
         else {
             continue;
         };
-        let Some(target) = draft
+        let Some(target) = attachments
             .target_view_id
             .as_ref()
             .and_then(|id| endpoints.get(id))
@@ -110,6 +111,22 @@ pub fn reroute_visual_drafts(diagram: &mut Diagram) {
             continue;
         };
         if let Geometry::Path { start, segments } = &mut view.geometry {
+            let source_anchor = resolve_authored_anchor(&draft.properties, "source_anchor", *source);
+            let target_anchor = resolve_authored_anchor(&draft.properties, "target_anchor", *target);
+            let distinct_anchors = source_anchor.zip(target_anchor).is_some_and(|(source, target)| source != target);
+            if attachments.source_view_id == attachments.target_view_id
+                && !(draft.notation_kind == "uml.general_ordering" && distinct_anchors)
+                && (segments.is_empty() || matches!(segments.as_slice(), [PathSegment::Line { .. }]))
+            {
+                let right = source.center.x + source.width / 2.0;
+                *start = Point { x: right, y: source.center.y - 16.0 };
+                *segments = vec![
+                    PathSegment::Line { to: Point { x: right + 64.0, y: start.y } },
+                    PathSegment::Line { to: Point { x: right + 64.0, y: source.center.y + 16.0 } },
+                    PathSegment::Line { to: Point { x: right, y: source.center.y + 16.0 } },
+                ];
+                draft.properties.insert("self_loop".into(), serde_json::Value::Bool(true));
+            }
             if segments.is_empty() {
                 segments.push(PathSegment::Line { to: target.center });
             }
@@ -125,9 +142,10 @@ pub fn reroute_visual_drafts(diagram: &mut Diagram) {
             } else {
                 source.center
             };
-            let self_loop_offset = if draft
+            let self_loop_offset = if attachments.source_view_id == attachments.target_view_id && draft
                 .properties
-                .get("self_message")
+                .get("self_loop")
+                .or_else(|| draft.properties.get("self_message"))
                 .and_then(serde_json::Value::as_bool)
                 == Some(true)
             {
@@ -138,13 +156,21 @@ pub fn reroute_visual_drafts(diagram: &mut Diagram) {
             } else {
                 None
             };
+            let loop_direction = |endpoint: crate::relationships::Endpoint, vertical: f64| Point {
+                x: endpoint.center.x + endpoint.width.max(64.0),
+                y: endpoint.center.y + vertical * endpoint.height.max(32.0),
+            };
             *start = resolve_authored_anchor(&draft.properties, "source_anchor", *source)
-                .unwrap_or_else(|| source.anchor_toward(first_direction));
+                .unwrap_or_else(|| source.anchor_toward(if self_loop_offset.is_some() {
+                    loop_direction(*source, -0.25)
+                } else { first_direction }));
             if let Some(segment) = segments.last_mut() {
                 match segment {
                     PathSegment::Line { to } | PathSegment::Cubic { to, .. } => {
                         *to = resolve_authored_anchor(&draft.properties, "target_anchor", *target)
-                            .unwrap_or_else(|| target.anchor_toward(last_direction))
+                            .unwrap_or_else(|| target.anchor_toward(if self_loop_offset.is_some() {
+                                loop_direction(*target, 0.25)
+                            } else { last_direction }))
                     }
                 }
             }
@@ -196,8 +222,8 @@ fn resolve_routing_order(diagram: &Diagram) -> Vec<usize> {
                 continue;
             }
             stack.push((index, true));
-            if let Some(draft) = &diagram.views[index].draft {
-                for id in [&draft.source_view_id, &draft.target_view_id]
+            if let Some(endpoints) = &diagram.views[index].endpoints {
+                for id in [&endpoints.source_view_id, &endpoints.target_view_id]
                     .into_iter()
                     .flatten()
                 {
@@ -235,18 +261,12 @@ pub(crate) fn translate_message_anchors(diagram: &mut Diagram, view_id: &str, dy
             _ => None,
         })
         .collect();
-    let Some(draft) = diagram
-        .views
-        .iter_mut()
-        .find(|view| view.id == view_id)
-        .and_then(|view| view.draft.as_mut())
-        .filter(|draft| draft.notation_kind == "uml.message")
-    else {
-        return;
-    };
+    let Some(view) = diagram.views.iter_mut().find(|view| view.id == view_id) else { return };
+    let Some(draft) = view.draft.as_mut().filter(|draft| draft.notation_kind == "uml.message") else { return };
+    let Some(endpoints) = &view.endpoints else { return };
     for (key, endpoint) in [
-        ("source_anchor", &draft.source_view_id),
-        ("target_anchor", &draft.target_view_id),
+        ("source_anchor", &endpoints.source_view_id),
+        ("target_anchor", &endpoints.target_view_id),
     ] {
         let Some(height) = endpoint.as_ref().and_then(|id| heights.get(id)) else {
             continue;

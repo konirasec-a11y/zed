@@ -10,6 +10,7 @@ mod native_document_guard;
 pub mod panels;
 mod property_editor;
 mod quick_edit_view;
+mod relationship_creation;
 mod snapshot;
 mod source;
 mod status_entry;
@@ -35,7 +36,7 @@ use bellatrix_mde::{
 };
 use bellatrix_mde_cordis::{
     MdeUiCommand, ModelingAddMemberRequested, ModelingCreateElementRequested,
-    ModelingCreateRelationRequested, ModelingDeleteElementRequested,
+    ModelingDeleteElementRequested,
     ModelingMoveParameterRequested, ModelingMoveViewRequested, ModelingQuickEditRequested,
     ModelingResizeViewRequested, ModelingSetNameExpressionRequested,
     ModelingSetPropertyRequested,
@@ -102,8 +103,7 @@ pub struct MdeWorkbenchItem {
     draft_label_pending: bool,
     active_diagram: Option<String>,
     selected_tool: Option<ModelingTool>,
-    pending_relation_source: Option<String>,
-    pending_visual_point: Option<bellatrix_mde::Point>,
+    pending_relation_source: Option<relationship_creation::PendingRelationEndpoint>,
     visual_draft_mode: bool,
     gesture: Option<CanvasGesture>,
     drop_point: Option<(f64, f64)>,
@@ -115,26 +115,6 @@ pub struct MdeWorkbenchItem {
     validation_status: String,
     _watch_task: Task<()>,
 }
-#[derive(Debug, PartialEq, Eq)]
-enum RelationClick {
-    First,
-    Repeat,
-    Connect(String),
-}
-fn choose_relation_endpoint(pending: &mut Option<String>, clicked: &str) -> RelationClick {
-    match pending.take() {
-        None => {
-            *pending = Some(clicked.to_owned());
-            RelationClick::First
-        }
-        Some(from) if from == clicked => {
-            *pending = Some(from);
-            RelationClick::Repeat
-        }
-        Some(from) => RelationClick::Connect(from),
-    }
-}
-
 pub(crate) fn diagram_kind_label(kind: bellatrix_mde::StructuralDiagramKind) -> &'static str {
     use bellatrix_mde::StructuralDiagramKind::*;
     match kind {
@@ -297,7 +277,6 @@ impl MdeWorkbenchItem {
             active_diagram: initial_diagram,
             selected_tool: None,
             pending_relation_source: None,
-            pending_visual_point: None,
             visual_draft_mode: false,
             gesture: None,
             drop_point: None,
@@ -357,7 +336,6 @@ impl MdeWorkbenchItem {
         self.select_diagram(diagram_id, cx);
         self.selected_element = subject;
         self.selected_view = Some(view_id);
-        self.pending_visual_point = None;
         self.feedback = if self.selected_element.is_none() {
             "Visual View selected; no semantic subject is required".into()
         } else { "Diagram View selected".into() };
@@ -687,61 +665,6 @@ impl MdeWorkbenchItem {
         self.feedback = "No relationship tool selected".into();
         cx.notify();
     }
-    fn link_endpoint(
-        &mut self,
-        kind: ModelingRelationKind,
-        target: String,
-        cx: &mut Context<Self>,
-    ) {
-        if self.source.is_read_only() {
-            return;
-        }
-        let from = match choose_relation_endpoint(&mut self.pending_relation_source, &target) {
-            RelationClick::First => {
-                self.select_element(target, cx);
-                self.feedback =
-                    format!("{}: source selected. Click a second element", kind.label());
-                cx.notify();
-                return;
-            }
-            RelationClick::Repeat => {
-                self.feedback = format!("{}: choose another element to connect", kind.label());
-                cx.notify();
-                return;
-            }
-            RelationClick::Connect(from) => from,
-        };
-        self.select_element(target.clone(), cx);
-        let Ok(snapshot) = self.source.snapshot() else {
-            self.feedback = "Project snapshot unavailable".into();
-            cx.notify();
-            return;
-        };
-        let Some(diagram_id) = self.active_diagram.clone().or_else(|| {
-            snapshot
-                .section
-                .diagrams
-                .first()
-                .map(|diagram| diagram.id.clone())
-        }) else {
-            self.feedback = "Project has no diagram".into();
-            cx.notify();
-            return;
-        };
-        self.submit(
-            MdeUiCommand::CreateRelationOrVisualDraft(ModelingCreateRelationRequested {
-                project_id: self.project_id().clone(),
-                diagram_id,
-                kind,
-                from,
-                to: target,
-                expected_revision: snapshot.revision,
-            }),
-            cx,
-        );
-        self.selected_tool = None;
-        cx.notify();
-    }
     pub fn arm_drag_tool(&mut self, tool: ModelingTool, cx: &mut Context<Self>) {
         if self.source.is_read_only() {
             return;
@@ -816,11 +739,7 @@ impl MdeWorkbenchItem {
         cx: &mut Context<Self>,
     ) {
         if let Some(ModelingTool::Relation(kind)) = self.selected_tool {
-            if self.visual_draft_mode || kind.is_visual_only() {
-                self.link_visual_draft_endpoint(kind, view_id, cx);
-                return;
-            }
-            self.link_endpoint(kind, subject, cx);
+            self.connect_relation_view(kind, view_id, None, cx);
             return;
         }
         self.select_view(subject, view_id.clone(), cx);

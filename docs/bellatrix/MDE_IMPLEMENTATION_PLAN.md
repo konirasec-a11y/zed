@@ -93,6 +93,15 @@ de diretório ou SQLite. A engine compõe as funções necessárias e gera um ú
 script de construção, em Rust, Python, Julia, F# ou outra linguagem escolhida.
 A execução posterior desse script é que materializa todo o projeto físico.
 A engine não acessa o sistema de arquivos nem materializa o projeto diretamente.
+O Kernel e a engine expõem rastreamento estruturado da execução real, com
+identidade da execução, sequência, operação/regra, dependências e resultado,
+para permitir plotar o fluxo. A coleta é configurável, em memória ou por
+assinante externo, sem registrar conteúdo sensível nem alterar o resultado
+determinístico; adaptadores externos cuidam de exportação/persistência.
+Um painel nativo exclusivo do MDE apresenta os logs e gráficos em tempo real,
+consumindo eventos efetivamente emitidos durante a execução, com correlação,
+ordem e limites de memória. Não simular execução nem bloquear o editor; perdas
+na coleta e cobertura incompleta devem ser visíveis ao usuário.
 O próprio grafo é a representação intermediária: grafos UML e de saída podem
 compartilhar infraestrutura, preservando contratos distintos. Cada operação de
 transformação declara entradas e saídas tipadas; a composição verifica as

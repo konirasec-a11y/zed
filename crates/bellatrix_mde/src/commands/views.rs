@@ -99,6 +99,7 @@ pub(super) fn place(
         .ok_or("diagram not found")?
         .views
         .push(View {
+            endpoints: None,
             timing: None,
             draft: None,
             id: identifier,
@@ -235,6 +236,10 @@ pub(super) fn create_draft(
         .find(|diagram| diagram.id == diagram_id)
         .ok_or("diagram not found")?;
     diagram.views.push(View {
+        endpoints: (source_view_id.is_some() || target_view_id.is_some()).then(|| crate::ViewEndpoints {
+            source_view_id: source_view_id.clone(),
+            target_view_id: target_view_id.clone(),
+        }),
         timing: None,
         id,
         subject: None,
@@ -246,11 +251,36 @@ pub(super) fn create_draft(
             notation_kind: notation_kind.into(),
             properties: properties.clone(),
             parent_view_id: parent_view_id.clone(),
-            source_view_id: source_view_id.clone(),
-            target_view_id: target_view_id.clone(),
         }),
     });
     crate::reroute_visual_drafts(diagram);
+    Ok(())
+}
+
+pub(super) fn set_endpoints(
+    section: &mut ModelingSection,
+    diagram_id: &str,
+    view_id: &str,
+    endpoints: &crate::ViewEndpoints,
+) -> Result<(), String> {
+    let diagram = section.diagrams.iter().find(|diagram| diagram.id == diagram_id).ok_or("diagram not found")?;
+    let view = diagram.views.iter().find(|view| view.id == view_id).ok_or("view not found in diagram")?;
+    if !matches!(view.geometry, Geometry::Path { .. }) {
+        return Err("only relationship Path Views can have endpoints".into());
+    }
+    for identifier in [&endpoints.source_view_id, &endpoints.target_view_id].into_iter().flatten() {
+        if identifier == view_id || !diagram.views.iter().any(|view| &view.id == identifier) {
+            return Err(format!("invalid endpoint View in diagram: {identifier}"));
+        }
+    }
+    if let Some(relation) = view.subject.as_ref().and_then(|subject| section.relations.iter().find(|relation| &relation.id == subject)) {
+        crate::relationships::route_at_views(section, diagram_id, &relation.from, &relation.to, endpoints)?;
+    }
+    let diagram = section.diagrams.iter_mut().find(|diagram| diagram.id == diagram_id).ok_or("diagram not found")?;
+    let view = diagram.views.iter_mut().find(|view| view.id == view_id).ok_or("view not found in diagram")?;
+    view.endpoints = Some(endpoints.clone());
+    crate::reroute_visual_drafts(diagram);
+    crate::reroute_relationships(section, diagram_id);
     Ok(())
 }
 

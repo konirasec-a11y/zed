@@ -390,6 +390,24 @@ fn behavior_nodes_use_canonical_composite_owners_and_transactional_commands()
 fn exercise_visual_drafts() -> Result<(), Box<dyn std::error::Error>> {
     use bellatrix_mde::{Geometry, StructuralSeverity, validate_structural_diagram};
     let before = fixture()?;
+    // Exercise the same shared creation paths used by the Class and Association quick tools.
+    let class = apply(&before, &Command::CreateElementOrVisualDraft {
+        diagram_id: "diagram-tasks".into(), owner_id: None, kind: ModelingElementKind::Class,
+        name: Some("Quick class".into()), x: 80.0, y: 90.0,
+    }, 30)?;
+    let quick_view = class.diagrams.iter().find(|diagram| diagram.id == "diagram-tasks")
+        .and_then(|diagram| diagram.views.last()).ok_or("quick class View missing")?;
+    assert!(bellatrix_mde::visual_components(&bellatrix_mde::ModelingSection::from_model(&class))
+        .iter().any(|component| component.diagram_id == "diagram-tasks" && component.view_id == quick_view.id));
+    let association = apply(&class, &Command::CreateRelationOrVisualDraft {
+        diagram_id: "diagram-tasks".into(), kind: bellatrix_mde::ModelingRelationKind::Association,
+        from: "type-list".into(), to: "type-task".into(),
+    }, 31)?;
+    let quick_edge = association.diagrams.iter().find(|diagram| diagram.id == "diagram-tasks")
+        .and_then(|diagram| diagram.views.last()).ok_or("quick association View missing")?;
+    assert!(matches!(&quick_edge.geometry, Geometry::Path { segments, .. } if !segments.is_empty()));
+    assert!(bellatrix_mde::visual_components(&bellatrix_mde::ModelingSection::from_model(&association))
+        .iter().any(|component| component.diagram_id == "diagram-tasks" && component.view_id == quick_edge.id));
     let fallback = apply(
         &before,
         &Command::CreateElementOrVisualDraft {
@@ -466,6 +484,106 @@ fn exercise_visual_drafts() -> Result<(), Box<dyn std::error::Error>> {
     }, 2)?;
     let inventory = bellatrix_mde::visual_components(&bellatrix_mde::ModelingSection::from_model(&duplicate));
     assert_eq!(inventory.iter().filter(|view| view.subject_id.as_deref() == Some("type-task") && view.diagram_id == "diagram-tasks").count(), 2);
+    // The clicked View identities, not the first View of each subject, drive attachments.
+    let repeated_id = duplicate.diagrams.iter().find(|diagram| diagram.id == "diagram-tasks")
+        .and_then(|diagram| diagram.views.last()).ok_or("repeated View missing")?.id.clone();
+    let make_link = |source: &str, target: &str, from: Option<&str>, to: Option<&str>| Command::CreateRelationAtViewsOrVisualDraft {
+        diagram_id: "diagram-tasks".into(), kind: bellatrix_mde::ModelingRelationKind::Association,
+        source_view_id: source.into(), target_view_id: target.into(), from: from.map(str::to_owned), to: to.map(str::to_owned),
+    };
+    let mixed = apply(&duplicate, &make_link(&repeated_id, &draft_id, Some("type-task"), None), 40)?;
+    assert_eq!(mixed.relations, duplicate.relations);
+    let mixed_edge = mixed.diagrams.iter().find(|diagram| diagram.id == "diagram-tasks")
+        .and_then(|diagram| diagram.views.last()).ok_or("mixed edge missing")?;
+    let mixed_edge_id = mixed_edge.id.clone();
+    let ends = mixed_edge.endpoints.as_ref().ok_or("edge endpoints missing")?;
+    assert_eq!(ends.source_view_id.as_deref(), Some(repeated_id.as_str()));
+    assert_eq!(ends.target_view_id.as_deref(), Some(draft_id.as_str()));
+    let reverse = apply(&mixed, &make_link(&draft_id, &repeated_id, None, Some("type-task")), 41)?;
+    let reverse_edge = reverse.diagrams.iter().find(|diagram| diagram.id == "diagram-tasks")
+        .and_then(|diagram| diagram.views.last()).ok_or("reverse edge missing")?;
+    assert_eq!(reverse_edge.endpoints.as_ref().and_then(|ends| ends.source_view_id.as_deref()), Some(draft_id.as_str()));
+    assert_eq!(reverse_edge.endpoints.as_ref().and_then(|ends| ends.target_view_id.as_deref()), Some(repeated_id.as_str()));
+    assert!(apply(&mixed, &make_link("missing", &draft_id, Some("type-task"), None), 42).is_err());
+    assert!(apply(&mixed, &make_link(&repeated_id, &draft_id, Some("type-list"), None), 42).is_err());
+    let moved_other = apply(&mixed, &Command::MoveView { view_id: "view-task".into(), dx: 17.0, dy: 5.0 }, 42)?;
+    let edge = |project: &Project| project.diagrams.iter().flat_map(|diagram| &diagram.views)
+        .find(|view| view.id == mixed_edge_id).map(|view| view.geometry.clone());
+    assert_eq!(edge(&mixed), edge(&moved_other));
+    let moved_selected = apply(&mixed, &Command::MoveView { view_id: repeated_id.clone(), dx: 17.0, dy: 5.0 }, 43)?;
+    assert_ne!(edge(&mixed), edge(&moved_selected));
+    let retargeted = apply(&mixed, &Command::SetViewEndpoints {
+        diagram_id: "diagram-tasks".into(), view_id: mixed_edge_id.clone(),
+        endpoints: bellatrix_mde::ViewEndpoints { source_view_id: Some("view-task".into()), target_view_id: Some(draft_id.clone()) },
+    }, 44)?;
+    assert_eq!(retargeted.diagrams.iter().flat_map(|diagram| &diagram.views).find(|view| view.id == mixed_edge_id)
+        .and_then(|view| view.endpoints.as_ref()).and_then(|ends| ends.source_view_id.as_deref()), Some("view-task"));
+    for format in [Format::Json, Format::Protobuf] {
+        assert_eq!(decode(&encode(&retargeted, format)?, format)?, retargeted);
+    }
+    let canonical = apply(&class, &Command::CreateElement {
+        diagram_id: "diagram-tasks".into(), owner_id: None, kind: ModelingElementKind::Class,
+        name: Some("Other class".into()), x: 450.0, y: 90.0,
+    }, 50)?;
+    let source_subject = quick_view.subject.as_deref().ok_or("canonical source subject missing")?;
+    let target_subject = canonical.diagrams.iter().find(|diagram| diagram.id == "diagram-tasks")
+        .and_then(|diagram| diagram.views.last()).and_then(|view| view.subject.as_deref()).ok_or("canonical target subject missing")?.to_owned();
+    let canonical = apply(&canonical, &Command::PlaceElementView { diagram_id: "diagram-tasks".into(), element_id: source_subject.into(), x: 100.0, y: 450.0 }, 51)?;
+    let source_copy = canonical.diagrams.iter().find(|diagram| diagram.id == "diagram-tasks").and_then(|diagram| diagram.views.last()).ok_or("source copy missing")?.id.clone();
+    let canonical = apply(&canonical, &Command::PlaceElementView { diagram_id: "diagram-tasks".into(), element_id: target_subject.clone(), x: 550.0, y: 450.0 }, 52)?;
+    let target_copy = canonical.diagrams.iter().find(|diagram| diagram.id == "diagram-tasks").and_then(|diagram| diagram.views.last()).ok_or("target copy missing")?.id.clone();
+    let initial_associations = canonical.relations.iter().filter(|relation| relation.kind == "uml.association").count();
+    let canonical = apply(&canonical, &make_link(&source_copy, &target_copy, Some(source_subject), Some(&target_subject)), 53)?;
+    let canonical_edge = canonical.diagrams.iter().find(|diagram| diagram.id == "diagram-tasks").and_then(|diagram| diagram.views.last()).ok_or("canonical edge missing")?;
+    assert!(canonical_edge.draft.is_none());
+    let canonical_edge_id = canonical_edge.id.clone();
+    let relation_id = canonical_edge.subject.clone().ok_or("canonical relation missing")?;
+    let relation = canonical.relations.iter().find(|relation| relation.id == relation_id).ok_or("relation missing")?;
+    assert_eq!((&relation.from, &relation.to), (&source_subject.to_owned(), &target_subject));
+    assert_eq!(canonical.relations.iter().filter(|relation| relation.kind == "uml.association").count(), initial_associations + 1);
+    assert_eq!(canonical_edge.endpoints.as_ref(), Some(&bellatrix_mde::ViewEndpoints { source_view_id: Some(source_copy.clone()), target_view_id: Some(target_copy.clone()) }));
+    let canonical_path = |project: &Project| {
+        let section = bellatrix_mde::ModelingSection::from_model(project);
+        bellatrix_mde::RelationshipGraph::new(&section, "diagram-tasks").view_path(&canonical_edge_id)
+    };
+    assert_eq!(canonical_path(&canonical), Some(canonical_edge.geometry.clone()));
+    let unselected_moved = apply(&canonical, &Command::MoveView { view_id: quick_view.id.clone(), dx: 70.0, dy: 20.0 }, 54)?;
+    assert_eq!(canonical_path(&canonical), canonical_path(&unselected_moved));
+    let selected_moved = apply(&canonical, &Command::MoveView { view_id: source_copy.clone(), dx: 70.0, dy: 20.0 }, 55)?;
+    assert_ne!(canonical_path(&canonical), canonical_path(&selected_moved));
+    let canonical_reverse = apply(&canonical, &make_link(&target_copy, &source_copy, Some(&target_subject), Some(source_subject)), 56)?;
+    let reverse_view = canonical_reverse.diagrams.iter().find(|diagram| diagram.id == "diagram-tasks").and_then(|diagram| diagram.views.last()).ok_or("reverse canonical edge missing")?;
+    assert!(reverse_view.draft.is_none());
+    assert_eq!(reverse_view.endpoints.as_ref(), Some(&bellatrix_mde::ViewEndpoints { source_view_id: Some(target_copy.clone()), target_view_id: Some(source_copy.clone()) }));
+    let retargeted_canonical = apply(&canonical, &Command::SetViewEndpoints {
+        diagram_id: "diagram-tasks".into(), view_id: canonical_edge_id.clone(),
+        endpoints: bellatrix_mde::ViewEndpoints { source_view_id: Some(quick_view.id.clone()), target_view_id: Some(target_copy.clone()) },
+    }, 57)?;
+    assert_eq!(retargeted_canonical.relations, canonical.relations);
+    assert_ne!(canonical_path(&retargeted_canonical), canonical_path(&canonical));
+    let mut missing_selected = canonical.clone();
+    for diagram in &mut missing_selected.diagrams { diagram.views.retain(|view| view.id != target_copy); }
+    assert!(canonical_path(&missing_selected).is_none());
+    assert!(apply(&missing_selected, &make_link(&source_copy, &target_copy, Some(source_subject), Some(&target_subject)), 58).is_err());
+    for format in [Format::Json, Format::Protobuf] {
+        assert_eq!(decode(&encode(&retargeted_canonical, format)?, format)?, retargeted_canonical);
+    }
+    let legacy: bellatrix_mde::View = serde_json::from_value(serde_json::json!({
+        "id": "legacy-edge", "subject": null,
+        "geometry": {"kind":"path", "start":{"x":0.0,"y":0.0}, "segments":[]},
+        "draft": {"notation_kind":"uml.association", "source_view_id":"old-source", "target_view_id":"old-target"}
+    }))?;
+    assert_eq!(legacy.endpoints.as_ref().and_then(|ends| ends.source_view_id.as_deref()), Some("old-source"));
+    let normalized = serde_json::to_value(&legacy)?;
+    assert!(normalized["draft"].get("source_view_id").is_none());
+    assert_eq!(normalized["endpoints"]["target_view_id"], "old-target");
+    // This authored tag-7 draft fixture predates the tag-9 View endpoint field.
+    let old_wire = decode(include_bytes!("../fixtures/draft-endpoints-v1.blx"), Format::Protobuf)?;
+    let migrated = old_wire.diagrams.first().and_then(|diagram| diagram.views.first()).ok_or("old wire View missing")?;
+    assert_eq!(migrated, &legacy);
+    for format in [Format::Json, Format::Protobuf] {
+        assert_eq!(decode(&encode(&old_wire, format)?, format)?, old_wire);
+    }
     let other_diagram = apply(&duplicate, &Command::PlaceElementView {
         diagram_id: "diagram-overview".into(), element_id: "type-task".into(), x: 20.0, y: 30.0,
     }, 3)?;
@@ -632,9 +750,9 @@ fn exercise_visual_drafts() -> Result<(), Box<dyn std::error::Error>> {
         .find(|diagram| diagram.id == "diagram-tasks")
         .ok_or("missing diagram")?;
     assert!(diagram.views.iter().any(|view| {
-        view.draft
+        view.endpoints
             .as_ref()
-            .is_some_and(|draft| draft.source_view_id.as_deref() == Some(&draft_id))
+            .is_some_and(|endpoints| endpoints.source_view_id.as_deref() == Some(&draft_id))
     }));
     assert!(
         validate_structural_diagram(&removed, &diagram.id, kind)

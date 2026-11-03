@@ -13,6 +13,37 @@ pub struct ModelingCreateRelationRequested {
     pub to: String,
     pub expected_revision: u64,
 }
+#[derive(Clone, Debug)]
+pub struct ModelingCreateRelationAtViewsRequested {
+    pub project_id: ProjectId,
+    pub diagram_id: String,
+    pub kind: ModelingRelationKind,
+    pub source_view_id: String,
+    pub target_view_id: String,
+    pub from: Option<String>,
+    pub to: Option<String>,
+    pub expected_revision: u64,
+}
+
+pub struct ModelingCreateRelationAtViewsOrVisualDraft;
+impl Event for ModelingCreateRelationAtViewsOrVisualDraft {
+    const NAME: &'static str = "bellatrix.mde.create-relation-at-views-or-visual-draft.v1";
+    type Args = ModelingCreateRelationAtViewsRequested;
+    type Output = Result<u64, String>;
+}
+
+pub(crate) async fn create_relation_at_views_or_visual_draft(
+    context: &Context,
+    projects: &ProjectService,
+    request: ModelingCreateRelationAtViewsRequested,
+) -> Result<u64, String> {
+    crate::mutation::execute(context, projects, request.project_id, request.expected_revision,
+        Command::CreateRelationAtViewsOrVisualDraft {
+            diagram_id: request.diagram_id, kind: request.kind, from: request.from, to: request.to,
+            source_view_id: request.source_view_id, target_view_id: request.target_view_id,
+        }).await
+}
+
 pub struct ModelingCreateRelation;
 impl Event for ModelingCreateRelation {
     const NAME: &'static str = "bellatrix.mde.create-relation.v1";

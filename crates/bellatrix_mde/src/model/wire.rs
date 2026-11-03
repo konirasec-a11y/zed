@@ -1,6 +1,6 @@
 //! A typed protobuf envelope. Extensible properties and geometry retain JSON values.
 use super::io::ModelIoError;
-use crate::{Annotation, Diagram, Element, FileContent, Implementation, Project, Relation, View};
+use crate::{Annotation, Diagram, Element, FileContent, Implementation, Project, Relation};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use prost::Message;
 
@@ -115,6 +115,8 @@ struct WireView {
     draft_json: Vec<u8>,
     #[prost(bytes, optional, tag = "8")]
     timing_json: Option<Vec<u8>>,
+    #[prost(bytes, optional, tag = "9")]
+    endpoints_json: Option<Vec<u8>>,
 }
 
 pub(super) fn encode(project: &Project) -> Result<Vec<u8>, ModelIoError> {
@@ -195,6 +197,7 @@ pub(super) fn encode(project: &Project) -> Result<Vec<u8>, ModelIoError> {
                             z_index: v.z_index,
                             draft_json: serde_json::to_vec(&v.draft)?,
                             timing_json: v.timing.as_ref().map(serde_json::to_vec).transpose()?,
+                            endpoints_json: v.endpoints.as_ref().map(serde_json::to_vec).transpose()?,
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()?,
@@ -289,24 +292,20 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Project, ModelIoError> {
                     .views
                     .into_iter()
                     .map(|v| {
-                        Ok::<_, ModelIoError>(View {
-                            draft: if v.draft_json.is_empty() {
-                                None
-                            } else {
-                                serde_json::from_slice(&v.draft_json)?
-                            },
-                            timing: v
-                                .timing_json
-                                .as_deref()
-                                .map(serde_json::from_slice)
-                                .transpose()?,
-                            id: v.id,
-                            subject: v.subject,
-                            label: v.label,
-                            geometry: serde_json::from_slice(&v.geometry_json)?,
-                            style: serde_json::from_slice(&v.style_json)?,
-                            z_index: v.z_index,
-                        })
+                        let json_value = |bytes: &[u8]| -> Result<serde_json::Value, serde_json::Error> {
+                            if bytes.is_empty() { Ok(serde_json::Value::Null) } else { serde_json::from_slice(bytes) }
+                        };
+                        Ok::<_, ModelIoError>(serde_json::from_value(serde_json::json!({
+                            "id": v.id,
+                            "subject": v.subject,
+                            "label": v.label,
+                            "geometry": json_value(&v.geometry_json)?,
+                            "style": json_value(&v.style_json)?,
+                            "z_index": v.z_index,
+                            "draft": json_value(&v.draft_json)?,
+                            "timing": v.timing_json.as_deref().map(json_value).transpose()?,
+                            "endpoints": v.endpoints_json.as_deref().map(json_value).transpose()?,
+                        }))?)
                     })
                     .collect::<Result<Vec<_>, _>>()?,
             })

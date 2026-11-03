@@ -1,37 +1,5 @@
 use super::*;
 #[test]
-fn two_clicks_connect_distinct_model_elements() {
-    let mut pending = None;
-    assert_eq!(
-        choose_relation_endpoint(&mut pending, "type-list"),
-        RelationClick::First
-    );
-    assert_eq!(pending.as_deref(), Some("type-list"));
-    assert_eq!(
-        choose_relation_endpoint(&mut pending, "type-task"),
-        RelationClick::Connect("type-list".to_owned())
-    );
-    assert_eq!(pending, None);
-}
-#[test]
-fn clicking_source_again_does_not_drop_armed_tool() {
-    let mut pending = None;
-    assert_eq!(
-        choose_relation_endpoint(&mut pending, "type-list"),
-        RelationClick::First
-    );
-    assert_eq!(
-        choose_relation_endpoint(&mut pending, "type-list"),
-        RelationClick::Repeat
-    );
-    assert_eq!(pending.as_deref(), Some("type-list"));
-    assert_eq!(
-        choose_relation_endpoint(&mut pending, "type-task"),
-        RelationClick::Connect("type-list".into())
-    );
-}
-
-#[test]
 fn switching_diagrams_clears_selection_but_reopening_same_diagram_preserves_it() {
     let mut active = Some("first".to_owned());
     let mut selected = Some("class".to_owned());

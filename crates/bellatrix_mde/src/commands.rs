@@ -26,7 +26,7 @@ pub use name_expression::format as name_expression_text;
 use crate::{
     Element, Geometry, Graph, ModelingRelationKind, ModelingSection, Project, Relation,
     RelationshipGraph, StructuralDiagramKind, Style, UmlQuickCreate, UmlType, View,
-    classifier_contents, relation_kind_for_creation, reroute_relationships, route_relationship,
+    classifier_contents, relation_kind_for_creation, reroute_relationships,
 };
 use serde_json::Value;
 use std::collections::HashSet;
@@ -60,6 +60,13 @@ pub enum Command {
         diagram_id: String, owner_id: Option<String>, kind: ModelingElementKind, name: Option<String>, x: f64, y: f64,
     },
     CreateRelationOrVisualDraft { diagram_id: String, kind: ModelingRelationKind, from: String, to: String },
+    CreateRelationAtViewsOrVisualDraft {
+        diagram_id: String, kind: ModelingRelationKind, source_view_id: String, target_view_id: String,
+        from: Option<String>, to: Option<String>,
+    },
+    CreateRelationAtViews {
+        diagram_id: String, kind: ModelingRelationKind, from: String, to: String, endpoints: crate::ViewEndpoints,
+    },
     CreateRelation {
         diagram_id: String,
         kind: ModelingRelationKind,
@@ -103,6 +110,7 @@ pub enum Command {
     },
     SetViewLabel { view_id: String, label: Option<String> },
     SetViewTiming { view_id: String, timing: Option<crate::TimingPresentation> },
+    SetViewEndpoints { diagram_id: String, view_id: String, endpoints: crate::ViewEndpoints },
     SetViewStyle {
         diagram_id: String,
         view_id: String,
@@ -162,23 +170,43 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
             }
         };
     }
-    if let Command::CreateRelationOrVisualDraft { diagram_id, kind, from, to } = command {
-        let semantic = Command::CreateRelation { diagram_id: diagram_id.clone(), kind: *kind, from: from.clone(), to: to.clone() };
-        return match apply(project, &semantic, revision) {
+    if let Command::CreateRelationAtViewsOrVisualDraft { diagram_id, kind, source_view_id, target_view_id, from, to } = command {
+        let diagram = project.diagrams.iter().find(|diagram| diagram.id == *diagram_id).ok_or("diagram not found")?;
+        let source = diagram.views.iter().find(|view| view.id == *source_view_id).ok_or("source View not found in diagram")?;
+        let target = diagram.views.iter().find(|view| view.id == *target_view_id).ok_or("target View not found in diagram")?;
+        if source.subject != *from || target.subject != *to {
+            return Err("selected endpoint View subject changed; select endpoints again".into());
+        }
+        let endpoints = crate::ViewEndpoints { source_view_id: Some(source_view_id.clone()), target_view_id: Some(target_view_id.clone()) };
+        let semantic = match (from, to) {
+            (Some(from), Some(to)) => apply(project, &Command::CreateRelationAtViews {
+                diagram_id: diagram_id.clone(), kind: *kind, from: from.clone(), to: to.clone(), endpoints,
+            }, revision),
+            _ => Err("relationship endpoint has no semantic subject".into()),
+        };
+        return match semantic {
             Ok(updated) => Ok(updated),
             Err(reason) => {
-                let diagram = project.diagrams.iter().find(|diagram| diagram.id == *diagram_id).ok_or("diagram not found")?;
-                let source = diagram.views.iter().find(|view| view.subject.as_ref() == Some(from)).ok_or("source view not found")?;
-                let target = diagram.views.iter().find(|view| view.subject.as_ref() == Some(to)).ok_or("target view not found")?;
                 let mut properties = std::collections::BTreeMap::new();
                 properties.insert("semantic_creation_diagnostic".into(), Value::String(reason));
-                properties.insert("requested_source_id".into(), Value::String(from.clone()));
-                properties.insert("requested_target_id".into(), Value::String(to.clone()));
+                if let Some(from) = from { properties.insert("requested_source_id".into(), Value::String(from.clone())); }
+                if let Some(to) = to { properties.insert("requested_target_id".into(), Value::String(to.clone())); }
+                let center = crate::resolve_visual_center(&source.geometry).ok_or("source View has no center")?;
+                let geometry = Geometry::Path { start: center, segments: Vec::new() };
                 apply(project, &Command::CreateVisualDraft { diagram_id: diagram_id.clone(), notation_kind: kind.model_kind().into(),
-                    label: None, geometry: Geometry::Path { start: crate::Point { x: 0.0, y: 0.0 }, segments: Vec::new() },
-                    properties, parent_view_id: None, source_view_id: Some(source.id.clone()), target_view_id: Some(target.id.clone()) }, revision)
+                    label: None, geometry, properties, parent_view_id: None,
+                    source_view_id: Some(source_view_id.clone()), target_view_id: Some(target_view_id.clone()) }, revision)
             }
         };
+    }
+    if let Command::CreateRelationOrVisualDraft { diagram_id, kind, from, to } = command {
+        let diagram = project.diagrams.iter().find(|diagram| diagram.id == *diagram_id).ok_or("diagram not found")?;
+        let source = diagram.views.iter().find(|view| view.subject.as_ref() == Some(from)).ok_or("source view not found")?;
+        let target = diagram.views.iter().find(|view| view.subject.as_ref() == Some(to)).ok_or("target view not found")?;
+        return apply(project, &Command::CreateRelationAtViewsOrVisualDraft {
+            diagram_id: diagram_id.clone(), kind: *kind, from: Some(from.clone()), to: Some(to.clone()),
+            source_view_id: source.id.clone(), target_view_id: target.id.clone(),
+        }, revision);
     }
     let previous_section = ModelingSection::from_model(project);
     let mut section = previous_section.clone();
@@ -203,7 +231,7 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
             diagrams::rename(&mut section, diagram_id, name)?
         }
         Command::DeleteDiagram { diagram_id } => diagrams::delete(&mut section, diagram_id)?,
-        Command::CreateRelationOrVisualDraft { .. } => return Err("visual relation dispatch failed".into()),
+        Command::CreateRelationOrVisualDraft { .. } | Command::CreateRelationAtViewsOrVisualDraft { .. } => return Err("visual relation dispatch failed".into()),
         Command::CreateElementOrVisualDraft { .. } => return Err("visual creation dispatch failed".into()),
         Command::CreateElement { .. } => {
             create_element(&mut section, command, revision, &project.id)?
@@ -219,8 +247,12 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
             *kind,
             from,
             to,
+            None,
             revision,
             &project.id,
+        )?,
+        Command::CreateRelationAtViews { diagram_id, kind, from, to, endpoints } => create_relation(
+            &mut section, diagram_id, *kind, from, to, Some(endpoints), revision, &project.id,
         )?,
         Command::AddMember { owner_id, kind } => {
             members::append_member(&mut section, owner_id, *kind, revision, &project.id)?;
@@ -271,6 +303,7 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
             view.label = label.clone();
         }
         Command::SetViewTiming { view_id, timing } => views::set_timing(&mut section, view_id, timing)?,
+        Command::SetViewEndpoints { diagram_id, view_id, endpoints } => views::set_endpoints(&mut section, diagram_id, view_id, endpoints)?,
         Command::SetViewStyle {
             diagram_id,
             view_id,
@@ -325,7 +358,7 @@ pub fn apply(project: &Project, command: &Command, revision: u64) -> Result<Proj
             .is_some_and(|diagram| diagram.views.iter().any(|view| view.id == *view_id && view.draft.is_some())),
         _ => false,
     };
-    let presentation_only = draft_view_edit || matches!(command, Command::CreateDiagram { .. } | Command::CreateVisualDraft { .. } | Command::SetExplorerParent { .. } | Command::SetViewLabel { .. } | Command::SetViewTiming { .. } | Command::SetViewStyle { .. } | Command::SetViewRouting { .. } | Command::ReorderView { .. });
+    let presentation_only = draft_view_edit || matches!(command, Command::CreateDiagram { .. } | Command::CreateVisualDraft { .. } | Command::SetExplorerParent { .. } | Command::SetViewLabel { .. } | Command::SetViewTiming { .. } | Command::SetViewEndpoints { .. } | Command::SetViewStyle { .. } | Command::SetViewRouting { .. } | Command::ReorderView { .. });
     if !presentation_only {
         crate::uml::associations::materialize_new(project, &mut section)?;
         crate::uml::associations::synchronize_changes(&previous_section, &mut section)?;
@@ -452,6 +485,7 @@ fn create_element(
         .checked_add(1)
         .ok_or("diagram z-index overflow")?;
     diagram.views.push(View {
+        endpoints: None,
         timing: None,
             draft: None,
         id: view_id,
@@ -541,12 +575,14 @@ fn diagram_relation_owner(section: &ModelingSection, kind: ModelingRelationKind,
     Ok(Some(source_owner))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn create_relation(
     section: &mut ModelingSection,
     diagram_id: &str,
     kind: ModelingRelationKind,
     from: &str,
     to: &str,
+    endpoints: Option<&crate::ViewEndpoints>,
     revision: u64,
     project_id: &str,
 ) -> Result<(), String> {
@@ -563,7 +599,11 @@ fn create_relation(
         .ok_or("target element not found")?;
     kind.validate_endpoints(&source.kind, &target.kind)?;
     let specialized_owner = diagram_relation_owner(section, kind, from, to)?;
-    let geometry = route_relationship(section, diagram_id, from, to)?;
+    let endpoints = match endpoints {
+        Some(endpoints) => endpoints.clone(),
+        None => crate::relationships::resolve_view_endpoints(section, diagram_id, from, to)?,
+    };
+    let geometry = crate::relationships::route_at_views(section, diagram_id, from, to, &endpoints)?;
     let [id, view_id] = fresh_ids(
         section,
         ["mde-uml-relation", "mde-uml-relation-view"],
@@ -606,6 +646,7 @@ fn create_relation(
         .checked_add(1)
         .ok_or("z-index overflow")?;
     diagram.views.push(View {
+        endpoints: Some(endpoints),
         timing: None,
             draft: None,
         id: view_id,

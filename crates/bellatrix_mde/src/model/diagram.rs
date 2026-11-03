@@ -39,13 +39,15 @@ fn default_height() -> f64 {
     720.0
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct View {
     pub id: String,
     #[serde(default)]
     pub subject: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub draft: Option<VisualDraft>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub endpoints: Option<ViewEndpoints>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timing: Option<TimingPresentation>,
     #[serde(default)]
@@ -55,6 +57,62 @@ pub struct View {
     pub style: Style,
     #[serde(default)]
     pub z_index: i32,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ViewEndpoints {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_view_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_view_id: Option<String>,
+}
+
+impl<'de> Deserialize<'de> for View {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct DraftInput {
+            #[serde(flatten)]
+            draft: VisualDraft,
+            #[serde(flatten)]
+            endpoints: ViewEndpoints,
+        }
+        #[derive(Deserialize)]
+        struct ViewInput {
+            id: String,
+            #[serde(default)]
+            subject: Option<String>,
+            #[serde(default)]
+            draft: Option<DraftInput>,
+            #[serde(default)]
+            endpoints: Option<ViewEndpoints>,
+            #[serde(default)]
+            timing: Option<TimingPresentation>,
+            #[serde(default)]
+            label: Option<String>,
+            geometry: Geometry,
+            #[serde(default)]
+            style: Style,
+            #[serde(default)]
+            z_index: i32,
+        }
+        let input = ViewInput::deserialize(deserializer)?;
+        // Old files stored attachment identities inside draft JSON; normalize once on load.
+        let migrated_endpoints = input.draft.as_ref().and_then(|draft| {
+            (draft.endpoints.source_view_id.is_some() || draft.endpoints.target_view_id.is_some())
+                .then(|| draft.endpoints.clone())
+        });
+        Ok(Self {
+            id: input.id,
+            subject: input.subject,
+            draft: input.draft.map(|draft| draft.draft),
+            endpoints: input.endpoints.or(migrated_endpoints),
+            timing: input.timing,
+            label: input.label,
+            geometry: input.geometry,
+            style: input.style,
+            z_index: input.z_index,
+        })
+    }
 }
 
 // These are authored display events, not evaluated UML time or value specifications.
@@ -122,10 +180,7 @@ pub struct VisualDraft {
     pub properties: std::collections::BTreeMap<String, serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_view_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_view_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub target_view_id: Option<String>,
+
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
