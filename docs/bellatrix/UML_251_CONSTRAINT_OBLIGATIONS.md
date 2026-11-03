@@ -55,6 +55,9 @@ têm recortes publicados em `f3644ea91f41df63238d775332ec66035ca7fcae` (E44/E45)
 ClassifierTemplateParameter::constraining_classifiers_constrain_args e
 CollaborationUse::every_role têm recortes publicados em
 `695097cc12e34c10fbab6854bdd346323274b599` (E46/E47).
+InstanceSpecification::deployment_target e o recorte base de
+TemplateParameterSubstitution::must_be_compatible foram publicados em
+`84ff594be299ba824a0ab2efe0b0488bd58b40d4` (E48/E49).
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -170,7 +173,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E47 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E49 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -683,6 +686,59 @@ de execução nova. E12–E47 possuem os gates delimitados nas seções seguinte
   substitui supplier materializado pelo target binário visual. Papéis ausentes,
   tipos externos e listas incompletas continuam limites; todos os contratos
   materializados são checados para não ocultar malformados com witness válido.
+
+- **E48**: `semantics/deployments.rs`, `instance_deployment_target` e
+  `validate`; `instance_deployment_target.rs`, oito testes. Se a instância tem
+  deployment canônico, deve existir classifier que conforme a Node e seja o
+  tipo de uma part composta diretamente possuída por algum Node do modelo.
+  Compara identidade de p.type com o classifier, não ancestralidade ou
+  equivalência estrutural. Atributo herdado, filho de outro papel e propriedade
+  não composta não inventam witness. Antecedente vazio comprovado satisfaz a
+  implicação; inversas conflitantes e dados malformados permanecem erros.
+  Witness local pode decidir com ramos externos, mas ausência de witness com
+  coleções/metaclasses não resolvidas não prova violação nem sucesso completo.
+
+- **E49**: `semantics/templates.rs`, `template_substitution_compatible`,
+  `checked_parametered_element` e `validate_bindings`;
+  `template_substitution_compatibility.rs`, dez testes. Recorte da operação
+  base ParameterableElement::isCompatibleWith: actual deve conformar à
+  metaclasse UML do parameteredElement exposto pelo formal. Isso não compara
+  generalização de classificadores do modelo, identidade ou substitutabilidade.
+  Referências e projeções canônicas de formal/parameteredElement/actual são
+  verificadas; malformado de um lado não desaparece diante de unknown do outro.
+  Actual Property ou ValueSpecification permanece **Unsupported**, pois essas
+  metaclasses sobrescrevem a operação base. O corpo publicado de Property usa
+  TypeElement, não TypedElement; não corrigir silenciosamente a divergência nem
+  usar a base para contornar os overrides. Metaclasse indefinida ou projeção
+  ausente conserva unknown.
+
+### Evidência publicada de InstanceSpecification target e compatibilidade base
+
+Commit inspecionado: `84ff594be299ba824a0ab2efe0b0488bd58b40d4`.
+Logs finais lidos:
+
+- `/tmp/instance-target-final-gate.log`: **207/207 aprovados**,
+  160 testes lib e 47 integrações (deployment_deployed_elements 9,
+  deployment_specification 10, instance_deployment_artifact 8,
+  instance_deployment_target 8 e property_deployment_target 12).
+- `/tmp/template-substitution-compatibility-gate-final.log`: **99/99 aprovados**,
+  classifier_template_abstract 11, classifier_template_actual 10,
+  classifier_template_constraints 11, operation_template_default 11,
+  template_binding_formal 13, template_binding_unique 12, template_signatures 21
+  e template_substitution_compatibility 10.
+
+As linhas ficam **P/E48–E49**. O teste focado posterior de compatibilidade em
+`/tmp/template-substitution-compatibility-final-focused.log` repete o alvo de
+10 testes e não amplia a contagem distinta do gate. Não certificar overrides
+isCompatibleWith ainda não implementados, templates integralmente ou
+Node::internal_structure, cuja divergência normativa continua pendente.
+Witness de deployment_target não certifica execução/deployment real, autoria
+visual ou fechamento de todos os contratos de instâncias.
+
+Os gates precedem a publicação e não são reruns no SHA remoto; a matriz não
+executou novos testes. Lib completa e integrações selecionadas não equivalem
+à suíte integral. Não somar regressões repetidas como cobertura normativa;
+UI, geração e interchange continuam separados.
 
 ### Evidência publicada de argumentos restritos e CollaborationUse::every_role
 
@@ -1385,7 +1441,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `TemplateParameterSubstitution-must_be_compatible`
 
-- Metaclass: `TemplateParameterSubstitution`. Estado: **N**. Evidência: sem predicado dedicado identificado nos passes inspecionados.
+- Metaclass: `TemplateParameterSubstitution`. Estado: **P**. Evidência: E49; commit `84ff594be299ba824a0ab2efe0b0488bd58b40d4`; overrides ainda Unsupported.
 - OCL publicado: `actual->forAll(a | a.isCompatibleWith(formal.parameteredElement))`.
 
 #### `TemplateSignature-own_elements`
@@ -1482,7 +1538,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `InstanceSpecification-deployment_target`
 
-- Metaclass: `InstanceSpecification`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `InstanceSpecification`. Estado: **P**. Evidência: E48; commit `84ff594be299ba824a0ab2efe0b0488bd58b40d4`.
 - OCL publicado: `deployment->notEmpty() implies classifier->exists(node | node.oclIsKindOf(Node) and Node.allInstances()->exists(n | n.part->exists(p | p.type = node)))`.
 
 #### `Operation-at_most_one_return`

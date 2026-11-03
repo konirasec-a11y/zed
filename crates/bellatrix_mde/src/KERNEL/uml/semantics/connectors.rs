@@ -582,6 +582,137 @@ fn collaboration_every_role(references: &ReferenceIndex<'_>, usage: ElementRef<'
     feature_compatibility::require_all(guards)
 }
 
+// Opposite collection membership derives from the forward role associations.
+// StructuredClassifier::role is not allRoles(): inherited features are excluded.
+fn collaboration_context_membership(
+    references: &ReferenceIndex<'_>, context: ElementRef<'_>, role: ElementRef<'_>, suppliers: bool,
+) -> Result<bool, QueryError> {
+    let target = if suppliers { "Collaboration-collaborationRole" } else { "StructuredClassifier-role" };
+    let mut witnesses = Vec::new();
+    for descriptor in classifiers::properties(context)? {
+        if !classifiers::contributes(descriptor, target)
+            .map_err(|error| QueryError::unsupported(context.id(), error))? { continue; }
+        if let Some(value) = context.properties().get(descriptor.name) {
+            let checked = check(references, context, &PropertyDescriptor { is_derived: false, ..*descriptor }, value);
+            if let Err(error @ QueryError::Invalid { .. }) = checked { return Err(error); }
+            if descriptor.is_derived {
+                witnesses.push(Err(QueryError::unsupported(context.id(), "stored derived role is not canonical membership")));
+                continue;
+            }
+            if checked.is_err() { witnesses.push(checked); }
+            if value.as_array().into_iter().flatten().any(|value|
+                super::references::reference_id(value).ok().flatten() == Some(role.id())) {
+                witnesses.push(Ok(true));
+            }
+        }
+    }
+    if !suppliers {
+        for child in references.explicit_owned_elements(context.id())
+            .map_err(|error| QueryError::invalid(context.id(), error))? {
+            let member = classifiers::contributes_to_owned_union(context, child, target);
+            match member {
+                Err(error) => witnesses.push(Err(error)),
+                Ok(member) if child.id() == role.id() => witnesses.push(Ok(member)),
+                _ => {},
+            }
+        }
+    }
+    feature_compatibility::accept_any(witnesses)
+}
+
+fn collaboration_client_elements(references: &ReferenceIndex<'_>, usage: ElementRef<'_>) -> Result<bool, QueryError> {
+    use super::element_graph_queries::ElementGraphError;
+    let (mut bindings, contract) = collaboration_members(references, usage, "roleBinding", "Dependency")?;
+    let mut checks = vec![contract];
+    for child in references.explicit_owned_elements(usage.id())
+        .map_err(|error| QueryError::invalid(usage.id(), error))? {
+        match classifiers::contributes_to_owned_union(usage, child, "CollaborationUse-roleBinding") {
+            Ok(true) => if !bindings.iter().any(|binding| binding.id() == child.id()) { bindings.push(child); },
+            Ok(false) => {},
+            Err(error) => checks.push(Err(error)),
+        }
+    }
+    for suppliers in [false, true] {
+        let name = if suppliers { "supplier" } else { "client" };
+        let target = if suppliers { "Dependency-supplier" } else { "Dependency-client" };
+        let mut endpoints = Vec::new();
+        for binding in &bindings {
+            for descriptor in classifiers::properties(*binding)? {
+                if classifiers::contributes(descriptor, target)
+                    .map_err(|error| QueryError::unsupported(binding.id(), error))?
+                    && let Some(value) = binding.properties().get(descriptor.name)
+                    && let Err(error @ QueryError::Invalid { .. }) = check(references, *binding, descriptor, value) {
+                    checks.push(Err(error));
+                }
+            }
+            let values = if suppliers { super::relationship_endpoints::suppliers(references, binding.id()) }
+                else { super::relationship_endpoints::clients(references, binding.id()) };
+            match values {
+                Ok(values) => endpoints.extend(values),
+                Err(ElementGraphError::Invalid { subject_id, message }) => checks.push(Err(QueryError::invalid(&subject_id, message))),
+                Err(ElementGraphError::Unsupported { subject_id, message }) => {
+                    checks.push(Err(QueryError::unsupported(&subject_id, message)));
+                    // Preserve known endpoints beside external references without
+                    // substituting binary endpoints for a materialized role.
+                    for value in binding.properties().get(name).and_then(Value::as_array).into_iter().flatten() {
+                        if let Ok(Some(id)) = super::references::reference_id(value)
+                            && let Ok(endpoint) = references.element(id) { endpoints.push(endpoint); }
+                    }
+                }
+            }
+        }
+        let mut roles = Vec::new();
+        for endpoint in endpoints {
+            let inverse = if suppliers { "collaboration" } else { "structuredClassifier" };
+            if let Some(value) = endpoint.properties().get(inverse) {
+                // Forward association membership is authoritative. Until an
+                // authored opposite is reconciled, do not certify it as equal
+                // merely because the forward projections happen to agree.
+                let descriptor = property(endpoint, inverse).or_else(|_| {
+                    schema::property_by_id(schema::XmiId::new(schema::Document::Uml,
+                        if suppliers { "A_collaborationRole_collaboration-collaboration" }
+                        else { "A_role_structuredClassifier-structuredClassifier" }))
+                        .ok_or_else(|| QueryError::unsupported(endpoint.id(), "missing opposite role contract"))
+                });
+                checks.push(match descriptor {
+                    Ok(descriptor) => match check(references, endpoint, &PropertyDescriptor { is_derived: false, ..*descriptor }, value) {
+                        Err(error @ QueryError::Invalid { .. }) => Err(error),
+                        _ => Err(QueryError::unsupported(endpoint.id(), format!("authored {inverse} requires reconciliation with canonical forward roles"))),
+                    },
+                    Err(error) => Err(error),
+                });
+            }
+            if endpoint.metaclass().is_none() {
+                checks.push(Err(QueryError::unsupported(endpoint.id(), "endpoint metaclass is unresolved")));
+            } else if !endpoint.conforms_to("ConnectableElement") { checks.push(Ok(false)); }
+            else if !roles.iter().any(|role: &ElementRef<'_>| role.id() == endpoint.id()) { roles.push(endpoint); }
+        }
+        // Pairwise equality of opposite sets, not equality of canonical owners.
+        // A known different membership disproves equality even beside unknowns.
+        for context in references.model().elements() {
+            if context.metaclass().is_none() {
+                if roles.len() > 1 { checks.push(Err(QueryError::unsupported(context.id(), "possible context metaclass is unresolved"))); }
+                continue;
+            }
+            if !context.conforms_to(if suppliers { "Collaboration" } else { "StructuredClassifier" }) { continue; }
+            let memberships = roles.iter().map(|role| collaboration_context_membership(references, context, *role, suppliers)).collect::<Vec<_>>();
+            for membership in &memberships {
+                if let Err(error @ QueryError::Invalid { .. }) = membership { checks.push(Err(error.clone())); }
+            }
+            for left in 0..memberships.len() {
+                for right in left+1..memberships.len() {
+                    checks.push(match (&memberships[left], &memberships[right]) {
+                        (Ok(left), Ok(right)) => Ok(left == right),
+                        (Err(error @ QueryError::Invalid { .. }), _) | (_, Err(error @ QueryError::Invalid { .. })) => Err(error.clone()),
+                        (Err(error), _) | (_, Err(error)) => Err(error.clone()),
+                    });
+                }
+            }
+        }
+    }
+    feature_compatibility::require_all(checks)
+}
+
 pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     for connector in references.model().elements().filter(|element| element.conforms_to("Connector")) {
@@ -623,6 +754,15 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
             Err(QueryError::Unsupported { message, .. }) => (StructuralSeverity::Warning, "MDE_COLLABORATION_USE_EVERY_ROLE_UNVERIFIED", message),
         };
         issues.push(StructuralDiagnostic { severity, code, subject_id: usage.id().into(), message: format!("CollaborationUse-every_role: {message}") });
+    }
+    for usage in references.model().elements().filter(|element| element.conforms_to("CollaborationUse")) {
+        let (severity, code, message) = match collaboration_client_elements(references, usage) {
+            Ok(true) => continue,
+            Ok(false) => (StructuralSeverity::Error, "UML_COLLABORATION_USE_CLIENT_ELEMENTS", "role bindings require ConnectableElements with equal context collections".to_owned()),
+            Err(QueryError::Invalid { message, .. }) => (StructuralSeverity::Error, "UML_COLLABORATION_USE_CLIENT_ELEMENTS", message),
+            Err(QueryError::Unsupported { message, .. }) => (StructuralSeverity::Warning, "MDE_COLLABORATION_USE_CLIENT_ELEMENTS_UNVERIFIED", message),
+        };
+        issues.push(StructuralDiagnostic { severity, code, subject_id: usage.id().into(), message: format!("CollaborationUse-client_elements: {message}") });
     }
     issues
 }

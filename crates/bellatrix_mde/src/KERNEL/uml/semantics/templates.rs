@@ -821,6 +821,14 @@ fn template_substitution_compatible(
             }
             checked_parametered_element(references, formal, "ParameterableElement")
         });
+    parameterable_compatible(actual, exposed)
+}
+
+fn parameterable_compatible(
+    actual: Result<crate::uml::root::ElementRef<'_>, crate::uml::classifiers::QueryError>,
+    exposed: Result<crate::uml::root::ElementRef<'_>, crate::uml::classifiers::QueryError>,
+) -> Result<bool, crate::uml::classifiers::QueryError> {
+    use crate::uml::classifiers::QueryError;
     // A malformed independent operand must not disappear behind Unknown.
     for operand in [&actual, &exposed] {
         if let Err(error @ QueryError::Invalid { .. }) = operand {
@@ -852,12 +860,108 @@ fn template_substitution_compatible(
     Ok(actual.conforms_to(exposed_metaclass))
 }
 
+fn template_default_compatible(
+    references: &crate::uml::references::ReferenceIndex<'_>,
+    parameter: crate::uml::root::ElementRef<'_>,
+) -> Result<bool, crate::uml::classifiers::QueryError> {
+    use crate::uml::{
+        classifiers::{self, QueryError},
+        feature_compatibility::require_all,
+    };
+    let owned = parameter
+        .properties()
+        .get("ownedDefault")
+        .filter(|value| !value.is_null())
+        .map(|_| template_reference_target(references, parameter, "ownedDefault"));
+    if let Some(Err(error @ QueryError::Invalid { .. })) = &owned {
+        return Err(error.clone());
+    }
+    if parameter
+        .properties()
+        .get("default")
+        .is_none_or(serde_json::Value::is_null)
+    {
+        if owned.is_some() {
+            return Err(QueryError::unsupported(
+                parameter.id(),
+                "default/ownedDefault projection is not materialized",
+            ));
+        }
+        for child in references
+            .explicit_owned_elements(parameter.id())
+            .map_err(|error| QueryError::invalid(parameter.id(), error))?
+        {
+            if (child.metaclass().is_none() || child.conforms_to("ParameterableElement"))
+                && classifiers::contributes_to_owned_union(
+                    parameter,
+                    child,
+                    "TemplateParameter-ownedDefault",
+                )?
+            {
+                return Err(QueryError::unsupported(
+                    parameter.id(),
+                    "default/ownedDefault role is not materialized",
+                ));
+            }
+        }
+        return Ok(true);
+    }
+    let default = template_reference_target(references, parameter, "default");
+    let owned_consistency = match owned {
+        None => Ok(true),
+        Some(owned) => match (&default, owned) {
+            (Ok(default), Ok(owned)) if default.id() != owned.id() => Err(QueryError::invalid(
+                parameter.id(),
+                "ownedDefault contradicts its default superset",
+            )),
+            (Ok(_), Ok(_)) => Ok(true),
+            (_, Err(error)) => Err(error),
+            (Err(error), _) => Err(error.clone()),
+        },
+    };
+    require_all([
+        owned_consistency,
+        parameterable_compatible(
+            default,
+            checked_parametered_element(references, parameter, "ParameterableElement"),
+        ),
+    ])
+}
+
 pub(crate) fn validate_bindings(
     references: &crate::uml::references::ReferenceIndex<'_>,
 ) -> Vec<StructuralDiagnostic> {
     use crate::uml::classifiers::QueryError;
     let mut issues = Vec::new();
     for binding in references.model().elements() {
+        if binding.conforms_to("TemplateParameter") {
+            let default = match template_default_compatible(references, binding) {
+                Ok(true) => None,
+                Ok(false) => Some((
+                    StructuralSeverity::Error,
+                    "UML_TEMPLATE_DEFAULT_COMPATIBLE",
+                    "Default UML metaclass must equal or specialize the exposed ParameterableElement metaclass".to_owned(),
+                )),
+                Err(QueryError::Invalid { message, .. }) => Some((
+                    StructuralSeverity::Error,
+                    "MDE_TEMPLATE_DEFAULT_COMPATIBLE_INVALID",
+                    message,
+                )),
+                Err(QueryError::Unsupported { message, .. }) => Some((
+                    StructuralSeverity::Warning,
+                    "MDE_TEMPLATE_DEFAULT_COMPATIBLE_UNVERIFIED",
+                    message,
+                )),
+            };
+            if let Some((severity, code, message)) = default {
+                issues.push(StructuralDiagnostic {
+                    severity,
+                    code,
+                    subject_id: binding.id().into(),
+                    message: format!("TemplateParameter-must_be_compatible: {message}"),
+                });
+            }
+        }
         if binding.conforms_to("ClassifierTemplateParameter")
             && binding
                 .properties()
