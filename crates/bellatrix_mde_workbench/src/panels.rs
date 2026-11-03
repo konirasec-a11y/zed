@@ -149,6 +149,8 @@ pub struct MdeRightPanel {
     pub(crate) inspector_styles_open: bool,
     pub(crate) timing_drafts: HashMap<(String, String, String), crate::timing_editor::TimingDraft>,
     collapsed_elements: HashSet<String>,
+    last_revealed_view: Option<(gpui::EntityId, String)>,
+    explorer_scroll: gpui::ScrollHandle,
     collapsed_by_document: HashMap<gpui::EntityId, HashSet<String>>,
     explorer_open: bool,
     inspector_open: bool,
@@ -178,6 +180,8 @@ impl MdeRightPanel {
             inspector_styles_open: true,
             timing_drafts: HashMap::new(),
             collapsed_elements: HashSet::new(),
+            last_revealed_view: None,
+            explorer_scroll: gpui::ScrollHandle::new(),
             collapsed_by_document: HashMap::new(),
             explorer_open: true,
             inspector_open: true,
@@ -247,6 +251,7 @@ impl Render for MdeRightPanel {
         let panel_border = palette.border;
         let selected_id = item.read(cx).selected_element().map(str::to_owned);
         let active_diagram = item.read(cx).active_diagram().map(str::to_owned);
+        let selected_view = item.read(cx).selected_view.clone();
         let snapshot = item.read(cx).source().snapshot().ok();
         let inspection = snapshot.as_ref().and_then(|snapshot| {
             selected_id
@@ -254,9 +259,26 @@ impl Render for MdeRightPanel {
                 .and_then(|id| inspect_element(&snapshot.section, id))
         });
         let mut rows = Vec::new();
+        let mut reveal_selected = false;
         if let Some(snapshot) = &snapshot {
             let tree = project_explorer(&snapshot.section);
             let root_key = format!("project:{}", snapshot.project_id.as_str());
+            let reveal = selected_view.as_ref().map(|view| (item.entity_id(), view.clone()));
+            if reveal != self.last_revealed_view {
+                self.last_revealed_view = reveal;
+                reveal_selected = selected_view.is_some();
+                if let Some(index) = selected_view.as_ref().and_then(|id| tree.iter().position(|row| row.view.as_ref().is_some_and(|view| &view.view_id == id))) {
+                    self.collapsed_elements.remove(&root_key);
+                    let mut depth = tree[index].depth;
+                    for ancestor in tree[..index].iter().rev() {
+                        if ancestor.depth < depth {
+                            self.collapsed_elements.remove(&ancestor.element_id);
+                            depth = ancestor.depth;
+                        }
+                        if depth == 0 { break; }
+                    }
+                }
+            }
             let root_expanded = !self.collapsed_elements.contains(&root_key);
             let root_panel = cx.weak_entity();
             let root_drop_owner = item.clone();
@@ -285,6 +307,38 @@ impl Render for MdeRightPanel {
                 let has_children = tree
                     .get(index + 1)
                     .is_some_and(|next| next.depth > row.depth);
+                if let Some(view) = &row.view {
+                    let diagram_id = view.diagram_id.clone();
+                    let view_id = view.view_id.clone();
+                    let owner = item.clone();
+                    let selected = active_diagram.as_deref() == Some(diagram_id.as_str())
+                        && selected_view.as_deref() == Some(view_id.as_str());
+                    if selected && reveal_selected { self.explorer_scroll.scroll_to_item(rows.len() + 1); }
+                    let expanded = !self.collapsed_elements.contains(&row.element_id);
+                    let disclosure_id = row.element_id.clone();
+                    let disclosure_panel = cx.weak_entity();
+                    rows.push(div().id(format!("mde-explorer-view-{}", row.element_id))
+                        .pl(px((row.depth.min(15) + 2) as f32 * 14.0)).flex().items_center().gap_1()
+                        .when(selected, |row| row.bg(palette.surface))
+                        .child(svg().data(glyph(element_glyph(&row.kind))).size(px(14.0)).flex_none()
+                            .text_color(if selected { palette.selection } else { palette.muted }))
+                        .child(div().flex_1().min_w_0().overflow_hidden().child(
+                            TreeViewItem::new(row.element_id.clone(), row.label.clone())
+                                .root_item(has_children).expanded(expanded).toggle_state(selected)
+                                .on_toggle(move |_, _, cx| {
+                                    if let Err(error) = disclosure_panel.update(cx, |panel, cx| {
+                                        if !panel.collapsed_elements.insert(disclosure_id.clone()) { panel.collapsed_elements.remove(&disclosure_id); }
+                                        cx.notify();
+                                    }) { eprintln!("MDE Explorer expansion failed: {error}"); }
+                                })
+                                .on_click(move |_, _, cx| {
+                                    owner.update(cx, |workbench, cx| workbench.select_diagram_view(diagram_id.clone(), view_id.clone(), cx));
+                                })
+                        ))
+                        .child(Label::new(format!("View · {}", row.kind)).size(LabelSize::XSmall).color(Color::Muted)));
+                    if has_children && !expanded { hidden_by_depth = Some(row.depth); }
+                    continue;
+                }
                 if row.diagram {
                     let id = row.element_id.clone();
                     let owner = item.clone();
@@ -572,6 +626,7 @@ impl Render for MdeRightPanel {
                                 .flex_1()
                                 .min_h_0()
                                 .overflow_y_scroll()
+                                .track_scroll(&self.explorer_scroll)
                                 .child(
                                     div()
                                         .h_8()

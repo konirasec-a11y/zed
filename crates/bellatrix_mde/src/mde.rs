@@ -11,6 +11,8 @@ mod construction_script;
 mod generation;
 mod graph;
 mod hierarchy;
+mod visual_consistency;
+pub use visual_consistency::{VisualComponent, visual_components};
 mod index;
 mod inspector;
 mod operation_graph;

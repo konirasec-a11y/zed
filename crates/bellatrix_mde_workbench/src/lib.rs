@@ -342,6 +342,28 @@ impl MdeWorkbenchItem {
         cx.notify();
     }
 
+    pub fn select_diagram_view(&mut self, diagram_id: String, view_id: String, cx: &mut Context<Self>) {
+        if self.source.is_presentation_suspended() { return; }
+        let selection = self.source.snapshot().and_then(|snapshot| {
+            snapshot.section.diagrams.iter().find(|diagram| diagram.id == diagram_id)
+                .and_then(|diagram| diagram.views.iter().find(|view| view.id == view_id))
+                .map(|view| view.subject.clone())
+                .ok_or_else(|| "The original diagram View no longer exists".to_owned())
+        });
+        let subject = match selection {
+            Ok(subject) => subject,
+            Err(error) => { self.feedback = error; cx.notify(); return; }
+        };
+        self.select_diagram(diagram_id, cx);
+        self.selected_element = subject;
+        self.selected_view = Some(view_id);
+        self.pending_visual_point = None;
+        self.feedback = if self.selected_element.is_none() {
+            "Visual View selected; no semantic subject is required".into()
+        } else { "Diagram View selected".into() };
+        cx.notify();
+    }
+
     pub fn remove_selected_view(&mut self, cx: &mut Context<Self>) {
         if self.source.is_read_only() {
             return;

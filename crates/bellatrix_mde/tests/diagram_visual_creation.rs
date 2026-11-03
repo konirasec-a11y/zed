@@ -412,6 +412,8 @@ fn exercise_visual_drafts() -> Result<(), Box<dyn std::error::Error>> {
                 .properties
                 .contains_key("semantic_creation_diagnostic")))
     );
+    let fallback_inventory = bellatrix_mde::visual_components(&bellatrix_mde::ModelingSection::from_model(&fallback));
+    assert!(fallback_inventory.iter().any(|view| view.diagram_id == "diagram-tasks" && view.subject_id.is_none() && view.label == "Waiting"));
     let after = apply(
         &before,
         &Command::CreateVisualDraft {
@@ -455,6 +457,27 @@ fn exercise_visual_drafts() -> Result<(), Box<dyn std::error::Error>> {
                 && issue.severity == StructuralSeverity::Warning)
     );
     let draft_id = draft.id.clone();
+    let inventory = bellatrix_mde::visual_components(&bellatrix_mde::ModelingSection::from_model(&after));
+    assert!(inventory.iter().any(|view| view.diagram_id == "diagram-tasks" && view.view_id == draft_id && view.subject_id.is_none() && view.label == "Waiting"));
+    assert!(inventory.iter().any(|view| view.diagram_id == "diagram-tasks" && view.view_id == "view-task" && view.subject_id.as_deref() == Some("type-task")));
+    assert_eq!(inventory.len(), after.diagrams.iter().map(|diagram| diagram.views.len()).sum::<usize>());
+    let duplicate = apply(&after, &Command::PlaceElementView {
+        diagram_id: "diagram-tasks".into(), element_id: "type-task".into(), x: 350.0, y: 150.0,
+    }, 2)?;
+    let inventory = bellatrix_mde::visual_components(&bellatrix_mde::ModelingSection::from_model(&duplicate));
+    assert_eq!(inventory.iter().filter(|view| view.subject_id.as_deref() == Some("type-task") && view.diagram_id == "diagram-tasks").count(), 2);
+    let other_diagram = apply(&duplicate, &Command::PlaceElementView {
+        diagram_id: "diagram-overview".into(), element_id: "type-task".into(), x: 20.0, y: 30.0,
+    }, 3)?;
+    let inventory = bellatrix_mde::visual_components(&bellatrix_mde::ModelingSection::from_model(&other_diagram));
+    assert!(inventory.iter().any(|view| view.diagram_id == "diagram-overview" && view.subject_id.as_deref() == Some("type-task")));
+    let nested = apply(&after, &Command::CreateVisualDraft {
+        diagram_id: "diagram-tasks".into(), notation_kind: "Annotation".into(), label: Some("Note".into()),
+        geometry: Geometry::Rect { x: 20.0, y: 30.0, width: 40.0, height: 30.0 },
+        properties: Default::default(), parent_view_id: Some(draft_id.clone()), source_view_id: None, target_view_id: None,
+    }, 4)?;
+    assert!(bellatrix_mde::visual_components(&bellatrix_mde::ModelingSection::from_model(&nested))
+        .iter().any(|view| view.label == "Note" && view.parent_view_id.as_deref() == Some(draft_id.as_str())));
     let labeled = apply(
         &after,
         &Command::SetViewLabel {
@@ -464,6 +487,8 @@ fn exercise_visual_drafts() -> Result<(), Box<dyn std::error::Error>> {
         2,
     )?;
     assert_eq!(labeled.elements, after.elements);
+    assert!(bellatrix_mde::visual_components(&bellatrix_mde::ModelingSection::from_model(&labeled))
+        .iter().any(|view| view.view_id == draft_id && view.label == "Revised"));
     assert_eq!(
         labeled
             .diagrams
@@ -594,8 +619,13 @@ fn exercise_visual_drafts() -> Result<(), Box<dyn std::error::Error>> {
             .iter()
             .any(|issue| issue.code == "VISUAL_DRAFT_ORPHANED_LINK")
     );
+    assert!(!bellatrix_mde::visual_components(&bellatrix_mde::ModelingSection::from_model(&removed))
+        .iter().any(|view| view.view_id == draft_id));
     for format in [Format::Json, Format::Protobuf] {
-        assert_eq!(decode(&encode(&removed, format)?, format)?, removed);
+        let reopened = decode(&encode(&removed, format)?, format)?;
+        assert_eq!(reopened, removed);
+        assert_eq!(bellatrix_mde::visual_components(&bellatrix_mde::ModelingSection::from_model(&reopened)),
+            bellatrix_mde::visual_components(&bellatrix_mde::ModelingSection::from_model(&removed)));
     }
     Ok(())
 }

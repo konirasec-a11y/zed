@@ -236,7 +236,10 @@ separadas no gate final, não um selo agregado obtido por testes visuais.
 Reaproveitar Project, worktrees, ProjectPath, Buffer, Workspace Item e
 SerializableItem/restauração conforme auditoria. Associar documento/revisão
 MDE, arquivo/buffer real, diagramas abertos, estado visual e artefatos.
-Model Explorer é semântico; Project Panel continua responsável por arquivos.
+Model Explorer projeta elementos semânticos e todas as representações visuais
+do canvas, inclusive anotações e formas ilustrativas; Project Panel continua
+responsável por arquivos. Figuras sem semântica UML não viram elementos UML
+fictícios nem são validadas como tais.
 Sessão SQLite não é a única cópia canônica do projeto. Retirar shell de I/O
 redundante apenas após demonstrar autoridade Zed e testar conflitos.
 
@@ -377,6 +380,17 @@ outras aplicações enquanto esse marco permanece incompleto.
   às cláusulas e aos caminhos de código explicitamente examinados.
 
 ## 9. Montar a UI Bellatrix como contribuição nativa
+
+**Regra transversal de consistência visual:** todo componente presente em um
+canvas deve aparecer no Model Explorer, inclusive Views provisórias, anotações,
+formas e relações ilustrativas. A projeção usa a identidade da View e do
+diagrama e, quando existir, a identidade semântica correspondente. Seleção,
+edição, remoção e reabertura permanecem coerentes em Canvas, Explorer, Quick
+Tools e Working Diagrams sem criar uma segunda fonte persistente de verdade.
+A regra é de UX/UI, não uma regra UML nem validação semântica.
+Toda ferramenta apresentada em Quick Tools deve materializar sua representação
+no canvas e na mesma projeção do Model Explorer, inclusive quando provisória
+ou ilustrativa; uma ferramenta visível não pode ser apenas um ícone sem ação.
 
 Conectar Canvas/Toolbox, Model Explorer, Inspector/QuickEdit, Editor de
 código, configuração de projeto/alvos/recursos e diagnósticos/geração ao
