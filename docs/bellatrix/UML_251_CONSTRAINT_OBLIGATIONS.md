@@ -81,6 +81,8 @@ Property::subsetting_context_conforms tem recorte publicado em
 `b2beb7bdcabc2646eaca900b4282e46e6406262d` (E64).
 Operation::only_body_for_query tem recorte publicado em
 `29bd166b536dc1f529ea145f1f12d7920c05aaa4` (E65).
+Quatro invariantes de limites de MultiplicityElement têm evidência e correção
+de Unknown publicadas em `fc150fb3c58c7dcfda427a8cc5c07e36f0226a33` (E66).
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -196,7 +198,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E65 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E66 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -1018,6 +1020,52 @@ de execução nova. E12–E65 possuem os gates delimitados nas seções seguinte
   ou semântica operacional completa. Edição para nonquery é rejeitada sem
   mutação e snapshot importado inválido pode ser reparado.
 
+- **E66**: `semantics/value_specifications.rs`, `bound`, `evaluate_literal`,
+  `multiplicity`, `evaluate_upper_bound` e `validate`, com
+  `MultiplicityRange::from_bounds`; `multiplicity_element_invariants.rs`,
+  catorze testes. Evidência individual de upper_ge_lower, lower_ge_0,
+  lower_is_integer e upper_is_unlimitedNatural no validador compartilhado.
+  Compara limites exatos, inclusive inteiros de precisão arbitrária e upper
+  ilimitado; lower negativo é inválido. lowerValue explícito exige projeção
+  Integer e upperValue explícito exige UnlimitedNatural, não apenas qualquer
+  literal numérico. Referência ausente/null usa defaults 1..1, exceto
+  ExtensionEnd 0..1; LiteralNull é um valor explícito e não vira ausência.
+  Consultas lowerBound/upperBound têm seus fallbacks próprios, distintos da
+  validação estrita de multiplicity; não usar o fallback como prova de que
+  lower_is_integer ou upper_is_unlimitedNatural foi satisfeita.
+  Corrige a classificação de metaclasse de ValueSpecification desconhecida
+  para Unsupported, preservando Invalid para alvo conhecido incompatível e
+  ownership contraditório. Ambos os limites são inspecionados antes de
+  escolher Unknown: limite oposto inválido não é ocultado por expressão opaca,
+  referência externa ou metaclasse desconhecida. Valores referenciados exigem
+  ownership canônico; ValueSpecification possuída sem papel lowerValue ou
+  upperValue não é interpretada silenciosamente como limite.
+  Diagnósticos compartilhados: `UML_MULTIPLICITY_VALUE` e
+  `MDE_MULTIPLICITY_UNSUPPORTED`; Parameter usa `UML_PARAMETER_MULTIPLICITY` e
+  `MDE_PARAMETER_MULTIPLICITY_UNSUPPORTED`. Não são quatro novos códigos.
+  Expressões opacas/não avaliáveis permanecem não verificadas; não se provam
+  constância nem ausência de efeitos colaterais, cujas linhas continuam A.
+  Não certifica interpretação geral de ValueSpecification, autoria visual ou
+  todos os contratos de multiplicidade das metaclasses especializadas.
+
+### Evidência publicada dos limites de MultiplicityElement
+
+Commit inspecionado: `fc150fb3c58c7dcfda427a8cc5c07e36f0226a33`.
+Log final lido: `/tmp/multiplicity-element-invariants-final.log`,
+**53/53 aprovados** em seis alvos: multiplicity_element_invariants 14,
+connector_end_multiplicity 10, extension_end_constraints 8,
+kb09_redefinitions 11, parameter_scalar_constraints 7 e
+property_contract_flow 3.
+
+As quatro linhas passam a **P/E66**. Os testes cobrem defaults, limites
+exatos, null versus LiteralNull, herança por Parameter/ExtensionEnd, referências
+externas, Unknown, ownership inválido, precedência de Invalid nos dois lados,
+roundtrip e reparo usando os mesmos registros de literais. Gate focado anterior
+à publicação, sem rerun no SHA publicado nem execução nova por esta matriz;
+não inclui um novo gate lib. Regressões repetidas não somam cobertura normativa.
+Não certifica suíte integral, UI, geração, interchange ou conformidade UML
+completa.
+
 ### Evidência publicada de bodyCondition em Operation query
 
 Commit inspecionado: `29bd166b536dc1f529ea145f1f12d7920c05aaa4`.
@@ -1033,7 +1081,8 @@ ownership incorreto, roundtrip e rejeição atômica/reparo. Gate anterior à
 publicação, sem rerun no SHA publicado nem execução nova por esta matriz;
 regressões repetidas não somam cobertura normativa. Não certifica suíte
 integral, UI, geração, interchange ou conformidade UML completa. As linhas de
-MultiplicityElement não são promovidas por este incremento.
+MultiplicityElement não foram promovidas pelo incremento de Operation; quatro
+recebem evidência posterior em E66.
 
 ### Evidência publicada de conformance de contextos de subsetting
 
@@ -1858,12 +1907,12 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `MultiplicityElement-upper_ge_lower`
 
-- Metaclass: `MultiplicityElement`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `MultiplicityElement`. Estado: **P**. Evidência: E66; commit `fc150fb3c58c7dcfda427a8cc5c07e36f0226a33`.
 - OCL publicado: `upperBound() >= lowerBound()`.
 
 #### `MultiplicityElement-lower_ge_0`
 
-- Metaclass: `MultiplicityElement`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `MultiplicityElement`. Estado: **P**. Evidência: E66; commit `fc150fb3c58c7dcfda427a8cc5c07e36f0226a33`.
 - OCL publicado: `lowerBound() >= 0`.
 
 #### `MultiplicityElement-value_specification_no_side_effects`
@@ -1880,12 +1929,12 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `MultiplicityElement-lower_is_integer`
 
-- Metaclass: `MultiplicityElement`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `MultiplicityElement`. Estado: **P**. Evidência: E66; commit `fc150fb3c58c7dcfda427a8cc5c07e36f0226a33`.
 - OCL publicado: `lowerValue <> null implies lowerValue.integerValue() <> null`.
 
 #### `MultiplicityElement-upper_is_unlimitedNatural`
 
-- Metaclass: `MultiplicityElement`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `MultiplicityElement`. Estado: **P**. Evidência: E66; commit `fc150fb3c58c7dcfda427a8cc5c07e36f0226a33`.
 - OCL publicado: `upperValue <> null implies upperValue.unlimitedValue() <> null`.
 
 #### `NamedElement-visibility_needs_ownership`

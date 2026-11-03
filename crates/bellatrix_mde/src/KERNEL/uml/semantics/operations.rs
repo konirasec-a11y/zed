@@ -30,52 +30,186 @@ pub(crate) fn checked_owned_parameters<'a>(
     references: &ReferenceIndex<'a>,
     owner_id: &str,
 ) -> Result<Vec<&'a Element>, QueryError> {
-    let owner = references.element(owner_id).map_err(|error| QueryError::invalid(owner_id, error))?;
+    let (parameters, completeness) = owned_parameter_evidence(references, owner_id)?;
+    completeness?;
+    Ok(parameters)
+}
+
+fn unambiguous_parameter_role(
+    owner: ElementRef<'_>,
+    parameter: ElementRef<'_>,
+    role: &'static str,
+) -> Result<bool, QueryError> {
+    let mut found = false;
+    for property in classifiers::properties(owner)? {
+        if property.aggregation != schema::Aggregation::Composite || property.is_derived {
+            continue;
+        }
+        let required = property
+            .property_type
+            .target
+            .and_then(schema::classifier)
+            .ok_or_else(|| {
+                QueryError::unsupported(owner.id(), "composite role target type is unresolved")
+            })?;
+        if parameter.conforms_to(required.name) {
+            if !classifiers::contributes(property, role)
+                .map_err(|error| QueryError::unsupported(owner.id(), error))?
+            {
+                return Ok(false);
+            }
+            found = true;
+        }
+    }
+    Ok(found)
+}
+
+fn owned_parameter_evidence<'a>(
+    references: &ReferenceIndex<'a>,
+    owner_id: &str,
+) -> Result<(Vec<&'a Element>, Result<(), QueryError>), QueryError> {
+    let owner = references
+        .element(owner_id)
+        .map_err(|error| QueryError::invalid(owner_id, error))?;
     let role = if owner.conforms_to("BehavioralFeature") {
         "BehavioralFeature-ownedParameter"
     } else if owner.conforms_to("Behavior") {
         "Behavior-ownedParameter"
     } else {
-        return Err(QueryError::invalid(owner_id, "parameter owner must be a BehavioralFeature or Behavior"));
+        return Err(QueryError::invalid(
+            owner_id,
+            "parameter owner must be a BehavioralFeature or Behavior",
+        ));
     };
+    let mut completeness = Ok(());
     let explicit = if let Some(value) = owner.properties().get("ownedParameter") {
         let descriptor = schema::uml_property(
-            owner.metaclass().ok_or_else(|| QueryError::unsupported(owner_id, "parameter owner has no UML metaclass"))?,
+            owner.metaclass().ok_or_else(|| {
+                QueryError::unsupported(owner_id, "parameter owner has no UML metaclass")
+            })?,
             "ownedParameter",
         )
         .map_err(|error| QueryError::unsupported(owner_id, error.to_string()))?
         .ok_or_else(|| QueryError::unsupported(owner_id, "ownedParameter contract is missing"))?;
         match super::property_contracts::check_value(references, owner, descriptor, value) {
             super::property_contracts::PropertyOutcome::Satisfied => {}
-            super::property_contracts::PropertyOutcome::Violation(error) =>
-                return Err(QueryError::invalid(owner_id, error)),
-            super::property_contracts::PropertyOutcome::Unverified(error) =>
-                return Err(QueryError::unsupported(owner_id, error)),
+            super::property_contracts::PropertyOutcome::Violation(error) => {
+                return Err(QueryError::invalid(owner_id, error));
+            }
+            super::property_contracts::PropertyOutcome::Unverified(error) => {
+                completeness = Err(QueryError::unsupported(owner_id, error));
+            }
         }
-        Some(references.validate_many(descriptor, value)
-            .map_err(|error| QueryError::invalid(owner_id, error))?)
+        if completeness.is_ok() {
+            Some(
+                references
+                    .validate_many(descriptor, value)
+                    .map_err(|error| QueryError::invalid(owner_id, error))?,
+            )
+        } else {
+            None
+        }
     } else {
         None
     };
     let mut parameters = Vec::new();
-    for element in references.explicit_owned_elements(owner_id)
-        .map_err(|error| QueryError::invalid(owner_id, error))? {
-        if let ElementRef::Object(parameter) = element
+    let owned = references
+        .explicit_owned_elements(owner_id)
+        .map_err(|error| QueryError::invalid(owner_id, error))?;
+    for element in owned.iter().copied() {
+        if element.metaclass().is_none() {
+            completeness = Err(QueryError::unsupported(
+                owner_id,
+                "unknown owned metaclass may be a Parameter",
+            ));
+        } else if let ElementRef::Object(parameter) = element
             && element.conforms_to("Parameter")
-            && classifiers::contributes_to_owned_union(owner, element, role)?
         {
-            parameters.push(parameter);
+            match classifiers::contributes_to_owned_union(owner, element, role) {
+                Ok(true) => parameters.push(parameter),
+                Ok(false) => {}
+                Err(error @ QueryError::Invalid { .. }) => return Err(error),
+                Err(error @ QueryError::Unsupported { .. }) => {
+                    completeness = Err(error);
+                    // An unresolved stored projection cannot erase canonical
+                    // membership when every compatible composite role is a Parameter role.
+                    match unambiguous_parameter_role(owner, element, role) {
+                        Ok(true) => parameters.push(parameter),
+                        Ok(false) => {}
+                        Err(error @ QueryError::Invalid { .. }) => return Err(error),
+                        Err(error @ QueryError::Unsupported { .. }) => completeness = Err(error),
+                    }
+                }
+            }
+        }
+    }
+    if let Some(values) = owner
+        .properties()
+        .get("ownedParameter")
+        .and_then(Value::as_array)
+    {
+        if parameters.len() > values.len() {
+            return Err(QueryError::invalid(owner_id,
+                "ownedParameter projection must match canonical owns order and membership; too few entries for the known Parameters"));
+        }
+        let local_ids = values
+            .iter()
+            .filter_map(|value| super::references::reference_id(value).ok().flatten())
+            .collect::<Vec<_>>();
+        let canonical = owned
+            .iter()
+            .filter(|element| local_ids.contains(&element.id()))
+            .map(|element| element.id());
+        if !local_ids.iter().copied().eq(canonical) {
+            return Err(QueryError::invalid(
+                owner_id,
+                "ownedParameter projection must match canonical owns order and membership; known local order contradicts it",
+            ));
+        }
+        // Explicit local references occupy fixed slots even when their metaclass
+        // is unknown; only external references may fill gaps between anchors.
+        let required_ids = owned
+            .iter()
+            .filter(|element| {
+                local_ids.contains(&element.id())
+                    || parameters.iter().any(|parameter| parameter.id == element.id())
+            })
+            .map(|element| element.id())
+            .collect::<Vec<_>>();
+        let mut consumed_parameters = 0;
+        let mut consumed_entries = 0;
+        for (entry_index, value) in values.iter().enumerate() {
+            if let Some(parameter_index) = super::references::reference_id(value)
+                .ok()
+                .flatten()
+                .and_then(|id| required_ids.iter().position(|required| *required == id))
+            {
+                if parameter_index - consumed_parameters > entry_index - consumed_entries {
+                    return Err(QueryError::invalid(owner_id,
+                        "ownedParameter projection has too few entries between known local anchors"));
+                }
+                consumed_parameters = parameter_index + 1;
+                consumed_entries = entry_index + 1;
+            }
+        }
+        if required_ids.len() - consumed_parameters > values.len() - consumed_entries {
+            return Err(QueryError::invalid(owner_id,
+                "ownedParameter projection has too few entries after the last known local anchor"));
         }
     }
     if let Some(explicit) = explicit {
-        if !explicit.iter().map(|parameter| parameter.id())
+        if !explicit
+            .iter()
+            .map(|parameter| parameter.id())
             .eq(parameters.iter().map(|parameter| parameter.id.as_str()))
         {
-            return Err(QueryError::invalid(owner_id,
-                "ownedParameter projection must match canonical owns order and membership"));
+            return Err(QueryError::invalid(
+                owner_id,
+                "ownedParameter projection must match canonical owns order and membership",
+            ));
         }
     }
-    Ok(parameters)
+    Ok((parameters, completeness))
 }
 
 pub fn direction(parameter: &Element) -> Result<String, String> {
@@ -96,20 +230,60 @@ pub(crate) fn checked_return_parameter<'a>(
     references: &ReferenceIndex<'a>,
     operation_id: &str,
 ) -> Result<Option<&'a Element>, QueryError> {
-    if !references.element(operation_id)
-        .map_err(|error| QueryError::invalid(operation_id, error))?.conforms_to("Operation") {
-        return Err(QueryError::invalid(operation_id, "return-parameter query requires an Operation"));
+    if !references
+        .element(operation_id)
+        .map_err(|error| QueryError::invalid(operation_id, error))?
+        .conforms_to("Operation")
+    {
+        return Err(QueryError::invalid(
+            operation_id,
+            "return-parameter query requires an Operation",
+        ));
+    }
+    let operation = references
+        .element(operation_id)
+        .map_err(|error| QueryError::invalid(operation_id, error))?;
+    if !at_most_one_return(references, operation)? {
+        return Err(QueryError::invalid(
+            operation_id,
+            "Operation::at_most_one_return permits at most one return Parameter",
+        ));
     }
     let mut result = None;
     for parameter in checked_owned_parameters(references, operation_id)? {
-        if direction(parameter).map_err(|error| QueryError::invalid(parameter.id.as_str(), error))? == "return" && result.replace(parameter).is_some() {
-            return Err(QueryError::invalid(
-                operation_id,
-                "Operation::at_most_one_return permits at most one return Parameter",
-            ));
+        if direction(parameter)
+            .map_err(|error| QueryError::invalid(parameter.id.as_str(), error))?
+            == "return"
+        {
+            result = Some(parameter);
         }
     }
     Ok(result)
+}
+
+fn at_most_one_return(
+    references: &ReferenceIndex<'_>,
+    operation: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let (parameters, completeness) = owned_parameter_evidence(references, operation.id())?;
+    let mut returns = 0;
+    // Inspect all local Parameter directions before deciding a known count:
+    // an unresolved role or two earlier returns cannot hide malformed values.
+    for child in references
+        .explicit_owned_elements(operation.id())
+        .map_err(|error| QueryError::invalid(operation.id(), error))?
+    {
+        if let ElementRef::Object(parameter) = child
+            && child.conforms_to("Parameter")
+        {
+            let direction =
+                direction(parameter).map_err(|error| QueryError::invalid(child.id(), error))?;
+            if direction == "return" && parameters.iter().any(|known| known.id == parameter.id) {
+                returns += 1;
+            }
+        }
+    }
+    super::feature_compatibility::require_all([Ok(returns <= 1), completeness.map(|()| true)])
 }
 
 pub fn return_type<'a>(
@@ -865,6 +1039,15 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
                 issues.push(StructuralDiagnostic { severity: StructuralSeverity::Warning,
                     code: "MDE_OPERATION_CONDITION_UNSUPPORTED", subject_id: element.id().into(),
                     message: "Operation bodyCondition ownership and only_body_for_query are checked; its constraint expression is not evaluated".into() });
+            }
+            let return_count = match at_most_one_return(references, element) {
+                Ok(true) => None,
+                Ok(false) => Some((StructuralSeverity::Error, "UML_OPERATION_AT_MOST_ONE_RETURN", "at most one owned Parameter may have return direction".to_owned())),
+                Err(QueryError::Invalid { message, .. }) => Some((StructuralSeverity::Error, "MDE_OPERATION_AT_MOST_ONE_RETURN_INVALID", message)),
+                Err(QueryError::Unsupported { message, .. }) => Some((StructuralSeverity::Warning, "MDE_OPERATION_AT_MOST_ONE_RETURN_UNVERIFIED", message)),
+            };
+            if let Some((severity, code, message)) = return_count {
+                issues.push(StructuralDiagnostic { severity, code, subject_id:element.id().into(), message:format!("Operation-at_most_one_return: {message}") });
             }
             let outcome = match only_body_for_query(references, element) {
                 Ok(true) => None,
