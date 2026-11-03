@@ -786,13 +786,20 @@ fn public_association_flow_creates_edits_reparents_navigates_rejects_and_reopens
         end_ids(&nary, &nary_id),
         vec![nary_ids[0].clone(), nary_ids[2].clone()]
     );
-    assert!(Model::from_project(&nary).validate().is_empty());
+    let diagnostics = Model::from_project(&nary).validate();
+    // The detached classifier-owned Property retains its legacy multiplicity
+    // declaration; it must not hide any diagnostics from the new Association.
+    assert_eq!(diagnostics, vec![bellatrix_mde::StructuralDiagnostic {
+        severity: bellatrix_mde::StructuralSeverity::Warning,
+        code: "MDE_PROPERTY_CONTRACT_UNVERIFIED",
+        subject_id: ends[1].clone(),
+        message: "multiplicity: no normative property or registered extension contract".into(),
+    }]);
     for format in [Format::Json, Format::Protobuf] {
-        assert_eq!(
-            decode(&encode(&nary, format).expect("save n-ary edit"), format)
-                .expect("reopen n-ary edit"),
-            nary
-        );
+        let reopened = decode(&encode(&nary, format).expect("save n-ary edit"), format)
+            .expect("reopen n-ary edit");
+        assert_eq!(reopened, nary);
+        assert_eq!(Model::from_project(&reopened).validate(), diagnostics);
     }
     // Specialize the Association and redefine its owned end. ownedEnd is a
     // Feature, not an attribute, and its redefinition context is the Association.
