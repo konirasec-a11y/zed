@@ -25,3 +25,34 @@ cargo run -p zed
 ```
 
 The native code must still pass Windows build and interaction tests before the new Workbench is considered fully validated.
+
+## Existing-design frontend integration
+
+The visual source is `../bellatrix_design_system/docs/design/src/components/panels/`,
+with reference captures in that package's `preview/` directory. Its React controls
+are layout specimens, not permission to introduce unsupported model operations.
+
+The native workbench reuses `bellatrix_ui_panels::PropertyRow` for editable compact
+property rows and `PaneHeader` for panel disclosure/actions. Native Zed controls
+continue to submit the existing validated MDE commands. Text changes use the
+inline check action; boolean and choice controls commit directly. ID and type
+remain read-only. Documentation and less-common properties remain reachable in
+their collapsed sections; opening the Inspector does not mutate the model.
+
+The toolbox presents supported quick tools, searchable categories and existing
+symbol glyphs. Collapse state belongs to the panel, not the semantic model.
+Zed still owns dock widths and persisted placement; this increment does not
+reset a user's saved workspace layout or introduce a separate docking system.
+
+Native acceptance remains required for this increment:
+
+- Compare light/dark and compact/wide windows with the existing design captures.
+- Collapse and reopen every panel section; retain selection and split sizes.
+- Search tools, clear the query, select a tool and create through the canvas.
+- Select classes, members and relations from the canvas and Model Explorer.
+- Edit and apply text, toggle booleans and choose enums; inspect revision feedback.
+- Open Documentation/Advanced and ensure all schema properties are reachable.
+- Confirm full figure bounds, context menus, resize and toolbar zoom still work.
+
+Pure-helper tests, Cargo metadata and source checks do not establish native GPUI
+compilation or successful interaction. Keep that distinction in release reports.

@@ -4,17 +4,42 @@
 // Zed Workspace owns Dock Panels; these are reusable panel contents.
 
 use bellatrix_design_system::Palette;
-use gpui::{App, IntoElement, RenderOnce, SharedString, Window, div, prelude::*};
+use gpui::{
+    AnyElement, App, ClickEvent, IntoElement, RenderOnce, SharedString, Window, div, prelude::*,
+};
 
 #[derive(IntoElement)]
 pub struct PaneHeader {
     title: SharedString,
+    disclosure: Option<AnyElement>,
+    action: Option<AnyElement>,
 }
 impl PaneHeader {
     pub fn new(title: impl Into<SharedString>) -> Self {
         Self {
             title: title.into(),
+            disclosure: None,
+            action: None,
         }
+    }
+}
+impl PaneHeader {
+    pub fn toggle(
+        mut self,
+        open: bool,
+        handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.disclosure = Some(
+            ui::Disclosure::new(format!("{}-disclosure", self.title), open)
+                .on_click(handler)
+                .into_any_element(),
+        );
+        self
+    }
+
+    pub fn action(mut self, action: impl IntoElement) -> Self {
+        self.action = Some(action.into_any_element());
+        self
     }
 }
 impl RenderOnce for PaneHeader {
@@ -22,6 +47,7 @@ impl RenderOnce for PaneHeader {
         let p = Palette::current(cx);
         div()
             .h_9()
+            .flex_none()
             .w_full()
             .flex()
             .items_center()
@@ -31,20 +57,34 @@ impl RenderOnce for PaneHeader {
             .text_xs()
             .font_weight(gpui::FontWeight::SEMIBOLD)
             .text_color(gpui::rgb(p.text))
-            .child(self.title)
+            .gap_1()
+            .children(self.disclosure)
+            .child(div().flex_1().min_w_0().overflow_hidden().child(self.title))
+            .children(self.action)
     }
 }
 
 #[derive(IntoElement)]
 pub struct PropertyRow {
     label: SharedString,
-    value: SharedString,
+    value: Option<SharedString>,
+    control: Option<AnyElement>,
 }
 impl PropertyRow {
     pub fn new(label: impl Into<SharedString>, value: impl Into<SharedString>) -> Self {
         Self {
             label: label.into(),
-            value: value.into(),
+            value: Some(value.into()),
+            control: None,
+        }
+    }
+}
+impl PropertyRow {
+    pub fn with_control(label: impl Into<SharedString>, control: impl IntoElement) -> Self {
+        Self {
+            label: label.into(),
+            value: None,
+            control: Some(control.into_any_element()),
         }
     }
 }
@@ -61,6 +101,7 @@ impl RenderOnce for PropertyRow {
             .child(
                 div()
                     .w_20()
+                    .flex_shrink_0()
                     .text_xs()
                     .text_color(gpui::rgb(p.muted))
                     .child(self.label),
@@ -69,16 +110,19 @@ impl RenderOnce for PropertyRow {
                 div()
                     .flex_1()
                     .min_w_0()
-                    .h_7()
-                    .px_2()
+                    .min_h_7()
                     .flex()
                     .items_center()
-                    .border_1()
-                    .border_color(gpui::rgb(p.border))
-                    .rounded_sm()
+                    .when(self.control.is_none(), |this| {
+                        this.px_2()
+                            .border_1()
+                            .border_color(gpui::rgb(p.border))
+                            .rounded_sm()
+                    })
                     .text_xs()
                     .text_color(gpui::rgb(p.text))
-                    .child(self.value),
+                    .children(self.value)
+                    .children(self.control),
             )
     }
 }

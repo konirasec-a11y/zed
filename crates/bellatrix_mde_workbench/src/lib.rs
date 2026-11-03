@@ -35,7 +35,7 @@ use gpui::{
     Point, Render, ScrollEvent, SharedString, Task, Window, div, prelude::*, px,
 };
 use quick_edit_view::quick_edit_for_element;
-use ui::{Clickable, Label};
+use ui::{Clickable, Label, LabelCommon};
 use ui_input::InputField;
 use workspace::{Workspace, item::Item};
 
@@ -1810,19 +1810,21 @@ impl Render for MdeWorkbenchItem {
             .child(
                 div()
                     .h(px(39.0))
+                    .flex_none()
                     .flex()
+                    .gap_3()
                     .items_center()
                     .justify_between()
                     .px_3()
                     .border_b_1()
                     .border_color(border)
-                    .child(Label::new(title))
+                    .child(div().flex_1().min_w_0().child(Label::new(title).truncate()))
                     .child(
                         div()
                             .flex()
+                            .flex_none()
                             .gap_2()
                             .items_center()
-                            .child(Label::new(details))
                             .child(
                                 ui::Button::new("mde-validate-diagram", "Validate").on_click(
                                     move |_, window, cx| {
@@ -1869,7 +1871,7 @@ impl Render for MdeWorkbenchItem {
                                         .update(cx, |item, cx| item.set_zoom(item.zoom * 1.2, cx));
                                 }),
                             )
-                            .child(ui::Button::new("mde-reset-view", "100%").on_click(
+                            .child(ui::Button::new("mde-reset-view", "Reset view").on_click(
                                 move |_, _, cx| {
                                     let _ =
                                         reset_owner.update(cx, |item, cx| item.reset_viewport(cx));
@@ -1977,15 +1979,21 @@ impl Render for MdeWorkbenchItem {
             .child(
                 div()
                     .h(px(25.0))
+                    .flex_none()
                     .px_2()
                     .flex()
+                    .gap_3()
                     .items_center()
                     .border_t_1()
                     .border_color(border)
                     .text_color(muted)
-                    .child(Label::new(
-                        self.feedback.lines().next().unwrap_or_default().to_owned(),
-                    )),
+                    .child(
+                        div().flex_1().min_w_0().child(
+                            Label::new(self.feedback.lines().next().unwrap_or_default().to_owned())
+                                .truncate(),
+                        ),
+                    )
+                    .child(Label::new(details).truncate()),
             )
     }
 }

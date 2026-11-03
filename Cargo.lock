@@ -2231,6 +2231,7 @@ dependencies = [
  "bellatrix_mde",
  "bellatrix_mde_cordis",
  "bellatrix_project",
+ "bellatrix_ui_panels",
  "bellatrix_ui_symbols",
  "bellatrix_ui_uml",
  "dugong",
@@ -2295,6 +2296,7 @@ version = "0.1.0"
 dependencies = [
  "bellatrix_design_system",
  "gpui",
+ "ui",
 ]
 
 [[package]]
