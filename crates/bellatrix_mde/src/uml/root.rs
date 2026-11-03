@@ -213,6 +213,17 @@ pub fn relationship_metaclass(kind: &str) -> Option<&'static str> {
         "uml.generalization" => "Generalization",
         "uml.dependency" | "depends_on" => "Dependency",
         "uml.usage" => "Usage",
+        "uml.abstraction" => "Abstraction",
+        "uml.include" => "Include",
+        "uml.extend" => "Extend",
+        "uml.package_import" => "PackageImport",
+        "uml.package_merge" => "PackageMerge",
+        "uml.deployment" => "Deployment",
+        "uml.manifestation" => "Manifestation",
+        "uml.control_flow" => "ControlFlow",
+        "uml.object_flow" => "ObjectFlow",
+        "uml.transition" => "Transition",
+
         "uml.realization" => "Realization",
         "uml.interface_realization" => "InterfaceRealization",
         "uml.template_binding" => "TemplateBinding",
@@ -690,6 +701,14 @@ fn ownership_property(owner: ElementRef<'_>, child: ElementRef<'_>) -> Option<&'
         ("Region", "Vertex", "subvertex"),
         ("Interaction", "Lifeline", "lifeline"),
         ("Interaction", "InteractionFragment", "fragment"),
+        ("UseCase", "Include", "include"),
+        ("UseCase", "Extend", "extend"),
+        ("Namespace", "PackageImport", "packageImport"),
+        ("Package", "PackageMerge", "packageMerge"),
+        ("DeploymentTarget", "Deployment", "deployment"),
+        ("Artifact", "Manifestation", "manifestation"),
+        ("Activity", "ActivityEdge", "edge"),
+        ("Region", "Transition", "transition"),
     ] {
         if owner.conforms_to(owner_type) && child.conforms_to(child_type) && has(property) {
             return Some(property);

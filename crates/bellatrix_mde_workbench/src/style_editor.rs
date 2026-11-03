@@ -122,7 +122,16 @@ pub(crate) fn reconcile_style_inputs(
         let mut listeners = Vec::new();
         let inputs = FIELDS
             .iter()
-            .filter(|(field, _)| !matches!(*field, "text_align" | "text_vertical_align"))
+            .filter(|(field, _)| {
+                !matches!(
+                    *field,
+                    "text_align"
+                        | "text_vertical_align"
+                        | "line_mode"
+                        | "word_wrap"
+                        | "show_shadow"
+                )
+            })
             .map(|(field, _)| {
                 let input = cx.new(|cx| {
                     let input = InputField::new(window, cx, "Inherited").label_min_width(px(0.0));
@@ -298,6 +307,27 @@ pub(crate) fn flush_style_edits(
     cx.notify();
 }
 
+fn edit_style_choice(
+    panel: &mut MdeRightPanel,
+    item: &Entity<MdeWorkbenchItem>,
+    key: &StyleKey,
+    field: &str,
+    value: &str,
+    cx: &mut Context<MdeRightPanel>,
+) {
+    if !target_is_active(panel, item, key, cx) {
+        return;
+    }
+    if let Some(draft) = panel.style_drafts.get_mut(key) {
+        if draft.state.conflict {
+            return;
+        }
+        draft.state.edit(field, value.into());
+    }
+    flush_style_edits(panel, item, cx);
+    cx.notify();
+}
+
 pub(crate) fn render_styles(
     target: Option<(&str, &View, bool)>,
     item: Entity<MdeWorkbenchItem>,
@@ -427,6 +457,87 @@ pub(crate) fn render_styles(
         }
         rows.push(row.into_any_element());
     }
+    let mut format = div().px_3().py_1().flex().gap_1();
+    for (field, icon, description) in [
+        (
+            "word_wrap",
+            IconName::TextWrap,
+            "Wrap text · click to toggle; restore theme to inherit",
+        ),
+        (
+            "show_shadow",
+            IconName::Copy,
+            "Show view shadow · click to toggle; restore theme to inherit",
+        ),
+    ] {
+        let enabled = draft
+            .state
+            .values
+            .get(field)
+            .is_some_and(|value| value == "true");
+        let item = item.clone();
+        let key = key.clone();
+        format = format.child(
+            Button::new(format!("mde-style-{field}"), "")
+                .start_icon(if field == "show_shadow" {
+                    Icon::from_path("icons/bellatrix-show-shadow.svg").size(IconSize::Small)
+                } else {
+                    Icon::new(icon).size(IconSize::Small)
+                })
+                .tooltip(Tooltip::text(description))
+                .toggle_state(enabled)
+                .disabled(draft.state.conflict)
+                .on_click(cx.listener(move |panel, _, _, cx| {
+                    edit_style_choice(
+                        panel,
+                        &item,
+                        &key,
+                        field,
+                        if enabled { "false" } else { "true" },
+                        cx,
+                    );
+                })),
+        );
+    }
+    rows.push(format.into_any_element());
+    let mut patterns = div().px_3().py_1().flex().gap_1();
+    for (value, glyph, description) in [
+        ("", "inherit", "Inherit the notation's line pattern"),
+        ("solid", "solid", "Solid outline · visual override only"),
+        ("dotted", "dotted", "Dotted outline · visual override only"),
+        ("dashed", "dashed", "Dashed outline · visual override only"),
+    ] {
+        let item = item.clone();
+        let key = key.clone();
+        patterns = patterns.child(
+            Button::new(format!("mde-style-line-mode-{glyph}"), "")
+                .start_icon(
+                    Icon::from_path(format!("icons/bellatrix-line-{glyph}.svg"))
+                        .size(IconSize::Small),
+                )
+                .tooltip(Tooltip::text(description))
+                .toggle_state(draft.state.values.get("line_mode").is_some_and(|current| {
+                    current == value
+                        && (!value.is_empty() || draft.state.baseline.dash_pattern.is_empty())
+                }))
+                .disabled(draft.state.conflict)
+                .on_click(cx.listener(move |panel, _, _, cx| {
+                    edit_style_choice(panel, &item, &key, "line_mode", value, cx);
+                })),
+        );
+    }
+    if draft
+        .state
+        .values
+        .get("line_mode")
+        .is_some_and(|value| !value.is_empty())
+        || !draft.state.baseline.dash_pattern.is_empty()
+    {
+        patterns = patterns.child(IconButton::new("mde-custom-notation-warning", IconName::Warning)
+            .icon_color(Color::Warning)
+            .tooltip(Tooltip::text("Custom line appearance may differ from standard UML notation. Model meaning is unchanged; inherit restores notation defaults.")));
+    }
+    rows.push(patterns.into_any_element());
     let mut alignment = div().px_3().py_1().flex().gap_1();
     for (field, value, glyph, description) in [
         ("text_align", "left", "left", "Align text left"),
@@ -464,52 +575,34 @@ pub(crate) fn render_styles(
                 )
                 .disabled(draft.state.conflict)
                 .on_click(cx.listener(move |panel, _, _, cx| {
-                    if !target_is_active(panel, &item, &key, cx) {
-                        return;
-                    }
-                    if let Some(draft) = panel.style_drafts.get_mut(&key) {
-                        if draft.state.conflict {
-                            return;
-                        }
-                        draft.state.edit(field, value.into());
-                    }
-                    flush_style_edits(panel, &item, cx);
-                    cx.notify();
+                    edit_style_choice(panel, &item, &key, field, value, cx);
                 })),
         );
     }
     rows.push(alignment.into_any_element());
     let mut ordering = div().px_3().py_1().flex().gap_1();
-    for (id, icon, description, order) in [
-        (
-            "front",
-            IconName::ChevronUp,
-            "Bring to front",
-            ViewOrder::BringToFront,
-        ),
+    for (id, description, order) in [
+        ("front", "Bring to front", ViewOrder::BringToFront),
         (
             "forward",
-            IconName::ArrowUp,
             "Bring forward one layer",
             ViewOrder::BringForward,
         ),
         (
             "backward",
-            IconName::ArrowDown,
             "Send backward one layer",
             ViewOrder::SendBackward,
         ),
-        (
-            "back",
-            IconName::ChevronDown,
-            "Send to back",
-            ViewOrder::SendToBack,
-        ),
+        ("back", "Send to back", ViewOrder::SendToBack),
     ] {
         let item = item.clone();
         let key = key.clone();
         ordering = ordering.child(
-            IconButton::new(format!("mde-style-order-{id}"), icon)
+            Button::new(format!("mde-style-order-{id}"), "")
+                .start_icon(
+                    Icon::from_path(format!("icons/bellatrix-order-{id}.svg"))
+                        .size(IconSize::Small),
+                )
                 .tooltip(Tooltip::text(description))
                 .disabled(draft.state.conflict || draft.state.pending.is_some())
                 .on_click(cx.listener(move |panel, _, _, cx| {
@@ -612,25 +705,23 @@ pub(crate) fn render_styles(
     );
     if is_edge {
         let mut routing_row = div().px_3().py_1().flex().gap_1();
-        for (id, glyph, description, routing) in [
-            (
-                "straight",
-                "╱",
-                "Straight line",
-                RelationshipRouting::Straight,
-            ),
+        for (id, description, routing) in [
+            ("straight", "Straight line", RelationshipRouting::Straight),
             (
                 "automatic",
-                "⌐",
                 "Automatic orthogonal routing",
                 RelationshipRouting::Automatic,
             ),
-            ("curve", "∿", "Curved line", RelationshipRouting::Curve),
+            ("curve", "Curved line", RelationshipRouting::Curve),
         ] {
             let item = item.clone();
             let key = key.clone();
             routing_row = routing_row.child(
-                Button::new(format!("mde-style-routing-{id}"), glyph)
+                Button::new(format!("mde-style-routing-{id}"), "")
+                    .start_icon(
+                        Icon::from_path(format!("icons/bellatrix-route-{id}.svg"))
+                            .size(IconSize::Small),
+                    )
                     .tooltip(Tooltip::text(description))
                     .toggle_state(draft.state.displayed_routing() == Some(routing))
                     .disabled(draft.state.conflict)

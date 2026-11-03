@@ -176,6 +176,8 @@ fn tool_glyph(tool: ModelingTool) -> ShapeKind {
             | ModelingElementKind::PrimitiveType => ShapeKind::Class,
         },
         ModelingTool::Relation(kind) => match kind {
+            ModelingRelationKind::Usage | ModelingRelationKind::Abstraction | ModelingRelationKind::Include | ModelingRelationKind::Extend | ModelingRelationKind::PackageImport | ModelingRelationKind::PackageMerge | ModelingRelationKind::Deployment | ModelingRelationKind::Manifestation => ShapeKind::Dependency,
+            ModelingRelationKind::ControlFlow | ModelingRelationKind::ObjectFlow | ModelingRelationKind::Transition => ShapeKind::Relation,
             ModelingRelationKind::Association
             | ModelingRelationKind::DirectedAssociation
             | ModelingRelationKind::Containment => ShapeKind::Association,
@@ -364,7 +366,7 @@ impl Render for MdeLeftPanel {
                     })
                 })
         });
-        let tool_groups: [(&str, Vec<ModelingTool>); 12] = [
+        let tool_groups: [(&str, Vec<ModelingTool>); 14] = [
             (
                 "Classes · basic",
                 ModelingElementKind::BASIC
@@ -430,6 +432,8 @@ impl Render for MdeLeftPanel {
             ("Activity nodes · select Activity", ModelingElementKind::ACTIVITY_NODES.iter().copied().map(ModelingTool::Element).collect()),
             ("States · select container", ModelingElementKind::STATE_NODES.iter().copied().map(ModelingTool::Element).collect()),
             ("Interactions · select Interaction", ModelingElementKind::INTERACTION_NODES.iter().copied().map(ModelingTool::Element).collect()),
+            ("Structural relationships", ModelingRelationKind::STRUCTURAL.iter().copied().map(ModelingTool::Relation).collect()),
+            ("Behavior relationships", ModelingRelationKind::BEHAVIOR.iter().copied().map(ModelingTool::Relation).collect()),
             (
                 "Annotations",
                 ModelingElementKind::ANNOTATIONS

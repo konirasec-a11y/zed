@@ -177,20 +177,37 @@ fn style_validation_is_atomic_and_preserves_semantics() -> Result<(), Box<dyn st
         .is_err()
     );
     let edge = original.diagrams[0].views.last().ok_or("edge missing")?;
-    let mut invalid = edge.style.clone();
-    invalid.dash_pattern = vec![3.0, 2.0];
-    assert!(
-        apply(
+    let mut custom = edge.style.clone();
+    custom.dash_pattern = vec![3.0, 2.0];
+    custom.line_mode = Some(LineMode::Dashed);
+    let styled = apply(
+        &original,
+        &Command::SetViewStyle {
+            diagram_id: "d".into(),
+            view_id: edge.id.clone(),
+            style: custom,
+        },
+        1,
+    )?;
+    assert_eq!(styled.elements, original.elements);
+    assert_eq!(styled.relations, original.relations);
+    for mode in [LineMode::Solid, LineMode::Dotted, LineMode::Dashed] {
+        let mut style = edge.style.clone();
+        style.line_mode = Some(mode);
+        let styled = apply(
             &original,
             &Command::SetViewStyle {
                 diagram_id: "d".into(),
                 view_id: edge.id.clone(),
-                style: invalid
+                style,
             },
-            1
-        )
-        .is_err()
-    );
+            1,
+        )?;
+        assert_eq!(styled.relations, original.relations);
+        for format in [Format::Json, Format::Protobuf] {
+            assert_eq!(decode(&encode(&styled, format)?, format)?, styled);
+        }
+    }
     assert_eq!(original, fixture()?);
     Ok(())
 }

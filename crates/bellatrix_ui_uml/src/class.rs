@@ -3,8 +3,8 @@ use crate::inline_edit::UmlInlineNameEditor;
 use bellatrix_design_system::Palette;
 use bellatrix_mde::{ClassifierPresentation, MemberPresentation, UmlHeader, uml_header};
 use gpui::{
-    App, Entity, InteractiveElement, IntoElement, MouseButton, RenderOnce, SharedString, Window,
-    div, prelude::*, px, rgb,
+    App, Entity, InteractiveElement, IntoElement, MouseButton, PathBuilder, RenderOnce,
+    SharedString, Window, canvas, div, point, prelude::*, px, rgb,
 };
 use std::rc::Rc;
 use ui_input::InputField;
@@ -36,7 +36,90 @@ impl ViewAppearance {
         let width = self.0.stroke_width.map_or(default, |value| value as f32) * scale;
         if selected { width.max(2.0) } else { width }
     }
+    pub(crate) fn resolve_stroke_pattern(&self, notation_dashed: bool, scale: f32) -> Vec<gpui::Pixels> {
+        self.0
+            .resolve_stroke_pattern(notation_dashed)
+            .iter()
+            .map(|value| px(*value as f32 * scale))
+            .collect()
+    }
+    pub(crate) fn apply_rectangle_border(
+        &self,
+        element: gpui::Div,
+        palette: Palette,
+        selected: bool,
+        scale: f32,
+        default_radius: f64,
+    ) -> gpui::Div {
+        let width = self.width(1.0, scale, selected);
+        let radius = self.0.corner_radius.unwrap_or(default_radius) as f32 * scale;
+        let color = self.stroke(palette, selected);
+        let pattern = self.resolve_stroke_pattern(false, scale);
+        let element = element.border(px(width)).rounded(px(radius));
+        if pattern.is_empty() {
+            return element.border_color(color);
+        }
+        element.border_color(gpui::rgba(0)).child(
+            canvas(
+                |_, _, _| (),
+                move |bounds, (), window, _| {
+                    let inset = width / 2.0;
+                    let left = f32::from(bounds.origin.x) + inset;
+                    let top = f32::from(bounds.origin.y) + inset;
+                    let right = left + (f32::from(bounds.size.width) - width).max(0.0);
+                    let bottom = top + (f32::from(bounds.size.height) - width).max(0.0);
+                    let radius = radius
+                        .max(0.0)
+                        .min((right - left) / 2.0)
+                        .min((bottom - top) / 2.0);
+                    let mut points = Vec::new();
+                    for (center_x, center_y, start_angle) in [
+                        (right - radius, top + radius, -std::f32::consts::FRAC_PI_2),
+                        (right - radius, bottom - radius, 0.0),
+                        (left + radius, bottom - radius, std::f32::consts::FRAC_PI_2),
+                        (left + radius, top + radius, std::f32::consts::PI),
+                    ] {
+                        for step in 0..=8 {
+                            let angle =
+                                start_angle + step as f32 * std::f32::consts::FRAC_PI_2 / 8.0;
+                            points.push(point(
+                                px(center_x + radius * angle.cos()),
+                                px(center_y + radius * angle.sin()),
+                            ));
+                        }
+                    }
+                    let mut outline = PathBuilder::stroke(px(width)).dash_array(&pattern);
+                    outline.add_polygon(&points, true);
+                    match outline.build() {
+                        Ok(path) => window.paint_path(path, color),
+                        Err(error) => log::error!("UML styled outline: {error}"),
+                    }
+                },
+            )
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full(),
+        )
+    }
+    pub(crate) fn apply_text_wrap<T: gpui::Styled>(&self, element: T) -> T {
+        match self.0.word_wrap {
+            Some(true) => element.whitespace_normal(),
+            Some(false) => element.whitespace_nowrap(),
+            None => element,
+        }
+    }
+    pub(crate) fn apply_surface<T: gpui::Styled>(&self, element: T, scale: f32) -> T {
+        match self.0.show_shadow {
+            Some(true) => element.shadow(vec![gpui::BoxShadow::new(
+                px(2.0 * scale), px(3.0 * scale), gpui::hsla(0.0, 0.0, 0.0, 0.25 * self.0.opacity.unwrap_or(1.0) as f32),
+            ).blur_radius(px(4.0 * scale))]),
+            Some(false) => element.shadow(Vec::new()),
+            None => element,
+        }
+    }
     pub(crate) fn align_text<T: gpui::Styled>(&self, element: T) -> T {
+        let element = self.apply_text_wrap(element);
         match self.0.text_align {
             Some(bellatrix_mde::TextAlignment::Left) => element.text_left(),
             Some(bellatrix_mde::TextAlignment::Center) => element.text_center(),
@@ -505,9 +588,8 @@ impl RenderOnce for UmlClassifier {
             .size_full()
             .flex()
             .flex_col()
-            .border(px(appearance.width(1.0, scale, self.selected)))
-            .border_color(line)
-            .rounded(px(appearance.0.corner_radius.unwrap_or(2.0) as f32 * scale))
+            .relative()
+            .map(|element| appearance.apply_rectangle_border(element, palette, self.selected, scale, 2.0))
             .when_some(appearance.0.font_family.clone(), |element, family| {
                 element.font_family(family)
             })
@@ -548,6 +630,7 @@ impl RenderOnce for UmlClassifier {
                             .justify_center()
                             .map(|element| appearance.align_column(element))
                             .whitespace_normal()
+                            .map(|element| appearance.apply_text_wrap(element))
                             .when_some(keyword, |header, value| {
                                 header.child(
                                     div()
@@ -604,6 +687,7 @@ impl RenderOnce for UmlClassifier {
         div()
             .size_full()
             .relative()
+            .map(|element| appearance.apply_surface(element, scale))
             .child(body)
             .when(self.presentation.double_sided, |element| {
                 element.child(
@@ -745,4 +829,5 @@ mod tests {
             assert_eq!(second.header, expected);
         }
     }
+
 }

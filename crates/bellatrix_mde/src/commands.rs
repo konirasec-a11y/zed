@@ -427,6 +427,32 @@ fn create_element(
     Ok(())
 }
 
+fn diagram_relation_owner(section: &ModelingSection, kind: ModelingRelationKind, from: &str, to: &str) -> Result<Option<String>, String> {
+    use ModelingRelationKind::*;
+    match kind {
+        Include | Extend | PackageImport | PackageMerge | Manifestation => return Ok(Some(from.into())),
+        Deployment => return Ok(Some(to.into())),
+        _ => {}
+    }
+    let expected = match kind { ControlFlow | ObjectFlow => "Activity", Transition => "Region", _ => return Ok(None) };
+    let model = crate::uml::root::Model::from_section(section);
+    let ancestor = |id: &str| -> Result<String, String> {
+        let mut element = model.element(id).ok_or("relationship endpoint missing")?;
+        let mut seen = HashSet::new();
+        while seen.insert(element.id().to_owned()) {
+            let owner = model.owner(element)?.ok_or_else(|| format!("endpoint has no containing {expected}"))?;
+            if owner.conforms_to(expected) { return Ok(owner.id().to_owned()); }
+            element = owner;
+        }
+        Err("cyclic relationship endpoint ownership".into())
+    };
+    let source_owner = ancestor(from)?;
+    if source_owner != ancestor(to)? {
+        return Err(format!("this creation tool requires endpoints in the same {expected}"));
+    }
+    Ok(Some(source_owner))
+}
+
 fn create_relation(
     section: &mut ModelingSection,
     diagram_id: &str,
@@ -447,6 +473,7 @@ fn create_relation(
         .find(|element| element.id == to)
         .ok_or("target element not found")?;
     kind.validate_endpoints(&source.kind, &target.kind)?;
+    let specialized_owner = diagram_relation_owner(section, kind, from, to)?;
     let geometry = route_relationship(section, diagram_id, from, to)?;
     let [id, view_id] = fresh_ids(
         section,
@@ -455,6 +482,9 @@ fn create_relation(
         project_id,
     )?;
     let mut properties = std::collections::BTreeMap::new();
+    if kind == ModelingRelationKind::PackageImport {
+        properties.insert("visibility".into(), serde_json::json!("public"));
+    }
     let (semantic_kind, aggregation) = relation_kind_for_creation(kind);
     if let Some(aggregation) = aggregation {
         properties.insert("end1Aggregation".into(), serde_json::json!(aggregation));
@@ -468,8 +498,10 @@ fn create_relation(
     });
     if crate::uml::root::relationship_metaclass(semantic_kind).is_some()
         && !matches!(semantic_kind, "uml.generalization" | "uml.interface_realization" | "uml.template_binding") {
-        let root_id = crate::uml::root::adopt_root_model(section, project_id, "Model")?;
-        crate::uml::root::set_owner(section, project_id, &id, &root_id)?;
+        let owner_id = if let Some(owner) = specialized_owner { owner } else {
+            crate::uml::root::adopt_root_model(section, project_id, "Model")?
+        };
+        crate::uml::root::set_owner(section, project_id, &id, &owner_id)?;
     }
     let diagram = section
         .diagrams

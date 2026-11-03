@@ -6,7 +6,7 @@ mod section;
 pub(crate) mod wire;
 
 pub use diagram::{
-    Diagram, Geometry, PathSegment, Point, RelationshipRouting, Style, TextAlignment,
+    Diagram, Geometry, LineMode, PathSegment, Point, RelationshipRouting, Style, TextAlignment,
     TextVerticalAlignment, View,
 };
 pub use graph::{Annotation, Element, FileContent, Implementation, Relation};

@@ -106,6 +106,14 @@ pub enum RelationshipRouting {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum LineMode {
+    Solid,
+    Dotted,
+    Dashed,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum TextAlignment {
     Left,
     Center,
@@ -146,6 +154,36 @@ pub struct Style {
     pub corner_radius: Option<f64>,
     #[serde(default)]
     pub dash_pattern: Vec<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line_mode: Option<LineMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub word_wrap: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show_shadow: Option<bool>,
+}
+
+impl Style {
+    pub fn resolve_stroke_pattern(&self, notation_dashed: bool) -> &[f64] {
+        match self.line_mode {
+            Some(LineMode::Solid) => return &[],
+            Some(LineMode::Dotted) => return &[1.0, 3.0],
+            _ => {}
+        }
+        // Existing files can carry custom patterns without an explicit mode.
+        if !self.dash_pattern.is_empty()
+            && self
+                .dash_pattern
+                .iter()
+                .all(|value| value.is_finite() && *value > 0.0 && *value <= 1000.0)
+        {
+            return &self.dash_pattern;
+        }
+        match self.line_mode {
+            Some(LineMode::Dashed) => &[6.0, 4.0],
+            _ if notation_dashed => &[6.0, 5.0],
+            _ => &[],
+        }
+    }
 }
 
 /// Moves a visual representation; semantic objects remain untouched.

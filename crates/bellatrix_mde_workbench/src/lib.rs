@@ -1765,6 +1765,7 @@ impl Render for MdeWorkbenchItem {
                                 element.name.clone()
                             };
                             let mut figure = UmlFigure::new(element.kind.clone(), label)
+                                .diagram_presentation(diagram)
                                 .with_template_parameters_from(&classifier)
                                 .view_style(&view.style)
                                 .selected(is_selected)

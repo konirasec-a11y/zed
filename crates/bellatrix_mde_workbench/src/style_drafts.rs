@@ -1,5 +1,5 @@
 use bellatrix_mde::{
-    RelationshipRouting, Style, TextAlignment, TextVerticalAlignment, commands::ViewOrder,
+    LineMode, RelationshipRouting, Style, TextAlignment, TextVerticalAlignment, commands::ViewOrder,
 };
 use std::collections::HashMap;
 
@@ -11,12 +11,25 @@ pub(crate) const FIELDS: &[(&str, &str)] = &[
     ("font_size", "Font size"),
     ("stroke_width", "Line width"),
     ("opacity", "Opacity"),
+    ("word_wrap", "Wrap text"),
+    ("show_shadow", "Show shadow"),
+    ("line_mode", "Line pattern"),
     ("text_align", "Horizontal text alignment"),
     ("text_vertical_align", "Vertical text alignment"),
 ];
 
 pub(crate) fn style_value(style: &Style, key: &str) -> String {
     match key {
+        "word_wrap" => style.word_wrap.map(|value| value.to_string()),
+        "show_shadow" => style.show_shadow.map(|value| value.to_string()),
+        "line_mode" => style.line_mode.map(|value| {
+            match value {
+                LineMode::Solid => "solid",
+                LineMode::Dotted => "dotted",
+                LineMode::Dashed => "dashed",
+            }
+            .into()
+        }),
         "text_align" => style.text_align.map(|value| {
             match value {
                 TextAlignment::Left => "left",
@@ -74,6 +87,16 @@ pub(crate) fn field_error(key: &str, text: &str) -> Option<&'static str> {
         return None;
     }
     match key {
+        "word_wrap" | "show_shadow" => {
+            (!matches!(text, "true" | "false")).then_some("Choose enabled or disabled")
+        }
+        "line_mode" => {
+            (!matches!(text, "solid" | "dotted" | "dashed")).then_some("Choose a line pattern")
+        }
+        "text_align" => (!matches!(text, "left" | "center" | "right"))
+            .then_some("Choose horizontal text alignment"),
+        "text_vertical_align" => (!matches!(text, "top" | "center" | "bottom"))
+            .then_some("Choose vertical text alignment"),
         "fill" | "stroke" | "text_color" => {
             let valid = text.strip_prefix('#').is_some_and(|digits| {
                 matches!(digits.len(), 6 | 8)
@@ -226,7 +249,14 @@ impl StyleEditState {
             return None;
         }
         self.queued = false;
-        let mut style = self.baseline.clone();
+        let mut style = if self.reset && self.order.is_none() && self.routing.is_none() {
+            Style {
+                routing: self.baseline.routing,
+                ..Style::default()
+            }
+        } else {
+            self.baseline.clone()
+        };
         let routing = self
             .routing
             .filter(|routing| Some(*routing) != style.routing);
@@ -249,6 +279,19 @@ impl StyleEditState {
                 }
                 let value = (!text.is_empty()).then(|| text.to_owned());
                 match *key {
+                    "word_wrap" => style.word_wrap = text.parse().ok(),
+                    "show_shadow" => style.show_shadow = text.parse().ok(),
+                    "line_mode" => {
+                        if text.is_empty() {
+                            style.dash_pattern.clear();
+                        }
+                        style.line_mode = match text {
+                            "solid" => Some(LineMode::Solid),
+                            "dotted" => Some(LineMode::Dotted),
+                            "dashed" => Some(LineMode::Dashed),
+                            _ => None,
+                        };
+                    }
                     "text_align" => {
                         style.text_align = match text {
                             "left" => Some(TextAlignment::Left),

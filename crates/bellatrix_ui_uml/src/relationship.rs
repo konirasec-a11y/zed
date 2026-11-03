@@ -80,27 +80,6 @@ impl UmlRelationGlyph {
     }
 }
 
-fn relationship_dashes(dashed: bool, pattern: &[f64], scale: f32) -> Vec<Pixels> {
-    // UML 2.5.1 §7.7.4: presentation overrides must not erase the Dependency's
-    // dashed notation or change a solid Association/Generalization into one.
-    if !dashed {
-        return Vec::new();
-    }
-    let pattern = if !pattern.is_empty()
-        && pattern
-            .iter()
-            .all(|value| value.is_finite() && *value > 0.0 && *value <= 1000.0)
-    {
-        pattern
-    } else {
-        &[6.0, 5.0]
-    };
-    pattern
-        .iter()
-        .map(|value| px(*value as f32 * scale))
-        .collect()
-}
-
 fn tangent(start: (f32, f32), end: (f32, f32)) -> (f32, f32) {
     let dx = end.0 - start.0;
     let dy = end.1 - start.1;
@@ -199,6 +178,7 @@ fn label_block(
                 .flex()
                 .flex_col()
                 .whitespace_nowrap()
+                .when(appearance.0.word_wrap == Some(true), |element| element.w(px(font_size * 16.0)))
                 .text_size(px(font_size))
                 .text_color(color)
                 .when(anchor.right_aligned, |element| {
@@ -296,15 +276,24 @@ fn paint_marker(
             stroke_line(window, offset(-12.0, 6.0), endpoint, bounds, stroke, width);
             stroke_line(window, endpoint, offset(-12.0, -6.0), bounds, stroke, width);
         }
-        Triangle => polygon(
+        Triangle | FilledTriangle => polygon(
             window,
             &[endpoint, offset(-17.0, 8.0), offset(-17.0, -8.0)],
             bounds,
             stroke,
             background,
-            false,
+            marker == FilledTriangle,
             width,
         ),
+        FilledCircle => {
+            let points = (0..32)
+                .map(|step| {
+                    let angle = step as f32 * std::f32::consts::TAU / 32.0;
+                    offset(5.0 * angle.cos(), 5.0 * angle.sin())
+                })
+                .collect::<Vec<_>>();
+            polygon(window, &points, bounds, stroke, background, true, width);
+        }
         Diamond | FilledDiamond => polygon(
             window,
             &[
@@ -386,7 +375,7 @@ impl RenderOnce for UmlRelationGlyph {
             self.scale,
             self.selected,
         );
-        let dashes = relationship_dashes(dashed, &appearance.0.dash_pattern, self.scale);
+        let dashes = appearance.resolve_stroke_pattern(dashed, self.scale);
         let text_color = appearance.text(palette.text);
         let font_size = appearance.font_size(12.0, self.scale);
         let (source_anchor, target_anchor, middle) =
@@ -469,6 +458,7 @@ impl RenderOnce for UmlRelationGlyph {
         .size_full();
         div()
             .relative()
+            .map(|element| appearance.apply_surface(element, scale))
             .when_some(appearance.0.font_family.clone(), |element, family| {
                 element.font_family(family)
             })
@@ -521,32 +511,6 @@ impl RenderOnce for UmlRelationGlyph {
 mod tests {
     use super::*;
     use bellatrix_mde::relationship_style_for_notation;
-    #[test]
-    fn view_dashes_cannot_change_uml_relationship_semantics() {
-        assert!(relationship_dashes(false, &[2.0, 3.0], 2.0).is_empty());
-        assert_eq!(
-            relationship_dashes(true, &[2.0, 3.0], 2.0),
-            vec![px(4.0), px(6.0)]
-        );
-        assert_eq!(relationship_dashes(true, &[4.0], 1.0), vec![px(4.0)]);
-        for pattern in [vec![], vec![0.0, 0.0], vec![f64::NAN], vec![-1.0]] {
-            assert_eq!(
-                relationship_dashes(true, &pattern, 2.0),
-                vec![px(12.0), px(10.0)]
-            );
-        }
-        let dependency = relationship_style_for_notation("uml.dependency");
-        let association = relationship_style_for_notation("uml.association");
-        let styled = UmlRelationGlyph::new(dependency, 100.0, 100.0, (0.0, 0.0), (100.0, 100.0))
-            .view_style(&bellatrix_mde::Style {
-                dash_pattern: vec![2.0, 3.0],
-                ..Default::default()
-            });
-        assert!(styled.style.dashed);
-        assert_eq!(styled.style.target_marker, dependency.target_marker);
-        assert!(!association.dashed);
-    }
-
     #[test]
     fn endpoint_labels_follow_their_own_ends_and_view_scale() {
         let segments = [UmlLineSegment::Line { to: (200.0, 40.0) }];

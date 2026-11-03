@@ -1,3 +1,4 @@
+use bellatrix_mde::ModelingRelationKind;
 use bellatrix_mde::commands::{Command, ModelingElementKind, apply};
 use bellatrix_mde::{Format, Project, StructuralDiagramKind, decode, encode};
 
@@ -19,6 +20,24 @@ fn create(
             name: None,
             x: 100.0,
             y: 100.0,
+        },
+        0,
+    )
+}
+
+fn connect(
+    project: &Project,
+    kind: ModelingRelationKind,
+    from: &str,
+    to: &str,
+) -> Result<Project, String> {
+    apply(
+        project,
+        &Command::CreateRelation {
+            diagram_id: "diagram-tasks".into(),
+            kind,
+            from: from.into(),
+            to: to.into(),
         },
         0,
     )
@@ -135,6 +154,103 @@ fn behavior_nodes_use_canonical_composite_owners_and_transactional_commands()
             );
         }
         assert!(create(&region, child, Some(&machine_id)).is_err());
+    }
+    let mut graph = create(&source, ModelingElementKind::Activity, None)?;
+    let activity_id = graph.elements.last().ok_or("missing activity")?.id.clone();
+    graph = create(
+        &graph,
+        ModelingElementKind::OpaqueAction,
+        Some(&activity_id),
+    )?;
+    let source_node = graph.elements.last().ok_or("missing action")?.id.clone();
+    graph = create(
+        &graph,
+        ModelingElementKind::OpaqueAction,
+        Some(&activity_id),
+    )?;
+    let target_node = graph.elements.last().ok_or("missing action")?.id.clone();
+    for kind in [
+        ModelingRelationKind::ControlFlow,
+        ModelingRelationKind::ObjectFlow,
+    ] {
+        let linked = connect(&graph, kind, &source_node, &target_node)?;
+        let edge = linked
+            .relations
+            .iter()
+            .find(|edge| edge.kind == kind.model_kind())
+            .ok_or("missing flow")?;
+        assert!(
+            linked.relations.iter().any(|owner| owner.kind == "owns"
+                && owner.from == activity_id
+                && owner.to == edge.id)
+        );
+        assert_eq!(
+            bellatrix_mde::relationship_presentation(edge)
+                .style
+                .target_marker,
+            bellatrix_mde::RelationshipMarker::OpenArrow
+        );
+        assert!(connect(&graph, kind, &source_node, "type-list").is_err());
+    }
+    for (left, right, kinds, owner_is_target) in [
+        (
+            ModelingElementKind::UseCase,
+            ModelingElementKind::UseCase,
+            &[ModelingRelationKind::Include, ModelingRelationKind::Extend][..],
+            false,
+        ),
+        (
+            ModelingElementKind::Package,
+            ModelingElementKind::Package,
+            &[
+                ModelingRelationKind::PackageImport,
+                ModelingRelationKind::PackageMerge,
+            ][..],
+            false,
+        ),
+        (
+            ModelingElementKind::Artifact,
+            ModelingElementKind::Node,
+            &[ModelingRelationKind::Deployment][..],
+            true,
+        ),
+        (
+            ModelingElementKind::Artifact,
+            ModelingElementKind::Class,
+            &[ModelingRelationKind::Manifestation][..],
+            false,
+        ),
+    ] {
+        let mut graph = create(&source, ModelingElementKind::Package, None)?;
+        let package_id = graph.elements.last().ok_or("missing package")?.id.clone();
+        graph = create(&graph, left, Some(&package_id))?;
+        let left_id = graph.elements.last().ok_or("missing source")?.id.clone();
+        graph = create(&graph, right, Some(&package_id))?;
+        let right_id = graph.elements.last().ok_or("missing target")?.id.clone();
+        for kind in kinds {
+            let linked = connect(&graph, *kind, &left_id, &right_id)?;
+            let edge = linked
+                .relations
+                .iter()
+                .find(|edge| edge.kind == kind.model_kind())
+                .ok_or("missing relationship")?;
+            let owner_id = if owner_is_target { &right_id } else { &left_id };
+            assert!(linked.relations.iter().any(|owner| owner.kind == "owns"
+                && &owner.from == owner_id
+                && owner.to == edge.id));
+            let presentation = bellatrix_mde::relationship_presentation(edge);
+            assert!(presentation.style.dashed);
+            assert!(
+                presentation
+                    .name
+                    .as_deref()
+                    .is_some_and(|name| name.starts_with('«'))
+            );
+            assert_eq!(
+                decode(&encode(&linked, Format::Protobuf)?, Format::Protobuf)?,
+                linked
+            );
+        }
     }
     Ok(())
 }

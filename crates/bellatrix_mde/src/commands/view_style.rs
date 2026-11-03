@@ -87,14 +87,6 @@ pub(super) fn set_style(
     {
         return Err("dash lengths must be finite and positive".into());
     }
-    if !style.dash_pattern.is_empty()
-        && section.relations.iter().any(|relation| {
-            Some(relation.id.as_str()) == current.subject.as_deref()
-                && relation.kind.starts_with("uml.")
-        })
-    {
-        return Err("UML relationship dashing is defined by its semantic notation".into());
-    }
     view_mut(section, diagram_id, view_id)?.style = style.clone();
     Ok(())
 }

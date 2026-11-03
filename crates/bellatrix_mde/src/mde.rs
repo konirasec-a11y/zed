@@ -19,6 +19,7 @@ mod presentation;
 mod publish;
 mod quick_edit;
 mod relationships;
+mod relationship_notation;
 mod scope;
 mod structural_diagrams;
 mod structural_rules;

@@ -1,16 +1,14 @@
 //! Non-classifier notations share editing, but not the classifier silhouette.
+use crate::figure_geometry::{paint_folded_paper, paint_frame_heading, paint_notation};
 use crate::{
     class::{MemberInteractions, MemberRow, UmlClassifier, ViewAppearance, template_signature},
     inline_edit::UmlInlineNameEditor,
 };
 use bellatrix_design_system::Palette;
-use bellatrix_mde::{
-    UmlNotation, folded_note_layout, frame_heading_layout, port_label_layout, uml_header,
-    uml_notation,
-};
+use bellatrix_mde::{UmlNotation, port_label_layout, uml_header, uml_notation};
 use gpui::{
-    App, Bounds, Entity, InteractiveElement, IntoElement, MouseButton, PathBuilder, Pixels,
-    RenderOnce, SharedString, Window, canvas, div, point, prelude::*, px,
+    App, Entity, InteractiveElement, IntoElement, MouseButton, PathBuilder, RenderOnce,
+    SharedString, Window, canvas, div, point, prelude::*, px,
 };
 use std::rc::Rc;
 use ui_input::InputField;
@@ -20,6 +18,7 @@ type Action = Rc<dyn Fn(&mut Window, &mut App)>;
 pub struct UmlFigure {
     kind: String,
     pseudostate_kind: Option<String>,
+    interaction_presentation: Option<String>,
     name: SharedString,
     applied_stereotype: Option<SharedString>,
     selected: bool,
@@ -70,6 +69,7 @@ impl UmlFigure {
         Self {
             kind: kind.into(),
             pseudostate_kind: None,
+            interaction_presentation: None,
             name: name.into(),
             applied_stereotype: None,
             selected: false,
@@ -81,11 +81,21 @@ impl UmlFigure {
             template_parameters: None,
         }
     }
+    pub fn diagram_presentation(mut self, diagram: &bellatrix_mde::Diagram) -> Self {
+        if diagram.uml_di_type == "UMLInteractionDiagram" {
+            self.interaction_presentation = diagram.interaction_kind.clone();
+        }
+        self
+    }
     pub fn pseudostate_kind(mut self, kind: &str) -> Self {
         self.pseudostate_kind = Some(kind.to_owned());
         self
     }
     fn notation(&self) -> UmlNotation {
+        // §17.9 uses compact participant heads, not the sequence time axis.
+        if self.kind == "uml.lifeline" && self.interaction_presentation.as_deref() == Some("communication") {
+            return UmlNotation::Instance;
+        }
         if self.kind != "uml.pseudostate" {
             return uml_notation(&self.kind);
         }
@@ -150,290 +160,6 @@ impl UmlFigure {
         self
     }
 }
-fn paint_folded_paper(
-    bounds: Bounds<Pixels>,
-    scale: f32,
-    palette: Palette,
-    selected: bool,
-    appearance: &ViewAppearance,
-    window: &mut Window,
-) {
-    let layout = folded_note_layout(
-        f64::from(bounds.size.width) / f64::from(scale),
-        f64::from(bounds.size.height) / f64::from(scale),
-    );
-    let outline = layout.outline.map(|position| {
-        point(
-            bounds.origin.x + px(position.x as f32 * scale),
-            bounds.origin.y + px(position.y as f32 * scale),
-        )
-    });
-    let fold = layout.fold.map(|position| {
-        point(
-            bounds.origin.x + px(position.x as f32 * scale),
-            bounds.origin.y + px(position.y as f32 * scale),
-        )
-    });
-    let stroke = appearance.stroke(palette, selected);
-    let mut fill = PathBuilder::fill();
-    fill.add_polygon(&outline, true);
-    match fill.build() {
-        Ok(path) => window.paint_path(path, appearance.fill(palette.panel)),
-        Err(error) => log::error!("UML paper fill: {error}"),
-    }
-    let mut border = PathBuilder::stroke(px(appearance.width(1.0, scale, selected)));
-    border.add_polygon(&outline, true);
-    border.add_polygon(&fold, false);
-    match border.build() {
-        Ok(path) => window.paint_path(path, stroke),
-        Err(error) => log::error!("UML paper outline: {error}"),
-    }
-}
-fn paint_frame_heading(
-    bounds: Bounds<Pixels>,
-    scale: f32,
-    palette: Palette,
-    selected: bool,
-    appearance: &ViewAppearance,
-    window: &mut Window,
-) {
-    let layout = frame_heading_layout(
-        f64::from(bounds.size.width) / f64::from(scale),
-        f64::from(bounds.size.height) / f64::from(scale),
-    );
-    let outline = layout.outline.map(|position| {
-        point(
-            bounds.origin.x + px(position.x as f32 * scale),
-            bounds.origin.y + px(position.y as f32 * scale),
-        )
-    });
-    let mut fill = PathBuilder::fill();
-    fill.add_polygon(&outline, true);
-    match fill.build() {
-        Ok(path) => window.paint_path(path, appearance.fill(palette.panel_alt)),
-        Err(error) => log::error!("UML frame heading fill: {error}"),
-    }
-    let mut border = PathBuilder::stroke(px(appearance.width(1.0, scale, selected)));
-    border.add_polygon(&outline, true);
-    match border.build() {
-        Ok(path) => window.paint_path(path, appearance.stroke(palette, selected)),
-        Err(error) => log::error!("UML frame heading outline: {error}"),
-    }
-}
-// UML 2.5.1 §§9, 11, 14–19: these are notation outlines, not executable model state.
-#[derive(Debug)]
-struct FigurePath {
-    points: Vec<(f32, f32)>,
-    closed: bool,
-    solid: bool,
-    dashed: bool,
-}
-impl FigurePath {
-    fn outline(points: &[(f32, f32)], closed: bool) -> Self {
-        Self {
-            points: points.to_vec(),
-            closed,
-            solid: false,
-            dashed: false,
-        }
-    }
-    fn ellipse(center: (f32, f32), radii: (f32, f32)) -> Self {
-        let points = (0..64)
-            .map(|index| {
-                let angle = std::f32::consts::TAU * index as f32 / 64.0;
-                (
-                    center.0 + radii.0 * angle.cos(),
-                    center.1 + radii.1 * angle.sin(),
-                )
-            })
-            .collect();
-        Self {
-            points,
-            closed: true,
-            solid: false,
-            dashed: false,
-        }
-    }
-    fn solid(mut self) -> Self {
-        self.solid = true;
-        self
-    }
-    fn dashed(mut self) -> Self {
-        self.dashed = true;
-        self
-    }
-}
-fn figure_paths(notation: UmlNotation, width: f32, height: f32) -> Vec<FigurePath> {
-    use UmlNotation::*;
-    let rectangle = || {
-        FigurePath::outline(
-            &[(0.02, 0.02), (0.98, 0.02), (0.98, 0.98), (0.02, 0.98)],
-            true,
-        )
-    };
-    let line = |points: &[(f32, f32)]| FigurePath::outline(points, false);
-    let circle = |radius: f32| {
-        let diameter = width.min(height) * radius;
-        FigurePath::ellipse((0.5, 0.5), (diameter / width, diameter / height))
-    };
-    match notation {
-        Actor => {
-            let radius = (width * 0.14).min(height * 0.13);
-            vec![
-                FigurePath::ellipse((0.5, 0.16), (radius / width, radius / height)),
-                line(&[(0.5, 0.29), (0.5, 0.61)]),
-                line(&[(0.22, 0.39), (0.78, 0.39)]),
-                line(&[(0.24, 0.88), (0.5, 0.61), (0.76, 0.88)]),
-            ]
-        }
-        UseCase => vec![FigurePath::ellipse((0.5, 0.5), (0.48, 0.48))],
-        Collaboration => vec![FigurePath::ellipse((0.5, 0.5), (0.48, 0.48)).dashed()],
-        DeploymentNode => vec![
-            FigurePath::outline(
-                &[
-                    (0.02, 0.16),
-                    (0.18, 0.02),
-                    (0.98, 0.02),
-                    (0.98, 0.84),
-                    (0.82, 0.98),
-                    (0.02, 0.98),
-                ],
-                true,
-            ),
-            line(&[(0.02, 0.16), (0.82, 0.16), (0.98, 0.02)]),
-            line(&[(0.82, 0.16), (0.82, 0.98)]),
-        ],
-        InitialNode => vec![circle(0.43).solid()],
-        FinalNode => vec![circle(0.46), circle(0.30).solid()],
-        FlowFinal | History => {
-            let mut paths = vec![circle(0.46)];
-            if notation == FlowFinal {
-                let radius = width.min(height) * 0.29;
-                let horizontal = radius / width;
-                let vertical = radius / height;
-                paths.push(line(&[
-                    (0.5 - horizontal, 0.5 - vertical),
-                    (0.5 + horizontal, 0.5 + vertical),
-                ]));
-                paths.push(line(&[
-                    (0.5 - horizontal, 0.5 + vertical),
-                    (0.5 + horizontal, 0.5 - vertical),
-                ]));
-            }
-            paths
-        }
-        Terminate => vec![
-            line(&[(0.12, 0.12), (0.88, 0.88)]),
-            line(&[(0.12, 0.88), (0.88, 0.12)]),
-        ],
-        Decision => vec![FigurePath::outline(
-            &[(0.5, 0.02), (0.98, 0.5), (0.5, 0.98), (0.02, 0.5)],
-            true,
-        )],
-        Fork => vec![rectangle().solid()],
-        Lifeline => vec![
-            FigurePath::outline(
-                &[(0.02, 0.02), (0.98, 0.02), (0.98, 0.22), (0.02, 0.22)],
-                true,
-            ),
-            line(&[(0.5, 0.22), (0.5, 0.98)]).dashed(),
-        ],
-        Execution | Instance | ObjectNode => vec![rectangle()],
-        SendSignal => vec![FigurePath::outline(
-            &[
-                (0.02, 0.02),
-                (0.76, 0.02),
-                (0.98, 0.5),
-                (0.76, 0.98),
-                (0.02, 0.98),
-            ],
-            true,
-        )],
-        AcceptEvent => vec![FigurePath::outline(
-            &[
-                (0.02, 0.02),
-                (0.98, 0.02),
-                (0.98, 0.98),
-                (0.02, 0.98),
-                (0.24, 0.5),
-            ],
-            true,
-        )],
-        Partition => vec![rectangle(), line(&[(0.02, 0.16), (0.98, 0.16)])],
-        InteractionUse | CombinedFragment => vec![
-            rectangle(),
-            line(&[(0.02, 0.18), (0.28, 0.18), (0.34, 0.12), (0.34, 0.02)]),
-        ],
-        TimingState => vec![line(&[
-            (0.02, 0.72),
-            (0.28, 0.72),
-            (0.36, 0.28),
-            (0.64, 0.28),
-            (0.72, 0.72),
-            (0.98, 0.72),
-        ])],
-        _ => Vec::new(),
-    }
-}
-fn paint_notation(
-    bounds: Bounds<Pixels>,
-    notation: UmlNotation,
-    scale: f32,
-    palette: Palette,
-    selected: bool,
-    appearance: &ViewAppearance,
-    window: &mut Window,
-) {
-    let width = f32::from(bounds.size.width).max(1.0);
-    let height = f32::from(bounds.size.height).max(1.0);
-    let stroke = appearance.stroke(palette, selected);
-    for path in figure_paths(notation, width, height) {
-        let points = path
-            .points
-            .iter()
-            .map(|(x, y)| {
-                point(
-                    bounds.origin.x + px(x * width),
-                    bounds.origin.y + px(y * height),
-                )
-            })
-            .collect::<Vec<_>>();
-        if path.closed {
-            let mut fill = PathBuilder::fill();
-            fill.add_polygon(&points, true);
-            match fill.build() {
-                Ok(path_geometry) => window.paint_path(
-                    path_geometry,
-                    if path.solid {
-                        stroke
-                    } else {
-                        appearance.fill(palette.panel)
-                    },
-                ),
-                Err(error) => log::error!("UML notation fill: {error}"),
-            }
-        }
-        let mut outline = PathBuilder::stroke(px(appearance.width(1.0, scale, selected)));
-        let dashes = appearance
-            .0
-            .dash_pattern
-            .iter()
-            .filter(|value| value.is_finite() && **value > 0.0)
-            .map(|value| px(*value as f32 * scale))
-            .collect::<Vec<_>>();
-        if !dashes.is_empty() {
-            outline = outline.dash_array(&dashes);
-        } else if path.dashed {
-            outline = outline.dash_array(&[px(6.0 * scale), px(4.0 * scale)]);
-        }
-        outline.add_polygon(&points, path.closed);
-        match outline.build() {
-            Ok(path_geometry) => window.paint_path(path_geometry, stroke),
-            Err(error) => log::error!("UML notation outline: {error}"),
-        }
-    }
-}
-
 impl RenderOnce for UmlFigure {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let notation = self.notation();
@@ -527,8 +253,9 @@ impl RenderOnce for UmlFigure {
                             .top(px(16.0 * scale))
                             .right_0()
                             .bottom_0()
-                            .border(px(appearance.width(1.0, scale, selected)))
-                            .border_color(border)
+                            .map(|element| {
+                                appearance.apply_rectangle_border(element, palette, selected, scale, 0.0)
+                            })
                             .bg(appearance.fill(palette.panel)),
                     )
                     .child(
@@ -538,8 +265,9 @@ impl RenderOnce for UmlFigure {
                             .top_0()
                             .w(px(87.0 * scale))
                             .h(px(17.0 * scale))
-                            .border(px(appearance.width(1.0, scale, selected)))
-                            .border_color(border)
+                            .map(|element| {
+                                appearance.apply_rectangle_border(element, palette, selected, scale, 0.0)
+                            })
                             .bg(appearance.fill(palette.panel_alt)),
                     )
                     .child(
@@ -580,8 +308,7 @@ impl RenderOnce for UmlFigure {
             UmlNotation::Port => div()
                 .size_full()
                 .relative()
-                .border(px(appearance.width(1.0, scale, selected)))
-                .border_color(border)
+                .map(|element| appearance.apply_rectangle_border(element, palette, selected, scale, 0.0))
                 .bg(appearance.fill(palette.panel_alt))
                 .child(
                     div()
@@ -599,8 +326,7 @@ impl RenderOnce for UmlFigure {
                 .size_full()
                 .flex()
                 .flex_col()
-                .border(px(appearance.width(1.0, scale, selected)))
-                .border_color(border)
+                .map(|element| appearance.apply_rectangle_border(element, palette, selected, scale, 0.0))
                 .bg(appearance.fill(palette.panel))
                 .child(
                     div()
@@ -621,8 +347,7 @@ impl RenderOnce for UmlFigure {
                 })
                 .size_full()
                 .relative()
-                .border(px(appearance.width(1.0, scale, selected)))
-                .border_color(border)
+                .map(|element| appearance.apply_rectangle_border(element, palette, selected, scale, 0.0))
                 .child(
                     div()
                         .w(px(142.0 * scale))
@@ -698,9 +423,13 @@ impl RenderOnce for UmlFigure {
                                             }
                                         }
                                     }
+                                    let dashes = appearance.resolve_stroke_pattern(false, scale);
                                     let mut outline = PathBuilder::stroke(px(
                                         appearance.width(1.0, scale, selected)
                                     ));
+                                    if !dashes.is_empty() {
+                                        outline = outline.dash_array(&dashes);
+                                    }
                                     outline.add_polygon(&vertices, true);
                                     match outline.build() {
                                         Ok(path) => window.paint_path(path, border),
@@ -731,9 +460,8 @@ impl RenderOnce for UmlFigure {
                 .into_any_element(),
             UmlNotation::Action | UmlNotation::State => div()
                 .size_full()
-                .rounded(px(appearance.0.corner_radius.unwrap_or(14.0) as f32 * scale))
-                .border(px(appearance.width(1.0, scale, selected)))
-                .border_color(border)
+                .relative()
+                .map(|element| appearance.apply_rectangle_border(element, palette, selected, scale, 14.0))
                 .bg(appearance.fill(palette.panel))
                 .flex()
                 .items_center()
@@ -916,6 +644,7 @@ impl RenderOnce for UmlFigure {
         div()
             .size_full()
             .relative()
+            .map(|element| alignment.apply_surface(element, scale))
             .when_some(font_family, |element, family| element.font_family(family))
             .child(figure)
             .when_some(signature, |element, signature| element.child(signature))
@@ -960,6 +689,5 @@ mod tests {
             assert!(UmlFigure::supports(kind));
         }
     }
-
 
 }

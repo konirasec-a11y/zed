@@ -1,8 +1,8 @@
 //! Native Zed inline text editing inside a UML element compartment.
 //! No model storage, IDs, commands, or Cordis types are owned here.
 use gpui::{
-    App, Entity, InteractiveElement, IntoElement, KeyDownEvent, MouseButton,
-    RenderOnce, Window, div, prelude::*,
+    App, Entity, InteractiveElement, IntoElement, KeyDownEvent, MouseButton, RenderOnce, Window,
+    div, prelude::*,
 };
 use std::rc::Rc;
 use ui::{IconButton, IconButtonShape, IconName, Tooltip, prelude::*};
@@ -25,7 +25,11 @@ impl UmlInlineNameEditor {
         accept: impl Fn(&mut Window, &mut App) + 'static,
         cancel: impl Fn(&mut Window, &mut App) + 'static,
     ) -> Self {
-        Self { field, accept: Rc::new(accept), cancel: Rc::new(cancel) }
+        Self {
+            field,
+            accept: Rc::new(accept),
+            cancel: Rc::new(cancel),
+        }
     }
 }
 

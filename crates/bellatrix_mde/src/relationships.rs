@@ -1,6 +1,6 @@
 //! One relationship contract for model operations and diagram projections.
 //! GPUI paints and hit-tests; it does not define relationship semantics.
-use crate::uml::types::{RelationEnd, RelationEndMultiplicity};
+pub use crate::relationship_notation::{RelationshipMarker, RelationshipStyle, RelationshipEndpointLabels, RelationshipPresentation, relationship_style_for_notation, relationship_presentation};
 use crate::{Geometry, ModelingSection, PathSegment, Point, Relation, RelationshipRouting, View};
 use crate::{UmlType, classifier_contents};
 
@@ -16,6 +16,17 @@ pub enum ModelingRelationKind {
     TemplateBinding,
     Realization,
     Containment,
+    Usage,
+    Abstraction,
+    Include,
+    Extend,
+    PackageImport,
+    PackageMerge,
+    Deployment,
+    Manifestation,
+    ControlFlow,
+    ObjectFlow,
+    Transition,
 }
 impl ModelingRelationKind {
     pub const BASIC: &'static [Self] = &[
@@ -28,6 +39,21 @@ impl ModelingRelationKind {
         Self::InterfaceRealization,
     ];
     pub const ADVANCED: &'static [Self] = &[Self::TemplateBinding, Self::Realization];
+    pub const BEHAVIOR: &'static [Self] = &[
+        Self::Include,
+        Self::Extend,
+        Self::ControlFlow,
+        Self::ObjectFlow,
+        Self::Transition,
+    ];
+    pub const STRUCTURAL: &'static [Self] = &[
+        Self::Usage,
+        Self::Abstraction,
+        Self::PackageImport,
+        Self::PackageMerge,
+        Self::Deployment,
+        Self::Manifestation,
+    ];
     pub const PACKAGES: &'static [Self] = &[Self::Containment];
     pub fn label(self) -> &'static str {
         match self {
@@ -41,6 +67,17 @@ impl ModelingRelationKind {
             Self::TemplateBinding => "Template Binding",
             Self::Realization => "Realization",
             Self::Containment => "Containment",
+            Self::Usage => "Usage",
+            Self::Abstraction => "Abstraction",
+            Self::Include => "Include",
+            Self::Extend => "Extend",
+            Self::PackageImport => "Package Import",
+            Self::PackageMerge => "Package Merge",
+            Self::Deployment => "Deployment",
+            Self::Manifestation => "Manifestation",
+            Self::ControlFlow => "Control Flow",
+            Self::ObjectFlow => "Object Flow",
+            Self::Transition => "Transition",
         }
     }
     pub fn model_kind(self) -> &'static str {
@@ -55,6 +92,17 @@ impl ModelingRelationKind {
             Self::TemplateBinding => "uml.template_binding",
             Self::Realization => "uml.realization",
             Self::Containment => "uml.containment",
+            Self::Usage => "uml.usage",
+            Self::Abstraction => "uml.abstraction",
+            Self::Include => "uml.include",
+            Self::Extend => "uml.extend",
+            Self::PackageImport => "uml.package_import",
+            Self::PackageMerge => "uml.package_merge",
+            Self::Deployment => "uml.deployment",
+            Self::Manifestation => "uml.manifestation",
+            Self::ControlFlow => "uml.control_flow",
+            Self::ObjectFlow => "uml.object_flow",
+            Self::Transition => "uml.transition",
         }
     }
     /// The first click is Relation.from, not necessarily the arrowhead end.
@@ -74,10 +122,55 @@ impl ModelingRelationKind {
                 "click implementing classifier, then specification (triangle at target)"
             }
             Self::Containment => "click container, then contained element (circle at first)",
+            Self::Usage | Self::Abstraction => "click client, then supplier",
+            Self::Include => "click including use case, then included use case",
+            Self::Extend => "click extending use case, then extended use case",
+            Self::PackageImport => "click importing namespace, then imported package",
+            Self::PackageMerge => "click receiving package, then merged package",
+            Self::Deployment => "click deployed artifact, then deployment target",
+            Self::Manifestation => "click artifact, then manifested model element",
+            Self::ControlFlow | Self::ObjectFlow => {
+                "click source activity node, then target in the same activity"
+            }
+            Self::Transition => "click source vertex, then target in the same region",
         }
     }
 
     pub fn validate_endpoints(self, source: &str, target: &str) -> Result<(), &'static str> {
+        let conforms = |kind: &str, expected: &str| {
+            crate::uml::root::object_metaclass(kind)
+                .is_some_and(|actual| crate::uml::metamodel::conforms_to(actual, expected))
+        };
+        let valid = match self {
+            Self::Include | Self::Extend => {
+                Some(conforms(source, "UseCase") && conforms(target, "UseCase"))
+            }
+            Self::PackageImport => {
+                Some(conforms(source, "Namespace") && conforms(target, "Package"))
+            }
+            Self::PackageMerge => Some(conforms(source, "Package") && conforms(target, "Package")),
+            Self::Deployment => {
+                Some(conforms(source, "DeployedArtifact") && conforms(target, "DeploymentTarget"))
+            }
+            Self::Manifestation => {
+                Some(conforms(source, "Artifact") && conforms(target, "PackageableElement"))
+            }
+            Self::ControlFlow | Self::ObjectFlow => {
+                Some(conforms(source, "ActivityNode") && conforms(target, "ActivityNode"))
+            }
+            Self::Transition => Some(conforms(source, "Vertex") && conforms(target, "Vertex")),
+            Self::Usage | Self::Abstraction => {
+                Some(conforms(source, "NamedElement") && conforms(target, "NamedElement"))
+            }
+            _ => None,
+        };
+        if let Some(valid) = valid {
+            return if valid {
+                Ok(())
+            } else {
+                Err("endpoints do not conform to this UML relationship's types")
+            };
+        }
         const PACKAGES: &[&str] = &["uml.package", "uml.model", "uml.subsystem"];
         if self == Self::Containment {
             return if PACKAGES.contains(&source) {
@@ -91,8 +184,7 @@ impl ModelingRelationKind {
             return Err("interface realization must target an Interface");
         }
         if self == Self::Generalization
-            && (!UmlType::from_kind(source).is_some_and(UmlType::is_classifier)
-                || !UmlType::from_kind(target).is_some_and(UmlType::is_classifier))
+            && (!conforms(source, "Classifier") || !conforms(target, "Classifier"))
         {
             return Err("generalization requires classifier endpoints");
         }
@@ -532,155 +624,6 @@ fn reroute_matching_relationships(
                 view.geometry = geometry.clone();
             }
         }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RelationshipMarker {
-    None,
-    OpenArrow,
-    Triangle,
-    Diamond,
-    FilledDiamond,
-    Containment,
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct RelationshipStyle {
-    pub source_marker: RelationshipMarker,
-    pub target_marker: RelationshipMarker,
-    pub dashed: bool,
-}
-pub fn relationship_style_for_notation(kind: &str) -> RelationshipStyle {
-    use RelationshipMarker::*;
-    let (source_marker, target_marker, dashed) = match kind {
-        "uml.generalization" => (None, Triangle, false),
-        "uml.interface_realization" | "uml.realization" => (None, Triangle, true),
-        "uml.directed_association" => (None, OpenArrow, false),
-        "uml.dependency" | "uml.usage" | "uml.template_binding" | "depends_on" => {
-            (None, OpenArrow, true)
-        }
-        "uml.aggregation" => (Diamond, None, false),
-        "uml.composition" => (FilledDiamond, None, false),
-        "uml.containment" => (Containment, None, false),
-        "uml.note_link" | "uml.constraint_link" => (None, None, true),
-        _ => (None, None, false),
-    };
-    RelationshipStyle {
-        source_marker,
-        target_marker,
-        dashed,
-    }
-}
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct RelationshipEndpointLabels {
-    pub role: Option<String>,
-    pub multiplicity: Option<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RelationshipPresentation {
-    pub name: Option<String>,
-    pub source_labels: RelationshipEndpointLabels,
-    pub target_labels: RelationshipEndpointLabels,
-    pub label: String,
-    pub notation: String,
-    pub style: RelationshipStyle,
-    pub source_role: &'static str,
-    pub target_role: &'static str,
-}
-impl RelationshipPresentation {
-    pub fn describe(&self, from: &str, to: &str) -> String {
-        if self.style.source_marker == RelationshipMarker::None
-            && self.style.target_marker == RelationshipMarker::None
-            && !self.style.dashed
-        {
-            format!("{from} —[{}]— {to}", self.label)
-        } else {
-            format!(
-                "{from} ({}) —[{}]→ {to} ({})",
-                self.source_role, self.label, self.target_role
-            )
-        }
-    }
-}
-pub fn relationship_presentation(relation: &Relation) -> RelationshipPresentation {
-    let notation = match relation.kind.as_str() {
-        "depends_on" => "uml.dependency",
-        "uml.association" => match relation
-            .properties
-            .get("end1Aggregation")
-            .or_else(|| relation.properties.get("end2Aggregation"))
-            .and_then(serde_json::Value::as_str)
-        {
-            Some("shared") => "uml.aggregation",
-            Some("composite") => "uml.composition",
-            _ => "uml.association",
-        },
-        other => other,
-    };
-    let label = notation
-        .strip_prefix("uml.")
-        .unwrap_or(notation)
-        .replace('_', " ");
-    let (source_role, target_role) = match notation {
-        "uml.generalization" => ("subtype", "supertype"),
-        "uml.interface_realization" => ("implementer", "interface"),
-        "uml.realization" => ("implementation", "specification"),
-        "uml.dependency" | "uml.usage" | "uml.template_binding" => ("client", "supplier"),
-        "uml.aggregation" | "uml.composition" if relation.properties.get("end2Aggregation")
-            .and_then(serde_json::Value::as_str).is_some_and(|kind| matches!(kind, "shared" | "composite")) => ("part", "whole"),
-        "uml.aggregation" | "uml.composition" => ("whole", "part"),
-        "uml.containment" => ("container", "contained"),
-        "uml.association" => ("end1", "end2"),
-        _ => ("source", "target"),
-    };
-    let text = |key: &str| {
-        relation
-            .properties
-            .get(key)
-            .and_then(serde_json::Value::as_str)
-            .map(str::to_owned)
-    };
-    let mut style = relationship_style_for_notation(notation);
-    if matches!(relation.kind.as_str(), "uml.association" | "uml.directed_association") {
-        let marker = |key: &str| match relation.properties.get(key).and_then(serde_json::Value::as_str) {
-            Some("shared") => RelationshipMarker::Diamond,
-            Some("composite") => RelationshipMarker::FilledDiamond,
-            _ => RelationshipMarker::None,
-        };
-        style.source_marker = marker("end1Aggregation");
-        let target_marker = marker("end2Aggregation");
-        if relation.kind == "uml.association" || target_marker != RelationshipMarker::None {
-            style.target_marker = target_marker;
-        }
-    }
-    RelationshipPresentation {
-        name: if notation == "uml.usage" {
-            Some(
-                text("name")
-                    .filter(|name| !name.is_empty())
-                    .map_or_else(|| "«use»".into(), |name| format!("«use» {name}")),
-            )
-        } else {
-            text("name")
-        },
-        source_labels: RelationshipEndpointLabels {
-            role: text("sourceRole"),
-            multiplicity: RelationEndMultiplicity::new(relation, RelationEnd::Source)
-                .authored_notation()
-                .map(str::to_owned),
-        },
-        target_labels: RelationshipEndpointLabels {
-            role: text("targetRole"),
-            multiplicity: RelationEndMultiplicity::new(relation, RelationEnd::Target)
-                .authored_notation()
-                .map(str::to_owned),
-        },
-        label,
-        notation: notation.to_owned(),
-        style,
-        source_role,
-        target_role,
     }
 }
 

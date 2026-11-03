@@ -346,11 +346,14 @@ mod tests {
             .iter()
             .chain(ModelingRelationKind::ADVANCED)
             .chain(ModelingRelationKind::PACKAGES)
+            .chain(ModelingRelationKind::STRUCTURAL)
+            .chain(ModelingRelationKind::BEHAVIOR)
         {
             assert!(kinds.insert(kind.model_kind()));
         }
-        assert_eq!(kinds.len(), 60);
+        assert_eq!(kinds.len(), 71);
     }
+
     #[test]
     fn generalization_and_realization_validate_targets() {
         assert!(

@@ -130,8 +130,11 @@ Bellatrix design provides composition and reusable components through
 The design is incomplete: it is not a substitute for the complete StarUML
 behavior/icon inventory. Existing repository restrictions prohibit copying
 proprietary StarUML source, CSS, or assets into the shipping implementation.
-The new alignment vectors use the supplied Bellatrix design geometry; vertical
-variants are independently drawn. Existing theme roles and Zed controls remain
+The horizontal alignment vectors use the supplied Bellatrix design geometry;
+vertical variants, layer-order, line-pattern, and routing vectors are independently
+drawn from the referenced meanings. The bundled StarUML `package.json` names
+MKLabs Co.,Ltd. as copyright holder; no blanket permission to redistribute its
+proprietary icon assets has been established. Existing theme roles and Zed controls remain
 native rather than embedding the reference web interface.
 
 Current implementation status (not a full parity claim):
@@ -144,10 +147,10 @@ Current implementation status (not a full parity claim):
 | Horizontal and vertical text alignment | Six icon controls, persisted optional enums, shared classifier/figure/relationship-label projection. Model JSON/protobuf and receipt-state tests cover values; native visual acceptance remains pending. |
 | Send to back / bring to front | View-local stack command; also forward/backward by one layer. One sorted canvas child list interleaves edges and nodes so paint and hit-test stacking agree. Core view-local/semantic-isolation/roundtrip tests added; native pointer acceptance remains pending. |
 | Straight/oblique, rectilinear, rounded rectilinear, curve | Straight, automatic orthogonal, and curve already routed by the model and now icon controls. Rounded orthogonal corners remain pending. |
-| Solid, dotted, dashed strokes | `dash_pattern` persisted, but full shared rendering and icon controls remain pending. UML notation defaults must survive absent overrides. |
+| Solid, dotted, dashed strokes | Optional common `LineMode`, live icon controls and explicit inherit action; core accepts per-view patterns without modifying relationships. View-local persistence flows pass. Shared stroke resolution and rectangular-outline helper project patterns to relationship/figure paths and classifier/action/state/package/port/part/frame outlines. Native rendering/pointer acceptance remains pending. |
 | Flat/stick/solid head and tail | View-only overrides pending. Default UML-required relationship markers must remain intact; changing a visual marker must never mutate relation kind. |
 | Auto resize | Pending shared view-format command and renderer-measured bounds. |
-| Show shadow and word wrap | Pending common optional Style contract and renderer/control projection. |
+| Show shadow and word wrap | Common optional Style flags with live icon controls and shared native surface/text helpers. Shadow applies to the view frame; SVG exports a drop-shadow filter. Native wrapping uses renderer text layout; SVG word wrapping is not implemented and is documented as an export limitation. |
 | Stereotype display (none/label/decoration/icon variants) | Pending common view-format options, with notation-specific projection. |
 | Show visibility, namespace, property, type | Pending view-format toggles; semantic values must stay unchanged. |
 | Suppress attributes, operations, receptions, literals, columns | Pending shared view-format flags and compartment projection. |
@@ -162,3 +165,16 @@ The same project revision/receipt channel serializes property and appearance
 edits. Input admission, selection binding, original target, stale revision,
 conflict preservation, and theme reset continue through the existing draft gate.
 No Apply/Cancel cycle or parallel semantic store is introduced.
+
+
+### Export consistency and limits
+
+Native renderers and SVG share `Style::resolve_stroke_pattern`, so explicit
+solid/dotted/dashed modes, valid legacy custom patterns, and inherited notation
+use one resolver. SVG projects horizontal/vertical text alignment for rectangle
+and ellipse labels and preserves view stack order. The export remains a basic
+geometry renderer: polygon/path labels, full UML compartments/markers, word wrapping, native
+font metrics, and live IDE-theme reproduction are not yet equivalent to the
+native canvas. These are limitations, not enabled controls that silently claim
+export fidelity. One public integration flow covers edit command, protobuf
+save/reload, HTML export artifacts, and unchanged semantic objects.
