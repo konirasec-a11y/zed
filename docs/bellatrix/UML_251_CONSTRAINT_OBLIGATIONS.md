@@ -72,6 +72,9 @@ têm recortes publicados em `497f200eb443bdbaaf6ea6cd14ac0630c5ed6390`
 RedefinableTemplateSignature::redefines_parents e Property::subsetted_property_names
 têm recortes publicados em `9b71a3146ce4c7e28b8734439e9fd0c9a60cf6ef`
 (E58/E59).
+A preservação de Unknown/Invalid no agregado de subsetting e
+InstanceSpecification::structural_feature foram publicadas em
+`d71f0315fb67987983a7effe388cdcb1e7842295` (E60/E61).
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -187,7 +190,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E59 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E61 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -887,12 +890,72 @@ de execução nova. E12–E59 possuem os gates delimitados nas seções seguinte
   de Property. Diagnósticos: `UML_PROPERTY_SUBSETTED_PROPERTY_NAMES`,
   `MDE_PROPERTY_SUBSETTED_PROPERTY_NAMES_INVALID` e
   `MDE_PROPERTY_SUBSETTED_PROPERTY_NAMES_UNVERIFIED`.
-  O agregado legado `subsetting_diagnostic` continua ativo e usa
-  `resolve_subsetted_properties`/`validate_many`: pode emitir erro
-  `UML_PROPERTY_SUBSETTING` para metaclasse local desconhecida enquanto o
-  predicado dedicado preserva Unknown. Essa inconsistência não foi corrigida
-  neste incremento; o gate focado não prova coerência do relatório agregado
-  nem fechamento integral dos contratos de subsetting.
+  A inconsistência histórica do agregado `subsetting_diagnostic`, que tratava
+  metaclasse local desconhecida como Invalid enquanto este predicado preservava
+  Unknown, foi corrigida no incremento E60. Os sete testes deste registro são
+  o gate original, não o gate ampliado da correção. Mantêm-se os limites de
+  resolução e de fechamento integral dos contratos de subsetting.
+
+- **E60**: correção de `semantics/property_subsetting.rs`,
+  `resolve_subsetted_properties`, `subsetting_context`, `compare_contexts` e
+  `compare_subsetting`, e `semantics/feature_compatibility.rs`, resolução e
+  comparação de Types; `property_subsetted_names.rs` passa de sete para
+  dezenove testes. O agregado usa o contrato de referência para distinguir
+  Unknown de Invalid e conserva Properties locais ao lado de membros não
+  resolvidos. A consulta pública não devolve essa coleção parcial como
+  completa. Metaclasses desconhecidas de Property, Type e owner permanecem
+  não verificadas; metaclasses conhecidas incompatíveis, duplicatas e formas
+  inválidas continuam erros. Comparações inspecionam os dois lados de tipo,
+  contexto e upper bound para não ocultar Invalid atrás de Unknown.
+  Contexto de Association inspeciona memberEnd e os tipos locais sem promover
+  contexto incompleto a completo. Violação local conhecida ainda decide falso
+  ao lado de desconhecido. Corrige a ressalva anterior de E59, sem prometer
+  resolução externa, suporte de projeções autoradas ou conformidade integral
+  de subsetting. Não é uma nova invariante para somar ao inventário.
+
+- **E61**: `semantics/instances.rs`, `instance_structural_feature`,
+  `instance_reference_evidence`, `slottable_membership` e `validate`;
+  `instance_structural_feature.rs`, treze testes. Conta Slots canonicamente
+  possuídos por instância e suas identidades definingFeature, não valores dos
+  Slots. Para cada classifier, proíbe mais de um Slot para uma feature em
+  allSlottableFeatures, incluindo atributos herdados privados. Duplicata fora
+  dessa coleção não viola esta invariante; defining_feature continua obrigação
+  separada. Usa consulta completa ou witness local de StructuralFeature em
+  allFeatures, sem inferir ausência de membership de consulta incompleta.
+  Projeção slot armazenada não pode omitir Slots canônicos conhecidos;
+  referências externas e metaclasses desconhecidas preservam não verificado
+  quando afetam a prova. Classifier vazio, singleton comprovado ou contagens
+  completas distintas podem satisfazer a quantificação sem resolver todos os
+  classifiers, mas contratos malformados inspecionados continuam Invalid.
+  Duplicata local conhecida não desaparece diante de classifier/slot externo,
+  e ciclos não são encobertos por witness. Diagnósticos:
+  `UML_INSTANCE_STRUCTURAL_FEATURE`, `MDE_INSTANCE_STRUCTURAL_FEATURE_INVALID`
+  e `MDE_INSTANCE_STRUCTURAL_FEATURE_UNVERIFIED`. Não certifica valores de
+  Slot, specification, todas as regras de instâncias ou modelos externos.
+
+### Evidência publicada de subsetting parcial e unicidade de Slots
+
+Commit inspecionado: `d71f0315fb67987983a7effe388cdcb1e7842295`.
+Logs finais lidos:
+
+- `/tmp/property-subsetting-unknown-final-gate.log`: **233/233 aprovados**,
+  161 lib e 72 integrações (association_kernel 2, connector_types 5,
+  graph_rules 2, kb09_redefinitions 11, kernel_api_validation 4,
+  property_redefined_inherited 9, property_subsetted_names 19,
+  template_default_compatibility 10 e template_substitution_compatibility 10).
+- `/tmp/instance-structural-feature.log`: **40/40 aprovados**,
+  instance_structural_feature 13, instance_deployment_artifact 8,
+  instance_deployment_target 8 e kb09_redefinitions 11.
+
+Property::subsetted_property_names permanece **P/E59–E60** e
+InstanceSpecification::structural_feature passa a **P/E61**. Os casos incluem
+Unknown/Invalid em ambos os lados e ordens, mistura de referências, validação
+com/sem raiz, roundtrip, reparo de snapshot e revalidação. A correção remove a
+inconsistência específica do agregado registrada em E59, não os demais limites
+do recorte. Gates anteriores à publicação, sem rerun no SHA publicado nem
+execução nova por esta matriz; não somar regressões repetidas como cobertura.
+Não certificam suíte integral, UI, geração, interchange ou conformidade UML
+completa.
 
 ### Evidência publicada de ancestrais de assinatura e nomes de subsets
 
@@ -910,8 +973,9 @@ As duas linhas ficam **P/E58–E59**. Os testes de assinatura incluem fechamento
 transitivo/diamante/ciclo, referências externas, projeções contraditórias,
 reparo de snapshot e revalidação sem cache persistente. Os de nomes incluem
 modelos com/sem raiz, roundtrip, vacuidade, Unknown e precedência de
-malformados/igualdade local. Permanece a inconsistência do agregado legado
-explicitada em E59. Gates anteriores à publicação, sem rerun no SHA publicado
+malformados/igualdade local. A inconsistência então existente no agregado
+legado foi corrigida posteriormente em E60. Gates anteriores à publicação,
+sem rerun no SHA publicado
 nem execução nova por esta matriz; repetições do gate focado de nomes não são
 somadas como cobertura. Não certificam suíte integral, UI, geração,
 interchange ou conformidade UML completa.
@@ -1829,7 +1893,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `InstanceSpecification-structural_feature`
 
-- Metaclass: `InstanceSpecification`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `InstanceSpecification`. Estado: **P**. Evidência: E61; commit `d71f0315fb67987983a7effe388cdcb1e7842295`.
 - OCL publicado: `classifier->forAll(c | (c.allSlottableFeatures()->forAll(f | slot->select(s | s.definingFeature = f)->size() <= 1)))`.
 
 #### `InstanceSpecification-defining_feature`
@@ -1944,7 +2008,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `Property-subsetted_property_names`
 
-- Metaclass: `Property`. Estado: **P**. Evidência: E59; commit `9b71a3146ce4c7e28b8734439e9fd0c9a60cf6ef`.
+- Metaclass: `Property`. Estado: **P**. Evidência: E59/E60; implementação em `9b71a3146ce4c7e28b8734439e9fd0c9a60cf6ef` e correção do agregado em `d71f0315fb67987983a7effe388cdcb1e7842295`.
 - OCL publicado: `subsettedProperty->forAll(sp | sp.name <> name)`.
 
 #### `Property-type_of_opposite_end`

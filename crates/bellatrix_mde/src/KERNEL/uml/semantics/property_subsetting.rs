@@ -202,6 +202,27 @@ fn compare_contexts(
     }))
 }
 
+fn compare_subsetting_type_and_upper(
+    references: &ReferenceIndex<'_>,
+    specific: ElementRef<'_>,
+    general: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let upper = (|| {
+        let specific = resolve_feature_upper_bound(references, specific);
+        let general = resolve_feature_upper_bound(references, general);
+        for result in [&specific, &general] {
+            if let Err(error @ QueryError::Invalid { .. }) = result {
+                return Err(error.clone());
+            }
+        }
+        Ok(specific?.fits_within(&general?))
+    })();
+    require_all([
+        compare_type_conformance(references, specific, general),
+        upper,
+    ])
+}
+
 /// Subsetting restricts the upper bound only. Unlike redefinition, it imposes
 /// no containment condition on the lower bound and does not replace a feature.
 pub fn compare_subsetting(
@@ -218,21 +239,10 @@ pub fn compare_subsetting(
     }
     specific_contract?;
     general_contract?;
-    let upper = (|| {
-        let specific = resolve_feature_upper_bound(references, specific);
-        let general = resolve_feature_upper_bound(references, general);
-        for result in [&specific, &general] {
-            if let Err(error @ QueryError::Invalid { .. }) = result {
-                return Err(error.clone());
-            }
-        }
-        Ok(specific?.fits_within(&general?))
-    })();
     require_all([
         Ok(specific.named().and_then(|named| named.name())
             != general.named().and_then(|named| named.name())),
-        compare_type_conformance(references, specific, general),
-        upper,
+        compare_subsetting_type_and_upper(references, specific, general),
         compare_contexts(references, specific, general),
     ])
 }
@@ -321,6 +331,19 @@ fn subsetted_property_names(
     require_all(checks)
 }
 
+fn subsetting_rules(
+    references: &ReferenceIndex<'_>,
+    property: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let (local, unresolved) = resolve_subsetted_properties(references, property)?;
+    require_all(
+        local
+            .into_iter()
+            .map(|general| compare_subsetting_type_and_upper(references, property, general))
+            .chain(unresolved.then(|| Err(unresolved_subset(property)))),
+    )
+}
+
 pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues: Vec<_> = references
         .model()
@@ -332,30 +355,43 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
         .elements()
         .filter(|element| element.conforms_to("Property"))
     {
-        let (severity, code, message) = match subsetted_property_names(references, property) {
-            Ok(true) => continue,
-            Ok(false) => (
-                StructuralSeverity::Error,
+        for (rule, error_code, invalid_code, unknown_code, outcome) in [
+            (
+                "Property-subsetted_property_names",
                 "UML_PROPERTY_SUBSETTED_PROPERTY_NAMES",
-                "a Property may not subset a Property with the same name".to_owned(),
-            ),
-            Err(QueryError::Invalid { message, .. }) => (
-                StructuralSeverity::Error,
                 "MDE_PROPERTY_SUBSETTED_PROPERTY_NAMES_INVALID",
-                message,
-            ),
-            Err(QueryError::Unsupported { message, .. }) => (
-                StructuralSeverity::Warning,
                 "MDE_PROPERTY_SUBSETTED_PROPERTY_NAMES_UNVERIFIED",
-                message,
+                subsetted_property_names(references, property),
             ),
-        };
-        issues.push(StructuralDiagnostic {
-            severity,
-            code,
-            subject_id: property.id().into(),
-            message: format!("Property-subsetted_property_names: {message}"),
-        });
+            (
+                "Property-subsetting_rules",
+                "UML_PROPERTY_SUBSETTING_RULES",
+                "MDE_PROPERTY_SUBSETTING_RULES_INVALID",
+                "MDE_PROPERTY_SUBSETTING_RULES_UNVERIFIED",
+                subsetting_rules(references, property),
+            ),
+        ] {
+            let (severity, code, message) = match outcome {
+                Ok(true) => continue,
+                Ok(false) => (
+                    StructuralSeverity::Error,
+                    error_code,
+                    "normative constraint is violated".to_owned(),
+                ),
+                Err(QueryError::Invalid { message, .. }) => {
+                    (StructuralSeverity::Error, invalid_code, message)
+                }
+                Err(QueryError::Unsupported { message, .. }) => {
+                    (StructuralSeverity::Warning, unknown_code, message)
+                }
+            };
+            issues.push(StructuralDiagnostic {
+                severity,
+                code,
+                subject_id: property.id().into(),
+                message: format!("{rule}: {message}"),
+            });
+        }
     }
     issues
 }

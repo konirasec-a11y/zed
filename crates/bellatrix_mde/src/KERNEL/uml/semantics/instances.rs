@@ -323,13 +323,9 @@ fn slottable_membership(
     }
 }
 
-fn instance_structural_feature(
-    references: &ReferenceIndex<'_>, instance: ElementRef<'_>,
-) -> Result<bool, QueryError> {
-    let instance = references.element(instance.id())
-        .map_err(|error| QueryError::invalid(instance.id(), error))?;
-    let classifier_value = instance.properties().get("classifier").cloned().unwrap_or_else(|| serde_json::json!([]));
-    let (classifiers, unknown_classifier) = instance_reference_evidence(references, instance, "InstanceSpecification", "classifier", &classifier_value)?;
+fn instance_slots_evidence<'a>(
+    references: &ReferenceIndex<'a>, instance: ElementRef<'a>,
+) -> Result<(Vec<ElementRef<'a>>, bool), QueryError> {
     let children = references.explicit_owned_elements(instance.id())
         .map_err(|error| QueryError::invalid(instance.id(), error))?;
     let slots = children.iter().copied().filter(|child| child.conforms_to("Slot")).collect::<Vec<_>>();
@@ -342,6 +338,17 @@ fn instance_structural_feature(
             return Err(QueryError::invalid(instance.id(), "slot projection omits canonical owned Slots"));
         }
     }
+    Ok((slots, unknown_slot))
+}
+
+fn instance_structural_feature(
+    references: &ReferenceIndex<'_>, instance: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let instance = references.element(instance.id())
+        .map_err(|error| QueryError::invalid(instance.id(), error))?;
+    let classifier_value = instance.properties().get("classifier").cloned().unwrap_or_else(|| serde_json::json!([]));
+    let (classifiers, unknown_classifier) = instance_reference_evidence(references, instance, "InstanceSpecification", "classifier", &classifier_value)?;
+    let (slots, unknown_slot) = instance_slots_evidence(references, instance)?;
     let mut counts = std::collections::BTreeMap::<String, usize>::new();
     let mut unknown_feature = false;
     for slot in &slots {
@@ -373,6 +380,47 @@ fn instance_structural_feature(
     super::feature_compatibility::require_all(checks)
 }
 
+fn instance_defining_feature(
+    references: &ReferenceIndex<'_>, instance: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    use super::feature_compatibility::{accept_any, require_all};
+    let instance = references.element(instance.id())
+        .map_err(|error| QueryError::invalid(instance.id(), error))?;
+    let classifier_value = instance.properties().get("classifier").cloned().unwrap_or_else(|| serde_json::json!([]));
+    let (classifiers, unknown_classifier) = instance_reference_evidence(references, instance, "InstanceSpecification", "classifier", &classifier_value)?;
+    let (slots, unknown_slot) = instance_slots_evidence(references, instance)?;
+    let mut checks = Vec::new();
+    if unknown_slot {
+        checks.push(Err(QueryError::unsupported(instance.id(), "unresolved owned Slot membership")));
+    }
+    for slot in slots {
+        let value = slot.properties().get("definingFeature").unwrap_or(&Value::Null);
+        let (features, _) = instance_reference_evidence(references, slot, "Slot", "definingFeature", value)?;
+        let mut candidates = Vec::new();
+        if unknown_classifier {
+            candidates.push(Err(QueryError::unsupported(instance.id(), "external or unresolved classifier may supply the definingFeature")));
+        }
+        for classifier in &classifiers {
+            let membership = if let Some(feature) = features.first() {
+                slottable_membership(references, *classifier, feature.id())
+            } else {
+                // An unresolved feature cannot belong to a proven empty set.
+                // Otherwise its identity is needed to decide membership.
+                classifiers::query(references, classifier.id()).and_then(|query| {
+                    let features = query.classifier
+                        .ok_or_else(|| QueryError::unsupported(classifier.id(), "Classifier query is unresolved"))?
+                        .all_slottable_features?;
+                    if features.is_empty() { Ok(false) }
+                    else { Err(QueryError::unsupported(slot.id(), "external definingFeature identity is unresolved")) }
+                })
+            };
+            candidates.push(membership);
+        }
+        checks.push(accept_any(candidates));
+    }
+    require_all(checks)
+}
+
 pub(crate) fn validate<'a>(
     model: Model<'a>,
     references: &ReferenceIndex<'a>,
@@ -398,6 +446,16 @@ pub(crate) fn validate<'a>(
         })
         .collect();
     for instance in model.elements().filter_map(InstanceSpecificationRef::from_element) {
+        let defining = match instance_defining_feature(references, instance.0) {
+            Ok(true) => None,
+            Ok(false) => Some((StructuralSeverity::Error, "UML_INSTANCE_DEFINING_FEATURE", "each owned Slot must refer to a slottable feature of at least one instance Classifier".to_owned())),
+            Err(QueryError::Invalid { message, .. }) => Some((StructuralSeverity::Error, "MDE_INSTANCE_DEFINING_FEATURE_INVALID", message)),
+            Err(QueryError::Unsupported { message, .. }) => Some((StructuralSeverity::Warning, "MDE_INSTANCE_DEFINING_FEATURE_UNVERIFIED", message)),
+        };
+        if let Some((severity, code, message)) = defining {
+            issues.push(StructuralDiagnostic { severity, code, subject_id: instance.id().into(),
+                message: format!("InstanceSpecification-defining_feature: {message}") });
+        }
         let outcome = match instance_structural_feature(references, instance.0) {
             Ok(true) => None,
             Ok(false) => Some((StructuralSeverity::Error, "UML_INSTANCE_STRUCTURAL_FEATURE", "each slottable feature may define at most one owned Slot".to_owned())),
