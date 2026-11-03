@@ -120,3 +120,24 @@ Testes focados: `tests/port_aggregation.rs` (3 casos, incluindo repetição A-B-
 concorrência) e `created_port_is_composite_and_noncomposite_edits_are_atomic`.
 Continuam fora deste fechamento as outras restrições de Port, suas interfaces
 provided/required, Connector/ConnectorEnd, notação e fluxo GUI completo.
+
+## Atualização focada: Port::default_value — 2026-11-03
+
+O validador compartilhado implementa `Port-default_value` (UML 2.5.1
+§11.8.14.7, XMI `type.oclIsKindOf(Interface) implies defaultValue->isEmpty()`).
+Port com tipo Interface e defaultValue local tipado/canonicamente owned recebe
+`UML_PORT_DEFAULT_VALUE`. Default ausente/nulo satisfaz o consequente; tipos
+conhecidos não-Interface não recebem essa proibição. Texto legado, referências
+externas e papéis de ValueSpecification não resolvidos ficam não verificados,
+sem inferir tipos por nome ou confundir lowerValue/upperValue com defaultValue.
+Referências locais inválidas continuam recebendo os erros de contrato existentes.
+
+`tests/port_default_value.rs` cobre cenários positivos/negativos, referências
+não resolvidas, distinção de bounds, preservação JSON/Protobuf de drafts,
+rejeição atômica de edição e recuperação. Não há mudança de API pública ou UI;
+esta regra não estabelece conformidade completa de Port/CompositeStructure.
+A edição legada de `defaultValue` por `SetProperty` ainda aceita somente texto e
+rejeita objetos `$ref` antes da validação semântica (`expected string`). O teste
+registra essa rejeição sem mutação; o rollback normativo é exercitado pela troca
+do tipo de um Port com default existente de Class para Interface. Este fechamento
+não resolve a autoria de referências defaultValue pelo editor legado.

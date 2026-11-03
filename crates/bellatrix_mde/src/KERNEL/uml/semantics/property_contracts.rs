@@ -393,6 +393,8 @@ fn validate_property_rules(
             Err(error) => Unverified(error),
         };
         issues.extend(outcome.diagnostic(element, "Port-port_aggregation", "UML_PORT_AGGREGATION"));
+        issues.extend(port_default_value(references, element)
+            .diagnostic(element, "Port-default_value", "UML_PORT_DEFAULT_VALUE"));
     }
     let derived_union = schema::read_effective_boolean(element, "isDerivedUnion");
     for (property, rule, code) in [
@@ -429,6 +431,56 @@ fn validate_property_rules(
     };
     issues.extend(outcome.diagnostic(element, "Property-qualified_is_association_end",
         "UML_PROPERTY_QUALIFIED_ASSOCIATION_END"));
+}
+
+fn port_default_value(references: &ReferenceIndex<'_>, port: ElementRef<'_>) -> PropertyOutcome {
+    use PropertyOutcome::{Satisfied, Unverified, Violation};
+    let interface_type = (|| -> Result<bool, String> {
+        let Some(value) = port.properties().get("type").filter(|value| !value.is_null()) else {
+            return Ok(false);
+        };
+        let property = schema::uml_property("Port", "type").map_err(|error| error.to_string())?
+            .ok_or("Port type contract is unavailable")?;
+        match check_value(references, port, property, value) {
+            Satisfied => {}
+            Violation(error) | Unverified(error) => return Err(error),
+        }
+        let identifier = reference_id(value)?.ok_or("Port type identity is absent")?;
+        Ok(references.element(identifier)?.conforms_to("Interface"))
+    })();
+    if matches!(interface_type, Ok(false)) { return Satisfied; }
+    let default_present = (|| -> Result<bool, String> {
+        if let Some(value) = port.properties().get("defaultValue") {
+            if value.is_null() { return Ok(false); }
+            let property = schema::uml_property("Port", "defaultValue").map_err(|error| error.to_string())?
+                .ok_or("Port defaultValue contract is unavailable")?;
+            return match check_value(references, port, property, value) {
+                Satisfied => Ok(true),
+                Violation(error) | Unverified(error) => Err(error),
+            };
+        }
+        // An owned ValueSpecification can also be a multiplicity bound. Do not
+        // invent a defaultValue role from containment alone.
+        let mut unresolved = false;
+        for child in references.explicit_owned_elements(port.id())? {
+            if !child.conforms_to("ValueSpecification") { continue; }
+            let roles = super::classifiers::ownership_roles(port, child).map_err(|error| error.to_string())?;
+            if roles.properties.iter().any(|property| property.id.fragment == "Property-defaultValue") {
+                if roles.is_resolved { return Ok(true); }
+                unresolved = true;
+            }
+        }
+        if unresolved { Err("owned ValueSpecification has no resolved defaultValue or multiplicity-bound role".into()) }
+        else { Ok(false) }
+    })();
+    // The consequent being true establishes the implication even if the type
+    // cannot be resolved. Otherwise both operands must be known to prove a violation.
+    match (interface_type, default_present) {
+        (_, Ok(false)) => Satisfied,
+        (Ok(true), Ok(true)) => Violation("a Port typed by an Interface cannot specify a defaultValue".into()),
+        (Err(error), _) | (_, Err(error)) => Unverified(error),
+        (Ok(false), _) => Satisfied,
+    }
 }
 
 // Constraints are evaluated structurally; their truth against the modeled
