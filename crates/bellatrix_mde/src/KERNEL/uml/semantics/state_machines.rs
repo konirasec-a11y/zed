@@ -68,23 +68,129 @@ fn connection_points(references: &ReferenceIndex<'_>, owner: ElementRef<'_>) -> 
     require_all(checks)
 }
 
+fn final_state_submachine(references: &ReferenceIndex<'_>, state: ElementRef<'_>) -> Result<bool, QueryError> {
+    let descriptor = schema::uml_property("FinalState", "submachine")
+        .map_err(|error| QueryError::unsupported(state.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(state.id(), "missing submachine contract"))?;
+    let opposite = schema::uml_property("StateMachine", "submachineState")
+        .map_err(|error| QueryError::unsupported(state.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(state.id(), "missing submachineState contract"))?;
+    let direct = state.properties().get("submachine");
+    let value = direct.unwrap_or(&serde_json::Value::Null);
+    let mut checks = vec![match property_contracts::check_value(references, state, descriptor, value) {
+        PropertyOutcome::Satisfied => Ok(true),
+        PropertyOutcome::Violation(message) => Err(QueryError::invalid(state.id(), message)),
+        PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(state.id(), message)),
+    }, Ok(value.is_null())];
+    let mut witnesses = HashSet::new();
+    // An authored opposite is association evidence, unlike containment or a
+    // stored isSubmachineState cache. Do not silently discard that evidence.
+    for machine in references.model().elements().filter(|element| element.conforms_to("StateMachine")) {
+        let Some(inverse) = machine.properties().get("submachineState") else { continue; };
+        let checked = property_contracts::check_value(references, machine, opposite, inverse);
+        // Local identities decide membership independently of an unrelated
+        // member's unresolved metaclass. Its property warning remains reported
+        // by property-contract validation, without obscuring known exclusion.
+        let identities_complete = inverse.as_array().is_some_and(|values| values.iter()
+            .all(|value| matches!(reference_id(value), Ok(Some(_)))));
+        checks.push(match checked {
+            PropertyOutcome::Satisfied => Ok(true),
+            PropertyOutcome::Violation(message) => Err(QueryError::invalid(machine.id(), message)),
+            PropertyOutcome::Unverified(_) if identities_complete => Ok(true),
+            PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(machine.id(), message)),
+        });
+        let contains = inverse.as_array().is_some_and(|values| values.iter().any(|value|
+            matches!(reference_id(value), Ok(Some(id)) if id == state.id())));
+        if contains {
+            witnesses.insert(machine.id());
+            checks.push(Ok(false));
+            if let Some(direct) = direct
+                && let Ok(target) = reference_id(direct)
+                && target != Some(machine.id())
+            {
+                checks.push(Err(QueryError::invalid(state.id(), "submachine contradicts authored StateMachine::submachineState")));
+            }
+        } else if identities_complete && matches!(reference_id(value), Ok(Some(id)) if id == machine.id()) {
+            checks.push(Err(QueryError::invalid(state.id(), "submachine is excluded by its authored submachineState opposite")));
+        }
+    }
+    if witnesses.len() > 1 {
+        checks.push(Err(QueryError::invalid(state.id(), "submachineState opposites identify more than one submachine")));
+    }
+    // A well-formed external reference still proves nonempty submachine. Type
+    // uncertainty cannot turn that known cardinality violation into a warning.
+    require_all(checks)
+}
+
 pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     for element in references.model().elements() {
-        let (code, unknown, constraint) = if element.conforms_to("StateMachine") {
-            ("UML_STATE_MACHINE_CONNECTION_POINTS", "MDE_STATE_MACHINE_CONNECTION_POINTS_UNVERIFIED", "StateMachine-connection_points")
+        let mut constraints = Vec::new();
+        if element.conforms_to("StateMachine") {
+            constraints.push((connection_points(references, element),
+                "UML_STATE_MACHINE_CONNECTION_POINTS", "MDE_STATE_MACHINE_CONNECTION_POINTS_UNVERIFIED",
+                "StateMachine-connection_points", "connection points must have kind entryPoint or exitPoint"));
         } else if element.conforms_to("State") {
-            ("UML_STATE_ENTRY_OR_EXIT", "MDE_STATE_ENTRY_OR_EXIT_UNVERIFIED", "State-entry_or_exit")
-        } else { continue; };
-        let (severity, code, message) = match connection_points(references, element) {
-            Ok(true) => continue,
-            Ok(false) => (StructuralSeverity::Error, code, "connection points must have kind entryPoint or exitPoint".to_owned()),
-            Err(QueryError::Invalid { message, .. }) => (StructuralSeverity::Error, code, message),
-            Err(QueryError::Unsupported { message, .. }) => (StructuralSeverity::Warning, unknown, message),
-        };
-        issues.push(StructuralDiagnostic {
-            severity, code, subject_id: element.id().to_owned(), message: format!("{constraint}: {message}"),
-        });
+            constraints.push((connection_points(references, element),
+                "UML_STATE_ENTRY_OR_EXIT", "MDE_STATE_ENTRY_OR_EXIT_UNVERIFIED",
+                "State-entry_or_exit", "connection points must have kind entryPoint or exitPoint"));
+        }
+        if element.conforms_to("FinalState") {
+            constraints.push((final_state_submachine(references, element),
+                "UML_FINAL_STATE_CANNOT_REFERENCE_SUBMACHINE", "MDE_FINAL_STATE_SUBMACHINE_UNVERIFIED",
+                "FinalState-cannot_reference_submachine", "a FinalState cannot reference a submachine"));
+        }
+        for (result, code, unknown, constraint, violation) in constraints {
+            let (severity, code, message) = match result {
+                Ok(true) => continue,
+                Ok(false) => (StructuralSeverity::Error, code, violation.to_owned()),
+                Err(QueryError::Invalid { message, .. }) => (StructuralSeverity::Error, code, message),
+                Err(QueryError::Unsupported { message, .. }) => (StructuralSeverity::Warning, unknown, message),
+            };
+            issues.push(StructuralDiagnostic {
+                severity, code, subject_id: element.id().to_owned(), message: format!("{constraint}: {message}"),
+            });
+        }
     }
     issues
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{Project, uml::root::validate_changes};
+    use serde_json::{Value, json};
+
+    #[test]
+    fn final_state_transaction_gate_rejects_new_submachine_and_accepts_repair() -> Result<(), Box<dyn std::error::Error>> {
+        let project: Project = serde_json::from_value(json!({
+            "id":"model", "name":"Final state gate", "elements":[
+                {"id":"final", "kind":"uml.final_state", "name":"Done"},
+                {"id":"machine", "kind":"uml.state_machine", "name":"Machine"}
+            ]
+        }))?;
+        let before = project.clone();
+        for reference in [json!({"$ref":"machine"}), json!({"href":"other.uml#Machine"})] {
+            let mut proposed = project.clone();
+            proposed.elements.iter_mut().find(|element| element.id == "final").ok_or("FinalState")?
+                .properties.insert("submachine".into(), reference);
+            let failure = validate_changes(&project, &proposed).expect_err("the transaction gate must reject new violations");
+            assert!(failure.starts_with("UML_FINAL_STATE_CANNOT_REFERENCE_SUBMACHINE:"), "{failure}");
+            assert_eq!(project, before);
+            let mut repaired = proposed.clone();
+            repaired.elements.iter_mut().find(|element| element.id == "final").ok_or("FinalState")?
+                .properties.insert("submachine".into(), Value::Null);
+            validate_changes(&proposed, &repaired)?;
+        }
+        let mut proposed = project.clone();
+        proposed.elements.iter_mut().find(|element| element.id == "machine").ok_or("StateMachine")?
+            .properties.insert("submachineState".into(), json!([{"$ref":"final"}]));
+        let failure = validate_changes(&project, &proposed).expect_err("inverse-only edits must also reach the gate");
+        assert!(failure.starts_with("UML_FINAL_STATE_CANNOT_REFERENCE_SUBMACHINE:"), "{failure}");
+        let mut repaired = proposed.clone();
+        repaired.elements.iter_mut().find(|element| element.id == "machine").ok_or("StateMachine")?
+            .properties.insert("submachineState".into(), json!([]));
+        validate_changes(&proposed, &repaired)?;
+        assert_eq!(project, before);
+        Ok(())
+    }
 }

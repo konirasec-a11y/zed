@@ -97,6 +97,12 @@ Correções de criação/reparent e fixtures foram publicadas em
 de `-p bellatrix_mde` passou **867/867, sem falhas ou testes ignorados**.
 Isso supera as três falhas dos gates históricos acima, sem alterar seus
 resultados registrados. Nenhum componente de UI foi compilado nesse gate.
+StateMachine::connection_points e State::entry_or_exit têm validação
+compartilhada publicada em `75367884a6e44bf34041179968149287f56f5f42`
+(E71), inclusive snapshots e SetProperty. Sete testes novos passam, e o gate
+completo posterior de `-p bellatrix_mde` passa **874/874, zero falhas e
+ignorados**. As duas obrigações são adicionais ao inventário inicial de 127
+IDs, sem ampliar silenciosamente aquele denominador.
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -212,7 +218,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E70 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E71 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -1124,12 +1130,48 @@ de execução nova. E12–E70 possuem os gates delimitados nas seções seguinte
   preservados; projeção explícita malformada não autoriza inferir um papel.
   O recorte não é um validador geral dessas invariantes: snapshots importados
   e mudanças posteriores via SetProperty ainda não estão cobertos por essas
-  guardas de criação/reparent. Não promover obrigações comportamentais com
-  base apenas nessa correção.
+  guardas de criação/reparent nesse commit. E71 posteriormente cobre as duas
+  regras de connectionPoint na validação compartilhada; não fecha as demais
+  guardas de Pin/InteractionOperand. Não promover obrigações comportamentais
+  com base apenas na correção E70.
   A criação de Deployment/Manifestation limpa visibility para null, como já
   ocorria para InterfaceRealization: seus owners compostos não projetam
   Namespace::ownedMember. Os testes verificam owner, visibility e ausência de
   namespace; isso não certifica todos os contratos dessas metaclasses.
+
+- **E71**: `semantics/state_machines.rs`, `connection_point_kind`,
+  `connection_points` e `validate`, chamado por
+  `semantics/root.rs::Model::validate_contracts`; `state_connection_points.rs`,
+  sete testes novos. As duas obrigações de connectionPoint são verificadas
+  no validador compartilhado, incluindo snapshots importados, roundtrip e
+  edições por SetProperty, não apenas criação/reparent. Kind omitido usa
+  o default normativo initial e viola o predicado; apenas entryPoint/exitPoint
+  satisfazem. ProtocolStateMachine herda a regra de StateMachine; vértices de
+  Region não são tratados como connectionPoint de State/StateMachine.
+  Projeções explícitas não substituem ownership canônico. Duplicatas,
+  ownership contraditório/ambíguo, metaclasse conhecida incompatível e
+  escalares/referências malformados continuam Invalid. Referências externas,
+  metaclasses desconhecidas e membership não resolvido continuam
+  Unknown/Unsupported. Violação conhecida ou Invalid não desaparece diante
+  de membro desconhecido, em nenhuma ordem.
+  Diagnósticos: `UML_STATE_MACHINE_CONNECTION_POINTS`,
+  `MDE_STATE_MACHINE_CONNECTION_POINTS_UNVERIFIED`,
+  `UML_STATE_ENTRY_OR_EXIT` e `MDE_STATE_ENTRY_OR_EXIT_UNVERIFIED`.
+
+### Evidência publicada de connectionPoint em State e StateMachine
+
+Commit inspecionado: `75367884a6e44bf34041179968149287f56f5f42`.
+O log `/tmp/state-connection-points-kernel-gate.log` registra **874/874
+aprovados, zero falhas e zero ignorados** no gate completo de
+`-p bellatrix_mde`, incluindo **7/7** no novo alvo state_connection_points.
+Os testes comprovam diagnóstico de snapshots inválidos, rejeição atômica de
+edição que introduz violação e reparo de snapshot importado por SetProperty.
+A lacuna registrada em E70 está fechada para estas duas regras; não se
+certifica cobertura de snapshots/SetProperty das demais guardas de ownership.
+
+Gate anterior à publicação, sem rerun no SHA publicado nem execução nova por
+esta matriz. O resultado não certifica StateMachines integralmente, execução
+comportamental, UI, geração, interchange ou conformidade UML completa.
 
 ### Evidência publicada da recuperação do gate completo do kernel
 
@@ -1156,7 +1198,9 @@ são reclassificados retroativamente como verdes. O gate foi executado antes
 da publicação, sem rerun no SHA publicado nem execução nova por esta matriz.
 A aprovação é do pacote bellatrix_mde neste recorte, não da aplicação inteira,
 UI, geração, interchange ou conformidade UML completa. Permanece aberta a
-lacuna de snapshots/SetProperty para as guardas de ownership descritas em E70.
+lacuna de snapshots/SetProperty para as guardas de ownership descritas em E70
+nesse commit; E71 fecha o recorte das duas regras de connectionPoint, não
+as demais guardas de Pin/InteractionOperand.
 
 ### Evidência publicada de constância e ausência de efeitos em multiplicidades
 
@@ -2719,6 +2763,24 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 - Metaclass: `TimeExpression`. Estado: **P**. Evidência: E43; commit `1d0843a1db2bb2bee6c22638cb15b159be2c4821`.
 - OCL publicado: `expr = null implies (observation->size() = 1 and observation->forAll(oclIsKindOf(TimeObservation)))`.
+
+## Obrigações adicionais ao inventário estrutural inicial
+
+Estas duas linhas de StateMachines têm evidência própria. Não alteram a
+extração histórica das 127 invariantes diretas dos sete pacotes selecionados
+nem constituem inventário completo de StateMachines.
+
+### `StateMachine-connection_points`
+
+- Metaclass: `StateMachine`. Estado: **P**. Evidência: E71; commit `75367884a6e44bf34041179968149287f56f5f42`.
+- OCL publicado: `connectionPoint->forAll (kind = PseudostateKind::entryPoint or kind = PseudostateKind::exitPoint)`.
+- Referências externas/metaclasses desconhecidas e membership não resolvido permanecem Unknown; ProtocolStateMachine herda o predicado.
+
+### `State-entry_or_exit`
+
+- Metaclass: `State`. Estado: **P**. Evidência: E71; commit `75367884a6e44bf34041179968149287f56f5f42`.
+- OCL publicado: `connectionPoint->forAll(kind = PseudostateKind::entryPoint or kind = PseudostateKind::exitPoint)`.
+- Referências externas/metaclasses desconhecidas e membership não resolvido permanecem Unknown; vértices de Region não são connectionPoint desta regra.
 
 ## Plano executável e dependências
 
