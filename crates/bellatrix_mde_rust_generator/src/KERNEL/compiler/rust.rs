@@ -52,6 +52,15 @@ fn plan_with_templates_inner(project: &Project, scope: &Scope, options: Generati
     Ok(result)
 }
 /// The same planner with observed kernel and generation stages recorded in a caller-owned run.
+///
+/// # Effects and determinism
+/// Does not itself read or write files, execute processes or access the network.
+/// Updates the caller-owned trace, reads its monotonic clock and invokes its
+/// configured sink synchronously. Logging itself is not classified as a side
+/// effect; clock-derived trace timestamps are nevertheless nondeterministic.
+/// A sink can perform arbitrary external effects or panic, which this function
+/// neither restricts nor rolls back. The underlying generated result is unchanged
+/// by tracing when the sink completes normally.
 pub fn plan_with_options_traced(project: &Project, scope: &Scope, options: GenerationOptions, trace: &mut bellatrix_mde::ExecutionTrace) -> Result<Plan, Box<dyn std::error::Error>> {
     use bellatrix_mde::{TracePhase, TraceOutcome};
     trace.emit("generation", "rust.plan", TracePhase::Start, Some(&project.id), &[], None);

@@ -12,6 +12,21 @@ pub enum ConstructionScriptError {
 /// Serializes an already-rendered plan without accessing the filesystem.
 /// The returned Python script requires an explicit destination. On Windows, the
 /// destination tree must not be modified concurrently while the script runs.
+///
+/// # Effects
+/// No external side effects during composition: reads only the supplied plan and
+/// returns source text, without filesystem, process, clock or network access.
+/// A non-UTF-8 artifact path returns an error without executing the script.
+///
+/// # Effects of executing the returned program
+/// Execution is a separate caller action. The program reads destination metadata,
+/// creates output directories and temporary files, writes artifact bytes, replaces
+/// existing regular files at artifact paths and removes temporary files. It does
+/// not use the ownership manifest and does not remove obsolete output artifacts.
+/// Publication is per file, not transactional across the project; failure can
+/// leave earlier files replaced and directories created. Platform, permission,
+/// storage, symlink/reparse-point or concurrent-modification errors can stop it.
+/// It does not compile generated code, install dependencies or access the network.
 pub fn python_construction_script(plan: &Plan) -> Result<String, ConstructionScriptError> {
     let mut script = String::from(PYTHON_HEADER);
     for artifact in plan.artifacts() {
@@ -197,6 +212,15 @@ if __name__ == '__main__':
 "#;
 
 /// Record script composition without recording artifact paths or contents.
+///
+/// # Effects and determinism
+/// Does not itself read or write files, execute processes or access the network.
+/// Updates the caller-owned trace, reads its monotonic clock and invokes its
+/// configured sink synchronously. Logging itself is not classified as a side
+/// effect; clock-derived trace timestamps are nevertheless nondeterministic.
+/// A sink can perform arbitrary external effects or panic, which this function
+/// neither restricts nor rolls back. The underlying generated result is unchanged
+/// by tracing when the sink completes normally.
 pub fn python_construction_script_traced(plan: &Plan, trace: &mut crate::ExecutionTrace) -> Result<String, ConstructionScriptError> {
     use crate::{TraceOutcome, TracePhase};
     trace.emit("generation", "python_script.compose", TracePhase::Start, None, &[], None);

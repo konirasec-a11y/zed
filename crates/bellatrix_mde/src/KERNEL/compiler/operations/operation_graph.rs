@@ -274,11 +274,26 @@ impl OperationGraph {
     }
 
     /// Validate dependencies and produce a deterministic in-memory plan.
+    ///
+    /// # Effects and determinism
+    /// Built-in operations only create an in-memory artifact plan: no filesystem,
+    /// process, clock or network access. Registered host callbacks are arbitrary
+    /// Rust functions and may have external effects or panic; their declared
+    /// purity/determinism is a caller contract, not enforced isolation. Such
+    /// effects are not rolled back if a later operation fails. Deterministic
+    /// scheduling alone does not make an effectful callback deterministic.
     pub fn execute(&self) -> Result<Plan, OperationGraphError> {
         self.execute_inner(None)
     }
 
     /// Executes the same graph while recording actual registered callback boundaries.
+    ///
+    /// # Effects and determinism
+    /// Has the callback effects and failure limits of [`Self::execute`]. Also
+    /// updates the caller-owned trace, reads a monotonic clock and synchronously
+    /// invokes any configured trace sink. Logging is not classified as a side
+    /// effect, but elapsed timestamps vary and a custom sink may perform other
+    /// effects or panic. Trace delivery and callback effects are not transactional.
     pub fn execute_traced(&self, trace: &mut crate::ExecutionTrace) -> Result<Plan, OperationGraphError> {
         use crate::{TraceOutcome, TracePhase};
         trace.emit("engine", "operation_graph.execute", TracePhase::Start, None, &[], None);
