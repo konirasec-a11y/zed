@@ -64,6 +64,9 @@ pub fn project_hierarchy(section: &ModelingSection) -> Vec<HierarchyRow> {
     sort(&mut remaining);
     for element in remaining { visit(element, 0, &children, &mut seen, &mut result, &references); }
     for row in &mut result {
+        if let Some(ElementRef::Relationship(relation)) = elements.get(row.element_id.as_str()) {
+            row.label = crate::visual_consistency::relationship_display_label(section, relation, &references);
+        }
         if let Some(ElementRef::Object(element)) = elements.get(row.element_id.as_str()) && crate::templates::is_parameter(&element.kind) { row.label = crate::template_parameter_label_with_references(section, element, &references); }
     }
     result

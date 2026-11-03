@@ -11,6 +11,26 @@ pub struct VisualComponent {
     pub kind: String,
 }
 
+// Both semantic and diagram projections need the same human-readable fallback.
+pub(crate) fn relationship_display_label(
+    section: &ModelingSection,
+    relation: &crate::Relation,
+    references: &crate::uml::references::ReferenceIndex<'_>,
+) -> String {
+    crate::format_relationship_label(&relation.kind, &relation.properties)
+        .filter(|label| !label.trim().is_empty())
+        .unwrap_or_else(|| {
+            let endpoint = |id: &str| section.elements.iter().find(|element| element.id == id)
+                .map(|element| {
+                    let exposed = crate::template_parametered_element(section, element).unwrap_or(element);
+                    crate::element_display_label_with_references(exposed, references)
+                })
+                .filter(|label| !label.trim().is_empty())
+                .unwrap_or_else(|| "Unnamed element".into());
+            format!("{} → {}", endpoint(&relation.from), endpoint(&relation.to))
+        })
+}
+
 /// Derive the cross-view inventory from persisted diagram views, without creating model elements.
 pub fn visual_components(section: &ModelingSection) -> Vec<VisualComponent> {
     let model = crate::uml::root::Model::from_section(section);
@@ -46,22 +66,7 @@ pub fn visual_components(section: &ModelingSection) -> Vec<VisualComponent> {
                     })
                 })
                 .or_else(|| {
-                    relation.map(|relation| {
-                        crate::format_relationship_label(&relation.kind, &relation.properties)
-                            .unwrap_or_else(|| {
-                                let endpoint = |id: &str| {
-                                    section
-                                        .elements
-                                        .iter()
-                                        .find(|element| element.id == id)
-                                        .map_or_else(
-                                            || id.to_owned(),
-                                            |element| element.name.clone(),
-                                        )
-                                };
-                                format!("{} → {}", endpoint(&relation.from), endpoint(&relation.to))
-                            })
-                    })
+                    relation.map(|relation| relationship_display_label(section, relation, &references))
                 })
                 .unwrap_or_else(|| kind.clone());
             components.push(VisualComponent {

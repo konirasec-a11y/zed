@@ -171,6 +171,24 @@ impl gpui::Render for ExplorerDrag {
     }
 }
 
+pub(crate) fn explorer_type_label(kind: &str, relationship: bool) -> String {
+    if relationship { return "Relationship".into(); }
+    let label = bellatrix_mde::semantic_identity(kind).type_label;
+    if label == kind { "Element".into() } else { label.into() }
+}
+
+pub(crate) fn explorer_view_icon(id: &str, kind: &str, selected: bool, palette: &crate::WorkbenchPalette) -> impl gpui::IntoElement {
+    use gpui::{div, prelude::*, px, svg};
+    use bellatrix_ui_symbols::glyph;
+    div().id(format!("mde-explorer-view-icon-{id}"))
+        .flex().items_center().gap_1()
+        .tooltip(ui::Tooltip::text("Diagram occurrence"))
+        .child(ui::Icon::new(ui::IconName::Eye).size(ui::IconSize::Small)
+            .color(if selected { ui::Color::Selected } else { ui::Color::Muted }))
+        .child(svg().data(glyph(element_glyph(kind))).size(px(14.0)).flex_none()
+            .text_color(if selected { palette.selection } else { palette.muted }))
+}
+
 pub(crate) fn element_glyph(kind: &str) -> bellatrix_ui_symbols::ShapeKind {
     use bellatrix_ui_symbols::ShapeKind;
     let identity = bellatrix_mde::semantic_identity(kind);

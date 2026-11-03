@@ -320,8 +320,7 @@ impl Render for MdeRightPanel {
                     rows.push(div().id(format!("mde-explorer-view-{}", row.element_id))
                         .pl(px((row.depth.min(15) + 2) as f32 * 14.0)).flex().items_center().gap_1()
                         .when(selected, |row| row.bg(palette.surface))
-                        .child(svg().data(glyph(element_glyph(&row.kind))).size(px(14.0)).flex_none()
-                            .text_color(if selected { palette.selection } else { palette.muted }))
+                        .child(crate::hierarchy::explorer_view_icon(&row.element_id, &row.kind, selected, &palette))
                         .child(div().flex_1().min_w_0().overflow_hidden().child(
                             TreeViewItem::new(row.element_id.clone(), row.label.clone())
                                 .root_item(has_children).expanded(expanded).toggle_state(selected)
@@ -335,7 +334,7 @@ impl Render for MdeRightPanel {
                                     owner.update(cx, |workbench, cx| workbench.select_diagram_view(diagram_id.clone(), view_id.clone(), cx));
                                 })
                         ))
-                        .child(Label::new(format!("View · {}", row.kind)).size(LabelSize::XSmall).color(Color::Muted)));
+                        .child(Label::new(crate::hierarchy::explorer_type_label(&row.kind, view.subject_id.as_deref().is_some_and(|id| snapshot.section.relations.iter().any(|relation| relation.id == id)))).size(LabelSize::XSmall).color(Color::Muted)));
                     if has_children && !expanded { hidden_by_depth = Some(row.depth); }
                     continue;
                 }
@@ -375,7 +374,7 @@ impl Render for MdeRightPanel {
                                         owner.update(cx, |workbench, cx| workbench.select_diagram(id.clone(), cx));
                                     })
                             ))
-                            .child(Label::new(row.kind.clone()).size(LabelSize::XSmall).color(Color::Muted)),
+                            .child(Label::new("Diagram").size(LabelSize::XSmall).color(Color::Muted)),
                     );
                     if has_children && !expanded { hidden_by_depth = Some(row.depth); }
                     continue;
@@ -396,7 +395,7 @@ impl Render for MdeRightPanel {
                 let tree_item = TreeViewItem::new(id.clone(), label)
                     .root_item(has_children)
                     .expanded(expanded)
-                    .toggle_state(selected_id.as_deref() == Some(id.as_str()))
+                    .toggle_state(selected_view.is_none() && selected_id.as_deref() == Some(id.as_str()))
                     .on_toggle(move |_, _, cx| {
                         if let Err(error) = disclosure_panel.update(cx, |panel, cx| {
                             if !panel.collapsed_elements.insert(disclosure_id.clone()) {
@@ -423,7 +422,7 @@ impl Render for MdeRightPanel {
                         .items_center()
                         .gap_1()
                         .when(
-                            selected_id.as_deref() == Some(row.element_id.as_str()),
+                            selected_view.is_none() && selected_id.as_deref() == Some(row.element_id.as_str()),
                             |row| row.bg(palette.surface),
                         )
                         .child(
@@ -432,7 +431,7 @@ impl Render for MdeRightPanel {
                                 .size(px(14.0))
                                 .flex_none()
                                 .text_color(
-                                    if selected_id.as_deref() == Some(row.element_id.as_str()) {
+                                    if selected_view.is_none() && selected_id.as_deref() == Some(row.element_id.as_str()) {
                                         palette.selection
                                     } else {
                                         palette.muted
@@ -505,9 +504,7 @@ impl Render for MdeRightPanel {
                                 .bg(palette.surface)
                                 .child(
                                     Label::new(
-                                        bellatrix_mde::semantic_identity(&row.kind)
-                                            .type_label
-                                            .to_owned(),
+                                        crate::hierarchy::explorer_type_label(&row.kind, snapshot.section.relations.iter().any(|relation| relation.id == row.element_id)),
                                     )
                                     .size(LabelSize::XSmall)
                                     .color(Color::Muted),
