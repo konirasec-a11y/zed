@@ -325,8 +325,10 @@ pub fn lower_bound(
         return bound(references, element, "lowerValue")?.map_or(Ok(1.into()), |target| {
             match evaluate(references, target.id())? {
                 LiteralValue::Integer(value) => Ok(value),
-                _ => Err(EvaluationError::invalid(target.id(),
-                    "MultiplicityElement::lower_is_integer requires a non-null integerValue()")),
+                // lowerBound's fallback is distinct from lower_is_integer.
+                // A computable value with no Integer projection yields 1;
+                // multiplicity() still diagnoses the violated invariant.
+                _ => Ok(1.into()),
             }
         });
     }
@@ -348,7 +350,13 @@ pub fn upper_bound(
         ));
     }
     if has_bound_references(element) {
-        return evaluate_upper_bound(references, element);
+        return bound(references, element, "upperValue")?.map_or(Ok(1.into()), |target| {
+            match evaluate(references, target.id())? {
+                LiteralValue::UnlimitedNatural(value) => Ok(value),
+                // Keep the query fallback separate from the strict validator.
+                _ => Ok(1.into()),
+            }
+        });
     }
     require_assigned_values(references, element)?;
     literal_upper_bound(element.properties())

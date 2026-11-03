@@ -147,7 +147,8 @@ pub fn compare_property_consistency(
     // adopted erratum: preserve the published OCL rather than interval containment.
     // Bounds must be queried independently: a false lower-bound clause decides
     // the conjunction even when an upper ValueSpecification is unevaluated.
-    // Typed-null/invalid bounds remain errors, not empty or default bounds.
+    // Malformed bounds remain errors; computable typed-null projections use
+    // the bound query's normative fallback, with invariants checked separately.
     let specific_lower = value_specifications::lower_bound(references, redefining)
         .map_err(|error| classify_value_error(redefining.id(), error));
     let general_lower = value_specifications::lower_bound(references, redefined)

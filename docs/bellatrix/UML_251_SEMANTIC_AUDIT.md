@@ -352,3 +352,70 @@ sua proposta em errata aprovada nem ampliam a cobertura UML declarada.
 
 Uma rodada posterior acrescentou o caso de precedência de erro estrutural sobre
 limite não computável em ambas as ordens: **10/10 testes KB-09 aprovados**.
+
+## Gate focado KB-01–KB-12 (2026-11-03, 17:59 UTC)
+
+**63/63 testes aprovados em 15 alvos**, além de `cargo check` da crate e do
+check de atualidade do catálogo normativo. Execução no workspace nativo,
+Linux x86_64, Rust/Cargo 1.98.1, offline locked, dois jobs, sem incremental
+e sem build de UI. O snapshot permaneceu inalterado durante o lote.
+
+Base: `4529ecd98edd50e955b3fa45efa92d007d72f033`, acrescida do delta de bounds
+em `feature_compatibility.rs`, `value_specifications.rs` e
+`kb09_redefinitions.rs`, ainda não commitado no momento deste gate.
+Não se atribui antecipadamente um SHA final a esse delta.
+
+- SHA-256 do diff binário antes do gate:
+  `55d8137ad3519c9b42dde478f5cc340a8e18f71f9ec4dbe85d79d1a25ca9a890`.
+- Fingerprint dos arquivos versionados da crate, idêntico antes/depois:
+  `07061ec1c7255963fb5381bfe42bc3633cbf8f40f549ff250d45eaa7b65e425b`.
+- Cálculo do fingerprint:
+  `git ls-files crates/bellatrix_mde | sort | xargs sha256sum | sha256sum`.
+
+```sh
+export CARGO_BUILD_JOBS=2 CARGO_INCREMENTAL=0
+python3 script/bellatrix_mde/bellatrix_uml_catalog.py --check
+cargo check --offline --locked -p bellatrix_mde
+cargo test --offline --locked -p bellatrix_mde \
+  --test ownership_namespace_flow --test namespace_distinguishability_flow \
+  --test inherited_capabilities --test property_contract_flow \
+  --test property_invariants_flow --test association_specialization_flow \
+  --test association_kernel --test relationship_roles_flow \
+  --test kb09_redefinitions --test kernel_api_validation \
+  --test property_collection_validation --test graph_rules \
+  --test kernel_api_document --test kernel_api_graph \
+  --test reception_signal_contracts
+git diff --check
+```
+
+| Recorte | Fluxos executados | Resultado |
+| --- | --- | --- |
+| KB-01/11 | `ownership_namespace_flow`: papéis canônicos, namespace e visibilidade | 4/4 |
+| KB-02 | `namespace_distinguishability_flow`: sobrecargas, aliases, ordem e defaults | 3/3 |
+| KB-03/12 | `inherited_capabilities`: Operation, herança, connector_end e reentrant_behaviors | 5/5 |
+| KB-04 | `property_contract_flow`: literais, computabilidade, Constraint e persistência | 3/3 |
+| KB-05 | `property_invariants_flow`: uniões derivadas e qualificadores | 5/5 |
+| KB-06/07 | `association_specialization_flow` e `association_kernel` | 2/2 + 2/2 |
+| KB-08 | `relationship_roles_flow`: múltiplas pontas, objetos, inversas e subsets | 3/3 |
+| KB-09 | `kb09_redefinitions`: Slots, papéis, OCL literal e bounds independentes | 11/11 |
+| KB-10 | `kernel_api_validation`: mesmos passes com/sem raiz, reparo e diagnósticos | 4/4 |
+| Regressões | `property_collection_validation` e `graph_rules` | 3/3 + 2/2 |
+| Persistência e API | `kernel_api_document` e `kernel_api_graph` | 5/5 + 7/7 |
+| Bounds em Reception | `reception_signal_contracts` | 4/4 |
+
+O último fluxo de KB-09 verifica o fallback normativo de `lowerBound()` e
+`upperBound()`: quando a consulta tipada de um valor computável retorna null,
+a consulta de bound usa 1. Isso não é aplicado a expressão não computável,
+valor malformado ou referência ausente. `multiplicity` mantém a validação
+estrita e diagnósticos estruturais separados, incluindo tipo exigido pelo
+bound e ordem do intervalo; um resultado verdadeiro do comparador não os
+suprime. O teste distingue consulta, consistência, snapshot inválido e
+persistência JSON/Protobuf.
+
+Este gate comprova os fluxos selecionados do Kernel básico, não toda a suíte
+unitária existente nem conformidade UML integral. Referências externas sem
+resolver e overrides/contextos não implementados continuam não verificados.
+UMLR-424 permanece aberta; usa-se o OCL publicado, não a errata proposta.
+UI, geração, compilação de aplicação e aceite local do mantenedor não foram
+executados. A API continua declarando `implemented_rules_only`. O fingerprint
+testado deve ser associado ao commit final no checkpoint de publicação.

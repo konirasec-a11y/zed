@@ -571,7 +571,7 @@ fn property_consistency_evaluates_owned_bounds_independently() {
         ("uml.literal_integer", json!(1), "true"),
         ("uml.literal_integer", json!(2), "unsupported"),
         ("uml.opaque_expression", Value::Null, "unsupported"),
-        ("uml.literal_null", Value::Null, "invalid"),
+        ("uml.literal_null", Value::Null, "true"),
         ("uml.literal_integer", Value::Null, "invalid"),
     ] {
         let project = edit(&document(false), |value| {
@@ -653,8 +653,8 @@ fn property_consistency_prioritizes_invalid_lower_in_either_argument() {
                     .find(|element| element["id"] == owner)
                     .expect("property")["properties"]["lowerValue"] = json!({"$ref":lower_id});
                 elements.push(json!({"id":lower_id,
-                    "kind":if owner == invalid_owner { "uml.literal_null" } else { "uml.opaque_expression" },
-                    "name":"", "properties":{"visibility":null}}));
+                    "kind":if owner == invalid_owner { "uml.literal_integer" } else { "uml.opaque_expression" },
+                    "name":"", "properties":{"visibility":null,"value":null}}));
                 value["relations"]
                     .as_array_mut()
                     .expect("relations")
@@ -675,6 +675,77 @@ fn property_consistency_prioritizes_invalid_lower_in_either_argument() {
             assert!(
                 matches!(result, Err(classifiers::QueryError::Invalid { .. })),
                 "invalid lower owned by {invalid_owner}: {result:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn typed_null_bound_queries_default_without_suppressing_invariant_diagnostics() {
+    use bellatrix_mde::uml::{
+        feature_compatibility::compare_property_consistency, value_specifications,
+    };
+    for (role, kind, invariant) in [
+        ("lowerValue", "uml.literal_null", "lower_is_integer"),
+        (
+            "upperValue",
+            "uml.literal_null",
+            "upper_is_unlimitedNatural",
+        ),
+        ("lowerValue", "uml.literal_boolean", "lower_is_integer"),
+        (
+            "upperValue",
+            "uml.literal_boolean",
+            "upper_is_unlimitedNatural",
+        ),
+    ] {
+        let project = edit(&document(false), |value| {
+            let elements = value["elements"].as_array_mut().expect("elements");
+            elements
+                .iter_mut()
+                .find(|element| element["id"] == "replacement")
+                .expect("property")["properties"][role] = json!({"$ref":"bound"});
+            elements.push(json!({"id":"bound","kind":kind,"name":"",
+                "properties":{"visibility":null}}));
+            value["relations"]
+                .as_array_mut()
+                .expect("relations")
+                .push(json!({
+                    "id":"owns-bound","kind":"owns","from":"replacement","to":"bound"
+                }));
+        });
+        for format in [Format::Json, Format::Protobuf] {
+            let reopened =
+                decode(&encode(&project, format).expect("save"), format).expect("reopen");
+            let references = ReferenceIndex::new(Model::from_project(&reopened));
+            let replacement = references.element("replacement").expect("replacement");
+            assert_eq!(
+                value_specifications::lower_bound(&references, replacement).expect("lower"),
+                1.into()
+            );
+            assert_eq!(
+                value_specifications::upper_bound(&references, replacement).expect("upper"),
+                1.into()
+            );
+            assert_eq!(
+                compare_property_consistency(
+                    &references,
+                    replacement,
+                    references.element("original").expect("original")
+                ),
+                Ok(true)
+            );
+            assert!(matches!(
+                value_specifications::multiplicity(&references, replacement),
+                Err(value_specifications::EvaluationError::Invalid { .. })
+            ));
+            let issues = Model::from_project(&reopened).validate();
+            assert!(
+                issues
+                    .iter()
+                    .any(|issue| issue.severity == StructuralSeverity::Error
+                        && issue.message.contains(invariant)),
+                "{role}/{kind}: {issues:?}"
             );
         }
     }
