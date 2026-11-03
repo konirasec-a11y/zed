@@ -262,7 +262,7 @@ fn fixture() -> serde_json::Result<Project> {
             {"id":"root", "kind":"uml.model", "name":"Root"},
             {"id":"class", "kind":"uml.class", "name":"Box"},
             {"id":"attribute", "kind":"uml.attribute", "name":"item", "properties":{"type":"String", "defaultValue":"empty", "aggregation":"none"}},
-            {"id":"operation", "kind":"uml.operation", "name":"get", "properties":{"isOrdered":false}}
+            {"id":"operation", "kind":"uml.operation", "name":"get", "properties":{"isOrdered":false,"type":"LegacyResult"}}
         ],
         "relations":[
             {"id":"owns-class", "kind":"owns", "from":"root", "to":"class"},
@@ -325,7 +325,232 @@ fn generated_contracts_drive_canonical_inspection_commands_validation_and_roundt
     assert!(contract("Property", "isComposite")?.is_derived);
     assert!(!contract("Property", "isComposite")?.is_read_only);
     assert!(validate_edit("Property", "isComposite", &json!(true)).is_err());
-    let changed = edit(&changed, "attribute", "type", json!("Vec<String>"))?;
+    let changed = commands::apply(
+        &changed,
+        &Command::CreateDiagram {
+            kind: crate::StructuralDiagramKind::Class,
+            name: "Types".into(),
+            model_elements: vec![],
+        },
+        1,
+    )?;
+    let diagram_id = changed.diagrams.last().ok_or("missing diagram")?.id.clone();
+    let changed = commands::apply(
+        &changed,
+        &Command::CreateElement {
+            diagram_id,
+            owner_id: Some("root".into()),
+            kind: crate::commands::ModelingElementKind::PrimitiveType,
+            name: Some("String".into()),
+            x: 0.0,
+            y: 0.0,
+        },
+        2,
+    )?;
+    let type_id = changed.elements.last().ok_or("missing Type")?.id.clone();
+    let changed = commands::apply(
+        &changed,
+        &Command::AddMember {
+            owner_id: "class".into(),
+            kind: crate::commands::ModelingMemberKind::Attribute,
+        },
+        3,
+    )?;
+    let property_id = changed
+        .elements
+        .last()
+        .ok_or("missing new Property")?
+        .id
+        .clone();
+    let inspected =
+        inspect_element(&ModelingSection::from_model(&changed), "attribute").ok_or("inspector")?;
+    assert!(
+        inspected
+            .properties
+            .iter()
+            .any(|field| field.path == "properties.type"
+                && field.editor == PropertyEditor::Reference
+                && field.value.is_null())
+    );
+    assert!(
+        inspected
+            .properties
+            .iter()
+            .any(|field| field.path == "legacy.type"
+                && field.value == json!("String")
+                && !field.editable)
+    );
+    assert!(
+        inspected
+            .reference_choices
+            .iter()
+            .any(|choice| choice.id == type_id && choice.label.contains("Root::String"))
+    );
+    assert!(
+        !inspected
+            .reference_choices
+            .iter()
+            .any(|choice| choice.id == "root")
+    );
+    assert!(edit(&changed, "attribute", "type", json!("String")).is_err());
+    let mut conflicting_text = changed.clone();
+    conflicting_text
+        .elements
+        .iter_mut()
+        .find(|element| element.id == "attribute")
+        .ok_or("Property")?
+        .properties
+        .insert("typeText".into(), json!("Different authored text"));
+    let conflicting_before = conflicting_text.clone();
+    assert!(
+        edit(
+            &conflicting_text,
+            "attribute",
+            "type",
+            json!({"$ref":type_id})
+        )
+        .is_err()
+    );
+    assert_eq!(conflicting_text, conflicting_before);
+    let changed = edit(&changed, "attribute", "type", json!({"$ref":type_id}))?;
+    let changed = edit(&changed, &property_id, "type", json!({"$ref":"class"}))?;
+    assert_eq!(
+        changed
+            .element("attribute")
+            .ok_or("Property")?
+            .properties
+            .get("typeText"),
+        Some(&json!("String"))
+    );
+    let before_invalid = changed.clone();
+    for invalid in [
+        json!({"$ref":"missing"}),
+        json!({"$ref":"root"}),
+        json!([]),
+        json!({"href":"library#String"}),
+        json!({"$ref":type_id,"extra":true}),
+    ] {
+        assert!(edit(&changed, "attribute", "type", invalid).is_err());
+        assert_eq!(changed, before_invalid);
+    }
+    assert!(validate_edit("Operation", "type", &json!("String")).is_err());
+    let operation = inspect_element(&ModelingSection::from_model(&changed), "operation")
+        .ok_or("Operation inspector")?;
+    assert!(
+        operation
+            .properties
+            .iter()
+            .any(|field| field.path == "properties.type"
+                && !field.editable
+                && field.editor == PropertyEditor::ReadOnly)
+    );
+    assert!(edit(&changed, "operation", "type", json!({"$ref":type_id})).is_err());
+    assert!(
+        commands::apply(
+            &changed,
+            &Command::DeleteElement {
+                element_id: type_id.clone()
+            },
+            4
+        )
+        .is_err()
+    );
+    assert_eq!(changed, before_invalid);
+    let changed = commands::apply(
+        &changed,
+        &Command::Rename {
+            element_id: type_id.clone(),
+            name: "Text".into(),
+        },
+        4,
+    )?;
+    let section = ModelingSection::from_model(&changed);
+    let references = super::super::references::ReferenceIndex::new(
+        super::super::root::Model::from_section(&section),
+    );
+    let label = crate::element_display_label_with_references(
+        changed.element("attribute").ok_or("Property")?,
+        &references,
+    );
+    assert!(label.contains(": Text"));
+    assert!(!label.contains("String"));
+    assert_eq!(
+        inspect_element(&section, "attribute")
+            .ok_or("Property inspector")?
+            .display_label,
+        label
+    );
+    assert_eq!(
+        inspect_element(&section, "class")
+            .ok_or("Class inspector")?
+            .attributes
+            .iter()
+            .find(|member| member.id == "attribute")
+            .ok_or("member")?
+            .display_label,
+        label
+    );
+    assert_eq!(
+        crate::project_hierarchy(&section)
+            .iter()
+            .find(|row| row.element_id == "attribute")
+            .ok_or("tree row")?
+            .label,
+        label
+    );
+    let cleared = edit(&changed, "attribute", "type", Value::Null)?;
+    assert!(
+        !cleared
+            .element("attribute")
+            .ok_or("Property")?
+            .properties
+            .contains_key("type")
+    );
+    assert_eq!(
+        cleared
+            .element("attribute")
+            .ok_or("Property")?
+            .properties
+            .get("typeText"),
+        Some(&json!("String"))
+    );
+    let mut dangling = changed.clone();
+    dangling.elements.retain(|element| element.id != type_id);
+    assert!(
+        crate::validate_structural_model(&dangling)
+            .iter()
+            .any(|issue| issue.code == "UML_TYPED_ELEMENT_TYPE" && issue.subject_id == "attribute")
+    );
+    let mut wrong_type = changed.clone();
+    wrong_type
+        .elements
+        .iter_mut()
+        .find(|element| element.id == type_id)
+        .ok_or("Type")?
+        .kind = "uml.comment".into();
+    assert!(
+        crate::validate_structural_model(&wrong_type)
+            .iter()
+            .any(|issue| issue.code == "UML_TYPED_ELEMENT_TYPE" && issue.subject_id == "attribute")
+    );
+    let mut duplicate_type = changed.clone();
+    duplicate_type
+        .elements
+        .push(changed.element(&type_id).ok_or("Type")?.clone());
+    let references = super::super::references::ReferenceIndex::new(
+        super::super::root::Model::from_project(&duplicate_type),
+    );
+    assert!(
+        references
+            .validate(contract("Property", "type")?, &json!({"$ref":type_id}))
+            .is_err()
+    );
+    dangling.root_model = None;
+    assert!(
+        crate::validate_structural_model(&dangling)
+            .iter()
+            .any(|issue| issue.code == "UML_TYPED_ELEMENT_TYPE")
+    );
     let changed = edit(&changed, "attribute", "defaultValue", json!("[]"))?;
     let changed = edit(&changed, "attribute", "visibility", json!("private"))?;
     let changed = edit(&changed, "attribute", "visibility", Value::Null)?;
@@ -348,7 +573,7 @@ fn generated_contracts_drive_canonical_inspection_commands_validation_and_roundt
                 .ok_or("missing attribute")?
                 .properties
                 .get("type"),
-            Some(&json!("Vec<String>"))
+            Some(&json!({"$ref":type_id}))
         );
     }
     let mut malformed = changed.clone();

@@ -114,7 +114,26 @@ pub fn member_presentation(element: &Element) -> MemberPresentation {
 }
 
 pub fn element_display_label(element: &Element) -> String {
-    if let Some(body) = crate::uml::root::ElementRef::Object(element).comment().and_then(|comment| comment.body()) { return body.to_owned(); }
+    display_label(element, None)
+}
+
+pub fn element_display_label_with_references(
+    element: &Element,
+    references: &crate::uml::references::ReferenceIndex<'_>,
+) -> String {
+    display_label(element, Some(references))
+}
+
+fn display_label(
+    element: &Element,
+    references: Option<&crate::uml::references::ReferenceIndex<'_>>,
+) -> String {
+    if let Some(body) = crate::uml::root::ElementRef::Object(element)
+        .comment()
+        .and_then(|comment| comment.body())
+    {
+        return body.to_owned();
+    }
     let kind = UmlType::from_kind(&element.kind);
     let member = matches!(
         kind,
@@ -154,7 +173,36 @@ pub fn element_display_label(element: &Element) -> String {
     }
     // Source declaration/signature fields may retain an earlier name. They belong
     // in their labeled inspector fields, never in the canonical semantic label.
-    let value_type = text(element.properties.get("type"));
+    let type_value = element.properties.get("type");
+    let type_label = match type_value {
+        Some(value) if value.is_object() => {
+            Some(match crate::uml::references::reference_id(value) {
+                Ok(Some(id)) => {
+                    let target = references.and_then(|index| {
+                        let descriptor = crate::uml::root::ElementRef::Object(element)
+                            .metaclass()
+                            .and_then(|metaclass| {
+                                crate::uml::schema::uml_property(metaclass, "type")
+                                    .ok()
+                                    .flatten()
+                            })?;
+                        index.validate(descriptor, value).ok().flatten()
+                    });
+                    match target {
+                        Some(target) => target
+                            .named()
+                            .and_then(|target| target.name())
+                            .map(str::to_owned)
+                            .unwrap_or_else(|| format!("[unnamed Type: {id}]")),
+                        None => format!("[unresolved Type: {id}]"),
+                    }
+                }
+                _ => "[invalid Type reference]".into(),
+            })
+        }
+        value => text(value).map(|text| format!("{text} {{type text}}")),
+    };
+    let value_type = type_label.as_deref();
     let mut has_return_details = value_type.is_some();
     if let Some(value_type) = value_type {
         label.push_str(": ");
@@ -428,7 +476,7 @@ mod tests {
             .iter()
             .find(|row| row.element_id == "field-title")
             .expect("row");
-        assert_eq!(row.label, "Customer wording");
+        assert_eq!(row.label, expected);
         assert_eq!(row.depth, 1);
         assert_eq!(semantic_identity(&row.kind).type_label, "Attribute");
         assert_eq!(
@@ -476,7 +524,7 @@ mod tests {
                 "uml.attribute",
                 json!({"type":"String", "visibility":"private"})
             )),
-            "-anything: String"
+            "-anything: String {type text}"
         );
         assert_eq!(
             element_display_label(&element(

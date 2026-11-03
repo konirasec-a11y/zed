@@ -15,6 +15,7 @@ pub enum PropertyEditor {
     Boolean,
     Number,
     Choice(&'static [&'static str]),
+    Reference,
     ReadOnly,
 }
 
@@ -38,6 +39,12 @@ pub struct InspectorMember {
     pub kind: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InspectorReferenceChoice {
+    pub id: String,
+    pub label: String,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ElementInspector {
     pub element_id: String,
@@ -45,6 +52,7 @@ pub struct ElementInspector {
     pub name: String,
     pub display_label: String,
     pub properties: Vec<InspectorProperty>,
+    pub reference_choices: Vec<InspectorReferenceChoice>,
     /// Owned attributes/operations are model Elements, not strings in a form.
     pub attributes: Vec<InspectorMember>,
     pub operations: Vec<InspectorMember>,
@@ -129,12 +137,19 @@ fn apply_normative_contracts(element: crate::uml::root::ElementRef<'_>, properti
     for field in properties {
         let Some(key) = field.path.strip_prefix("properties.") else { continue; };
         let Ok(Some(descriptor)) = schema::uml_property(metaclass, key) else { continue; };
-        if schema::uses_legacy_text_adapter(descriptor, &field.value) { continue; }
         if descriptor.is_read_only || descriptor.is_derived {
             field.editor = PropertyEditor::ReadOnly;
             field.editable = false;
             continue;
         }
+        if key == "type" && element.conforms_to("Property") {
+            field.editor = PropertyEditor::Reference;
+            field.label = "Type reference".into();
+            field.editable = true;
+            if field.value.is_string() { field.value = Value::Null; }
+            continue;
+        }
+        if schema::uses_legacy_text_adapter(descriptor, &field.value) { continue; }
         let Ok(kind) = schema::scalar_kind(descriptor) else { continue; };
         field.editable = true;
         field.editor = match kind {
@@ -168,6 +183,32 @@ fn root_properties(section: &ModelingSection, id: &str) -> Vec<InspectorProperty
 }
 
 pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementInspector> {
+    let references = crate::uml::references::ReferenceIndex::new(
+        crate::uml::root::Model::from_section(section),
+    );
+    inspect_element_with_references(section, id, &references)
+}
+
+fn inspect_element_with_references(
+    section: &ModelingSection,
+    id: &str,
+    references: &crate::uml::references::ReferenceIndex<'_>,
+) -> Option<ElementInspector> {
+    let model = crate::uml::root::Model::from_section(section);
+    let mut reference_choices = references.element(id).ok()
+        .and_then(|element| element.metaclass())
+        .and_then(|metaclass| crate::uml::schema::uml_property(metaclass, "type").ok().flatten())
+        .map(|property| references.candidates(property).into_iter().map(|target| {
+            let name = target.named()
+                .and_then(|named| named.qualified_name(model).ok().flatten())
+                .unwrap_or_else(|| target.named().and_then(|named| named.name())
+                    .unwrap_or("(unnamed)").into());
+            InspectorReferenceChoice {
+                id: target.id().into(),
+                label: format!("{name} · {} [{}]", target.metaclass().unwrap_or(target.kind()), target.id()),
+            }
+        }).collect::<Vec<_>>()).unwrap_or_default();
+    reference_choices.sort_by(|left, right| left.label.cmp(&right.label));
     // Relationship records share Element identity without acquiring unrelated Class properties.
     if let Some(relation) = section.relations.iter().find(|relation| relation.id == id
         && (crate::uml::root::relationship_metaclass(&relation.kind).is_some() || relation.kind.starts_with("uml.") || section.diagrams.iter().any(|diagram|
@@ -228,13 +269,15 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
             element_id:relation.id.clone(),kind:relation.kind.clone(),
             name:format!("{source} → {target}"),
             display_label:format!("{source} → {target}"),
-            properties,attributes:Vec::new(),operations:Vec::new(),receptions:Vec::new(),
+            reference_choices,properties,attributes:Vec::new(),operations:Vec::new(),receptions:Vec::new(),
             template_parameters:Vec::new(),ports:Vec::new(),parts:Vec::new(),
         });
     }
     let element = section.elements.iter().find(|element| element.id == id)?;
+    let has_type_contract = crate::uml::root::ElementRef::Object(element).metaclass()
+        .and_then(|metaclass| crate::uml::schema::uml_property(metaclass, "type").ok().flatten()).is_some();
     let semantic_name = crate::template_parametered_element(section, element).map_or(element.name.as_str(), |exposed| exposed.name.as_str());
-    let display_label = if crate::templates::is_parameter(&element.kind) { crate::template_parameter_label(section, element) } else { crate::element_display_label(element) };
+    let display_label = if crate::templates::is_parameter(&element.kind) { crate::template_parameter_label_with_references(section, element, references) } else { crate::element_display_label_with_references(element, references) };
     let mut properties = vec![
         InspectorProperty { path:"id".into(), label:"ID".into(), group:"Identity",
             editor:PropertyEditor::ReadOnly, value:json!(element.id), editable:false },
@@ -274,6 +317,15 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
         properties.push(InspectorProperty {path:format!("properties.{key}"),label:key.clone(),
             group:"Properties",editor,value:value.clone(),editable});
     }
+    if has_type_contract && let Some(text) = element.properties.get("type").filter(|value| value.is_string()) {
+        properties.push(InspectorProperty {path:"legacy.type".into(),label:"Type text (unresolved)".into(),group:"Authored text",editor:PropertyEditor::ReadOnly,value:text.clone(),editable:false});
+    }
+    if has_type_contract && let Some(field) = properties.iter_mut().find(|field| field.path == "properties.typeText") {
+        field.label = "Preserved type text (unresolved)".into();
+        field.group = "Authored text";
+        field.editor = PropertyEditor::ReadOnly;
+        field.editable = false;
+    }
     properties.push(InspectorProperty {path:"description".into(),label:"Documentation".into(),
         group:"Documentation",editor:PropertyEditor::Multiline,
         value:json!(element.description.clone().unwrap_or_default()),editable:true});
@@ -283,7 +335,7 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
     let mut receptions = Vec::new();
     let template_parameters = crate::template_parameters(section, &element.id).into_iter().map(|member| InspectorMember {
         id:member.id.clone(), name:crate::template_parametered_element(section, member).unwrap_or(member).name.clone(), kind:member.kind.clone(),
-        display_label: crate::template_parameter_label(section, member),
+        display_label: crate::template_parameter_label_with_references(section, member, references),
     }).collect();
     let mut ports=Vec::new();
     let mut parts=Vec::new();
@@ -292,7 +344,7 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
         if let Some(member) = section.elements.iter().find(|e| e.id == relation.to) {
             let descriptor = InspectorMember {
                 id:member.id.clone(),name:member.name.clone(),kind:member.kind.clone(),
-                display_label:crate::element_display_label(member),
+                display_label:crate::element_display_label_with_references(member, references),
             };
             match member.kind.as_str() {
                 "rust.field" | "uml.attribute" => attributes.push(descriptor),
@@ -307,7 +359,7 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
     }
     apply_normative_contracts(crate::uml::root::ElementRef::Object(element), &mut properties);
     Some(ElementInspector {element_id:element.id.clone(),kind:element.kind.clone(),
-        name:semantic_name.into(),display_label,properties,attributes,operations,receptions,
+        name:semantic_name.into(),display_label,reference_choices,properties,attributes,operations,receptions,
         template_parameters,ports,parts})
 }
 
@@ -315,7 +367,10 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
 pub fn set_inspected_property(
     section: &mut ModelingSection, id: &str, path: &str, value: Value
 ) -> Result<(), String> {
-    let inspected = inspect_element(section, id).ok_or("element not found")?;
+    let references = crate::uml::references::ReferenceIndex::new(
+        crate::uml::root::Model::from_section(section),
+    );
+    let inspected = inspect_element_with_references(section, id, &references).ok_or("element not found")?;
     let field = inspected.properties.iter().find(|f| f.path == path)
         .ok_or("property is not declared")?;
     if !field.editable { return Err("property is read-only".into()); }
@@ -339,10 +394,23 @@ pub fn set_inspected_property(
         },
         _ => {},
     }
+    let mut canonical_type = false;
     if let Some(key) = path.strip_prefix("properties.")
         && let Some(element) = crate::uml::root::Model::from_section(section).element(id)
         && let Some(metaclass) = element.metaclass() {
         crate::uml::schema::validate_edit(metaclass, key, &value)?;
+        if key == "type"
+            && let Some(descriptor) = crate::uml::schema::uml_property(metaclass, key)
+                .map_err(|error| error.to_string())? {
+
+            canonical_type = true;
+            references.validate(descriptor, &value)?;
+            if let Some(text) = element.properties().get("type").filter(|value| value.is_string())
+                && let Some(preserved) = element.properties().get("typeText")
+                && preserved != text {
+                return Err("existing typeText differs from the legacy type declaration; preserve both before choosing a Type".into());
+            }
+        }
     }
     let diagram_relation = section.diagrams.iter().any(|diagram|
         diagram.views.iter().any(|view| view.subject.as_deref() == Some(id)));
@@ -365,6 +433,16 @@ pub fn set_inspected_property(
         },
         _ => {
             let key = path.strip_prefix("properties.").ok_or("invalid property path")?;
+            if canonical_type {
+                if let Some(text) = element.properties.get("type")
+                    .filter(|value| value.is_string()).cloned() {
+                    element.properties.insert("typeText".into(), text);
+                }
+                if value.is_null() {
+                    element.properties.remove(key);
+                    return Ok(());
+                }
+            }
             element.properties.insert(key.to_owned(),value);
         },
     }

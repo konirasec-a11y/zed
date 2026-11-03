@@ -27,7 +27,10 @@ pub mod uml;
 mod uml_geometry;
 mod uml_notation;
 mod uml_types;
-pub use templates::{template_parameter_label, template_parametered_element, template_parameters};
+pub use templates::{
+    template_parameter_label, template_parameter_label_with_references,
+    template_parametered_element, template_parameters,
+};
 
 pub use generation::{
     GenerationGraphError, GenerationModel, GenerationReference, GenerationUnit,
@@ -37,14 +40,15 @@ pub use graph::{Graph, GraphError};
 pub use hierarchy::{HierarchyRow, project_hierarchy};
 pub use index::{GraphIndex, GraphLookupError};
 pub use inspector::{
-    ElementInspector, InspectorMember, InspectorProperty, PropertyEditor, inspect_element,
-    set_inspected_property,
+    ElementInspector, InspectorMember, InspectorProperty, InspectorReferenceChoice, PropertyEditor,
+    inspect_element, set_inspected_property,
 };
 pub use path::{PathError, physical_path, validate_segment};
 pub use plan::{Artifact, Diagnostic, Plan, PlanError};
 pub use presentation::{
     ClassifierPresentation, ClassifierPresentationOptions, MemberPresentation, SemanticIdentity,
-    classifier_presentation, element_display_label, member_presentation, semantic_identity,
+    classifier_presentation, element_display_label, element_display_label_with_references,
+    member_presentation, semantic_identity,
 };
 pub use publish::{publish_new, publish_replace};
 pub use quick_edit::{

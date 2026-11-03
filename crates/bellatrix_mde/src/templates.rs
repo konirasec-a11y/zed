@@ -70,9 +70,12 @@ pub fn template_parametered_element<'a>(
 }
 
 pub fn template_parameter_label(section: &ModelingSection, parameter: &Element) -> String {
-    template_parametered_element(section, parameter)
-        .map(crate::element_display_label)
-        .unwrap_or_else(|| crate::element_display_label(parameter))
+    let references = crate::uml::references::ReferenceIndex::new(crate::uml::root::Model::from_section(section));
+    template_parameter_label_with_references(section, parameter, &references)
+}
+
+pub fn template_parameter_label_with_references(section: &ModelingSection, parameter: &Element, references: &crate::uml::references::ReferenceIndex<'_>) -> String {
+    crate::element_display_label_with_references(template_parametered_element(section, parameter).unwrap_or(parameter), references)
 }
 
 pub(crate) fn rename_parameter(

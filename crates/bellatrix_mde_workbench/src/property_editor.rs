@@ -4,7 +4,9 @@ use crate::{
     inspector_drafts::{DraftKey, DraftState},
     panels::{MdeRightPanel, element_glyph},
 };
-use bellatrix_mde::{ElementInspector, InspectorProperty, PropertyEditor};
+use bellatrix_mde::{
+    ElementInspector, InspectorProperty, InspectorReferenceChoice, PropertyEditor,
+};
 use bellatrix_project::ProjectId;
 use bellatrix_ui_symbols::glyph;
 use gpui::{AnyElement, Context, Entity, Focusable, IntoElement, Window, div, prelude::*, px, svg};
@@ -19,6 +21,38 @@ fn display(value: &Value) -> String {
     value
         .as_str()
         .map_or_else(|| value.to_string(), str::to_owned)
+}
+
+fn reference_label(value: &Value, choices: &[InspectorReferenceChoice]) -> String {
+    if value.is_null() {
+        return "No type".into();
+    }
+    let Some(id) = value.get("$ref").and_then(Value::as_str) else {
+        return display(value);
+    };
+    choices
+        .iter()
+        .find(|choice| choice.id == id)
+        .map(|choice| choice.label.clone())
+        .unwrap_or_else(|| format!("Unavailable type · {id}"))
+}
+
+fn reference_options(
+    choices: &[InspectorReferenceChoice],
+) -> impl Iterator<Item = (String, Value)> + '_ {
+    std::iter::once(("No type".into(), Value::Null)).chain(
+        choices
+            .iter()
+            .map(|choice| (choice.label.clone(), serde_json::json!({"$ref": choice.id}))),
+    )
+}
+
+fn property_label(property: &InspectorProperty, choices: &[InspectorReferenceChoice]) -> String {
+    if property.editor == PropertyEditor::Reference || property.path == "properties.type" {
+        reference_label(&property.value, choices)
+    } else {
+        display(&property.value)
+    }
 }
 
 fn same_value(editor: PropertyEditor, left: &str, right: &str) -> bool {
@@ -436,6 +470,7 @@ pub(crate) fn flush_property_edits(
 
 fn property_row(
     property: &InspectorProperty,
+    reference_choices: &[InspectorReferenceChoice],
     item: &Entity<MdeWorkbenchItem>,
     drafts: &HashMap<DraftKey, InspectorDraft>,
     project: &ProjectId,
@@ -448,7 +483,7 @@ fn property_row(
         // A captured preview presents canonical values, never another document's drafts.
         return compact_row(
             property.label.clone(),
-            Label::new(display(&property.value)).size(LabelSize::Small),
+            Label::new(property_label(property, reference_choices)).size(LabelSize::Small),
         );
     }
     let path = property.path.clone();
@@ -612,13 +647,43 @@ fn property_row(
                 .full_width(true)
                 .into_any_element()
         }
-        _ => Label::new(display(&property.value))
+        PropertyEditor::Reference if property.editable => {
+            let target = item.clone();
+            let panel = cx.weak_entity();
+            let choice_key = key.clone();
+            let menu = ContextMenu::build(window, cx, move |menu, _, _| {
+                reference_options(reference_choices).fold(menu, |menu, (label, value)| {
+                    let target = target.clone();
+                    let key = choice_key.clone();
+                    let panel = panel.clone();
+                    menu.entry(label, None, move |_, cx| {
+                        if let Err(error) = panel.update(cx, |panel, cx| {
+                            queue_discrete_property(panel, &target, &key, value.clone(), cx)
+                        }) {
+                            eprintln!("MDE property reference update failed: {error}");
+                        }
+                    })
+                })
+            });
+            let value = drafts
+                .get(&key)
+                .and_then(|draft| draft.discrete.as_ref())
+                .unwrap_or(&property.value);
+            DropdownMenu::new(
+                format!("mde-inspector-reference-{path}"),
+                reference_label(value, reference_choices),
+                menu,
+            )
+            .full_width(true)
+            .into_any_element()
+        }
+        _ => Label::new(property_label(property, reference_choices))
             .size(LabelSize::Small)
             .into_any_element(),
     };
     if matches!(
         property.editor,
-        PropertyEditor::Boolean | PropertyEditor::Choice(_)
+        PropertyEditor::Boolean | PropertyEditor::Choice(_) | PropertyEditor::Reference
     ) {
         let key = DraftKey {
             project: project.as_str().into(),
@@ -712,6 +777,8 @@ fn is_general(path: &str) -> bool {
             | "properties.declaration"
             | "properties.signature"
             | "properties.type"
+            | "legacy.type"
+            | "properties.typeText"
             | "properties.defaultValue"
             | "properties.name"
             | "properties.sourceMultiplicity"
@@ -804,6 +871,7 @@ pub(crate) fn render_inspector(
     {
         children.push(property_row(
             property,
+            &inspector.reference_choices,
             &item,
             drafts,
             &project,
@@ -884,6 +952,7 @@ pub(crate) fn render_inspector(
             {
                 children.push(property_row(
                     property,
+                    &inspector.reference_choices,
                     &item,
                     drafts,
                     &project,
@@ -937,6 +1006,7 @@ pub(crate) fn render_inspector(
                 }
                 children.push(property_row(
                     property,
+                    &inspector.reference_choices,
                     &item,
                     drafts,
                     &project,
@@ -953,7 +1023,64 @@ pub(crate) fn render_inspector(
 
 #[cfg(test)]
 mod tests {
-    use super::{display_kind, is_general};
+    use super::{display_kind, is_general, property_label, reference_label, reference_options};
+    use bellatrix_mde::{InspectorProperty, InspectorReferenceChoice, PropertyEditor};
+    use serde_json::{Value, json};
+
+    #[test]
+    fn reference_selection_preserves_identity_text_and_read_only_values() {
+        let choices = [
+            InspectorReferenceChoice {
+                id: "first".into(),
+                label: "Name · Class · first".into(),
+            },
+            InspectorReferenceChoice {
+                id: "second".into(),
+                label: "Name · Class · second".into(),
+            },
+        ];
+        assert_eq!(
+            reference_options(&choices).collect::<Vec<_>>(),
+            vec![
+                ("No type".into(), Value::Null),
+                ("Name · Class · first".into(), json!({"$ref": "first"})),
+                ("Name · Class · second".into(), json!({"$ref": "second"})),
+            ]
+        );
+        assert_eq!(
+            reference_label(&json!({"$ref": "second"}), &choices),
+            "Name · Class · second"
+        );
+        assert_eq!(reference_label(&Value::Null, &choices), "No type");
+        assert_eq!(
+            reference_options(&[]).collect::<Vec<_>>(),
+            vec![("No type".into(), Value::Null)]
+        );
+        assert_eq!(
+            reference_label(&json!({"$ref": "removed"}), &[]),
+            "Unavailable type · removed"
+        );
+        assert_eq!(reference_label(&json!("legacy type"), &[]), "legacy type");
+        assert_eq!(reference_label(&json!({"$ref": 42}), &[]), r#"{"$ref":42}"#);
+        let mut property = InspectorProperty {
+            path: "properties.type".into(),
+            label: "Type".into(),
+            group: "Properties",
+            editor: PropertyEditor::ReadOnly,
+            value: json!({"$ref": "second"}),
+            editable: false,
+        };
+        assert_eq!(property_label(&property, &choices), "Name · Class · second");
+        property.value = Value::Null;
+        assert_eq!(property_label(&property, &choices), "No type");
+        property.value = json!("preserved legacy type");
+        assert_eq!(property_label(&property, &choices), "preserved legacy type");
+        property.path = "properties.custom".into();
+        property.value = Value::Null;
+        assert_eq!(property_label(&property, &choices), "null");
+        property.editor = PropertyEditor::Reference;
+        assert_eq!(property_label(&property, &choices), "No type");
+    }
 
     #[test]
     fn identity_uses_domain_metaclasses_without_changing_unknown_types() {
@@ -979,6 +1106,8 @@ mod tests {
             "properties.declaration",
             "properties.signature",
             "properties.type",
+            "legacy.type",
+            "properties.typeText",
             "properties.defaultValue",
             "properties.name",
             "properties.sourceMultiplicity",

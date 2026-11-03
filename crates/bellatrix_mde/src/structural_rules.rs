@@ -3,7 +3,11 @@ use crate::{Element, GraphIndex, Project, StructuralDiagnostic, StructuralSeveri
 use std::collections::HashMap;
 
 fn metaclass(element: &Element) -> Option<&'static str> {
-    UmlType::from_kind(&element.kind).and_then(UmlType::metaclass)
+    match element.kind.as_str() {
+        "uml.instance_specification" => Some("InstanceSpecification"),
+        "uml.slot" => Some("Slot"),
+        _ => UmlType::from_kind(&element.kind).and_then(UmlType::metaclass),
+    }
 }
 
 fn conforms(element: &Element, expected: &str) -> bool {
@@ -189,7 +193,6 @@ mod tests {
             "uml.template",
             "uml.subsystem",
             "uml.frame",
-            "uml.instance_specification",
             "uml.connector",
             "uml.unknown",
         ] {

@@ -295,7 +295,7 @@ mod tests {
             .iter()
             .find(|element| element.id == "type-list")
             .expect("port");
-        assert!(crate::element_display_label(port).ends_with(": Service"));
+        assert!(crate::element_display_label(port).ends_with(": Service {type text}"));
         let label = port_label_layout(16.0);
         assert!(label.left > 16.0);
         assert_eq!(section, before);

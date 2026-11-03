@@ -278,6 +278,12 @@ impl<'a> ElementRef<'a> {
         self.conforms_to("NamedElement")
             .then_some(NamedElementRef(self))
     }
+    pub fn instance_specification(self) -> Option<super::instances::InstanceSpecificationRef<'a>> {
+        super::instances::InstanceSpecificationRef::from_element(self)
+    }
+    pub fn slot(self) -> Option<super::instances::SlotRef<'a>> {
+        super::instances::SlotRef::from_element(self)
+    }
     pub fn namespace(self) -> Option<NamespaceRef<'a>> {
         self.conforms_to("Namespace")
             .then_some(NamespaceRef(NamedElementRef(self)))
@@ -603,6 +609,9 @@ impl<'a> Model<'a> {
         for element in self.elements() {
             issues.extend(super::schema::validate_element(element));
         }
+        let references = super::references::ReferenceIndex::new(self);
+        issues.extend(super::instances::validate(self, &references));
+        issues.extend(references.validate_typed_elements());
         issues
     }
 }
@@ -646,6 +655,9 @@ fn ownership_property(owner: ElementRef<'_>, child: ElementRef<'_>) -> Option<&'
     };
     if child.conforms_to("Comment") {
         return Some("ownedComment");
+    }
+    if owner.instance_specification().is_some() && child.slot().is_some() {
+        return Some("slot");
     }
     if owner.conforms_to("Package") && child.conforms_to("PackageableElement") {
         return Some("packagedElement");
@@ -798,6 +810,17 @@ pub(crate) fn reparent(
 ) -> Result<(), String> {
     let model = Model::from_section(section);
     let element = model.element(element_id).ok_or("UML element not found")?;
+    if let Some(slot) = element.slot() {
+        let owner = owner_id
+            .and_then(|identifier| model.element(identifier))
+            .and_then(ElementRef::instance_specification)
+            .ok_or("Slot owningInstance requires an existing InstanceSpecification")?;
+        super::instances::validate_assignment(slot, owner, model)
+            .map_err(|error| error.to_string())?;
+        // Adapted from RUML Slot::set_owning_instance (pinned provenance in instances.rs).
+        // Replacing this edge below simultaneously detaches the old inverse and attaches
+        // the new one; neither InstanceSpecification::slot nor owningInstance is stored twice.
+    }
     if let ElementRef::Relationship(relation) = element
         && matches!(
             relation.kind.as_str(),

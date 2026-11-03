@@ -1021,12 +1021,20 @@
     },
     {
       "file": "crates/bellatrix_mde/src/inspector.rs",
-      "scope": "Existing canonical field editors, choices, defaults and edit-time scalar/read-only guards; explicit legacy type/defaultValue text adapter."
+      "scope": "Canonical scalar/reference field editors, choices, defaults and edit-time guards; preserved unresolved type text and legacy defaultValue declarations."
+    },
+    {
+      "file": "crates/bellatrix_mde/src/uml/references.rs",
+      "scope": "Snapshot-indexed local scalar TypedElement.type references, target conformance and graph diagnostics; collection and external references remain unsupported."
+    },
+    {
+      "file": "crates/bellatrix_mde/src/uml/instances.rs",
+      "scope": "Bounded Slot ownership, classifier/definingFeature references and uniqueness through one canonical edge; direct classifier properties only, with explicit unsupported capabilities."
     }
   ],
   "not_executable_from_extraction": [
     "OCL/opaque specification bodies and generated operation definitions are preserved, not interpreted or compiled into behavior.",
-    "Collection/reference contracts and full association, subset/redefinition consistency remain outside scalar validation.",
+    "Generic collection/external-reference contracts and full association, subset/redefinition consistency remain outside the bounded scalar, Type-reference and Slot adapters.",
     "Derived-property maintenance requires handwritten implementations; unsupported derived setters are blocked independently of isReadOnly.",
     "Stereotype application, complete UMLDI rendering/validation, ValueSpecification evaluation and behavioral execution are not implemented by these descriptors.",
     "Ambiguous source definitions are excluded from typed tables and remain available in the pinned source with this ambiguity ledger.",

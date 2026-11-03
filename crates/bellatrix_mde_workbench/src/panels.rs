@@ -932,17 +932,7 @@ impl Render for MdeRightPanel {
                 let disclosure_panel = cx.weak_entity();
                 let menu_owner = item.clone();
                 let menu_subject = id.clone();
-                let label = snapshot
-                    .section
-                    .elements
-                    .iter()
-                    .find(|element| element.id == row.element_id)
-                    .map(|element| {
-                        bellatrix_mde::template_parametered_element(&snapshot.section, element)
-                            .map(bellatrix_mde::element_display_label)
-                            .unwrap_or_else(|| bellatrix_mde::element_display_label(element))
-                    })
-                    .unwrap_or_else(|| row.label.clone());
+                let label = row.label.clone();
                 let tree_item = TreeViewItem::new(id.clone(), label)
                     .root_item(has_children)
                     .expanded(expanded)

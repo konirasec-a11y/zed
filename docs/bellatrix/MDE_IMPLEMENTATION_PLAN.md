@@ -296,6 +296,13 @@ rollback/recuperação e preservação gerado/autoral/misto. Política beta não
 
 ## Auditoria normativa e prioridade estrutural — 2026-11-03
 
+Escopo final explicitado: regras para os 14 diagramas UML. **A primeira entrega
+continua sendo exclusivamente os sete estruturais**: Classes, Componentes,
+Estrutura Composta, Implantação, Objetos, Pacotes e Perfis. Atividades, Casos de
+Uso, Máquinas de Estados, Sequência, Comunicação, Visão Geral de Interação e
+Timing ficam para uma etapa posterior; não antecipar sua implementação nesta
+primeira entrega nem contar metadados extraídos como suporte funcional.
+
 A ordem do plano completo é preservada. A execução atual concentra P03/P04/P09
 no marco de **todos os sete diagramas estruturais**, começando pelas dependências
 do índice oficial: Root, Namespaces, Types/Values, Classifiers, Simple/Structured

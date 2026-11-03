@@ -505,7 +505,11 @@ impl MdeWorkbenchItem {
         };
         let classifier = UmlType::from_kind(&element.kind).is_some_and(UmlType::is_classifier);
         let comment = UmlType::from_kind(&element.kind) == Some(UmlType::Note);
-        let name = if comment { text.to_string() } else { text.trim().to_owned() };
+        let name = if comment {
+            text.to_string()
+        } else {
+            text.trim().to_owned()
+        };
         let changed = name
             != if comment {
                 bellatrix_mde::element_display_label(element)
@@ -1253,6 +1257,9 @@ impl Render for MdeWorkbenchItem {
         let mut edges = Vec::new();
         match self.source.snapshot() {
             Ok(snapshot) => {
+                let references = bellatrix_mde::uml::references::ReferenceIndex::new(
+                    bellatrix_mde::uml::root::Model::from_section(&snapshot.section),
+                );
                 let diagram = self
                     .active_diagram
                     .as_deref()
@@ -1595,7 +1602,10 @@ impl Render for MdeWorkbenchItem {
                             else {
                                 continue;
                             };
-                            let text = bellatrix_mde::element_display_label(member);
+                            let text = bellatrix_mde::element_display_label_with_references(
+                                member,
+                                &references,
+                            );
                             match member.kind.as_str() {
                                 "rust.field" | "uml.attribute" => {
                                     classifier =
@@ -1619,9 +1629,10 @@ impl Render for MdeWorkbenchItem {
                         for parameter in template_parameters {
                             classifier = classifier.template_parameter_with_id(
                                 parameter.id.clone(),
-                                bellatrix_mde::template_parameter_label(
+                                bellatrix_mde::template_parameter_label_with_references(
                                     &snapshot.section,
                                     parameter,
+                                    &references,
                                 ),
                             );
                         }
@@ -1652,8 +1663,14 @@ impl Render for MdeWorkbenchItem {
                             let edit_id = element.id.clone();
                             let label = if element.kind == "uml.constraint" {
                                 format!("{{{}}}", element.name)
-                            } else if matches!(element.kind.as_str(), "uml.port" | "uml.note" | "uml.comment") {
-                                bellatrix_mde::element_display_label(element)
+                            } else if matches!(
+                                element.kind.as_str(),
+                                "uml.port" | "uml.part" | "uml.note" | "uml.comment"
+                            ) {
+                                bellatrix_mde::element_display_label_with_references(
+                                    element,
+                                    &references,
+                                )
                             } else {
                                 element.name.clone()
                             };

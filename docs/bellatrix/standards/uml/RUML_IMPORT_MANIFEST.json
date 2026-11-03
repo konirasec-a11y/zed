@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "reference": "https://www.omg.org/spec/UML/2.5.1/",
   "primary_resources": [
     "https://www.omg.org/spec/UML/20161101/UML.xmi",
@@ -11,7 +11,7 @@
     "repository": "https://github.com/javapak/ruml-wasm",
     "commit": "5c90d7399acbce4c37847b272759ed85d677ba92",
     "license": "MIT (declared in upstream Cargo.toml)",
-    "role": "consultation only; no build or runtime dependency",
+    "role": "selective source adaptation into canonical graph commands; no upstream build or runtime dependency",
     "local_reference": "docs/bellatrix/references/ruml-wasm",
     "local_reference_is_complete": false
   },
@@ -21,13 +21,29 @@
   "independent_registry": false,
   "original_manifest": "docs/bellatrix/references/ruml-import-original-manifest.json",
   "coverage": {
-    "status": "consultation archive only; unused imported DTO declarations removed",
-    "note": "The original manifest describes an intended import, not integrated UML coverage. Canonical Element/Graph state and the OMG XMI-derived uml::metamodel catalog remain active; they do not provide complete UML typing or a conformance certificate."
+    "status": "bounded Slot ownership transition adapted and consumed; other archived sources remain reference material",
+    "note": "The original manifest is not a coverage certificate. The Slot transition is adapted from the pinned upstream setter into one canonical ownership edge, with official UML constraints and atomic failure handling. It does not implement the complete Object diagram or all upstream behavior."
   },
   "retained_modules": [],
   "conformance": {
     "source_of_rules": "OMG UML 2.5.1 and normative XMI",
     "all_structural_diagrams_validated": false,
-    "migration_changes_persistence_schema": false
-  }
+    "persistence_representation": "canonical graph ownership and explicit $ref identities in existing JSON/Protobuf containers"
+  },
+  "adapted_operations": [
+    {
+      "source_path": "slot.rs",
+      "source_symbol": "Slot::set_owning_instance",
+      "target_module": "crates/bellatrix_mde/src/uml/instances.rs",
+      "command_path": [
+        "Command::SetOwner",
+        "uml::root::reparent"
+      ],
+      "canonical_state": "one owns edge; inverse views are derived, not stored independently",
+      "limits": [
+        "direct classifier properties only in this slice",
+        "unsupported value/specification and inheritance/redefinition cases remain explicit capability diagnostics"
+      ]
+    }
+  ]
 }

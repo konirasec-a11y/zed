@@ -21,6 +21,7 @@ fn rank(kind: &str) -> u8 {
 pub fn project_hierarchy(section: &ModelingSection) -> Vec<HierarchyRow> {
     use crate::uml::root::{ElementRef, Model};
     let model = Model::from_section(section);
+    let references = crate::uml::references::ReferenceIndex::new(model);
     let elements: HashMap<_, _> = model.elements().filter(|element| semantic(element.kind())).map(|element| (element.id(), element)).collect();
     let mut children: HashMap<&str, Vec<ElementRef<'_>>> = HashMap::new();
     let mut roots = Vec::new();
@@ -35,21 +36,21 @@ pub fn project_hierarchy(section: &ModelingSection) -> Vec<HierarchyRow> {
     };
     sort(&mut roots);
     for siblings in children.values_mut() { sort(siblings); }
-    fn visit<'a>(element: ElementRef<'a>, depth: usize, children: &HashMap<&str, Vec<ElementRef<'a>>>, seen: &mut HashSet<String>, result: &mut Vec<HierarchyRow>) {
+    fn visit<'a>(element: ElementRef<'a>, depth: usize, children: &HashMap<&str, Vec<ElementRef<'a>>>, seen: &mut HashSet<String>, result: &mut Vec<HierarchyRow>, references: &crate::uml::references::ReferenceIndex<'_>) {
         if !seen.insert(element.id().to_owned()) { return; }
-        result.push(HierarchyRow { element_id: element.id().into(), label: match element { ElementRef::Object(object) => if element.comment().is_some() { crate::element_display_label(object) } else { object.name.clone() }, ElementRef::Relationship(_) => element.display_label() }, kind: element.kind().into(), depth });
+        result.push(HierarchyRow { element_id: element.id().into(), label: match element { ElementRef::Object(object) => crate::element_display_label_with_references(object, references), ElementRef::Relationship(_) => element.display_label() }, kind: element.kind().into(), depth });
         if let Some(children_of_element) = children.get(element.id()) {
-            for child in children_of_element { visit(*child, depth + 1, children, seen, result); }
+            for child in children_of_element { visit(*child, depth + 1, children, seen, result, references); }
         }
     }
     let mut result = Vec::new();
     let mut seen = HashSet::new();
-    for root in roots { visit(root, 0, &children, &mut seen, &mut result); }
+    for root in roots { visit(root, 0, &children, &mut seen, &mut result, &references); }
     let mut remaining = elements.values().copied().filter(|element| !seen.contains(element.id())).collect::<Vec<_>>();
     sort(&mut remaining);
-    for element in remaining { visit(element, 0, &children, &mut seen, &mut result); }
+    for element in remaining { visit(element, 0, &children, &mut seen, &mut result, &references); }
     for row in &mut result {
-        if let Some(ElementRef::Object(element)) = elements.get(row.element_id.as_str()) && crate::templates::is_parameter(&element.kind) { row.label = crate::template_parameter_label(section, element); }
+        if let Some(ElementRef::Object(element)) = elements.get(row.element_id.as_str()) && crate::templates::is_parameter(&element.kind) { row.label = crate::template_parameter_label_with_references(section, element, &references); }
     }
     result
 }

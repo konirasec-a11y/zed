@@ -148,8 +148,25 @@ value is rejected when the upper bound is 0. Omitted draft fields are not
 materialized or rejected wholesale, and reading defaults does not mutate the
 model.
 
-`properties.type` and `properties.defaultValue` strings remain explicit legacy
-editor declarations. They are not falsely validated as canonical UML Type or
+`Property::type` now uses a local canonical reference: `properties.type =
+{"$ref":"element-id"}`. Omission/null is untyped, following UML 2.5.1
+§§7.5.3.1 and 7.8.22 (`TypedElement-type` in UML.xmi). The generated inherited
+property descriptor determines the multiplicity and required target metaclass.
+A borrowed `ReferenceIndex` for each model snapshot rejects missing, ambiguous,
+or nonconforming targets without copying model objects or globally caching IDs.
+Graph validation protects commands such as Type deletion as well as field edits.
+
+The Property Inspector offers existing model Types through its realtime command
+queue. Model-aware labels resolve the current target name for Inspector, hierarchy,
+and diagram members/ports/parts. A Type rename never rewrites reference identities.
+Operation's derived return Type remains read-only until Parameter ownership and
+derivation are implemented.
+
+Historical `properties.type` strings are unresolved authored text, never matched
+to Types by name. They remain visibly distinguished and unchanged on read. The
+first reference edit preserves a legacy string in `properties.typeText`; a conflict
+with existing different text rejects the edit rather than losing either value.
+`properties.defaultValue` strings remain declarations, not validated
 ValueSpecification references. Unknown extension/editor properties retain their
 existing policy.
 
@@ -165,8 +182,8 @@ python3 script/bellatrix_mde/bellatrix_headless.py \
   --cache-dir /tmp/bellatrix-headless -- test -p bellatrix_mde --lib
 ```
 
-This increment does not implement general OCL execution, collection/reference
-validation, association/subsetting/redefinition consistency, derived-expression
+This increment does not implement general OCL execution, generic collection or
+external-document reference validation, association/subsetting/redefinition consistency, derived-expression
 maintenance, stereotype application, all UMLDI rendering rules, or a complete
 UML ValueSpecification evaluator. Package/Profile containers, package-import
 object identities and MOF tags are reference-audited and inventoried, not yet

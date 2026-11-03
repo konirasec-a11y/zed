@@ -358,7 +358,14 @@ pub fn validate_structural_model(project: &Project) -> Vec<StructuralDiagnostic>
             "Generalization cannot contain cycles of Classifiers",
         ));
     }
-    if project.root_model.is_some() { issues.extend(crate::uml::root::Model::from_project(project).validate()); }
+    let model = crate::uml::root::Model::from_project(project);
+    if project.root_model.is_some() {
+        issues.extend(model.validate());
+    } else {
+        let references = crate::uml::references::ReferenceIndex::new(model);
+        issues.extend(crate::uml::instances::validate(model, &references));
+        issues.extend(references.validate_typed_elements());
+    }
     issues.extend(crate::structural_rules::validate(project));
     issues.extend(crate::templates::validate(project));
     issues

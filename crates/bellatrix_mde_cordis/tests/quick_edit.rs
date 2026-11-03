@@ -1,5 +1,6 @@
 use bellatrix_mde::{
-    ModelingSection, Project, element_display_label, inspect_element, member_presentation,
+    ModelingSection, Project, element_display_label, element_display_label_with_references,
+    inspect_element, member_presentation,
 };
 use bellatrix_mde_cordis::{
     MdePlugin, ModelingAddMember, ModelingAddMemberRequested, ModelingMemberKind,
@@ -124,6 +125,14 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
         .expect("created operation");
     assert_eq!(element_display_label(attribute), "+Attribute1");
     assert_eq!(element_display_label(operation), "+Operation1()");
+    let type_id = "type-task".to_owned();
+    let inspection = inspect_element(&section, &attribute.id).expect("Property inspector");
+    assert!(
+        inspection
+            .reference_choices
+            .iter()
+            .any(|choice| choice.id == type_id)
+    );
     let mut revision = 2;
     for (element_id, path, value) in [
         (&attribute.id, "name", serde_json::json!("limit")),
@@ -135,8 +144,9 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
         (
             &attribute.id,
             "properties.type",
-            serde_json::json!("Integer"),
+            serde_json::json!({"$ref":type_id}),
         ),
+        (&type_id, "name", serde_json::json!("Integer")),
         (
             &attribute.id,
             "properties.defaultValue",
@@ -176,6 +186,35 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
         revision += 1;
         assert!(matches!(result, QueryOutcome::Answer(Ok(value)) if value == revision));
     }
+    let before_invalid = projects.snapshot(&a).expect("before rejected edits");
+    for (element_id, value) in [
+        (&attribute.id, serde_json::json!({"$ref":"missing"})),
+        (&attribute.id, serde_json::json!({"$ref":"file-task"})),
+        (&attribute.id, serde_json::json!("Integer")),
+        (&operation.id, serde_json::json!({"$ref":type_id})),
+    ] {
+        assert!(matches!(
+            ctx.query::<ModelingSetProperty>(
+                Routing::Unscoped,
+                ModelingSetPropertyRequested {
+                    project_id: a.clone(),
+                    element_id: element_id.clone(),
+                    path: "properties.type".into(),
+                    value,
+                    expected_revision: revision
+                }
+            )
+            .await
+            .expect("rejected type response"),
+            QueryOutcome::Answer(Err(_))
+        ));
+        let after = projects.snapshot(&a).expect("unchanged snapshot");
+        assert_eq!(after.revision(), revision);
+        assert_eq!(
+            serde_json::to_value(after.as_ref()).expect("after"),
+            serde_json::to_value(before_invalid.as_ref()).expect("before")
+        );
+    }
     let edited = projects.snapshot(&a).expect("edited project");
     let reopened: ProjectDocument =
         serde_json::from_slice(&serde_json::to_vec(edited.as_ref()).expect("serialize project"))
@@ -187,6 +226,9 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
             .clone(),
     )
     .expect("reopened model");
+    let references = bellatrix_mde::uml::references::ReferenceIndex::new(
+        bellatrix_mde::uml::root::Model::from_section(&projected),
+    );
     let owner = inspect_element(&projected, "type-list").expect("classifier compartments");
     for (member_id, expected, rows) in [
         (
@@ -201,7 +243,18 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
             .iter()
             .find(|element| &element.id == member_id)
             .expect("persisted member");
-        assert_eq!(element_display_label(member), expected);
+        assert_eq!(
+            element_display_label_with_references(member, &references),
+            expected
+        );
+        assert_eq!(
+            bellatrix_mde::project_hierarchy(&projected)
+                .iter()
+                .find(|row| &row.element_id == member_id)
+                .expect("tree row")
+                .label,
+            expected
+        );
         assert_eq!(
             inspect_element(&projected, member_id)
                 .expect("member inspector")
@@ -219,7 +272,7 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
     }
     assert_eq!(projects.snapshot(&b).expect("other project").revision(), 0);
     for (element_id, path, value) in [
-        (&attribute.id, "properties.type", serde_json::json!("")),
+        (&attribute.id, "properties.type", serde_json::Value::Null),
         (
             &attribute.id,
             "properties.defaultValue",

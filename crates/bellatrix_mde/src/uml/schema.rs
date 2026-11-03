@@ -637,9 +637,6 @@ pub fn validate_edit(metaclass: &str, name: &str, value: &Value) -> Result<(), S
     let Some(property) = uml_property(metaclass, name).map_err(|error| error.to_string())? else {
         return Ok(());
     };
-    if uses_legacy_text_adapter(property, value) {
-        return Ok(());
-    }
     if property.is_read_only {
         return Err(format!(
             "{} is read-only in the UML metamodel",
@@ -653,9 +650,16 @@ pub fn validate_edit(metaclass: &str, name: &str, value: &Value) -> Result<(), S
             UnsupportedContract::Derivation
         ));
     }
+    if property.name == "type" {
+        super::references::reference_id(value)?;
+        return Ok(());
+    }
+    if uses_legacy_text_adapter(property, value) {
+        return Ok(());
+    }
     match validate_scalar(property, value) {
         Ok(result) => result.map_err(|error| format!("{}: {error}", property.name)),
-        // Existing type/defaultValue text and other reference adapters retain their own contract.
+        // Other reference/collection adapters retain their own contract.
         Err(_) => Ok(()),
     }
 }
