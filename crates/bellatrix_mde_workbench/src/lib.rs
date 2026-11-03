@@ -791,7 +791,7 @@ impl MdeWorkbenchItem {
         cx: &mut Context<Self>,
     ) {
         if let Some(ModelingTool::Relation(kind)) = self.selected_tool {
-            if self.visual_draft_mode {
+            if self.visual_draft_mode || kind.is_visual_only() {
                 self.link_visual_draft_endpoint(kind, view_id, cx);
                 return;
             }

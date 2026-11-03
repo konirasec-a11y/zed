@@ -13,6 +13,21 @@ impl MdeWorkbenchItem {
         )
     }
 
+    pub(super) fn select_or_connect_edge(
+        &mut self,
+        subject: String,
+        view_id: String,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(ModelingTool::Relation(kind)) = self.selected_tool {
+            self.link_visual_draft_endpoint(kind, view_id, cx);
+        } else {
+            self.select_view(subject, view_id, cx);
+        }
+    }
+    pub(super) fn should_connect_visual(&self, kind: ModelingRelationKind) -> bool {
+        self.visual_draft_mode || kind.is_visual_only() || self.is_pending_visual_endpoint()
+    }
     pub(super) fn is_pending_visual_endpoint(&self) -> bool {
         self.pending_relation_source.as_ref().is_some_and(|id| {
             self.source.snapshot().ok().is_some_and(|snapshot| {
@@ -344,18 +359,7 @@ impl MdeWorkbenchItem {
                 .views
                 .iter()
                 .find(|view| view.id == id)
-                .and_then(|view| match view.geometry {
-                    Geometry::Rect {
-                        x,
-                        y,
-                        width,
-                        height,
-                    } => Some(bellatrix_mde::Point {
-                        x: x + width / 2.0,
-                        y: y + height / 2.0,
-                    }),
-                    _ => None,
-                })
+                .and_then(|view| bellatrix_mde::resolve_visual_center(&view.geometry))
         };
         let (Some(start), Some(to)) = (locate(&from), locate(&target)) else {
             return;
@@ -390,7 +394,7 @@ pub(super) fn format_figure_label(
     style: &bellatrix_mde::Style,
 ) -> String {
     if element.kind == "uml.interaction_operand" {
-        String::new()
+        bellatrix_mde::format_operand_guard(element, references)
     } else if element.kind == "uml.constraint" {
         format!("{{{}}}", element.name)
     } else if matches!(

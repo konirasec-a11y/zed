@@ -17,6 +17,8 @@ mod path;
 mod plan;
 mod presentation;
 mod instance_presentation;
+mod interaction_presentation;
+pub use interaction_presentation::format_operand_guard;
 pub use instance_presentation::{format_instance_heading, collect_instance_slot_labels};
 mod publish;
 mod quick_edit;
@@ -80,4 +82,4 @@ pub use uml_types::{UmlCapability, UmlQuickCreate, UmlType};
 pub use uml_notation::{UmlHeader, UmlNotation, resolve_element_notation, resolve_pseudostate_notation, uml_header, uml_notation};
 
 mod visual_draft_routing;
-pub use visual_draft_routing::reroute_visual_drafts;
+pub use visual_draft_routing::{reroute_visual_drafts, resolve_visual_center};

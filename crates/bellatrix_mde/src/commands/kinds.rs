@@ -484,7 +484,7 @@ mod tests {
         {
             assert!(kinds.insert(kind.model_kind()));
         }
-        assert_eq!(kinds.len(), 81);
+        assert_eq!(kinds.len(), 82);
     }
 
     #[test]

@@ -12,6 +12,7 @@ pub enum Family {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum ShapeKind {
+    AssociationClassAttachment,
     Port,
     DeepHistory,
     Junction,
@@ -106,6 +107,9 @@ pub fn glyph(kind: ShapeKind) -> &'static [u8] {
         ShapeKind::InitialNode => include_bytes!("../assets/initial-node.svg"),
         ShapeKind::FinalNode => include_bytes!("../assets/final-node.svg"),
         ShapeKind::FlowFinal => include_bytes!("../assets/flow-final.svg"),
+        ShapeKind::AssociationClassAttachment => {
+            include_bytes!("../assets/association-class-attachment.svg")
+        }
         ShapeKind::Port => include_bytes!("../assets/port.svg"),
         ShapeKind::DeepHistory => include_bytes!("../assets/deep-history.svg"),
         ShapeKind::Junction => include_bytes!("../assets/junction.svg"),

@@ -78,6 +78,9 @@ fn tool_glyph(tool: ModelingTool) -> ShapeKind {
             | ModelingElementKind::PrimitiveType => ShapeKind::Class,
         },
         ModelingTool::Relation(kind) => match kind {
+            ModelingRelationKind::AssociationClassAttachment => {
+                ShapeKind::AssociationClassAttachment
+            }
             ModelingRelationKind::Usage
             | ModelingRelationKind::Abstraction
             | ModelingRelationKind::Include

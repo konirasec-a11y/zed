@@ -124,7 +124,12 @@ impl FigurePath {
         self
     }
 }
-fn build_figure_paths(notation: UmlNotation, width: f32, height: f32) -> Vec<FigurePath> {
+fn build_figure_paths(
+    notation: UmlNotation,
+    width: f32,
+    height: f32,
+    descriptor: (f32, f32),
+) -> Vec<FigurePath> {
     use UmlNotation::*;
     let rectangle = || {
         FigurePath::outline(
@@ -222,10 +227,31 @@ fn build_figure_paths(notation: UmlNotation, width: f32, height: f32) -> Vec<Fig
         )],
         Partition => vec![rectangle(), line(&[(0.02, 0.16), (0.98, 0.16)])],
         InteractionOperand => vec![line(&[(0.02, 0.02), (0.98, 0.02)]).dashed()],
-        InteractionUse | CombinedFragment => vec![
-            rectangle(),
-            line(&[(0.02, 0.18), (0.28, 0.18), (0.34, 0.12), (0.34, 0.02)]),
-        ],
+        InteractionUse | CombinedFragment => {
+            let left = (1.0 / width).min(0.25);
+            let top = (1.0 / height).min(0.25);
+            let right = (descriptor.0 / width).clamp(left, 1.0 - left);
+            let bottom = (descriptor.1 / height).clamp(top, 1.0 - top);
+            let cut_x = (8.0 / width).min(right / 3.0);
+            let cut_y = (8.0 / height).min(bottom / 3.0);
+            vec![
+                FigurePath::outline(
+                    &[
+                        (left, top),
+                        (1.0 - left, top),
+                        (1.0 - left, 1.0 - top),
+                        (left, 1.0 - top),
+                    ],
+                    true,
+                ),
+                line(&[
+                    (left, bottom),
+                    (right - cut_x, bottom),
+                    (right, bottom - cut_y),
+                    (right, top),
+                ]),
+            ]
+        }
         TimingState => vec![line(&[
             (0.02, 0.72),
             (0.28, 0.72),
@@ -241,6 +267,7 @@ pub(crate) fn paint_notation(
     bounds: Bounds<Pixels>,
     notation: UmlNotation,
     scale: f32,
+    descriptor: (f32, f32),
     palette: Palette,
     selected: bool,
     appearance: &ViewAppearance,
@@ -249,7 +276,7 @@ pub(crate) fn paint_notation(
     let width = f32::from(bounds.size.width).max(1.0);
     let height = f32::from(bounds.size.height).max(1.0);
     let stroke = appearance.stroke(palette, selected);
-    for path in build_figure_paths(notation, width, height) {
+    for path in build_figure_paths(notation, width, height, descriptor) {
         let points = path
             .points
             .iter()

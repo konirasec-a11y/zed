@@ -544,6 +544,7 @@ fn create_relation(
     revision: u64,
     project_id: &str,
 ) -> Result<(), String> {
+    if kind.is_visual_only() { return Err("this connector is View-only notation, not a semantic UML relationship".into()); }
     let source = section
         .elements
         .iter()

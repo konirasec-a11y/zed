@@ -183,12 +183,58 @@ impl UmlFigure {
     }
 }
 impl RenderOnce for UmlFigure {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let notation = self.notation();
         let palette = Palette::current(cx);
         let scale = self.scale;
         let port_label = port_label_layout(self.view_width);
         let selected = self.selected;
+        // Descriptor display is single-line; the canonical authored text stays unchanged.
+        let descriptor_operator = self
+            .interaction_operator
+            .as_ref()
+            .map(|text| text.replace(['\r', '\n'], " "));
+        let display_name: SharedString = if self.kind == "uml.interaction" {
+            self.name.replace(['\r', '\n'], " ").into()
+        } else {
+            self.name.clone()
+        };
+        // Shape the actual descriptor with the active font instead of a fixed-width tab.
+        let descriptor: SharedString = if self.kind == "uml.interaction" {
+            format!("sd {display_name}").into()
+        } else if notation == UmlNotation::CombinedFragment {
+            descriptor_operator
+                .as_deref()
+                .unwrap_or("[operator]")
+                .to_owned()
+                .into()
+        } else {
+            "ref".into()
+        };
+        let mut descriptor_font = window.text_style().font();
+        if let Some(family) = self.appearance.0.font_family.clone() {
+            descriptor_font.family = family.into();
+        }
+        descriptor_font.weight = gpui::FontWeight::SEMIBOLD;
+        let descriptor_size = self.appearance.font_size(12.0, scale);
+        let descriptor_width = (f32::from(
+            window
+                .text_system()
+                .shape_line(
+                    descriptor.clone(),
+                    px(descriptor_size),
+                    &[gpui::TextRun {
+                        len: descriptor.len(),
+                        font: descriptor_font,
+                        ..Default::default()
+                    }],
+                    None,
+                )
+                .width,
+        ) + 28.0 * scale)
+            .min(self.view_width as f32 * scale - 4.0 * scale)
+            .max(32.0 * scale);
+        let descriptor_height = descriptor_size * 1.5 + 10.0 * scale;
         let signature = self
             .template_parameters
             .and_then(|(rows, interactions, width)| {
@@ -209,7 +255,7 @@ impl RenderOnce for UmlFigure {
             )
             .into_any_element()
         } else {
-            div().child(self.name).into_any_element()
+            div().child(display_name).into_any_element()
         };
         let edit = self.edit;
         let title_area = div()
@@ -587,8 +633,7 @@ impl RenderOnce for UmlFigure {
                 let frame_keyword = if is_interaction {
                     "sd".to_owned()
                 } else if notation == UmlNotation::CombinedFragment {
-                    self.interaction_operator
-                        .unwrap_or_else(|| "[operator]".to_owned())
+                    descriptor_operator.unwrap_or_else(|| "[operator]".to_owned())
                 } else {
                     "ref".to_owned()
                 };
@@ -603,6 +648,7 @@ impl RenderOnce for UmlFigure {
                                     bounds,
                                     notation,
                                     scale,
+                                    (descriptor_width, descriptor_height),
                                     palette,
                                     selected,
                                     &appearance,
@@ -637,8 +683,8 @@ impl RenderOnce for UmlFigure {
                                     .absolute()
                                     .left(px(8.0 * scale))
                                     .top(px(4.0 * scale))
-                                    .text_size(px(10.0 * scale))
-                                    .text_color(border)
+                                    .text_size(px(descriptor_size))
+                                    .text_color(label_color)
                                     .child(frame_keyword),
                             )
                         },
@@ -659,18 +705,28 @@ impl RenderOnce for UmlFigure {
                                     .top(gpui::relative(0.20))
                                     .right(gpui::relative(0.20))
                             })
+                            .when(notation == UmlNotation::InteractionOperand, |element| {
+                                element.top(px(8.0 * scale)).items_start()
+                            })
                             .when(is_interaction, |element| {
                                 element
                                     .top(px(4.0 * scale))
                                     .left(px(30.0 * scale))
+                                    .max_w(px((descriptor_width - 34.0 * scale).max(1.0)))
+                                    .max_h(px(descriptor_height - 6.0 * scale))
+                                    .overflow_hidden()
                                     .items_start()
                             })
                             .when(notation == UmlNotation::CombinedFragment, |element| {
                                 element.top(px(32.0 * scale))
                             })
-                            .when(!external_label && !heading && !is_interaction, |element| {
-                                element.top_0().bottom_0().items_center()
-                            })
+                            .when(
+                                !external_label
+                                    && !heading
+                                    && !is_interaction
+                                    && notation != UmlNotation::InteractionOperand,
+                                |element| element.top_0().bottom_0().items_center(),
+                            )
                             .when(
                                 heading && alignment.0.text_vertical_align.is_some(),
                                 |element| match notation {
@@ -709,7 +765,8 @@ impl RenderOnce for UmlFigure {
                             .flex_col()
                             .map(|element| alignment.align_column(element))
                             .when(
-                                is_interaction && alignment.0.text_align.is_none(),
+                                (is_interaction || notation == UmlNotation::InteractionOperand)
+                                    && alignment.0.text_align.is_none(),
                                 |element| element.items_start(),
                             )
                             .child(title_area)

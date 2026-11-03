@@ -6,6 +6,7 @@ use crate::{UmlType, classifier_contents};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ModelingRelationKind {
+    AssociationClassAttachment,
     Association,
     DirectedAssociation,
     Aggregation,
@@ -38,7 +39,7 @@ impl ModelingRelationKind {
         Self::Generalization,
         Self::InterfaceRealization,
     ];
-    pub const ADVANCED: &'static [Self] = &[Self::TemplateBinding, Self::Realization];
+    pub const ADVANCED: &'static [Self] = &[Self::TemplateBinding, Self::Realization, Self::AssociationClassAttachment];
     pub const BEHAVIOR: &'static [Self] = &[
         Self::Include,
         Self::Extend,
@@ -57,6 +58,7 @@ impl ModelingRelationKind {
     pub const PACKAGES: &'static [Self] = &[Self::Containment];
     pub fn label(self) -> &'static str {
         match self {
+            Self::AssociationClassAttachment => "Association-class attachment",
             Self::Association => "Association",
             Self::DirectedAssociation => "Directed Association",
             Self::Aggregation => "Aggregation",
@@ -82,6 +84,7 @@ impl ModelingRelationKind {
     }
     pub fn model_kind(self) -> &'static str {
         match self {
+            Self::AssociationClassAttachment => "view.association_class_attachment",
             Self::Association => "uml.association",
             Self::DirectedAssociation => "uml.directed_association",
             Self::Aggregation => "uml.aggregation",
@@ -108,6 +111,7 @@ impl ModelingRelationKind {
     /// The first click is Relation.from, not necessarily the arrowhead end.
     pub fn endpoint_instruction(self) -> &'static str {
         match self {
+            Self::AssociationClassAttachment => "click the association path, then its classifier box (visual attachment)",
             Self::Association => "click either first class, then the second (no arrow)",
             Self::DirectedAssociation => "click source, then navigable target (arrow at target)",
             Self::Aggregation => "click the whole, then the part (hollow diamond at first)",
@@ -136,6 +140,7 @@ impl ModelingRelationKind {
         }
     }
 
+    pub fn is_visual_only(self) -> bool { self == Self::AssociationClassAttachment }
     pub fn validate_endpoints(self, source: &str, target: &str) -> Result<(), &'static str> {
         let conforms = |kind: &str, expected: &str| {
             crate::uml::root::object_metaclass(kind)

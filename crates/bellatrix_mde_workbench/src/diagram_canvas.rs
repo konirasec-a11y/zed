@@ -167,7 +167,7 @@ impl Render for MdeWorkbenchItem {
                                         .cursor_pointer()
                                         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                                             let _ = edge_owner.update(cx, |item, cx| {
-                                                item.select_view(
+                                                item.select_or_connect_edge(
                                                     edge_id.clone(),
                                                     edge_view_id.clone(),
                                                     cx,
@@ -693,9 +693,7 @@ impl Render for MdeWorkbenchItem {
                                                         if let Some(ModelingTool::Relation(kind)) =
                                                             item.selected_tool
                                                         {
-                                                            if item.visual_draft_mode
-                                                                || item.is_pending_visual_endpoint()
-                                                            {
+                                                            if item.should_connect_visual(kind) {
                                                                 item.link_visual_draft_endpoint(
                                                                     kind,
                                                                     connect_view.clone(),

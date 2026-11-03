@@ -41,7 +41,7 @@ pub fn relationship_style_for_notation(kind: &str) -> RelationshipStyle {
         "uml.aggregation" => (Diamond, None, false),
         "uml.composition" => (FilledDiamond, None, false),
         "uml.containment" => (Containment, None, false),
-        "uml.note_link" | "uml.constraint_link" => (None, None, true),
+        "view.association_class_attachment" | "uml.note_link" | "uml.constraint_link" => (None, None, true),
         _ => (None, None, false),
     };
     RelationshipStyle {

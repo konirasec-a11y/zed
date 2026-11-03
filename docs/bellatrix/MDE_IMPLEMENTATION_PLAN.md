@@ -88,8 +88,11 @@ físicos e não acessa arquivos. Mapear metaclasses, nós e relações para fun�
 de transformação reutilizáveis, com dependências explícitas, ordenação
 determinística e diagnósticos para ciclos de execução ou mapeamentos ausentes.
 Ciclos legítimos do modelo UML não são automaticamente ciclos de execução.
-A saída é um grafo/plano em memória; adaptadores externos resolvem destinos,
-carregam templates de diretório ou SQLite e materializam os arquivos com Rust.
+A saída é um grafo/plano em memória; adaptadores externos carregam templates
+de diretório ou SQLite. A engine compõe as funções necessárias e gera um único
+script de construção, em Rust, Python, Julia, F# ou outra linguagem escolhida.
+A execução posterior desse script é que materializa todo o projeto físico.
+A engine não acessa o sistema de arquivos nem materializa o projeto diretamente.
 
 ## 1. Fixar a base e consolidar as especificações
 
@@ -321,8 +324,9 @@ conflitos como pré-requisito de geração. Não criar commits automaticamente.
 Carregar os templates de cada linguagem de um diretório ou do SQLite e
 renderizá-los com Tera.
 O mesmo UML, a mesma configuração e a mesma versão dos templates devem gerar
-exatamente a mesma saída. Materializar diretórios e arquivos do grafo de
-saída com funções nativas do Rust. Restringir a escrita ao destino de geração definido e
+exatamente o mesmo script e a mesma saída. Compor no script as funções para
+criar diretórios e arquivos; sua execução externa materializa o projeto.
+Restringir a escrita ao destino de geração definido e
 validar caminhos; não tratar a autorização para sobrescrever a saída gerada
 como autorização para apagar arquivos fora desse destino.
 
@@ -495,7 +499,7 @@ linha deve receber evidência por requisito e SHA antes de aceite.
 | P03/P04 | [domínio](../../crates/bellatrix_mde/), [Cordis](../../crates/bellatrix_mde_cordis/) | ASG/comandos/revisões, catálogo/herança/restrições e quatro camadas | Positivos/negativos, rollback, cobertura normativa |
 | P05 | [Project](../../crates/project/), [Workspace](../../crates/workspace/), [Bellatrix Project](../../crates/bellatrix_project/) | ProjectPath/Buffer/SerializableItem, configuração completa e revisão semântica | Documento real, conflito externo, salvar/restaurar |
 | P06 | [Editor](../../crates/editor/), [Language](../../crates/language/) | Fonte única autoral, contexto LSP, macros/anotações/dependências | Corpo + recurso alvo, save/reopen/regenerate |
-| P07/P08 | [gerador Rust](../../crates/bellatrix_mde_rust_generator/), [Tera](../../crates/bellatrix_mde_templates/) | Grafo de saída e rastreio, Tera e materialização nativa | Determinismo, saída gerada, Git e Rust gerado |
+| P07/P08 | [gerador Rust](../../crates/bellatrix_mde_rust_generator/), [Tera](../../crates/bellatrix_mde_templates/) | Grafo de saída, Tera e script de materialização | Determinismo, saída gerada, Git e Rust gerado |
 | P09 | [workbench](../../crates/bellatrix_mde_workbench/), [UML UI](../../crates/bellatrix_ui_uml/) | UX-01–UX-09, apresentação compartilhada, tema ativo e interação | M1 vazio, teclado/Dock, gate GUI |
 | P10/P11 | [Project](../../crates/project/), [terminal](../../crates/terminal/) | Tarefas/build/run explícitos, traces e regressão host | Customer completo + Zed normal, cancelamento |
 
