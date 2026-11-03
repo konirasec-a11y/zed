@@ -225,8 +225,6 @@ const INTERFACE_ACTIONS: &[QuickEditAction] = &[
         None,
     ),
 ];
-const CLASSIFIER_ACTIONS: &[QuickEditAction] =
-    &[NAME, VISIBILITY, NOTE, CONSTRAINT, ATTRIBUTE, OPERATION];
 const PACKAGE_ACTIONS: &[QuickEditAction] = &[NAME, NOTE, CONSTRAINT];
 const ATTRIBUTE_ACTIONS: &[QuickEditAction] = &[
     act(
@@ -324,20 +322,41 @@ const OPERATION_ACTIONS: &[QuickEditAction] = &[
         None,
     ),
 ];
-pub fn quick_edit_for(kind: &str) -> &'static [QuickEditAction] {
-    match UmlType::from_kind(kind) {
-        Some(UmlType::Class) => CLASS_ACTIONS,
-        Some(UmlType::Interface) => INTERFACE_ACTIONS,
-        Some(UmlType::Attribute) => ATTRIBUTE_ACTIONS,
-        Some(UmlType::Operation) => OPERATION_ACTIONS,
-        Some(UmlType::Package | UmlType::Model | UmlType::Subsystem) => PACKAGE_ACTIONS,
-        Some(kind)
-            if kind.supports(crate::UmlCapability::Attribute)
-                && kind.supports(crate::UmlCapability::Operation) =>
-        {
-            CLASSIFIER_ACTIONS
-        }
-        _ => &[],
+pub fn quick_edit_for(kind: &str) -> Vec<QuickEditAction> {
+    let Some(kind) = UmlType::from_kind(kind) else {
+        return Vec::new();
+    };
+    match kind {
+        UmlType::Class => CLASS_ACTIONS.to_vec(),
+        UmlType::Interface => INTERFACE_ACTIONS.to_vec(),
+        UmlType::Attribute => ATTRIBUTE_ACTIONS.to_vec(),
+        UmlType::Operation => OPERATION_ACTIONS.to_vec(),
+        UmlType::Package | UmlType::Model | UmlType::Subsystem => PACKAGE_ACTIONS.to_vec(),
+        kind if kind.is_classifier() || kind == UmlType::Template => CLASS_ACTIONS
+            .iter()
+            .copied()
+            .filter(|action| {
+                use crate::UmlCapability::*;
+                let capability = match action.id {
+                    "uml.name-expression" | "uml.visibility" => return true,
+                    "uml.add-note" | "uml.add-constraint" => Annotation,
+                    "uml.add-attribute" => Attribute,
+                    "uml.add-operation" => Operation,
+                    "uml.add-reception" => Reception,
+                    "uml.add-template-parameter" => TemplateParameter,
+                    "uml.add-subclass" | "uml.add-superclass" => Specialization,
+                    "uml.add-provided-interface" | "uml.add-required-interface" => ClassInterfaces,
+                    "uml.add-associated-class"
+                    | "uml.add-aggregated-class"
+                    | "uml.add-composited-class" => ClassAssociation,
+                    "uml.add-port" => Port,
+                    "uml.add-part" => Part,
+                    _ => return false,
+                };
+                kind.supports(capability)
+            })
+            .collect(),
+        _ => Vec::new(),
     }
 }
 
@@ -428,25 +447,6 @@ mod tests {
                     .collect::<Vec<_>>(),
                 ids.to_vec()
             );
-        }
-    }
-}
-
-#[cfg(test)]
-mod semantic_registry_regression_tests {
-    #[test]
-    fn newly_recognized_classifiers_do_not_expose_unimplemented_editor_actions() {
-        for kind in [
-            "uml.component",
-            "uml.node",
-            "uml.device",
-            "uml.execution_environment",
-            "uml.artifact",
-            "uml.stereotype",
-            "uml.collaboration",
-            "uml.nary_association",
-        ] {
-            assert!(super::quick_edit_for(kind).is_empty(), "{kind}");
         }
     }
 }

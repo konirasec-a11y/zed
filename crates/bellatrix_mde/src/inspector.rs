@@ -74,9 +74,6 @@ const CLASS: &[Declared] = &[
     Declared { key:"isFinalSpecialization", label:"Final specialization", editor:PropertyEditor::Boolean, default:false_value },
     Declared { key:"isActive", label:"Active", editor:PropertyEditor::Boolean, default:false_value },
 ];
-const TRAIT: &[Declared] = &[
-    Declared { key:"isActive", label:"Active", editor:PropertyEditor::Boolean, default:false_value },
-];
 const FIELD: &[Declared] = &[
     Declared { key:"visibility", label:"Visibility", editor:PropertyEditor::Choice(VISIBILITY), default:public },
     Declared { key:"declaration", label:"Declaration", editor:PropertyEditor::Text, default:empty },
@@ -94,18 +91,24 @@ const FUNCTION: &[Declared] = &[
 ];
 
 fn fields_for(kind: &str) -> impl Iterator<Item = &Declared> {
-    let classifier = matches!(kind, "rust.struct" | "rust.trait" | "uml.class" | "uml.interface"
-        | "uml.signal" | "uml.data_type" | "uml.primitive_type"
-        | "uml.enumeration" | "uml.association_class" | "uml.template");
-    (if classifier { COMMON_CLASSIFIER } else { &[] }).iter().chain(
-        match kind {
-            "rust.struct" | "uml.class" => CLASS,
-            "rust.trait" | "uml.interface" => TRAIT,
-            "rust.field" | "uml.attribute" => FIELD,
-            "rust.function" | "uml.operation" => FUNCTION,
-            _ => &[],
-        }.iter()
-    )
+    let semantic_type = crate::UmlType::from_kind(kind);
+    COMMON_CLASSIFIER.iter().chain(CLASS.iter()).filter(move |field| {
+        semantic_type.is_some_and(|kind| {
+            // The legacy editor template alias is not a normative metaclass.
+            if kind == crate::UmlType::Template {
+                return COMMON_CLASSIFIER.iter().any(|declared| declared.key == field.key);
+            }
+            if field.key == "stereotype" {
+                kind.is_classifier()
+            } else {
+                kind.has_property(field.key)
+            }
+        })
+    }).chain(match kind {
+        "rust.field" | "uml.attribute" | "uml.part" | "uml.port" => FIELD,
+        "rust.function" | "uml.operation" => FUNCTION,
+        _ => &[],
+    }.iter())
 }
 
 fn inherited_value(element: &Element, key: &str, fallback: fn() -> Value) -> Value {

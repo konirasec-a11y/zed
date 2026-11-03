@@ -190,9 +190,9 @@ pub(super) fn insert_feature(
         .elements
         .iter()
         .find(|element| element.id == owner_id)
-        .ok_or("Class missing")?;
-    if !matches!(owner.kind.as_str(), "rust.struct" | "uml.class") {
-        return Err("Class specialization requires a Class".into());
+        .ok_or("feature owner missing")?;
+    if !action.accepts(&owner.kind) {
+        return Err("element type cannot own this feature kind".into());
     }
     let diagram = section
         .diagrams
@@ -203,7 +203,7 @@ pub(super) fn insert_feature(
         .views
         .iter()
         .find(|view| view.subject.as_deref() == Some(owner_id))
-        .ok_or("Class has no View in diagram")?;
+        .ok_or("feature owner has no View in diagram")?;
     let z_index = diagram
         .views
         .iter()
@@ -219,13 +219,13 @@ pub(super) fn insert_feature(
             width,
             height,
         } => (*x, *y, *width, *height),
-        _ => return Err("Class geometry must be Rect".into()),
+        _ => return Err("feature owner geometry must be Rect".into()),
     };
     let (kind, prefix, shape) = match action {
         UmlQuickCreate::TemplateParameter => ("uml.template_parameter", "TemplateParameter", None),
         UmlQuickCreate::Port => ("uml.port", "Port", Some((16.0, 16.0))),
         UmlQuickCreate::Part => ("uml.part", "Part", Some((86.0, 48.0))),
-        _ => return Err("not a contained Class specialization".into()),
+        _ => return Err("not a contained feature action".into()),
     };
     let previous = section
         .relations

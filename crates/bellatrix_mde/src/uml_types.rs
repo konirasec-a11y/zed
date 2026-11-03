@@ -155,34 +155,30 @@ impl UmlType {
         ))
     }
 
+    pub fn has_property(self, property: &str) -> bool {
+        self.metaclass()
+            .is_some_and(|name| crate::uml::metamodel::has_property(name, property))
+    }
+
     pub fn supports(self, capability: UmlCapability) -> bool {
         match capability {
             // Profile registration enables notation only; command support must
             // be introduced deliberately with its ownership/application adapter.
             UmlCapability::Annotation => !matches!(self, Self::Frame | Self::Profile),
-            // Preserve the editor's supported commands independently of the
-            // broader semantic Classifier hierarchy used by validation.
-            UmlCapability::Attribute | UmlCapability::Operation => matches!(
-                self,
-                Self::Class
-                    | Self::Interface
-                    | Self::Signal
-                    | Self::DataType
-                    | Self::PrimitiveType
-                    | Self::Enumeration
-                    | Self::AssociationClass
-                    | Self::Template
-            ),
-            UmlCapability::Reception => {
-                matches!(self, Self::Class | Self::Interface | Self::AssociationClass)
+            UmlCapability::Attribute => {
+                self.has_property("ownedAttribute") || self == Self::Template
             }
+            UmlCapability::Operation => {
+                self.has_property("ownedOperation") || self == Self::Template
+            }
+            UmlCapability::Reception => self.has_property("ownedReception"),
+            UmlCapability::Port => self.has_property("ownedPort"),
+            UmlCapability::Part => self.has_property("part"),
             UmlCapability::Specialization => matches!(self, Self::Class | Self::Interface),
             UmlCapability::RealizationTarget => self == Self::Interface,
             UmlCapability::TemplateParameter
             | UmlCapability::ClassInterfaces
-            | UmlCapability::ClassAssociation
-            | UmlCapability::Port
-            | UmlCapability::Part => self == Self::Class,
+            | UmlCapability::ClassAssociation => self == Self::Class,
         }
     }
 }
@@ -249,21 +245,18 @@ mod tests {
     }
 
     #[test]
-    fn semantic_classifiers_do_not_enable_unsupported_editor_commands() {
+    fn classifier_identity_does_not_imply_owned_operations() {
         for kind in [
-            UmlType::Component,
-            UmlType::Node,
-            UmlType::Device,
-            UmlType::ExecutionEnvironment,
-            UmlType::Artifact,
-            UmlType::Stereotype,
+            UmlType::Signal,
             UmlType::Collaboration,
             UmlType::NaryAssociation,
         ] {
             assert!(kind.is_classifier());
-            assert!(!kind.supports(UmlCapability::Attribute));
             assert!(!kind.supports(UmlCapability::Operation));
         }
+        assert!(UmlType::Signal.supports(UmlCapability::Attribute));
+        assert!(UmlType::Collaboration.supports(UmlCapability::Attribute));
+        assert!(!UmlType::NaryAssociation.supports(UmlCapability::Attribute));
         assert_eq!(UmlType::Template.may_specialize_type(UmlType::Class), None);
         assert_eq!(UmlType::Class.may_specialize_type(UmlType::Template), None);
         assert_eq!(UmlType::Package.may_specialize_type(UmlType::Class), None);
