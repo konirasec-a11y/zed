@@ -24,8 +24,9 @@ pub use instance_presentation::{format_instance_heading, collect_instance_slot_l
 mod publish;
 mod quick_edit;
 mod relationships;
+mod relationship_tools;
 mod relationship_notation;
-pub use relationship_notation::format_relationship_label;
+pub use relationship_notation::{format_relationship_label, resolve_relationship_style};
 mod scope;
 mod structural_diagrams;
 mod structural_rules;

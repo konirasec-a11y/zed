@@ -638,6 +638,7 @@ fn move_view(section: &mut ModelingSection, view_id: &str, dx: f64, dy: f64) -> 
     }
     reroute_relationships(section, &diagram_id);
     if let Some(diagram) = section.diagrams.iter_mut().find(|diagram| diagram.id == diagram_id) {
+        crate::visual_draft_routing::translate_message_anchors(diagram, view_id, dy);
         crate::reroute_visual_drafts(diagram);
     }
     Ok(())

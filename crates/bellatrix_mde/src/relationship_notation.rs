@@ -22,7 +22,7 @@ pub fn relationship_style_for_notation(kind: &str) -> RelationshipStyle {
     use RelationshipMarker::*;
     let (source_marker, target_marker, dashed) = match kind {
         "uml.generalization" => (None, Triangle, false),
-        "uml.extension" => (None, FilledTriangle, false),
+        "uml.extension" | "uml.message" => (None, FilledTriangle, false),
         "uml.control_flow" | "uml.object_flow" | "uml.transition" => (None, OpenArrow, false),
         "uml.include"
         | "uml.extend"
@@ -41,7 +41,9 @@ pub fn relationship_style_for_notation(kind: &str) -> RelationshipStyle {
         "uml.aggregation" => (Diamond, None, false),
         "uml.composition" => (FilledDiamond, None, false),
         "uml.containment" => (Containment, None, false),
-        "view.association_class_attachment" | "uml.note_link" | "uml.constraint_link" => (None, None, true),
+        "view.association_class_attachment" | "uml.note_link" | "uml.constraint_link" => {
+            (None, None, true)
+        }
         _ => (None, None, false),
     };
     RelationshipStyle {
@@ -127,25 +129,7 @@ pub fn relationship_presentation(relation: &Relation) -> RelationshipPresentatio
             .and_then(serde_json::Value::as_str)
             .map(str::to_owned)
     };
-    let mut style = relationship_style_for_notation(notation);
-    if relation.kind == "uml.message" {
-        match relation
-            .properties
-            .get("messageSort")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("synchCall")
-        {
-            "synchCall" => style.target_marker = RelationshipMarker::FilledTriangle,
-            "reply" | "createMessage" => {
-                style.target_marker = RelationshipMarker::OpenArrow;
-                style.dashed = true;
-            }
-            "asynchCall" | "asynchSignal" | "deleteMessage" => {
-                style.target_marker = RelationshipMarker::OpenArrow
-            }
-            _ => {}
-        }
-    }
+    let mut style = resolve_relationship_style(notation, &relation.properties);
 
     if matches!(
         relation.kind.as_str(),
@@ -227,4 +211,30 @@ pub fn format_relationship_label(
         (Some(keyword), None) => Some(keyword.into()),
         (None, name) => name.map(str::to_owned),
     }
+}
+
+/// Interpret notation metadata equally for canonical relationships and View-only drafts.
+pub fn resolve_relationship_style(
+    kind: &str,
+    properties: &std::collections::BTreeMap<String, serde_json::Value>,
+) -> RelationshipStyle {
+    let mut style = relationship_style_for_notation(kind);
+    if kind == "uml.message" {
+        match properties
+            .get("messageSort")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("synchCall")
+        {
+            "synchCall" => style.target_marker = RelationshipMarker::FilledTriangle,
+            "reply" | "createMessage" => {
+                style.target_marker = RelationshipMarker::OpenArrow;
+                style.dashed = true;
+            }
+            "asynchCall" | "asynchSignal" | "deleteMessage" => {
+                style.target_marker = RelationshipMarker::OpenArrow
+            }
+            _ => {}
+        }
+    }
+    style
 }

@@ -9,6 +9,7 @@ impl Render for MdeWorkbenchItem {
         let muted = palette.muted;
         let zoom = self.zoom;
         let pan = self.pan;
+        let canvas_origin = std::rc::Rc::new(std::cell::Cell::new(None::<(f64, f64)>));
         let relation_hint = match self.selected_tool {
             Some(ModelingTool::Relation(kind)) => Some(if self.pending_relation_source.is_some() {
                 format!("{}: click second element (target)", kind.label())
@@ -49,9 +50,13 @@ impl Render for MdeWorkbenchItem {
                     views.sort_by_key(|view| view.z_index);
                     for view in views {
                         if view.subject.is_none() && view.draft.is_some() {
-                            if let Some(card) =
-                                self.render_visual_draft(view, diagram, snapshot.revision, cx)
-                            {
+                            if let Some(card) = self.render_visual_draft(
+                                view,
+                                diagram,
+                                snapshot.revision,
+                                &canvas_origin,
+                                cx,
+                            ) {
                                 cards.push(card);
                             }
                             continue;
@@ -552,6 +557,7 @@ impl Render for MdeWorkbenchItem {
                         let connect_owner = cx.weak_entity();
                         let connect_target = subject.to_owned();
                         let connect_view = view.id.clone();
+                        let connection_origin = canvas_origin.clone();
                         let resize_owner = cx.weak_entity();
                         let resize_id = view.id.clone();
                         let element_id = subject.to_owned();
@@ -688,27 +694,23 @@ impl Render for MdeWorkbenchItem {
                                             .cursor_crosshair()
                                             .on_mouse_down(
                                                 MouseButton::Left,
-                                                move |_, window, cx| {
-                                                    let _ = connect_owner.update(cx, |item, cx| {
-                                                        if let Some(ModelingTool::Relation(kind)) =
-                                                            item.selected_tool
-                                                        {
-                                                            if item.should_connect_visual(kind) {
-                                                                item.link_visual_draft_endpoint(
-                                                                    kind,
-                                                                    connect_view.clone(),
-                                                                    cx,
-                                                                );
-                                                            } else {
-                                                                item.link_endpoint(
-                                                                    kind,
-                                                                    connect_target.clone(),
-                                                                    cx,
-                                                                );
-                                                            }
+                                                move |event: &MouseDownEvent, window, cx| {
+                                                    if let Err(error) =
+                                                        connect_owner.update(cx, |item, cx| {
+                                                            item.connect_view_at_pointer(
+                                                                connect_view.clone(),
+                                                                Some(connect_target.clone()),
+                                                                event.position,
+                                                                connection_origin.get(),
+                                                                cx,
+                                                            );
                                                             cx.focus_self(window);
-                                                        }
-                                                    });
+                                                        })
+                                                    {
+                                                        eprintln!(
+                                                            "MDE connection update failed: {error}"
+                                                        );
+                                                    }
                                                     cx.stop_propagation();
                                                 },
                                             ),
@@ -739,7 +741,6 @@ impl Render for MdeWorkbenchItem {
         let validate_owner = cx.weak_entity();
         let cancel_relation_owner = cx.weak_entity();
         let escape_relation_owner = cx.weak_entity();
-        let canvas_origin = std::rc::Rc::new(std::cell::Cell::new(None::<(f64, f64)>));
         let measured_canvas_origin = canvas_origin.clone();
         div()
             .id(format!("mde-workbench-{}", self.project_id().as_str()))

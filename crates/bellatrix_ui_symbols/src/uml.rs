@@ -186,7 +186,7 @@ pub(super) static UML: &[SymbolGroup] = &[
             Symbol {
                 id: "uml-sequence-2",
                 label: "Message",
-                kind: ShapeKind::Message,
+                kind: ShapeKind::SynchronousMessage,
             },
             Symbol {
                 id: "uml-sequence-3",
@@ -196,7 +196,7 @@ pub(super) static UML: &[SymbolGroup] = &[
             Symbol {
                 id: "uml-sequence-4",
                 label: "Reply message",
-                kind: ShapeKind::Message,
+                kind: ShapeKind::ReplyMessage,
             },
             Symbol {
                 id: "uml-sequence-5",

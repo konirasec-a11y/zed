@@ -12,6 +12,8 @@ pub enum Family {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum ShapeKind {
+    SynchronousMessage,
+    ReplyMessage,
     AssociationClassAttachment,
     Port,
     DeepHistory,
@@ -148,6 +150,8 @@ pub fn glyph(kind: ShapeKind) -> &'static [u8] {
         ShapeKind::Input => include_bytes!("../assets/input.svg"),
         ShapeKind::Interface => include_bytes!("../assets/interface.svg"),
         ShapeKind::Lifeline => include_bytes!("../assets/lifeline.svg"),
+        ShapeKind::SynchronousMessage => include_bytes!("../assets/synchronous-message.svg"),
+        ShapeKind::ReplyMessage => include_bytes!("../assets/reply-message.svg"),
         ShapeKind::Message => include_bytes!("../assets/message.svg"),
         ShapeKind::Note => include_bytes!("../assets/note.svg"),
         ShapeKind::Package => include_bytes!("../assets/package.svg"),

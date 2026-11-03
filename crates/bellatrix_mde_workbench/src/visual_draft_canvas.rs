@@ -1,5 +1,6 @@
 //! View-only notation uses the same canvas figures and styles without pretending to be UML.
 use super::*;
+pub(super) type CanvasOrigin = std::rc::Rc<std::cell::Cell<Option<(f64, f64)>>>;
 
 impl MdeWorkbenchItem {
     pub(super) fn render_validation_mode(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -45,6 +46,7 @@ impl MdeWorkbenchItem {
         view: &bellatrix_mde::View,
         diagram: &bellatrix_mde::Diagram,
         revision: u64,
+        canvas_origin: &CanvasOrigin,
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
         let draft = view.draft.as_ref()?;
@@ -159,7 +161,10 @@ impl MdeWorkbenchItem {
                     target_labels: Default::default(),
                     label: label.clone(),
                     notation: draft.notation_kind.clone(),
-                    style: bellatrix_mde::relationship_style_for_notation(&draft.notation_kind),
+                    style: bellatrix_mde::resolve_relationship_style(
+                        &draft.notation_kind,
+                        &draft.properties,
+                    ),
                     source_role: "source",
                     target_role: "target",
                 };
@@ -196,6 +201,7 @@ impl MdeWorkbenchItem {
             _ => {}
         }
         let owner = cx.weak_entity();
+        let click_origin = canvas_origin.clone();
         let id = view.id.clone();
         let draft_editor = self
             .inline_editor
@@ -249,8 +255,15 @@ impl MdeWorkbenchItem {
                         if let Err(error) = owner.update(cx, |item, cx| {
                             if event.click_count >= 2 && item.selected_tool.is_none() {
                                 item.begin_draft_label_edit(id.clone(), window, cx);
-                            } else if let Some(ModelingTool::Relation(kind)) = item.selected_tool {
-                                item.link_visual_draft_endpoint(kind, id.clone(), cx);
+                            } else if matches!(item.selected_tool, Some(ModelingTool::Relation(_)))
+                            {
+                                item.connect_view_at_pointer(
+                                    id.clone(),
+                                    None,
+                                    event.position,
+                                    click_origin.get(),
+                                    cx,
+                                );
                             } else {
                                 item.selected_element = None;
                                 item.selected_view = Some(id.clone());
@@ -319,14 +332,28 @@ impl MdeWorkbenchItem {
         target: String,
         cx: &mut Context<Self>,
     ) {
+        self.link_visual_draft_endpoint_at(kind, target, None, cx);
+    }
+    fn link_visual_draft_endpoint_at(
+        &mut self,
+        kind: ModelingRelationKind,
+        target: String,
+        point: Option<bellatrix_mde::Point>,
+        cx: &mut Context<Self>,
+    ) {
         if self.source.is_read_only() {
             return;
         }
         let from = match choose_relation_endpoint(&mut self.pending_relation_source, &target) {
             RelationClick::First => {
+                self.pending_visual_point = point;
                 self.feedback = "Visual connection: select another view".into();
                 cx.notify();
                 return;
+            }
+            RelationClick::Repeat if kind.resolve_message_sort().is_some() => {
+                self.pending_relation_source = None;
+                target.clone()
             }
             RelationClick::Repeat => return,
             RelationClick::Connect(from) => from,
@@ -364,18 +391,54 @@ impl MdeWorkbenchItem {
         let (Some(start), Some(to)) = (locate(&from), locate(&target)) else {
             return;
         };
+        let mut properties = std::collections::BTreeMap::new();
+        let source_point = self.pending_visual_point.take();
+        let label = if let Some(sort) = kind.resolve_message_sort() {
+            properties.insert("messageSort".into(), serde_json::json!(sort));
+            for (key, view_id, point) in [
+                ("source_anchor", from.as_str(), source_point),
+                ("target_anchor", target.as_str(), point),
+            ] {
+                if let Some(anchor) = point.and_then(|point| {
+                    resolve_message_anchor(&snapshot.section, diagram, view_id, point)
+                }) {
+                    properties.insert(key.into(), serde_json::json!({"x":anchor.x,"y":anchor.y}));
+                }
+            }
+            Some("message()".to_owned())
+        } else {
+            None
+        };
+        let segments = if from == target && kind.resolve_message_sort().is_some() {
+            let send_y = source_point.map_or(start.y, |point| point.y);
+            let receive_y = point.map_or(to.y + 30.0, |point| point.y);
+            vec![
+                PathSegment::Line {
+                    to: bellatrix_mde::Point {
+                        x: start.x + 48.0,
+                        y: send_y,
+                    },
+                },
+                PathSegment::Line {
+                    to: bellatrix_mde::Point {
+                        x: start.x + 48.0,
+                        y: receive_y,
+                    },
+                },
+                PathSegment::Line { to },
+            ]
+        } else {
+            vec![PathSegment::Line { to }]
+        };
         self.submit(
             MdeUiCommand::CreateVisualDraft(
                 bellatrix_mde_cordis::ModelingCreateVisualDraftRequested {
                     project_id: self.project_id().clone(),
                     diagram_id: diagram.id.clone(),
                     notation_kind: kind.model_kind().into(),
-                    label: None,
-                    geometry: Geometry::Path {
-                        start,
-                        segments: vec![PathSegment::Line { to }],
-                    },
-                    properties: std::collections::BTreeMap::new(),
+                    label,
+                    geometry: Geometry::Path { start, segments },
+                    properties,
                     parent_view_id: None,
                     source_view_id: Some(from),
                     target_view_id: Some(target),
@@ -554,4 +617,75 @@ impl MdeWorkbenchItem {
         .detach();
         cx.notify();
     }
+}
+
+impl MdeWorkbenchItem {
+    pub(super) fn connect_view_at_pointer(
+        &mut self,
+        view_id: String,
+        subject: Option<String>,
+        position: Point<Pixels>,
+        origin: Option<(f64, f64)>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(ModelingTool::Relation(kind)) = self.selected_tool else {
+            return;
+        };
+        if subject.is_none() || self.should_connect_visual(kind) {
+            let point = origin.map(|origin| {
+                let (x, y) = canvas_model_position(
+                    (f64::from(position.x), f64::from(position.y)),
+                    origin,
+                    self.pan,
+                    self.zoom,
+                );
+                bellatrix_mde::Point { x, y }
+            });
+            self.link_visual_draft_endpoint_at(kind, view_id, point, cx);
+        } else if let Some(subject) = subject {
+            self.link_endpoint(kind, subject, cx);
+        }
+    }
+}
+fn resolve_message_anchor(
+    section: &bellatrix_mde::ModelingSection,
+    diagram: &bellatrix_mde::Diagram,
+    view_id: &str,
+    point: bellatrix_mde::Point,
+) -> Option<bellatrix_mde::Point> {
+    let view = diagram.views.iter().find(|view| view.id == view_id)?;
+    let Geometry::Rect {
+        x,
+        y,
+        width,
+        height,
+    } = view.geometry
+    else {
+        return None;
+    };
+    if width <= 0.0 || height <= 0.0 {
+        return None;
+    }
+    let kind = view
+        .draft
+        .as_ref()
+        .map(|draft| draft.notation_kind.as_str())
+        .or_else(|| {
+            section
+                .elements
+                .iter()
+                .find(|element| view.subject.as_deref() == Some(element.id.as_str()))
+                .map(|element| element.kind.as_str())
+        });
+    let anchor_x = if kind == Some("uml.lifeline")
+        && diagram.interaction_kind.as_deref() != Some("communication")
+    {
+        0.5
+    } else {
+        ((point.x - x) / width).clamp(0.0, 1.0)
+    };
+    Some(bellatrix_mde::Point {
+        x: anchor_x,
+        y: ((point.y - y) / height).clamp(0.0, 1.0),
+    })
 }

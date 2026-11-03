@@ -125,11 +125,13 @@ pub fn reroute_visual_drafts(diagram: &mut Diagram) {
             } else {
                 source.center
             };
-            *start = source.anchor_toward(first_direction);
+            *start = resolve_authored_anchor(&draft.properties, "source_anchor", *source)
+                .unwrap_or_else(|| source.anchor_toward(first_direction));
             if let Some(segment) = segments.last_mut() {
                 match segment {
                     PathSegment::Line { to } | PathSegment::Cubic { to, .. } => {
-                        *to = target.anchor_toward(last_direction)
+                        *to = resolve_authored_anchor(&draft.properties, "target_anchor", *target)
+                            .unwrap_or_else(|| target.anchor_toward(last_direction))
                     }
                 }
             }
@@ -180,4 +182,58 @@ fn resolve_routing_order(diagram: &Diagram) -> Vec<usize> {
         }
     }
     order
+}
+
+fn resolve_authored_anchor(
+    properties: &std::collections::BTreeMap<String, serde_json::Value>,
+    key: &str,
+    endpoint: crate::relationships::Endpoint,
+) -> Option<Point> {
+    let anchor = properties.get(key)?;
+    let x = anchor.get("x")?.as_f64()?;
+    let y = anchor.get("y")?.as_f64()?;
+    (x.is_finite() && y.is_finite()).then_some(Point {
+        x: endpoint.center.x + (x - 0.5) * endpoint.width,
+        y: endpoint.center.y + (y - 0.5) * endpoint.height,
+    })
+}
+
+/// Moving a visual message changes its drawn event heights, not semantic occurrences.
+pub(crate) fn translate_message_anchors(diagram: &mut Diagram, view_id: &str, dy: f64) {
+    let heights: std::collections::HashMap<_, _> = diagram
+        .views
+        .iter()
+        .filter_map(|view| match view.geometry {
+            Geometry::Rect { height, .. } if height > 0.0 => Some((view.id.clone(), height)),
+            _ => None,
+        })
+        .collect();
+    let Some(draft) = diagram
+        .views
+        .iter_mut()
+        .find(|view| view.id == view_id)
+        .and_then(|view| view.draft.as_mut())
+        .filter(|draft| draft.notation_kind == "uml.message")
+    else {
+        return;
+    };
+    for (key, endpoint) in [
+        ("source_anchor", &draft.source_view_id),
+        ("target_anchor", &draft.target_view_id),
+    ] {
+        let Some(height) = endpoint.as_ref().and_then(|id| heights.get(id)) else {
+            continue;
+        };
+        if let Some(anchor) = draft
+            .properties
+            .get_mut(key)
+            .and_then(serde_json::Value::as_object_mut)
+            && let Some(y) = anchor.get("y").and_then(serde_json::Value::as_f64)
+        {
+            let translated = y + dy / height;
+            if translated.is_finite() {
+                anchor.insert("y".into(), serde_json::json!(translated));
+            }
+        }
+    }
 }

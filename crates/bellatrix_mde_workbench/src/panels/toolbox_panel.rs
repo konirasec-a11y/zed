@@ -78,6 +78,10 @@ fn tool_glyph(tool: ModelingTool) -> ShapeKind {
             | ModelingElementKind::PrimitiveType => ShapeKind::Class,
         },
         ModelingTool::Relation(kind) => match kind {
+            ModelingRelationKind::MessageSynchronous => ShapeKind::SynchronousMessage,
+            ModelingRelationKind::MessageAsynchronous => ShapeKind::Message,
+            ModelingRelationKind::MessageReply => ShapeKind::ReplyMessage,
+
             ModelingRelationKind::AssociationClassAttachment => {
                 ShapeKind::AssociationClassAttachment
             }
@@ -272,7 +276,7 @@ impl Render for MdeLeftPanel {
                     })
                 })
         });
-        let tool_groups: [(&str, Vec<ModelingTool>); 16] = [
+        let tool_groups: [(&str, Vec<ModelingTool>); 17] = [
             (
                 "Classes · basic",
                 ModelingElementKind::BASIC
@@ -397,6 +401,14 @@ impl Render for MdeLeftPanel {
                     .iter()
                     .copied()
                     .map(ModelingTool::Element)
+                    .collect(),
+            ),
+            (
+                "Sequence messages · visual",
+                ModelingRelationKind::MESSAGES
+                    .iter()
+                    .copied()
+                    .map(ModelingTool::Relation)
                     .collect(),
             ),
             (
