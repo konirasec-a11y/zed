@@ -9,7 +9,11 @@ o commit `62465b699f9ff9e8bd6da5a6aa2cdc1d73c13d53` publica Port::encapsulated_o
 e as duas invariantes diretas de Component. Essas três linhas foram atualizadas
 com evidência específica. Enumeration::immutable também tem implementação no
 working tree e gate focado 8/8, descritos em E14, ainda sem SHA de publicação
-atribuído. BehavioredClassifier continua pendente.
+atribuído. BehavioredClassifier::class_behavior foi publicada em
+`d1acb16d7499a2437e25f5f17828acfbc8c174a2`, com evidência focada em E16.
+AssociationClass::cannot_be_defined
+foi publicada em `867c6afa2a99906936ec23a398a54278ebf5266e`, com gate focado
+33/33 e limites de suporte descritos em E15.
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -125,7 +129,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12/E13/E14 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12/E13/E14/E15/E16 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -166,8 +170,10 @@ de execução nova. E12/E13/E14 possuem os gates delimitados nas seções seguin
   `feature_compatibility.rs`; `kb09_redefinitions.rs`.
   Overrides/contextos especializados não implementados continuam Unsupported.
 - **U01**: `semantics/associations.rs`, final de `validate_association`:
-  regras herdadas são verificadas, mas metaclasses especializadas retornam
-  Unsupported. `association_specialization_flow.rs` testa a fronteira.
+  regras herdadas são verificadas, mas contratos especializados restantes
+  retornam Unsupported. Isso não apaga predicados específicos existentes de
+  AssociationClass (E05/E15) nem autoriza autoria completa.
+  `association_specialization_flow.rs` testa a fronteira.
 
 - **E12**: `semantics/classifiers.rs`, `validate_feature_rules` e
   `contributes_to_owned_union`; `port_ownership.rs`, quatro testes.
@@ -194,6 +200,60 @@ de execução nova. E12/E13/E14 possuem os gates delimitados nas seções seguin
   decide o forAll falso mesmo com vizinho externo; coleção inválida não é
   escondida por essa decisão. Coleção vazia comprovada satisfaz; coleção externa
   incompleta permanece não verificada.
+
+- **E15**: `semantics/associations.rs`,
+  `association_class_cannot_be_defined`, `validate` e `validate_association`;
+  `semantics/classifier_hierarchy.rs`, `has_ancestor`;
+  `association_class_constraints.rs`, quatro testes. A própria AssociationClass
+  não pode aparecer nos endTypes nem nos allParents desses tipos. Uma prova
+  local de inclusão pode decidir a violação mesmo com ramo externo, mas
+  `resolve_ancestry` não retorna fechamento parcial como completo. Ausência de
+  caminho com ramo não resolvido permanece desconhecida; ciclos e entradas
+  inválidas continuam diagnosticados. A regra específica aparece uma vez na
+  validação global e também é aplicada no gate de comando. O fallback de
+  contratos especializados restantes é preservado.
+
+- **E16**: `semantics/classifiers.rs`, `validate_feature_rules` e
+  `role_present`; `class_behavior.rs`, seis testes; teste unitário
+  `class_behavior_gate_rejects_new_violation_and_accepts_repaired_draft`.
+  A regra segue o Behavior selecionado em classifierBehavior e exige sua
+  specification vazia. Behavior possuído mas não selecionado não é inferido
+  como classifierBehavior. A regra é herdada por outras metaclasses
+  BehavioredClassifier; Class::passive_class continua independente.
+  Referências externas permanecem não verificadas e referências inválidas
+  mantêm erro de contrato. O editor genérico ainda não escreve
+  classifierBehavior: sua rejeição sem mutação não é autoria aprovada.
+
+### Evidência publicada de BehavioredClassifier
+
+Commit: `d1acb16d7499a2437e25f5f17828acfbc8c174a2`. Logs locais lidos:
+`/tmp/class-behavior-gate.log` registra **6/6 class_behavior** e
+**5/5 property_invariants_flow**; `/tmp/class-behavior-kernel-gate.log`
+registra **1/1 teste unitário focado**, com 157 testes filtrados.
+O teste unitário verifica rejeição pelo gate semântico e aceite após reparo;
+não substitui um fluxo de autoria pelo editor genérico, ainda limitado.
+
+Os testes incluem API com/sem raiz, specification ausente/nula/preenchida,
+Behavior não selecionado, herança de metaclasses, referências externas e
+malformadas, roundtrip e preservação do modelo após comando não suportado.
+A linha fica P/E16, com limites de referências e autoria explícitos. Esses gates
+não constituem execução integral nem conformidade de comportamento em runtime.
+A matriz não iniciou novos testes, UI ou geração para registrar a evidência.
+
+### Evidência publicada de AssociationClass
+
+Commit: `867c6afa2a99906936ec23a398a54278ebf5266e`. O log local
+`/tmp/association-class-review.log` foi lido e registra **33/33 aprovados**:
+AssociationClass 4, Association kernel 2, Association specialization 2, API 4 e
+templates 21. Este é o gate focado de revisão do incremento, não a suíte integral
+do Kernel. A matriz não executou esses testes novamente.
+
+O recorte comprova referência própria, ancestral direto/transitivo, ramos
+externos em ambas ordens, malformados, ciclos, contagem do diagnóstico,
+reabertura e rejeição atômica. Comandos válidos ainda bloqueados pelo fallback
+especializado não são contabilizados como autoria aprovada. A linha fica P/E15;
+as outras obrigações e a autoria completa de AssociationClass continuam fora
+desta alegação. Não houve mudança de UI nem geração.
 
 ### Evidência de Enumeration no working tree
 
@@ -598,7 +658,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `BehavioredClassifier-class_behavior`
 
-- Metaclass: `BehavioredClassifier`. Estado: **L1**. Evidência: lote 1; não promover antes do gate final.
+- Metaclass: `BehavioredClassifier`. Estado: **P**. Evidência: E16; commit `d1acb16d7499a2437e25f5f17828acfbc8c174a2`.
 - OCL publicado: `classifierBehavior->notEmpty() implies classifierBehavior.specification->isEmpty()`.
 
 #### `Enumeration-immutable`
@@ -650,7 +710,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `AssociationClass-cannot_be_defined`
 
-- Metaclass: `AssociationClass`. Estado: **U**. Evidência: U01.
+- Metaclass: `AssociationClass`. Estado: **P**. Evidência: E15; commit `867c6afa2a99906936ec23a398a54278ebf5266e`.
 - OCL publicado: `self.endType()->excludes(self) and self.endType()->collect(et|et.oclAsType(Classifier).allParents())->flatten()->excludes(self)`.
 
 #### `AssociationClass-disjoint_attributes_ends`
@@ -909,7 +969,9 @@ contagem de testes nem de descritores como cobertura normativa.
 Port e as duas regras de Component já têm implementação e gates descritos em
 E12/E13. Enumeration (item 4) tem implementação e gate no working tree em E14,
 ainda aguardando referência ao commit publicado. BehavioredClassifier (item 5)
-continua pendente. Não tratar este lote inteiro como concluído.
+tem recorte publicado e gates em E16. Os cinco itens têm predicados no recorte,
+mas persistem limites de representação, autoria e rastreabilidade; não converter
+essa contagem em conformidade integral.
 
 1. `Port-encapsulated_owner`: derivar encapsulatedClassifier a partir do owner
    e dos papéis canônicos; não confiar numa cópia armazenada da inversa.
@@ -928,7 +990,10 @@ viram vazio/false; erro estrutural não desaparece diante de outro unknown.
 
 ### Lote 2: conjuntos e correspondência posicional
 
-AssociationClass e CommunicationPath; Connector e ConnectorEnd. Dependências:
+AssociationClass::cannot_be_defined já tem recorte publicado em E15 e
+AssociationClass::disjoint_attributes_ends tem recorte em E05. Fechar os limites
+e contratos restantes sem remover Unsupported prematuramente. Continuar com
+CommunicationPath, Connector e ConnectorEnd. Dependências:
 allRoles, membership, conformance, definingEnd e compatibleWith. Testar aridade,
 ordem das pontas, partWithPort, type opcional, herança e referências externas.
 Implementar os contratos especializados antes de remover Unsupported.
