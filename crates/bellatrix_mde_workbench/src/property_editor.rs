@@ -296,7 +296,7 @@ pub(crate) fn render_inspector(
                         )
                         .on_click(cx.listener(|panel, _, window, cx| {
                             if panel.inspector_documentation_open {
-                                window.focus(&panel.focus_handle(cx));
+                                window.focus(&panel.focus_handle(cx), cx);
                             }
                             panel.inspector_documentation_open =
                                 !panel.inspector_documentation_open;
@@ -340,7 +340,7 @@ pub(crate) fn render_inspector(
                     )
                     .on_click(cx.listener(|panel, _, window, cx| {
                         if panel.inspector_advanced_open {
-                            window.focus(&panel.focus_handle(cx));
+                            window.focus(&panel.focus_handle(cx), cx);
                         }
                         panel.inspector_advanced_open = !panel.inspector_advanced_open;
                         cx.notify();

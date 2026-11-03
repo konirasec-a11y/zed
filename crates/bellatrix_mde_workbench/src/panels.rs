@@ -174,7 +174,7 @@ impl MdeLeftPanel {
     ) -> Self {
         let search_input = cx.new(|cx| {
             InputField::new(window, cx, "Search symbols…")
-                .start_icon(IconName::Search)
+                .start_icon(IconName::MagnifyingGlass)
                 .label_min_width(px(0.0))
         });
         let owner = cx.weak_entity();
@@ -612,24 +612,24 @@ impl Render for MdeLeftPanel {
                                 cx.listener(|panel, _, window, cx| {
                                     panel.toolbox_open = !panel.toolbox_open;
                                     if !panel.toolbox_open {
-                                        window.focus(&panel.state.focus);
+                                        window.focus(&panel.state.focus, cx);
                                     }
                                     cx.notify();
                                 }),
                             )
                             .action(
-                                ui::IconButton::new("mde-search-tools", IconName::Search)
+                                ui::IconButton::new("mde-search-tools", IconName::MagnifyingGlass)
                                     .toggle_state(self.search_open)
                                     .on_click(cx.listener(|panel, _, window, cx| {
                                         panel.search_open = !panel.search_open;
                                         panel.toolbox_open = true;
                                         if panel.search_open {
-                                            window.focus(&panel.search_input.focus_handle(cx));
+                                            window.focus(&panel.search_input.focus_handle(cx), cx);
                                         } else {
                                             let editor =
                                                 panel.search_input.read(cx).editor().clone();
                                             editor.clear(window, cx);
-                                            window.focus(&panel.state.focus);
+                                            window.focus(&panel.state.focus, cx);
                                         }
                                         cx.notify();
                                     })),
@@ -1190,7 +1190,7 @@ impl Render for MdeRightPanel {
                         cx.listener(|panel, _, window, cx| {
                             panel.inspector_open = !panel.inspector_open;
                             if !panel.inspector_open {
-                                window.focus(&panel.state.focus);
+                                window.focus(&panel.state.focus, cx);
                             }
                             cx.notify();
                         }),

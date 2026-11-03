@@ -41,6 +41,32 @@ HEADLESS = {
 def manifest(path: Path) -> dict:
     return tomllib.loads(path.read_text(encoding="utf-8"))
 
+def check_native_api_source(body: str, path: Path, icon_variants: set[str]) -> None:
+    """Guard known API regressions; this does not type-check Rust or replace Cargo."""
+    for variant in re.findall(r"\bIconName::(\w+)", body):
+        assert variant in icon_variants, f"Unknown IconName::{variant} in {path}"
+    for call in re.finditer(r"\bwindow\s*\.\s*focus\s*\(", body):
+        depth = 1
+        argument_start = call.end()
+        arguments = []
+        for index in range(call.end(), len(body)):
+            character = body[index]
+            if character in "([{":
+                depth += 1
+            elif character in ")]}":
+                depth -= 1
+                if depth == 0:
+                    arguments.append(body[argument_start:index].strip())
+                    break
+            elif character == "," and depth == 1:
+                arguments.append(body[argument_start:index].strip())
+                argument_start = index + 1
+        if arguments and not arguments[-1]:
+            arguments.pop()
+        assert len(arguments) == 2 and arguments[-1] == "cx", (
+            f"Window::focus requires a handle and cx in {path}: {arguments}"
+        )
+
 def check() -> None:
     workspace = manifest(ROOT / "Cargo.toml")["workspace"]
     assert "crates/zed" in workspace["members"]
@@ -74,10 +100,16 @@ def check() -> None:
         assert not (ROOT / "crates" / obsolete / "Cargo.toml").exists(), obsolete
 
     includes = 0
+    icons = (ROOT / "crates/icons/src/icons.rs").read_text(encoding="utf-8")
+    icon_enum = re.search(r"pub enum IconName\s*\{(.*?)\n\}", icons, re.DOTALL)
+    assert icon_enum, "IconName enum declaration not found"
+    icon_variants = set(re.findall(r"^\s*(\w+)\s*,", icon_enum.group(1), re.MULTILINE))
+    assert icon_variants, "IconName enum has no recognized variants"
     include_rx = re.compile(r'include_(?:str|bytes)!\s*\(\s*"([^"]+)"\s*\)')
     for package in CRATES:
         for path in (ROOT / "crates" / package).rglob("*.rs"):
             body = path.read_text(encoding="utf-8")
+            check_native_api_source(body, path, icon_variants)
             assert "gpui_kit::" not in body, f"Legacy GPUI Kit type in {path}"
             for item in include_rx.finditer(body):
                 include = (path.parent / item.group(1)).resolve()
