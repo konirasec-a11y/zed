@@ -26,6 +26,10 @@ ConnectorEnd::multiplicity e definingEnd têm recorte publicado em
 Connector::kind e CommunicationPath::association_ends têm incrementos publicados
 em `bb795fa764adaf5d9724a5a6c4a041557e58d694` e
 `f152917ce28279467e1339e9b683ac846bd16cd7`, delimitados em E23/E24.
+Property::deployment_target foi publicada em
+`4e88d1b9f71f62f2d216130f99b5c978b4c1474a` (E25). As duas invariantes de
+ExtensionEnd têm recorte publicado em
+`6188ddb14d09d2641fa188c58087f5056de5d18a` (E26).
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -141,7 +145,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E24 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E26 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -351,6 +355,64 @@ de execução nova. E12–E24 possuem os gates delimitados nas seções seguinte
   Diagnósticos: `UML_COMMUNICATION_PATH_ASSOCIATION_ENDS`,
   `MDE_COMMUNICATION_PATH_ASSOCIATION_ENDS_INVALID` e
   `MDE_COMMUNICATION_PATH_ASSOCIATION_ENDS_UNVERIFIED`.
+
+- **E25**: `semantics/deployments.rs`, `property_deployment_target` e
+  `validate`; `property_deployment_target.rs`, doze testes. Deployment canônico
+  não vazio exige que a Property seja ownedAttribute composto de um Node.
+  Ownership único permite usar o Node proprietário como testemunha da operação
+  part; atributo apenas herdado não é parte possuída. Subtipos Node, como Device
+  e ExecutionEnvironment, são considerados. Ausência comprovada de deployment
+  satisfaz a implicação; não se infere deployment da Property pelo deployment
+  do Node ou por filhos de outro papel. Membro canônico conhecido pode provar
+  não vazio sem apresentar coleção parcial como completa; inversas conflitantes
+  e coleções malformadas continuam erros. Antecedente desconhecido pode ser
+  decidido por consequente comprovado; caso contrário permanece não verificado.
+  Diagnósticos: `UML_PROPERTY_DEPLOYMENT_TARGET`,
+  `MDE_PROPERTY_DEPLOYMENT_TARGET_INVALID` e
+  `MDE_PROPERTY_DEPLOYMENT_TARGET_UNVERIFIED`.
+
+- **E26**: implementação publicada em `semantics/profiles.rs`,
+  `end_multiplicity`, `end_aggregation` e `validate`, ligada ao passe comum
+  `root.rs::validate_contracts`; `semantics/value_specifications.rs`,
+  `default_lower_bound`, `lower_bound` e `multiplicity`;
+  `extension_end_constraints.rs`, oito testes. ExtensionEnd exige lower 0 ou 1
+  e upper 1, com default efetivo 0..1 quando os bounds estão ausentes, sem
+  alterar o default 1..1 de Property. Bounds por identidade são avaliados;
+  externos, opacos ou não atribuídos não viram defaults inventados. Lower e
+  upper independentes preservam violação conhecida ou valor inválido diante
+  de unknown no outro lado. Aggregation deve ser composite; ausência não é
+  convertida silenciosamente em composite. Diagnósticos próprios usam
+  `UML_EXTENSION_END_MULTIPLICITY` e `UML_EXTENSION_END_AGGREGATION`, com
+  variantes `MDE_EXTENSION_END_*_UNVERIFIED`.
+
+### Evidência de Property::deployment_target e ExtensionEnd
+
+Property::deployment_target: commit inspecionado
+`4e88d1b9f71f62f2d216130f99b5c978b4c1474a`. O log local
+`/tmp/property-deployment-gate-final.log` registra **31/31 aprovados**:
+property_deployment_target 12, deployment_deployed_elements 9 e
+deployment_specification 10. O recorte inclui ownership/papéis canônicos,
+subtipos Node, herança que não constitui part, unknowns, inversas contraditórias,
+rejeição atômica de reparent e reparo de draft. A linha fica **P/E25**;
+Node::internal_structure continua uma decisão normativa independente e pendente.
+
+ExtensionEnd: commit publicado
+`6188ddb14d09d2641fa188c58087f5056de5d18a`, sobre
+`4e88d1b9f71f62f2d216130f99b5c978b4c1474a`. A revisão confirmou árvore idêntica
+ao snapshot testado antes da publicação; isso não é rerun sobre o SHA publicado.
+O log local `/tmp/extension-end-gate-final.log` registra **46/46 aprovados**:
+connector_end_constraints 10, connector_end_multiplicity 10, connector_kind 8,
+extension_end_constraints 8, property_collection_validation 6 e
+reception_signal_contracts 4. Os testes incluem defaults, null, valores por
+identidade, tipos incorretos, opacos, referências externas, precedência de
+malformados, roundtrip JSON/Protobuf e comandos atômicos em container suportado.
+
+As duas linhas ExtensionEnd ficam **P/E26**. O teste com container Extension
+completo preserva `MDE_ASSOCIATION_UNSUPPORTED`, inclusive para edição que seria
+válida isoladamente. Não declarar autoria completa de Extension, contratos de
+Profile ou suporte integral a profiles. Esses gates são focados, não suíte
+integral; não houve nova execução pela matriz nem rerun no SHA publicado.
+A publicação não amplia a cobertura desses gates nem comprova UI ou geração.
 
 ### Evidência publicada de Connector::kind e CommunicationPath
 
@@ -923,7 +985,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `Property-deployment_target`
 
-- Metaclass: `Property`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `Property`. Estado: **P**. Evidência: E25; commit `4e88d1b9f71f62f2d216130f99b5c978b4c1474a`.
 - OCL publicado: `deployment->notEmpty() implies owner.oclIsKindOf(Node) and Node.allInstances()->exists(n | n.part->exists(p | p = self))`.
 
 #### `Property-subsetted_property_names`
@@ -1120,12 +1182,12 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `ExtensionEnd-multiplicity`
 
-- Metaclass: `ExtensionEnd`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `ExtensionEnd`. Estado: **P**. Evidência: E26; commit `6188ddb14d09d2641fa188c58087f5056de5d18a`.
 - OCL publicado: `(lowerBound() = 0 or lowerBound() = 1) and upperBound() = 1`.
 
 #### `ExtensionEnd-aggregation`
 
-- Metaclass: `ExtensionEnd`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `ExtensionEnd`. Estado: **P**. Evidência: E26; commit `6188ddb14d09d2641fa188c58087f5056de5d18a`.
 - OCL publicado: `self.aggregation = AggregationKind::composite`.
 
 #### `Package-elements_public_or_private`
@@ -1327,7 +1389,8 @@ atual do parameteredElement para actual arguments.
 ### Lote 4: deployment e instâncias
 
 DeploymentSpecification::deployment_target tem recorte publicado em E19.
-DeploymentSpecification::deployed_elements tem recorte em E21.
+DeploymentSpecification::deployed_elements tem recorte em E21 e
+Property::deployment_target em E25.
 Decidir a contradição OCL/prosa de Node::internal_structure antes de implementar.
 Continuar InstanceSpecification e Property relacionados a deployment; completar
 specification/values e slots. O caminho
@@ -1336,7 +1399,9 @@ InstanceSpecification::specification ainda não são avaliados.
 
 ### Lote 5: profiles e extensões
 
-Extension/ExtensionEnd, referências de Profile, demais constraints de Stereotype
+ExtensionEnd tem predicados locais publicados (E26), mas Extension mantém
+Unsupported. Continuar Extension, limites de ExtensionEnd, referências de
+Profile e demais constraints de Stereotype
 e aplicações. Stereotype::generalize existente é apenas uma obrigação.
 Semântica do modelo é distinta de renderização, edição visual e intercâmbio XMI.
 
