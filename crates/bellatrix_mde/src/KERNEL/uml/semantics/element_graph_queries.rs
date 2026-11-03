@@ -319,3 +319,121 @@ pub fn client_dependencies<'a>(
     }
     Ok(result)
 }
+fn checked_name<'a>(
+    index: &ReferenceIndex<'a>,
+    element: ElementRef<'a>,
+) -> Result<Option<&'a str>, ElementGraphError> {
+    let named = element.named().ok_or_else(|| {
+        ElementGraphError::unsupported(element.id(), "NamedElement metaclass is unresolved")
+    })?;
+    if matches!(element, ElementRef::Relationship(_))
+        && let Some(value) = element.properties().get("name")
+    {
+        let descriptor = schema::uml_property("NamedElement", "name")
+            .map_err(|error| ElementGraphError::unsupported(element.id(), error.to_string()))?
+            .ok_or_else(|| {
+                ElementGraphError::unsupported(element.id(), "name descriptor is unavailable")
+            })?;
+        match super::property_contracts::check_value(index, element, descriptor, value) {
+            super::property_contracts::PropertyOutcome::Satisfied => {}
+            super::property_contracts::PropertyOutcome::Violation(message) => {
+                return Err(ElementGraphError::invalid(element.id(), message));
+            }
+            super::property_contracts::PropertyOutcome::Unverified(message) => {
+                return Err(ElementGraphError::unsupported(element.id(), message));
+            }
+        }
+    }
+    Ok(named.name())
+}
+
+fn projected_qualified_name<'a>(
+    index: &ReferenceIndex<'a>,
+    subject: ElementRef<'a>,
+) -> Result<Option<String>, ElementGraphError> {
+    let subject = named_element(index, subject.id())?;
+    // Unknown namespace projections must not hide corruption of the canonical
+    // ownership chain, even when a missing name makes qualifiedName null.
+    {
+        let mut current = subject;
+        let mut visited = HashSet::from([current.id()]);
+        while let Some(owner) = index
+            .model()
+            .owner(current)
+            .map_err(|error| ElementGraphError::invalid(current.id(), error))?
+        {
+            current = element(index, owner.id())?;
+            if !visited.insert(current.id()) {
+                return Err(ElementGraphError::invalid(
+                    current.id(),
+                    "cycle in UML ownership",
+                ));
+            }
+        }
+    }
+    let mut current = subject;
+    let mut visited = HashSet::from([current.id()]);
+    let mut names = Vec::new();
+    let mut absent_name = false;
+    loop {
+        match checked_name(index, current)? {
+            Some(name) => names.push(name),
+            None => absent_name = true,
+        }
+        match namespace(index, current, true) {
+            Ok(Some(parent)) => {
+                if !visited.insert(parent.id()) {
+                    return Err(ElementGraphError::invalid(
+                        parent.id(),
+                        "cycle in UML namespace ownership",
+                    ));
+                }
+                current = parent;
+            }
+            Ok(None) => break,
+            Err(error @ ElementGraphError::Invalid { .. }) => return Err(error),
+            Err(error) => return if absent_name { Ok(None) } else { Err(error) },
+        }
+    }
+    if absent_name {
+        return Ok(None);
+    }
+    names.reverse();
+    // NamedElement::separator() is the constant '::' in the pinned UML XMI.
+    Ok(Some(names.join("::")))
+}
+
+/// Validate only stored derived projections. Absent qualifiedName is computed
+/// by the existing query; it is not a missing authored value or a second model.
+pub(crate) fn validate_qualified_names(
+    index: &ReferenceIndex<'_>,
+) -> Vec<crate::StructuralDiagnostic> {
+    use crate::{StructuralDiagnostic, StructuralSeverity};
+    index.model().elements().filter(|element| element.named().is_some())
+        .filter_map(|element| {
+            let value = element.properties().get("qualifiedName")?;
+            let result = (|| {
+                let descriptor = schema::uml_property("NamedElement", "qualifiedName")
+                    .map_err(|error| ElementGraphError::unsupported(element.id(), error.to_string()))?
+                    .ok_or_else(|| ElementGraphError::unsupported(element.id(), "qualifiedName descriptor is unavailable"))?;
+                // The value is a projection to compare, not evidence of the
+                // derivation. Check its ordinary type/multiplicity separately.
+                let stored = schema::PropertyDescriptor { is_derived: false, ..*descriptor };
+                match super::property_contracts::check_value(index, element, &stored, value) {
+                    super::property_contracts::PropertyOutcome::Satisfied => {},
+                    super::property_contracts::PropertyOutcome::Violation(message) => return Err(ElementGraphError::invalid(element.id(), message)),
+                    super::property_contracts::PropertyOutcome::Unverified(message) => return Err(ElementGraphError::unsupported(element.id(), message)),
+                }
+                projected_qualified_name(index, element)
+            })();
+            let (severity, code, message) = match result {
+                Ok(Some(expected)) if value.as_str() == Some(expected.as_str()) => return None,
+                Ok(None) if value.is_null() => return None,
+                Ok(Some(expected)) => (StructuralSeverity::Error, "UML_NAMED_ELEMENT_HAS_QUALIFIED_NAME", format!("NamedElement-has_qualified_name: qualifiedName must be {expected:?}")),
+                Ok(None) => (StructuralSeverity::Error, "UML_NAMED_ELEMENT_HAS_NO_QUALIFIED_NAME", "NamedElement-has_no_qualified_name: qualifiedName must be null when a name in its namespace chain is absent".into()),
+                Err(ElementGraphError::Invalid { message, .. }) => (StructuralSeverity::Error, "MDE_NAMED_ELEMENT_QUALIFIED_NAME_INVALID", format!("NamedElement-qualified_name: {message}")),
+                Err(ElementGraphError::Unsupported { message, .. }) => (StructuralSeverity::Warning, "MDE_NAMED_ELEMENT_QUALIFIED_NAME_UNVERIFIED", format!("NamedElement-qualified_name: {message}")),
+            };
+            Some(StructuralDiagnostic { severity, code, subject_id: element.id().into(), message })
+        }).collect()
+}

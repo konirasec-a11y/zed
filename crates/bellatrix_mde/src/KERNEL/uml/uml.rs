@@ -16,6 +16,8 @@ pub mod metamodel;
 pub mod namespace_imports;
 #[path = "semantics/operations.rs"]
 pub mod operations;
+#[path = "semantics/parameter_sets.rs"]
+pub mod parameter_sets;
 #[path = "semantics/operation_signatures.rs"]
 pub mod operation_signatures;
 #[path = "semantics/property_subsetting.rs"]

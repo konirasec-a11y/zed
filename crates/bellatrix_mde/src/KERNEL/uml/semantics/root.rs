@@ -611,9 +611,11 @@ impl<'a> Model<'a> {
             issues.extend(super::schema::validate_element(element));
         }
         let references = super::references::ReferenceIndex::new(self);
+        issues.extend(super::element_graph_queries::validate_qualified_names(&references));
         issues.extend(super::namespace_imports::validate(&references));
         issues.extend(super::instances::validate(self, &references));
         issues.extend(super::operations::validate(&references));
+        issues.extend(super::parameter_sets::validate(&references));
         issues.extend(crate::templates::validate_bindings(&references));
         issues.extend(super::value_specifications::validate(&references));
         issues.extend(super::associations::validate(&references));

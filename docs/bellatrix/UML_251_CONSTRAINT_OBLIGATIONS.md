@@ -60,6 +60,9 @@ TemplateParameterSubstitution::must_be_compatible foram publicados em
 `84ff594be299ba824a0ab2efe0b0488bd58b40d4` (E48/E49).
 TemplateParameter::must_be_compatible e CollaborationUse::client_elements têm
 recortes publicados em `f6caa47d39cff8da5bef4f351a555af68a32902b` (E50/E51).
+Property::redefined_property_inherited e o recorte materializado de
+TemplateSignature::unique_parameters foram publicados em
+`d1fc01c9939333caeeeeb229f1a569bb8ef1214f` (E52/E53).
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -175,7 +178,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E51 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E53 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -739,6 +742,57 @@ de execução nova. E12–E51 possuem os gates delimitados nas seções seguinte
   explicitamente não reconciliadas, mesmo com memberships forward conhecidos;
   cache derivado de role não prova membership. Diferença local conhecida não é
   apagada por ramo externo, e witness não encobre malformados.
+
+- **E52**: `semantics/redefinition_contexts.rs`, `property_redefined_inherited`,
+  e `semantics/classifiers.rs`, `has_feature` e `validate`;
+  `property_redefined_inherited.rs`, nove testes. redefinedProperty não vazio
+  exige contexto canônico não vazio e membership de cada alvo em allFeatures
+  de algum ancestral estrito desse contexto. Mesmo owner, nome ou apenas
+  compatibilidade de contextos não provam membership. Ausência/coleção vazia
+  satisfaz a implicação. Witness de Feature diretamente possuída e canônica
+  sobrevive a ramo desconhecido de herança/import; ausência sem enumeração
+  completa permanece unknown. Metaclasse futura, alvo externo ou contexto
+  derivado não implementado não viram falsa ausência. Contextos armazenados
+  não substituem derivação canônica; referências malformadas e ciclos não são
+  ocultados por alvo externo ou witness. Não certifica todas as regras de
+  redefinição, todos os subsets nem autoria visual.
+
+- **E53**: `semantics/templates.rs`, `template_signature_unique_parameters`
+  e `validate_bindings`; `template_signature_unique_parameters.rs`, dez testes.
+  Recorte de parameter materializado, inclusive formais não possuídos: compara
+  nomes dos parameteredElements NamedElement, não rótulos dos formais. A guarda
+  compara identidades de formais; dois formais distintos expondo o mesmo
+  elemento ainda colidem. Nomes ausentes são iguais, não nomes inventados.
+  Projeção parameter/parameteredElement ausente permanece não verificada;
+  não deriva a coleção completa de assinaturas redefiníveis/herdadas. Singleton
+  desconhecido pode satisfazer por vacuidade, mas dois desconhecidos não provam
+  unicidade; duplicata local conhecida sobrevive a membro externo. Contratos
+  inválidos, inclusive name em relacionamento, continuam erros. Não amplia o
+  suporte de compatibilidade, overrides ou projeções inversas de templates.
+
+### Evidência publicada de propriedades herdadas e unicidade de parâmetros
+
+Commit inspecionado: `d1fc01c9939333caeeeeb229f1a569bb8ef1214f`.
+Logs finais lidos:
+
+- `/tmp/property-redefined-final-gate.log`: **210/210 aprovados**,
+  160 testes lib e 50 integrações (collaboration_use_clients 10,
+  collaboration_use_roles 11, connector_roles 9, kb09_redefinitions 11 e
+  property_redefined_inherited 9).
+- `/tmp/template-signature-unique-gate-final.log`: **119/119 aprovados**,
+  classifier_template_abstract 11, classifier_template_actual 10,
+  classifier_template_constraints 11, operation_template_default 11,
+  template_binding_formal 13, template_binding_unique 12,
+  template_default_compatibility 10, template_signature_unique_parameters 10,
+  template_signatures 21 e template_substitution_compatibility 10.
+
+As linhas ficam **P/E52–E53**, com unicidade restrita à projeção materializada.
+Revisão do código e dos casos cobre ancestralidade direta/transitiva/diamante,
+unknown, malformados, roundtrip e rollback, sem transformar regressões em prova
+integral do OCL. Gates executados antes da publicação; não houve rerun no SHA
+remoto nem testes novos pela matriz. Execuções focadas e gates anteriores
+repetidos não somam cobertura. Não há certificação de suíte integral, UI,
+geração, interchange ou conformidade UML completa.
 
 ### Evidência publicada de default compatível e CollaborationUse::client_elements
 
@@ -1507,7 +1561,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `TemplateSignature-unique_parameters`
 
-- Metaclass: `TemplateSignature`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `TemplateSignature`. Estado: **P**. Evidência: E53; commit `d1fc01c9939333caeeeeb229f1a569bb8ef1214f`; recorte materializado.
 - OCL publicado: `parameter->forAll( p1, p2 | (p1 <> p2 and p1.parameteredElement.oclIsKindOf(NamedElement) and p2.parameteredElement.oclIsKindOf(NamedElement) ) implies p1.parameteredElement.oclAsType(NamedElement).name <> p2.parameteredElement.oclAsType(NamedElement).name)`.
 
 ### Classification: 44 invariantes diretas
@@ -1674,7 +1728,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `Property-redefined_property_inherited`
 
-- Metaclass: `Property`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `Property`. Estado: **P**. Evidência: E52; commit `d1fc01c9939333caeeeeb229f1a569bb8ef1214f`.
 - OCL publicado: `(redefinedProperty->notEmpty()) implies (redefinitionContext->notEmpty() and redefinedProperty->forAll(rp| ((redefinitionContext->collect(fc| fc.allParents()))->asSet())->collect(c| c.allFeatures())->asSet()->includes(rp)))`.
 
 #### `Property-subsetting_rules`
