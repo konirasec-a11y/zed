@@ -888,6 +888,257 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
             &[&original_operation, &left_operation],
         )?;
     }
+    for operation in [&original_operation, &own_operation] {
+        let mut contracts = project.clone();
+        apply(
+            &mut contracts,
+            Command::QuickEdit {
+                diagram_id: "diagram".into(),
+                element_id: operation.clone(),
+                action: UmlQuickCreate::TemplateParameter,
+            },
+        )?;
+        set_property(&mut contracts, operation, "isQuery", json!(true))?;
+        for element in [
+            json!({"id":"operation-condition", "kind":"uml.constraint", "name":"Allowed"}),
+            json!({"id":"operation-condition-value", "kind":"uml.literal_boolean", "name":"",
+                "properties":{"value":true, "visibility":null}}),
+            json!({"id":"operation-method", "kind":"uml.opaque_behavior", "name":"Implementation",
+                "properties":{"specification":{"$ref":operation}}}),
+        ] {
+            contracts.elements.push(serde_json::from_value(element)?);
+        }
+        for (owner, child) in [
+            (operation.as_str(), "operation-condition"),
+            ("operation-condition", "operation-condition-value"),
+            ("model", "operation-method"),
+        ] {
+            contracts.relations.push(serde_json::from_value(json!({
+                "id":format!("owns-{child}"), "kind":"owns", "from":owner, "to":child,
+            }))?);
+        }
+        // Reference roles have no editable Inspector adapter yet. Load the
+        // authored document through public I/O before using semantic commands.
+        let authored_operation = contracts
+            .elements
+            .iter_mut()
+            .find(|element| &element.id == operation)
+            .ok_or("authored Operation")?;
+        for (key, value) in [
+            ("precondition", json!([{"$ref":"operation-condition"}])),
+            ("postcondition", json!([{"$ref":"operation-condition"}])),
+            ("bodyCondition", json!({"$ref":"operation-condition"})),
+            ("method", json!([{"$ref":"operation-method"}])),
+            ("raisedException", json!([{"$ref":right}])),
+        ] {
+            authored_operation.properties.insert(key.into(), value);
+        }
+        contracts = decode(&encode(&contracts, Format::Json)?, Format::Json)?;
+        redefine(
+            &mut contracts,
+            &own_operation,
+            &[&original_operation, &left_operation],
+        )?;
+        for format in [Format::Json, Format::Protobuf] {
+            let reopened = decode(&encode(&contracts, format)?, format)?;
+            assert_eq!(contracts, reopened);
+            let references = ReferenceIndex::new(Model::from_project(&reopened));
+            assert!(
+                bellatrix_mde::uml::operation_signatures::compare_operation_consistency(
+                    &references,
+                    references.element(&own_operation)?,
+                    references.element(&original_operation)?,
+                )?
+            );
+            let diagnostics = validate_structural_model(&reopened);
+            assert!(
+                diagnostics
+                    .iter()
+                    .all(|issue| issue.code != "UML_REDEFINITION_CONSISTENCY_UNSUPPORTED"),
+                "{diagnostics:?}"
+            );
+            assert!(
+                diagnostics.iter().any(|issue| issue.subject_id == *operation
+                    && issue.code == "MDE_OPERATION_CONDITION_UNSUPPORTED")
+            );
+            let section = ModelingSection::from_model(&reopened);
+            let inspector = inspect_element(&section, &own_operation)
+                .ok_or("compatible Operation Inspector")?;
+            assert!(
+                inspector
+                    .properties
+                    .iter()
+                    .all(|field| field.path != "uml.redefinition.status")
+            );
+            assert!(
+                !inspect_element(&section, operation)
+                    .ok_or("template Operation Inspector")?
+                    .template_parameters
+                    .is_empty()
+            );
+        }
+
+        let before = encode(&contracts, Format::Json)?;
+        let error = set_property(&mut contracts, operation, "isQuery", json!(false))
+            .err()
+            .ok_or("bodyCondition accepted a non-query Operation")?;
+        assert!(error.contains("UML_OPERATION_BODY_CONDITION"), "{error}");
+        let error = set_property(&mut contracts, &own_parameters[3], "isUnique", json!(false))
+            .err()
+            .ok_or("incompatible signature accepted with contracts")?;
+        assert!(error.contains("inconsistent"), "{error}");
+        assert!(redefine(&mut contracts, &original_operation, &[&own_operation]).is_err());
+        assert_eq!(encode(&contracts, Format::Json)?, before);
+
+        let references = ReferenceIndex::new(Model::from_project(&contracts));
+        let ordered = bellatrix_mde::uml::operations::owned_parameters(&references, operation)?
+            .into_iter()
+            .map(|parameter| json!({"$ref":parameter.id}))
+            .collect::<Vec<_>>();
+        let mut projected = contracts.clone();
+        projected
+            .elements
+            .iter_mut()
+            .find(|element| &element.id == operation)
+            .ok_or("Operation with explicit parameter projection")?
+            .properties
+            .insert("ownedParameter".into(), json!(ordered));
+        projected = decode(&encode(&projected, Format::Json)?, Format::Json)?;
+        redefine(
+            &mut projected,
+            &own_operation,
+            &[&original_operation, &left_operation],
+        )?;
+        let reopened = decode(&encode(&projected, Format::Protobuf)?, Format::Protobuf)?;
+        let references = ReferenceIndex::new(Model::from_project(&reopened));
+        assert!(
+            bellatrix_mde::uml::operation_signatures::compare_operation_consistency(
+                &references,
+                references.element(&own_operation)?,
+                references.element(&original_operation)?,
+            )?
+        );
+        projected
+            .elements
+            .iter_mut()
+            .find(|element| &element.id == operation)
+            .ok_or("Operation with explicit parameter projection")?
+            .properties
+            .insert("ownedParameter".into(), json!(ordered.into_iter().rev().collect::<Vec<_>>()));
+        for format in [Format::Json, Format::Protobuf] {
+            let invalid = decode(&encode(&projected, format)?, format)?;
+            assert!(
+                Model::from_project(&invalid).validate().iter().any(|issue|
+                    issue.subject_id == *operation
+                        && issue.code == "UML_PARAMETER_OWNERSHIP_STORAGE"
+                        && issue.message.contains("canonical owns order and membership")
+                        && issue.severity == bellatrix_mde::StructuralSeverity::Error)
+            );
+            let references = ReferenceIndex::new(Model::from_project(&invalid));
+            assert!(matches!(
+                bellatrix_mde::uml::operation_signatures::compare_operation_consistency(
+                    &references,
+                    references.element(&own_operation)?,
+                    references.element(&original_operation)?,
+                ),
+                Err(classifiers::QueryError::Invalid { .. })
+            ));
+        }
+
+        // A read-only Inspector field is not evidence of semantic rejection.
+        // Imported drafts must reach each independent validator and keep their
+        // formal signature consistency result separate from that violation.
+        for (key, value, code, rule) in [
+            (
+                "bodyCondition",
+                json!({"$ref":"operation-method"}),
+                "UML_OPERATION_BODY_CONDITION",
+                "must conform to UML Constraint",
+            ),
+            (
+                "raisedException",
+                json!([{"$ref":"operation-condition"}]),
+                "UML_PROPERTY_CONTRACT",
+                "Operation-raisedException",
+            ),
+        ] {
+            let mut draft = contracts.clone();
+            draft
+                .elements
+                .iter_mut()
+                .find(|element| &element.id == operation)
+                .ok_or("draft Operation")?
+                .properties
+                .insert(key.into(), value);
+            for format in [Format::Json, Format::Protobuf] {
+                let invalid = decode(&encode(&draft, format)?, format)?;
+                let diagnostics = Model::from_project(&invalid).validate();
+                assert!(
+                    diagnostics.iter().any(|issue| issue.subject_id == *operation
+                        && issue.code == code
+                        && issue.message.contains(rule)
+                        && issue.severity == bellatrix_mde::StructuralSeverity::Error),
+                    "{diagnostics:?}"
+                );
+                assert!(
+                    diagnostics
+                        .iter()
+                        .all(|issue| issue.code != "UML_REDEFINITION_CONSISTENCY_UNSUPPORTED")
+                );
+                let references = ReferenceIndex::new(Model::from_project(&invalid));
+                assert!(
+                    bellatrix_mde::uml::operation_signatures::compare_operation_consistency(
+                        &references,
+                        references.element(&own_operation)?,
+                        references.element(&original_operation)?,
+                    )?
+                );
+            }
+        }
+        assert_eq!(encode(&contracts, Format::Json)?, before);
+
+        let condition = contracts
+            .elements
+            .iter_mut()
+            .find(|element| element.id == "operation-condition-value")
+            .ok_or("condition expression")?;
+        condition.kind = "uml.literal_integer".into();
+        condition.properties.insert("value".into(), json!(1));
+        let invalid = decode(&encode(&contracts, Format::Json)?, Format::Json)?;
+        let diagnostics = validate_structural_model(&invalid);
+        assert!(
+            diagnostics.iter().any(|issue| issue.subject_id == "operation-condition"
+                && issue.code == "UML_CONSTRAINT_BOOLEAN"
+                && issue.severity == bellatrix_mde::StructuralSeverity::Error)
+        );
+        assert!(
+            diagnostics
+                .iter()
+                .all(|issue| issue.code != "UML_REDEFINITION_CONSISTENCY_UNSUPPORTED")
+        );
+        let condition = contracts
+            .elements
+            .iter_mut()
+            .find(|element| element.id == "operation-condition-value")
+            .ok_or("condition expression")?;
+        condition.kind = "uml.literal_boolean".into();
+        condition.properties.insert("value".into(), json!(false));
+        contracts = decode(&encode(&contracts, Format::Json)?, Format::Json)?;
+        apply(
+            &mut contracts,
+            Command::Rename {
+                element_id: "operation-condition".into(),
+                name: "MayExecute".into(),
+            },
+        )?;
+        let repaired = decode(&encode(&contracts, Format::Protobuf)?, Format::Protobuf)?;
+        assert!(
+            validate_structural_model(&repaired)
+                .iter()
+                .all(|issue| issue.code != "UML_CONSTRAINT_BOOLEAN"
+                    && issue.code != "UML_REDEFINITION_CONSISTENCY_UNSUPPORTED")
+        );
+    }
     // Authored expressions survive storage without being interpreted as valid/invalid.
     let mut unevaluated_operation = project.clone();
     set_property(
@@ -990,6 +1241,230 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
                 .iter()
                 .all(|element| !element.properties.contains_key("inheritedMember"))
         );
+    }
+    Ok(())
+}
+
+#[test]
+fn parameter_relations_follow_canonical_roles_stream_edits_and_reopened_drafts()
+-> Result<(), Box<dyn std::error::Error>> {
+    use bellatrix_mde::{Format, StructuralSeverity, decode, encode, uml::root::Model};
+    use serde_json::{Value, json};
+
+    fn edit_document(
+        project: &Project,
+        subject: &str,
+        property: &str,
+        value: Value,
+    ) -> Result<Project, Box<dyn std::error::Error>> {
+        let mut document: Value = serde_json::from_slice(&encode(project, Format::Json)?)?;
+        let element = document["elements"].as_array_mut().ok_or("elements")?
+            .iter_mut().find(|element| element["id"] == subject).ok_or("subject")?;
+        element["properties"][property] = value;
+        Ok(decode(&serde_json::to_vec(&document)?, Format::Json)?)
+    }
+
+    fn parameter_error(project: &Project, rule: &str) -> bool {
+        Model::from_project(project).validate().iter().any(|issue|
+            issue.subject_id == "parameter"
+                && issue.severity == StructuralSeverity::Error
+                && issue.message.contains(rule))
+    }
+
+    let mut project = decode(&serde_json::to_vec(&json!({
+        "id":"project", "name":"Parameter collaboration", "root_model":"root",
+        "elements":[
+            {"id":"root", "kind":"uml.model", "name":"Root"},
+            {"id":"class", "kind":"uml.class", "name":"Service"},
+            {"id":"operation", "kind":"uml.operation", "name":"call"},
+            {"id":"behavior", "kind":"uml.opaque_behavior", "name":"Execute", "properties":{}},
+            {"id":"parameter", "kind":"uml.parameter", "name":"input",
+             "properties":{"type":{"$ref":"class"}}},
+            {"id":"property", "kind":"uml.attribute", "name":"peer"},
+            {"id":"collaboration", "kind":"uml.collaboration", "name":"Session", "properties":{}},
+            {"id":"connector", "kind":"uml.connector", "name":"channel"},
+            {"id":"end", "kind":"uml.connector_end", "name":"",
+             "properties":{"role":{"$ref":"property"}}},
+            {"id":"other-end", "kind":"uml.connector_end", "name":"",
+             "properties":{"role":{"$ref":"property"}}}
+        ],
+        "relations":[
+            {"id":"owns-class", "kind":"owns", "from":"root", "to":"class"},
+            {"id":"owns-operation", "kind":"owns", "from":"class", "to":"operation"},
+            {"id":"owns-behavior", "kind":"owns", "from":"root", "to":"behavior"},
+            {"id":"owns-parameter", "kind":"owns", "from":"behavior", "to":"parameter"},
+            {"id":"owns-property", "kind":"owns", "from":"class", "to":"property"},
+            {"id":"owns-collaboration", "kind":"owns", "from":"root", "to":"collaboration"},
+            {"id":"owns-connector", "kind":"owns", "from":"class", "to":"connector"},
+            {"id":"owns-end", "kind":"owns", "from":"connector", "to":"end"},
+            {"id":"owns-other-end", "kind":"owns", "from":"connector", "to":"other-end"}
+        ]
+    }))?, Format::Json)?;
+    assert!(!parameter_error(&project, "Parameter-reentrant_behaviors"));
+    assert!(!parameter_error(&project, "Parameter-connector_end"));
+
+    // The inspector can edit authored flags; omitted Behavior::isReentrant is
+    // still effectively true when this Parameter becomes a stream.
+    project = edit_document(&project, "parameter", "isStream", json!(false))?;
+    let stream = Command::SetProperty {
+        element_id: "parameter".into(), path: "properties.isStream".into(), value: json!(true),
+    };
+    let before = encode(&project, Format::Json)?;
+    let error = commands::apply(&project, &stream, 0).err().ok_or("accepted reentrant stream")?;
+    assert!(error.contains("Parameter-reentrant_behaviors"), "{error}");
+    assert_eq!(encode(&project, Format::Json)?, before);
+    project = edit_document(&project, "behavior", "isReentrant", json!(false))?;
+    project = commands::apply(&project, &stream, 1)?;
+    assert!(!parameter_error(&project, "Parameter-reentrant_behaviors"));
+
+    let reentrant = Command::SetProperty {
+        element_id: "behavior".into(), path: "properties.isReentrant".into(), value: json!(true),
+    };
+    let before = encode(&project, Format::Json)?;
+    let error = commands::apply(&project, &reentrant, 2).err().ok_or("accepted reentrant Behavior")?;
+    assert!(error.contains("Parameter-reentrant_behaviors"), "{error}");
+    assert_eq!(encode(&project, Format::Json)?, before);
+    let draft = edit_document(&project, "behavior", "isReentrant", json!(true))?;
+    for format in [Format::Json, Format::Protobuf] {
+        let reopened = decode(&encode(&draft, format)?, format)?;
+        assert_eq!(draft, reopened);
+        assert!(parameter_error(&reopened, "Parameter-reentrant_behaviors"));
+        project = commands::apply(&reopened, &Command::SetProperty {
+            element_id: "behavior".into(), path: "properties.isReentrant".into(), value: json!(false),
+        }, 3)?;
+        assert!(!parameter_error(&project, "Parameter-reentrant_behaviors"));
+    }
+
+    // Changing the canonical owner to an Operation removes the Behavior role.
+    project = commands::apply(&project, &Command::SetOwner {
+        element_id: "parameter".into(), owner_id: Some("operation".into()),
+    }, 4)?;
+    project = commands::apply(&project, &reentrant, 5)?;
+    assert!(!parameter_error(&project, "Parameter-reentrant_behaviors"));
+    let before = encode(&project, Format::Json)?;
+    let return_to_behavior = Command::SetOwner {
+        element_id: "parameter".into(), owner_id: Some("behavior".into()),
+    };
+    let error = commands::apply(&project, &return_to_behavior, 6)
+        .err().ok_or("accepted a stream in a reentrant owner")?;
+    assert!(error.contains("Parameter-reentrant_behaviors"), "{error}");
+    assert_eq!(encode(&project, Format::Json)?, before);
+    project = commands::apply(&project, &Command::SetProperty {
+        element_id: "behavior".into(), path: "properties.isReentrant".into(), value: json!(false),
+    }, 7)?;
+    project = commands::apply(&project, &return_to_behavior, 8)?;
+
+    // A ConnectorEnd points to the Parameter even when no stored `end` exists.
+    // Collaboration participation is a typed reference, not its lexical owner.
+    let draft = edit_document(&project, "end", "role", json!({"$ref":"parameter"}))?;
+    assert!(parameter_error(&draft, "Parameter-connector_end"));
+    let unrelated = edit_document(&draft, "other-end", "role", json!({"$ref":"missing"}))?;
+    for format in [Format::Json, Format::Protobuf] {
+        let mut reopened = decode(&encode(&unrelated, format)?, format)?;
+        assert!(parameter_error(&reopened, "Parameter-connector_end"));
+        reopened.elements.reverse();
+        assert!(parameter_error(&reopened, "Parameter-connector_end"));
+        assert!(Model::from_project(&reopened).validate().iter().any(|issue|
+            issue.subject_id == "other-end" && issue.code == "UML_PROPERTY_CONTRACT"));
+    }
+    let unresolved = edit_document(&project, "end", "role", json!({"$ref":"missing"}))?;
+    assert!(!parameter_error(&unresolved, "Parameter-connector_end"));
+    assert!(Model::from_project(&unresolved).validate().iter().any(|issue|
+        issue.subject_id == "parameter" && issue.code == "MDE_PARAMETER_CONSTRAINT_UNVERIFIED"
+            && issue.message.contains("Parameter-connector_end")));
+    let forged = edit_document(&draft, "parameter", "collaboration", json!([{"$ref":"collaboration"}]))?;
+    assert!(parameter_error(&forged, "Parameter-connector_end"));
+    assert!(Model::from_project(&forged).validate().iter().any(|issue|
+        issue.subject_id == "parameter" && issue.code == "MDE_PARAMETER_CONSTRAINT_UNVERIFIED"));
+    let reopened = decode(&encode(&draft, Format::Protobuf)?, Format::Protobuf)?;
+    assert!(parameter_error(&reopened, "Parameter-connector_end"));
+    project = edit_document(&reopened, "collaboration", "collaborationRole", json!([{"$ref":"parameter"}]))?;
+    assert!(!parameter_error(&project, "Parameter-connector_end"));
+    let unrelated = edit_document(&project, "other-end", "role", json!({"$ref":"missing"}))?;
+    let before = encode(&unrelated, Format::Json)?;
+    let error = commands::apply(&unrelated, &Command::DeleteElement {
+        element_id: "collaboration".into(),
+    }, 9).err().ok_or("accepted removal of the Parameter's only Collaboration")?;
+    assert!(error.contains("Parameter-connector_end"), "{error}");
+    assert_eq!(encode(&unrelated, Format::Json)?, before);
+    assert_eq!(Model::from_project(&project).owner(
+        Model::from_project(&project).element("parameter").ok_or("parameter")?
+    )?.map(|owner| owner.id()), Some("behavior"));
+
+    for (subject, property, value, unverified) in [
+        ("collaboration", "collaborationRole", json!([{"$ref":"missing"}]), true),
+        ("collaboration", "collaborationRole", json!([{"$ref":"class"}]), true),
+        ("collaboration", "collaborationRole", json!([{"$ref":"parameter"},{"$ref":"parameter"}]), false),
+        ("collaboration", "collaborationRole", json!([{"$ref":"missing"},{"$ref":"parameter"}]), false),
+        ("end", "role", json!({"$ref":"class"}), false),
+        ("end", "role", json!({"$ref":"missing"}), false),
+        ("end", "role", json!({"href":"external.uml#parameter"}), false),
+    ] {
+        let invalid = edit_document(&project, subject, property, value)?;
+        let reopened = decode(&encode(&invalid, Format::Json)?, Format::Json)?;
+        let diagnostics = Model::from_project(&reopened).validate();
+        assert_eq!(diagnostics.iter().any(|issue|
+            issue.subject_id == "parameter"
+                && issue.code == "MDE_PARAMETER_CONSTRAINT_UNVERIFIED"
+                && issue.message.contains("Parameter-connector_end")), unverified, "{diagnostics:?}");
+        assert!(diagnostics.iter().any(|issue|
+            issue.subject_id == subject
+                && matches!(issue.code, "UML_PROPERTY_CONTRACT" | "MDE_PROPERTY_CONTRACT_UNVERIFIED")),
+            "{diagnostics:?}");
+        assert!(!parameter_error(&reopened, "Parameter-connector_end"));
+    }
+    let wrong_boolean = edit_document(&project, "behavior", "isReentrant", json!("false"))?;
+    assert!(Model::from_project(&wrong_boolean).validate().iter().any(|issue|
+        issue.subject_id == "parameter" && issue.code == "MDE_PARAMETER_CONSTRAINT_UNVERIFIED"
+            && issue.message.contains("Parameter-reentrant_behaviors")));
+    let forged = edit_document(&project, "parameter", "behavior", json!({"$ref":"class"}))?;
+    assert!(Model::from_project(&forged).validate().iter().any(|issue|
+        issue.subject_id == "parameter" && issue.code == "UML_PARAMETER_OWNERSHIP_STORAGE"));
+    let exception = edit_document(&project, "parameter", "direction", json!("return"))?;
+    let exception = edit_document(&exception, "parameter", "isException", json!(true))?;
+    assert!(parameter_error(&exception, "Parameter::stream_and_exception"));
+
+    let mut ordered = project.clone();
+    ordered.relations.iter_mut().find(|relation| relation.id == "owns-parameter")
+        .ok_or("Parameter owner")?.from = "operation".into();
+    let mut second_parameter = ordered.element("parameter").ok_or("Parameter")?.clone();
+    second_parameter.id = "second-parameter".into();
+    second_parameter.name = "otherInput".into();
+    ordered.elements.push(second_parameter);
+    ordered.relations.push(serde_json::from_value(json!({
+        "id":"owns-second-parameter", "kind":"owns", "from":"operation", "to":"second-parameter"
+    }))?);
+    ordered = edit_document(&ordered, "operation", "ownedParameter",
+        json!([{"$ref":"parameter"},{"$ref":"second-parameter"}]))?;
+    assert!(!Model::from_project(&ordered).validate().iter().any(|issue|
+        issue.subject_id == "operation" && issue.code == "UML_PARAMETER_OWNERSHIP_STORAGE"));
+    let before = encode(&ordered, Format::Json)?;
+    let error = commands::apply(&ordered, &Command::MoveParameter {
+        parameter_id: "parameter".into(), up: false,
+    }, 10).err().ok_or("accepted divergent explicit Parameter order")?;
+    assert!(error.contains("canonical owns order"), "{error}");
+    assert_eq!(encode(&ordered, Format::Json)?, before);
+    let divergent = edit_document(&ordered, "operation", "ownedParameter",
+        json!([{"$ref":"second-parameter"},{"$ref":"parameter"}]))?;
+    assert!(Model::from_project(&divergent).validate().iter().any(|issue|
+        issue.subject_id == "operation" && issue.code == "UML_PARAMETER_OWNERSHIP_STORAGE"
+            && issue.message.contains("canonical owns order")));
+
+    project = edit_document(&project, "behavior", "ownedParameter", json!([{"$ref":"parameter"}]))?;
+    assert!(!Model::from_project(&project).validate().iter().any(|issue|
+        issue.subject_id == "behavior" && issue.code == "UML_PARAMETER_OWNERSHIP_STORAGE"));
+    let error = commands::apply(&project, &reentrant, 11)
+        .err().ok_or("accepted reentrant Behavior with explicit Parameter role")?;
+    assert!(error.contains("Parameter-reentrant_behaviors"), "{error}");
+
+    for format in [Format::Json, Format::Protobuf] {
+        let reopened = decode(&encode(&project, format)?, format)?;
+        assert_eq!(project, reopened);
+        assert!(!parameter_error(&reopened, "Parameter-connector_end"));
+        assert!(!parameter_error(&reopened, "Parameter-reentrant_behaviors"));
+        let parameter = reopened.element("parameter").ok_or("same Parameter identity")?;
+        assert!(parameter.properties.get("isStream").and_then(Value::as_bool) == Some(true));
+        assert!(["end", "collaboration", "behavior"].iter().all(|key| !parameter.properties.contains_key(*key)));
     }
     Ok(())
 }

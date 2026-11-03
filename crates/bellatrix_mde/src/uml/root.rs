@@ -80,7 +80,7 @@ pub trait DirectedRelationship<'a>: Relationship<'a> {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct RelationshipRef<'a>(&'a Relation);
+pub struct RelationshipRef<'a>(ElementRef<'a>);
 #[derive(Clone, Copy, Debug)]
 pub struct DirectedRelationshipRef<'a>(RelationshipRef<'a>);
 #[derive(Clone, Copy, Debug)]
@@ -103,7 +103,7 @@ impl<'a> Element<'a> for NamespaceRef<'a> {
 }
 impl<'a> Element<'a> for RelationshipRef<'a> {
     fn as_element(self) -> ElementRef<'a> {
-        ElementRef::Relationship(self.0)
+        self.0
     }
 }
 impl<'a> Element<'a> for DirectedRelationshipRef<'a> {
@@ -135,22 +135,9 @@ impl<'a> NamedElement<'a> for NamespaceRef<'a> {
 impl<'a> Namespace<'a> for NamespaceRef<'a> {}
 impl<'a> Relationship<'a> for RelationshipRef<'a> {
     fn related_elements(self, model: Model<'a>) -> Result<Vec<ElementRef<'a>>, String> {
-        if self.as_element().conforms_to("Association") && self.0.properties.contains_key("memberEnd") {
-            return super::associations::end_types(&super::references::ReferenceIndex::new(model), &self.0.id);
-        }
-        let mut related = Vec::new();
-        for id in [&self.0.from, &self.0.to] {
-            let element = model
-                .element(id)
-                .ok_or_else(|| format!("unknown related Element {id}"))?;
-            if !related
-                .iter()
-                .any(|existing: &ElementRef<'a>| existing.id() == element.id())
-            {
-                related.push(element);
-            }
-        }
-        Ok(related)
+        super::relationship_endpoints::related_elements(
+            &super::references::ReferenceIndex::new(model), self.id(),
+        ).map_err(|error| error.to_string())
     }
 }
 impl<'a> Relationship<'a> for DirectedRelationshipRef<'a> {
@@ -160,16 +147,14 @@ impl<'a> Relationship<'a> for DirectedRelationshipRef<'a> {
 }
 impl<'a> DirectedRelationship<'a> for DirectedRelationshipRef<'a> {
     fn sources(self, model: Model<'a>) -> Result<Vec<ElementRef<'a>>, String> {
-        model
-            .element(&self.0.0.from)
-            .map(|element| vec![element])
-            .ok_or_else(|| "unknown source Element".into())
+        super::relationship_endpoints::sources(
+            &super::references::ReferenceIndex::new(model), self.id(),
+        ).map_err(|error| error.to_string())
     }
     fn targets(self, model: Model<'a>) -> Result<Vec<ElementRef<'a>>, String> {
-        model
-            .element(&self.0.0.to)
-            .map(|element| vec![element])
-            .ok_or_else(|| "unknown target Element".into())
+        super::relationship_endpoints::targets(
+            &super::references::ReferenceIndex::new(model), self.id(),
+        ).map_err(|error| error.to_string())
     }
 }
 impl<'a> CommentRef<'a> {
@@ -272,12 +257,7 @@ impl<'a> ElementRef<'a> {
             .is_some_and(|actual| super::metamodel::conforms_to(actual, metaclass))
     }
     pub fn relationship(self) -> Option<RelationshipRef<'a>> {
-        match self {
-            Self::Relationship(relation) if self.conforms_to("Relationship") => {
-                Some(RelationshipRef(relation))
-            }
-            _ => None,
-        }
+        self.conforms_to("Relationship").then_some(RelationshipRef(self))
     }
     pub fn directed_relationship(self) -> Option<DirectedRelationshipRef<'a>> {
         self.conforms_to("DirectedRelationship")
@@ -486,6 +466,7 @@ impl<'a> Model<'a> {
     }
     pub fn validate(self) -> Vec<StructuralDiagnostic> {
         let mut issues = Vec::new();
+        let mut unresolved_namespaces = Vec::new();
         let mut error = |code, id: &str, message: String| {
             issues.push(StructuralDiagnostic {
                 severity: StructuralSeverity::Error,
@@ -508,6 +489,25 @@ impl<'a> Model<'a> {
                     continue;
                 }
             };
+            if let Some(owner) = owner {
+                match super::classifiers::contributes_to_owned_union(owner, element, "Element-ownedElement") {
+                    Ok(true) => {}
+                    Ok(false) => error(
+                        "UML_ELEMENT_OWNERSHIP_ROLE", element.id(),
+                        "The canonical ownership role must contribute to Element::ownedElement".into(),
+                    ),
+                    Err(super::classifiers::QueryError::Invalid { message, .. }) =>
+                        error("UML_ELEMENT_OWNERSHIP_ROLE", element.id(), message),
+                    Err(super::classifiers::QueryError::Unsupported { message, .. }) => {
+                        unresolved_namespaces.push(StructuralDiagnostic {
+                            severity: StructuralSeverity::Warning,
+                            code: "UML_ELEMENT_OWNERSHIP_ROLE_UNVERIFIED",
+                            subject_id: element.id().into(),
+                            message,
+                        });
+                    }
+                }
+            }
             if owner.is_none() && !element.conforms_to("Package") {
                 error(
                     "UML_ELEMENT_HAS_OWNER",
@@ -542,6 +542,18 @@ impl<'a> Model<'a> {
                 };
             }
             if let Some(named) = element.named() {
+                let namespace = match self.namespace(named) {
+                    Ok(namespace) => Some(namespace),
+                    Err(message) => {
+                        unresolved_namespaces.push(StructuralDiagnostic {
+                            severity: StructuralSeverity::Warning,
+                            code: "UML_NAMED_ELEMENT_NAMESPACE_UNVERIFIED",
+                            subject_id: element.id().into(),
+                            message,
+                        });
+                        None
+                    }
+                };
                 if element.properties().get("visibility").is_some_and(|value| {
                     !value.is_null() && value.as_str().and_then(VisibilityKind::from_name).is_none()
                 }) {
@@ -552,18 +564,17 @@ impl<'a> Model<'a> {
                     );
                 }
                 if named.visibility().is_some()
-                    && owner.is_some_and(|owner| {
-                        owner.metaclass().is_some() && !owner.conforms_to("Namespace")
-                    })
+                    && owner.is_some()
+                    && matches!(namespace, Some(None))
                 {
                     error(
                         "UML_VISIBILITY_NEEDS_OWNERSHIP",
                         element.id(),
-                        "A NamedElement owned by a non-Namespace cannot have visibility".into(),
+                        "An owned NamedElement without a derived namespace cannot have visibility".into(),
                     );
                 }
                 if element.conforms_to("PackageableElement")
-                    && owner.is_some_and(|owner| owner.conforms_to("Namespace"))
+                    && namespace.flatten().is_some()
                     && named.visibility().is_none()
                 {
                     error(
@@ -572,7 +583,7 @@ impl<'a> Model<'a> {
                         "A PackageableElement in a Namespace must have visibility".into(),
                     );
                 }
-                if owner.is_some_and(|owner| owner.conforms_to("Package"))
+                if namespace.flatten().is_some_and(|namespace| namespace.element().conforms_to("Package"))
                     && element.conforms_to("PackageableElement")
                     && !matches!(
                         named.visibility(),
@@ -585,49 +596,19 @@ impl<'a> Model<'a> {
                         "Package members must have public or private visibility".into(),
                     );
                 }
-                if let Some(namespace) = owner.and_then(ElementRef::namespace) {
-                    // BehavioralFeature defines signature-based distinguishability; complete signature distinguishability remains a later slice.
-                    if !element.conforms_to("BehavioralFeature")
-                        && let Some(name) = named.name()
-                    {
-                        let members = match self.owned_elements(namespace.element()) {
-                            Ok(members) => members,
-                            Err(message) => {
-                                error("UML_NAMESPACE_MEMBERS", namespace.id(), message);
-                                continue;
-                            }
-                        };
-                        let duplicate = members.into_iter().any(|other| {
-                            other.id() != element.id()
-                                && other.named().and_then(NamedElementRef::name) == Some(name)
-                                && (element
-                                    .metaclass()
-                                    .is_some_and(|metaclass| other.conforms_to(metaclass))
-                                    || other
-                                        .metaclass()
-                                        .is_some_and(|metaclass| element.conforms_to(metaclass)))
-                        });
-                        if duplicate {
-                            error(
-                                "UML_NAMESPACE_MEMBERS_DISTINGUISHABLE",
-                                element.id(),
-                                format!(
-                                    "Namespace members of compatible metaclasses cannot share the name {name}"
-                                ),
-                            );
-                        }
-                    }
-                }
             }
         }
+        issues.extend(unresolved_namespaces);
         for element in self.elements() {
             issues.extend(super::schema::validate_element(element));
         }
         let references = super::references::ReferenceIndex::new(self);
+        issues.extend(super::namespace_imports::validate(&references));
         issues.extend(super::instances::validate(self, &references));
         issues.extend(super::operations::validate(&references));
         issues.extend(super::value_specifications::validate(&references));
         issues.extend(super::associations::validate(&references));
+        issues.extend(super::relationship_endpoints::validate(&references));
         issues.extend(super::classifiers::validate(&references));
         issues.extend(super::property_subsetting::validate(&references));
         issues.extend(references.validate_typed_elements());
@@ -668,6 +649,10 @@ fn fresh_id(section: &ModelingSection, project_id: &str, prefix: &str) -> Result
 }
 
 fn ownership_property(owner: ElementRef<'_>, child: ElementRef<'_>) -> Option<&'static str> {
+    let roles = super::classifiers::ownership_roles(owner, child).ok()?;
+    if roles.is_resolved && let Some(property) = roles.properties.first() {
+        return Some(property.name);
+    }
     if let Some(role) = super::value_specifications::bound_role(owner, child) { return Some(role); }
     let has = |property| {
         owner

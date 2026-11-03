@@ -184,6 +184,77 @@ impl<'a> ReferenceIndex<'a> {
             .collect()
     }
 
+    /// A valid witness proves membership even when another source is unresolved.
+    /// Absence requires every candidate to resolve; no opposite list is persisted.
+    pub(crate) fn has_reference_source(
+        &self,
+        property: &PropertyDescriptor,
+        target_id: &str,
+    ) -> Result<bool, String> {
+        if property.is_derived || property.aggregation == schema::Aggregation::Composite {
+            return Err(
+                "derived and composite references require a canonical graph projection".into(),
+            );
+        }
+        self.validate_target(Self::required_type(property)?, target_id)?;
+        let owner = schema::classifier(property.owner).ok_or("unresolved reference owner metaclass")?;
+        let mut unresolved = None;
+        for source in self
+            .model
+            .elements()
+            .filter(|element| element.conforms_to(owner.name))
+        {
+            let contains = || -> Result<bool, String> {
+                self.element(source.id())?;
+                if matches!(property.upper, "0" | "1") {
+                    return self
+                        .validate(
+                            property,
+                            source.properties().get(property.name).unwrap_or(&Value::Null),
+                        )
+                        .map(|target| target.is_some_and(|target| target.id() == target_id));
+                }
+                let empty = Value::Array(Vec::new());
+                let value = source.properties().get(property.name).unwrap_or(&empty);
+                match self.validate_many(property, value) {
+                    Ok(targets) => Ok(targets.iter().any(|target| target.id() == target_id)),
+                    Err(error) => {
+                        // A malformed neighbor or duplicate does not erase a
+                        // typed member. The property validator reports that fault.
+                        let member = PropertyDescriptor {
+                            lower: "1",
+                            upper: "1",
+                            ..*property
+                        };
+                        if value.as_array().is_some_and(|values| {
+                            values.iter().any(|value| {
+                                matches!(self.validate(&member, value), Ok(Some(target))
+                                    if target.id() == target_id)
+                            })
+                        }) {
+                            Ok(true)
+                        } else {
+                            Err(error)
+                        }
+                    }
+                }
+            };
+            match contains() {
+                Ok(true) => return Ok(true),
+                Ok(false) => {}
+                Err(error) => {
+                    unresolved.get_or_insert_with(|| {
+                        format!("{}::{}: {error}", source.id(), property.name)
+                    });
+                }
+            }
+        }
+        match unresolved {
+            Some(error) => Err(error),
+            None => Ok(false),
+        }
+    }
+
     fn required_type(
         property: &PropertyDescriptor,
     ) -> Result<&'static ClassifierDescriptor, String> {

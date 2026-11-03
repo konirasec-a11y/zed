@@ -148,6 +148,101 @@ fn matches_type(element: ElementRef<'_>, property: &PropertyDescriptor) -> bool 
         .is_some_and(|required| element.conforms_to(required.name))
 }
 
+pub(crate) struct OwnershipRoles {
+    pub properties: Vec<&'static PropertyDescriptor>,
+    pub is_resolved: bool,
+}
+
+fn contains_reference(value: &Value, id: &str) -> Result<bool, String> {
+    let values = value.as_array().map(Vec::as_slice)
+        .unwrap_or_else(|| std::slice::from_ref(value));
+    let mut contains = false;
+    for value in values {
+        contains |= reference_id(value)? == Some(id);
+    }
+    Ok(contains)
+}
+
+pub(crate) fn ownership_roles(
+    owner: ElementRef<'_>,
+    child: ElementRef<'_>,
+) -> Result<OwnershipRoles, QueryError> {
+    let mut explicit = Vec::new();
+    let mut candidates = Vec::new();
+    let mut excluded_by_explicit_role = false;
+    let mut unresolved_type = false;
+    for property in properties(owner)? {
+        if property.aggregation != Aggregation::Composite || property.is_derived {
+            continue;
+        }
+        let type_is_resolved = property.property_type.resolution == schema::ReferenceResolution::Exact
+            && property.property_type.target.and_then(schema::classifier).is_some()
+            && child.metaclass().is_some();
+        let compatible = matches_type(child, property);
+        unresolved_type |= !type_is_resolved;
+        if let Some(value) = owner.properties().get(property.name) {
+            if type_is_resolved && !compatible {
+                // An unrelated malformed composite cannot prevent resolving this
+                // child's role. A local reference to this child still proves a
+                // type violation, even beside another malformed collection item.
+                let values = value.as_array().map(Vec::as_slice)
+                    .unwrap_or_else(|| std::slice::from_ref(value));
+                if values.iter().any(|value|
+                    matches!(reference_id(value), Ok(Some(id)) if id == child.id()))
+                {
+                    return Err(QueryError::invalid(child.id(), format!(
+                        "{} has an incompatible composite target", property.id.fragment,
+                    )));
+                }
+                continue;
+            }
+            let contains = contains_reference(value, child.id())
+                .map_err(|error| QueryError::unsupported(owner.id(), error))?;
+            if contains {
+                if !type_is_resolved {
+                    return Err(QueryError::unsupported(owner.id(),
+                        "composite ownership role has an unresolved target type"));
+                }
+                explicit.push(property);
+            } else if compatible {
+                excluded_by_explicit_role = true;
+            }
+        } else if compatible {
+            candidates.push(property);
+        }
+    }
+    if !explicit.is_empty() {
+        return Ok(OwnershipRoles { properties: explicit, is_resolved: true });
+    }
+    // A canonical Association memberEnd plus ownership identifies ownedEnd,
+    // including AssociationClass, whose ownedAttribute has the same target type.
+    if owner.conforms_to("Association") && child.conforms_to("Property")
+        && let Some(member_ends) = owner.properties().get("memberEnd")
+    {
+        let is_end = contains_reference(member_ends, child.id())
+            .map_err(|error| QueryError::invalid(owner.id(), error))?;
+        let mut filtered = Vec::new();
+        for property in candidates {
+            if contributes(property, "Association-ownedEnd")
+                .map_err(|error| QueryError::unsupported(owner.id(), error))? == is_end
+            {
+                filtered.push(property);
+            }
+        }
+        candidates = filtered;
+    }
+    if candidates.is_empty() && excluded_by_explicit_role && !unresolved_type {
+        return Err(QueryError::invalid(child.id(), format!(
+            "canonical ownership by {} contradicts its explicit composite role references",
+            owner.id(),
+        )));
+    }
+    Ok(OwnershipRoles {
+        is_resolved: candidates.len() == 1,
+        properties: candidates,
+    })
+}
+
 pub(crate) fn is_owned_member(
     owner: ElementRef<'_>,
     child: ElementRef<'_>,
@@ -167,33 +262,31 @@ pub(crate) fn contributes_to_owned_union(
     child: ElementRef<'_>,
     target: &'static str,
 ) -> Result<bool, QueryError> {
+    let ownership = ownership_roles(owner, child)?;
     let mut roles = HashSet::new();
-    for property in properties(owner)? {
-        if property.aggregation == Aggregation::Composite
-            && !property.is_derived
-            && matches_type(child, property)
-        {
-            roles.insert(
-                contributes(property, target)
-                    .map_err(|error| QueryError::unsupported(owner.id(), error))?,
-            );
-        }
+    for property in ownership.properties {
+        roles.insert(
+            contributes(property, target)
+                .map_err(|error| QueryError::unsupported(owner.id(), error))?,
+        );
     }
-    if roles.len() > 1 {
+    if !ownership.is_resolved && roles.len() > 1 {
         return Err(QueryError::unsupported(
             child.id(),
             "ambiguous composite membership role",
         ));
     }
-    roles.into_iter().next().ok_or_else(|| {
+    if roles.is_empty() {
+        return Err(
         QueryError::unsupported(
             child.id(),
             format!(
                 "cannot determine a composite membership role under {}",
                 owner.id(),
             ),
-        )
-    })
+        ));
+    }
+    Ok(roles.contains(&true))
 }
 
 fn unique<'a>(values: impl IntoIterator<Item = ElementRef<'a>>) -> Vec<ElementRef<'a>> {
@@ -239,6 +332,13 @@ impl<'index, 'model> Queries<'index, 'model> {
         if !element.conforms_to("Namespace") {
             return Err(QueryError::invalid(id, "a UML Namespace is required"));
         }
+        super::element_graph_queries::ensure_canonical_ownership(self.references, element)
+            .map_err(|error| match error {
+                super::element_graph_queries::ElementGraphError::Invalid { subject_id, message } =>
+                    QueryError::invalid(&subject_id, message),
+                super::element_graph_queries::ElementGraphError::Unsupported { subject_id, message } =>
+                    QueryError::unsupported(&subject_id, message),
+            })?;
         for key in [
             "member",
             "importedMember",
@@ -293,7 +393,6 @@ impl<'index, 'model> Queries<'index, 'model> {
             .explicit_owned_elements(id)
             .map_err(|error| QueryError::invalid(id, error))?;
         let descriptors = properties(element)?;
-        let mut projections = Vec::new();
         for property in descriptors {
             let member = contributes(property, "Namespace-ownedMember")
                 .map_err(|error| QueryError::unsupported(id, error))?;
@@ -308,6 +407,7 @@ impl<'index, 'model> Queries<'index, 'model> {
                 .get(property.name)
                 .is_some_and(populated)
                 && (member || (complete && (feature || attribute || contributes_member)))
+                && (property.aggregation != Aggregation::Composite || property.is_derived)
                 && !(element.conforms_to("Association") && property.name == "memberEnd")
             {
                 return Err(QueryError::unsupported(
@@ -315,22 +415,20 @@ impl<'index, 'model> Queries<'index, 'model> {
                     format!("{} has no canonical membership adapter", property.name,),
                 ));
             }
-            if property.aggregation == Aggregation::Composite && !property.is_derived {
-                projections.push((property, member, feature, attribute));
-            }
         }
         let mut owned_members = Vec::new();
         let mut features = Vec::new();
         let mut attributes = Vec::new();
         for child in owned {
-            let roles = projections
-                .iter()
-                .filter(|(property, ..)| matches_type(child, property))
-                .map(|(_, member, feature, attribute)| {
-                    (*member, complete && *feature, complete && *attribute)
-                })
-                .collect::<HashSet<_>>();
-            if roles.len() > 1 {
+            let ownership = ownership_roles(element, child)?;
+            let roles = ownership.properties.into_iter().map(|property| {
+                let contribution = |target| contributes(property, target)
+                    .map_err(|error| QueryError::unsupported(id, error));
+                Ok((contribution("Namespace-ownedMember")?,
+                    complete && contribution("Classifier-feature")?,
+                    complete && contribution("Classifier-attribute")?))
+            }).collect::<Result<HashSet<_>, QueryError>>()?;
+            if !ownership.is_resolved && roles.len() > 1 {
                 return Err(QueryError::unsupported(
                     child.id(),
                     format!(
@@ -339,7 +437,11 @@ impl<'index, 'model> Queries<'index, 'model> {
                     ),
                 ));
             }
-            if let Some((member, feature, attribute)) = roles.into_iter().next() {
+            if !roles.is_empty() {
+                let (member, feature, attribute) = roles.into_iter().fold(
+                    (false, false, false),
+                    |left, right| (left.0 || right.0, left.1 || right.1, left.2 || right.2),
+                );
                 if member {
                     owned_members.push(child);
                 }

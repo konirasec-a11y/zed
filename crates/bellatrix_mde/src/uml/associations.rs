@@ -7,6 +7,8 @@
 // License and provenance: docs/bellatrix/references/uml4net/.
 
 use super::{
+    classifier_hierarchy, classifiers,
+    feature_compatibility::compare_type_conformance,
     references::{ReferenceIndex, reference_id},
     root::{ElementRef, Model},
     schema,
@@ -42,25 +44,120 @@ pub fn member_ends<'a>(
         .collect()
 }
 
-/// ownedEnd order is the canonical composite edge order, independent of memberEnd order.
+/// Explicit role references preserve ownedEnd order; otherwise use composite edge order.
 pub fn owned_ends<'a>(
     references: &ReferenceIndex<'a>,
     association_id: &str,
 ) -> Result<Vec<&'a Element>, String> {
+    let association = references.element(association_id)?;
     let members = member_ends(references, association_id)?;
-    references
-        .explicit_owned_elements(association_id)?
-        .into_iter()
-        .filter(|element| element.conforms_to("Property"))
-        .map(|element| match element {
-            ElementRef::Object(property)
-                if members.iter().any(|member| member.id == property.id) =>
-            {
-                Ok(property)
+    let children = references.explicit_owned_elements(association_id)?;
+    let explicit = association.properties().get("ownedEnd")
+        .map(|value| -> Result<Vec<ElementRef<'a>>, String> {
+            let descriptor = schema::uml_property(
+                association.metaclass().ok_or("Association metaclass is missing")?,
+                "ownedEnd",
+            )
+            .map_err(|error| error.to_string())?
+            .ok_or("Association::ownedEnd contract is missing")?;
+            let explicit = if matches!(descriptor.upper, "0" | "1") {
+                references.validate(descriptor, value)?.into_iter().collect()
+            } else {
+                references.validate_many(descriptor, value)?
+            };
+            let expected = children.iter()
+                .filter(|child| members.iter().any(|member| member.id == child.id()))
+                .map(|child| child.id())
+                .collect::<HashSet<_>>();
+            if explicit.iter().map(|end| end.id()).collect::<HashSet<_>>() != expected {
+                return Err("Association::ownedEnd must match its canonically owned member ends".into());
             }
-            _ => Err("Association::ownedEnd must subset memberEnd".into()),
+            Ok(explicit)
+        })
+        .transpose()?;
+    let mut owned = Vec::new();
+    for child in children.into_iter().filter(|child| child.conforms_to("Property")) {
+        let is_end = members.iter().any(|member| member.id == child.id());
+        let is_owned_end = classifiers::contributes_to_owned_union(
+            association,
+            child,
+            "Association-ownedEnd",
+        ).map_err(|error| error.to_string())?;
+        if is_end
+            && (!is_owned_end
+                || classifiers::is_owned_attribute(association, child)
+                    .map_err(|error| error.to_string())?)
+        {
+            return Err("Association-owned memberEnd has a conflicting composite role; AssociationClass::disjoint_attributes_ends forbids an end also being an ownedAttribute".into());
+        }
+        if is_owned_end {
+            let ElementRef::Object(property) = child else {
+                return Err("Association::ownedEnd requires a Property object identity".into());
+            };
+            if !is_end {
+                return Err("Association::ownedEnd must subset memberEnd".into());
+            }
+            owned.push(property);
+        }
+    }
+    if let Some(explicit) = explicit {
+        return explicit.into_iter()
+            .map(|end| match end {
+                ElementRef::Object(property) => Ok(property),
+                _ => Err("Association::ownedEnd requires a Property object identity".into()),
+            })
+            .collect();
+    }
+    Ok(owned)
+}
+
+pub fn navigable_owned_ends<'a>(
+    references: &ReferenceIndex<'a>,
+    association_id: &str,
+) -> Result<Vec<&'a Element>, String> {
+    let association = references.element(association_id)?;
+    let owned = owned_ends(references, association_id)?;
+    let descriptor = schema::uml_property("Association", "navigableOwnedEnd")
+        .map_err(|error| error.to_string())?
+        .ok_or("Association::navigableOwnedEnd contract is missing")?;
+    let Some(value) = association.properties().get("navigableOwnedEnd") else {
+        return Ok(Vec::new());
+    };
+    references
+        .validate_many(descriptor, value)?
+        .into_iter()
+        .map(|navigable| {
+            owned
+                .iter()
+                .copied()
+                .find(|end| end.id == navigable.id())
+                .ok_or_else(|| {
+                    "Association::navigableOwnedEnd must subset Association::ownedEnd".into()
+                })
         })
         .collect()
+}
+
+pub fn is_navigable(
+    references: &ReferenceIndex<'_>,
+    property_id: &str,
+) -> Result<bool, String> {
+    let property = references.element(property_id)?;
+    if !property.conforms_to("Property") {
+        return Err("Property::isNavigable requires a Property".into());
+    }
+    if let Some(owner) = references.model().owner(property)?
+        && owner.conforms_to("Classifier")
+        && classifiers::is_owned_attribute(owner, property).map_err(|error| error.to_string())?
+    {
+        return Ok(true);
+    }
+    let Some(association) = association_of(references, property_id)? else {
+        return Ok(false);
+    };
+    Ok(navigable_owned_ends(references, association.id())?
+        .iter()
+        .any(|end| end.id == property_id))
 }
 
 pub fn association_of<'a>(
@@ -78,6 +175,25 @@ pub fn association_of<'a>(
         }
     }
     Ok(found)
+}
+
+pub fn owning_association<'a>(
+    references: &ReferenceIndex<'a>,
+    property_id: &str,
+) -> Result<Option<ElementRef<'a>>, String> {
+    let property = references.element(property_id)?;
+    if !property.conforms_to("Property") {
+        return Err("owningAssociation requires a Property".into());
+    }
+    let Some(owner) = references.model().owner(property)?
+        .filter(|owner| owner.conforms_to("Association"))
+    else {
+        return Ok(None);
+    };
+    Ok(owned_ends(references, owner.id())?
+        .iter()
+        .any(|end| end.id == property_id)
+        .then_some(owner))
 }
 
 pub fn opposite<'a>(
@@ -160,30 +276,14 @@ fn validate_association(
     references: &ReferenceIndex<'_>,
     association: ElementRef<'_>,
 ) -> Result<(), String> {
-    if association.metaclass() != Some("Association") {
-        return Err("Unsupported specialized Association constraints: this mutation/validation slice implements Association itself".into());
-    }
-    for key in ["ownedEnd", "endType"] {
-        if association.properties().contains_key(key) {
-            return Err(format!(
-                "Association::{key} must be derived from canonical memberEnd and owns edges"
-            ));
-        }
+    if association.properties().contains_key("endType") {
+        return Err(
+            "Association::endType must be derived from canonical memberEnd and owns edges".into(),
+        );
     }
     let ends = member_ends(references, association.id())?;
     let owned = owned_ends(references, association.id())?;
-    if let Some(value) = association.properties().get("navigableOwnedEnd") {
-        let descriptor = schema::uml_property("Association", "navigableOwnedEnd")
-            .map_err(|error| error.to_string())?
-            .ok_or("Association::navigableOwnedEnd contract is missing")?;
-        for navigable in references.validate_many(descriptor, value)? {
-            if !owned.iter().any(|end| end.id == navigable.id()) {
-                return Err(
-                    "Association::navigableOwnedEnd must subset Association::ownedEnd".into(),
-                );
-            }
-        }
-    }
+    navigable_owned_ends(references, association.id())?;
     if ends.len() > 2 && owned.len() != ends.len() {
         return Err(
             "Association::association_ends requires all n-ary member ends to be Association-owned"
@@ -208,12 +308,15 @@ fn validate_association(
             .owner(ElementRef::Object(end))?
             .ok_or("Association member end requires an owner")?;
         if owner.id() != association.id() {
-            if owner.conforms_to("Association") {
-                return Err(if owner.metaclass() == Some("Association") {
-                    "Property::owningAssociation must subset Property::association; an end owned by another Association cannot be a member here".into()
-                } else {
-                    "Unsupported specialized Association owner: the Property ownership slot is ambiguous".into()
-                });
+            if owner.conforms_to("Association")
+                && classifiers::contributes_to_owned_union(
+                    owner,
+                    ElementRef::Object(end),
+                    "Association-ownedEnd",
+                )
+                .map_err(|error| error.to_string())?
+            {
+                return Err("Property::owningAssociation must subset Property::association; an end owned by another Association cannot be a member here".into());
             }
             if !owner.conforms_to("Classifier") {
                 return Err(
@@ -282,7 +385,60 @@ fn validate_association(
             );
         }
     }
+    validate_specialization(references, association, &ends)?;
+    if association.metaclass() != Some("Association") {
+        return Err(format!(
+            "Unsupported {} constraints: inherited Association rules were checked, but specialized metaclass contracts are not implemented",
+            association.metaclass().unwrap_or("Association subtype"),
+        ));
+    }
     Ok(())
+}
+
+fn validate_specialization(
+    references: &ReferenceIndex<'_>,
+    association: ElementRef<'_>,
+    ends: &[&Element],
+) -> Result<(), String> {
+    let ancestry = classifier_hierarchy::resolve_ancestry(references, association.id())
+        .map_err(|error| error.to_string())?;
+    let mut unsupported = None;
+    for general in ancestry.parents.iter()
+        .filter(|parent| parent.conforms_to("Association"))
+    {
+        if !general.properties().contains_key("memberEnd") {
+            unsupported = Some(format!(
+                "Unsupported Association specialization: general {} has no materialized memberEnd identities",
+                general.id(),
+            ));
+            continue;
+        }
+        let general_ends = member_ends(references, general.id())?;
+        if ends.len() != general_ends.len() {
+            return Err(format!(
+                "Association::specialized_end_number requires the same number of member ends as general {} ({} instead of {})",
+                general.id(), ends.len(), general_ends.len(),
+            ));
+        }
+        for (position, (specific, general_end)) in ends.iter().zip(general_ends).enumerate() {
+            match compare_type_conformance(
+                references,
+                ElementRef::Object(specific),
+                ElementRef::Object(general_end),
+            ) {
+                Ok(true) => {}
+                Ok(false) => return Err(format!(
+                    "Association::specialized_end_types requires end {} ({}) to conform to the corresponding end {} of general {}",
+                    position + 1, specific.id, general_end.id, general.id(),
+                )),
+                Err(error @ classifiers::QueryError::Unsupported { .. }) => {
+                    unsupported = Some(error.to_string());
+                }
+                Err(error) => return Err(error.to_string()),
+            }
+        }
+    }
+    unsupported.map_or(Ok(()), Err)
 }
 
 pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
@@ -313,18 +469,6 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
             } else {
                 issues.push(issue("UML_ASSOCIATION_ENDS", association.id(), message));
             }
-        }
-        if association
-            .properties()
-            .get("navigableOwnedEnd")
-            .is_some_and(|value| !value.is_null() && !value.as_array().is_some_and(Vec::is_empty))
-        {
-            issues.push(StructuralDiagnostic {
-                severity: StructuralSeverity::Warning,
-                code: "MDE_ASSOCIATION_NAVIGATION_UNSUPPORTED",
-                subject_id: association.id().into(),
-                message: "Association navigableOwnedEnd semantics are not implemented by this end-identity slice".into(),
-            });
         }
         if let Ok(ends) = member_ends(references, association.id()) {
             for end in ends {
@@ -596,9 +740,6 @@ pub(crate) fn set_member_ends(
     if !association.conforms_to("Association") {
         return Err("memberEnd owner must be an Association".into());
     }
-    if association.metaclass() != Some("Association") {
-        return Err("Unsupported specialized Association constraints: this mutation currently supports Association itself".into());
-    }
     let value = Value::Array(ends.iter().map(|id| json!({"$ref": id})).collect());
     let descriptor = schema::uml_property("Association", "memberEnd")
         .map_err(|error| error.to_string())?
@@ -699,7 +840,9 @@ fn canonical_inputs_changed(
     let previous_model = Model::from_section(before);
     let previous = previous_model.element(association.id());
     if previous.is_none_or(|previous| {
-        previous.properties().get("memberEnd") != association.properties().get("memberEnd")
+        ["memberEnd", "ownedEnd", "navigableOwnedEnd"].iter().any(|key| {
+            previous.properties().get(*key) != association.properties().get(*key)
+        })
     }) {
         return true;
     }

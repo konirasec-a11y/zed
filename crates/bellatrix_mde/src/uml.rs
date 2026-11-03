@@ -12,6 +12,7 @@ pub mod property_subsetting;
 pub mod property_contracts;
 pub mod redefinition_contexts;
 pub mod references;
+pub mod relationship_endpoints;
 pub mod root;
 pub mod schema;
 pub mod types;

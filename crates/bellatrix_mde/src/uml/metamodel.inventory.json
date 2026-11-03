@@ -1037,7 +1037,7 @@
     },
     {
       "file": "crates/bellatrix_mde/src/uml/value_specifications.rs",
-      "scope": "Pure evaluation of canonical Integer/UnlimitedNatural/Boolean/String/Null literal identities and generated defaults; owned lowerValue/upperValue role resolution shared by Property, Parameter, Operation return and redefinition checks, plus independent upperBound evaluation for subsetting. External references, opaque/nonliteral expressions, Real and unassigned owned-value roles remain explicit unsupported capabilities."
+      "scope": "Pure evaluation of canonical Integer/UnlimitedNatural/Real/Boolean/String/Null literal identities and generated defaults, computability, null and typed value queries; Real uses finite JSON numbers. Owned lowerValue/upperValue role resolution is shared by Property, Parameter, Operation return and redefinition checks, plus independent upperBound evaluation for subsetting. External references, opaque/nonliteral expression evaluation and unassigned owned-value roles remain explicit unsupported capabilities."
     },
     {
       "file": "crates/bellatrix_mde/src/uml/types.rs",
@@ -1053,7 +1053,7 @@
     },
     {
       "file": "crates/bellatrix_mde/src/uml/classifiers.rs",
-      "scope": "Generated ownership subsets, direct/inherited Namespace members and Classifier features/attributes, direct redefinition filtering and slottable-feature unions. Bounded Property and Operation signature consistency are consumed from shared feature_compatibility/operation_signatures; behavioral/template contracts and ambiguous ownership/ancestor redefinition cases remain explicit unsupported capabilities."
+      "scope": "Generated ownership subsets, direct/inherited Namespace members and Classifier features/attributes, direct redefinition filtering and slottable-feature unions. Bounded Property and normative Operation signature consistency are consumed from shared feature_compatibility/operation_signatures after checking redefinition contexts; independent behavioral/template contracts are not additional Operation consistency requirements. Ambiguous ownership/ancestor redefinition cases remain explicit unsupported capabilities."
     },
     {
       "file": "crates/bellatrix_mde/src/uml/property_subsetting.rs",
@@ -1065,7 +1065,7 @@
     },
     {
       "file": "crates/bellatrix_mde/src/uml/operation_signatures.rs",
-      "scope": "Official Operation signature consistency over ordered canonical Parameters: equal count/direction/ordering/uniqueness, bidirectional Type conformance and direction-dependent interval containment. Consumed by redefinition commands, validation and Inspector; unsupported Type/bound and behavioral/template contract evaluation remain explicit capability diagnostics."
+      "scope": "Official Operation signature consistency over ordered canonical Parameters: equal count/direction/ordering/uniqueness, bidirectional Type conformance and direction-dependent interval containment. Consumed by redefinition commands, validation and Inspector; unsupported Type/bound evaluation remains explicit. Conditions, methods, exceptions and templates retain independent validation and do not impose extra consistency requirements."
     },
     {
       "file": "crates/bellatrix_mde/src/uml/classifier_hierarchy.rs",

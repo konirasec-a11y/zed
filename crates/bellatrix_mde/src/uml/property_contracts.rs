@@ -7,6 +7,7 @@
 //! constraints of its metaclass were evaluated.
 
 use super::{
+    associations,
     references::{ReferenceIndex, reference_id},
     operations,
     value_specifications::{self, LiteralValue},
@@ -173,9 +174,9 @@ fn scalar_identity(kind: ScalarKind, value: &Value) -> String {
 fn endpoint_value(element: ElementRef<'_>, property: &PropertyDescriptor) -> Option<Value> {
     let ElementRef::Relationship(relation) = element else { return None; };
     let target = match property.id.fragment {
-        "Dependency-client" | "Generalization-specific" | "ElementImport-importingNamespace"
+        "Generalization-specific" | "ElementImport-importingNamespace"
         | "PackageImport-importingNamespace" | "InterfaceRealization-implementingClassifier" => &relation.from,
-        "Dependency-supplier" | "Generalization-general" | "ElementImport-importedElement"
+        "Generalization-general" | "ElementImport-importedElement"
         | "PackageImport-importedPackage" | "InterfaceRealization-contract" => &relation.to,
         _ => return None,
     };
@@ -207,6 +208,21 @@ fn required_role<'a>(
 ) -> Result<Option<Value>, String> {
     if let Some(value) = endpoint_value(element, property) { return Ok(Some(value)); }
     match property.id.fragment {
+        "Dependency-client" | "Dependency-supplier" => {
+            let result = if property.name == "client" {
+                super::relationship_endpoints::clients(references, element.id())
+            } else {
+                super::relationship_endpoints::suppliers(references, element.id())
+            };
+            let values = match result {
+                Ok(values) => values,
+                Err(super::element_graph_queries::ElementGraphError::Unsupported { .. }) =>
+                    return Ok(None),
+                Err(error) => return Err(error.to_string()),
+            };
+            Ok(Some(Value::Array(values.into_iter()
+                .map(|element| json!({"$ref": element.id()})).collect())))
+        }
         "Constraint-specification" => constraint_specification(references, element)
             .map(|specification| Some(json!({"$ref": specification.id()}))),
         "Slot-owningInstance" => references.model().owner(element)
@@ -282,6 +298,7 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             issues.extend(check_value(references, element, property, value)
                 .diagnostic(element, property.id.fragment, code));
         }
+        validate_property_rules(references, element, &mut issues);
         validate_value_rules(references, element, &mut issues);
         for property in inherited.properties {
             if property.is_derived || element.properties().contains_key(property.name) {
@@ -329,6 +346,50 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
         }
     }
     issues
+}
+
+fn validate_property_rules(
+    references: &ReferenceIndex<'_>,
+    element: ElementRef<'_>,
+    issues: &mut Vec<StructuralDiagnostic>,
+) {
+    use PropertyOutcome::{Satisfied, Unverified, Violation};
+    if !element.conforms_to("Property") { return; }
+    let derived_union = schema::read_effective_boolean(element, "isDerivedUnion");
+    for (property, rule, code) in [
+        ("isReadOnly", "Property-derived_union_is_read_only", "UML_PROPERTY_DERIVED_UNION_READ_ONLY"),
+        ("isDerived", "Property-derived_union_is_derived", "UML_PROPERTY_DERIVED_UNION_DERIVED"),
+    ] {
+        let outcome = match &derived_union {
+            Ok(false) => Satisfied,
+            Ok(true) => match schema::read_effective_boolean(element, property) {
+                Ok(true) => Satisfied,
+                Ok(false) => Violation(format!("isDerivedUnion requires {property} to be true")),
+                Err(error) => Unverified(error),
+            },
+            Err(error) => Unverified(error.clone()),
+        };
+        issues.extend(outcome.diagnostic(element, rule, code));
+    }
+    let explicit_qualifiers = element.properties().get("qualifier")
+        .and_then(Value::as_array).is_some_and(|values| !values.is_empty());
+    let owned_qualifiers = match references.explicit_owned_elements(element.id()) {
+        Ok(owned) => owned.into_iter().any(|child| child.conforms_to("Property")),
+        Err(error) => {
+            issues.extend(Violation(error).diagnostic(element,
+                "Property-qualified_is_association_end", "UML_PROPERTY_QUALIFIED_ASSOCIATION_END"));
+            return;
+        }
+    };
+    if !explicit_qualifiers && !owned_qualifiers { return; }
+    // association is the inverse of canonical memberEnd, never a stored copy.
+    let outcome = match associations::association_of(references, element.id()) {
+        Ok(Some(_)) => Satisfied,
+        Ok(None) => Violation("a Property with qualifiers must be an Association memberEnd".into()),
+        Err(error) => Violation(error),
+    };
+    issues.extend(outcome.diagnostic(element, "Property-qualified_is_association_end",
+        "UML_PROPERTY_QUALIFIED_ASSOCIATION_END"));
 }
 
 // Constraints are evaluated structurally; their truth against the modeled
@@ -381,23 +442,17 @@ fn validate_value_rules<'a>(
         .and_then(|value| reference_id(value).ok().flatten()) else { return; };
     let Ok(behavior) = references.element(behavior_id) else { return; };
     if !behavior.conforms_to("Behavior") { return; } // typed-reference diagnostic already emitted
-    if behavior.properties().contains_key("ownedParameter") {
-        issues.extend(Unverified("Behavior parameters must be read from canonical ownership".into())
-            .diagnostic(element, "OpaqueExpression-one_return_result_parameter", "UML_OPAQUE_EXPRESSION_PARAMETERS"));
-        return;
-    }
-    let parameters = match references.explicit_owned_elements(behavior_id) {
-        Ok(owned) => owned.into_iter().filter(|child| child.conforms_to("Parameter")).collect::<Vec<_>>(),
+    let parameters = match operations::owned_parameters(references, behavior_id) {
+        Ok(parameters) => parameters,
         Err(error) => {
-            issues.extend(Violation(error)
+            issues.extend(Unverified(error)
                 .diagnostic(element, "OpaqueExpression-one_return_result_parameter", "UML_OPAQUE_EXPRESSION_PARAMETERS"));
             return;
         }
     };
     let mut returns = 0;
     let mut permitted = true;
-    for parameter in parameters {
-        let ElementRef::Object(record) = parameter else { continue; };
+    for record in parameters {
         let direction = match operations::direction(record) {
             Ok(direction) => direction,
             Err(error) => {
@@ -406,7 +461,7 @@ fn validate_value_rules<'a>(
                 return;
             }
         };
-        let stream = match schema::read_effective_boolean(parameter, "isStream") {
+        let stream = match schema::read_effective_boolean(ElementRef::Object(record), "isStream") {
             Ok(stream) => stream,
             Err(error) => {
                 issues.extend(Unverified(error)

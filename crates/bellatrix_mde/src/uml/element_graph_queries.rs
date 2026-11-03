@@ -65,7 +65,10 @@ fn ensure_derived_ownership(element: ElementRef<'_>) -> Result<(), ElementGraphE
     Ok(())
 }
 
-fn ensure_canonical_ownership(element: ElementRef<'_>) -> Result<(), ElementGraphError> {
+pub(crate) fn ensure_canonical_ownership(
+    index: &ReferenceIndex<'_>,
+    element: ElementRef<'_>,
+) -> Result<(), ElementGraphError> {
     ensure_derived_ownership(element)?;
     let Some(classifier) = element.metaclass().and_then(schema::uml_classifier) else {
         return Err(ElementGraphError::unsupported(
@@ -84,16 +87,30 @@ fn ensure_canonical_ownership(element: ElementRef<'_>) -> Result<(), ElementGrap
     for property in properties.properties {
         if property.aggregation == Aggregation::Composite
             && !property.is_derived
-            && element
-                .properties()
-                .get(property.name)
-                .is_some_and(populated)
+            && let Some(value) = element.properties().get(property.name)
         {
-            return Err(ElementGraphError::unsupported(
-                element.id(),
-                format!("{} requires a canonical ownership adapter", property.name),
-            ));
+            // The same value contract validates shape, target type and canonical
+            // owner, preserving unknown/legacy representations as unverified.
+            match super::property_contracts::check_value(index, element, property, value) {
+                super::property_contracts::PropertyOutcome::Satisfied => {}
+                super::property_contracts::PropertyOutcome::Violation(message) => {
+                    return Err(ElementGraphError::invalid(element.id(), message));
+                }
+                super::property_contracts::PropertyOutcome::Unverified(message) => {
+                    return Err(ElementGraphError::unsupported(element.id(), message));
+                }
+            }
         }
+    }
+    for child in index.model().owned_elements(element)
+        .map_err(|error| ElementGraphError::invalid(element.id(), error))?
+    {
+        super::classifiers::ownership_roles(element, child).map_err(|error| match error {
+            super::classifiers::QueryError::Invalid { subject_id, message } =>
+                ElementGraphError::invalid(&subject_id, message),
+            super::classifiers::QueryError::Unsupported { subject_id, message } =>
+                ElementGraphError::unsupported(&subject_id, message),
+        })?;
     }
     Ok(())
 }
@@ -108,7 +125,7 @@ pub fn all_owned_elements<'a>(
     let mut pending = VecDeque::from([root]);
     let mut result = Vec::new();
     while let Some(owner) = pending.pop_front() {
-        ensure_canonical_ownership(owner)?;
+        ensure_canonical_ownership(index, owner)?;
         index
             .explicit_owned_elements(owner.id())
             .map_err(|error| ElementGraphError::invalid(owner.id(), error))?;
@@ -149,7 +166,7 @@ fn namespace<'a>(
         .map_err(|error| ElementGraphError::invalid(current.id(), error))?;
     if let Some(owner) = owner {
         element(index, owner.id())?;
-        ensure_canonical_ownership(owner)?;
+        ensure_canonical_ownership(index, owner)?;
         index
             .explicit_owned_elements(owner.id())
             .map_err(|error| ElementGraphError::invalid(owner.id(), error))?;
@@ -167,7 +184,7 @@ fn namespace<'a>(
                     ElementGraphError::invalid(owner.id(), "TemplateParameter has no signature")
                 })?;
             element(index, signature.id())?;
-            ensure_canonical_ownership(signature)?;
+            ensure_canonical_ownership(index, signature)?;
             if signature
                 .properties()
                 .get("template")
@@ -195,7 +212,7 @@ fn namespace<'a>(
                     ElementGraphError::invalid(signature.id(), "TemplateSignature has no template")
                 })?;
             element(index, template.id())?;
-            ensure_canonical_ownership(template)?;
+            ensure_canonical_ownership(index, template)?;
             if !template.conforms_to("TemplateableElement") {
                 return Err(ElementGraphError::invalid(
                     template.id(),
@@ -281,24 +298,9 @@ pub fn client_dependencies<'a>(
         .elements()
         .filter(|element| element.conforms_to("Dependency"))
     {
-        element(index, dependency.id())?;
-        let ElementRef::Relationship(relation) = dependency else {
-            return Err(ElementGraphError::unsupported(
-                dependency.id(),
-                "Dependency object clients require a canonical relationship adapter",
-            ));
-        };
-        if relation.properties.get("client").is_some_and(populated)
-            || relation.properties.get("supplier").is_some_and(populated)
+        if super::relationship_endpoints::clients(index, dependency.id())?
+            .iter().any(|client| client.id() == id)
         {
-            return Err(ElementGraphError::unsupported(
-                dependency.id(),
-                "Dependency client and supplier must use canonical endpoints",
-            ));
-        }
-        named_element(index, &relation.from)?;
-        named_element(index, &relation.to)?;
-        if relation.from == id {
             result.push(dependency);
         }
     }

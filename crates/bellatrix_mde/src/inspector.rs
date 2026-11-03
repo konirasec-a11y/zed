@@ -293,17 +293,19 @@ fn append_association_properties(
             .map(|ends| json!(ends.iter().map(|end| json!({"$ref": end.id})).collect::<Vec<_>>())));
         append("uml.ownedEnd", "Association-owned ends", associations::owned_ends(references, id)
             .map(|ends| json!(ends.iter().map(|end| json!({"$ref": end.id})).collect::<Vec<_>>())));
+        append("uml.navigableOwnedEnd", "Navigable owned ends", associations::navigable_owned_ends(references, id)
+            .map(|ends| json!(ends.iter().map(|end| json!({"$ref": end.id})).collect::<Vec<_>>())));
         append("uml.endType", "End Types", associations::end_types(references, id)
             .map(|types| json!(types.iter().map(|element| json!({"$ref": element.id()})).collect::<Vec<_>>())));
     } else if let ElementRef::Object(property) = element && element.conforms_to("Property") {
         append("uml.association", "Association", associations::association_of(references, id)
             .map(|association| association.map_or(Value::Null, |association| json!({"$ref": association.id()}))));
-        append("uml.owningAssociation", "Owning Association", references.model().owner(element)
-            .map(|owner| owner.filter(|owner| owner.conforms_to("Association"))
-                .map_or(Value::Null, |owner| json!({"$ref": owner.id()}))));
+        append("uml.owningAssociation", "Owning Association", associations::owning_association(references, id)
+            .map(|owner| owner.map_or(Value::Null, |owner| json!({"$ref": owner.id()}))));
         append("uml.opposite", "Binary opposite", associations::opposite(references, id)
             .map(|opposite| opposite.map_or(Value::Null, |opposite| json!({"$ref": opposite.id}))));
         append("uml.isComposite", "Composite (derived)", associations::is_composite(property).map(Value::Bool));
+        append("uml.isNavigable", "Navigable (derived)", associations::is_navigable(references, id).map(Value::Bool));
     }
 }
 

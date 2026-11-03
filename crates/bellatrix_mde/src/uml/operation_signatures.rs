@@ -8,15 +8,10 @@ use super::{
         accept_any, compare_multiplicity_containment, compare_type_conformance, require_all,
     },
     operations,
-    references::{ReferenceIndex, reference_id},
+    references::ReferenceIndex,
     root::ElementRef,
     schema,
 };
-use serde_json::Value;
-
-fn populated(value: &Value) -> bool {
-    !value.is_null() && !value.as_array().is_some_and(Vec::is_empty)
-}
 
 fn compare_parameter_signature(
     references: &ReferenceIndex<'_>,
@@ -71,19 +66,10 @@ pub fn compare_operation_signature(
         return Ok(false);
     }
     for operation in [redefining, redefined] {
-        if operation.properties().contains_key("ownedParameter") {
-            return Err(QueryError::unsupported(
-                operation.id(),
-                "Operation signature requires ordered canonical Parameter ownership, not a stored ownedParameter list",
-            ));
-        }
-        operations::return_parameter(references, operation.id())
-            .map_err(|error| QueryError::invalid(operation.id(), error))?;
+        operations::checked_return_parameter(references, operation.id())?;
     }
-    let specific = operations::owned_parameters(references, redefining.id())
-        .map_err(|error| QueryError::invalid(redefining.id(), error))?;
-    let general = operations::owned_parameters(references, redefined.id())
-        .map_err(|error| QueryError::invalid(redefined.id(), error))?;
+    let specific = operations::checked_owned_parameters(references, redefining.id())?;
+    let general = operations::checked_owned_parameters(references, redefined.id())?;
     if specific.len() != general.len() {
         return Ok(false);
     }
@@ -95,63 +81,14 @@ pub fn compare_operation_signature(
     )
 }
 
-/// A compatible signature does not establish behavioral/template contract
-/// consistency. Preserve that boundary without interpreting opaque expressions.
+/// UML Operation-isConsistentWith-spec compares formal signatures only; the
+/// caller establishes its redefinition-context precondition. Conditions,
+/// methods, exceptions and templates retain their independent validators and
+/// do not add requirements to this normative query.
 pub fn compare_operation_consistency(
     references: &ReferenceIndex<'_>,
     redefining: ElementRef<'_>,
     redefined: ElementRef<'_>,
 ) -> Result<bool, QueryError> {
-    if !compare_operation_signature(references, redefining, redefined)? {
-        return Ok(false);
-    }
-    for operation in [redefining, redefined] {
-        for key in [
-            "precondition",
-            "postcondition",
-            "bodyCondition",
-            "method",
-            "raisedException",
-            "ownedTemplateSignature",
-            "templateBinding",
-            "templateParameter",
-        ] {
-            if operation.properties().get(key).is_some_and(populated) {
-                return Err(QueryError::unsupported(
-                    operation.id(),
-                    format!(
-                        "Operation signature is compatible; {key} contract compatibility is not evaluated"
-                    ),
-                ));
-            }
-        }
-        let owned = references
-            .model()
-            .owned_elements(operation)
-            .map_err(|error| QueryError::invalid(operation.id(), error))?;
-        if owned.iter().any(|child| {
-            child.conforms_to("Constraint")
-                || child.conforms_to("TemplateSignature")
-                || child.conforms_to("Behavior")
-        }) || references.model().relationship_records().any(|relation| {
-            relation.from == operation.id() && relation.kind == "uml.template_binding"
-        }) || references.model().elements().any(|candidate| {
-            candidate.conforms_to("Behavior")
-                && reference_id(
-                    candidate
-                        .properties()
-                        .get("specification")
-                        .unwrap_or(&Value::Null),
-                )
-                .ok()
-                .flatten()
-                    == Some(operation.id())
-        }) {
-            return Err(QueryError::unsupported(
-                operation.id(),
-                "Operation signature is compatible; behavioral/template contracts are not evaluated",
-            ));
-        }
-    }
-    Ok(true)
+    compare_operation_signature(references, redefining, redefined)
 }

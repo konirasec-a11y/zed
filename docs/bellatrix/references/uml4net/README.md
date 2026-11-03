@@ -412,16 +412,26 @@ removes the previous blanket warning for resolved compatible signatures,
 including empty signatures. Unsupported Type/bound evaluation remains a
 capability warning and storable data. Shared conjunction/disjunction helpers
 preserve known false/true results when other operands are unsupported, while
-malformed graph data retains its invalid diagnostic. The public signature query
-is distinct from broader contract compatibility: populated behavioral,
-pre/post/body, exception and template contracts are explicitly unevaluated, not
-interpreted or certified by a signature-only result.
+malformed graph data retains its invalid diagnostic. Both the signature query
+and the normative consistency query use this same comparison. The official
+`Operation-isConsistentWith-spec` in the pinned 20161101 UML.xmi requires no
+behavioral or template-equivalence proof. Pre/post/body conditions, methods,
+exceptions and templates therefore do not make this query unsupported. Their
+own structural validators and expression-evaluation limits remain independent;
+a compatible signature does not certify those other contracts. The Classifier
+consumer still checks `Operation-isConsistentWith-pre` through the shared
+redefinition-context query before comparing signatures.
 
 The existing Namespace/Classifier feature workflow now constructs and edits
 three ordered signatures through commands, establishes redefinitions, changes
 Parameter order/count/Type/bounds/flags, repairs the model, preserves an unknown
-bound with Inspector diagnostics, and reopens JSON and Protobuf. No test function
-or isolated unit test was added.
+bound with Inspector diagnostics, and reopens JSON and Protobuf. It also creates
+templates through commands and imports conditions, methods and exceptions on
+either side of a redefinition, since those reference roles do not yet have an
+editable Inspector adapter. It keeps incompatible signatures and invalid
+contexts rejected and checks condition/reference diagnostics on imported drafts
+independently through repair and reopen.
+No test function or isolated unit test was added.
 
 
 ## Bounded Property subsetting

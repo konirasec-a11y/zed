@@ -5,12 +5,14 @@
 // Normative corrections and Apache notices: docs/bellatrix/references/uml4net/.
 
 use super::{
-    classifiers::{self, QueryError},
+    classifiers::{self, NamespaceQuery, QueryError},
+    feature_compatibility::{require_all, resolve_feature_multiplicity},
+    operations,
     references::ReferenceIndex,
     root::{ElementRef, Model, VisibilityKind},
     schema,
 };
-use crate::{ModelingSection, Relation};
+use crate::{ModelingSection, Relation, StructuralDiagnostic, StructuralSeverity};
 use petgraph::{algo::kosaraju_scc, graphmap::DiGraphMap};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
@@ -21,6 +23,7 @@ pub struct ResolvedImports<'a> {
     pub visible_members: Vec<ElementRef<'a>>,
     pub imported_names: BTreeMap<String, Vec<Option<String>>>,
     pub excluded_members: Vec<ElementRef<'a>>,
+    candidate_names: BTreeMap<String, Vec<Option<String>>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -313,12 +316,335 @@ fn names_collide(
     let right_element = references
         .element(right)
         .map_err(|error| QueryError::invalid(right, error))?;
-    Ok(left_element
+    distinguishable_with_names(
+        references,
+        left_element,
+        &left_names.names,
+        right_element,
+        &right_names.names,
+    )
+    .map(|distinguishable| !distinguishable)
+}
+
+fn parameter_type<'a>(
+    references: &ReferenceIndex<'a>,
+    parameter: ElementRef<'a>,
+) -> Result<Option<&'a str>, QueryError> {
+    let descriptor = schema::uml_property("Parameter", "type")
+        .map_err(|error| QueryError::unsupported(parameter.id(), error.to_string()))?
+        .ok_or_else(|| {
+            QueryError::unsupported(parameter.id(), "Parameter::type contract missing")
+        })?;
+    let value = parameter.properties().get("type").unwrap_or(&Value::Null);
+    if value.is_string() || value.get("href").is_some() {
+        return Err(QueryError::unsupported(
+            parameter.id(),
+            "Parameter signature Type identity requires a resolved local reference",
+        ));
+    }
+    references
+        .validate(descriptor, value)
+        .map(|target| target.map(ElementRef::id))
+        .map_err(|error| QueryError::invalid(parameter.id(), error))
+}
+
+fn parameter_effect(parameter: ElementRef<'_>) -> Result<Value, QueryError> {
+    if parameter.properties().get("effect").is_none_or(Value::is_null) {
+        return Ok(Value::Null);
+    }
+    schema::read_effective_scalar(parameter, "effect")
+        .map_err(|error| QueryError::invalid(parameter.id(), error))
+}
+
+fn same_parameter(
+    references: &ReferenceIndex<'_>,
+    left: ElementRef<'_>,
+    right: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let mut checks = vec![
+        Ok(left.named().and_then(|named| named.name())
+            == right.named().and_then(|named| named.name())),
+        parameter_type(references, left).and_then(|left_type| {
+            parameter_type(references, right).map(|right_type| left_type == right_type)
+        }),
+        parameter_effect(left).and_then(|left_effect| {
+            parameter_effect(right).map(|right_effect| left_effect == right_effect)
+        }),
+        resolve_feature_multiplicity(references, left).and_then(|left_range| {
+            resolve_feature_multiplicity(references, right)
+                .map(|right_range| left_range == right_range)
+        }),
+    ];
+    for key in ["direction", "isException", "isStream", "isOrdered", "isUnique"] {
+        checks.push((|| {
+            let left_value = schema::read_effective_scalar(left, key)
+                .map_err(|error| QueryError::invalid(left.id(), error))?;
+            let right_value = schema::read_effective_scalar(right, key)
+                .map_err(|error| QueryError::invalid(right.id(), error))?;
+            Ok(left_value == right_value)
+        })());
+    }
+    require_all(checks)
+}
+
+fn distinguishable_with_names(
+    references: &ReferenceIndex<'_>,
+    left: ElementRef<'_>,
+    left_names: &BTreeSet<Option<String>>,
+    right: ElementRef<'_>,
+    right_names: &BTreeSet<Option<String>>,
+) -> Result<bool, QueryError> {
+    // Both normative overrides return true independently of names or type.
+    if left.conforms_to("Gate") || left.conforms_to("Message") {
+        return Ok(true);
+    }
+    if left_names.is_disjoint(right_names) {
+        return Ok(true);
+    }
+    if left.conforms_to("BehavioralFeature") {
+        if !right.conforms_to("BehavioralFeature") || left.id() == right.id() {
+            return Ok(true);
+        }
+        let left_parameters = operations::checked_owned_parameters(references, left.id())?;
+        let right_parameters = operations::checked_owned_parameters(references, right.id())?;
+        if left_parameters.len() != right_parameters.len() {
+            return Ok(true);
+        }
+        // BehavioralFeature compares tuple equality, unlike the variance and
+        // interval-containment rules of Operation::isConsistentWith.
+        return require_all(left_parameters.into_iter().zip(right_parameters).map(
+            |(left, right)| {
+                same_parameter(
+                    references,
+                    ElementRef::Object(left),
+                    ElementRef::Object(right),
+                )
+            },
+        ))
+        .map(|same_signature| !same_signature);
+    }
+    Ok(!(left
         .metaclass()
-        .is_some_and(|kind| right_element.conforms_to(kind))
-        || right_element
+        .is_some_and(|kind| right.conforms_to(kind))
+        || right
             .metaclass()
-            .is_some_and(|kind| left_element.conforms_to(kind)))
+            .is_some_and(|kind| left.conforms_to(kind))))
+}
+
+fn member_names(
+    references: &ReferenceIndex<'_>,
+    namespace: &NamespaceQuery<'_>,
+    member: ElementRef<'_>,
+) -> Result<BTreeSet<Option<String>>, QueryError> {
+    if namespace
+        .owned_members
+        .iter()
+        .any(|owned| owned.id() == member.id())
+    {
+        return Ok(BTreeSet::from([
+            member.named().and_then(|named| named.name()).map(str::to_owned),
+        ]));
+    }
+    if let Some(names) = namespace.imported_names.get(member.id()) {
+        return Ok(names.iter().cloned().collect());
+    }
+    if let Some(classifier) = &namespace.classifier
+        && classifier
+            .inherited_members
+            .iter()
+            .any(|inherited| inherited.id() == member.id())
+    {
+        let mut names = BTreeSet::new();
+        for parent in &classifier.parents {
+            let parent = classifiers::query(references, parent.id())?;
+            if parent
+                .members
+                .iter()
+                .any(|inherited| inherited.id() == member.id())
+            {
+                names.extend(member_names(references, &parent, member)?);
+            }
+        }
+        return Ok(names);
+    }
+    if namespace
+        .members
+        .iter()
+        .any(|candidate| candidate.id() == member.id())
+    {
+        return Ok(BTreeSet::from([
+            member.named().and_then(|named| named.name()).map(str::to_owned),
+        ]));
+    }
+    Ok(BTreeSet::new())
+}
+
+pub fn get_names_of_member(
+    references: &ReferenceIndex<'_>,
+    namespace_id: &str,
+    member_id: &str,
+) -> Result<BTreeSet<Option<String>>, QueryError> {
+    let member = references
+        .element(member_id)
+        .map_err(|error| QueryError::invalid(member_id, error))?;
+    if member.named().is_none() {
+        return Err(QueryError::invalid(member_id, "a NamedElement is required"));
+    }
+    names_in_namespace(
+        references,
+        namespace_id,
+        &classifiers::query(references, namespace_id)?,
+        member,
+    )
+}
+
+fn names_in_namespace(
+    references: &ReferenceIndex<'_>,
+    namespace_id: &str,
+    namespace: &NamespaceQuery<'_>,
+    member: ElementRef<'_>,
+) -> Result<BTreeSet<Option<String>>, QueryError> {
+    let names = member_names(references, namespace, member)?;
+    if !names.is_empty() {
+        return Ok(names);
+    }
+    // Names must remain available for excluded import candidates: these names
+    // are precisely what makes their isDistinguishableFrom result false.
+    Ok(resolve_namespace_imports(references, namespace_id)?
+        .candidate_names
+        .remove(member.id())
+        .unwrap_or_default()
+        .into_iter()
+        .collect())
+}
+
+pub fn is_distinguishable_from(
+    references: &ReferenceIndex<'_>,
+    namespace_id: &str,
+    left_id: &str,
+    right_id: &str,
+) -> Result<bool, QueryError> {
+    let namespace = classifiers::query(references, namespace_id)?;
+    let left = references
+        .element(left_id)
+        .map_err(|error| QueryError::invalid(left_id, error))?;
+    let right = references
+        .element(right_id)
+        .map_err(|error| QueryError::invalid(right_id, error))?;
+    if left.named().is_none() || right.named().is_none() {
+        return Err(QueryError::invalid(
+            namespace_id,
+            "distinguishability requires NamedElements",
+        ));
+    }
+    distinguishable_with_names(
+        references,
+        left,
+        &names_in_namespace(references, namespace_id, &namespace, left)?,
+        right,
+        &names_in_namespace(references, namespace_id, &namespace, right)?,
+    )
+}
+
+fn member_distinctions<'a>(
+    references: &ReferenceIndex<'a>,
+    namespace_id: &str,
+) -> Result<Vec<(&'a str, &'a str, Result<bool, QueryError>)>, QueryError> {
+    let namespace = classifiers::query(references, namespace_id)?;
+    let members = namespace
+        .members
+        .iter()
+        .map(|member| Ok((*member, member_names(references, &namespace, *member)?)))
+        .collect::<Result<Vec<_>, QueryError>>()?;
+    let mut results = Vec::new();
+    for (left, left_names) in &members {
+        for (right, right_names) in &members {
+            if left.id() != right.id() {
+                results.push((
+                    left.id(),
+                    right.id(),
+                    distinguishable_with_names(
+                        references, *left, left_names, *right, right_names,
+                    ),
+                ));
+            }
+        }
+    }
+    Ok(results)
+}
+
+pub fn members_are_distinguishable(
+    references: &ReferenceIndex<'_>,
+    namespace_id: &str,
+) -> Result<bool, QueryError> {
+    require_all(
+        member_distinctions(references, namespace_id)?
+            .into_iter()
+            .map(|(_, _, result)| result),
+    )
+}
+
+pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
+    let mut issues = Vec::new();
+    for namespace in references
+        .model()
+        .elements()
+        .filter(|element| element.conforms_to("Namespace"))
+    {
+        let results = match member_distinctions(references, namespace.id()) {
+            Ok(results) => results,
+            Err(error) => {
+                let (severity, code) = if matches!(error, QueryError::Unsupported { .. }) {
+                    (
+                        StructuralSeverity::Warning,
+                        "UML_NAMESPACE_DISTINGUISHABILITY_UNSUPPORTED",
+                    )
+                } else {
+                    (StructuralSeverity::Error, "UML_NAMESPACE_DISTINGUISHABILITY")
+                };
+                issues.push(StructuralDiagnostic {
+                    severity,
+                    code,
+                    subject_id: namespace.id().into(),
+                    message: error.to_string(),
+                });
+                continue;
+            }
+        };
+        for (left, right, result) in results {
+            let (severity, code, message) = match result {
+                Ok(true) => continue,
+                Ok(false) => (
+                    StructuralSeverity::Error,
+                    "UML_NAMESPACE_MEMBERS_DISTINGUISHABLE",
+                    format!(
+                        "Namespace {} members {left} and {right} are not distinguishable",
+                        namespace.id(),
+                    ),
+                ),
+                Err(QueryError::Unsupported { message, .. }) => (
+                    StructuralSeverity::Warning,
+                    "UML_NAMESPACE_DISTINGUISHABILITY_UNSUPPORTED",
+                    message,
+                ),
+                Err(QueryError::Invalid { message, .. }) => (
+                    StructuralSeverity::Error,
+                    "UML_NAMESPACE_DISTINGUISHABILITY",
+                    message,
+                ),
+            };
+            let diagnostic = StructuralDiagnostic {
+                severity,
+                code,
+                subject_id: left.into(),
+                message,
+            };
+            if !issues.contains(&diagnostic) {
+                issues.push(diagnostic);
+            }
+        }
+    }
+    issues
 }
 
 fn exclude_collisions<'a>(
@@ -443,6 +769,10 @@ pub fn resolve_namespace_imports<'a>(
     let namespace = namespaces
         .get(namespace_id)
         .ok_or_else(|| QueryError::invalid(namespace_id, "missing import root"))?;
+    let candidate_names = collect_candidates(namespace, &resolved)?
+        .into_iter()
+        .map(|(id, binding)| (id.to_owned(), binding.names.into_iter().collect()))
+        .collect();
     let bindings = resolved
         .remove(namespace_id)
         .ok_or_else(|| QueryError::invalid(namespace_id, "missing resolved import root"))?;
@@ -477,6 +807,7 @@ pub fn resolve_namespace_imports<'a>(
         visible_members,
         imported_names,
         excluded_members,
+        candidate_names,
     })
 }
 
