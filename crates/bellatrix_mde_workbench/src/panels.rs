@@ -496,7 +496,7 @@ impl Render for MdeRightPanel {
                 .views
                 .iter()
                 .find(|view| Some(view.id.as_str()) == selected_view.as_deref())?;
-            let is_edge = matches!(view.geometry, Geometry::Path { .. }) || snapshot
+            let is_edge = matches!(view.geometry, bellatrix_mde::Geometry::Path { .. }) || snapshot
                 .section
                 .relations
                 .iter()
