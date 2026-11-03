@@ -211,3 +211,34 @@ uma única vez, mantendo sua execução no gate de comando e as outras verifica�
 de Association. Teste adicional cobre ordens dos ramos, contagem exata, caminho
 removido e ciclo. Gate de revisão **33/33**: AssociationClass 4, association kernel
 2, specialization 2, API 4 e templates 21. Log `/tmp/association-class-review.log`.
+
+## Atualização focada: Connector::types — 2026-11-03
+
+O Kernel agora aplica `Connector-types` conforme UML.xmi: com `type` local
+resolvido, Connector.end e Association.memberEnd precisam ter a mesma quantidade
+e cada `end.role.type` deve conformar ao tipo da ponta correspondente, preservando
+a ordem das duas coleções. `type` ausente/null torna esta implicação satisfeita;
+isso não elimina os contratos independentes de ends, roles ou ownership.
+O estado canônico usa Connector/ConnectorEnd como objetos, referências tipadas e
+`owns`. Ausência da coleção ordenada não inventa ordem a partir da apresentação.
+
+Reutiliza contratos de propriedades, ReferenceIndex e consultas de herança;
+referências externas permanecem não verificadas. Comparações/posições conhecidas
+podem provar violação ao lado de desconhecidos. Ambos os lados de cada comparação
+são examinados para não esconder Tipo malformado atrás de referência externa.
+Não retorna coleções parciais como completas nem altera o helper de hierarquia.
+
+Código em `semantics/connectors.rs`, registro em `uml.rs`/`root.rs` e cinco
+fluxos em `tests/connector_types.rs`: ordem/cardinalidade, identidade e herança,
+type opcional, ownership, tipos errados, resultados inconclusivos, rejeição
+atômica, referências mistas nas duas ordens e reabertura JSON/Protobuf.
+A ausência de end ou memberEnd não esconde um contrato explicitamente inválido
+na coleção oposta: ambas são avaliadas antes de combinar os resultados.
+Casos simétricos cobrem null, escalar, membro malformado, duplicação e href.
+Gate focado **11/11**: Connector 5, association kernel 2 e API 4.
+Log local `/tmp/connector-types-symmetric-review.log`.
+
+Permanecem fora deste incremento `Connector-roles`/`StructuredClassifier::allRoles`,
+as demais invariantes de ConnectorEnd, derivação de kind, adapter binário de
+Connector e criação/edição visual. Esta regra não significa suporte completo a
+Composite Structure ou Connectors.

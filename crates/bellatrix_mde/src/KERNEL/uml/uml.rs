@@ -42,3 +42,6 @@ pub mod components;
 
 #[path = "semantics/enumerations.rs"]
 pub mod enumerations;
+
+#[path = "semantics/connectors.rs"]
+pub mod connectors;
