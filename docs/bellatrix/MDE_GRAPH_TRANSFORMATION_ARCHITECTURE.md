@@ -6,6 +6,11 @@ implementada. A engine MDE é apenas uma capacidade do **Bellatrix**, que
 continua sendo uma plataforma geral de DevSecOps, computação científica e
 desenvolvimento componível. Consultar [PLATFORM_VISION.md](PLATFORM_VISION.md).
 
+Este contrato técnico e sua matriz UI/UX detalham o
+[plano mestre de implementação MDE](MDE_IMPLEMENTATION_PLAN.md).
+As etapas abaixo são o subroteiro de grafos/transformações, não o plano
+completo de autoria LOW CODE e integração Zed.
+
 ## Objetivo
 
 Modelar uma aplicação como grafo de sintaxe abstrata tipado/atribuído (ASG),

@@ -1,5 +1,8 @@
 # Bellatrix — plataforma componível sobre Zed e Cordis-rs
 
+**Plano mestre de execução MDE:** [MDE_IMPLEMENTATION_PLAN.md](MDE_IMPLEMENTATION_PLAN.md).
+Os documentos técnicos abaixo detalham esse plano, sem substituí-lo.
+
 **Gerador M2T com Tera 2.4.0:** [TERA_GENERATION_PIPELINE.md](TERA_GENERATION_PIPELINE.md).
 
 **Metamodelos e transformação de grafos (M2M→M2T):**
