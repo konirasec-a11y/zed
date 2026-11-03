@@ -599,6 +599,159 @@ fn template_reference_is_kind(
     Ok(target.conforms_to(metaclass))
 }
 
+fn classifier_template_constraints<'a>(
+    references: &crate::uml::references::ReferenceIndex<'a>,
+    formal: crate::uml::root::ElementRef<'a>,
+) -> Result<TemplateReferenceEvidence<'a>, crate::uml::classifiers::QueryError> {
+    use crate::uml::classifiers::QueryError;
+    let canonical = references
+        .model()
+        .relationship_records()
+        .filter(|relation| {
+            relation.kind == "uml.constraining_classifier" && relation.from == formal.id()
+        })
+        .map(|relation| {
+            references
+                .element(&relation.to)
+                .map_err(|error| QueryError::invalid(formal.id(), error))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    for target in &canonical {
+        if target.metaclass().is_some() && !target.conforms_to("Classifier") {
+            return Err(QueryError::invalid(
+                formal.id(),
+                "constrainingClassifier must be a Classifier",
+            ));
+        }
+    }
+    if formal.properties().contains_key("constrainingClassifier") {
+        let mut explicit =
+            template_reference_evidence(references, formal, "constrainingClassifier")?;
+        if !canonical.is_empty() {
+            if explicit
+                .known
+                .iter()
+                .any(|target| !canonical.iter().any(|other| other.id() == target.id()))
+                || (!explicit.unknown
+                    && canonical.iter().any(|target| {
+                        !explicit.known.iter().any(|other| other.id() == target.id())
+                    }))
+            {
+                return Err(QueryError::invalid(
+                    formal.id(),
+                    "constrainingClassifier projection contradicts canonical references",
+                ));
+            }
+            for target in canonical {
+                if !explicit.known.iter().any(|other| other.id() == target.id()) {
+                    explicit.known.push(target);
+                }
+            }
+        }
+        return Ok(explicit);
+    }
+    if canonical.is_empty() {
+        return Err(QueryError::unsupported(
+            formal.id(),
+            "constrainingClassifier extent is not materialized",
+        ));
+    }
+    Ok(TemplateReferenceEvidence {
+        cardinality: Some(canonical.len()),
+        known: canonical,
+        unknown: false,
+    })
+}
+
+fn classifier_template_constrained_actual(
+    references: &crate::uml::references::ReferenceIndex<'_>,
+    substitution: crate::uml::root::ElementRef<'_>,
+) -> Result<bool, crate::uml::classifiers::QueryError> {
+    use crate::uml::{
+        classifier_hierarchy,
+        classifiers::QueryError,
+        feature_compatibility::{accept_any, require_all},
+        schema,
+    };
+    let formal = template_reference_target(references, substitution, "formal");
+    let actual = template_reference_target(references, substitution, "actual");
+    // Validate independent reference shapes even if the formal cannot be resolved.
+    if let Err(error @ QueryError::Invalid { .. }) = &actual {
+        return Err(error.clone());
+    }
+    let formal = formal?;
+    if formal.metaclass().is_none() {
+        return Err(QueryError::unsupported(
+            formal.id(),
+            "formal metaclass is unresolved",
+        ));
+    }
+    if !formal.conforms_to("ClassifierTemplateParameter") {
+        return Ok(true);
+    }
+    let constraints = classifier_template_constraints(references, formal);
+    let allow = schema::read_effective_boolean(formal, "allowSubstitutable")
+        .map_err(|error| QueryError::invalid(formal.id(), error));
+    if let Err(error @ QueryError::Invalid { .. }) = &allow {
+        return Err(error.clone());
+    }
+    // A known non-Classifier actual cannot satisfy the normative cast, even
+    // when the inner collection is empty. External actuals remain unresolved.
+    if let Ok(actual) = actual {
+        if actual.metaclass().is_some() && !actual.conforms_to("Classifier") {
+            return Err(QueryError::invalid(
+                actual.id(),
+                "constraining_classifiers_constrain_args requires a Classifier actual",
+            ));
+        }
+    }
+    let constraints = constraints?;
+    let mut checks = Vec::new();
+    if constraints.unknown {
+        checks.push(Err(QueryError::unsupported(
+            formal.id(),
+            "constrainingClassifier includes external identities",
+        )));
+    }
+    for constraint in constraints.known {
+        checks.push((|| {
+            let actual = actual.clone()?;
+            if actual.metaclass().is_none() || constraint.metaclass().is_none() {
+                // Exact identity proves the first disjunct without guessing type
+                // conformance. Independent property contracts retain type Unknown.
+                return if actual.id() == constraint.id() {
+                    Ok(true)
+                } else {
+                    Err(QueryError::unsupported(
+                        actual.id(),
+                        "Classifier metaclass is unresolved",
+                    ))
+                };
+            }
+            let conformance = if actual.id() == constraint.id() {
+                Ok(true)
+            } else {
+                classifier_hierarchy::has_ancestor_matching(references, actual.id(), |parent| {
+                    parent.id() == constraint.id()
+                })
+            };
+            if matches!(conformance, Ok(true)) {
+                return conformance;
+            }
+            let substitutable = match allow.clone()? {
+                false => Ok(false),
+                true => classifier_hierarchy::is_substitutable_for(
+                    references,
+                    actual.id(),
+                    constraint.id(),
+                ),
+            };
+            accept_any([conformance, substitutable])
+        })());
+    }
+    require_all(checks)
+}
+
 fn classifier_template_actual(
     references: &crate::uml::references::ReferenceIndex<'_>,
     substitution: crate::uml::root::ElementRef<'_>,
@@ -629,6 +782,12 @@ pub(crate) fn validate_bindings(
                 .properties()
                 .contains_key("templateParameterSubstitution")
         {
+            issues.push(StructuralDiagnostic {
+                severity: StructuralSeverity::Warning,
+                code: "MDE_CLASSIFIER_TEMPLATE_CONSTRAINED_ACTUAL_UNVERIFIED",
+                subject_id: binding.id().into(),
+                message: "ClassifierTemplateParameter-constraining_classifiers_constrain_args: authored templateParameterSubstitution inverse projection is not reconciled; only canonical substitution.formal witnesses are evaluated".into(),
+            });
             // Forward formal links do not reconcile an independently authored
             // inverse collection. Keep that representation explicitly unverified.
             issues.push(StructuralDiagnostic {
@@ -645,6 +804,22 @@ pub(crate) fn validate_bindings(
             });
         }
         if binding.conforms_to("TemplateParameterSubstitution") {
+            let constrained = match classifier_template_constrained_actual(references, binding) {
+                        Ok(true) => None,
+                        Ok(false) => Some((StructuralSeverity::Error, "UML_CLASSIFIER_TEMPLATE_CONSTRAINED_ACTUAL", "Actual must equal, conform to, or satisfy the permitted Substitution alternative for every constraining Classifier".to_owned())),
+                        Err(QueryError::Invalid { message, .. }) => Some((StructuralSeverity::Error, "MDE_CLASSIFIER_TEMPLATE_CONSTRAINED_ACTUAL_INVALID", message)),
+                        Err(QueryError::Unsupported { message, .. }) => Some((StructuralSeverity::Warning, "MDE_CLASSIFIER_TEMPLATE_CONSTRAINED_ACTUAL_UNVERIFIED", message)),
+                    };
+            if let Some((severity, code, message)) = constrained {
+                issues.push(StructuralDiagnostic {
+                    severity,
+                    code,
+                    subject_id: binding.id().into(),
+                    message: format!(
+                        "ClassifierTemplateParameter-constraining_classifiers_constrain_args: {message}"
+                    ),
+                });
+            }
             let abstract_outcome = match classifier_template_matching_abstract(references, binding)
             {
                 Ok(true) => None,

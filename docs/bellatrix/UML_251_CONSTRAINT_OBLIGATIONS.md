@@ -50,6 +50,8 @@ têm recortes publicados em `5845f273b5cfa4c6089d6457c91b9bf49f90d064` (E40/E41)
 ClassifierTemplateParameter::actual_is_classifier e as regras de observação sem
 expr de Duration/TimeExpression têm recortes publicados em
 `1d0843a1db2bb2bee6c22638cb15b159be2c4821` (E42/E43).
+ClassifierTemplateParameter::matching_abstract e StringExpression::subexpressions
+têm recortes publicados em `f3644ea91f41df63238d775332ec66035ca7fcae` (E44/E45).
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -165,7 +167,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E43 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E45 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -628,6 +630,55 @@ de execução nova. E12–E43 possuem os gates delimitados nas seções seguinte
   `UML_DURATION_OBSERVATION_REQUIRED`, `UML_TIME_EXPRESSION_OBSERVATION_REQUIRED`
   e respectivas variantes `MDE_*_UNVERIFIED`.
 
+- **E44**: `semantics/templates.rs`, `classifier_template_matching_abstract`,
+  `checked_parametered_classifier` e `validate_bindings`;
+  `classifier_template_abstract.rs`, onze testes. Recorte pelos witnesses
+  canônicos substitution.formal: parameteredElement Classifier não abstrato
+  exige actual Classifier não abstrato. isAbstract usa default efetivo falso;
+  booleano malformado não vira default. Formal de outra espécie não recebe
+  cast de Classifier; com aplicabilidade indefinida e actual não Classifier,
+  o resultado continua desconhecido. ParameteredElement abstrato ou actual
+  comprovadamente concreto pode decidir a implicação, sem apagar malformados.
+  Inversa templateParameterSubstitution armazenada independentemente continua
+  não reconciliada e explicitamente não verificada, como em E42. Não é prova
+  completa de todas as representações de ClassifierTemplateParameter.
+
+- **E45**: `semantics/value_specifications.rs`,
+  `string_expression_subexpressions` e `validate`;
+  `string_expression_subexpressions.rs`, dez testes no gate final. Exige
+  exatamente uma entre operand e subExpression não vazia, não apenas proíbe
+  ambas preenchidas: ambas vazias também violam. Usa coleções explícitas e
+  papéis canônicos de filhos possuídos, sem confundir nameExpression com
+  operand/subExpression. Coleção explícita informa cardinalidade sem depender
+  da resolução completa de metaclasses, mas contratos de referência e ownership
+  permanecem avaliados. Projeções ambíguas conservam unknown; presença conhecida
+  não oculta coleções malformadas ou ownership incompatível. Não avalia o texto
+  resultante nem substitui a obrigação LiteralString dos operands em E35.
+
+### Evidência publicada de matching_abstract e StringExpression::subexpressions
+
+Commit inspecionado: `f3644ea91f41df63238d775332ec66035ca7fcae`.
+Logs finais lidos:
+
+- `/tmp/classifier-template-abstract-gate.log`: **78/78 aprovados**,
+  classifier_template_abstract 11, classifier_template_actual 10,
+  operation_template_default 11, template_binding_formal 13,
+  template_binding_unique 12 e template_signatures 21.
+- `/tmp/string-subexpressions-final-gate.log`: **213/213 aprovados**,
+  160 testes lib e 53 integrações (duration_first_event 7,
+  duration_observation_first_event 8, string_expression_operands 8,
+  string_expression_subexpressions 10, temporal_expression_observation 12 e
+  time_constraint_cardinality 8).
+
+O log anterior `/tmp/string-subexpressions-final-focused.log` registra 9 testes;
+o gate final contém 10, incluindo a revisão posterior. Não somar os dois como
+cobertura independente. As linhas ficam **P/E44–E45**. Mantêm-se limites da
+inversa de substituições, projeções não resolvidas, autoria pública e execução
+de expressões; o teste de predicado não certifica todos os contratos herdados.
+Os gates precedem a publicação, não são reruns no SHA remoto nem testes novos
+pela matriz. Lib completa mais integrações selecionadas não é suíte integral;
+contagens não medem conformidade normativa, UI, geração ou interchange.
+
 ### Evidência publicada de actual Classifier e observações temporais
 
 Commit inspecionado: `1d0843a1db2bb2bee6c22638cb15b159be2c4821`.
@@ -759,7 +810,8 @@ ordem dos ramos e limites do adapter. StringExpression inclui papéis explícito
 versus inferidos, subExpression ambíguo, metaclasse versus texto, unknowns,
 malformados, roundtrip e rejeição atômica de reparent como operand.
 As duas linhas ficam **P/E34–E35**. Powertype tem incremento posterior em E36;
-esses gates não certificam isCovering/isDisjoint ou StringExpression::subexpressions, avaliação geral de expressões, UI ou
+esses gates não certificam isCovering/isDisjoint. StringExpression::subexpressions
+tem incremento posterior em E45; permanecem fora da prova avaliação geral de expressões, UI ou
 geração. Os gates precedem a publicação e não são reruns no SHA remoto.
 Lib completa e integrações selecionadas não constituem suíte integral nem
 percentual de conformidade UML.
@@ -1332,7 +1384,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `ClassifierTemplateParameter-matching_abstract`
 
-- Metaclass: `ClassifierTemplateParameter`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `ClassifierTemplateParameter`. Estado: **P**. Evidência: E44; commit `f3644ea91f41df63238d775332ec66035ca7fcae`.
 - OCL publicado: `(not parameteredElement.isAbstract) implies templateParameterSubstitution.actual->forAll(a | not a.oclAsType(Classifier).isAbstract)`.
 
 #### `ClassifierTemplateParameter-actual_is_classifier`
@@ -1808,7 +1860,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `StringExpression-subexpressions`
 
-- Metaclass: `StringExpression`. Estado: **A**. Evidência: revisão individual pendente.
+- Metaclass: `StringExpression`. Estado: **P**. Evidência: E45; commit `f3644ea91f41df63238d775332ec66035ca7fcae`.
 - OCL publicado: `if subExpression->notEmpty() then operand->isEmpty() else operand->notEmpty() endif`.
 
 #### `TimeConstraint-has_one_constrainedElement`

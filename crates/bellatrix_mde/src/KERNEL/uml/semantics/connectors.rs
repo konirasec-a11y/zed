@@ -488,6 +488,100 @@ pub fn kind(references: &ReferenceIndex<'_>, connector: ElementRef<'_>) -> Resul
     })
 }
 
+fn collaboration_members<'a>(
+    references: &ReferenceIndex<'a>,
+    element: ElementRef<'a>,
+    name: &str,
+    required_type: &str,
+) -> Result<(Vec<ElementRef<'a>>, Result<bool, QueryError>), QueryError> {
+    let Some(value) = element.properties().get(name) else { return Ok((Vec::new(), Ok(true))); };
+    let contract = check(references, element, property(element, name)?, value);
+    let mut members = Vec::new();
+    for value in value.as_array().into_iter().flatten() {
+        if let Ok(Some(id)) = super::references::reference_id(value) {
+            if let Ok(target) = references.element(id) {
+                if target.conforms_to(required_type) { members.push(target); }
+            }
+        }
+    }
+    Ok((members, contract))
+}
+
+fn collaboration_every_role(references: &ReferenceIndex<'_>, usage: ElementRef<'_>) -> Result<bool, QueryError> {
+    use super::element_graph_queries::ElementGraphError;
+    use std::collections::HashSet;
+    let (mut bindings, binding_contract) = collaboration_members(references, usage, "roleBinding", "Dependency")?;
+    let mut guards = Vec::new();
+    let mut unknown_binding = None;
+    match binding_contract {
+        Err(error @ QueryError::Unsupported { .. }) => unknown_binding = Some(error),
+        other => guards.push(other),
+    }
+    for child in references.explicit_owned_elements(usage.id())
+        .map_err(|error| QueryError::invalid(usage.id(), error))?
+    {
+        match classifiers::contributes_to_owned_union(usage, child, "CollaborationUse-roleBinding") {
+            Ok(true) => { if !bindings.iter().any(|binding| binding.id() == child.id()) { bindings.push(child); } }
+            Ok(false) => {}
+            Err(error @ QueryError::Unsupported { .. }) => unknown_binding = Some(error),
+            Err(error) => guards.push(Err(error)),
+        }
+    }
+    let mut suppliers = Vec::new();
+    for binding in bindings {
+        // Validate every materialized supplier subset before using a partial
+        // witness. An unknown sibling must not hide malformed known evidence.
+        for descriptor in classifiers::properties(binding)? {
+            if classifiers::contributes(descriptor, "Dependency-supplier")
+                .map_err(|error| QueryError::unsupported(binding.id(), error))?
+                && let Some(value) = binding.properties().get(descriptor.name)
+            {
+                if let Err(error @ QueryError::Invalid { .. }) = check(references, binding, descriptor, value) {
+                    guards.push(Err(error));
+                }
+            }
+        }
+        let (known, unknown) = match super::relationship_endpoints::suppliers(references, binding.id()) {
+            Ok(values) => (values.into_iter().map(|value| value.id().to_owned()).collect::<HashSet<_>>(), None),
+            Err(ElementGraphError::Invalid { subject_id, message }) => {
+                guards.push(Err(QueryError::invalid(&subject_id, message)));
+                continue;
+            }
+            Err(ElementGraphError::Unsupported { subject_id, message }) => {
+                // Explicit supplier membership can prove includes despite an
+                // external neighbor. Never substitute the binary record target
+                // when the endpoint query selected a materialized supplier role.
+                let known = binding.properties().get("supplier").and_then(Value::as_array)
+                    .into_iter().flatten().filter_map(|value| super::references::reference_id(value).ok().flatten())
+                    .filter(|id| references.element(id).is_ok_and(|target| target.conforms_to("NamedElement")))
+                    .map(str::to_owned).collect();
+                (known, Some(QueryError::unsupported(&subject_id, message)))
+            }
+        };
+        suppliers.push((known, unknown));
+    }
+    let roles = (|| {
+        let value = usage.properties().get("type")
+            .ok_or_else(|| QueryError::unsupported(usage.id(), "CollaborationUse type is not materialized"))?;
+        let collaboration = reference(references, usage, property(usage, "type")?, value)?
+            .ok_or_else(|| QueryError::invalid(usage.id(), "CollaborationUse requires a Collaboration type"))?;
+        let (roles, contract) = collaboration_members(references, collaboration, "collaborationRole", "ConnectableElement")?;
+        let mut checks = vec![contract];
+        for role in roles {
+            let mut witnesses = Vec::new();
+            if let Some(error) = &unknown_binding { witnesses.push(Err(error.clone())); }
+            for (known, unknown) in &suppliers {
+                witnesses.push(if known.contains(role.id()) { Ok(true) }
+                    else if let Some(error) = unknown { Err(error.clone()) } else { Ok(false) });
+            }
+            checks.push(feature_compatibility::accept_any(witnesses));
+        }
+        feature_compatibility::require_all(checks)
+    })();
+    guards.push(roles);
+    feature_compatibility::require_all(guards)
+}
+
 pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     for connector in references.model().elements().filter(|element| element.conforms_to("Connector")) {
@@ -520,6 +614,15 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
             };
             issues.push(StructuralDiagnostic { severity, code, subject_id:end.id().into(), message:format!("{rule}: {message}") });
         }
+    }
+    for usage in references.model().elements().filter(|element| element.conforms_to("CollaborationUse")) {
+        let (severity, code, message) = match collaboration_every_role(references, usage) {
+            Ok(true) => continue,
+            Ok(false) => (StructuralSeverity::Error, "UML_COLLABORATION_USE_EVERY_ROLE", "every collaborationRole must be a supplier of a roleBinding".to_owned()),
+            Err(QueryError::Invalid { message, .. }) => (StructuralSeverity::Error, "UML_COLLABORATION_USE_EVERY_ROLE", message),
+            Err(QueryError::Unsupported { message, .. }) => (StructuralSeverity::Warning, "MDE_COLLABORATION_USE_EVERY_ROLE_UNVERIFIED", message),
+        };
+        issues.push(StructuralDiagnostic { severity, code, subject_id: usage.id().into(), message: format!("CollaborationUse-every_role: {message}") });
     }
     issues
 }
