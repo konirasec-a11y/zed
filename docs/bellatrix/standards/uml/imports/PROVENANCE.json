@@ -1,0 +1,280 @@
+{
+  "schema_version": 1,
+  "scope": "Exact official OMG XMI documents recursively required by the pinned UML 20161101 roots.",
+  "retrieval_method": "curl GET with --location, --fail, --dump-header, --output and --write-out %{json}; connect timeout 20 seconds; total timeout 60 seconds for DI and 90 seconds for the other retained downloads.",
+  "byte_preservation": "Downloaded response bodies are copied without XML parsing, reserialization, newline conversion, URI rewriting, or identifier rewriting. Parsing is used only for verification.",
+  "version_identity_policy": "Document URL and fragment identify an element. Historical 20131001 resources remain distinct from 20161101 resources even when names match. The 20131001 and 20161101 PrimitiveTypes files differ in the UML namespace and package URI.",
+  "documents": [
+    {
+      "path": "docs/bellatrix/standards/uml/imports/20131001/DC.xmi",
+      "source_url": "http://www.omg.org/spec/DD/20131001/DC.xmi",
+      "sha256": "e6fc3b4aed32e8a9b07a4188c14f693fa3e52b01e25619d7741d3fcda7459066",
+      "byte_count": 15648,
+      "xmi_id_count": 91,
+      "href_occurrences": 12,
+      "dependencies": [
+        "http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi"
+      ],
+      "package_identity": [
+        {
+          "name": "DC",
+          "uri": "http://www.omg.org/spec/DD/20131001/DC",
+          "xmi_id": "_0"
+        }
+      ],
+      "document_version": "20131001",
+      "retrieved_at_utc": "2026-11-03T04:33:23.098590+00:00",
+      "retrieval": {
+        "method": "GET",
+        "final_url": "http://www.omg.org/spec/DD/20131001/DC.xmi",
+        "http_status": 200,
+        "redirect_count": 0,
+        "content_type": "text/xml",
+        "downloaded_bytes": 15648,
+        "curl_exit_code": 0,
+        "response_headers_path": "docs/bellatrix/standards/uml/imports/retrieval/DC.http-headers.txt"
+      },
+      "https_transport_verification": {
+        "requested_url": "https://www.omg.org/spec/DD/20131001/DC.xmi",
+        "verified_at_utc": "2026-11-03T04:50:56.628654+00:00",
+        "status": "unverified_connection_timeout",
+        "certificate_verification": "enabled (curl default; no insecure or TLS-bypass option)",
+        "tls_handshake_completed": false,
+        "http_status": 0,
+        "curl_exit_code": 28,
+        "curl_error": "curl: (28) Connection timed out after 20089 milliseconds",
+        "final_url": "https://www.omg.org/spec/DD/20131001/DC.xmi",
+        "redirect_count": 0,
+        "downloaded_bytes": 0,
+        "sha256": null,
+        "byte_identical_to_pinned_file": null,
+        "source_identity_and_pinned_bytes_unchanged": true,
+        "evidence_path": "docs/bellatrix/standards/uml/imports/retrieval/DC.https-verification.json"
+      }
+    },
+    {
+      "path": "docs/bellatrix/standards/uml/imports/20131001/DI.xmi",
+      "source_url": "http://www.omg.org/spec/DD/20131001/DI.xmi",
+      "sha256": "f421d673d13fcde22781b2f12a8887af98cf5970b9b910aca13d8b20f27812d4",
+      "byte_count": 14439,
+      "xmi_id_count": 77,
+      "href_occurrences": 10,
+      "dependencies": [
+        "http://www.omg.org/spec/DD/20131001/DC.xmi",
+        "http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi",
+        "http://www.omg.org/spec/UML/20131001/UML.xmi"
+      ],
+      "package_identity": [
+        {
+          "name": "DI",
+          "uri": "http://www.omg.org/spec/DD/20131001/DI",
+          "xmi_id": "_0"
+        }
+      ],
+      "document_version": "20131001",
+      "retrieved_at_utc": "2026-11-03T04:33:03.126172+00:00",
+      "retrieval": {
+        "method": "GET",
+        "final_url": "http://www.omg.org/spec/DD/20131001/DI.xmi",
+        "http_status": 200,
+        "redirect_count": 0,
+        "content_type": "text/xml",
+        "downloaded_bytes": 14439,
+        "curl_exit_code": 0,
+        "response_headers_path": "docs/bellatrix/standards/uml/imports/retrieval/DI.http-headers.txt"
+      },
+      "https_transport_verification": {
+        "requested_url": "https://www.omg.org/spec/DD/20131001/DI.xmi",
+        "verified_at_utc": "2026-11-03T04:50:56.630128+00:00",
+        "status": "unverified_connection_timeout",
+        "certificate_verification": "enabled (curl default; no insecure or TLS-bypass option)",
+        "tls_handshake_completed": false,
+        "http_status": 0,
+        "curl_exit_code": 28,
+        "curl_error": "curl: (28) Connection timed out after 20082 milliseconds",
+        "final_url": "https://www.omg.org/spec/DD/20131001/DI.xmi",
+        "redirect_count": 0,
+        "downloaded_bytes": 0,
+        "sha256": null,
+        "byte_identical_to_pinned_file": null,
+        "source_identity_and_pinned_bytes_unchanged": true,
+        "evidence_path": "docs/bellatrix/standards/uml/imports/retrieval/DI.https-verification.json"
+      }
+    },
+    {
+      "path": "docs/bellatrix/standards/uml/imports/20131001/PrimitiveTypes.xmi",
+      "source_url": "http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi",
+      "sha256": "8a2c3944bc4760303350d1220a2bfffcbe75883a343e0d77548904838d3c3347",
+      "byte_count": 2880,
+      "xmi_id_count": 17,
+      "href_occurrences": 0,
+      "dependencies": [],
+      "package_identity": [
+        {
+          "name": "PrimitiveTypes",
+          "uri": "http://www.omg.org/spec/PrimitiveTypes/20131001",
+          "xmi_id": "_0"
+        }
+      ],
+      "document_version": "20131001",
+      "retrieved_at_utc": "2026-11-03T04:33:22.996570+00:00",
+      "retrieval": {
+        "method": "GET",
+        "final_url": "http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi",
+        "http_status": 200,
+        "redirect_count": 0,
+        "content_type": "text/xml",
+        "downloaded_bytes": 2880,
+        "curl_exit_code": 0,
+        "response_headers_path": "docs/bellatrix/standards/uml/imports/retrieval/PrimitiveTypes.http-headers.txt"
+      },
+      "https_transport_verification": {
+        "requested_url": "https://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi",
+        "verified_at_utc": "2026-11-03T04:50:56.938799+00:00",
+        "status": "unverified_connection_timeout",
+        "certificate_verification": "enabled (curl default; no insecure or TLS-bypass option)",
+        "tls_handshake_completed": false,
+        "http_status": 0,
+        "curl_exit_code": 28,
+        "curl_error": "curl: (28) Connection timed out after 20068 milliseconds",
+        "final_url": "https://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi",
+        "redirect_count": 0,
+        "downloaded_bytes": 0,
+        "sha256": null,
+        "byte_identical_to_pinned_file": null,
+        "source_identity_and_pinned_bytes_unchanged": true,
+        "evidence_path": "docs/bellatrix/standards/uml/imports/retrieval/PrimitiveTypes.https-verification.json"
+      }
+    },
+    {
+      "path": "docs/bellatrix/standards/uml/imports/20131001/UML.xmi",
+      "source_url": "http://www.omg.org/spec/UML/20131001/UML.xmi",
+      "sha256": "f01fe6c97eefed64a3f0fddd19474734f8443fcec1d95e406bb7d4b141ca1dce",
+      "byte_count": 1432544,
+      "xmi_id_count": 6716,
+      "href_occurrences": 198,
+      "dependencies": [
+        "http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi"
+      ],
+      "package_identity": [
+        {
+          "name": "UML",
+          "uri": "http://www.omg.org/spec/UML/20131001",
+          "xmi_id": "_0"
+        }
+      ],
+      "document_version": "20131001",
+      "retrieved_at_utc": "2026-11-03T04:33:23.178586+00:00",
+      "retrieval": {
+        "method": "GET",
+        "final_url": "http://www.omg.org/spec/UML/20131001/UML.xmi",
+        "http_status": 200,
+        "redirect_count": 0,
+        "content_type": "text/xml",
+        "downloaded_bytes": 1432544,
+        "curl_exit_code": 0,
+        "response_headers_path": "docs/bellatrix/standards/uml/imports/retrieval/UML.http-headers.txt"
+      },
+      "https_transport_verification": {
+        "requested_url": "https://www.omg.org/spec/UML/20131001/UML.xmi",
+        "verified_at_utc": "2026-11-03T04:50:56.624684+00:00",
+        "status": "unverified_connection_timeout",
+        "certificate_verification": "enabled (curl default; no insecure or TLS-bypass option)",
+        "tls_handshake_completed": false,
+        "http_status": 0,
+        "curl_exit_code": 28,
+        "curl_error": "curl: (28) Connection timed out after 20065 milliseconds",
+        "final_url": "https://www.omg.org/spec/UML/20131001/UML.xmi",
+        "redirect_count": 0,
+        "downloaded_bytes": 0,
+        "sha256": null,
+        "byte_identical_to_pinned_file": null,
+        "source_identity_and_pinned_bytes_unchanged": true,
+        "evidence_path": "docs/bellatrix/standards/uml/imports/retrieval/UML.https-verification.json"
+      }
+    }
+  ],
+  "closure_validation": {
+    "original_roots": [
+      {
+        "path": "docs/bellatrix/standards/uml/20161101/PrimitiveTypes.xmi",
+        "sha256": "62d12217fcd26037fc917709e2a896600af574efd6412c110e2a711395a69849",
+        "byte_count": 2880,
+        "xmi_id_count": 17,
+        "href_occurrences": 0,
+        "dependencies": [],
+        "package_identity": [
+          {
+            "name": "PrimitiveTypes",
+            "uri": "http://www.omg.org/spec/PrimitiveTypes/20161101",
+            "xmi_id": "_0"
+          }
+        ],
+        "reference_url": "http://www.omg.org/spec/UML/20161101/PrimitiveTypes.xmi"
+      },
+      {
+        "path": "docs/bellatrix/standards/uml/20161101/StandardProfile.xmi",
+        "sha256": "b505ebdee791f857da838b5be3394ebd9a857fd044a89625cb71f56badb867bc",
+        "byte_count": 29801,
+        "xmi_id_count": 177,
+        "href_occurrences": 35,
+        "dependencies": [
+          "http://www.omg.org/spec/UML/20161101/UML.xmi"
+        ],
+        "package_identity": [
+          {
+            "name": "StandardProfile",
+            "uri": "http://www.omg.org/spec/UML/20161101/StandardProfile",
+            "xmi_id": "_0"
+          }
+        ],
+        "reference_url": "http://www.omg.org/spec/UML/20161101/StandardProfile.xmi"
+      },
+      {
+        "path": "docs/bellatrix/standards/uml/20161101/UML.xmi",
+        "sha256": "e8166c91f51b8a0c015a90101b83d2249d03252e9f9a500a6511654347804f21",
+        "byte_count": 1901856,
+        "xmi_id_count": 6777,
+        "href_occurrences": 200,
+        "dependencies": [
+          "http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi"
+        ],
+        "package_identity": [
+          {
+            "name": "UML",
+            "uri": "http://www.omg.org/spec/UML/20161101",
+            "xmi_id": "_0"
+          }
+        ],
+        "reference_url": "http://www.omg.org/spec/UML/20161101/UML.xmi"
+      },
+      {
+        "path": "docs/bellatrix/standards/uml/20161101/UMLDI.xmi",
+        "sha256": "5ac8d9414ccfdbca156fc33aeb45b5a36502c33fea391a0fa8bf7b8b1529124c",
+        "byte_count": 91173,
+        "xmi_id_count": 427,
+        "href_occurrences": 67,
+        "dependencies": [
+          "http://www.omg.org/spec/DD/20131001/DI.xmi",
+          "http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi",
+          "http://www.omg.org/spec/UML/20161101/UML.xmi"
+        ],
+        "package_identity": [
+          {
+            "name": "UMLDI",
+            "uri": "http://www.omg.org/spec/UML/20161101/UMLDI",
+            "xmi_id": "_0"
+          }
+        ],
+        "reference_url": "http://www.omg.org/spec/UML/20161101/UMLDI.xmi"
+      }
+    ],
+    "document_count": 8,
+    "href_occurrences": 522,
+    "resolved_href_occurrences": 522,
+    "unresolved_references": [],
+    "unavailable_sources": [],
+    "scope": "Every href attribute in all eight documents was resolved to an existing xmi:id in its exact referenced document. This verifies document and fragment closure, not UML behavioral conformance."
+  },
+  "https_transport_verification_method": "curl --silent --location --fail --show-error --connect-timeout 20 --max-time 90 --dump-header <headers> --output <temporary-file> --write-out %{json} <https-equivalent>; normal certificate verification remained enabled. All four attempts timed out before a response or completed TLS handshake, so HTTPS equivalence is not established."
+}

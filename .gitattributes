@@ -3,3 +3,9 @@
 
 # Ensure the WSL script always has LF line endings, even on Windows
 crates/zed/resources/windows/zed.sh text eol=lf
+
+# Preserve the pinned OMG bytes used for provenance and reproducible extraction.
+docs/bellatrix/standards/uml/**/*.xmi -text
+crates/bellatrix_mde/src/uml/metamodel.rs text eol=lf
+crates/bellatrix_mde/src/uml/metamodel.inventory.json text eol=lf
+script/bellatrix_mde/bellatrix_uml_catalog.py text eol=lf

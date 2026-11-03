@@ -314,7 +314,13 @@ impl<'a> NamedElementRef<'a> {
     }
     pub fn visibility(self) -> Option<VisibilityKind> {
         match self.0.properties().get("visibility") {
-            None if self.0.conforms_to("PackageableElement") => Some(VisibilityKind::Public),
+            None => self.0.metaclass()
+                .and_then(|metaclass| super::schema::uml_property(metaclass, "visibility").ok().flatten())
+                .and_then(|property| super::schema::effective_default(property).ok().flatten())
+                .and_then(|default| match default {
+                    super::schema::DefaultValue::Enumeration { name, .. } => VisibilityKind::from_name(name),
+                    _ => None,
+                }),
             value => value
                 .and_then(Value::as_str)
                 .and_then(VisibilityKind::from_name),
@@ -593,6 +599,9 @@ impl<'a> Model<'a> {
                     }
                 }
             }
+        }
+        for element in self.elements() {
+            issues.extend(super::schema::validate_element(element));
         }
         issues
     }

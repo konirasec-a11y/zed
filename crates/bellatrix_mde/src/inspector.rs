@@ -54,7 +54,7 @@ pub struct ElementInspector {
     pub parts: Vec<InspectorMember>,
 }
 
-const VISIBILITY: &[&str] = &["public", "protected", "private", "package"];
+const VISIBILITY: &[&str] = &["public", "private", "protected", "package"];
 
 #[derive(Clone, Copy)]
 struct Declared {
@@ -120,6 +120,40 @@ fn inherited_value(element: &Element, key: &str, fallback: fn() -> Value) -> Val
     element.properties.get(key).cloned().unwrap_or_else(|| {
         if key == "body" && crate::uml::root::ElementRef::Object(element).comment().is_some() { json!(element.name) } else { fallback() }
     })
+}
+
+fn apply_normative_contracts(element: crate::uml::root::ElementRef<'_>, properties: &mut [InspectorProperty]) {
+    use crate::uml::schema::{self, ScalarKind};
+    use crate::uml::types::StandardPrimitiveType;
+    let Some(metaclass) = element.metaclass() else { return; };
+    for field in properties {
+        let Some(key) = field.path.strip_prefix("properties.") else { continue; };
+        let Ok(Some(descriptor)) = schema::uml_property(metaclass, key) else { continue; };
+        if schema::uses_legacy_text_adapter(descriptor, &field.value) { continue; }
+        if descriptor.is_read_only || descriptor.is_derived {
+            field.editor = PropertyEditor::ReadOnly;
+            field.editable = false;
+            continue;
+        }
+        let Ok(kind) = schema::scalar_kind(descriptor) else { continue; };
+        field.editable = true;
+        field.editor = match kind {
+            ScalarKind::Enumeration(literals) => PropertyEditor::Choice(literals),
+            ScalarKind::Primitive(StandardPrimitiveType::Boolean) => PropertyEditor::Boolean,
+            ScalarKind::Primitive(StandardPrimitiveType::Integer | StandardPrimitiveType::UnlimitedNatural) => PropertyEditor::Text,
+            ScalarKind::Primitive(StandardPrimitiveType::Real) => PropertyEditor::Number,
+            ScalarKind::Primitive(StandardPrimitiveType::String) => if field.editor == PropertyEditor::Multiline { PropertyEditor::Multiline } else { PropertyEditor::Text },
+        };
+        if !element.properties().contains_key(key) {
+            match schema::effective_default(descriptor) {
+                Ok(Some(default)) => {
+                    if let Some(value) = default.scalar_json() { field.value = value; }
+                },
+                Ok(None) if descriptor.lower == "0" && key != "body" => field.value = Value::Null,
+                _ => {},
+            }
+        }
+    }
 }
 
 fn root_properties(section: &ModelingSection, id: &str) -> Vec<InspectorProperty> {
@@ -189,6 +223,7 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
                 group:"Other properties",editor,value:value.clone(),editable,
             });
         }
+        apply_normative_contracts(crate::uml::root::ElementRef::Relationship(relation), &mut properties);
         return Some(ElementInspector {
             element_id:relation.id.clone(),kind:relation.kind.clone(),
             name:format!("{source} → {target}"),
@@ -270,6 +305,7 @@ pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementIns
             }
         }
     }
+    apply_normative_contracts(crate::uml::root::ElementRef::Object(element), &mut properties);
     Some(ElementInspector {element_id:element.id.clone(),kind:element.kind.clone(),
         name:semantic_name.into(),display_label,properties,attributes,operations,receptions,
         template_parameters,ports,parts})
@@ -283,7 +319,14 @@ pub fn set_inspected_property(
     let field = inspected.properties.iter().find(|f| f.path == path)
         .ok_or("property is not declared")?;
     if !field.editable { return Err("property is read-only".into()); }
+    let optional_null = value.is_null() && path.strip_prefix("properties.").is_some_and(|key| {
+        crate::uml::root::Model::from_section(section).element(id)
+            .and_then(|element| element.metaclass())
+            .and_then(|metaclass| crate::uml::schema::uml_property(metaclass, key).ok().flatten())
+            .is_some_and(|descriptor| crate::uml::schema::validate_scalar(descriptor, &value) == Ok(Ok(())))
+    });
     match field.editor {
+        _ if optional_null => {},
         PropertyEditor::ReadOnly => return Err("property is read-only".into()),
         PropertyEditor::Text | PropertyEditor::Multiline => {
             value.as_str().ok_or("expected string")?;
@@ -295,6 +338,11 @@ pub fn set_inspected_property(
             return Err("invalid option".into());
         },
         _ => {},
+    }
+    if let Some(key) = path.strip_prefix("properties.")
+        && let Some(element) = crate::uml::root::Model::from_section(section).element(id)
+        && let Some(metaclass) = element.metaclass() {
+        crate::uml::schema::validate_edit(metaclass, key, &value)?;
     }
     let diagram_relation = section.diagrams.iter().any(|diagram|
         diagram.views.iter().any(|view| view.subject.as_deref() == Some(id)));

@@ -122,6 +122,32 @@ com rejeição explícita de legado e nenhuma destruição de documentos.
 
 ## 4. Concluir a normalização e validação UML 2.5.1
 
+**Prioridade adotada em 2026-11-03: construir o motor UML Rust a partir dos
+contratos normativos, não apenas um catálogo ou editor de figuras.**
+
+1. Ler UML.xmi, UMLDI.xmi, PrimitiveTypes.xmi e StandardProfile.xmi, resolvendo
+   identificadores e imports normativos transitivos com versão e proveniência.
+2. Gerar a estrutura repetitiva em Rust: metaclasses, heranças, propriedades,
+   tipos, referências, cardinalidades, defaults e descritores de restrições.
+3. Consumir esses contratos no estado canônico, nos comandos e na validação.
+   Implementar as regras semânticas e propriedades derivadas; texto OCL
+   armazenado e structs sem consumidores não são regras executadas.
+4. Fazer a UI consumir os mesmos contratos para campos, seletores e operações,
+   com apresentação e notação orientadas também pelo PDF completo.
+
+O núcleo do motor é o **grafo UML tipado canônico**. As definições extraídas
+formam seu grafo de tipos/contratos; o modelo autorado é um grafo tipado por
+esse metamodelo. Structs, traits, comandos, validação e Views acessam esse
+estado, sem um modelo de objetos paralelo nem cópias autoritativas por painel.
+
+Existem duas gerações distintas: **XMI OMG → estrutura do motor UML Rust**;
+posteriormente **modelo UML autorado e validado → grafos de transformação →
+código da aplicação**. Um grafo de armazenamento não substitui os grafos-alvo.
+Só a revisão validada correspondente pode alimentar a geração; diagnósticos
+impeditivos precisam ser resolvidos. Esta prioridade serve ao marco completo
+UML estrutural e não exclui os contratos de primitivos, UMLDI ou perfis.
+
+
 Usar a [especificação completa UML 2.5.1](https://www.omg.org/spec/UML/2.5.1/PDF)
 e os originais versionados [UML.xmi](standards/uml/20161101/UML.xmi),
 [UMLDI.xmi](standards/uml/20161101/UMLDI.xmi),

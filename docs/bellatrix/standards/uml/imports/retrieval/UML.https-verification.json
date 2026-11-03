@@ -1,0 +1,16 @@
+{
+  "requested_url": "https://www.omg.org/spec/UML/20131001/UML.xmi",
+  "verified_at_utc": "2026-11-03T04:50:56.624684+00:00",
+  "status": "unverified_connection_timeout",
+  "certificate_verification": "enabled (curl default; no insecure or TLS-bypass option)",
+  "tls_handshake_completed": false,
+  "http_status": 0,
+  "curl_exit_code": 28,
+  "curl_error": "curl: (28) Connection timed out after 20065 milliseconds",
+  "final_url": "https://www.omg.org/spec/UML/20131001/UML.xmi",
+  "redirect_count": 0,
+  "downloaded_bytes": 0,
+  "sha256": null,
+  "byte_identical_to_pinned_file": null,
+  "source_identity_and_pinned_bytes_unchanged": true
+}
