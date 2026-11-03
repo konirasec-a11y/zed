@@ -30,6 +30,10 @@ pub enum MdeUiCommand {
         completion: watch::Sender<Option<Result<u64, String>>>,
     },
     SetViewRouting(ModelingSetViewRoutingRequested),
+    SetViewRoutingTracked {
+        request: ModelingSetViewRoutingRequested,
+        completion: watch::Sender<Option<Result<u64, String>>>,
+    },
     CreateDiagram(ModelingCreateDiagramRequested),
     RenameDiagram(ModelingRenameDiagramRequested),
     DeleteDiagram(ModelingDeleteDiagramRequested),
@@ -107,6 +111,22 @@ impl MdeUiBridge {
                             .query::<ModelingSetViewRouting>(Routing::Unscoped, request)
                             .await,
                     ),
+                    MdeUiCommand::SetViewRoutingTracked {
+                        request,
+                        completion,
+                    } => {
+                        let result = cordis
+                            .query::<ModelingSetViewRouting>(Routing::Unscoped, request)
+                            .await;
+                        let receipt = match &result {
+                            Ok(QueryOutcome::Answer(Ok(revision))) => Ok(*revision),
+                            Ok(QueryOutcome::Answer(Err(error))) => Err(error.to_string()),
+                            Ok(QueryOutcome::Miss) => Err("Cordis responder unavailable".into()),
+                            Err(error) => Err(error.to_string()),
+                        };
+                        completion.send_replace(Some(receipt));
+                        describe("View routing updated", result)
+                    }
                     MdeUiCommand::ValidateDiagram(request) => describe_validation(
                         cordis
                             .query::<ModelingValidateDiagram>(Routing::Unscoped, request)

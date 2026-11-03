@@ -94,8 +94,24 @@ pub(crate) fn preview_is_active(workspace: &Workspace, cx: &App) -> bool {
     active_preview_label(workspace, cx).is_some()
 }
 
-fn suspend_editing(workspace: &Workspace, source: &MdeUiSource, label: String, cx: &mut App) {
-    if source.set_preview_context(Some(label)) {
+pub(crate) fn active_workbench(
+    workspace: &Workspace,
+    cx: &App,
+) -> Option<Entity<MdeWorkbenchItem>> {
+    workspace
+        .active_item_as::<NativeMdePreviewItem>(cx)
+        .map(|item| item.read(cx).workbench.clone())
+        .or_else(|| workspace.active_item_as::<MdeWorkbenchItem>(cx))
+}
+
+fn prepare_preview_panels(
+    workspace: &mut Workspace,
+    source: &MdeUiSource,
+    preview: &Entity<NativeMdePreviewItem>,
+    window: &mut Window,
+    cx: &mut Context<Workspace>,
+) {
+    if source.set_preview_context(Some(preview.read(cx).label())) {
         let items = workspace
             .items_of_type::<MdeWorkbenchItem>(cx)
             .collect::<Vec<_>>();
@@ -103,7 +119,8 @@ fn suspend_editing(workspace: &Workspace, source: &MdeUiSource, label: String, c
             item.update(cx, |item, cx| item.refresh(cx));
         }
     }
-    crate::panels::refresh_context(workspace, cx);
+    let workbench = preview.read(cx).workbench.clone();
+    crate::panels::attach_panels(workspace, workbench, window, cx);
 }
 
 pub(crate) fn register_preview_action(
@@ -176,8 +193,13 @@ pub(crate) fn register_preview_action(
                             .items_of_type::<NativeMdePreviewItem>(cx)
                             .find(|item| item.read(cx).buffer.entity_id() == buffer.entity_id());
                         if let Some(item) = existing {
-                            let label = item.read(cx).label();
-                            suspend_editing(workspace, &presentation_source, label, cx);
+                            prepare_preview_panels(
+                                workspace,
+                                &presentation_source,
+                                &item,
+                                window,
+                                cx,
+                            );
                             workspace.activate_item(&item, true, true, window, cx);
                             true
                         } else {
@@ -212,8 +234,7 @@ pub(crate) fn register_preview_action(
                             .map_err(|error| error.message().to_owned())?;
                         let item =
                             cx.new(|cx| NativeMdePreviewItem::new(buffer, baseline, lease, cx));
-                        let label = item.read(cx).label();
-                        suspend_editing(workspace, &presentation_source, label, cx);
+                        prepare_preview_panels(workspace, &presentation_source, &item, window, cx);
                         workspace.add_item_to_active_pane(Box::new(item), None, true, window, cx);
                         Ok::<(), String>(())
                     })

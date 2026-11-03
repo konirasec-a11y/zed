@@ -113,7 +113,7 @@ impl MdeUiSource {
 
     pub fn submit(&self, command: MdeUiCommand) -> Result<(), String> {
         if self.is_presentation_suspended() {
-            return Err("The active document is a read-only preview. Return to the MDE Workbench before editing its model.".into());
+            return Err("This Workbench is not the active MDE document. Select its MDE tab before editing or saving its model.".into());
         }
         if self.is_read_only() {
             return Err("Read-only preview: edit the source in the native editor, then close and reopen the preview".into());

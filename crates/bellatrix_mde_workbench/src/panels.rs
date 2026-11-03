@@ -80,12 +80,12 @@ mod tests {
 }
 
 struct PanelState {
-    item: Entity<MdeWorkbenchItem>,
+    item: Option<gpui::WeakEntity<MdeWorkbenchItem>>,
     focus: FocusHandle,
     position: DockPosition,
     top_height: f32,
     split_start: Option<(Pixels, f32)>,
-    _listener: Subscription,
+    _listener: Option<Subscription>,
 }
 impl PanelState {
     fn new<T: 'static>(
@@ -96,14 +96,21 @@ impl PanelState {
     ) -> Self {
         let listener = cx.observe(&item, |_, _, cx| cx.notify());
         Self {
-            item,
+            item: Some(item.downgrade()),
             focus: cx.focus_handle(),
             position,
             top_height,
             split_start: None,
-            _listener: listener,
+            _listener: Some(listener),
         }
     }
+    fn bind<T: 'static>(&mut self, item: Option<&Entity<MdeWorkbenchItem>>, cx: &mut Context<T>) {
+        self._listener = item.map(|item| cx.observe(item, |_, _, cx| cx.notify()));
+        self.item = item.map(Entity::downgrade);
+        self.split_start = None;
+        cx.notify();
+    }
+
     fn start_split(&mut self, y: Pixels) {
         self.split_start = Some((y, self.top_height));
     }
@@ -254,17 +261,14 @@ impl Panel for MdeLeftPanel {
 }
 impl Render for MdeLeftPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        if self
-            .state
-            .item
-            .read(cx)
-            .source()
-            .is_presentation_suspended()
-        {
-            return preview_context_notice(&self.state.item, cx).into_any_element();
-        }
+        let Some(item) = self.state.item.as_ref().and_then(gpui::WeakEntity::upgrade) else {
+            return div()
+                .p_3()
+                .child(Label::new("Select an MDE document to inspect its model."))
+                .into_any_element();
+        };
+        let read_only = item.read(cx).source().is_read_only();
         let palette = WorkbenchPalette::current(cx);
-        let item = self.state.item.clone();
         let state = item.read(cx);
         let active = state.active_diagram().map(str::to_owned);
         let chosen = state.selected_tool();
@@ -305,7 +309,9 @@ impl Render for MdeLeftPanel {
                                         owner.update(cx, |workbench, cx| {
                                             workbench.select_diagram(diagram_id.clone(), cx)
                                         });
-                                        window.dispatch_action(Box::new(OpenMdeWorkbench), cx);
+                                        if !owner.read(cx).source().is_read_only() {
+                                            window.dispatch_action(Box::new(OpenMdeWorkbench), cx);
+                                        }
                                     }),
                             ),
                         ),
@@ -519,6 +525,9 @@ impl Render for MdeLeftPanel {
             .flex_col()
             .overflow_hidden()
             .bg(palette.panel)
+            .when(read_only, |panel| {
+                panel.child(Label::new("Read-only preview"))
+            })
             .on_mouse_move(cx.listener(|panel, event: &MouseMoveEvent, _, cx| {
                 if panel.state.move_split(event.position.y, event.dragging()) {
                     cx.notify();
@@ -555,7 +564,13 @@ impl Render for MdeLeftPanel {
                                     cx.notify();
                                 }),
                             )
-                            .action(ui::DropdownMenu::new("mde-new-diagram", "New", create_menu)),
+                            .when(!read_only, |header| {
+                                header.action(ui::DropdownMenu::new(
+                                    "mde-new-diagram",
+                                    "New",
+                                    create_menu,
+                                ))
+                            }),
                     )
                     .when(self.diagrams_open, |pane| {
                         pane.child(
@@ -625,18 +640,23 @@ impl Render for MdeLeftPanel {
                     .when(self.toolbox_open, |pane| pane.flex_1())
                     .when(!self.toolbox_open, |pane| pane.flex_none())
                     .child(
-                        PaneHeader::new("Toolbox")
-                            .toggle(
-                                self.toolbox_open,
-                                cx.listener(|panel, _, window, cx| {
-                                    panel.toolbox_open = !panel.toolbox_open;
-                                    if !panel.toolbox_open {
-                                        window.focus(&panel.state.focus, cx);
-                                    }
-                                    cx.notify();
-                                }),
-                            )
-                            .action(
+                        PaneHeader::new(if read_only {
+                            "Toolbox · read-only"
+                        } else {
+                            "Toolbox"
+                        })
+                        .toggle(
+                            self.toolbox_open,
+                            cx.listener(|panel, _, window, cx| {
+                                panel.toolbox_open = !panel.toolbox_open;
+                                if !panel.toolbox_open {
+                                    window.focus(&panel.state.focus, cx);
+                                }
+                                cx.notify();
+                            }),
+                        )
+                        .when(!read_only, |header| {
+                            header.action(
                                 ui::IconButton::new("mde-search-tools", IconName::MagnifyingGlass)
                                     .toggle_state(self.search_open)
                                     .on_click(cx.listener(|panel, _, window, cx| {
@@ -652,9 +672,10 @@ impl Render for MdeLeftPanel {
                                         }
                                         cx.notify();
                                     })),
-                            ),
+                            )
+                        }),
                     )
-                    .when(self.toolbox_open, |pane| {
+                    .when(self.toolbox_open && !read_only, |pane| {
                         pane.when(self.search_open, |pane| {
                             pane.child(div().p_2().child(self.search_input.clone()))
                         })
@@ -782,21 +803,26 @@ pub struct MdeRightPanel {
     editing_id: Option<String>,
     pub(crate) property_drafts:
         HashMap<crate::inspector_drafts::DraftKey, crate::property_editor::InspectorDraft>,
-    style_target_id: Option<(String, String)>,
-    pub(crate) pending_theme_resets:
-        HashMap<(String, String), crate::style_editor::PendingThemeReset>,
-    pub(crate) style_listeners: HashMap<(String, String), Vec<Subscription>>,
-    pub(crate) style_revisions: HashMap<(String, String), u64>,
-    pub(crate) style_baselines: HashMap<(String, String), bellatrix_mde::Style>,
-    pub(crate) style_inputs: HashMap<(String, String), HashMap<String, Entity<InputField>>>,
+    style_target_id: Option<crate::style_editor::StyleKey>,
+    pub(crate) style_drafts:
+        HashMap<crate::style_editor::StyleKey, crate::style_editor::StyleDraft>,
     pub(crate) inspector_styles_open: bool,
     collapsed_elements: HashSet<String>,
+    collapsed_by_document: HashMap<gpui::EntityId, HashSet<String>>,
     explorer_open: bool,
     inspector_open: bool,
     pub(crate) inspector_documentation_open: bool,
     pub(crate) inspector_advanced_open: bool,
 }
 impl MdeRightPanel {
+    pub(crate) fn is_bound_to(&self, item: &Entity<MdeWorkbenchItem>) -> bool {
+        self.state
+            .item
+            .as_ref()
+            .and_then(gpui::WeakEntity::upgrade)
+            .is_some_and(|bound| bound.entity_id() == item.entity_id())
+    }
+
     pub fn new(
         item: Entity<MdeWorkbenchItem>,
         _window: &mut Window,
@@ -806,14 +832,11 @@ impl MdeRightPanel {
             state: PanelState::new(item, DockPosition::Right, 230.0, cx),
             editing_id: None,
             property_drafts: HashMap::new(),
-            style_baselines: HashMap::new(),
-            style_inputs: HashMap::new(),
-            style_revisions: HashMap::new(),
+            style_drafts: HashMap::new(),
             style_target_id: None,
-            style_listeners: HashMap::new(),
-            pending_theme_resets: HashMap::new(),
             inspector_styles_open: true,
             collapsed_elements: HashSet::new(),
+            collapsed_by_document: HashMap::new(),
             explorer_open: true,
             inspector_open: true,
             inspector_documentation_open: true,
@@ -870,19 +893,16 @@ impl Panel for MdeRightPanel {
 }
 impl Render for MdeRightPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        if self
-            .state
-            .item
-            .read(cx)
-            .source()
-            .is_presentation_suspended()
-        {
-            return preview_context_notice(&self.state.item, cx).into_any_element();
-        }
+        let Some(item) = self.state.item.as_ref().and_then(gpui::WeakEntity::upgrade) else {
+            return div()
+                .p_3()
+                .child(Label::new("Select an MDE document to inspect its model."))
+                .into_any_element();
+        };
+        let read_only = item.read(cx).source().is_read_only();
         let palette = WorkbenchPalette::current(cx);
         let panel_background = palette.panel;
         let panel_border = palette.border;
-        let item = self.state.item.clone();
         let selected_id = item.read(cx).selected_element().map(str::to_owned);
         let active_diagram = item.read(cx).active_diagram().map(str::to_owned);
         let snapshot = item.read(cx).source().snapshot().ok();
@@ -976,7 +996,11 @@ impl Render for MdeRightPanel {
                                     let show_subject = menu_subject.clone();
                                     let delete_owner = menu_owner.clone();
                                     let delete_subject = menu_subject.clone();
+                                    let read_only = menu_owner.read(cx).source().is_read_only();
                                     ui::ContextMenu::build(window, cx, move |menu, _, _| {
+                                        if read_only {
+                                            return menu.header("Read-only preview");
+                                        }
                                         menu.entry(
                                             "Show in active diagram",
                                             None,
@@ -1092,27 +1116,28 @@ impl Render for MdeRightPanel {
                 );
             }
         }
-        if self.editing_id != selected_id {
+        if !read_only && self.editing_id != selected_id {
             if self.property_drafts.values().any(|draft| {
-                draft
-                    .input
-                    .read(cx)
-                    .focus_handle(cx)
-                    .contains_focused(window, cx)
+                draft.input.as_ref().is_some_and(|input| {
+                    input.read(cx).focus_handle(cx).contains_focused(window, cx)
+                })
             }) {
                 window.focus(&self.state.focus, cx);
             }
             self.editing_id = selected_id.clone();
         }
         let inspector_project = item.read(cx).project_id().clone();
-        crate::property_editor::reconcile_inputs(
-            &mut self.property_drafts,
-            inspector_project.as_str(),
-            inspection.as_ref(),
-            snapshot.as_ref().map_or(0, |snapshot| snapshot.revision),
-            window,
-            cx,
-        );
+        if !read_only {
+            crate::property_editor::reconcile_inputs(
+                &mut self.property_drafts,
+                item.clone(),
+                inspector_project.as_str(),
+                inspection.as_ref(),
+                snapshot.as_ref().map_or(0, |snapshot| snapshot.revision),
+                window,
+                cx,
+            );
+        }
         let selected_view = item.read(cx).selected_view.clone();
         let style_target = snapshot.as_ref().and_then(|snapshot| {
             let diagram = snapshot
@@ -1131,123 +1156,56 @@ impl Render for MdeRightPanel {
                 .any(|relation| view.subject.as_deref() == Some(relation.id.as_str()));
             Some((diagram.id.as_str(), view, is_edge))
         });
-        let style_target_id =
-            style_target.map(|(diagram_id, view, _)| (diagram_id.to_owned(), view.id.clone()));
-        if self.style_target_id != style_target_id {
+        let style_target_id = style_target.map(|(diagram_id, view, _)| {
+            (
+                inspector_project.as_str().to_owned(),
+                diagram_id.to_owned(),
+                view.id.clone(),
+            )
+        });
+        if !read_only && self.style_target_id != style_target_id {
             if self
                 .style_target_id
                 .as_ref()
-                .and_then(|key| self.style_inputs.get(key))
-                .is_some_and(|inputs| {
-                    inputs
+                .and_then(|key| self.style_drafts.get(key))
+                .is_some_and(|draft| {
+                    draft
+                        .inputs
                         .values()
                         .any(|input| input.read(cx).focus_handle(cx).contains_focused(window, cx))
                 })
             {
                 window.focus(&self.state.focus, cx);
             }
-            self.style_target_id = style_target_id;
+            self.style_target_id = style_target_id.clone();
         }
-        let mut inspector_rows = if let Some((diagram_id, view, _)) = style_target {
-            let key = (diagram_id.to_owned(), view.id.clone());
-            if !self.style_inputs.contains_key(&key) {
-                let inputs = crate::style_editor::inputs_for_style(&view.style, window, cx);
-                let listeners = inputs
-                    .values()
-                    .map(|input| {
-                        let owner = cx.weak_entity();
-                        input.read(cx).editor().clone().subscribe(
-                            Box::new(move |event, _, cx| {
-                                if event == ErasedEditorEvent::BufferEdited {
-                                    let owner = owner.clone();
-                                    cx.defer(move |cx| {
-                                        if let Err(error) = owner.update(cx, |_, cx| cx.notify()) {
-                                            eprintln!("MDE style input refresh failed: {error}");
-                                        }
-                                    });
-                                }
-                            }),
-                            window,
-                            cx,
-                        )
-                    })
-                    .collect();
-                self.style_listeners.insert(key.clone(), listeners);
-                self.style_inputs.insert(key.clone(), inputs);
-            }
-            if let (Some(pending), Some(inputs), Some(snapshot)) = (
-                self.pending_theme_resets.get(&key),
-                self.style_inputs.get(&key),
-                snapshot.as_ref(),
-            ) {
-                let acknowledgment = crate::style_editor::acknowledge_theme_reset(
-                    pending,
-                    inputs,
-                    snapshot.revision,
-                    &view.style,
+        if !read_only {
+            if let Some((diagram_id, view, _)) = style_target {
+                crate::style_editor::reconcile_style_inputs(
+                    &mut self.style_drafts,
+                    &item,
+                    diagram_id,
+                    view,
+                    snapshot.as_ref().map_or(0, |snapshot| snapshot.revision),
                     window,
                     cx,
                 );
-                if acknowledgment == crate::style_editor::ResetAcknowledgment::Applied {
-                    self.style_baselines.insert(key.clone(), view.style.clone());
-                    self.style_revisions.insert(key.clone(), snapshot.revision);
-                }
-                if acknowledgment != crate::style_editor::ResetAcknowledgment::Pending {
-                    self.pending_theme_resets.remove(&key);
-                }
             }
-            let dirty = self.style_baselines.get(&key).is_some_and(|previous| {
-                self.style_inputs.get(&key).is_some_and(|inputs| {
-                    crate::style_editor::style_inputs_dirty(inputs, previous, cx)
-                        && crate::style_editor::style_inputs_dirty(inputs, &view.style, cx)
-                })
-            });
-            if !dirty && !self.pending_theme_resets.contains_key(&key) {
-                if let (Some(previous), Some(inputs)) =
-                    (self.style_baselines.get(&key), self.style_inputs.get(&key))
-                {
-                    crate::style_editor::sync_style_inputs(
-                        inputs,
-                        previous,
-                        &view.style,
-                        window,
-                        cx,
-                    );
-                }
-                self.style_baselines.insert(key.clone(), view.style.clone());
-                self.style_revisions.insert(
-                    key.clone(),
-                    snapshot.as_ref().map_or(0, |snapshot| snapshot.revision),
-                );
-            }
-            let revision = self.style_revisions.get(&key).copied().unwrap_or(0);
-            let conflict = snapshot
-                .as_ref()
-                .is_some_and(|snapshot| snapshot.revision != revision);
-            crate::style_editor::render_styles(
-                style_target,
-                item.clone(),
-                self.style_inputs.get(&key).unwrap_or(&HashMap::new()),
-                revision,
-                conflict,
-                self.pending_theme_resets.contains_key(&key),
-                self.inspector_styles_open,
-                window,
-                cx,
-            )
-        } else {
-            crate::style_editor::render_styles(
-                None,
-                item.clone(),
-                &HashMap::new(),
-                0,
-                false,
-                false,
-                self.inspector_styles_open,
-                window,
-                cx,
-            )
-        };
+        }
+        let mut inspector_rows = crate::style_editor::render_styles(
+            style_target,
+            item.clone(),
+            if read_only {
+                None
+            } else {
+                style_target_id
+                    .as_ref()
+                    .and_then(|key| self.style_drafts.get(key))
+            },
+            self.inspector_styles_open,
+            window,
+            cx,
+        );
         inspector_rows.extend(render_inspector(
             inspection.as_ref(),
             item.clone(),
@@ -1272,6 +1230,9 @@ impl Render for MdeRightPanel {
             .flex_col()
             .overflow_hidden()
             .bg(panel_background)
+            .when(read_only, |panel| {
+                panel.child(Label::new("Read-only preview"))
+            })
             .on_mouse_move(cx.listener(|panel, event: &MouseMoveEvent, _, cx| {
                 if panel.state.move_split(event.position.y, event.dragging()) {
                     cx.notify();
@@ -1308,14 +1269,16 @@ impl Render for MdeRightPanel {
                                     cx.notify();
                                 }),
                             )
-                            .action(Button::new("mde-save-project", "Save As…").on_click(
-                                move |_, window, cx| {
-                                    window.dispatch_action(
-                                        Box::new(crate::integration::SaveMdeProjectAs),
-                                        cx,
-                                    );
-                                },
-                            )),
+                            .when(!read_only, |header| {
+                                header.action(Button::new("mde-save-project", "Save As…").on_click(
+                                    move |_, window, cx| {
+                                        window.dispatch_action(
+                                            Box::new(crate::integration::SaveMdeProjectAs),
+                                            cx,
+                                        );
+                                    },
+                                ))
+                            }),
                     )
                     .when(self.explorer_open, |pane| {
                         pane.child(
@@ -1406,7 +1369,7 @@ impl Render for MdeRightPanel {
                                 .flex_col()
                                 .gap_1()
                                 .children(inspector_rows)
-                                .when(selected_id.is_some(), |pane| {
+                                .when(selected_id.is_some() && !read_only, |pane| {
                                     pane.child(
                                         div()
                                             .mt_2()
@@ -1516,15 +1479,13 @@ impl Panel for MdeBottomPanel {
 }
 impl Render for MdeBottomPanel {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        if self
-            .state
-            .item
-            .read(cx)
-            .source()
-            .is_presentation_suspended()
-        {
-            return preview_context_notice(&self.state.item, cx).into_any_element();
-        }
+        let Some(item) = self.state.item.as_ref().and_then(gpui::WeakEntity::upgrade) else {
+            return div()
+                .p_3()
+                .child(Label::new("Select an MDE document to inspect its model."))
+                .into_any_element();
+        };
+        let read_only = item.read(cx).source().is_read_only();
         let palette = WorkbenchPalette::current(cx);
         let active = self.active;
         let handle = cx.weak_entity();
@@ -1563,6 +1524,9 @@ impl Render for MdeBottomPanel {
             .flex()
             .flex_col()
             .bg(palette.panel)
+            .when(read_only, |panel| {
+                panel.child(Label::new("Read-only preview"))
+            })
             .child(div().h(px(36.0)).flex().gap_2().children(tabs))
             .child(
                 div()
@@ -1573,7 +1537,7 @@ impl Render for MdeBottomPanel {
                     .p_3()
                     .child(div().whitespace_normal().child(description))
                     .when(active == BottomTab::Diagnostics, |output| {
-                        let feedback = self.state.item.read(cx).feedback();
+                        let feedback = item.read(cx).feedback();
                         output.children(
                             feedback
                                 .lines()
@@ -1588,31 +1552,82 @@ impl Render for MdeBottomPanel {
     }
 }
 
-fn preview_context_notice(item: &Entity<MdeWorkbenchItem>, cx: &App) -> impl IntoElement {
-    let name = item
-        .read(cx)
-        .source()
-        .snapshot()
-        .map(|snapshot| snapshot.name)
-        .unwrap_or_else(|_| "previous Workbench".into());
-    let preview = item
-        .read(cx)
-        .source()
-        .preview_context()
-        .unwrap_or_else(|| "active document".into());
-    div().size_full().p_3().whitespace_normal()
-        .child(Label::new(format!("Read-only preview: {preview}. Editing panels for {name} are suspended, not bound to this preview. Use the MDE button to return to that Workbench.")))
-}
-
-pub(crate) fn refresh_context(workspace: &Workspace, cx: &mut App) {
+pub(crate) fn bind_panels(
+    workspace: &Workspace,
+    item: Option<Entity<MdeWorkbenchItem>>,
+    window: &mut Window,
+    cx: &mut App,
+) {
     if let Some(panel) = workspace.panel::<MdeLeftPanel>(cx) {
-        panel.update(cx, |_, cx| cx.notify());
+        panel.update(cx, |panel, cx| {
+            if panel
+                .search_input
+                .read(cx)
+                .focus_handle(cx)
+                .contains_focused(window, cx)
+            {
+                window.focus(&panel.state.focus, cx);
+            }
+            panel.state.bind(item.as_ref(), cx);
+        });
     }
     if let Some(panel) = workspace.panel::<MdeRightPanel>(cx) {
-        panel.update(cx, |_, cx| cx.notify());
+        panel.update(cx, |panel, cx| {
+            let previous = panel
+                .state
+                .item
+                .as_ref()
+                .and_then(gpui::WeakEntity::upgrade)
+                .map(|item| item.entity_id());
+            let next = item.as_ref().map(Entity::entity_id);
+            if previous != next {
+                let hidden_input_focused = panel.property_drafts.values().any(|draft| {
+                    draft.input.as_ref().is_some_and(|input| {
+                        input.read(cx).focus_handle(cx).contains_focused(window, cx)
+                    })
+                }) || panel.style_drafts.values().any(|draft| {
+                    draft
+                        .inputs
+                        .values()
+                        .any(|input| input.read(cx).focus_handle(cx).contains_focused(window, cx))
+                });
+                if hidden_input_focused {
+                    window.focus(&panel.state.focus, cx);
+                }
+                if let Some(previous) = previous {
+                    panel
+                        .collapsed_by_document
+                        .insert(previous, std::mem::take(&mut panel.collapsed_elements));
+                }
+                panel.collapsed_elements = next
+                    .and_then(|id| panel.collapsed_by_document.remove(&id))
+                    .unwrap_or_default();
+            }
+            panel.state.bind(item.as_ref(), cx);
+            if let Some(item) = item
+                .as_ref()
+                .filter(|item| !item.read(cx).source().is_read_only())
+            {
+                let item = item.downgrade();
+                let owner = cx.weak_entity();
+                cx.defer(move |cx| {
+                    let Some(item) = item.upgrade() else {
+                        return;
+                    };
+                    if let Err(error) = owner.update(cx, |panel, cx| {
+                        if panel.is_bound_to(&item) && !item.read(cx).source().is_read_only() {
+                            crate::property_editor::flush_property_edits(panel, &item, cx);
+                            crate::style_editor::flush_style_edits(panel, &item, cx);
+                        }
+                    }) {
+                        eprintln!("MDE document queue resume failed: {error}");
+                    }
+                });
+            }
+        });
     }
     if let Some(panel) = workspace.panel::<MdeBottomPanel>(cx) {
-        panel.update(cx, |_, cx| cx.notify());
+        panel.update(cx, |panel, cx| panel.state.bind(item.as_ref(), cx));
     }
 }
 
@@ -1622,6 +1637,10 @@ pub fn attach_panels(
     window: &mut Window,
     cx: &mut Context<Workspace>,
 ) {
+    if workspace.panel::<MdeLeftPanel>(cx).is_some() {
+        bind_panels(workspace, Some(item), window, cx);
+        return;
+    }
     workspace.register_action(|workspace, _: &ToggleMdeLeft, window, cx| {
         workspace.toggle_panel_focus::<MdeLeftPanel>(window, cx);
     });

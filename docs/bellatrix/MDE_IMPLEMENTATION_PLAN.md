@@ -292,6 +292,18 @@ suprimir compartimento não apaga semântica; rótulos, setas, curvas manuais,
 ancoragem, zoom e seleção preservam referências. Validar claro/escuro,
 foco/teclado, erros, confirmar/cancelar e resize/collapse/restore do Dock.
 
+Edição reativa é requisito de UX: alterações válidas nos campos e estilos
+emitem os comandos existentes, e eventos/revisões atualizam Canvas, Explorer
+e Inspector do mesmo documento sem botão Apply. Entrada intermediária
+inválida permanece no controle com erro local, sem corromper o modelo.
+Preservar foco, cursor e digitação mais recente durante confirmações
+assíncronas; serializar/coalescer comandos sem ciclos de realimentação nem
+sobrescrita silenciosa em conflito. Trocar documento não redireciona edições
+pendentes. Salvar arquivo continua distinto de editar o modelo em memória.
+MVC/MVVM são referências para avaliar responsabilidades, não exigência de
+introduzir outro framework: reutilizar entidades observáveis GPUI, comandos
+e eventos Cordis, com domínio canônico e estado transitório de apresentação.
+
 **Entrega/aceite P09:** ciclo completo pela UI; modelagem e edição coexistem.
 Sem quebra do histórico textual por alteração MDE. Undo/redo entre Buffer e
 domínio tem contrato explícito, não equivalência presumida. Rejeição de

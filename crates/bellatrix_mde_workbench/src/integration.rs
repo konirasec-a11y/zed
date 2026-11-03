@@ -71,8 +71,9 @@ pub fn register_mde_workspace(
     ]);
 
     cx.observe_new(
-        move |workspace: &mut Workspace, window: Option<&mut Window>, cx| {
+        move |workspace: &mut Workspace, mut window: Option<&mut Window>, cx| {
             let source = source.for_workspace();
+            source.set_preview_context(Some("No active MDE document".into()));
             crate::native_document::register_preview_action(workspace, importer.clone(), source.clone());
             // The full Bellatrix catalog is a native Zed Item. The Workbench
             // remains focused on supported Class and Interface editing gestures.
@@ -91,22 +92,30 @@ pub fn register_mde_workspace(
             let cached_item = Rc::new(RefCell::new(None::<Entity<MdeWorkbenchItem>>));
             let observed_item = Rc::clone(&cached_item);
             let presentation_source = source.clone();
-            cx.subscribe(&cx.entity(), move |workspace, _, event: &workspace::Event, cx| {
+            if let Some(window) = window.as_deref_mut() {
+            cx.subscribe_in(&cx.entity(), window, move |workspace, _, event: &workspace::Event, window, cx| {
                 if matches!(event, workspace::Event::ActiveItemChanged | workspace::Event::ItemRemoved { .. }) {
-                    let preview = crate::native_document::active_preview_label(workspace, cx);
-                    if presentation_source.set_preview_context(preview) {
+                    let item = crate::native_document::active_workbench(workspace, cx);
+                    let inactive_context = crate::native_document::active_preview_label(workspace, cx)
+                        .or_else(|| item.is_none().then(|| "No active MDE document".to_owned()));
+                    if presentation_source.set_preview_context(inactive_context) {
                         if let Some(item) = observed_item.borrow().clone() {
                             item.update(cx, |item, cx| item.refresh(cx));
                         }
                     }
-                    panels::refresh_context(workspace, cx);
+                    panels::bind_panels(workspace, item, window, cx);
                 }
             }).detach();
+            }
             let save_item = Rc::clone(&cached_item);
             let save_prompt_pending = Rc::new(Cell::new(false));
             workspace.register_action(move |workspace, _: &SaveMdeProjectAs, window, cx| {
                 if crate::native_document::preview_is_active(workspace, cx) {
                     workspace.show_error("The active MDE preview is read-only. Save source edits through the native editor.", cx);
+                    return;
+                }
+                if workspace.active_item_as::<MdeWorkbenchItem>(cx).is_none() {
+                    workspace.show_error("Select the MDE Workbench before saving its project", cx);
                     return;
                 }
                 if !workspace.project().read(cx).is_local() {
@@ -182,11 +191,14 @@ pub fn register_mde_workspace(
             let action_item = Rc::clone(&cached_item);
             let action_source = source.clone();
             workspace.register_action(move |workspace, _: &OpenMdeWorkbench, window, cx| {
+                action_source.set_preview_context(None);
                 if let Some(item) = workspace.item_of_type::<MdeWorkbenchItem>(cx) {
+                    panels::attach_panels(workspace, item.clone(), window, cx);
                     workspace.activate_item(&item, true, true, window, cx);
                     return;
                 }
                 if let Some(item) = action_item.borrow().clone() {
+                    panels::attach_panels(workspace, item.clone(), window, cx);
                     workspace.add_item_to_active_pane(Box::new(item), None, true, window, cx);
                     return;
                 }
@@ -211,6 +223,7 @@ pub fn register_mde_workspace(
                     // Only an explicitly configured startup source authorizes
                     // auto-opening; an empty/restoring Workspace is not intent.
                     if auto_open_configured_source {
+                        startup_source.set_preview_context(None);
                         let cached = startup_item.borrow().clone();
                         if let Some(item) = workspace.item_of_type::<MdeWorkbenchItem>(cx) {
                             *startup_item.borrow_mut() = Some(item);

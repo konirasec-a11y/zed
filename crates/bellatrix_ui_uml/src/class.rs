@@ -1,7 +1,9 @@
 //! Shared classifier labels, compartments and editing. The notation selects the silhouette.
 use crate::{inline_edit::UmlInlineNameEditor, interface::UmlInterfaceBall};
 use bellatrix_design_system::Palette;
-use bellatrix_mde::{ClassifierPresentation, UmlHeader, UmlNotation, uml_header, uml_notation};
+use bellatrix_mde::{
+    ClassifierPresentation, MemberPresentation, UmlHeader, UmlNotation, uml_header, uml_notation,
+};
 use gpui::{
     App, Entity, InteractiveElement, IntoElement, MouseButton, RenderOnce, SharedString, Window,
     div, prelude::*, px, rgb,
@@ -50,6 +52,7 @@ pub(crate) type Action = Rc<dyn Fn(&mut Window, &mut App)>;
 pub(crate) struct MemberRow {
     pub(crate) id: Option<String>,
     pub(crate) title: SharedString,
+    pub(crate) presentation: MemberPresentation,
 }
 #[derive(Clone)]
 pub(crate) struct MemberInteractions {
@@ -149,6 +152,7 @@ impl UmlClassifier {
         self.attributes.push(MemberRow {
             id: None,
             title: value.into(),
+            presentation: MemberPresentation::default(),
         });
         self
     }
@@ -156,6 +160,7 @@ impl UmlClassifier {
         self.operations.push(MemberRow {
             id: None,
             title: value.into(),
+            presentation: MemberPresentation::default(),
         });
         self
     }
@@ -167,6 +172,7 @@ impl UmlClassifier {
         self.attributes.push(MemberRow {
             id: Some(id.into()),
             title: title.into(),
+            presentation: MemberPresentation::default(),
         });
         self
     }
@@ -178,6 +184,7 @@ impl UmlClassifier {
         self.operations.push(MemberRow {
             id: Some(id.into()),
             title: title.into(),
+            presentation: MemberPresentation::default(),
         });
         self
     }
@@ -189,6 +196,7 @@ impl UmlClassifier {
         self.template_parameters.push(MemberRow {
             id: Some(id.into()),
             title: title.into(),
+            presentation: MemberPresentation::default(),
         });
         self
     }
@@ -200,7 +208,21 @@ impl UmlClassifier {
         self.receptions.push(MemberRow {
             id: Some(id.into()),
             title: title.into(),
+            presentation: MemberPresentation::default(),
         });
+        self
+    }
+    pub fn member_presentation(mut self, id: &str, presentation: MemberPresentation) -> Self {
+        for row in self
+            .attributes
+            .iter_mut()
+            .chain(&mut self.operations)
+            .chain(&mut self.receptions)
+        {
+            if row.id.as_deref() == Some(id) {
+                row.presentation = presentation;
+            }
+        }
         self
     }
     pub fn selected(mut self, value: bool) -> Self {
@@ -307,6 +329,9 @@ pub(crate) fn compartment(
                 div()
                     .w_full()
                     .min_w_0()
+                    .when(member.presentation.underlined, |element| {
+                        element.underline()
+                    })
                     .child(member.title)
                     .into_any_element()
             };

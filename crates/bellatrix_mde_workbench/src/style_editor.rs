@@ -1,229 +1,305 @@
 use crate::property_editor::compact_row;
+use crate::style_drafts::{FIELDS, StyleEditState, StyleSubmission, field_error, style_value};
 use crate::{MdeWorkbenchItem, panels::MdeRightPanel};
-use bellatrix_mde::{RelationshipRouting, Style, View};
+use bellatrix_mde::{RelationshipRouting, View};
 use bellatrix_mde_cordis::{
     MdeUiCommand, ModelingSetViewRoutingRequested, ModelingSetViewStyleRequested,
 };
 use gpui::{AnyElement, Context, Entity, IntoElement, Window, div, prelude::*, px};
 use std::collections::HashMap;
 use ui::{Button, ContextMenu, DropdownMenu, Label, prelude::*};
-use ui_input::InputField;
+use ui_input::{ErasedEditorEvent, InputField};
 
-const FIELDS: &[(&str, &str)] = &[
-    ("fill", "Fill"),
-    ("stroke", "Stroke"),
-    ("text_color", "Text color"),
-    ("font_family", "Font"),
-    ("font_size", "Font size"),
-    ("stroke_width", "Line width"),
-    ("opacity", "Opacity"),
-];
+type Completion = tokio::sync::watch::Receiver<Option<Result<u64, String>>>;
+pub(crate) type StyleKey = (String, String, String);
 
-pub(crate) fn inputs_for_style(
-    style: &Style,
-    window: &mut Window,
-    cx: &mut Context<MdeRightPanel>,
-) -> HashMap<String, Entity<InputField>> {
-    FIELDS
-        .iter()
-        .map(|(key, _)| {
-            let value = style_value(style, key);
-            let input = cx.new(|cx| {
-                let input = InputField::new(window, cx, "Inherited").label_min_width(px(0.0));
-                input.set_text(&value, window, cx);
-                input
-            });
-            ((*key).to_owned(), input)
-        })
-        .collect()
+pub(crate) struct StyleDraft {
+    pub inputs: HashMap<String, Entity<InputField>>,
+    state: StyleEditState,
+    observed: HashMap<String, String>,
+    errors: HashMap<String, Option<&'static str>>,
+    completion: Option<Completion>,
+    _listeners: Vec<gpui::Subscription>,
 }
 
-fn style_value(style: &Style, key: &str) -> String {
-    match key {
-        "fill" => style.fill.clone(),
-        "stroke" => style.stroke.clone(),
-        "text_color" => style.text_color.clone(),
-        "font_family" => style.font_family.clone(),
-        "font_size" => style.font_size.map(|v| v.to_string()),
-        "stroke_width" => style.stroke_width.map(|v| v.to_string()),
-        "opacity" => style.opacity.map(|v| v.to_string()),
-        _ => None,
-    }
-    .unwrap_or_default()
-}
-
-fn style_value_matches(key: &str, draft: &str, stored: &str) -> bool {
-    if matches!(key, "font_size" | "stroke_width" | "opacity") {
-        match (optional_number(draft), optional_number(stored)) {
-            (Ok(draft), Ok(stored)) => draft == stored,
-            _ => false,
+impl StyleDraft {
+    fn capture_inputs(&mut self, admitted_field: Option<&str>, cx: &mut Context<MdeRightPanel>) {
+        for (key, input) in &self.inputs {
+            let text = input.read(cx).text(cx);
+            if self.observed.get(key) != Some(&text) {
+                if admitted_field == Some(key.as_str()) {
+                    self.observed.insert(key.clone(), text.clone());
+                    self.state.edit(key, text);
+                } else {
+                    self.state.preserve_input(key, text);
+                }
+            }
+            let error = self
+                .state
+                .values
+                .get(key)
+                .and_then(|text| field_error(key, text));
+            if self.errors.get(key) != Some(&error) {
+                self.errors.insert(key.clone(), error);
+                input.update(cx, |field, cx| field.set_error(error, cx));
+            }
         }
-    } else {
-        draft.trim() == stored.trim()
+    }
+
+    fn acknowledge(&mut self, completion: &Completion, cx: &mut Context<MdeRightPanel>) {
+        if !self
+            .completion
+            .as_ref()
+            .is_some_and(|pending| pending.same_channel(completion))
+        {
+            return;
+        }
+        let receipt = completion.borrow().clone().or_else(|| {
+            completion
+                .has_changed()
+                .is_err()
+                .then(|| Err("Style command channel closed".into()))
+        });
+        if let Some(receipt) = receipt {
+            self.capture_inputs(None, cx);
+            self.state.acknowledge(receipt);
+            self.completion = None;
+        }
+    }
+
+    fn sync_inputs(&mut self, window: &mut Window, cx: &mut Context<MdeRightPanel>) {
+        for (key, input) in &self.inputs {
+            let Some(value) = self.state.values.get(key) else {
+                continue;
+            };
+            if input.read(cx).text(cx) != *value {
+                // BufferEdited is delivered after set_text returns. Remember the value rather
+                // than temporarily disabling a listener, which would replay the canonical edit.
+                self.observed.insert(key.clone(), value.clone());
+                input.update(cx, |field, cx| field.set_text(value, window, cx));
+            }
+            let error = field_error(key, value);
+            if self.errors.get(key) != Some(&error) {
+                self.errors.insert(key.clone(), error);
+                input.update(cx, |field, cx| field.set_error(error, cx));
+            }
+        }
     }
 }
 
-pub(crate) fn style_inputs_dirty(
-    inputs: &HashMap<String, Entity<InputField>>,
-    baseline: &Style,
+fn target_is_active(
+    panel: &MdeRightPanel,
+    item: &Entity<MdeWorkbenchItem>,
+    key: &StyleKey,
     cx: &gpui::App,
 ) -> bool {
-    inputs.iter().any(|(key, input)| {
-        !style_value_matches(key, &input.read(cx).text(cx), &style_value(baseline, key))
-    })
+    let item_state = item.read(cx);
+    panel.is_bound_to(item)
+        && !item_state.source().is_read_only()
+        && item_state.project_id().as_str() == key.0
+        && item_state.active_diagram.as_deref() == Some(key.1.as_str())
+        && item_state.selected_view.as_deref() == Some(key.2.as_str())
 }
 
-pub(crate) fn sync_style_inputs(
-    inputs: &HashMap<String, Entity<InputField>>,
-    previous: &Style,
-    current: &Style,
+pub(crate) fn reconcile_style_inputs(
+    drafts: &mut HashMap<StyleKey, StyleDraft>,
+    item: &Entity<MdeWorkbenchItem>,
+    diagram_id: &str,
+    view: &View,
+    revision: u64,
     window: &mut Window,
     cx: &mut Context<MdeRightPanel>,
 ) {
-    for (key, input) in inputs {
-        let text = input.read(cx).text(cx);
-        if style_value_matches(key, &text, &style_value(previous, key))
-            && !style_value_matches(key, &text, &style_value(current, key))
-        {
-            input.update(cx, |field, cx| {
-                field.set_text(&style_value(current, key), window, cx)
-            });
+    let key = (
+        item.read(cx).project_id().as_str().to_owned(),
+        diagram_id.into(),
+        view.id.clone(),
+    );
+    let draft = drafts.entry(key.clone()).or_insert_with(|| {
+        let state = StyleEditState::new(&view.style, revision);
+        let observed = state.values.clone();
+        let mut listeners = Vec::new();
+        let inputs = FIELDS
+            .iter()
+            .map(|(field, _)| {
+                let input = cx.new(|cx| {
+                    let input = InputField::new(window, cx, "Inherited").label_min_width(px(0.0));
+                    input.set_text(&style_value(&view.style, field), window, cx);
+                    input
+                });
+                let owner = cx.weak_entity();
+                let key = key.clone();
+                let item = item.downgrade();
+                let field = *field;
+                listeners.push(input.read(cx).editor().clone().subscribe(
+                    Box::new(move |event, _, cx| {
+                        if event != ErasedEditorEvent::BufferEdited {
+                            return;
+                        }
+                        let owner = owner.clone();
+                        let key = key.clone();
+                        let item = item.clone();
+                        cx.defer(move |cx| {
+                            let Some(item) = item.upgrade() else { return };
+                            if let Err(error) = owner.update(cx, |panel, cx| {
+                                if !target_is_active(panel, &item, &key, cx) {
+                                    return;
+                                }
+                                if let Some(draft) = panel.style_drafts.get_mut(&key) {
+                                    draft.capture_inputs(Some(field), cx);
+                                }
+                                crate::property_editor::flush_property_edits(panel, &item, cx);
+                                flush_style_edits(panel, &item, cx);
+                                cx.notify();
+                            }) {
+                                eprintln!("MDE style input refresh failed: {error}");
+                            }
+                        });
+                    }),
+                    window,
+                    cx,
+                ));
+                (field.to_owned(), input)
+            })
+            .collect();
+        StyleDraft {
+            inputs,
+            state,
+            observed,
+            errors: HashMap::new(),
+            completion: None,
+            _listeners: listeners,
         }
-    }
-}
-
-pub(crate) struct PendingThemeReset {
-    expected_revision: u64,
-    style: Style,
-    drafts: HashMap<String, String>,
-    completion: tokio::sync::watch::Receiver<Option<Result<u64, String>>>,
-}
-
-#[derive(Debug, PartialEq)]
-pub(crate) enum ResetAcknowledgment {
-    Pending,
-    Applied,
-    Rejected,
-}
-
-fn reset_acknowledgment(
-    expected_revision: u64,
-    desired: &Style,
-    revision: u64,
-    current: &Style,
-    completion: Option<&Result<u64, String>>,
-) -> ResetAcknowledgment {
-    match completion {
-        Some(Ok(applied_revision))
-            if *applied_revision == expected_revision
-                || *applied_revision == expected_revision.saturating_add(1) =>
-        {
-            if revision < *applied_revision {
-                ResetAcknowledgment::Pending
-            } else if revision == *applied_revision && current == desired {
-                ResetAcknowledgment::Applied
-            } else {
-                ResetAcknowledgment::Rejected
-            }
-        }
-        Some(_) => ResetAcknowledgment::Rejected,
-        None => ResetAcknowledgment::Pending,
-    }
-}
-
-fn style_submission_allowed(conflict: bool, reset_pending: bool) -> bool {
-    !conflict && !reset_pending
-}
-
-fn reset_can_clear_draft(captured: &str, current: &str) -> bool {
-    captured == current
-}
-
-pub(crate) fn acknowledge_theme_reset(
-    pending: &PendingThemeReset,
-    inputs: &HashMap<String, Entity<InputField>>,
-    revision: u64,
-    style: &Style,
-    window: &mut Window,
-    cx: &mut Context<MdeRightPanel>,
-) -> ResetAcknowledgment {
-    let completion = pending.completion.borrow().clone().or_else(|| {
-        pending
-            .completion
-            .has_changed()
-            .is_err()
-            .then(|| Err("Style command channel closed".into()))
     });
-    match reset_acknowledgment(
-        pending.expected_revision,
-        &pending.style,
-        revision,
-        style,
-        completion.as_ref(),
-    ) {
-        ResetAcknowledgment::Pending => ResetAcknowledgment::Pending,
-        ResetAcknowledgment::Rejected => ResetAcknowledgment::Rejected,
-        ResetAcknowledgment::Applied => {
-            for (key, input) in inputs {
-                if pending.drafts.get(key).is_some_and(|captured| {
-                    reset_can_clear_draft(captured, &input.read(cx).text(cx))
-                }) {
-                    input.update(cx, |field, cx| {
-                        field.set_text("", window, cx);
-                        field.set_error(None::<&str>, cx);
-                    });
+    draft.capture_inputs(None, cx);
+    if let Some(completion) = draft.completion.clone() {
+        draft.acknowledge(&completion, cx);
+    }
+    draft.state.reconcile(&view.style, revision);
+    draft.sync_inputs(window, cx);
+    if draft.state.needs_flush() {
+        let owner = cx.weak_entity();
+        let item = item.clone();
+        cx.defer(move |cx| {
+            if let Err(error) = owner.update(cx, |panel, cx| {
+                crate::property_editor::flush_property_edits(panel, &item, cx);
+                flush_style_edits(panel, &item, cx);
+            }) {
+                eprintln!("MDE style synchronization failed: {error}");
+            }
+        });
+    }
+}
+
+pub(crate) fn style_command_pending(panel: &MdeRightPanel) -> bool {
+    panel
+        .style_drafts
+        .values()
+        .any(|draft| draft.state.pending.is_some())
+}
+
+pub(crate) fn flush_style_edits(
+    panel: &mut MdeRightPanel,
+    item: &Entity<MdeWorkbenchItem>,
+    cx: &mut Context<MdeRightPanel>,
+) {
+    if !panel.is_bound_to(item)
+        || item.read(cx).source().is_read_only()
+        || style_command_pending(panel)
+        || crate::property_editor::property_command_pending(panel)
+    {
+        return;
+    }
+    let project = item.read(cx).project_id().as_str().to_owned();
+    let keys: Vec<_> = panel
+        .style_drafts
+        .iter()
+        .filter(|(key, draft)| key.0 == project && draft.state.needs_flush())
+        .map(|(key, _)| key.clone())
+        .collect();
+    if keys.is_empty() {
+        return;
+    }
+    let snapshot = match item.read(cx).source().snapshot() {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            for key in keys {
+                if let Some(draft) = panel.style_drafts.get_mut(&key) {
+                    draft.state.error = Some(error.clone());
                 }
             }
-            ResetAcknowledgment::Applied
+            cx.notify();
+            return;
+        }
+    };
+    let mut ready = None;
+    for key in keys {
+        let Some(draft) = panel.style_drafts.get_mut(&key) else {
+            continue;
+        };
+        if snapshot.revision < draft.state.revision {
+            continue;
+        }
+        let Some(view) = snapshot
+            .section
+            .diagrams
+            .iter()
+            .find(|diagram| diagram.id == key.1)
+            .and_then(|diagram| diagram.views.iter().find(|view| view.id == key.2))
+        else {
+            draft.state.error = Some("The original diagram view no longer exists".into());
+            continue;
+        };
+        draft.capture_inputs(None, cx);
+        draft.state.reconcile(&view.style, snapshot.revision);
+        if let Some(submission) = draft.state.next_submission() {
+            ready = Some((key, submission));
+            break;
         }
     }
-}
-
-fn inherited_style_values() -> HashMap<String, String> {
-    FIELDS
-        .iter()
-        .map(|(key, _)| ((*key).to_owned(), String::new()))
-        .collect()
-}
-
-fn edited_style(style: &Style, values: HashMap<String, String>) -> Result<Style, &'static str> {
-    let mut style = style.clone();
-    for (key, text) in values {
-        let text = text.trim();
-        let string = (!text.is_empty()).then(|| text.to_owned());
-        match key.as_str() {
-            "fill" => style.fill = string,
-            "stroke" => style.stroke = string,
-            "text_color" => style.text_color = string,
-            "font_family" => style.font_family = string,
-            "font_size" => style.font_size = optional_number(text)?,
-            "stroke_width" => style.stroke_width = optional_number(text)?,
-            "opacity" => style.opacity = optional_number(text)?,
-            _ => {}
+    let Some((key, submission)) = ready else {
+        cx.notify();
+        return;
+    };
+    let Some(draft) = panel.style_drafts.get_mut(&key) else {
+        return;
+    };
+    let (sender, mut completion) = tokio::sync::watch::channel(None);
+    let result = item.update(cx, |item, cx| {
+        item.submit_style_edit(&key, &submission, sender, cx)
+    });
+    if let Err(error) = result {
+        draft.state.acknowledge(Err(error));
+        cx.notify();
+        return;
+    }
+    draft.completion = Some(completion.clone());
+    let item = item.clone();
+    cx.spawn(async move |owner, cx| {
+        if completion.borrow().is_none() {
+            if let Err(error) = completion.changed().await {
+                eprintln!("MDE style receipt unavailable: {error}");
+            }
         }
-    }
-    Ok(style)
-}
-
-fn optional_number(text: &str) -> Result<Option<f64>, &'static str> {
-    let text = text.trim();
-    if text.is_empty() {
-        return Ok(None);
-    }
-    text.parse::<f64>()
-        .ok()
-        .filter(|value| value.is_finite())
-        .map(Some)
-        .ok_or("Enter a finite number, or leave blank to inherit")
+        if let Err(error) = owner.update(cx, |panel, cx| {
+            if let Some(draft) = panel.style_drafts.get_mut(&key) {
+                draft.acknowledge(&completion, cx);
+            }
+            crate::property_editor::flush_property_edits(panel, &item, cx);
+            flush_style_edits(panel, &item, cx);
+            cx.notify();
+        }) {
+            eprintln!("MDE style completion refresh failed: {error}");
+        }
+    })
+    .detach();
+    cx.notify();
 }
 
 pub(crate) fn render_styles(
     target: Option<(&str, &View, bool)>,
     item: Entity<MdeWorkbenchItem>,
-    inputs: &HashMap<String, Entity<InputField>>,
-    expected_revision: u64,
-    conflict: bool,
-    reset_pending: bool,
+    draft: Option<&StyleDraft>,
     open: bool,
     window: &mut Window,
     cx: &mut Context<MdeRightPanel>,
@@ -261,7 +337,7 @@ pub(crate) fn render_styles(
                 .px_3()
                 .py_1()
                 .child(
-                    Label::new("Select a diagram view to edit its appearance.")
+                    Label::new("Select a diagram view to inspect its appearance.")
                         .size(LabelSize::Small)
                         .color(Color::Muted),
                 )
@@ -269,53 +345,98 @@ pub(crate) fn render_styles(
         );
         return rows;
     };
+    if item.read(cx).source().is_read_only() {
+        for (key, label) in FIELDS {
+            if is_edge && *key == "fill" {
+                continue;
+            }
+            let value = style_value(&view.style, key);
+            rows.push(compact_row(
+                *label,
+                Label::new(if value.is_empty() {
+                    "Inherited".into()
+                } else {
+                    value
+                })
+                .size(LabelSize::Small),
+            ));
+        }
+        if is_edge {
+            rows.push(compact_row(
+                "Routing",
+                Label::new(routing_label(view.style.routing)).size(LabelSize::Small),
+            ));
+        }
+        return rows;
+    }
+    let Some(draft) = draft else { return rows };
+    let key = (
+        item.read(cx).project_id().as_str().to_owned(),
+        diagram_id.to_owned(),
+        view.id.clone(),
+    );
     for (key, label) in FIELDS {
         if is_edge && *key == "fill" {
             continue;
         }
-        if let Some(input) = inputs.get(*key) {
+        if let Some(input) = draft.inputs.get(*key) {
             let color = input.read(cx).text(cx);
-            let swatch = color
-                .strip_prefix('#')
-                .filter(|hex| hex.len() == 6)
-                .and_then(|hex| u32::from_str_radix(hex, 16).ok());
-            let control = div()
-                .w_full()
-                .flex()
-                .items_center()
-                .gap_1()
-                .when(matches!(*key, "fill" | "stroke" | "text_color"), |row| {
-                    row.child(
-                        div()
-                            .size(px(16.0))
-                            .flex_none()
-                            .border_1()
-                            .border_color(cx.theme().colors().border)
-                            .when_some(swatch, |swatch, color| swatch.bg(gpui::rgb(color))),
-                    )
-                })
-                .child(div().flex_1().min_w_0().child(input.clone()));
-            rows.push(compact_row(*label, control));
+            let swatch = gpui::Rgba::try_from(color.trim()).ok();
+            rows.push(compact_row(
+                *label,
+                div()
+                    .w_full()
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .when(matches!(*key, "fill" | "stroke" | "text_color"), |row| {
+                        row.child(
+                            div()
+                                .size(px(16.0))
+                                .flex_none()
+                                .border_1()
+                                .border_color(cx.theme().colors().border)
+                                .when_some(swatch, |swatch, color| swatch.bg(color)),
+                        )
+                    })
+                    .child(div().flex_1().min_w_0().child(input.clone())),
+            ));
         }
     }
-    if conflict {
-        let key = (diagram_id.to_owned(), view.id.clone());
+    if draft.state.conflict || draft.state.error.is_some() {
+        let reload_key = key.clone();
+        let target = item.clone();
+        let status = if draft.state.conflict {
+            "This style changed elsewhere. Your text is preserved; reload to continue.".to_owned()
+        } else {
+            format!(
+                "Not updated: {}",
+                draft.state.error.as_deref().unwrap_or_default()
+            )
+        };
         rows.push(
             div()
                 .px_3()
                 .child(
-                    Label::new("Project changed. Draft preserved; reload before applying.")
+                    Label::new(status)
                         .size(LabelSize::XSmall)
                         .color(Color::Warning),
                 )
                 .child(
                     Button::new("mde-style-reload", "Discard draft and reload").on_click(
                         cx.listener(move |panel, _, _, cx| {
-                            panel.pending_theme_resets.remove(&key);
-                            panel.style_inputs.remove(&key);
-                            panel.style_baselines.remove(&key);
-                            panel.style_revisions.remove(&key);
-                            panel.style_listeners.remove(&key);
+                            if !panel.is_bound_to(&target)
+                                || target.read(cx).source().is_read_only()
+                            {
+                                return;
+                            }
+                            if panel
+                                .style_drafts
+                                .get(&reload_key)
+                                .is_some_and(|draft| draft.state.pending.is_none())
+                            {
+                                panel.style_drafts.remove(&reload_key);
+                            }
                             cx.notify();
                         }),
                     ),
@@ -323,107 +444,44 @@ pub(crate) fn render_styles(
                 .into_any_element(),
         );
     }
-    let apply_key = (diagram_id.to_owned(), view.id.clone());
-    let captured_inputs = inputs.clone();
-    let target_item = item.clone();
-    let diagram = diagram_id.to_owned();
-    let view_id = view.id.clone();
-    rows.push(
-        div()
-            .px_3()
-            .child(
-                Button::new("mde-style-apply", "Apply style")
-                    .disabled(!style_submission_allowed(conflict, reset_pending))
-                    .on_click(cx.listener(move |panel, _, _, cx| {
-                        if !style_submission_allowed(
-                            conflict,
-                            panel.pending_theme_resets.contains_key(&apply_key),
-                        ) {
-                            return;
-                        }
-                        let mut values = HashMap::new();
-                        let mut valid = true;
-                        for (key, input) in &captured_inputs {
-                            let text = input.read(cx).text(cx);
-                            let error =
-                                if matches!(key.as_str(), "font_size" | "stroke_width" | "opacity")
-                                {
-                                    optional_number(&text).err()
-                                } else {
-                                    None
-                                };
-                            valid &= error.is_none();
-                            input.update(cx, |field, cx| field.set_error(error, cx));
-                            values.insert(key.clone(), text);
-                        }
-                        if valid {
-                            target_item.update(cx, |item, cx| {
-                                let _submitted = item.apply_view_style(
-                                    &diagram,
-                                    &view_id,
-                                    expected_revision,
-                                    values,
-                                    None,
-                                    cx,
-                                );
-                            });
-                        }
-                    })),
-            )
-            .into_any_element(),
-    );
-    let theme_inputs = inputs.clone();
+    if draft.state.pending.is_some() {
+        rows.push(
+            div()
+                .px_3()
+                .child(
+                    Label::new("Updating…")
+                        .size(LabelSize::XSmall)
+                        .color(Color::Muted),
+                )
+                .into_any_element(),
+        );
+    }
+    let theme_key = key.clone();
     let theme_item = item.clone();
-    let theme_diagram = diagram_id.to_owned();
-    let theme_view = view.id.clone();
     rows.push(
         div()
             .px_3()
             .child(
                 Button::new(
                     "mde-style-restore-theme",
-                    if style_inputs_dirty(inputs, &view.style, cx) {
+                    if draft.state.dirty() {
                         "Restore IDE theme and discard draft"
                     } else {
                         "Restore IDE theme"
                     },
                 )
-                .disabled(!style_submission_allowed(conflict, reset_pending))
+                .disabled(draft.state.conflict || draft.state.pending.is_some())
                 .on_click(cx.listener(move |panel, _, _, cx| {
-                    if !style_submission_allowed(
-                        conflict,
-                        panel
-                            .pending_theme_resets
-                            .contains_key(&(theme_diagram.clone(), theme_view.clone())),
-                    ) {
+                    if !target_is_active(panel, &theme_item, &theme_key, cx) {
                         return;
                     }
-                    let (completion_sender, completion) = tokio::sync::watch::channel(None);
-                    let drafts = theme_inputs
-                        .iter()
-                        .map(|(key, input)| (key.clone(), input.read(cx).text(cx).to_string()))
-                        .collect();
-                    let submitted = theme_item.update(cx, |item, cx| {
-                        item.apply_view_style(
-                            &theme_diagram,
-                            &theme_view,
-                            expected_revision,
-                            inherited_style_values(),
-                            Some(completion_sender),
-                            cx,
-                        )
-                    });
-                    if let Some(style) = submitted {
-                        panel.pending_theme_resets.insert(
-                            (theme_diagram.clone(), theme_view.clone()),
-                            PendingThemeReset {
-                                expected_revision,
-                                style,
-                                drafts,
-                                completion,
-                            },
-                        );
+                    if let Some(draft) = panel.style_drafts.get_mut(&theme_key) {
+                        if draft.state.conflict || draft.state.pending.is_some() {
+                            return;
+                        }
+                        draft.state.restore_theme();
                     }
+                    flush_style_edits(panel, &theme_item, cx);
                     cx.notify();
                 })),
             )
@@ -433,46 +491,55 @@ pub(crate) fn render_styles(
         div()
             .px_3()
             .child(
-                Label::new("Blank values inherit the theme. Colors: #RRGGBB.")
+                Label::new("Changes update immediately. Blank values inherit the theme.")
                     .size(LabelSize::XSmall)
                     .color(Color::Muted),
             )
             .into_any_element(),
     );
     if is_edge {
-        let diagram = diagram_id.to_owned();
-        let view_id = view.id.clone();
-        let menu = ContextMenu::build(window, cx, move |menu, _, _| {
-            [
-                ("Straight", RelationshipRouting::Straight),
-                ("Automatic", RelationshipRouting::Automatic),
-                ("Curve", RelationshipRouting::Curve),
-            ]
-            .into_iter()
-            .fold(menu, |menu, (label, routing)| {
-                let item = item.clone();
-                let diagram = diagram.clone();
-                let view_id = view_id.clone();
-                menu.entry(label, None, move |_, cx| {
-                    item.update(cx, |item, cx| {
-                        item.apply_view_routing(&diagram, &view_id, routing, cx)
-                    });
+        let owner = cx.weak_entity();
+        let menu = ContextMenu::build(window, cx, {
+            move |menu, _, _| {
+                [
+                    ("Straight", RelationshipRouting::Straight),
+                    ("Automatic", RelationshipRouting::Automatic),
+                    ("Curve", RelationshipRouting::Curve),
+                ]
+                .into_iter()
+                .fold(menu, |menu, (label, routing)| {
+                    let owner = owner.clone();
+                    let item = item.clone();
+                    let key = key.clone();
+                    menu.entry(label, None, move |_, cx| {
+                        if let Err(error) = owner.update(cx, |panel, cx| {
+                            if !target_is_active(panel, &item, &key, cx) {
+                                return;
+                            }
+                            if let Some(draft) = panel.style_drafts.get_mut(&key) {
+                                if draft.state.conflict {
+                                    return;
+                                }
+                                draft.state.set_routing(routing);
+                            }
+                            flush_style_edits(panel, &item, cx);
+                            cx.notify();
+                        }) {
+                            eprintln!("MDE routing edit failed: {error}");
+                        }
+                    })
                 })
-            })
+            }
         });
-        let label = match view.style.routing {
-            Some(RelationshipRouting::Straight) => "Straight",
-            Some(RelationshipRouting::Automatic) => "Automatic",
-            Some(RelationshipRouting::Curve) => "Curve",
-            None => "Stored geometry",
-        };
-        rows.push(
-            compact_row(
-                "Routing",
-                DropdownMenu::new("mde-style-routing", label, menu).full_width(true),
+        rows.push(compact_row(
+            "Routing",
+            DropdownMenu::new(
+                "mde-style-routing",
+                routing_label(draft.state.displayed_routing()),
+                menu,
             )
-            .into_any_element(),
-        );
+            .full_width(true),
+        ));
         rows.push(
             div()
                 .px_3()
@@ -487,230 +554,53 @@ pub(crate) fn render_styles(
     rows
 }
 
-impl MdeWorkbenchItem {
-    fn apply_view_style(
-        &mut self,
-        diagram_id: &str,
-        view_id: &str,
-        expected_revision: u64,
-        values: HashMap<String, String>,
-        completion: Option<tokio::sync::watch::Sender<Option<Result<u64, String>>>>,
-        cx: &mut Context<Self>,
-    ) -> Option<Style> {
-        if self.active_diagram.as_deref() != Some(diagram_id)
-            || self.selected_view.as_deref() != Some(view_id)
-        {
-            return None;
-        }
-        let Ok(snapshot) = self.source.snapshot() else {
-            self.feedback = "Project snapshot unavailable".into();
-            cx.notify();
-            return None;
-        };
-        let Some(view) = snapshot
-            .section
-            .diagrams
-            .iter()
-            .find(|d| d.id == diagram_id)
-            .and_then(|d| d.views.iter().find(|v| v.id == view_id))
-        else {
-            return None;
-        };
-        let style = match edited_style(&view.style, values) {
-            Ok(style) => style,
-            Err(error) => {
-                self.feedback = error.into();
-                cx.notify();
-                return None;
-            }
-        };
-        let request = ModelingSetViewStyleRequested {
-            project_id: self.project_id().clone(),
-            expected_revision,
-            diagram_id: diagram_id.into(),
-            view_id: view_id.into(),
-            style: style.clone(),
-        };
-        let command = match completion {
-            Some(completion) => MdeUiCommand::SetViewStyleTracked {
-                request,
-                completion,
-            },
-            None => MdeUiCommand::SetViewStyle(request),
-        };
-        let result = self.source.submit(command);
-        match result {
-            Ok(()) => {
-                self.feedback = "Command sent to Cordis".into();
-                cx.notify();
-                Some(style)
-            }
-            Err(error) => {
-                self.feedback = format!("Command not sent: {error}");
-                cx.notify();
-                None
-            }
-        }
-    }
-    fn apply_view_routing(
-        &mut self,
-        diagram_id: &str,
-        view_id: &str,
-        routing: RelationshipRouting,
-        cx: &mut Context<Self>,
-    ) {
-        if self.active_diagram.as_deref() != Some(diagram_id)
-            || self.selected_view.as_deref() != Some(view_id)
-        {
-            return;
-        }
-        let Ok(snapshot) = self.source.snapshot() else {
-            self.feedback = "Project snapshot unavailable".into();
-            cx.notify();
-            return;
-        };
-        self.submit(
-            MdeUiCommand::SetViewRouting(ModelingSetViewRoutingRequested {
-                project_id: self.project_id().clone(),
-                expected_revision: snapshot.revision,
-                diagram_id: diagram_id.into(),
-                view_id: view_id.into(),
-                routing,
-            }),
-            cx,
-        );
+fn routing_label(routing: Option<RelationshipRouting>) -> &'static str {
+    match routing {
+        Some(RelationshipRouting::Straight) => "Straight",
+        Some(RelationshipRouting::Automatic) => "Automatic",
+        Some(RelationshipRouting::Curve) => "Curve",
+        None => "Stored geometry",
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{
-        ResetAcknowledgment, edited_style, inherited_style_values, optional_number,
-        reset_acknowledgment, reset_can_clear_draft, style_submission_allowed, style_value_matches,
-    };
-    use bellatrix_mde::{RelationshipRouting, Style};
-
-    #[test]
-    fn theme_reset_waits_for_authoritative_success() {
-        let desired = Style::default();
-        let authored = Style {
-            fill: Some("#123456".into()),
-            ..Style::default()
-        };
-        assert_eq!(
-            reset_acknowledgment(4, &desired, 4, &desired, Some(&Ok(4))),
-            ResetAcknowledgment::Applied
-        );
-        assert_eq!(
-            reset_acknowledgment(4, &desired, 4, &authored, None),
-            ResetAcknowledgment::Pending
-        );
-        assert_eq!(
-            reset_acknowledgment(4, &desired, 5, &desired, None),
-            ResetAcknowledgment::Pending
-        );
-        assert_eq!(
-            reset_acknowledgment(4, &desired, 4, &authored, Some(&Ok(5))),
-            ResetAcknowledgment::Pending
-        );
-        assert_eq!(
-            reset_acknowledgment(4, &desired, 5, &desired, Some(&Ok(5))),
-            ResetAcknowledgment::Applied
-        );
-    }
-
-    #[test]
-    fn theme_reset_rejection_staleness_and_late_typing_preserve_drafts() {
-        let desired = Style::default();
-        let authored = Style {
-            fill: Some("#123456".into()),
-            ..Style::default()
-        };
-        for (revision, current, completion) in [
-            (4, &authored, Err("stale revision".into())),
-            (4, &authored, Err("channel closed".into())),
-            (4, &authored, Err("responder unavailable".into())),
-            (5, &authored, Ok(5)),
-            (6, &desired, Ok(5)),
-            (5, &desired, Ok(6)),
-        ] {
-            assert_eq!(
-                reset_acknowledgment(4, &desired, revision, current, Some(&completion)),
-                ResetAcknowledgment::Rejected
+impl MdeWorkbenchItem {
+    fn submit_style_edit(
+        &mut self,
+        key: &StyleKey,
+        submission: &StyleSubmission,
+        completion: tokio::sync::watch::Sender<Option<Result<u64, String>>>,
+        cx: &mut Context<Self>,
+    ) -> Result<(), String> {
+        if self.project_id().as_str() != key.0 || self.source().is_read_only() {
+            return Err(
+                "Select the original editable diagram view before changing its style".into(),
             );
         }
-        assert!(reset_can_clear_draft("#123456", "#123456"));
-        assert!(!reset_can_clear_draft("#123456", "#abcdef"));
-        assert!(!reset_can_clear_draft("#123456", ""));
-    }
-
-    #[test]
-    fn pending_reset_blocks_repeat_reset_and_apply_until_receipt() {
-        assert!(style_submission_allowed(false, false));
-        assert!(!style_submission_allowed(false, true));
-        assert!(!style_submission_allowed(true, false));
-        assert!(!style_submission_allowed(true, true));
-    }
-
-    #[test]
-    fn restore_theme_clears_appearance_without_changing_routing_or_shape() {
-        let authored = Style {
-            fill: Some("#303844".into()),
-            stroke: Some("#82a3d5".into()),
-            text_color: Some("#eeeeee".into()),
-            font_family: Some("Custom font".into()),
-            font_size: Some(17.0),
-            stroke_width: Some(3.0),
-            opacity: Some(0.5),
-            routing: Some(RelationshipRouting::Curve),
-            corner_radius: Some(4.0),
-            dash_pattern: vec![3.0, 5.0],
-        };
-        let restored = edited_style(&authored, inherited_style_values()).expect("valid reset");
-        assert_eq!(
-            restored,
-            Style {
-                routing: authored.routing,
-                corner_radius: authored.corner_radius,
-                dash_pattern: authored.dash_pattern.clone(),
-                ..Style::default()
+        let command = if let Some(routing) = submission.routing {
+            MdeUiCommand::SetViewRoutingTracked {
+                request: ModelingSetViewRoutingRequested {
+                    project_id: self.project_id().clone(),
+                    expected_revision: submission.expected_revision,
+                    diagram_id: key.1.clone(),
+                    view_id: key.2.clone(),
+                    routing,
+                },
+                completion,
             }
-        );
-        assert_eq!(
-            edited_style(&restored, inherited_style_values()).expect("repeat reset"),
-            restored
-        );
-        assert_eq!(authored.fill.as_deref(), Some("#303844"));
-    }
-
-    #[test]
-    fn color_edits_are_real_overrides_and_blank_values_restore_inheritance() {
-        let overrides = [("fill".into(), " #123456 ".into())].into();
-        let authored = edited_style(&Style::default(), overrides).expect("valid color");
-        assert_eq!(authored.fill.as_deref(), Some("#123456"));
-        let restored = edited_style(&authored, inherited_style_values()).expect("valid reset");
-        assert_eq!(restored.fill, None);
-    }
-    #[test]
-    fn applied_values_acknowledge_normalized_persistence() {
-        assert!(style_value_matches("font_size", "16.0", "16"));
-        assert!(style_value_matches("stroke", " #ABCDEF ", "#ABCDEF"));
-        assert!(!style_value_matches("font_size", "NaN", "NaN"));
-        assert!(!style_value_matches("font_size", "17", "16"));
-    }
-    #[test]
-    fn normalized_clean_input_detects_external_changes() {
-        assert!(style_value_matches("font_size", "16.0", "16"));
-        assert!(!style_value_matches("font_size", "16.0", "18"));
-        assert!(!style_value_matches("font_size", "17", "16"));
-    }
-
-    #[test]
-    fn inherited_numeric_style_and_non_finite_values() {
-        assert_eq!(optional_number("  "), Ok(None));
-        assert_eq!(optional_number(" 1.5 "), Ok(Some(1.5)));
-        for text in ["NaN", "inf", "-inf", "invalid"] {
-            assert!(optional_number(text).is_err());
-        }
+        } else {
+            MdeUiCommand::SetViewStyleTracked {
+                request: ModelingSetViewStyleRequested {
+                    project_id: self.project_id().clone(),
+                    expected_revision: submission.expected_revision,
+                    diagram_id: key.1.clone(),
+                    view_id: key.2.clone(),
+                    style: submission.style.clone(),
+                },
+                completion,
+            }
+        };
+        self.source.submit(command)?;
+        cx.notify();
+        Ok(())
     }
 }

@@ -99,9 +99,24 @@ fn text(value: Option<&Value>) -> Option<&str> {
         .filter(|value| !value.is_empty())
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MemberPresentation {
+    pub underlined: bool,
+}
+
+pub fn member_presentation(element: &Element) -> MemberPresentation {
+    MemberPresentation {
+        // UML 2.5.1 §9.4.4 applies to inherited Feature::isStatic, not classifiers.
+        underlined: UmlType::from_kind(&element.kind)
+            .is_some_and(|kind| kind.has_property("isStatic"))
+            && element.properties.get("isStatic").and_then(Value::as_bool) == Some(true),
+    }
+}
+
 pub fn element_display_label(element: &Element) -> String {
+    let kind = UmlType::from_kind(&element.kind);
     let member = matches!(
-        UmlType::from_kind(&element.kind),
+        kind,
         Some(
             UmlType::Attribute
                 | UmlType::Operation
@@ -120,12 +135,62 @@ pub fn element_display_label(element: &Element) -> String {
         Some("package") => "~",
         _ => "",
     };
-    let mut label = format!("{prefix}{}", element.name);
+    let property = matches!(
+        kind,
+        Some(UmlType::Attribute | UmlType::Port | UmlType::Part)
+    );
+    let operation = kind == Some(UmlType::Operation);
+    let is_true = |key| element.properties.get(key).and_then(Value::as_bool) == Some(true);
+    let derived = if property && is_true("isDerived") {
+        "/"
+    } else {
+        ""
+    };
+    let mut label = format!("{prefix}{derived}{}", element.name);
+    if operation {
+        // §9.6.4 permits suppressing the parameter list, not the operation parentheses.
+        label.push_str("()");
+    }
     // Source declaration/signature fields may retain an earlier name. They belong
     // in their labeled inspector fields, never in the canonical semantic label.
-    if let Some(value_type) = text(element.properties.get("type")) {
+    let value_type = text(element.properties.get("type"));
+    let mut has_return_details = value_type.is_some();
+    if let Some(value_type) = value_type {
         label.push_str(": ");
         label.push_str(value_type);
+    }
+    if property || operation {
+        let bound = |key| match element.properties.get(key) {
+            Some(Value::Number(value)) if value.is_u64() => Some(value.to_string()),
+            value => text(value).map(str::to_owned),
+        };
+        if let (Some(lower), Some(upper)) = (bound("lower"), bound("upper")) {
+            if operation && value_type.is_none() {
+                label.push(':');
+            }
+            has_return_details = true;
+            label.push_str(" [");
+            label.push_str(&lower);
+            if lower != upper {
+                label.push_str("..");
+                label.push_str(&upper);
+            }
+            label.push(']');
+        }
+    }
+    if property {
+        if let Some(default) = text(element.properties.get("defaultValue")) {
+            label.push_str(" = ");
+            label.push_str(default);
+        }
+        if is_true("isReadOnly") {
+            label.push_str(" {readOnly}");
+        }
+    } else if operation && is_true("isQuery") {
+        if !has_return_details {
+            label.push(':');
+        }
+        label.push_str(" {query}");
     }
     label
 }
@@ -417,11 +482,11 @@ mod tests {
                 "uml.operation",
                 json!({"signature":"save(value: String): bool", "visibility":"public"})
             )),
-            "+anything"
+            "+anything()"
         );
         assert_eq!(
             element_display_label(&element("uml.operation", json!({}))),
-            "anything"
+            "anything()"
         );
         assert_eq!(
             element_display_label(&element("uml.class", json!({"type":"not-a-member"}))),

@@ -12,7 +12,7 @@ Setting `BELLATRIX_PROJECT_FILE` or `BELLATRIX_MODEL_FILE` before launching expl
 
 The adjacent **Open project** dropdown offers **Open MDE project (read-only preview)**. It uses the native file dialog, Project/worktree and shared text Buffer, validates the selected Bellatrix document, and renders its captured model through the existing Workbench. The preview has its own diagram chooser and pure validation control; selection and pan/zoom remain available. It does not enable model editing or native MDE save. Changes to the source text, file identity, dirty/conflict state or imported semantic snapshot mark the preview stale without overwriting source text. Close and reopen after resolving source changes. A document ID already owned by a configured/demo source is rejected explicitly, without substituting the fixture or cloning its ID.
 
-While a preview is the active Item, existing editing panels show a notice naming that preview and the previous Workbench instead of showing the wrong model's controls. Their drafts are retained, and their mutation sources are suspended only in that Workspace. Returning to an ordinary Item restores the previous context; the primary **MDE** button intentionally returns to the configured/demo Workbench. This is a bounded preview path, not full active-document panel rebinding or editable persistence.
+The native Explorer, Inspector, diagram list and diagnostics follow the active MDE document. Preview panels show that captured model and canonical read-only properties/styles, without edit controls. Switching back restores the configured Workbench's selection and unsent property/style drafts. Ordinary Editor tabs clear the MDE panel context and block stale editing callbacks. Panel bindings are weak and do not keep a closed preview session alive. The primary **MDE** button intentionally returns to the configured/demo Workbench. Native editable persistence and session restoration remain unfinished.
 
 The bridge relays typed Cordis commands and observes model revisions. The interim host still supplies one configured model or demo fixture; per-document `ProjectPath`/Buffer integration, native save acknowledgement and `SerializableItem` restoration remain incomplete. The visible-entry recovery does not claim those later integration gates passed.
 
@@ -49,20 +49,25 @@ with reference captures in that package's `preview/` directory. Its React contro
 are layout specimens, not permission to introduce unsupported model operations.
 
 The native workbench uses compact rows of native Zed controls and
-`bellatrix_ui_panels::PaneHeader` for panel disclosure/actions. Inspector text,
-number and documentation edits are transient drafts keyed by project, element
-and property, not another model store. Changed fields show **Not applied** with
-explicit **Apply** and **Cancel** controls. Cancel reloads the current canonical
-value. Clean fields follow model updates; a changed canonical value preserves a
-dirty draft, shows **Conflict**, and requires **Reload** before applying again.
+`bellatrix_ui_panels::PaneHeader` for panel disclosure/actions. Inspector editing
+is event-driven: typing, toggling a boolean or choosing an option queues the
+captured property command immediately. There is no Apply or Cancel step.
+The existing presentation state keeps only transient input, validation and
+receipt state keyed by project, element and property; the Cordis project model
+remains authoritative.
 
-Apply captures the target and revision and submits the existing validated MDE
-command. **Applying…** remains visible until its typed receipt and corresponding
-snapshot arrive. Success, including a no-op, acknowledges only the submitted
-edit; later typing is retained. Rejection keeps the draft and displays its error.
-Changing selection cannot redirect a captured edit to the new selection.
-Boolean and choice controls submit immediately through the same target and
-revision guard, with failures reported as feedback. ID and type remain read-only.
+Properties and styles share a single in-flight command boundary. While a command
+is pending, newer input is coalesced; its receipt releases the next valid edit
+against the current revision. The input stays mounted so typing and cursor focus
+are preserved. Canonical projection events do not submit another edit. Numeric
+intermediate input and domain rejections remain visible inline without corrupting
+the model. **Updating…** distinguishes queued input from acknowledged model state.
+
+Clean fields follow model updates. A conflicting canonical change preserves the
+local edit and offers **Reload model value** rather than silently overwriting the
+other change. Changing selection or document cannot redirect a captured command;
+queued input is revalidated against its own target before submission. Read-only
+previews show canonical values without write controls. ID and type stay read-only.
 **Name** is the canonical diagram name; **Label metadata (not diagram name)**
 remains stored and editable under Advanced. Documentation and less-common
 properties stay reachable in their sections; opening the Inspector does not
@@ -79,7 +84,7 @@ Native acceptance remains required for this increment:
 - Collapse and reopen every panel section; retain selection and split sizes.
 - Search tools, clear the query, select a tool and create through the canvas.
 - Select classes, members and relations from the canvas and Model Explorer.
-- Edit and apply text, toggle booleans and choose enums; inspect revision feedback.
+- Type continuously, toggle booleans and choose enums; observe live canonical updates, queued feedback and retained cursor focus.
 - Open Documentation/Advanced and ensure all schema properties are reachable.
 - Confirm full figure bounds, context menus, resize and toolbar zoom still work.
 
@@ -90,9 +95,13 @@ compilation or successful interaction. Keep that distinction in release reports.
 
 Select a concrete canvas View to edit Styles. Fill, stroke, text color, font,
 font size, stroke width and opacity use the existing View style contract; blank
-fields inherit the theme. Apply uses the revision captured with the draft.
-Conflicting revisions preserve the draft and require explicit reload instead of
-silently overwriting a newer style. Selecting only a semantic model element does
+fields inherit the theme. Valid edits update the model immediately through tracked
+Cordis commands, serialized with semantic property edits. Rapid typing is coalesced
+while a receipt is pending; later text and focus are retained. Incomplete colors
+and invalid numbers stay visible with field errors and do not enter the model.
+Concurrent changes to the same edited field preserve the draft and require explicit
+reload instead of silently overwriting a newer style. Theme restoration is an explicit
+action; its receipt clears only text that has not changed since the reset request. Selecting only a semantic model element does
 not choose an arbitrary representation to modify.
 
 Relationship Views offer Straight, Automatic and Curve routing. Curve authors a

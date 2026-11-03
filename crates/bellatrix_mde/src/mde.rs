@@ -43,8 +43,8 @@ pub use inspector::{
 pub use path::{PathError, physical_path, validate_segment};
 pub use plan::{Artifact, Diagnostic, Plan, PlanError};
 pub use presentation::{
-    ClassifierPresentation, ClassifierPresentationOptions, SemanticIdentity,
-    classifier_presentation, element_display_label, semantic_identity,
+    ClassifierPresentation, ClassifierPresentationOptions, MemberPresentation, SemanticIdentity,
+    classifier_presentation, element_display_label, member_presentation, semantic_identity,
 };
 pub use publish::{publish_new, publish_replace};
 pub use quick_edit::{

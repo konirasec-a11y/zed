@@ -21,6 +21,17 @@ fn display(value: &Value) -> String {
         .map_or_else(|| value.to_string(), str::to_owned)
 }
 
+fn same_value(editor: PropertyEditor, left: &str, right: &str) -> bool {
+    if left == right {
+        return true;
+    }
+    if editor != PropertyEditor::Number {
+        return false;
+    }
+    matches!((serde_json::from_str::<Value>(left), serde_json::from_str::<Value>(right)),
+        (Ok(left), Ok(right)) if left.is_number() && right.is_number() && left == right)
+}
+
 fn display_kind(kind: &str) -> &str {
     bellatrix_mde::semantic_identity(kind).type_label
 }
@@ -61,31 +72,55 @@ pub(crate) fn compact_row(
 }
 
 pub(crate) struct InspectorDraft {
-    pub input: Entity<InputField>,
+    pub input: Option<Entity<InputField>>,
+    discrete: Option<Value>,
+    last_observed: String,
+    admitted_text: Option<String>,
     state: DraftState,
     pending: Option<(
         String,
         tokio::sync::watch::Receiver<Option<Result<u64, String>>>,
     )>,
-    _listener: gpui::Subscription,
+    _listener: Option<gpui::Subscription>,
+}
+
+impl InspectorDraft {
+    fn text(&self, cx: &gpui::App) -> String {
+        self.input
+            .as_ref()
+            .map(|input| input.read(cx).text(cx))
+            .or_else(|| self.discrete.as_ref().map(display))
+            .unwrap_or_else(|| self.state.baseline.clone())
+    }
 }
 
 pub(crate) fn reconcile_inputs(
     drafts: &mut HashMap<DraftKey, InspectorDraft>,
+    item: Entity<MdeWorkbenchItem>,
     project: &str,
     inspector: Option<&ElementInspector>,
     revision: u64,
     window: &mut Window,
     cx: &mut Context<MdeRightPanel>,
 ) {
+    if drafts
+        .iter()
+        .any(|(key, draft)| key.project == project && draft.state.queued)
+    {
+        let item = item.clone();
+        let owner = cx.weak_entity();
+        cx.defer(move |cx| {
+            if let Err(error) = owner.update(cx, |panel, cx| {
+                flush_property_edits(panel, &item, cx);
+                crate::style_editor::flush_style_edits(panel, &item, cx);
+            }) {
+                eprintln!("MDE property queue refresh failed: {error}");
+            }
+        });
+    }
     let Some(inspector) = inspector else { return };
     for property in &inspector.properties {
-        if !property.editable
-            || !matches!(
-                property.editor,
-                PropertyEditor::Text | PropertyEditor::Multiline | PropertyEditor::Number
-            )
-        {
+        if !property.editable {
             continue;
         }
         let key = DraftKey {
@@ -94,32 +129,79 @@ pub(crate) fn reconcile_inputs(
             path: property.path.clone(),
         };
         let canonical = display(&property.value);
-        let draft = drafts.entry(key).or_insert_with(|| {
-            let input = cx.new(|cx| {
-                let input = InputField::new(window, cx, &property.label).label_min_width(px(0.0));
-                if property.editor == PropertyEditor::Multiline {
-                    input.editor().set_multiline(Some(12), window, cx);
-                }
-                input.set_text(&canonical, window, cx);
-                input
-            });
-            let owner = cx.weak_entity();
-            let listener = input.read(cx).editor().clone().subscribe(
-                Box::new(move |event, _, cx| {
-                    if event == ErasedEditorEvent::BufferEdited {
-                        let owner = owner.clone();
-                        cx.defer(move |cx| {
-                            if let Err(error) = owner.update(cx, |_, cx| cx.notify()) {
-                                eprintln!("MDE inspector refresh failed: {error}");
-                            }
-                        });
+        let draft = drafts.entry(key.clone()).or_insert_with(|| {
+            let input = matches!(
+                property.editor,
+                PropertyEditor::Text | PropertyEditor::Multiline | PropertyEditor::Number
+            )
+            .then(|| {
+                cx.new(|cx| {
+                    let input =
+                        InputField::new(window, cx, &property.label).label_min_width(px(0.0));
+                    if property.editor == PropertyEditor::Multiline {
+                        input.editor().set_multiline(Some(12), window, cx);
                     }
-                }),
-                window,
-                cx,
-            );
+                    input.set_text(&canonical, window, cx);
+                    input
+                })
+            });
+            let listener = input.as_ref().map(|input| {
+                let owner = cx.weak_entity();
+                let event_key = key.clone();
+                let event_item = item.clone();
+                let numeric = property.editor == PropertyEditor::Number;
+                input.read(cx).editor().clone().subscribe(
+                    Box::new(move |event, _, cx| {
+                        if event == ErasedEditorEvent::BufferEdited {
+                            let owner = owner.clone();
+                            let key = event_key.clone();
+                            let item = event_item.clone();
+                            cx.defer(move |cx| {
+                                if let Err(error) = owner.update(cx, |panel, cx| {
+                                    let admitted =
+                                        property_admission_allowed(panel, &item, &key, cx);
+                                    if let Some(draft) = panel.property_drafts.get_mut(&key) {
+                                        let text = draft.text(cx);
+                                        // Editor notifications are deferred, so a transient suppression flag cannot distinguish projection from typing.
+                                        if text == draft.last_observed {
+                                            return;
+                                        }
+                                        draft.last_observed = text.clone();
+                                        if !admitted {
+                                            draft.state.error = Some(
+                                                "Edit not synced: the active selection changed"
+                                                    .into(),
+                                            );
+                                            cx.notify();
+                                            return;
+                                        }
+                                        if numeric
+                                            && !serde_json::from_str::<Value>(&text)
+                                                .is_ok_and(|value| value.is_number())
+                                        {
+                                            draft.state.error = Some("Enter a valid number".into());
+                                        } else {
+                                            draft.admitted_text = Some(text);
+                                            draft.state.edited();
+                                        }
+                                    }
+                                    flush_property_edits(panel, &item, cx);
+                                    cx.notify();
+                                }) {
+                                    eprintln!("MDE inspector refresh failed: {error}");
+                                }
+                            });
+                        }
+                    }),
+                    window,
+                    cx,
+                )
+            });
             InspectorDraft {
                 input,
+                discrete: None,
+                last_observed: canonical.clone(),
+                admitted_text: None,
                 state: DraftState::new(canonical.clone(), revision),
                 pending: None,
                 _listener: listener,
@@ -133,22 +215,222 @@ pub(crate) fn reconcile_inputs(
                     .then(|| Err("Property command channel closed".into()))
             });
             if let Some(receipt) = receipt {
-                // Wait for the snapshot to reach the acknowledged revision before reconciling.
-                if !matches!(&receipt, Ok(applied) if revision < *applied) {
-                    draft.state.acknowledge(submitted, receipt);
-                    draft.pending = None;
-                }
+                draft.state.acknowledge(submitted, receipt);
+                draft.pending = None;
             }
         }
         if draft.pending.is_none() {
-            let text = draft.input.read(cx).text(cx);
-            let reconciled = draft.state.reconcile(&text, &canonical, revision);
+            let text = draft.text(cx);
+            // Numeric formatting is presentation state; acknowledging 1e2 as 100.0 must not move the caret.
+            let reconciled = if revision >= draft.state.revision
+                && same_value(property.editor, &text, &canonical)
+            {
+                draft.state.reload(&text, revision);
+                text.clone()
+            } else {
+                draft.state.reconcile(&text, &canonical, revision)
+            };
             if text != reconciled {
-                draft
-                    .input
-                    .update(cx, |input, cx| input.set_text(&reconciled, window, cx));
+                draft.last_observed = reconciled.clone();
+                if let Some(input) = &draft.input {
+                    input.update(cx, |input, cx| input.set_text(&reconciled, window, cx));
+                } else {
+                    draft.discrete = None;
+                }
+            } else if text == canonical && !draft.state.queued {
+                draft.discrete = None;
             }
         }
+    }
+}
+
+fn property_admission_allowed(
+    panel: &MdeRightPanel,
+    item: &Entity<MdeWorkbenchItem>,
+    key: &DraftKey,
+    cx: &gpui::App,
+) -> bool {
+    panel.is_bound_to(item)
+        && !item.read(cx).source().is_read_only()
+        && item.read(cx).project_id().as_str() == key.project
+        && item.read(cx).selected_element() == Some(key.element.as_str())
+}
+
+fn queue_discrete_property(
+    panel: &mut MdeRightPanel,
+    item: &Entity<MdeWorkbenchItem>,
+    key: &DraftKey,
+    value: Value,
+    cx: &mut Context<MdeRightPanel>,
+) {
+    if !property_admission_allowed(panel, item, key, cx) {
+        return;
+    }
+    if let Some(draft) = panel.property_drafts.get_mut(key) {
+        draft.admitted_text = Some(display(&value));
+        draft.discrete = Some(value);
+        draft.state.edited();
+    }
+    flush_property_edits(panel, item, cx);
+    cx.notify();
+}
+
+pub(crate) fn property_command_pending(panel: &MdeRightPanel) -> bool {
+    panel
+        .property_drafts
+        .values()
+        .any(|draft| draft.pending.is_some())
+}
+
+pub(crate) fn flush_property_edits(
+    panel: &mut MdeRightPanel,
+    item: &Entity<MdeWorkbenchItem>,
+    cx: &mut Context<MdeRightPanel>,
+) {
+    if property_command_pending(panel) || crate::style_editor::style_command_pending(panel) {
+        return;
+    }
+    let project = item.read(cx).project_id().clone();
+    if item.read(cx).source().is_read_only() {
+        let mut changed = false;
+        for (key, draft) in &mut panel.property_drafts {
+            if key.project == project.as_str() && draft.state.queued {
+                let message = "Waiting for this document to become editable";
+                changed |= draft.state.error.as_deref() != Some(message);
+                draft.state.error = Some(message.into());
+            }
+        }
+        if changed {
+            cx.notify();
+        }
+        return;
+    }
+    let snapshot = match item.read(cx).source().snapshot() {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            let message = format!("Project snapshot unavailable: {error}");
+            let mut changed = false;
+            for (key, draft) in &mut panel.property_drafts {
+                if key.project == project.as_str() && draft.state.queued {
+                    changed |= draft.state.error.as_ref() != Some(&message);
+                    draft.state.error = Some(message.clone());
+                }
+            }
+            if changed {
+                cx.notify();
+            }
+            return;
+        }
+    };
+    let keys: Vec<_> = panel
+        .property_drafts
+        .iter()
+        .filter(|(key, draft)| key.project == project.as_str() && draft.state.queued)
+        .map(|(key, _)| key.clone())
+        .collect();
+    let mut changed = false;
+    for key in keys {
+        let Some(draft) = panel.property_drafts.get_mut(&key) else {
+            continue;
+        };
+        if snapshot.revision < draft.state.revision {
+            continue;
+        }
+        draft.state.queued = false;
+        changed = true;
+        let Some(text) = draft.admitted_text.clone() else {
+            continue;
+        };
+        let Some(inspection) = bellatrix_mde::inspect_element(&snapshot.section, &key.element)
+        else {
+            draft.state.error = Some("Element no longer exists".into());
+            continue;
+        };
+        let Some(property) = inspection
+            .properties
+            .iter()
+            .find(|property| property.path == key.path)
+        else {
+            continue;
+        };
+        let canonical = display(&property.value);
+        if same_value(property.editor, &text, &canonical) {
+            draft.state.reload(&text, snapshot.revision);
+            continue;
+        }
+        if !same_value(property.editor, &canonical, &draft.state.baseline) {
+            draft.state.conflict = true;
+            continue;
+        }
+        draft.state.conflict = false;
+        draft.state.revision = snapshot.revision;
+        let value = if let Some(value) = &draft.discrete {
+            value.clone()
+        } else if property.editor == PropertyEditor::Number {
+            match serde_json::from_str::<Value>(&text) {
+                Ok(value) if value.is_number() => value,
+                _ => {
+                    draft.state.error = Some("Enter a valid number".into());
+                    continue;
+                }
+            }
+        } else {
+            Value::String(text.clone())
+        };
+        draft.state.error = None;
+        let completion = item.update(cx, |workbench, cx| {
+            workbench.submit_admitted_inspector_property(
+                project.clone(),
+                key.element.clone(),
+                key.path.clone(),
+                value,
+                snapshot.revision,
+                cx,
+            )
+        });
+        match completion {
+            Err(error) => {
+                draft.state.error = Some(error);
+            }
+            Ok(mut completion) => {
+                draft.pending = Some((text, completion.clone()));
+                let item = item.clone();
+                cx.spawn(async move |owner, cx| {
+                    if completion.borrow().is_none() {
+                        if let Err(error) = completion.changed().await {
+                            eprintln!("MDE property receipt unavailable: {error}");
+                        }
+                    }
+                    if let Err(error) = owner.update(cx, |panel, cx| {
+                        let receipt = completion
+                            .borrow()
+                            .clone()
+                            .unwrap_or_else(|| Err("Property command channel closed".into()));
+                        if let Some(draft) = panel.property_drafts.get_mut(&key) {
+                            if draft
+                                .pending
+                                .as_ref()
+                                .is_some_and(|(_, current)| current.same_channel(&completion))
+                            {
+                                if let Some((submitted, _)) = draft.pending.take() {
+                                    draft.state.acknowledge(&submitted, receipt);
+                                }
+                            }
+                        }
+                        flush_property_edits(panel, &item, cx);
+                        crate::style_editor::flush_style_edits(panel, &item, cx);
+                        cx.notify();
+                    }) {
+                        eprintln!("MDE property completion refresh failed: {error}");
+                    }
+                })
+                .detach();
+                break;
+            }
+        }
+    }
+    if changed {
+        cx.notify();
     }
 }
 
@@ -158,10 +440,17 @@ fn property_row(
     drafts: &HashMap<DraftKey, InspectorDraft>,
     project: &ProjectId,
     element: &str,
-    revision: u64,
+    _revision: u64,
     window: &mut Window,
     cx: &mut Context<MdeRightPanel>,
 ) -> AnyElement {
+    if item.read(cx).source().is_read_only() {
+        // A captured preview presents canonical values, never another document's drafts.
+        return compact_row(
+            property.label.clone(),
+            Label::new(display(&property.value)).size(LabelSize::Small),
+        );
+    }
     let path = property.path.clone();
     let key = DraftKey {
         project: project.as_str().into(),
@@ -178,143 +467,235 @@ fn property_row(
             let Some(draft) = drafts.get(&key) else {
                 return compact_row(label, Label::new(display(&property.value)));
             };
-            let dirty = draft.state.dirty(&draft.input.read(cx).text(cx));
+            let dirty = draft.state.dirty(&draft.text(cx));
             let pending = draft.pending.is_some();
             let conflict = draft.state.conflict;
-            let status = if pending {
-                "Applying…".to_owned()
+            let status = if let Some(error) = &draft.state.error {
+                format!("Not synced: {error}")
+            } else if pending {
+                "Updating…".to_owned()
             } else if conflict {
                 "Conflict: model changed. Reload to continue.".into()
-            } else if let Some(error) = &draft.state.error {
-                format!("Not applied: {error}")
             } else if dirty {
-                "Not applied".into()
+                "Waiting to sync…".into()
             } else {
                 "".into()
+            };
+            let Some(field) = &draft.input else {
+                return compact_row(label, Label::new(display(&property.value)));
             };
             let input = if property.editor == PropertyEditor::Multiline {
                 div()
                     .min_h(px(112.0))
-                    .child(draft.input.read(cx).editor().render(window, cx))
+                    .child(field.read(cx).editor().render(window, cx))
                     .into_any_element()
             } else {
-                draft.input.clone().into_any_element()
+                field.clone().into_any_element()
             };
-            let target = item.clone();
-            let apply_key = key.clone();
             let reload_key = key.clone();
             let reload_item = item.clone();
-            let numeric = property.editor == PropertyEditor::Number;
-            div().flex().flex_col().gap_1().w_full().min_w_0()
+            div()
+                .flex()
+                .flex_col()
+                .gap_1()
+                .w_full()
+                .min_w_0()
                 .child(input)
-                .when(!status.is_empty(), |row| row.child(Label::new(status).size(LabelSize::XSmall).color(Color::Muted)))
-                .child(div().flex().gap_2()
-                    .child(Button::new(format!("mde-inspector-apply-{path}"), "Apply")
-                        .disabled(!dirty || conflict || pending)
-                        .on_click(cx.listener(move |panel, _, _, cx| {
-                            let Some(draft) = panel.property_drafts.get_mut(&apply_key) else { return };
-                            if draft.pending.is_some() || draft.state.conflict { return; }
-                            let text = draft.input.read(cx).text(cx);
-                            let value = if numeric {
-                                match serde_json::from_str::<Value>(&text) {
-                                    Ok(value) if value.is_number() => value,
-                                    _ => { draft.state.error = Some("Enter a valid number".into()); cx.notify(); return; }
+                .when(!status.is_empty(), |row| {
+                    row.child(
+                        Label::new(status)
+                            .size(LabelSize::XSmall)
+                            .color(Color::Muted),
+                    )
+                })
+                .when(conflict, |row| {
+                    row.child(
+                        Button::new(format!("mde-inspector-reload-{path}"), "Reload model value")
+                            .disabled(pending)
+                            .on_click(cx.listener(move |panel, _, window, cx| {
+                                let Ok(snapshot) = reload_item.read(cx).source().snapshot() else {
+                                    return;
+                                };
+                                if reload_item.read(cx).project_id().as_str() != reload_key.project
+                                {
+                                    return;
                                 }
-                            } else { Value::String(text.clone()) };
-                            let completion = target.update(cx, |workbench, cx| workbench.set_inspector_property(project.clone(), apply_key.element.clone(), apply_key.path.clone(), value, draft.state.revision, cx));
-                            match completion {
-                            Ok(mut completion) => {
-                                draft.pending = Some((text, completion.clone()));
-                                cx.spawn(async move |owner, cx| {
-                                    if completion.borrow().is_none() {
-                                        if let Err(error) = completion.changed().await { eprintln!("MDE property receipt unavailable: {error}"); }
-                                    }
-                                    if let Err(error) = owner.update(cx, |_, cx| cx.notify()) { eprintln!("MDE property completion refresh failed: {error}"); }
-                                }).detach();
-                            }
-                            Err(error) => { draft.state.error = Some(error); }
-                            }
-                            cx.notify();
-                        })))
-                    .child(Button::new(format!("mde-inspector-reload-{path}"), if conflict { "Reload" } else { "Cancel" })
-                        .disabled(pending || (!dirty && !conflict && draft.state.error.is_none()))
-                        .on_click(cx.listener(move |panel, _, window, cx| {
-                            let Ok(snapshot) = reload_item.read(cx).source().snapshot() else { return };
-                            if reload_item.read(cx).project_id().as_str() != reload_key.project { return; }
-                            let Some(inspection) = bellatrix_mde::inspect_element(&snapshot.section, &reload_key.element) else { return };
-                            let Some(property) = inspection.properties.iter().find(|property| property.path == reload_key.path) else { return };
-                            let Some(draft) = panel.property_drafts.get_mut(&reload_key) else { return };
-                            if draft.pending.is_some() { return; }
-                            let canonical = display(&property.value);
-                            draft.state.reload(&canonical, snapshot.revision);
-                            draft.input.update(cx, |input, cx| input.set_text(&canonical, window, cx));
-                            cx.notify();
-                        }))))
+                                let Some(inspection) = bellatrix_mde::inspect_element(
+                                    &snapshot.section,
+                                    &reload_key.element,
+                                ) else {
+                                    return;
+                                };
+                                let Some(property) = inspection
+                                    .properties
+                                    .iter()
+                                    .find(|property| property.path == reload_key.path)
+                                else {
+                                    return;
+                                };
+                                let Some(draft) = panel.property_drafts.get_mut(&reload_key) else {
+                                    return;
+                                };
+                                if draft.pending.is_some() {
+                                    return;
+                                }
+                                let canonical = display(&property.value);
+                                draft.state.reload(&canonical, snapshot.revision);
+                                draft.state.queued = false;
+                                draft.last_observed = canonical.clone();
+                                if let Some(input) = &draft.input {
+                                    input.update(cx, |input, cx| {
+                                        input.set_text(&canonical, window, cx)
+                                    });
+                                }
+                                draft.discrete = None;
+                                cx.notify();
+                            })),
+                    )
+                })
                 .into_any_element()
         }
         PropertyEditor::Boolean if property.editable => {
             let target = item.clone();
+            let selected = drafts
+                .get(&key)
+                .and_then(|draft| draft.discrete.as_ref())
+                .unwrap_or(&property.value)
+                .as_bool()
+                .unwrap_or(false);
             Checkbox::new(
                 format!("mde-inspector-boolean-{path}"),
-                ToggleState::from(property.value.as_bool().unwrap_or(false)),
+                ToggleState::from(selected),
             )
             .tooltip(Tooltip::text(label.clone()))
-            .on_click(move |state, _, cx| {
-                target.update(cx, |workbench, cx| {
-                    if let Err(error) = workbench.set_inspector_property(
-                        project.clone(),
-                        element.clone(),
-                        path.clone(),
-                        Value::Bool(*state == ToggleState::Selected),
-                        revision,
-                        cx,
-                    ) {
-                        workbench.feedback = error;
-                        cx.notify();
-                    }
-                });
-            })
+            .on_click(cx.listener(move |panel, state, _, cx| {
+                queue_discrete_property(
+                    panel,
+                    &target,
+                    &key,
+                    Value::Bool(*state == ToggleState::Selected),
+                    cx,
+                );
+            }))
             .into_any_element()
         }
         PropertyEditor::Choice(options) if property.editable => {
             let target = item.clone();
-            let choices_path = path.clone();
+            let panel = cx.weak_entity();
+            let choice_key = key.clone();
             let menu = ContextMenu::build(window, cx, move |menu, _, _| {
                 options.iter().fold(menu, |menu, option| {
                     let target = target.clone();
-                    let path = choices_path.clone();
-                    let project = project.clone();
-                    let element = element.clone();
+                    let key = choice_key.clone();
+                    let panel = panel.clone();
                     let selected = *option;
                     menu.entry(selected, None, move |_, cx| {
-                        target.update(cx, |workbench, cx| {
-                            if let Err(error) = workbench.set_inspector_property(
-                                project.clone(),
-                                element.clone(),
-                                path.clone(),
+                        if let Err(error) = panel.update(cx, |panel, cx| {
+                            queue_discrete_property(
+                                panel,
+                                &target,
+                                &key,
                                 Value::String(selected.into()),
-                                revision,
                                 cx,
-                            ) {
-                                workbench.feedback = error;
-                                cx.notify();
-                            }
-                        });
+                            )
+                        }) {
+                            eprintln!("MDE property choice update failed: {error}");
+                        }
                     })
                 })
             });
-            DropdownMenu::new(
-                format!("mde-inspector-choice-{path}"),
-                display(&property.value),
-                menu,
-            )
-            .full_width(true)
-            .into_any_element()
+            let value = drafts
+                .get(&key)
+                .and_then(|draft| draft.discrete.as_ref())
+                .unwrap_or(&property.value);
+            DropdownMenu::new(format!("mde-inspector-choice-{path}"), display(value), menu)
+                .full_width(true)
+                .into_any_element()
         }
         _ => Label::new(display(&property.value))
             .size(LabelSize::Small)
             .into_any_element(),
     };
+    if matches!(
+        property.editor,
+        PropertyEditor::Boolean | PropertyEditor::Choice(_)
+    ) {
+        let key = DraftKey {
+            project: project.as_str().into(),
+            element,
+            path,
+        };
+        let status = drafts.get(&key).and_then(|draft| {
+            if let Some(error) = &draft.state.error {
+                Some(format!("Not synced: {error}"))
+            } else if draft.state.conflict {
+                Some("Conflict: model changed".into())
+            } else if draft.pending.is_some() || draft.state.queued {
+                Some("Updating…".into())
+            } else {
+                None
+            }
+        });
+        let conflict = drafts
+            .get(&key)
+            .is_some_and(|draft| draft.state.conflict && draft.pending.is_none());
+        let reload_item = item.clone();
+        return compact_row(
+            label,
+            div()
+                .flex()
+                .flex_col()
+                .gap_1()
+                .child(control)
+                .when_some(status, |row, status| {
+                    row.child(
+                        Label::new(status)
+                            .size(LabelSize::XSmall)
+                            .color(Color::Muted),
+                    )
+                })
+                .when(conflict, |row| {
+                    row.child(
+                        Button::new(
+                            format!("mde-inspector-reload-{}", key.path),
+                            "Reload model value",
+                        )
+                        .on_click(cx.listener(move |panel, _, _, cx| {
+                            let Ok(snapshot) = reload_item.read(cx).source().snapshot() else {
+                                return;
+                            };
+                            if reload_item.read(cx).project_id().as_str() != key.project {
+                                return;
+                            }
+                            let Some(inspection) =
+                                bellatrix_mde::inspect_element(&snapshot.section, &key.element)
+                            else {
+                                return;
+                            };
+                            let Some(property) = inspection
+                                .properties
+                                .iter()
+                                .find(|property| property.path == key.path)
+                            else {
+                                return;
+                            };
+                            let Some(draft) = panel.property_drafts.get_mut(&key) else {
+                                return;
+                            };
+                            if draft.pending.is_some() {
+                                return;
+                            }
+                            draft
+                                .state
+                                .reload(&display(&property.value), snapshot.revision);
+                            draft.state.queued = false;
+                            draft.discrete = None;
+                            cx.notify();
+                        })),
+                    )
+                }),
+        );
+    }
     compact_row(label, control)
 }
 
@@ -368,6 +749,11 @@ pub(crate) fn render_inspector(
         ];
     };
     let project = item.read(cx).project_id().clone();
+    let selection_status = if item.read(cx).source().is_read_only() {
+        "Read-only"
+    } else {
+        "Selected"
+    };
     let palette = WorkbenchPalette::current(cx);
     let mut children = vec![
         div()
@@ -399,9 +785,12 @@ pub(crate) fn render_inspector(
                             .weight(gpui::FontWeight::SEMIBOLD),
                     )
                     .child(
-                        Label::new(format!("{} · Selected", display_kind(&inspector.kind)))
-                            .size(LabelSize::XSmall)
-                            .color(Color::Muted),
+                        Label::new(format!(
+                            "{} · {selection_status}",
+                            display_kind(&inspector.kind)
+                        ))
+                        .size(LabelSize::XSmall)
+                        .color(Color::Muted),
                     ),
             )
             .into_any_element(),

@@ -11,6 +11,7 @@ mod quick_edit_view;
 mod snapshot;
 mod source;
 mod status_entry;
+mod style_drafts;
 mod style_editor;
 mod symbol_library;
 mod theme;
@@ -803,7 +804,7 @@ impl MdeWorkbenchItem {
             cx,
         );
     }
-    pub(crate) fn set_inspector_property(
+    pub(crate) fn submit_admitted_inspector_property(
         &mut self,
         project_id: ProjectId,
         element_id: String,
@@ -815,10 +816,10 @@ impl MdeWorkbenchItem {
         if self.source.is_read_only() {
             return Err("This document is not currently editable; draft preserved".into());
         }
-        if self.project_id() != &project_id
-            || self.selected_element.as_deref() != Some(element_id.as_str())
-        {
-            return Err("Inspector selection changed; draft preserved".into());
+        // Admission captured the target while its input was active. A later
+        // selection change must not redirect or discard that accepted edit.
+        if self.project_id() != &project_id {
+            return Err("Inspector project changed; draft preserved".into());
         }
         let (completion, receipt) = tokio::sync::watch::channel(None);
         self.source.submit(MdeUiCommand::SetPropertyTracked {
@@ -1619,6 +1620,10 @@ impl Render for MdeWorkbenchItem {
                                 }
                                 _ => {}
                             }
+                            classifier = classifier.member_presentation(
+                                &member.id,
+                                bellatrix_mde::member_presentation(member),
+                            );
                         }
                         for parameter in template_parameters {
                             classifier = classifier.template_parameter_with_id(

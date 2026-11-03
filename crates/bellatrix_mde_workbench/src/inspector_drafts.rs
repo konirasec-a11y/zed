@@ -12,6 +12,7 @@ pub(crate) struct DraftState {
     pub revision: u64,
     pub conflict: bool,
     pub error: Option<String>,
+    pub queued: bool,
 }
 
 impl DraftState {
@@ -21,7 +22,13 @@ impl DraftState {
             revision,
             conflict: false,
             error: None,
+            queued: false,
         }
+    }
+
+    pub fn edited(&mut self) {
+        self.queued = true;
+        self.error = None;
     }
 
     pub fn dirty(&self, text: &str) -> bool {
@@ -64,7 +71,7 @@ mod tests {
     use super::DraftState;
 
     #[test]
-    fn editing_tracks_the_model_without_losing_unapplied_changes() {
+    fn realtime_editing_preserves_newer_input_through_receipts_and_conflicts() {
         let mut draft = DraftState::new("Original".into(), 1);
         let text = draft.reconcile("Original", "Remote rename", 2);
         assert_eq!(text, "Remote rename");
@@ -82,7 +89,12 @@ mod tests {
         draft.reload("Someone else's edit", 4);
         assert!(!draft.dirty("Someone else's edit"));
         assert!(!draft.conflict);
+        draft.edited();
+        assert!(draft.queued);
+        draft.queued = false; // The first value is now in flight.
+        draft.edited(); // More typing while its receipt is pending.
         draft.acknowledge("Applied edit", Ok(5));
+        assert!(draft.queued);
         let text = draft.reconcile("Typed while applying", "Applied edit", 5);
         assert_eq!(text, "Typed while applying");
         assert!(draft.dirty(&text));
@@ -93,6 +105,7 @@ mod tests {
         assert_eq!(draft.reconcile(&text, "Applied edit", 5), text);
         assert_eq!(draft.error.as_deref(), Some("Rejected by validation"));
         draft.reload("Applied edit", 5);
+        draft.queued = false;
         draft.acknowledge("Applied edit", Ok(5));
         assert_eq!(
             draft.reconcile("Applied edit", "Applied edit", 5),

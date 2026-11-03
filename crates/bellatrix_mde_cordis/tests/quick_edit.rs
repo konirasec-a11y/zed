@@ -1,7 +1,10 @@
-use bellatrix_mde::{ModelingSection, Project};
+use bellatrix_mde::{
+    ModelingSection, Project, element_display_label, inspect_element, member_presentation,
+};
 use bellatrix_mde_cordis::{
     MdePlugin, ModelingAddMember, ModelingAddMemberRequested, ModelingMemberKind,
-    ModelingQuickEdit, ModelingQuickEditRequested, UmlQuickCreate, with_model,
+    ModelingQuickEdit, ModelingQuickEditRequested, ModelingSetProperty,
+    ModelingSetPropertyRequested, UmlQuickCreate, with_model,
 };
 use bellatrix_project::{
     ProjectCreate, ProjectCreateRequested, ProjectDocument, ProjectId, ProjectPlugin,
@@ -109,6 +112,174 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
         );
     }
     assert!(section.elements.iter().any(|e| e.id == "file-task"));
+    let attribute = section
+        .elements
+        .iter()
+        .find(|element| element.name == "Attribute1")
+        .expect("created attribute");
+    let operation = section
+        .elements
+        .iter()
+        .find(|element| element.name == "Operation1")
+        .expect("created operation");
+    assert_eq!(element_display_label(attribute), "+Attribute1");
+    assert_eq!(element_display_label(operation), "+Operation1()");
+    let mut revision = 2;
+    for (element_id, path, value) in [
+        (&attribute.id, "name", serde_json::json!("limit")),
+        (
+            &attribute.id,
+            "properties.visibility",
+            serde_json::json!("private"),
+        ),
+        (
+            &attribute.id,
+            "properties.type",
+            serde_json::json!("Integer"),
+        ),
+        (
+            &attribute.id,
+            "properties.defaultValue",
+            serde_json::json!("10"),
+        ),
+        (
+            &attribute.id,
+            "properties.isReadOnly",
+            serde_json::json!(true),
+        ),
+        (
+            &attribute.id,
+            "properties.isStatic",
+            serde_json::json!(true),
+        ),
+        (&operation.id, "name", serde_json::json!("find")),
+        (&operation.id, "properties.isQuery", serde_json::json!(true)),
+        (
+            &operation.id,
+            "properties.isStatic",
+            serde_json::json!(true),
+        ),
+    ] {
+        let result = ctx
+            .query::<ModelingSetProperty>(
+                Routing::Unscoped,
+                ModelingSetPropertyRequested {
+                    project_id: a.clone(),
+                    element_id: element_id.clone(),
+                    path: path.into(),
+                    value,
+                    expected_revision: revision,
+                },
+            )
+            .await
+            .expect("property response");
+        revision += 1;
+        assert!(matches!(result, QueryOutcome::Answer(Ok(value)) if value == revision));
+    }
+    let edited = projects.snapshot(&a).expect("edited project");
+    let reopened: ProjectDocument =
+        serde_json::from_slice(&serde_json::to_vec(edited.as_ref()).expect("serialize project"))
+            .expect("reopen project");
+    let projected: ModelingSection = serde_json::from_value(
+        reopened
+            .section(bellatrix_mde::MODELING_NAMESPACE)
+            .expect("modeling section")
+            .clone(),
+    )
+    .expect("reopened model");
+    let owner = inspect_element(&projected, "type-list").expect("classifier compartments");
+    for (member_id, expected, rows) in [
+        (
+            &attribute.id,
+            "-limit: Integer = 10 {readOnly}",
+            &owner.attributes,
+        ),
+        (&operation.id, "+find(): {query}", &owner.operations),
+    ] {
+        let member = projected
+            .elements
+            .iter()
+            .find(|element| &element.id == member_id)
+            .expect("persisted member");
+        assert_eq!(element_display_label(member), expected);
+        assert_eq!(
+            inspect_element(&projected, member_id)
+                .expect("member inspector")
+                .display_label,
+            expected
+        );
+        assert_eq!(
+            rows.iter()
+                .find(|row| &row.id == member_id)
+                .expect("compartment row")
+                .display_label,
+            expected
+        );
+        assert!(member_presentation(member).underlined);
+    }
+    assert_eq!(projects.snapshot(&b).expect("other project").revision(), 0);
+    for (element_id, path, value) in [
+        (&attribute.id, "properties.type", serde_json::json!("")),
+        (
+            &attribute.id,
+            "properties.defaultValue",
+            serde_json::json!(""),
+        ),
+        (
+            &attribute.id,
+            "properties.isReadOnly",
+            serde_json::json!(false),
+        ),
+        (
+            &attribute.id,
+            "properties.isStatic",
+            serde_json::json!(false),
+        ),
+        (
+            &operation.id,
+            "properties.isQuery",
+            serde_json::json!(false),
+        ),
+        (
+            &operation.id,
+            "properties.isStatic",
+            serde_json::json!(false),
+        ),
+        (&operation.id, "name", serde_json::json!("findAgain")),
+    ] {
+        let result = ctx
+            .query::<ModelingSetProperty>(
+                Routing::Unscoped,
+                ModelingSetPropertyRequested {
+                    project_id: a.clone(),
+                    element_id: element_id.clone(),
+                    path: path.into(),
+                    value,
+                    expected_revision: revision,
+                },
+            )
+            .await
+            .expect("repeat property response");
+        revision += 1;
+        assert!(matches!(result, QueryOutcome::Answer(Ok(value)) if value == revision));
+    }
+    let reset = projects.snapshot(&a).expect("reset project");
+    let reset: ModelingSection = serde_json::from_value(
+        reset
+            .section(bellatrix_mde::MODELING_NAMESPACE)
+            .expect("reset section")
+            .clone(),
+    )
+    .expect("reset model");
+    for (member_id, expected) in [(&attribute.id, "-limit"), (&operation.id, "+findAgain()")] {
+        let member = reset
+            .elements
+            .iter()
+            .find(|element| &element.id == member_id)
+            .expect("reset member");
+        assert_eq!(element_display_label(member), expected);
+        assert!(!member_presentation(member).underlined);
+    }
     mde.dispose().await.unwrap();
     assert!(matches!(
         ctx.query::<ModelingAddMember>(

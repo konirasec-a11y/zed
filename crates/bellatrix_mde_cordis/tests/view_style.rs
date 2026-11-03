@@ -255,6 +255,43 @@ async fn styles_and_routes_use_revision_boundary_and_rollback()
         Some(Ok(8)),
         "an already inherited style is an acknowledged no-op"
     );
+    let (completion, mut routing_receipt) = tokio::sync::watch::channel(None);
+    bridge
+        .sender()
+        .try_send(MdeUiCommand::SetViewRoutingTracked {
+            request: ModelingSetViewRoutingRequested {
+                project_id: id.clone(),
+                diagram_id: diagram.id.clone(),
+                view_id: edge.id.clone(),
+                routing: RelationshipRouting::Straight,
+                expected_revision: 8,
+            },
+            completion,
+        })?;
+    tokio::time::timeout(std::time::Duration::from_secs(5), routing_receipt.changed()).await??;
+    assert_eq!(*routing_receipt.borrow(), Some(Ok(9)));
+    let snapshot = service.snapshot(&id)?;
+    let routed: ModelingSection = serde_json::from_value(
+        snapshot
+            .section(MODELING_NAMESPACE)
+            .ok_or("section missing")?
+            .clone(),
+    )?;
+    let routed_edge = routed
+        .diagrams
+        .iter()
+        .flat_map(|diagram| &diagram.views)
+        .find(|view| view.id == edge.id)
+        .ok_or("edge missing")?;
+    assert_eq!(
+        routed_edge.style.routing,
+        Some(RelationshipRouting::Straight)
+    );
+    assert!(
+        matches!(&routed_edge.geometry, Geometry::Path { segments, .. }
+        if segments.iter().all(|segment| matches!(segment, PathSegment::Line { .. })))
+    );
+    assert_eq!(routed.relations, updated.relations);
     drop(bridge);
     plugin.dispose().await?;
     provider.dispose().await?;
