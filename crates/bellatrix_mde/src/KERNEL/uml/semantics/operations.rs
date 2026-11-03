@@ -553,6 +553,125 @@ fn parameter_object_effect(
     super::feature_compatibility::accept_any([not_data_type, absent_effect])
 }
 
+// This is exact signature equality, not Operation::isConsistentWith's
+// bidirectional type conformance or directional multiplicity containment.
+fn equal_signature_values<T: PartialEq>(
+    first: Result<T, QueryError>,
+    second: Result<T, QueryError>,
+) -> Result<bool, QueryError> {
+    match (first, second) {
+        (Ok(first), Ok(second)) => Ok(first == second),
+        (first, second) => {
+            super::feature_compatibility::require_all([first.map(|_| true), second.map(|_| true)])
+        }
+    }
+}
+
+fn operation_template_default_signature(
+    references: &ReferenceIndex<'_>,
+    parameter: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    if parameter
+        .properties()
+        .get("default")
+        .is_none_or(Value::is_null)
+    {
+        if parameter
+            .properties()
+            .get("ownedDefault")
+            .is_some_and(|value| !value.is_null())
+        {
+            return Err(QueryError::unsupported(
+                parameter.id(),
+                "default/ownedDefault projection is not materialized",
+            ));
+        }
+        for child in references
+            .explicit_owned_elements(parameter.id())
+            .map_err(|error| QueryError::invalid(parameter.id(), error))?
+        {
+            // ownedParameteredElement and ownedDefault share their target type;
+            // the explicit composite role, not the type alone, distinguishes them.
+            if child.conforms_to("ParameterableElement")
+                && classifiers::contributes_to_owned_union(
+                    parameter,
+                    child,
+                    "TemplateParameter-ownedDefault",
+                )?
+            {
+                return Err(QueryError::unsupported(
+                    parameter.id(),
+                    "default/ownedDefault projection is not materialized",
+                ));
+            }
+        }
+    }
+    let Some(default) = reception_reference(references, parameter, "default")? else {
+        return Ok(true);
+    };
+    if !default.conforms_to("Operation") {
+        return Ok(false);
+    }
+    // The legacy template adapter only supports generic/classifier parameters.
+    // Do not guess an exposed operation from its legacy relation or ownership.
+    if !parameter.properties().contains_key("parameteredElement") {
+        return Err(QueryError::unsupported(
+            parameter.id(),
+            "OperationTemplateParameter parameteredElement projection is not materialized",
+        ));
+    }
+    let exposed = reception_reference(references, parameter, "parameteredElement")?
+        .ok_or_else(|| QueryError::invalid(parameter.id(), "parameteredElement is required"))?;
+    let default_parameters = checked_owned_parameters(references, default.id());
+    let exposed_parameters = checked_owned_parameters(references, exposed.id());
+    let (default_parameters, exposed_parameters) = match (default_parameters, exposed_parameters) {
+        (Ok(default), Ok(exposed)) => (default, exposed),
+        (default, exposed) => {
+            return super::feature_compatibility::require_all([
+                default.map(|_| true),
+                exposed.map(|_| true),
+            ]);
+        }
+    };
+    if default_parameters.len() != exposed_parameters.len() {
+        return Ok(false);
+    }
+    let mut checks = Vec::new();
+    for (default, exposed) in default_parameters.into_iter().zip(exposed_parameters) {
+        let default = ElementRef::Object(default);
+        let exposed = ElementRef::Object(exposed);
+        checks.push(equal_signature_values(
+            reception_reference(references, default, "type").map(|value| value.map(ElementRef::id)),
+            reception_reference(references, exposed, "type").map(|value| value.map(ElementRef::id)),
+        ));
+        for property in ["direction", "isOrdered", "isUnique"] {
+            checks.push(equal_signature_values(
+                schema::read_effective_scalar(default, property)
+                    .map_err(|error| QueryError::invalid(default.id(), error)),
+                schema::read_effective_scalar(exposed, property)
+                    .map_err(|error| QueryError::invalid(exposed.id(), error)),
+            ));
+        }
+        let classify = |id: &str, error| match error {
+            EvaluationError::Invalid { message, .. } => QueryError::invalid(id, message),
+            EvaluationError::Unsupported { message, .. } => QueryError::unsupported(id, message),
+        };
+        checks.push(equal_signature_values(
+            value_specifications::lower_bound(references, default)
+                .map_err(|error| classify(default.id(), error)),
+            value_specifications::lower_bound(references, exposed)
+                .map_err(|error| classify(exposed.id(), error)),
+        ));
+        checks.push(equal_signature_values(
+            value_specifications::upper_bound(references, default)
+                .map_err(|error| classify(default.id(), error)),
+            value_specifications::upper_bound(references, exposed)
+                .map_err(|error| classify(exposed.id(), error)),
+        ));
+    }
+    super::feature_compatibility::require_all(checks)
+}
+
 fn parameter_set_same_entity(
     references: &ReferenceIndex<'_>,
     parameter_set: ElementRef<'_>,
@@ -623,6 +742,21 @@ fn parameter_set_same_entity(
 pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     for element in references.model().elements() {
+        if element.conforms_to("OperationTemplateParameter") {
+            let outcome = match operation_template_default_signature(references, element) {
+                Ok(true) => None,
+                Ok(false) => Some((StructuralSeverity::Error, "UML_OPERATION_TEMPLATE_DEFAULT_SIGNATURE",
+                    "The default must be an Operation with an exactly matching ordered Parameter signature".to_owned())),
+                Err(QueryError::Invalid { message, .. }) => Some((StructuralSeverity::Error,
+                    "MDE_OPERATION_TEMPLATE_DEFAULT_SIGNATURE_INVALID", message)),
+                Err(QueryError::Unsupported { message, .. }) => Some((StructuralSeverity::Warning,
+                    "MDE_OPERATION_TEMPLATE_DEFAULT_SIGNATURE_UNVERIFIED", message)),
+            };
+            if let Some((severity, code, message)) = outcome {
+                issues.push(StructuralDiagnostic { severity, code, subject_id: element.id().into(),
+                    message: format!("OperationTemplateParameter-match_default_signature: {message}") });
+            }
+        }
         if element.conforms_to("ParameterSet") {
             let outcome = match parameter_set_same_entity(references, element) {
                 Ok(true) => None,
