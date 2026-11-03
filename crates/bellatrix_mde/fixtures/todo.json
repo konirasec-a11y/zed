@@ -242,11 +242,7 @@
             "width": 240,
             "height": 140
           },
-          "style": {
-            "fill": "#303844",
-            "stroke": "#82a3d5",
-            "font_size": 17
-          },
+          "style": {},
           "z_index": 2
         },
         {
@@ -259,10 +255,7 @@
             "width": 220,
             "height": 110
           },
-          "style": {
-            "fill": "#3d434c",
-            "stroke": "#a9acb4"
-          },
+          "style": {},
           "z_index": 2
         },
         {
@@ -292,10 +285,7 @@
               }
             ]
           },
-          "style": {
-            "stroke": "#9cb4d2",
-            "stroke_width": 2
-          },
+          "style": {},
           "z_index": 1
         }
       ],
@@ -317,10 +307,7 @@
             "width": 180,
             "height": 90
           },
-          "style": {
-            "fill": "#4a4054",
-            "stroke": "#cab5df"
-          },
+          "style": {},
           "z_index": 1
         }
       ],

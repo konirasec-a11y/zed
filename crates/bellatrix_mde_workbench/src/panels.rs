@@ -768,6 +768,8 @@ pub struct MdeRightPanel {
     property_inputs: HashMap<String, Entity<InputField>>,
     property_drafts: HashMap<String, HashMap<String, Entity<InputField>>>,
     style_target_id: Option<(String, String)>,
+    pub(crate) pending_theme_resets:
+        HashMap<(String, String), crate::style_editor::PendingThemeReset>,
     pub(crate) style_listeners: HashMap<(String, String), Vec<Subscription>>,
     pub(crate) style_revisions: HashMap<(String, String), u64>,
     pub(crate) style_baselines: HashMap<(String, String), bellatrix_mde::Style>,
@@ -795,6 +797,7 @@ impl MdeRightPanel {
             style_revisions: HashMap::new(),
             style_target_id: None,
             style_listeners: HashMap::new(),
+            pending_theme_resets: HashMap::new(),
             inspector_styles_open: true,
             collapsed_elements: HashSet::new(),
             explorer_open: true,
@@ -1166,13 +1169,34 @@ impl Render for MdeRightPanel {
                 self.style_listeners.insert(key.clone(), listeners);
                 self.style_inputs.insert(key.clone(), inputs);
             }
+            if let (Some(pending), Some(inputs), Some(snapshot)) = (
+                self.pending_theme_resets.get(&key),
+                self.style_inputs.get(&key),
+                snapshot.as_ref(),
+            ) {
+                let acknowledgment = crate::style_editor::acknowledge_theme_reset(
+                    pending,
+                    inputs,
+                    snapshot.revision,
+                    &view.style,
+                    window,
+                    cx,
+                );
+                if acknowledgment == crate::style_editor::ResetAcknowledgment::Applied {
+                    self.style_baselines.insert(key.clone(), view.style.clone());
+                    self.style_revisions.insert(key.clone(), snapshot.revision);
+                }
+                if acknowledgment != crate::style_editor::ResetAcknowledgment::Pending {
+                    self.pending_theme_resets.remove(&key);
+                }
+            }
             let dirty = self.style_baselines.get(&key).is_some_and(|previous| {
                 self.style_inputs.get(&key).is_some_and(|inputs| {
                     crate::style_editor::style_inputs_dirty(inputs, previous, cx)
                         && crate::style_editor::style_inputs_dirty(inputs, &view.style, cx)
                 })
             });
-            if !dirty {
+            if !dirty && !self.pending_theme_resets.contains_key(&key) {
                 if let (Some(previous), Some(inputs)) =
                     (self.style_baselines.get(&key), self.style_inputs.get(&key))
                 {
@@ -1200,6 +1224,7 @@ impl Render for MdeRightPanel {
                 self.style_inputs.get(&key).unwrap_or(&HashMap::new()),
                 revision,
                 conflict,
+                self.pending_theme_resets.contains_key(&key),
                 self.inspector_styles_open,
                 window,
                 cx,
@@ -1210,6 +1235,7 @@ impl Render for MdeRightPanel {
                 item.clone(),
                 &HashMap::new(),
                 0,
+                false,
                 false,
                 self.inspector_styles_open,
                 window,

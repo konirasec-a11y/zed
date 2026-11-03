@@ -168,6 +168,94 @@ async fn styles_and_routes_use_revision_boundary_and_rollback()
     assert!(
         matches!(&edge.geometry,Geometry::Path {segments,..} if matches!(segments.first(),Some(PathSegment::Cubic {..})))
     );
+    let bridge = MdeUiBridge::start(&context, id.clone())?;
+    let request = ModelingSetViewStyleRequested {
+        project_id: id.clone(),
+        diagram_id: diagram.id.clone(),
+        view_id: view.id.clone(),
+        style: Style::default(),
+        expected_revision: 5,
+    };
+    let (completion, mut receipt) = tokio::sync::watch::channel(None);
+    bridge
+        .sender()
+        .try_send(MdeUiCommand::SetViewStyleTracked {
+            request: request.clone(),
+            completion,
+        })?;
+    tokio::time::timeout(std::time::Duration::from_secs(5), receipt.changed()).await??;
+    assert_eq!(*receipt.borrow(), Some(Ok(6)));
+    assert_eq!(service.snapshot(&id)?.revision(), 6);
+
+    let (completion, mut stale_receipt) = tokio::sync::watch::channel(None);
+    bridge
+        .sender()
+        .try_send(MdeUiCommand::SetViewStyleTracked {
+            request: request.clone(),
+            completion,
+        })?;
+    tokio::time::timeout(std::time::Duration::from_secs(5), stale_receipt.changed()).await??;
+    assert!(matches!(&*stale_receipt.borrow(), Some(Err(_))));
+    assert_eq!(service.snapshot(&id)?.revision(), 6);
+    assert_eq!(
+        *receipt.borrow(),
+        Some(Ok(6)),
+        "another command cannot overwrite the receipt"
+    );
+
+    let (completion, abandoned_receipt) = tokio::sync::watch::channel(None);
+    drop(abandoned_receipt);
+    bridge
+        .sender()
+        .try_send(MdeUiCommand::SetViewStyleTracked {
+            request: ModelingSetViewStyleRequested {
+                expected_revision: 6,
+                style: Style {
+                    fill: Some("#abcdef".into()),
+                    ..Style::default()
+                },
+                ..request.clone()
+            },
+            completion,
+        })?;
+    let (completion, mut subsequent_receipt) = tokio::sync::watch::channel(None);
+    bridge
+        .sender()
+        .try_send(MdeUiCommand::SetViewStyleTracked {
+            request: ModelingSetViewStyleRequested {
+                expected_revision: 7,
+                ..request.clone()
+            },
+            completion,
+        })?;
+    tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        subsequent_receipt.changed(),
+    )
+    .await??;
+    assert_eq!(
+        *subsequent_receipt.borrow(),
+        Some(Ok(8)),
+        "closing the inspector must not invalidate the preceding command"
+    );
+    assert_eq!(service.snapshot(&id)?.revision(), 8);
+    let (completion, mut no_op_receipt) = tokio::sync::watch::channel(None);
+    bridge
+        .sender()
+        .try_send(MdeUiCommand::SetViewStyleTracked {
+            request: ModelingSetViewStyleRequested {
+                expected_revision: 8,
+                ..request
+            },
+            completion,
+        })?;
+    tokio::time::timeout(std::time::Duration::from_secs(5), no_op_receipt.changed()).await??;
+    assert_eq!(
+        *no_op_receipt.borrow(),
+        Some(Ok(8)),
+        "an already inherited style is an acknowledged no-op"
+    );
+    drop(bridge);
     plugin.dispose().await?;
     provider.dispose().await?;
     Ok(())

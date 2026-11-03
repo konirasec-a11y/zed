@@ -92,6 +92,119 @@ pub(crate) fn sync_style_inputs(
     }
 }
 
+pub(crate) struct PendingThemeReset {
+    expected_revision: u64,
+    style: Style,
+    drafts: HashMap<String, String>,
+    completion: tokio::sync::watch::Receiver<Option<Result<u64, String>>>,
+}
+
+#[derive(Debug, PartialEq)]
+pub(crate) enum ResetAcknowledgment {
+    Pending,
+    Applied,
+    Rejected,
+}
+
+fn reset_acknowledgment(
+    expected_revision: u64,
+    desired: &Style,
+    revision: u64,
+    current: &Style,
+    completion: Option<&Result<u64, String>>,
+) -> ResetAcknowledgment {
+    match completion {
+        Some(Ok(applied_revision))
+            if *applied_revision == expected_revision
+                || *applied_revision == expected_revision.saturating_add(1) =>
+        {
+            if revision < *applied_revision {
+                ResetAcknowledgment::Pending
+            } else if revision == *applied_revision && current == desired {
+                ResetAcknowledgment::Applied
+            } else {
+                ResetAcknowledgment::Rejected
+            }
+        }
+        Some(_) => ResetAcknowledgment::Rejected,
+        None => ResetAcknowledgment::Pending,
+    }
+}
+
+fn style_submission_allowed(conflict: bool, reset_pending: bool) -> bool {
+    !conflict && !reset_pending
+}
+
+fn reset_can_clear_draft(captured: &str, current: &str) -> bool {
+    captured == current
+}
+
+pub(crate) fn acknowledge_theme_reset(
+    pending: &PendingThemeReset,
+    inputs: &HashMap<String, Entity<InputField>>,
+    revision: u64,
+    style: &Style,
+    window: &mut Window,
+    cx: &mut Context<MdeRightPanel>,
+) -> ResetAcknowledgment {
+    let completion = pending.completion.borrow().clone().or_else(|| {
+        pending
+            .completion
+            .has_changed()
+            .is_err()
+            .then(|| Err("Style command channel closed".into()))
+    });
+    match reset_acknowledgment(
+        pending.expected_revision,
+        &pending.style,
+        revision,
+        style,
+        completion.as_ref(),
+    ) {
+        ResetAcknowledgment::Pending => ResetAcknowledgment::Pending,
+        ResetAcknowledgment::Rejected => ResetAcknowledgment::Rejected,
+        ResetAcknowledgment::Applied => {
+            for (key, input) in inputs {
+                if pending.drafts.get(key).is_some_and(|captured| {
+                    reset_can_clear_draft(captured, &input.read(cx).text(cx))
+                }) {
+                    input.update(cx, |field, cx| {
+                        field.set_text("", window, cx);
+                        field.set_error(None::<&str>, cx);
+                    });
+                }
+            }
+            ResetAcknowledgment::Applied
+        }
+    }
+}
+
+fn inherited_style_values() -> HashMap<String, String> {
+    FIELDS
+        .iter()
+        .map(|(key, _)| ((*key).to_owned(), String::new()))
+        .collect()
+}
+
+fn edited_style(style: &Style, values: HashMap<String, String>) -> Result<Style, &'static str> {
+    let mut style = style.clone();
+    for (key, text) in values {
+        let text = text.trim();
+        let string = (!text.is_empty()).then(|| text.to_owned());
+        match key.as_str() {
+            "fill" => style.fill = string,
+            "stroke" => style.stroke = string,
+            "text_color" => style.text_color = string,
+            "font_family" => style.font_family = string,
+            "font_size" => style.font_size = optional_number(text)?,
+            "stroke_width" => style.stroke_width = optional_number(text)?,
+            "opacity" => style.opacity = optional_number(text)?,
+            _ => {}
+        }
+    }
+    Ok(style)
+}
+
 fn optional_number(text: &str) -> Result<Option<f64>, &'static str> {
     let text = text.trim();
     if text.is_empty() {
@@ -110,6 +223,7 @@ pub(crate) fn render_styles(
     inputs: &HashMap<String, Entity<InputField>>,
     expected_revision: u64,
     conflict: bool,
+    reset_pending: bool,
     open: bool,
     window: &mut Window,
     cx: &mut Context<MdeRightPanel>,
@@ -197,6 +311,7 @@ pub(crate) fn render_styles(
                 .child(
                     Button::new("mde-style-reload", "Discard draft and reload").on_click(
                         cx.listener(move |panel, _, _, cx| {
+                            panel.pending_theme_resets.remove(&key);
                             panel.style_inputs.remove(&key);
                             panel.style_baselines.remove(&key);
                             panel.style_revisions.remove(&key);
@@ -208,6 +323,7 @@ pub(crate) fn render_styles(
                 .into_any_element(),
         );
     }
+    let apply_key = (diagram_id.to_owned(), view.id.clone());
     let captured_inputs = inputs.clone();
     let target_item = item.clone();
     let diagram = diagram_id.to_owned();
@@ -217,8 +333,14 @@ pub(crate) fn render_styles(
             .px_3()
             .child(
                 Button::new("mde-style-apply", "Apply style")
-                    .disabled(conflict)
-                    .on_click(move |_, _, cx| {
+                    .disabled(!style_submission_allowed(conflict, reset_pending))
+                    .on_click(cx.listener(move |panel, _, _, cx| {
+                        if !style_submission_allowed(
+                            conflict,
+                            panel.pending_theme_resets.contains_key(&apply_key),
+                        ) {
+                            return;
+                        }
                         let mut values = HashMap::new();
                         let mut valid = true;
                         for (key, input) in &captured_inputs {
@@ -236,16 +358,74 @@ pub(crate) fn render_styles(
                         }
                         if valid {
                             target_item.update(cx, |item, cx| {
-                                item.apply_view_style(
+                                let _submitted = item.apply_view_style(
                                     &diagram,
                                     &view_id,
                                     expected_revision,
                                     values,
+                                    None,
                                     cx,
-                                )
+                                );
                             });
                         }
-                    }),
+                    })),
+            )
+            .into_any_element(),
+    );
+    let theme_inputs = inputs.clone();
+    let theme_item = item.clone();
+    let theme_diagram = diagram_id.to_owned();
+    let theme_view = view.id.clone();
+    rows.push(
+        div()
+            .px_3()
+            .child(
+                Button::new(
+                    "mde-style-restore-theme",
+                    if style_inputs_dirty(inputs, &view.style, cx) {
+                        "Restore IDE theme and discard draft"
+                    } else {
+                        "Restore IDE theme"
+                    },
+                )
+                .disabled(!style_submission_allowed(conflict, reset_pending))
+                .on_click(cx.listener(move |panel, _, _, cx| {
+                    if !style_submission_allowed(
+                        conflict,
+                        panel
+                            .pending_theme_resets
+                            .contains_key(&(theme_diagram.clone(), theme_view.clone())),
+                    ) {
+                        return;
+                    }
+                    let (completion_sender, completion) = tokio::sync::watch::channel(None);
+                    let drafts = theme_inputs
+                        .iter()
+                        .map(|(key, input)| (key.clone(), input.read(cx).text(cx).to_string()))
+                        .collect();
+                    let submitted = theme_item.update(cx, |item, cx| {
+                        item.apply_view_style(
+                            &theme_diagram,
+                            &theme_view,
+                            expected_revision,
+                            inherited_style_values(),
+                            Some(completion_sender),
+                            cx,
+                        )
+                    });
+                    if let Some(style) = submitted {
+                        panel.pending_theme_resets.insert(
+                            (theme_diagram.clone(), theme_view.clone()),
+                            PendingThemeReset {
+                                expected_revision,
+                                style,
+                                drafts,
+                                completion,
+                            },
+                        );
+                    }
+                    cx.notify();
+                })),
             )
             .into_any_element(),
     );
@@ -314,17 +494,18 @@ impl MdeWorkbenchItem {
         view_id: &str,
         expected_revision: u64,
         values: HashMap<String, String>,
+        completion: Option<tokio::sync::watch::Sender<Option<Result<u64, String>>>>,
         cx: &mut Context<Self>,
-    ) {
+    ) -> Option<Style> {
         if self.active_diagram.as_deref() != Some(diagram_id)
             || self.selected_view.as_deref() != Some(view_id)
         {
-            return;
+            return None;
         }
         let Ok(snapshot) = self.source.snapshot() else {
             self.feedback = "Project snapshot unavailable".into();
             cx.notify();
-            return;
+            return None;
         };
         let Some(view) = snapshot
             .section
@@ -333,45 +514,43 @@ impl MdeWorkbenchItem {
             .find(|d| d.id == diagram_id)
             .and_then(|d| d.views.iter().find(|v| v.id == view_id))
         else {
-            return;
+            return None;
         };
-        let mut style = view.style.clone();
-        for (key, text) in values {
-            let text = text.trim();
-            let string = (!text.is_empty()).then(|| text.to_owned());
-            match key.as_str() {
-                "fill" => style.fill = string,
-                "stroke" => style.stroke = string,
-                "text_color" => style.text_color = string,
-                "font_family" => style.font_family = string,
-                "font_size" | "stroke_width" | "opacity" => {
-                    let value = match optional_number(text) {
-                        Ok(value) => value,
-                        Err(error) => {
-                            self.feedback = error.into();
-                            cx.notify();
-                            return;
-                        }
-                    };
-                    match key.as_str() {
-                        "font_size" => style.font_size = value,
-                        "stroke_width" => style.stroke_width = value,
-                        _ => style.opacity = value,
-                    }
-                }
-                _ => {}
+        let style = match edited_style(&view.style, values) {
+            Ok(style) => style,
+            Err(error) => {
+                self.feedback = error.into();
+                cx.notify();
+                return None;
+            }
+        };
+        let request = ModelingSetViewStyleRequested {
+            project_id: self.project_id().clone(),
+            expected_revision,
+            diagram_id: diagram_id.into(),
+            view_id: view_id.into(),
+            style: style.clone(),
+        };
+        let command = match completion {
+            Some(completion) => MdeUiCommand::SetViewStyleTracked {
+                request,
+                completion,
+            },
+            None => MdeUiCommand::SetViewStyle(request),
+        };
+        let result = self.source.submit(command);
+        match result {
+            Ok(()) => {
+                self.feedback = "Command sent to Cordis".into();
+                cx.notify();
+                Some(style)
+            }
+            Err(error) => {
+                self.feedback = format!("Command not sent: {error}");
+                cx.notify();
+                None
             }
         }
-        self.submit(
-            MdeUiCommand::SetViewStyle(ModelingSetViewStyleRequested {
-                project_id: self.project_id().clone(),
-                expected_revision,
-                diagram_id: diagram_id.into(),
-                view_id: view_id.into(),
-                style,
-            }),
-            cx,
-        );
     }
     fn apply_view_routing(
         &mut self,
@@ -405,7 +584,113 @@ impl MdeWorkbenchItem {
 
 #[cfg(test)]
 mod tests {
-    use super::{optional_number, style_value_matches};
+    use super::{
+        ResetAcknowledgment, edited_style, inherited_style_values, optional_number,
+        reset_acknowledgment, reset_can_clear_draft, style_submission_allowed, style_value_matches,
+    };
+    use bellatrix_mde::{RelationshipRouting, Style};
+
+    #[test]
+    fn theme_reset_waits_for_authoritative_success() {
+        let desired = Style::default();
+        let authored = Style {
+            fill: Some("#123456".into()),
+            ..Style::default()
+        };
+        assert_eq!(
+            reset_acknowledgment(4, &desired, 4, &desired, Some(&Ok(4))),
+            ResetAcknowledgment::Applied
+        );
+        assert_eq!(
+            reset_acknowledgment(4, &desired, 4, &authored, None),
+            ResetAcknowledgment::Pending
+        );
+        assert_eq!(
+            reset_acknowledgment(4, &desired, 5, &desired, None),
+            ResetAcknowledgment::Pending
+        );
+        assert_eq!(
+            reset_acknowledgment(4, &desired, 4, &authored, Some(&Ok(5))),
+            ResetAcknowledgment::Pending
+        );
+        assert_eq!(
+            reset_acknowledgment(4, &desired, 5, &desired, Some(&Ok(5))),
+            ResetAcknowledgment::Applied
+        );
+    }
+
+    #[test]
+    fn theme_reset_rejection_staleness_and_late_typing_preserve_drafts() {
+        let desired = Style::default();
+        let authored = Style {
+            fill: Some("#123456".into()),
+            ..Style::default()
+        };
+        for (revision, current, completion) in [
+            (4, &authored, Err("stale revision".into())),
+            (4, &authored, Err("channel closed".into())),
+            (4, &authored, Err("responder unavailable".into())),
+            (5, &authored, Ok(5)),
+            (6, &desired, Ok(5)),
+            (5, &desired, Ok(6)),
+        ] {
+            assert_eq!(
+                reset_acknowledgment(4, &desired, revision, current, Some(&completion)),
+                ResetAcknowledgment::Rejected
+            );
+        }
+        assert!(reset_can_clear_draft("#123456", "#123456"));
+        assert!(!reset_can_clear_draft("#123456", "#abcdef"));
+        assert!(!reset_can_clear_draft("#123456", ""));
+    }
+
+    #[test]
+    fn pending_reset_blocks_repeat_reset_and_apply_until_receipt() {
+        assert!(style_submission_allowed(false, false));
+        assert!(!style_submission_allowed(false, true));
+        assert!(!style_submission_allowed(true, false));
+        assert!(!style_submission_allowed(true, true));
+    }
+
+    #[test]
+    fn restore_theme_clears_appearance_without_changing_routing_or_shape() {
+        let authored = Style {
+            fill: Some("#303844".into()),
+            stroke: Some("#82a3d5".into()),
+            text_color: Some("#eeeeee".into()),
+            font_family: Some("Custom font".into()),
+            font_size: Some(17.0),
+            stroke_width: Some(3.0),
+            opacity: Some(0.5),
+            routing: Some(RelationshipRouting::Curve),
+            corner_radius: Some(4.0),
+            dash_pattern: vec![3.0, 5.0],
+        };
+        let restored = edited_style(&authored, inherited_style_values()).expect("valid reset");
+        assert_eq!(
+            restored,
+            Style {
+                routing: authored.routing,
+                corner_radius: authored.corner_radius,
+                dash_pattern: authored.dash_pattern.clone(),
+                ..Style::default()
+            }
+        );
+        assert_eq!(
+            edited_style(&restored, inherited_style_values()).expect("repeat reset"),
+            restored
+        );
+        assert_eq!(authored.fill.as_deref(), Some("#303844"));
+    }
+
+    #[test]
+    fn color_edits_are_real_overrides_and_blank_values_restore_inheritance() {
+        let overrides = [("fill".into(), " #123456 ".into())].into();
+        let authored = edited_style(&Style::default(), overrides).expect("valid color");
+        assert_eq!(authored.fill.as_deref(), Some("#123456"));
+        let restored = edited_style(&authored, inherited_style_values()).expect("valid reset");
+        assert_eq!(restored.fill, None);
+    }
     #[test]
     fn applied_values_acknowledge_normalized_persistence() {
         assert!(style_value_matches("font_size", "16.0", "16"));

@@ -25,6 +25,10 @@ use tokio::sync::{mpsc, watch};
 #[derive(Clone)]
 pub enum MdeUiCommand {
     SetViewStyle(ModelingSetViewStyleRequested),
+    SetViewStyleTracked {
+        request: ModelingSetViewStyleRequested,
+        completion: watch::Sender<Option<Result<u64, String>>>,
+    },
     SetViewRouting(ModelingSetViewRoutingRequested),
     CreateDiagram(ModelingCreateDiagramRequested),
     RenameDiagram(ModelingRenameDiagramRequested),
@@ -77,6 +81,22 @@ impl MdeUiBridge {
                             .query::<ModelingSetViewStyle>(Routing::Unscoped, request)
                             .await,
                     ),
+                    MdeUiCommand::SetViewStyleTracked {
+                        request,
+                        completion,
+                    } => {
+                        let result = cordis
+                            .query::<ModelingSetViewStyle>(Routing::Unscoped, request)
+                            .await;
+                        let receipt = match &result {
+                            Ok(QueryOutcome::Answer(Ok(revision))) => Ok(*revision),
+                            Ok(QueryOutcome::Answer(Err(error))) => Err(error.to_string()),
+                            Ok(QueryOutcome::Miss) => Err("Cordis responder unavailable".into()),
+                            Err(error) => Err(error.to_string()),
+                        };
+                        completion.send_replace(Some(receipt));
+                        describe("View style updated", result)
+                    }
                     MdeUiCommand::SetViewRouting(request) => describe(
                         "View routing updated",
                         cordis

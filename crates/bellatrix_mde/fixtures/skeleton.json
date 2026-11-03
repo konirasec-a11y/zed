@@ -145,10 +145,7 @@
             "height": 120
           },
           "style": {
-            "stroke": "#92a5bb",
-            "fill": "#323943",
-            "corner_radius": 4,
-            "text_color": "#eeeeee"
+            "corner_radius": 4
           },
           "z_index": 2
         },
@@ -163,8 +160,6 @@
             "ry": 42
           },
           "style": {
-            "stroke": "#7b90a9",
-            "fill": "#454953",
             "dash_pattern": [
               3,
               5
@@ -199,10 +194,7 @@
               }
             ]
           },
-          "style": {
-            "stroke": "#8896af",
-            "stroke_width": 2
-          },
+          "style": {},
           "z_index": 1
         }
       ],
