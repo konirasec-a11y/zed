@@ -1,5 +1,7 @@
 //! Panels owned by the Zed Workspace Dock, consuming the single MDE domain.
+#[path = "panels/toolbox_panel.rs"]
 mod toolbox_panel;
+#[path = "panels/view_inspector.rs"]
 mod view_inspector;
 pub(crate) use crate::workbench_ui::hierarchy::element_glyph;
 use crate::workbench_ui::{
