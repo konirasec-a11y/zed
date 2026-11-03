@@ -13,7 +13,8 @@ atribuído. BehavioredClassifier::class_behavior foi publicada em
 `d1acb16d7499a2437e25f5f17828acfbc8c174a2`, com evidência focada em E16.
 AssociationClass::cannot_be_defined
 foi publicada em `867c6afa2a99906936ec23a398a54278ebf5266e`, com gate focado
-33/33 e limites de suporte descritos em E15.
+33/33 e limites de suporte descritos em E15. Connector::types foi publicada em
+`8da7a1d891791d2e9ea0462e95cdc5eac36f8afa`, com gate 11/11 descrito em E17.
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -129,7 +130,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12/E13/E14/E15/E16 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12/E13/E14/E15/E16/E17 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -223,6 +224,33 @@ de execução nova. E12/E13/E14/E15/E16 possuem os gates delimitados nas seçõe
   Referências externas permanecem não verificadas e referências inválidas
   mantêm erro de contrato. O editor genérico ainda não escreve
   classifierBehavior: sua rejeição sem mutação não é autoria aprovada.
+
+- **E17**: `semantics/connectors.rs`, `types_rule`, `pair_conforms` e
+  `validate`, integrado a `root.rs::validate_contracts`;
+  `connector_types.rs`, cinco testes. Com type resolvido, compara aridade e
+  conformance de tipos por posição entre Connector::end e Association::memberEnd.
+  Type ausente/null satisfaz somente esta implicação. Não infere a ordem de
+  coleções ausentes a partir de owns ou da apresentação. Ambos os contratos de
+  coleção e lados da comparação são inspecionados: ausência ou referência externa
+  de um lado não oculta malformado do outro. Uma incompatibilidade local conhecida
+  pode decidir falso ao lado de unknown, sem apresentar listas parciais como
+  resultados completos.
+
+### Evidência publicada de Connector::types
+
+Commit: `8da7a1d891791d2e9ea0462e95cdc5eac36f8afa`. O log local
+`/tmp/connector-types-symmetric-review.log` foi lido e registra **11/11 aprovados**:
+Connector 5, Association kernel 2 e API 4. É um gate focado do incremento,
+não suíte integral. Não houve nova execução pela matriz.
+
+Os fluxos cobrem ordem, cardinalidade, identidade/herança, type opcional,
+ownership, tipos incorretos, unknowns, rollback e JSON/Protobuf. Casos simétricos
+verificam null, escalar, membro malformado, duplicação e href na coleção oposta
+quando uma coleção está ausente. A linha permanece P/E17.
+`Connector-roles`, `StructuredClassifier::allRoles` e as quatro invariantes
+próprias de ConnectorEnd continuam pendentes. Derivação de kind, adapter binário
+e autoria visual de Connector também não são certificados por este incremento.
+Não alegar suporte completo a Connectors ou Composite Structure.
 
 ### Evidência publicada de BehavioredClassifier
 
@@ -756,7 +784,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 #### `Connector-types`
 
-- Metaclass: `Connector`. Estado: **N**. Evidência: sem predicado dedicado identificado nos passes inspecionados.
+- Metaclass: `Connector`. Estado: **P**. Evidência: E17; commit `8da7a1d891791d2e9ea0462e95cdc5eac36f8afa`.
 - OCL publicado: `type<>null implies let noOfEnds : Integer = end->size() in (type.memberEnd->size() = noOfEnds) and Sequence{1..noOfEnds}->forAll(i | end->at(i).role.type.conformsTo(type.memberEnd->at(i).type))`.
 
 #### `Connector-roles`
@@ -993,7 +1021,10 @@ viram vazio/false; erro estrutural não desaparece diante de outro unknown.
 AssociationClass::cannot_be_defined já tem recorte publicado em E15 e
 AssociationClass::disjoint_attributes_ends tem recorte em E05. Fechar os limites
 e contratos restantes sem remover Unsupported prematuramente. Continuar com
-CommunicationPath, Connector e ConnectorEnd. Dependências:
+CommunicationPath, Connector::roles e ConnectorEnd. Connector::types já tem
+recorte publicado em E17; preservar seus limites e testar as dependências
+adicionadas sem transformar a implicação de type em validação de todos os roles.
+Dependências:
 allRoles, membership, conformance, definingEnd e compatibleWith. Testar aridade,
 ordem das pontas, partWithPort, type opcional, herança e referências externas.
 Implementar os contratos especializados antes de remover Unsupported.

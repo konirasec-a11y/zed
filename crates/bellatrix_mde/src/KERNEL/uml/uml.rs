@@ -45,3 +45,6 @@ pub mod enumerations;
 
 #[path = "semantics/connectors.rs"]
 pub mod connectors;
+
+#[path = "semantics/deployments.rs"]
+pub mod deployments;

@@ -874,6 +874,67 @@ pub fn query<'a>(
     Queries::new(references).evaluate(namespace_id)
 }
 
+/// UML StructuredClassifier::allRoles filters allFeatures, not allAttributes.
+/// Keep the complete query exact: inheritance, imports and redefinition are
+/// handled by the existing namespace graph engine.
+pub fn all_roles<'a>(
+    references: &ReferenceIndex<'a>,
+    classifier_id: &str,
+) -> Result<Vec<ElementRef<'a>>, QueryError> {
+    let classifier = references.element(classifier_id)
+        .map_err(|error| QueryError::invalid(classifier_id, error))?;
+    if !classifier.conforms_to("StructuredClassifier") {
+        return Err(QueryError::invalid(classifier_id, "allRoles requires a StructuredClassifier"));
+    }
+    let namespace = query(references, classifier_id)?;
+    let features = namespace.classifier
+        .ok_or_else(|| QueryError::invalid(classifier_id, "missing Classifier query"))?;
+    Ok(features.all_features.into_iter()
+        .filter(|feature| feature.conforms_to("ConnectableElement")).collect())
+}
+
+/// Boolean membership may be proved by an owned member even when the complete
+/// namespace has unresolved branches. Never expose that evidence as a complete
+/// allRoles collection. Inherited/imported evidence stays conservative whenever
+/// the namespace engine cannot settle visibility or redefinition.
+pub fn has_role(
+    references: &ReferenceIndex<'_>,
+    classifier_id: &str,
+    role_id: &str,
+) -> Result<bool, QueryError> {
+    let complete = all_roles(references, classifier_id);
+    match &complete {
+        Ok(roles) => return Ok(roles.iter().any(|role| role.id() == role_id)),
+        Err(error @ QueryError::Invalid { .. }) => return Err(error.clone()),
+        Err(_) => {}
+    }
+    let classifier = references.element(classifier_id)
+        .map_err(|error| QueryError::invalid(classifier_id, error))?;
+    let role = references.element(role_id)
+        .map_err(|error| QueryError::invalid(role_id, error))?;
+    // Visit all canonical ownership contracts and all known ancestry branches
+    // before accepting direct evidence; malformed siblings/cycles dominate.
+    let ownership = super::element_graph_queries::ensure_canonical_ownership(references, classifier);
+    if let Err(super::element_graph_queries::ElementGraphError::Invalid { subject_id, message }) = ownership {
+        return Err(QueryError::invalid(&subject_id, message));
+    }
+    if let Err(error @ QueryError::Invalid { .. }) =
+        super::classifier_hierarchy::has_ancestor(references, classifier_id, classifier_id)
+    { return Err(error); }
+    let mut found = false;
+    for child in references.explicit_owned_elements(classifier_id)
+        .map_err(|error| QueryError::invalid(classifier_id, error))?
+    {
+        match is_owned_member(classifier, child) {
+            Ok(true) if child.id() == role_id && role.conforms_to("Feature")
+                && role.conforms_to("ConnectableElement") => found = true,
+            Err(error @ QueryError::Invalid { .. }) => return Err(error),
+            _ => {}
+        }
+    }
+    if found { Ok(true) } else { complete.map(|_| false) }
+}
+
 fn compare_redefinition_consistency(
     references: &ReferenceIndex<'_>,
     source: ElementRef<'_>,

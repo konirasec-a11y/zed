@@ -69,7 +69,11 @@ pub(crate) fn ensure_canonical_ownership(
     index: &ReferenceIndex<'_>,
     element: ElementRef<'_>,
 ) -> Result<(), ElementGraphError> {
-    ensure_derived_ownership(element)?;
+    let mut unresolved = match ensure_derived_ownership(element) {
+        Ok(()) => None,
+        Err(error @ ElementGraphError::Invalid { .. }) => return Err(error),
+        Err(error) => Some(error),
+    };
     let Some(classifier) = element.metaclass().and_then(schema::uml_classifier) else {
         return Err(ElementGraphError::unsupported(
             element.id(),
@@ -97,22 +101,31 @@ pub(crate) fn ensure_canonical_ownership(
                     return Err(ElementGraphError::invalid(element.id(), message));
                 }
                 super::property_contracts::PropertyOutcome::Unverified(message) => {
-                    return Err(ElementGraphError::unsupported(element.id(), message));
+                    unresolved = Some(ElementGraphError::unsupported(element.id(), message));
                 }
             }
         }
     }
+    // Raw legacy composites (for example textual defaultValue) must not be
+    // reparsed as canonical references by ownership_roles. All explicit value
+    // contracts above have already been inspected for independent violations.
+    if let Some(error) = unresolved { return Err(error); }
     for child in index.model().owned_elements(element)
         .map_err(|error| ElementGraphError::invalid(element.id(), error))?
     {
-        super::classifiers::ownership_roles(element, child).map_err(|error| match error {
+        let result = super::classifiers::ownership_roles(element, child).map_err(|error| match error {
             super::classifiers::QueryError::Invalid { subject_id, message } =>
                 ElementGraphError::invalid(&subject_id, message),
             super::classifiers::QueryError::Unsupported { subject_id, message } =>
                 ElementGraphError::unsupported(&subject_id, message),
-        })?;
+        });
+        match result {
+            Ok(_) => {}
+            Err(error @ ElementGraphError::Invalid { .. }) => return Err(error),
+            Err(error) => unresolved = Some(error),
+        }
     }
-    Ok(())
+    unresolved.map_or(Ok(()), Err)
 }
 
 /// Returns a set in deterministic snapshot traversal order; UML does not order this result.
