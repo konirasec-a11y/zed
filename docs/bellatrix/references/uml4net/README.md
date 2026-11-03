@@ -209,9 +209,9 @@ classifier explicitly redefines it; no extra global suppression rule is added.
 
 `Command::SetRedefinedElements` checks reference shape, target metaclass,
 uniqueness, self-redefinition, `isLeaf`, and the supported ancestor/owned-feature
-context before committing. Property consistency now uses the bounded comparisons described below.
-Operation signature and pre/postcondition conformance remain outside this slice.
-Unsupported Type/bound evaluation and Operation redefinitions retain an explicit
+context before committing. Property and Operation signature consistency now use
+the bounded comparisons described below. Behavioral/template contract
+conformance remains unevaluated. Unsupported Type/bound or contract evaluation retains an explicit
 `UML_REDEFINITION_CONSISTENCY_UNSUPPORTED` capability warning; successful
 membership computation alone does not certify full redefinition semantics. The
 query results are consumed by model/command validation and read-only derived
@@ -319,8 +319,8 @@ excluded. When that ambiguity is present and the receiving Classifier has not
 explicitly resolved it, the slottable query returns Unsupported. Ordinary
 Namespace members remain queryable and the Inspector shows the separate
 slottable-query reason. This is a capability warning, not a new UML constraint.
-Property consistency uses the bounded comparisons below; full Operation
-redefinition consistency remains unevaluated.
+Property and Operation signature consistency use the bounded comparisons below;
+behavioral/template contract consistency remains unevaluated.
 
 The existing `graph_rules.rs` Slot feature flow now moves a Slot for a private
 inherited attribute, changes direct redefinition, diagnoses ambiguous ancestry
@@ -379,8 +379,45 @@ The existing redefinition command rejects known incompatibility atomically.
 Loaded graphs, member queries and Inspector diagnostics use the same comparison;
 unknown cases remain storable with capability warnings. A fully resolved,
 compatible Property no longer receives the blanket unsupported-consistency
-warning. This does not implement Property subsetting, qualifiers, all template
-contexts or complete Operation signature consistency. The existing hierarchy
+warning. This does not implement Property subsetting, qualifiers or all template
+contexts. Operation signatures reuse these comparisons as described below. The existing hierarchy
 feature flow now mutates compatible Types/bounds/aggregation, rejects each
 incompatibility, preserves unknown bounds and reopens the canonical graph.
 No new test functions were introduced.
+
+
+## Bounded Operation signature consistency
+
+`uml/operation_signatures.rs` newly implements the original XMI
+`Operation-isConsistentWith` composition, UML 2.5.1 §9.9.11.6, using
+`MultiplicityElement-compatibleWith` (§7.8.8). The pinned uml4net
+`OperationExtensions.cs` provides the previously credited return-property query
+patterns, not an implementation of this signature comparison. Bellatrix reuses
+its existing ordered canonical Parameter projection, generated scalar defaults,
+TypedElement/Classifier conformance and reference-aware multiplicity adapters;
+there is no second ownership or inheritance graph.
+
+In an established redefinition context, ordered Parameter counts must match and
+corresponding directions, ordering and uniqueness must be equal. Names and
+visibility are not extra signature constraints. Corresponding Types must
+conform in either direction. This follows the official OCL and §9.6.3.1, which
+intentionally does not choose a programming language's variance policy. Input
+multiplicities may widen, output/return multiplicities may narrow, and inout
+multiplicities must remain equal. Arbitrary-precision bounds and infinity retain
+the shared interval representation and literal ValueSpecification evaluator.
+
+The Classifier redefinition consumer now rejects proven incompatibility and
+removes the previous blanket warning for resolved compatible signatures,
+including empty signatures. Unsupported Type/bound evaluation remains a
+capability warning and storable data. Shared conjunction/disjunction helpers
+preserve known false/true results when other operands are unsupported, while
+malformed graph data retains its invalid diagnostic. The public signature query
+is distinct from broader contract compatibility: populated behavioral,
+pre/post/body, exception and template contracts are explicitly unevaluated, not
+interpreted or certified by a signature-only result.
+
+The existing Namespace/Classifier feature workflow now constructs and edits
+three ordered signatures through commands, establishes redefinitions, changes
+Parameter order/count/Type/bounds/flags, repairs the model, preserves an unknown
+bound with Inspector diagnostics, and reopens JSON and Protobuf. No test function
+or isolated unit test was added.

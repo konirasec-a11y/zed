@@ -706,22 +706,19 @@ fn redefinitions<'a>(
                     format!("{id} isLeaf prohibits redefinition"),
                 ));
             }
-            if element.conforms_to("Property") {
-                match super::feature_compatibility::compare_property_consistency(
-                    references, element, target,
-                ) {
-                    Ok(true) | Err(QueryError::Unsupported { .. }) => {}
-                    Ok(false) => {
-                        return Err(QueryError::invalid(
-                            element.id(),
-                            format!(
-                                "Property redefinition of {} is inconsistent: Type conformance, multiplicity containment or composite preservation failed",
-                                target.id()
-                            ),
-                        ));
-                    }
-                    Err(error) => return Err(error),
+            match compare_redefinition_consistency(references, element, target) {
+                Ok(true) | Err(QueryError::Unsupported { .. }) => {}
+                Ok(false) => {
+                    return Err(QueryError::invalid(
+                        element.id(),
+                        format!(
+                            "{} redefinition of {} is inconsistent with its typed feature contract",
+                            element.metaclass().unwrap_or("Element"),
+                            target.id()
+                        ),
+                    ));
                 }
+                Err(error) => return Err(error),
             }
             targets.push(target);
         }
@@ -748,6 +745,18 @@ pub fn query<'a>(
     Queries::new(references).evaluate(namespace_id)
 }
 
+fn compare_redefinition_consistency(
+    references: &ReferenceIndex<'_>,
+    source: ElementRef<'_>,
+    target: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    if source.conforms_to("Property") {
+        super::feature_compatibility::compare_property_consistency(references, source, target)
+    } else {
+        super::operation_signatures::compare_operation_consistency(references, source, target)
+    }
+}
+
 pub(crate) fn redefinition_consistency_diagnostic(
     references: &ReferenceIndex<'_>,
     element: ElementRef<'_>,
@@ -762,19 +771,14 @@ pub(crate) fn redefinition_consistency_diagnostic(
     if !element.properties().get(key).is_some_and(populated) {
         return None;
     }
-    let message = if element.conforms_to("Property") {
-        let targets = match redefinitions(references, element) {
-            Ok(targets) => targets,
-            Err(error) => return Some(error.diagnostic()),
-        };
-        let unsupported = targets.into_iter().find_map(|target| {
-            super::feature_compatibility::compare_property_consistency(references, element, target)
-                .err()
-        });
-        unsupported?.to_string()
-    } else {
-        "Operation signature and pre/postcondition redefinition consistency is not evaluated".into()
+    let targets = match redefinitions(references, element) {
+        Ok(targets) => targets,
+        Err(error) => return Some(error.diagnostic()),
     };
+    let unsupported = targets
+        .into_iter()
+        .find_map(|target| compare_redefinition_consistency(references, element, target).err());
+    let message = unsupported?.to_string();
     Some(StructuralDiagnostic {
         severity: StructuralSeverity::Warning,
         code: "UML_REDEFINITION_CONSISTENCY_UNSUPPORTED",

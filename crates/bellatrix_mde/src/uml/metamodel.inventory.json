@@ -1045,7 +1045,7 @@
     },
     {
       "file": "crates/bellatrix_mde/src/uml/operations.rs",
-      "scope": "Ordered canonical Parameters; generated scalar defaults; derived return Type, ordering, uniqueness and reference-aware multiplicity; selected Parameter constraints and only_body_for_query with owned Constraint references. Nonliteral ValueSpecifications, condition expressions and full Operation redefinition consistency remain explicit limits."
+      "scope": "Ordered canonical Parameters; generated scalar defaults; derived return Type, ordering, uniqueness and reference-aware multiplicity; selected Parameter constraints and only_body_for_query with owned Constraint references. Nonliteral ValueSpecifications and condition expressions remain explicit limits; signature compatibility consumes these projections in operation_signatures."
     },
     {
       "file": "crates/bellatrix_mde/src/uml/associations.rs",
@@ -1053,7 +1053,11 @@
     },
     {
       "file": "crates/bellatrix_mde/src/uml/classifiers.rs",
-      "scope": "Generated ownership subsets, direct/inherited Namespace members and Classifier features/attributes, direct redefinition filtering and slottable-feature unions. Bounded Property consistency is shared with feature_compatibility; Operation consistency and ambiguous ownership/ancestor redefinition cases remain explicit unsupported capabilities."
+      "scope": "Generated ownership subsets, direct/inherited Namespace members and Classifier features/attributes, direct redefinition filtering and slottable-feature unions. Bounded Property and Operation signature consistency are consumed from shared feature_compatibility/operation_signatures; behavioral/template contracts and ambiguous ownership/ancestor redefinition cases remain explicit unsupported capabilities."
+    },
+    {
+      "file": "crates/bellatrix_mde/src/uml/operation_signatures.rs",
+      "scope": "Official Operation signature consistency over ordered canonical Parameters: equal count/direction/ordering/uniqueness, bidirectional Type conformance and direction-dependent interval containment. Consumed by redefinition commands, validation and Inspector; unsupported Type/bound and behavioral/template contract evaluation remain explicit capability diagnostics."
     },
     {
       "file": "crates/bellatrix_mde/src/uml/classifier_hierarchy.rs",
@@ -1061,7 +1065,7 @@
     },
     {
       "file": "crates/bellatrix_mde/src/uml/feature_compatibility.rs",
-      "scope": "Reusable TypedElement Type conformance and MultiplicityElement interval containment; Property redefinition consistency additionally preserves composite aggregation. Missing/legacy/external Types and unevaluated ValueSpecifications remain explicit unsupported outcomes; no general OCL interpreter or full Operation consistency is claimed."
+      "scope": "Reusable TypedElement Type conformance and MultiplicityElement interval containment; Property redefinition consistency additionally preserves composite aggregation. Missing/legacy/external Types and unevaluated ValueSpecifications remain explicit unsupported outcomes; shared known/unsupported Boolean composition also supports Operation signatures; no general OCL interpreter is claimed."
     },
     {
       "file": "crates/bellatrix_mde/src/uml/namespace_imports.rs",

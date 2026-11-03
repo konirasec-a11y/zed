@@ -116,22 +116,42 @@ pub fn compare_property_consistency(
     })();
     // The upper-bound clause in the published OCL repeats lowerBound. Follow
     // the accompanying interval-containment requirement, including infinity.
-    let mut unknown = None;
-    let mut incompatible = false;
-    for result in [
+    require_all([
         compare_type_conformance(references, redefining, redefined),
         compare_multiplicity_containment(references, redefining, redefined),
         composite,
-    ] {
-        match result {
-            Ok(false) => incompatible = true,
-            Ok(true) => {}
+    ])
+}
+
+fn combine_checks(
+    results: impl IntoIterator<Item = Result<bool, QueryError>>,
+    decisive: bool,
+) -> Result<bool, QueryError> {
+    let mut unknown = None;
+    let mut result = !decisive;
+    for check in results {
+        match check {
+            Ok(value) if value == decisive => result = decisive,
+            Ok(_) => {}
             Err(error @ QueryError::Unsupported { .. }) => unknown = Some(error),
             Err(error) => return Err(error),
         }
     }
-    if incompatible {
-        return Ok(false);
+    if result == decisive {
+        Ok(result)
+    } else {
+        unknown.map_or(Ok(result), Err)
     }
-    unknown.map_or(Ok(true), Err)
+}
+
+pub(crate) fn require_all(
+    results: impl IntoIterator<Item = Result<bool, QueryError>>,
+) -> Result<bool, QueryError> {
+    combine_checks(results, false)
+}
+
+pub(crate) fn accept_any(
+    results: impl IntoIterator<Item = Result<bool, QueryError>>,
+) -> Result<bool, QueryError> {
+    combine_checks(results, true)
 }

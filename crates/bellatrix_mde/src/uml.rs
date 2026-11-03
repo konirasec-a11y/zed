@@ -7,6 +7,7 @@ pub mod instances;
 pub mod metamodel;
 pub mod namespace_imports;
 pub mod operations;
+pub mod operation_signatures;
 pub mod references;
 pub mod root;
 pub mod schema;

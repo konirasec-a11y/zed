@@ -162,7 +162,7 @@ fn legacy_template_schema_does_not_claim_a_normative_metaclass() {
 #[test]
 fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
 -> Result<(), Box<dyn std::error::Error>> {
-    use bellatrix_mde::commands::ModelingMemberKind::{Attribute, Operation};
+    use bellatrix_mde::commands::ModelingMemberKind::{Attribute, Operation, Parameter};
     use bellatrix_mde::uml::{
         classifiers::{self, NamespaceQuery},
         references::ReferenceIndex,
@@ -172,8 +172,24 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
     use serde_json::json;
 
     fn apply(project: &mut Project, command: Command) -> Result<(), String> {
-        *project = commands::apply(project, &command, 0)?;
+        *project = commands::apply(project, &command, 0)
+            .map_err(|error| format!("{command:?}: {error}"))?;
         Ok(())
+    }
+    fn set_property(
+        project: &mut Project,
+        id: &str,
+        key: &str,
+        value: serde_json::Value,
+    ) -> Result<(), String> {
+        apply(
+            project,
+            Command::SetProperty {
+                element_id: id.into(),
+                path: format!("properties.{key}"),
+                value,
+            },
+        )
     }
     fn visibility(project: &mut Project, id: &str, value: &str) -> Result<(), String> {
         apply(
@@ -684,6 +700,228 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
     );
     assert_eq!(encode(&project, Format::Json)?, before);
 
+    // Continue the same inherited-feature workflow with ordered Operation signatures.
+    // UML allows conformance in either Type direction, unlike a fixed language policy.
+    redefine(&mut project, &own_operation, &[])?;
+    redefine(&mut project, &left_operation, &[])?;
+    let mut parameter_groups = Vec::new();
+    for (operation, types, ranges) in [
+        (
+            &original_operation,
+            [&ancestor, &left, &ancestor, &left],
+            ["1..2", "0..2", "0..*", "0..5"],
+        ),
+        (
+            &left_operation,
+            [&left, &ancestor, &left, &ancestor],
+            ["0..3", "0..2", "0..3", "1..4"],
+        ),
+        (
+            &own_operation,
+            [&ancestor, &ancestor, &ancestor, &ancestor],
+            ["0..*", "0..2", "1..2", "2..3"],
+        ),
+    ] {
+        let mut parameters = Vec::new();
+        for ((direction, type_id), range) in ["in", "inout", "out", "return"]
+            .into_iter()
+            .zip(types)
+            .zip(ranges)
+        {
+            apply(
+                &mut project,
+                Command::AddMember {
+                    owner_id: operation.clone(),
+                    kind: Parameter,
+                },
+            )?;
+            let parameter = project.elements.last().ok_or("new Parameter")?.id.clone();
+            for (key, value) in [
+                ("direction", json!(direction)),
+                ("type", json!({"$ref": type_id})),
+                ("multiplicity", json!(range)),
+            ] {
+                set_property(&mut project, &parameter, key, value)?;
+            }
+            parameters.push(parameter);
+        }
+        parameter_groups.push(parameters);
+    }
+    redefine(&mut project, &left_operation, &[&original_operation])?;
+    redefine(
+        &mut project,
+        &own_operation,
+        &[&original_operation, &left_operation],
+    )?;
+    let left_input = &parameter_groups[1][0];
+    let own_parameters = &parameter_groups[2];
+    apply(
+        &mut project,
+        Command::Rename {
+            element_id: own_parameters[0].clone(),
+            name: "independentName".into(),
+        },
+    )?;
+
+    // Reordering a signature changes correspondence, then restoring order repairs it.
+    let before = encode(&project, Format::Json)?;
+    assert!(
+        apply(
+            &mut project,
+            Command::MoveParameter {
+                parameter_id: left_input.clone(),
+                up: false
+            }
+        )
+        .is_err()
+    );
+    assert_eq!(encode(&project, Format::Json)?, before);
+    redefine(&mut project, &own_operation, &[])?;
+    redefine(&mut project, &left_operation, &[])?;
+    apply(
+        &mut project,
+        Command::MoveParameter {
+            parameter_id: left_input.clone(),
+            up: false,
+        },
+    )?;
+    let before = encode(&project, Format::Json)?;
+    assert!(redefine(&mut project, &left_operation, &[&original_operation]).is_err());
+    assert_eq!(encode(&project, Format::Json)?, before);
+    apply(
+        &mut project,
+        Command::MoveParameter {
+            parameter_id: left_input.clone(),
+            up: true,
+        },
+    )?;
+    redefine(&mut project, &left_operation, &[&original_operation])?;
+
+    // An added untyped input is still a proven count mismatch, not an unknown signature.
+    apply(
+        &mut project,
+        Command::AddMember {
+            owner_id: own_operation.clone(),
+            kind: Parameter,
+        },
+    )?;
+    let extra = project.elements.last().ok_or("extra Parameter")?.id.clone();
+    assert!(
+        redefine(
+            &mut project,
+            &own_operation,
+            &[&original_operation, &left_operation]
+        )
+        .is_err()
+    );
+    apply(&mut project, Command::DeleteElement { element_id: extra })?;
+    redefine(
+        &mut project,
+        &own_operation,
+        &[&original_operation, &left_operation],
+    )?;
+    for (parameter, key, incompatible, repaired) in [
+        (
+            &own_parameters[0],
+            "multiplicity",
+            json!("1..1"),
+            json!("0..*"),
+        ),
+        (
+            &own_parameters[1],
+            "multiplicity",
+            json!("0..3"),
+            json!("0..2"),
+        ),
+        (
+            &own_parameters[2],
+            "multiplicity",
+            json!("0..4"),
+            json!("1..2"),
+        ),
+        (
+            &own_parameters[3],
+            "multiplicity",
+            json!("0..6"),
+            json!("2..3"),
+        ),
+        (&own_parameters[3], "isOrdered", json!(true), json!(false)),
+        (&own_parameters[3], "isUnique", json!(false), json!(true)),
+        (
+            &own_parameters[1],
+            "type",
+            json!({"$ref": right}),
+            json!({"$ref": ancestor}),
+        ),
+    ] {
+        let before = encode(&project, Format::Json)?;
+        assert!(set_property(&mut project, parameter, key, incompatible.clone()).is_err());
+        assert_eq!(encode(&project, Format::Json)?, before);
+        // A loaded incompatible model reports the same problem and can be repaired.
+        project
+            .elements
+            .iter_mut()
+            .find(|element| &element.id == parameter)
+            .ok_or("Parameter")?
+            .properties
+            .insert(key.into(), incompatible);
+        let before = encode(&project, Format::Json)?;
+        let error = redefine(
+            &mut project,
+            &own_operation,
+            &[&original_operation, &left_operation],
+        )
+        .err()
+        .ok_or("incompatible Operation accepted")?;
+        assert!(error.contains("inconsistent"), "{error}");
+        assert_eq!(encode(&project, Format::Json)?, before);
+        assert!(
+            validate_structural_model(&project)
+                .iter()
+                .any(|issue| issue.subject_id == own_operation
+                    && issue.severity == bellatrix_mde::StructuralSeverity::Error)
+        );
+        set_property(&mut project, parameter, key, repaired)?;
+        redefine(
+            &mut project,
+            &own_operation,
+            &[&original_operation, &left_operation],
+        )?;
+    }
+    // Authored expressions survive storage without being interpreted as valid/invalid.
+    let mut unevaluated_operation = project.clone();
+    set_property(
+        &mut unevaluated_operation,
+        &own_parameters[3],
+        "multiplicity",
+        json!("limit..*"),
+    )?;
+    redefine(
+        &mut unevaluated_operation,
+        &own_operation,
+        &[&original_operation, &left_operation],
+    )?;
+    let unevaluated_operation =
+        decode(&encode(&unevaluated_operation, Format::Json)?, Format::Json)?;
+    assert!(
+        validate_structural_model(&unevaluated_operation)
+            .iter()
+            .any(|issue| issue.subject_id == own_operation
+                && issue.code == "UML_REDEFINITION_CONSISTENCY_UNSUPPORTED"
+                && issue.severity == bellatrix_mde::StructuralSeverity::Warning)
+    );
+    let unknown_inspector = inspect_element(
+        &ModelingSection::from_model(&unevaluated_operation),
+        &own_operation,
+    )
+    .ok_or("Operation Inspector")?;
+    assert!(
+        unknown_inspector
+            .properties
+            .iter()
+            .any(|field| field.path == "uml.redefinition.status")
+    );
+
     redefine(&mut project, &own_attribute, &[&public])?;
     let expected = ids(&query(&project, &leaf)?.members)
         .into_iter()
@@ -730,7 +968,7 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
         assert!(
             diagnostics
                 .iter()
-                .any(|issue| issue.code == "UML_REDEFINITION_CONSISTENCY_UNSUPPORTED")
+                .all(|issue| issue.code != "UML_REDEFINITION_CONSISTENCY_UNSUPPORTED")
         );
         let section = ModelingSection::from_model(&reopened);
         let inspector = inspect_element(&section, &leaf).ok_or("Inspector")?;

@@ -61,7 +61,7 @@ fn effective_scalar(element: ElementRef<'_>, key: &str) -> Result<Value, String>
     Ok(value)
 }
 
-fn effective_boolean(element: ElementRef<'_>, key: &str) -> Result<bool, String> {
+pub(crate) fn effective_boolean(element: ElementRef<'_>, key: &str) -> Result<bool, String> {
     effective_scalar(element, key)?
         .as_bool()
         .ok_or_else(|| format!("{key} requires a Boolean"))
