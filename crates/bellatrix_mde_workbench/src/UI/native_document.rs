@@ -524,7 +524,7 @@ impl NativeMdeDocumentItem {
                     }
                 }
                 let binding = if export_mdj { None } else {
-                    let binding = project.update(cx, |project, cx| project.find_or_create_worktree(path.clone(), true, cx))?;
+                    let binding = project.update(cx, |project, cx| project.find_or_create_worktree(path.clone(), true, cx));
                     Some(binding.await?)
                 };
                 this.update(cx, |this, cx| {
@@ -538,7 +538,7 @@ impl NativeMdeDocumentItem {
                 let bytes = if export_mdj { None } else { Some(serde_json::to_vec_pretty(document.as_ref())?) };
                 let mut warning = write(Arc::clone(&document), path.clone()).await.map_err(anyhow::Error::msg)?;
                 if let Some((worktree, relative_path)) = binding {
-                    let refresh = worktree.update(cx, |worktree, cx| worktree.as_local().map(|local| local.refresh_entry(relative_path, None, cx)))?;
+                    let refresh = worktree.update(cx, |worktree, cx| worktree.as_local().map(|local| local.refresh_entry(relative_path, None, cx)));
                     if let Some(refresh) = refresh && let Err(error) = refresh.await {
                         let message = format!("The file was saved, but its workspace entry could not be refreshed: {error}");
                         warning = Some(warning.map_or_else(|| message.clone(), |existing| format!("{existing} {message}")));

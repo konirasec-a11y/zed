@@ -9,7 +9,7 @@ use crate::workbench_ui::{
 };
 use bellatrix_mde_cordis::MdeUiCommand;
 use bellatrix_project::ProjectSaveRequested;
-use gpui::{App, AppContext, Entity, Window, actions};
+use gpui::{App, AppContext, Entity, TaskExt, Window, actions};
 use project::DirectoryLister;
 use std::{
     cell::{Cell, RefCell},
