@@ -39,8 +39,8 @@ exposes a documented data format, not the internal Rust structs.
 `Ok` contains a JSON object with:
 
 - `api_version`: 1.
-- `coverage`: `"implemented_rules_only"`, or
-  `"mixed_domain_semantics_unverified"` when UML evaluation is suspended.
+- `coverage`: `"implemented_rules_only"`, `"implemented_uml_subset_rules_only"`,
+  or `"implemented_uml_scalars_and_integrity_only"` (described below).
 - `validity`: `"unverified"` for a mixed-domain capacity blocker, `"invalid"`
   when errors were found, or `"no_violations_found"`. None certifies conformance.
 - `has_errors`: whether any reported diagnostic has severity `"error"`, including
@@ -72,12 +72,30 @@ warnings for represented cross-domain endpoints and `$ref` values, and
 the error `UML_MODEL_SEMANTICS_UNVERIFIED`. This error reports an unsupported
 validation capability, not a proven UML violation. `validity` is `unverified`
 and `has_errors` is `true`, so legacy error-only consumers cannot report success.
-Its coverage is
-`mixed_domain_semantics_unverified`: UML rule evaluation was **not performed**,
-including for the UML subset. This temporary boundary avoids legacy adapters
-implicitly interpreting Rust types as UML. External-domain mapping and partial
-validation remain future work; no semantic records or collection members are
-silently removed or converted.
+The semantic projection preserves the original relative order, properties and
+collection values of UML records, excluding external-domain objects and relations
+from evaluation rather than interpreting Rust aliases as UML. The source document
+is never changed. Two conservative coverage levels apply:
+
+- `implemented_uml_subset_rules_only`: all implemented checks run on the complete
+  UML projection when no relation endpoint, ownership link, designated root or
+  nested local `$ref` crosses between UML and an external domain, in either
+  direction. External records remain explicitly unverified. This is a whole-UML
+  projection, not independent evaluation of apparently disconnected components.
+- `implemented_uml_scalars_and_integrity_only`: a cross-domain dependency prevents
+  proving closure. `UML_CROSS_DOMAIN_RULES_UNVERIFIED` states that relational and
+  global rules, including namespace and inverse-reference queries, are suspended
+  for the UML projection. Normative scalar contracts still run for every UML
+  record, and local root, missing-endpoint and ownership integrity checks still
+  report independently provable errors. Known external endpoints are unresolved
+  boundaries, not falsely reported as missing or wrongly typed UML elements.
+
+The conservative global suspension is necessary because some rules inspect all
+candidate objects of a metaclass, including malformed candidates without explicit
+references. Connected-component partitioning alone cannot justify absence or
+multiplicity conclusions. Finer rule-level dependency tracking remains future
+work. Proved UML errors are returned alongside the capacity blocker; `validity`
+remains `unverified` rather than implying that suspended checks were evaluated.
 
 `has_errors: false` means only that no error diagnostic was reported. It is
 not proof of validity; mixed-domain evaluation always returns a capacity error

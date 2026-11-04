@@ -51,7 +51,7 @@ fn explorer_move_menu(
     owner: &Entity<MdeWorkbenchItem>,
     snapshot: &crate::workbench_ui::MdeSnapshot,
     target: crate::workbench_ui::hierarchy::ExplorerMoveTarget,
-    panel: gpui::WeakEntity<MdeRightPanel>,
+    _panel: gpui::WeakEntity<MdeRightPanel>,
 ) -> ui::ContextMenu {
     use crate::workbench_ui::hierarchy::ExplorerMoveTarget;
     let current_parent = match &target {
@@ -79,29 +79,16 @@ fn explorer_move_menu(
         ExplorerMoveTarget::Element(_) => "Move element into",
         ExplorerMoveTarget::Diagram(_) => "Move diagram into",
     };
-    menu.submenu(title, move |mut menu, _, cx| {
-        let destinations = destinations.iter().filter(|(parent, _)|
-            owner.read(cx).validate_explorer_move(&project_id, revision,
-                &target, parent.as_deref(), None).is_ok()).collect::<Vec<_>>();
-        if destinations.is_empty() { return menu.header("No compatible destinations"); }
-        for (parent, label) in destinations {
+    menu.submenu(title, move |mut menu, _, _cx| {
+        // Let the kernel explain rejected moves instead of silently hiding them.
+        for (parent, label) in &destinations {
             let owner = owner.clone();
             let project_id = project_id.clone();
             let target = target.clone();
             let parent = parent.clone();
-            let panel = panel.clone();
             menu = menu.entry(label.clone(), None, move |_, cx| {
-                let sent = owner.update(cx, |workbench, cx| workbench.move_explorer_item(
+                owner.update(cx, |workbench, cx| workbench.move_explorer_item(
                     &project_id, revision, &target, parent.clone(), None, cx));
-                if sent {
-                    if let Err(error) = panel.update(cx, |panel, cx| {
-                        if !panel.is_bound_to(&owner) { return; }
-                        // A valid owner may be represented by a semantic row or an occurrence.
-                        // Reveal the result without guessing a presentation key from its identity.
-                        panel.collapsed_elements.clear();
-                        cx.notify();
-                    }) { eprintln!("MDE move reveal failed: {error}"); }
-                }
             });
         }
         menu
@@ -662,6 +649,7 @@ impl Render for MdeRightPanel {
         let selected_id = item.read(cx).selected_element().map(str::to_owned);
         let active_diagram = item.read(cx).active_diagram().map(str::to_owned);
         let selected_view = item.read(cx).presentation.selected_view().map(str::to_owned);
+        let selected_explorer_key = item.read(cx).presentation.selected_explorer_key().map(str::to_owned);
         let snapshot = item.read(cx).source().snapshot().ok();
         let inspection = snapshot.as_ref().and_then(|snapshot| {
             selected_id
@@ -684,9 +672,11 @@ impl Render for MdeRightPanel {
             explorer_branch_keys.extend(tree.windows(2)
                 .filter(|rows| rows[1].depth > rows[0].depth)
                 .map(|rows| rows[0].key.clone()));
-            let selected_row = selected_view.as_ref()
-                .and_then(|id| tree.iter().find(|row| row.view.as_ref().is_some_and(|view|
-                    &view.view_id == id && active_diagram.as_deref() == Some(view.diagram_id.as_str()))))
+            let selected_row = selected_explorer_key.as_ref()
+                .and_then(|key| tree.iter().find(|row| &row.key == key))
+                .or_else(|| selected_view.as_ref()
+                    .and_then(|id| tree.iter().find(|row| row.view.as_ref().is_some_and(|view|
+                        &view.view_id == id && active_diagram.as_deref() == Some(view.diagram_id.as_str())))))
                 .or_else(|| selected_id.as_ref().and_then(|id| {
                     tree.iter().find(|row| row.view.is_none() && !row.diagram && &row.element_id == id
                         && (row.diagram_context.is_none() || row.diagram_context.as_deref() == active_diagram.as_deref()))
@@ -738,7 +728,34 @@ impl Render for MdeRightPanel {
             let project_row_key = root_key.clone();
             let project_row_name = snapshot.name.clone();
             let project_has_children = !tree.is_empty();
+            let root_filter_owner = item.clone();
+            let root_element_owner = item.clone();
+            let root_diagram_owner = item.clone();
+            let root_element_parent = snapshot.section.root_model.clone();
             rows.push(div().id("mde-explorer-project").flex().items_center().gap_1()
+                .can_drop(move |drag, _, cx| {
+                    let project_id = if let Some(drag) = drag.downcast_ref::<crate::workbench_ui::hierarchy::ExplorerElementDrag>() {
+                        &drag.project_id
+                    } else if let Some(drag) = drag.downcast_ref::<crate::workbench_ui::hierarchy::ExplorerDiagramDrag>() {
+                        &drag.project_id
+                    } else { return false; };
+                    let workbench = root_filter_owner.read(cx);
+                    workbench.project_id() == project_id
+                        && !workbench.source.is_read_only()
+                        && !workbench.source.is_presentation_suspended()
+                })
+                .on_drop(move |drag: &crate::workbench_ui::hierarchy::ExplorerElementDrag, _, cx| {
+                    root_element_owner.update(cx, |workbench, cx| workbench.move_explorer_item(
+                        &drag.project_id, drag.revision,
+                        &crate::workbench_ui::hierarchy::ExplorerMoveTarget::Element(drag.element_id.clone()),
+                        root_element_parent.clone(), None, cx));
+                })
+                .on_drop(move |drag: &crate::workbench_ui::hierarchy::ExplorerDiagramDrag, _, cx| {
+                    root_diagram_owner.update(cx, |workbench, cx| workbench.move_explorer_item(
+                        &drag.project_id, drag.revision,
+                        &crate::workbench_ui::hierarchy::ExplorerMoveTarget::Diagram(drag.diagram_id.clone()),
+                        None, None, cx));
+                })
                 .child(crate::workbench_ui::hierarchy::explorer_project_icon(&palette))
                 .child(ui::right_click_menu("mde-explorer-project-menu")
                     .trigger(move |_, _, _| TreeViewItem::new(project_row_key, project_row_name)
@@ -818,9 +835,6 @@ impl Render for MdeRightPanel {
                             let diagram_hover_target = target.clone();
                             let diagram_hover_owner = ownership_filter_owner.clone();
                             let diagram_drop_owner = ownership_drop_owner.clone();
-                            let diagram_drop_panel = cx.weak_entity();
-                            let element_drop_panel = cx.weak_entity();
-                            let filter_target = target.clone();
                             let hover_target = target.clone();
                             let hover_owner = ownership_filter_owner.clone();
                             let highlight = palette.selection;
@@ -842,38 +856,23 @@ impl Render for MdeRightPanel {
                                         && !workbench.source.is_presentation_suspended();
                                 }
                                 // GPUI checks every row here, including unhovered rows.
-                                // Full kernel validation belongs to hover feedback and drop.
+                                // Hover previews use the kernel; Cordis validates the submitted drop.
                                 drag.downcast_ref::<crate::workbench_ui::hierarchy::ExplorerElementDrag>()
                                     .is_some_and(|drag| {
                                         let workbench = ownership_filter_owner.read(cx);
-                                        drag.element_id != filter_target
-                                            && workbench.project_id() == &drag.project_id
+                                        workbench.project_id() == &drag.project_id
                                             && !workbench.source.is_read_only()
                                             && !workbench.source.is_presentation_suspended()
                                     })
                             }).on_drop(move |drag: &crate::workbench_ui::hierarchy::ExplorerElementDrag, _, cx| {
-                                let sent = ownership_drop_owner.update(cx, |workbench, cx| {
+                                ownership_drop_owner.update(cx, |workbench, cx| {
                                     workbench.reparent_explorer_element(drag, target.clone(), cx)
                                 });
-                                if sent {
-                                    if let Err(error) = element_drop_panel.update(cx, |panel, cx| {
-                                        if !panel.is_bound_to(&ownership_drop_owner) { return; }
-                                        panel.collapsed_elements.clear();
-                                        cx.notify();
-                                    }) { eprintln!("MDE move reveal failed: {error}"); }
-                                }
                             }).on_drop(move |drag: &crate::workbench_ui::hierarchy::ExplorerDiagramDrag, _, cx| {
-                                let sent = diagram_drop_owner.update(cx, |workbench, cx| workbench.move_explorer_item(
+                                diagram_drop_owner.update(cx, |workbench, cx| workbench.move_explorer_item(
                                     &drag.project_id, drag.revision,
                                     &crate::workbench_ui::hierarchy::ExplorerMoveTarget::Diagram(drag.diagram_id.clone()),
                                     Some(diagram_target.clone()), diagram_occurrence.clone(), cx));
-                                if sent {
-                                    if let Err(error) = diagram_drop_panel.update(cx, |panel, cx| {
-                                        if !panel.is_bound_to(&diagram_drop_owner) { return; }
-                                        panel.collapsed_elements.clear();
-                                        cx.notify();
-                                    }) { eprintln!("MDE move reveal failed: {error}"); }
-                                }
                             })
                         })
                         .tooltip(ui::Tooltip::text(format!("Visual component · {type_label}. Drag onto an owner to move its semantic element; the view stays in this diagram.")))
@@ -931,6 +930,8 @@ impl Render for MdeRightPanel {
                     let menu_panel = cx.weak_entity();
                     let diagram_row_key = row.key.clone();
                     let diagram_row_label = row.label.clone();
+                    let diagram_element_drop_owner = item.clone();
+                    let diagram_element_drop_target = id.clone();
                     let visual_menu_owner = item.clone();
                     let visual_menu_diagram = id.clone();
                     let visual_menu_id = format!("mde-unbound-views-{id}");
@@ -944,7 +945,12 @@ impl Render for MdeRightPanel {
                         div()
                             .id(format!("mde-explorer-diagram-{id}"))
                             .when_some(diagram_drag, |row, drag| row.on_drag(drag, |drag: &crate::workbench_ui::hierarchy::ExplorerDiagramDrag, _, _, cx| cx.new(|_| drag.clone())))
-                            .tooltip(ui::Tooltip::text("Diagram"))
+                            .on_drop(move |drag: &crate::workbench_ui::hierarchy::ExplorerElementDrag, _, cx| {
+                                diagram_element_drop_owner.update(cx, |workbench, cx| {
+                                    workbench.drop_explorer_element_on_diagram(drag, &diagram_element_drop_target, cx);
+                                });
+                            })
+                            .tooltip(ui::Tooltip::text("Diagram. Drop a model element here to show a view; its owner and other views are preserved."))
                             .pl(px((row.depth.min(15) + 2) as f32 * 14.0))
                             .flex().items_center().gap_1()
                             .when(selected, |row| row.bg(palette.surface))
@@ -1007,6 +1013,10 @@ impl Render for MdeRightPanel {
                 let id = row.element_id.clone();
                 let owner = item.clone();
                 let diagram_context = row.diagram_context.clone();
+                let selection_key = row.key.clone();
+                let selection_occurrence = ownership_occurrence.clone();
+                let menu_selection_key = row.key.clone();
+                let menu_selection_occurrence = ownership_occurrence.clone();
                 let disclosure_id = row.key.clone();
                 let disclosure_panel = cx.weak_entity();
                 let menu_owner = item.clone();
@@ -1036,7 +1046,7 @@ impl Render for MdeRightPanel {
                     .on_click(move |_, _, cx| {
                         owner.update(cx, |workbench, cx| {
                             if let Some(diagram) = &diagram_context { workbench.select_diagram(diagram.clone(), cx); }
-                            workbench.select_element(id.clone(), cx);
+                            workbench.select_explorer_element(id.clone(), selection_key.clone(), selection_occurrence.clone(), cx);
                         });
                     });
                 rows.push(
@@ -1050,9 +1060,6 @@ impl Render for MdeRightPanel {
                             let diagram_hover_target = target.clone();
                             let diagram_hover_owner = ownership_filter_owner.clone();
                             let diagram_drop_owner = ownership_drop_owner.clone();
-                            let diagram_drop_panel = cx.weak_entity();
-                            let element_drop_panel = cx.weak_entity();
-                            let filter_target = target.clone();
                             let hover_target = target.clone();
                             let hover_owner = ownership_filter_owner.clone();
                             let highlight = palette.selection;
@@ -1074,38 +1081,23 @@ impl Render for MdeRightPanel {
                                         && !workbench.source.is_presentation_suspended();
                                 }
                                 // GPUI checks every row here, including unhovered rows.
-                                // Full kernel validation belongs to hover feedback and drop.
+                                // Hover previews use the kernel; Cordis validates the submitted drop.
                                 drag.downcast_ref::<crate::workbench_ui::hierarchy::ExplorerElementDrag>()
                                     .is_some_and(|drag| {
                                         let workbench = ownership_filter_owner.read(cx);
-                                        drag.element_id != filter_target
-                                            && workbench.project_id() == &drag.project_id
+                                        workbench.project_id() == &drag.project_id
                                             && !workbench.source.is_read_only()
                                             && !workbench.source.is_presentation_suspended()
                                     })
                             }).on_drop(move |drag: &crate::workbench_ui::hierarchy::ExplorerElementDrag, _, cx| {
-                                let sent = ownership_drop_owner.update(cx, |workbench, cx| {
+                                ownership_drop_owner.update(cx, |workbench, cx| {
                                     workbench.reparent_explorer_element(drag, target.clone(), cx)
                                 });
-                                if sent {
-                                    if let Err(error) = element_drop_panel.update(cx, |panel, cx| {
-                                        if !panel.is_bound_to(&ownership_drop_owner) { return; }
-                                        panel.collapsed_elements.clear();
-                                        cx.notify();
-                                    }) { eprintln!("MDE move reveal failed: {error}"); }
-                                }
                             }).on_drop(move |drag: &crate::workbench_ui::hierarchy::ExplorerDiagramDrag, _, cx| {
-                                let sent = diagram_drop_owner.update(cx, |workbench, cx| workbench.move_explorer_item(
+                                diagram_drop_owner.update(cx, |workbench, cx| workbench.move_explorer_item(
                                     &drag.project_id, drag.revision,
                                     &crate::workbench_ui::hierarchy::ExplorerMoveTarget::Diagram(drag.diagram_id.clone()),
                                     Some(diagram_target.clone()), diagram_occurrence.clone(), cx));
-                                if sent {
-                                    if let Err(error) = diagram_drop_panel.update(cx, |panel, cx| {
-                                        if !panel.is_bound_to(&diagram_drop_owner) { return; }
-                                        panel.collapsed_elements.clear();
-                                        cx.notify();
-                                    }) { eprintln!("MDE move reveal failed: {error}"); }
-                                }
                             })
                         })
                         .tooltip(ui::Tooltip::text(format!("Model element · {type_label}. Moving this element changes semantic ownership and preserves its diagram views.")))
@@ -1129,7 +1121,7 @@ impl Render for MdeRightPanel {
                                         if let Some(diagram) = &menu_diagram_context {
                                             workbench.select_diagram(diagram.clone(), cx);
                                         }
-                                        workbench.select_element(menu_subject.clone(), cx);
+                                        workbench.select_explorer_element(menu_subject.clone(), menu_selection_key.clone(), menu_selection_occurrence.clone(), cx);
                                     });
                                     explorer_menu(&menu_owner, &menu_subject, member_menu_panel.clone(), member_menu_key.clone(), window, cx)
                                 }),
@@ -1292,6 +1284,12 @@ impl Render for MdeRightPanel {
                                         })
                                 ))),
                     )
+                    .when(self.explorer_open && !item.read(cx).feedback().is_empty(), |pane| {
+                        let feedback = item.read(cx).feedback().to_owned();
+                        pane.child(div().id("mde-explorer-feedback").px_2().py_1()
+                            .flex_none().max_h(px(72.0)).overflow_y_scroll()
+                            .whitespace_normal().child(Label::new(feedback).size(ui::LabelSize::Small)))
+                    })
                     .when(self.explorer_open && self.explorer_search_open, |pane| {
                         pane.child(div().p_2().flex().items_center().gap_1()
                             .child(div().flex_1().min_w_0().child(self.explorer_search.clone()))
@@ -1450,13 +1448,21 @@ enum BottomTab {
 pub struct MdeBottomPanel {
     state: PanelState,
     active: BottomTab,
+    execution: Entity<crate::workbench_ui::execution_dashboard::MdeExecutionDashboard>,
 }
 impl MdeBottomPanel {
-    pub fn new(item: Entity<MdeWorkbenchItem>, cx: &mut Context<Self>) -> Self {
+    pub fn new(item: Entity<MdeWorkbenchItem>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let execution = cx.new(|cx| crate::workbench_ui::execution_dashboard::MdeExecutionDashboard::new(item.clone(), window, cx));
         Self {
             state: PanelState::new(item, DockPosition::Bottom, 0.0, cx),
-            active: BottomTab::Relationships,
+            active: BottomTab::Diagnostics,
+            execution,
         }
+    }
+
+    fn bind(&mut self, item: Option<&Entity<MdeWorkbenchItem>>, cx: &mut Context<Self>) {
+        self.state.bind(item, cx);
+        self.execution.update(cx, |execution, cx| execution.bind(item, cx));
     }
 }
 impl EventEmitter<PanelEvent> for MdeBottomPanel {}
@@ -1491,7 +1497,7 @@ impl Panel for MdeBottomPanel {
         Some(IconName::BellatrixMdeDetails)
     }
     fn icon_tooltip(&self, _: &Window, _: &App) -> Option<&'static str> {
-        Some("Bellatrix MDE - Details: Diagnostics, Relations, Markdown & Thumbnails (bottom dock)")
+        Some("Bellatrix MDE - Logs, Diagnostics, Relations, Markdown & Thumbnails (bottom dock)")
     }
     fn toggle_action(&self) -> Box<dyn Action> {
         Box::new(ToggleMdeBottom)
@@ -1517,7 +1523,7 @@ impl Render for MdeBottomPanel {
         let handle = cx.weak_entity();
         let mut tabs = Vec::new();
         for (index, (kind, label, icon)) in [
-            (BottomTab::Diagnostics, "Diagnostics", IconName::Warning),
+            (BottomTab::Diagnostics, "Logs & diagnostics", IconName::ListTree),
             (BottomTab::Relationships, "Relationships", IconName::Link),
             (BottomTab::Documentation, "Markdown", IconName::FileMarkdown),
             (BottomTab::Thumbnails, "Thumbnails", IconName::Image),
@@ -1531,8 +1537,11 @@ impl Render for MdeBottomPanel {
                     .aria_label(label)
                     .tooltip(ui::Tooltip::text(label))
                     .toggle_state(active == kind)
-                    .on_click(move |_, _, cx| {
+                    .on_click(move |_, window, cx| {
                     if let Err(error) = owner.update(cx, |panel, cx| {
+                        if panel.active != kind {
+                            window.focus(&panel.state.focus, cx);
+                        }
                         panel.active = kind;
                         cx.notify();
                     }) {
@@ -1542,9 +1551,7 @@ impl Render for MdeBottomPanel {
             );
         }
         let description = match active {
-            BottomTab::Diagnostics => {
-                "Read-only implemented UML checks using the stored diagram type. This is not full conformance certification."
-            }
+            BottomTab::Diagnostics => "Logs & diagnostics",
             BottomTab::Relationships => "Select a relation to inspect its endpoints",
             BottomTab::Documentation => "Documentation is part of the MDE model",
             BottomTab::Thumbnails => "Diagrams are listed in Working diagrams",
@@ -1559,28 +1566,25 @@ impl Render for MdeBottomPanel {
             .when(read_only, |panel| {
                 panel.child(Label::new("Read-only preview"))
             })
-            .child(div().h(px(36.0)).flex().gap_2().children(tabs))
-            .child(
+            .child(div().h(px(36.0)).flex_none().flex().items_center().gap_2()
+                .children(tabs)
+                .child(div().flex_1())
+                .child(IconButton::new("mde-bottom-close", IconName::Close)
+                    .aria_label("Hide MDE logs and details")
+                    .tooltip(ui::Tooltip::text("Hide panel; execution events continue to be recorded"))
+                    .on_click(cx.listener(|_, _, _, cx| cx.emit(PanelEvent::Close)))))
+            .when(active == BottomTab::Diagnostics, |panel| panel.child(
+                div().flex_1().min_h_0().overflow_hidden().child(self.execution.clone()),
+            ))
+            .when(active != BottomTab::Diagnostics, |panel| panel.child(
                 div()
                     .id("mde-bottom-output")
                     .flex_1()
                     .min_h_0()
                     .overflow_y_scroll()
                     .p_3()
-                    .child(div().whitespace_normal().child(description))
-                    .when(active == BottomTab::Diagnostics, |output| {
-                        let feedback = item.read(cx).feedback();
-                        let validation_status = item.read(cx).validation_status();
-                        output.child(div().w_full().whitespace_normal().child(validation_status.to_owned())).children(
-                            feedback
-                                .lines()
-                                .map(|line| {
-                                    div().w_full().whitespace_normal().child(line.to_owned())
-                                })
-                                .collect::<Vec<_>>(),
-                        )
-                    }),
-            )
+                    .child(div().whitespace_normal().child(description)),
+            ))
             .into_any_element()
     }
 }
@@ -1663,11 +1667,18 @@ pub(crate) fn bind_panels(
         });
     }
     if let Some(panel) = workspace.panel::<MdeBottomPanel>(cx) {
-        panel.update(cx, |panel, cx| panel.state.bind(item.as_ref(), cx));
-    }
-    if let Some(panel) = workspace.panel::<crate::workbench_ui::execution_dashboard::MdeExecutionDashboard>(cx) {
         panel.update(cx, |panel, cx| panel.bind(item.as_ref(), cx));
     }
+}
+
+fn show_logs_and_diagnostics(workspace: &mut Workspace, window: &mut Window, cx: &mut Context<Workspace>) {
+    if let Some(panel) = workspace.panel::<MdeBottomPanel>(cx) {
+        panel.update(cx, |panel, cx| {
+            panel.active = BottomTab::Diagnostics;
+            cx.notify();
+        });
+    }
+    workspace.reveal_panel::<MdeBottomPanel>(window, cx);
 }
 
 pub fn attach_panels(
@@ -1681,7 +1692,7 @@ pub fn attach_panels(
         return;
     }
     workspace.register_action(|workspace, _: &crate::workbench_ui::execution_dashboard::ToggleMdeExecutionDashboard, window, cx| {
-        workspace.toggle_panel_focus::<crate::workbench_ui::execution_dashboard::MdeExecutionDashboard>(window, cx);
+        show_logs_and_diagnostics(workspace, window, cx);
     });
     workspace.register_action(|workspace, _: &ToggleMdeLeft, window, cx| {
         workspace.toggle_panel_focus::<MdeLeftPanel>(window, cx);
@@ -1693,20 +1704,12 @@ pub fn attach_panels(
         workspace.toggle_panel_focus::<MdeBottomPanel>(window, cx);
     });
     workspace.register_action(|workspace, _: &ShowMdeDiagnostics, window, cx| {
-        if let Some(panel) = workspace.panel::<MdeBottomPanel>(cx) {
-            panel.update(cx, |panel, cx| {
-                panel.active = BottomTab::Diagnostics;
-                cx.notify();
-            });
-        }
-        workspace.reveal_panel::<MdeBottomPanel>(window, cx);
+        show_logs_and_diagnostics(workspace, window, cx);
     });
     let left = cx.new(|cx| MdeLeftPanel::new(item.clone(), window, cx));
     let right = cx.new(|cx| MdeRightPanel::new(item.clone(), window, cx));
-    let execution = cx.new(|cx| crate::workbench_ui::execution_dashboard::MdeExecutionDashboard::new(item.clone(), window, cx));
-    let bottom = cx.new(|cx| MdeBottomPanel::new(item, cx));
+    let bottom = cx.new(|cx| MdeBottomPanel::new(item, window, cx));
     workspace.add_panel(left, window, cx);
     workspace.add_panel(right, window, cx);
     workspace.add_panel(bottom, window, cx);
-    workspace.add_panel(execution, window, cx);
 }

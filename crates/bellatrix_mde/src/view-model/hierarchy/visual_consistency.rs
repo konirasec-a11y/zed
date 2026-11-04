@@ -37,7 +37,11 @@ pub fn visual_components(section: &ModelingSection) -> Vec<VisualComponent> {
     let references = crate::uml::references::ReferenceIndex::new(model);
     let mut components = Vec::new();
     for diagram in &section.diagrams {
-        for view in &diagram.views {
+        let mut pending = diagram.views.iter().rev()
+            .map(|view| (view, None)).collect::<Vec<_>>();
+        while let Some((view, parent_view_id)) = pending.pop() {
+            pending.extend(view.children.iter().rev()
+                .map(|child| (child, Some(view.id.clone()))));
             let element = view
                 .subject
                 .as_deref()
@@ -73,10 +77,9 @@ pub fn visual_components(section: &ModelingSection) -> Vec<VisualComponent> {
                 diagram_id: diagram.id.clone(),
                 view_id: view.id.clone(),
                 subject_id: view.subject.clone(),
-                parent_view_id: view
-                    .draft
-                    .as_ref()
-                    .and_then(|draft| draft.parent_view_id.clone()),
+                parent_view_id: parent_view_id.or_else(|| {
+                    view.draft.as_ref().and_then(|draft| draft.parent_view_id.clone())
+                }),
                 label,
                 kind,
             });

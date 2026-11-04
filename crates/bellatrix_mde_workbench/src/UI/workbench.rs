@@ -114,6 +114,7 @@ enum CanvasGesture {
         dx: f64,
         dy: f64,
         revision: u64,
+        began: bool,
     },
     Resize {
         view_id: String,
@@ -123,6 +124,7 @@ enum CanvasGesture {
         dx: f64,
         dy: f64,
         revision: u64,
+        began: bool,
     },
 }
 pub struct MdeWorkbenchItem {
@@ -208,8 +210,7 @@ fn element_view_placement(
     element_id: &str,
 ) -> ElementViewPlacement {
     if let Some(view) = diagram
-        .views
-        .iter()
+        .all_views()
         .find(|view| view.subject.as_deref() == Some(element_id))
     {
         ElementViewPlacement::Existing(view.id.clone())
@@ -305,7 +306,17 @@ impl MdeWorkbenchItem {
         self.presentation.active_diagram()
     }
     pub fn select_element(&mut self, id: String, cx: &mut Context<Self>) {
+        self.source.record_interaction("selection.element", Some(&id), bellatrix_mde::TraceOutcome::Success);
         let change = self.presentation.select_element(id);
+        self.apply_selection_change(change, cx);
+    }
+
+    pub fn select_explorer_element(
+        &mut self, id: String, key: String, occurrence: Option<bellatrix_mde::ViewOccurrence>,
+        cx: &mut Context<Self>,
+    ) {
+        self.source.record_interaction("selection.explorer_member", Some(&key), bellatrix_mde::TraceOutcome::Success);
+        let change = self.presentation.select_explorer_element(id, key, occurrence);
         self.apply_selection_change(change, cx);
     }
 
@@ -321,13 +332,17 @@ impl MdeWorkbenchItem {
     }
 
     fn select_view(&mut self, subject: String, view_id: String, cx: &mut Context<Self>) {
+        self.source.record_interaction("selection.view", Some(&view_id), bellatrix_mde::TraceOutcome::Success);
         let change = self.presentation.select_view(Some(subject), view_id);
         self.apply_selection_change(change, cx);
         cx.notify();
     }
 
     pub fn select_diagram_view(&mut self, diagram_id: String, view_id: String, cx: &mut Context<Self>) {
-        if self.source.is_presentation_suspended() { return; }
+        if self.source.is_presentation_suspended() {
+            self.source.record_interaction("selection.view.suspended", Some(&view_id), bellatrix_mde::TraceOutcome::Invalid);
+            return;
+        }
         let selection = self.source.snapshot().and_then(|snapshot| {
             snapshot.section.diagrams.iter().find(|diagram| diagram.id == diagram_id)
                 .and_then(|diagram| diagram.all_views().find(|view| view.id == view_id))
@@ -336,8 +351,12 @@ impl MdeWorkbenchItem {
         });
         let subject = match selection {
             Ok(subject) => subject,
-            Err(error) => { self.feedback = error; cx.notify(); return; }
+            Err(error) => {
+                self.source.record_interaction("selection.view.missing", Some(&view_id), bellatrix_mde::TraceOutcome::Invalid);
+                self.feedback = error; cx.notify(); return;
+            }
         };
+        self.source.record_interaction("selection.view", Some(&view_id), bellatrix_mde::TraceOutcome::Success);
         self.select_diagram(diagram_id, cx);
         let change = self.presentation.select_view(subject, view_id);
         self.apply_selection_change(change, cx);
@@ -534,7 +553,9 @@ impl MdeWorkbenchItem {
                 .clone()
         };
         field.update(cx, |field, cx| field.set_text(&display, window, cx));
-        self.select_element(id.clone(), cx);
+        if self.selected_element() != Some(id.as_str()) {
+            self.select_element(id.clone(), cx);
+        }
         self.presentation.begin_element_edit(id);
         self.inline_editor = Some(field.clone());
         self.inline_draft = Some(inspector_drafts::DraftState::new(display, snapshot.revision));
@@ -672,6 +693,7 @@ impl MdeWorkbenchItem {
     }
 
     pub fn select_diagram(&mut self, id: String, cx: &mut Context<Self>) {
+        self.source.record_interaction("selection.diagram", Some(&id), bellatrix_mde::TraceOutcome::Success);
         if self.presentation.select_diagram(id) {
             self.validation_status = "Not yet validated for this diagram".into();
         }
@@ -682,6 +704,7 @@ impl MdeWorkbenchItem {
     }
     pub fn select_tool(&mut self, kind: ModelingTool, cx: &mut Context<Self>) {
         if self.source.is_read_only() {
+            self.source.record_interaction("tool.select.read_only", Some(kind.label()), bellatrix_mde::TraceOutcome::Invalid);
             return;
         }
         if self.presentation.selected_tool() == Some(kind) {
@@ -691,14 +714,17 @@ impl MdeWorkbenchItem {
         }
     }
     pub fn cancel_tool(&mut self, cx: &mut Context<Self>) {
+        self.source.record_interaction("tool.cancel", None, bellatrix_mde::TraceOutcome::Success);
         self.presentation.cancel_tool();
         self.feedback = "No relationship tool selected".into();
         cx.notify();
     }
     pub fn arm_drag_tool(&mut self, tool: ModelingTool, cx: &mut Context<Self>) {
         if self.source.is_read_only() {
+            self.source.record_interaction("tool.arm.read_only", Some(tool.label()), bellatrix_mde::TraceOutcome::Invalid);
             return;
         }
+        self.source.record_interaction("tool.arm", Some(tool.label()), bellatrix_mde::TraceOutcome::Success);
         self.gesture = None;
         self.inline_editor = None;
         self.inline_draft = None;
@@ -782,6 +808,7 @@ impl MdeWorkbenchItem {
             dx: 0.0,
             dy: 0.0,
             revision,
+            began: false,
         });
     }
     fn start_resize(
@@ -804,6 +831,7 @@ impl MdeWorkbenchItem {
             dx: 0.0,
             dy: 0.0,
             revision,
+            began: false,
         });
         cx.notify();
     }
@@ -811,27 +839,42 @@ impl MdeWorkbenchItem {
         if self.source.is_read_only() {
             return;
         }
-        if !event.dragging() {
+        if event.pressed_button != Some(MouseButton::Left) || !event.dragging() {
             return;
         }
         let Some(gesture) = &mut self.gesture else {
             return;
         };
-        let (start, dx, dy) = match gesture {
-            CanvasGesture::Move { start, dx, dy, .. }
-            | CanvasGesture::Resize { start, dx, dy, .. } => (start, dx, dy),
+        let (start, dx, dy, began, view_id, action) = match gesture {
+            CanvasGesture::Move { start, dx, dy, began, view_id, .. } =>
+                (start, dx, dy, began, view_id, "canvas.move.start"),
+            CanvasGesture::Resize { start, dx, dy, began, view_id, .. } =>
+                (start, dx, dy, began, view_id, "canvas.resize.start"),
         };
         *dx = f64::from(event.position.x - start.x) / f64::from(self.zoom);
         *dy = f64::from(event.position.y - start.y) / f64::from(self.zoom);
+        if !*began && (dx.abs() >= 1.0 || dy.abs() >= 1.0) {
+            *began = true;
+            self.source.record_interaction(action, Some(view_id), bellatrix_mde::TraceOutcome::Success);
+        }
         cx.notify();
     }
     fn finish_gesture(&mut self, cx: &mut Context<Self>) {
-        if self.source.is_read_only() {
-            return;
-        }
         let Some(gesture) = self.gesture.take() else {
             return;
         };
+        let (view_id, began) = match &gesture {
+            CanvasGesture::Move { view_id, began, .. } | CanvasGesture::Resize { view_id, began, .. } => (view_id, *began),
+        };
+        if !began {
+            cx.notify();
+            return;
+        }
+        if self.source.is_read_only() {
+            self.source.record_interaction("canvas.gesture.read_only", Some(view_id), bellatrix_mde::TraceOutcome::Invalid);
+            cx.notify();
+            return;
+        }
         let expected_revision = match &gesture {
             CanvasGesture::Move { revision, .. } | CanvasGesture::Resize { revision, .. } => {
                 *revision
@@ -844,6 +887,10 @@ impl MdeWorkbenchItem {
             .map(|snapshot| snapshot.revision)
             != Some(expected_revision)
         {
+            let view_id = match &gesture {
+                CanvasGesture::Move { view_id, .. } | CanvasGesture::Resize { view_id, .. } => view_id,
+            };
+            self.source.record_interaction("canvas.gesture.stale_revision", Some(view_id), bellatrix_mde::TraceOutcome::Invalid);
             self.feedback = "Project changed during drag; retry".into();
             cx.notify();
             return;
@@ -853,6 +900,7 @@ impl MdeWorkbenchItem {
                 view_id, dx, dy, ..
             } => {
                 if dx.abs() < 1.0 && dy.abs() < 1.0 {
+                    self.source.record_interaction("canvas.gesture.no_change", Some(&view_id), bellatrix_mde::TraceOutcome::Success);
                     cx.notify();
                     return;
                 }
@@ -873,6 +921,7 @@ impl MdeWorkbenchItem {
                 ..
             } => {
                 if dx.abs() < 1.0 && dy.abs() < 1.0 {
+                    self.source.record_interaction("canvas.gesture.no_change", Some(&view_id), bellatrix_mde::TraceOutcome::Success);
                     cx.notify();
                     return;
                 }

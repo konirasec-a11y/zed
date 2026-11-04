@@ -157,7 +157,7 @@ impl Render for MdeWorkbenchItem {
                                     continue;
                                 }
                                 if self.presentation.selected_element() == Some(subject)
-                                    && self.presentation.selected_view().map_or_else(
+                                    && self.presentation.selected_canvas_view().map_or_else(
                                         || diagram.views.iter()
                                             .find(|candidate| candidate.subject.as_deref() == Some(subject))
                                             .is_some_and(|candidate| candidate.id == view.id),
@@ -225,7 +225,7 @@ impl Render for MdeWorkbenchItem {
                                 .labels(presentation)
                                 .view_scale(zoom)
                                 .selected(self.presentation.selected_element() == Some(subject)
-                                    && self.presentation.selected_view().is_none_or(|selected| selected == view.id));
+                                    && self.presentation.selected_canvas_view().is_none_or(|selected| selected == view.id));
                                 let glyph = if let Some((source, target)) = resolved.markers { glyph.endpoint_markers(source, target) } else { glyph };
                                 let edge_owner = cx.weak_entity();
                                 let edge_id = subject.to_owned();
@@ -253,6 +253,7 @@ impl Render for MdeWorkbenchItem {
                                                 return;
                                             }
                                             if let Err(error) = edge_owner.update(cx, |item, cx| {
+                                                item.source.record_interaction("canvas.relationship.click", Some(&edge_view_id), bellatrix_mde::TraceOutcome::Success);
                                                 item.select_or_connect_edge(
                                                     edge_id.clone(),
                                                     edge_view_id.clone(),
@@ -402,7 +403,7 @@ impl Render for MdeWorkbenchItem {
                             } else {
                                 None
                             }
-                        }).filter(|_| self.presentation.selected_view().is_none_or(|selected| selected == view.id));
+                        }).filter(|_| self.presentation.selected_canvas_view().is_none_or(|selected| selected == view.id));
                         let is_selected = selected_target.is_some();
                         let editing = selected_target.filter(|selected| {
                             self.presentation.editing_element() == Some(selected.id.as_str())
@@ -422,9 +423,15 @@ impl Render for MdeWorkbenchItem {
                                 (None, None, None)
                             };
                         let title_id = element.id.clone();
+                        let title_diagram = diagram.id.clone();
+                        let title_view = view.id.clone();
                         let title_owner = cx.weak_entity();
                         let select_owner = cx.weak_entity();
                         let edit_owner = cx.weak_entity();
+                        let member_diagram = diagram.id.clone();
+                        let member_view = view.id.clone();
+                        let edit_member_diagram = member_diagram.clone();
+                        let edit_member_view = member_view.clone();
                         // Spatial containment is presentation only, not semantic ownership validation.
                         let has_nested_views = diagram.views.iter().any(|other| {
                             other.id != view.id && matches!(other.geometry, Geometry::Rect { x: child_x, y: child_y, width: child_width, height: child_height }
@@ -451,19 +458,33 @@ impl Render for MdeWorkbenchItem {
                             .on_title_edit(move |window, cx| {
                                 let id = title_id.clone();
                                 let _ = title_owner
-                                    .update(cx, |item, cx| item.begin_inline_edit(id, window, cx));
+                                    .update(cx, |item, cx| {
+                                        item.select_diagram_view(title_diagram.clone(), title_view.clone(), cx);
+                                        item.begin_inline_edit(id, window, cx);
+                                    });
                             })
                             .on_member_click(move |member_id, window, cx| {
                                 let id = member_id.to_owned();
                                 let _ = select_owner.update(cx, |item, cx| {
-                                    item.select_element(id, cx);
+                                    let key = format!("view:{member_diagram}:{member_view}/member:{id}");
+                                    let occurrence = bellatrix_mde::ViewOccurrence {
+                                        diagram_id: member_diagram.clone(), view_id: member_view.clone(), member_path: vec![id.clone()],
+                                    };
+                                    item.select_explorer_element(id, key, Some(occurrence), cx);
                                     cx.focus_self(window);
                                 });
                             })
                             .on_member_edit(move |member_id, window, cx| {
                                 let id = member_id.to_owned();
                                 let _ = edit_owner
-                                    .update(cx, |item, cx| item.begin_inline_edit(id, window, cx));
+                                    .update(cx, |item, cx| {
+                                        let key = format!("view:{edit_member_diagram}:{edit_member_view}/member:{id}");
+                                        let occurrence = bellatrix_mde::ViewOccurrence {
+                                            diagram_id: edit_member_diagram.clone(), view_id: edit_member_view.clone(), member_path: vec![id.clone()],
+                                        };
+                                        item.select_explorer_element(id.clone(), key, Some(occurrence), cx);
+                                        item.begin_inline_edit(id, window, cx);
+                                    });
                             });
                         if let Some(value) =
                             bellatrix_mde::stereotype_presentation(&snapshot.section, element)
@@ -544,6 +565,8 @@ impl Render for MdeWorkbenchItem {
                         let figure: gpui::AnyElement = if UmlFigure::supports(&element.kind) {
                             let edit_owner = cx.weak_entity();
                             let edit_id = element.id.clone();
+                            let edit_diagram = diagram.id.clone();
+                            let edit_view = view.id.clone();
                             let label = super::visual_draft_canvas::format_figure_label(
                                 element,
                                 &references,
@@ -578,6 +601,7 @@ impl Render for MdeWorkbenchItem {
                                 .on_title_edit(move |window, cx| {
                                     let id = edit_id.clone();
                                     let _ = edit_owner.update(cx, |item, cx| {
+                                        item.select_diagram_view(edit_diagram.clone(), edit_view.clone(), cx);
                                         item.begin_inline_edit(id, window, cx)
                                     });
                                 });
@@ -636,6 +660,7 @@ impl Render for MdeWorkbenchItem {
                         let menu_subject = subject.to_owned();
                         let drag_owner = cx.weak_entity();
                         let drag_id = view.id.clone();
+                        let drag_diagram = diagram.id.clone();
                         let connection_mode =
                             matches!(self.presentation.selected_tool(), Some(ModelingTool::Relation(_)));
                         let connect_owner = cx.weak_entity();
@@ -663,6 +688,10 @@ impl Render for MdeWorkbenchItem {
                                     MouseButton::Left,
                                     move |event: &MouseDownEvent, window, cx| {
                                         let _ = drag_owner.update(cx, |item, cx| {
+                                            item.source.record_interaction(
+                                                if event.click_count >= 2 { "canvas.view.double_click" } else { "canvas.view.click" },
+                                                Some(&drag_id), bellatrix_mde::TraceOutcome::Success,
+                                            );
                                             if is_selected && item.presentation.selected_tool().is_none() {
                                                 if let Some(field) = &item.inline_editor {
                                                     field
@@ -676,6 +705,7 @@ impl Render for MdeWorkbenchItem {
                                             if event.click_count >= 2
                                                 && item.presentation.selected_tool().is_none()
                                             {
+                                                item.select_diagram_view(drag_diagram.clone(), drag_id.clone(), cx);
                                                 item.begin_inline_edit(
                                                     element_id.clone(),
                                                     window,
@@ -1049,6 +1079,7 @@ impl Render for MdeWorkbenchItem {
                             return;
                         };
                         if let Err(error) = owner.update(cx, |item, cx| {
+                            item.source.record_interaction("canvas.background.click", item.presentation.active_diagram(), bellatrix_mde::TraceOutcome::Success);
                             if let Some(tool) = item.presentation.selected_tool() {
                                 let position =
                                     (f64::from(event.position.x), f64::from(event.position.y));
@@ -1113,8 +1144,14 @@ impl Render for MdeWorkbenchItem {
                     .on_drop(move |drag: &MdeToolDrag, _, cx| {
                         if let Err(error) = dropping_owner.update(cx, |item, cx| {
                             if &drag.project_id != item.project_id() {
+                                item.source.record_interaction("canvas.tool_drop.wrong_project", Some(drag.kind.label()), bellatrix_mde::TraceOutcome::Invalid);
                                 return;
                             }
+                            if item.source.is_read_only() {
+                                item.source.record_interaction("canvas.tool_drop.read_only", Some(drag.kind.label()), bellatrix_mde::TraceOutcome::Invalid);
+                                return;
+                            }
+                            item.source.record_interaction("canvas.tool_drop.accepted", Some(drag.kind.label()), bellatrix_mde::TraceOutcome::Success);
                             let (x, y) = item.drop_point.take().unwrap_or((40.0, 40.0));
                             item.place_modeling_tool(drag.kind, x, y, cx);
                         }) {

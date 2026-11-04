@@ -17,7 +17,7 @@ Feature: Pure UML validation at the Bellatrix document boundary
   Scenario: Keep mixed-domain validation explicitly blocked through reopening and repair
     Given an imported UML class project with accepted implemented-rule findings
     When I add Rust and C4 elements and repeated explicit cross-domain references
-    Then validity is unverified and coverage is mixed_domain_semantics_unverified
+    Then validity is unverified and coverage is implemented_uml_scalars_and_integrity_only
     And a capacity error prevents error-only consumers from reporting success
     And external domains and references have explicit warning diagnostics
     When I persist the mixed-domain project to JSON and BLX, close it and reopen both files
@@ -25,3 +25,28 @@ Feature: Pure UML validation at the Bellatrix document boundary
     And an independent UML violation cannot turn the blocked model into a false success
     When I restore the original pure UML graph and repeat the mixed request
     Then both results remain deterministic and preserve their distinct evaluation states
+
+  Scenario: Validate the closed UML graph alongside unmapped domains
+    Given a valid UML class project and an unrelated Rust object with a conflicting name and invalid UML-like property
+    Then the entire closed UML graph is checked without interpreting the Rust object as UML
+    And the whole mixed project remains explicitly unverified
+    When I make two UML members indistinguishable within their namespace
+    Then the same UML namespace errors appear as in the original pure UML project
+    When I save, close and reopen both states through JSON and BLX
+    Then semantic data, order and diagnostics are unchanged
+    When I repair the namespace collision and repeat the invalid request
+    Then both results are repeatable without claiming external-domain validity
+
+  Scenario: Suspend global rules at external references while retaining proved UML errors
+    Given a UML Type reference and PackageImport targeting unmapped Rust and C4 objects
+    Then explicit warnings identify those cross-domain references
+    And global and relational rules are suspended without false missing, type or namespace errors
+    When I author an invalid Boolean on an independent UML Class
+    Then its proved scalar violation is reported alongside the unverified capacity error
+    When I save, close and reopen the unknown and invalid states through JSON and BLX
+    Then all objects and findings remain identical
+    When I repair the Boolean but retain the external boundary
+    Then only the proved violation disappears and validity remains unverified
+    When an external object alone references the UML namespace
+    Then reverse dependencies also suspend global absence queries
+    And reopening and restoring the pure UML graph retain deterministic findings

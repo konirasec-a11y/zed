@@ -40,8 +40,9 @@ struct Diagnostic {
 /// Input is a JSON object containing exactly `api_version: 1` and `model`, the
 /// existing Bellatrix model document. Output contains `api_version`,
 /// `coverage`, `validity`, `has_errors` and ordered `diagnostics`. Coverage is
-/// `implemented_rules_only` for UML evaluation or
-/// `mixed_domain_semantics_unverified` when external-domain data prevents it.
+/// `implemented_rules_only` for pure UML, `implemented_uml_subset_rules_only`
+/// for a closed UML graph alongside external domains, or
+/// `implemented_uml_scalars_and_integrity_only` for cross-domain dependencies.
 /// Each diagnostic contains `severity`, `code`, `subject_id` and `message`.
 /// Diagnostics are ordered by code, subject identity, severity and message.
 /// Array order inside the input model retains its existing semantic meaning.
@@ -50,9 +51,10 @@ struct Diagnostic {
 /// Document presentation, composition and provenance are ignored, even when their
 /// contents are malformed. Semantic identities are checked first. Mixed-domain
 /// models return explicit unverified diagnostics and a capacity-blocking error,
-/// with `validity: "unverified"`; they do not run the UML rule engine:
-/// its legacy adapters would otherwise interpret some Rust objects as UML.
-/// Pure UML models then check root, endpoints and ownership before evaluating
+/// with `validity: "unverified"`. Their closed UML projection runs implemented
+/// rules without external aliases; cross-domain dependencies conservatively
+/// suspend relational/global rules while retaining scalar and integrity checks.
+/// Pure UML models check root, endpoints and ownership before evaluating
 /// implemented rules. No errors does not mean complete UML conformance, and an
 /// unverified result must not be interpreted as successful semantic validation.
 ///
@@ -82,15 +84,7 @@ pub fn validate_uml_model(input_json: &str) -> Result<String, String> {
                     Err(error) => vec![integrity_diagnostic(&model, error)],
                     Ok(()) => validate_structural_model(&model)
                         .into_iter()
-                        .map(|diagnostic| Diagnostic {
-                            severity: match diagnostic.severity {
-                                StructuralSeverity::Error => "error",
-                                StructuralSeverity::Warning => "warning",
-                            },
-                            code: diagnostic.code.into(),
-                            subject_id: diagnostic.subject_id,
-                            message: diagnostic.message,
-                        })
+                        .map(semantic_diagnostic)
                         .collect(),
                 }
             }
@@ -112,8 +106,13 @@ pub fn validate_uml_model(input_json: &str) -> Result<String, String> {
         .any(|diagnostic| diagnostic.severity == "error");
     let response = ValidationResponse {
         api_version: API_VERSION,
-        coverage: if unverified {
-            "mixed_domain_semantics_unverified"
+        coverage: if diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "UML_CROSS_DOMAIN_RULES_UNVERIFIED")
+        {
+            "implemented_uml_scalars_and_integrity_only"
+        } else if unverified {
+            "implemented_uml_subset_rules_only"
         } else {
             "implemented_rules_only"
         },
@@ -208,6 +207,14 @@ fn mixed_domain_diagnostics(project: &crate::Project) -> Vec<Diagnostic> {
     if external.is_empty() {
         return diagnostics;
     }
+    for relation in &project.relations {
+        if relation.kind == "owns"
+            && external.contains(relation.from.as_str())
+            && external.contains(relation.to.as_str())
+        {
+            external.insert(relation.id.as_str());
+        }
+    }
     let mut reported_references = HashSet::new();
     let mut reference_warning = |subject: &str, target: &str| {
         if !reported_references.insert((subject.to_owned(), target.to_owned())) {
@@ -218,7 +225,7 @@ fn mixed_domain_diagnostics(project: &crate::Project) -> Vec<Diagnostic> {
             code: "UML_EXTERNAL_REFERENCE_UNVERIFIED".into(),
             subject_id: subject.into(),
             message: format!(
-                "Reference to external-domain element {target} cannot be verified as UML"
+                "Reference to {target} involves an unmapped external-domain participant; UML semantics are not verified"
             ),
         });
     };
@@ -229,9 +236,24 @@ fn mixed_domain_diagnostics(project: &crate::Project) -> Vec<Diagnostic> {
     {
         reference_warning(&project.id, root);
     }
+    let uml: HashSet<_> = project
+        .elements
+        .iter()
+        .filter(|element| element.kind.starts_with("uml."))
+        .map(|element| element.id.as_str())
+        .chain(
+            project
+                .relations
+                .iter()
+                .filter(|relation| relation.kind.starts_with("uml."))
+                .map(|relation| relation.id.as_str()),
+        )
+        .collect();
     for relation in &project.relations {
         for endpoint in [&relation.from, &relation.to] {
-            if external.contains(endpoint.as_str()) {
+            if external.contains(endpoint.as_str())
+                || (external.contains(relation.id.as_str()) && uml.contains(endpoint.as_str()))
+            {
                 reference_warning(&relation.id, endpoint);
             }
         }
@@ -251,15 +273,168 @@ fn mixed_domain_diagnostics(project: &crate::Project) -> Vec<Diagnostic> {
             visit_external_references(value, &external, &mut |target| {
                 reference_warning(subject, target)
             });
+            if external.contains(subject.as_str()) {
+                visit_external_references(value, &uml, &mut |target| {
+                    reference_warning(subject, target)
+                });
+            }
+        }
+    }
+    let mut projection = project.clone();
+    projection
+        .elements
+        .retain(|element| element.kind.starts_with("uml."));
+    projection.relations.retain(|relation| {
+        relation.kind.starts_with("uml.")
+            || (relation.kind == "owns"
+                && !external.contains(relation.from.as_str())
+                && !external.contains(relation.to.as_str()))
+    });
+    if projection
+        .root_model
+        .as_deref()
+        .is_some_and(|root| external.contains(root))
+    {
+        projection.root_model = None;
+    }
+    if has_cross_domain_dependencies(project, &external) {
+        // Some existing rules search every candidate of a metaclass, including
+        // malformed candidates without explicit references. Graph components are
+        // not sufficient evidence of closure for those global/absence queries.
+        diagnostics.push(Diagnostic {
+            severity: "warning",
+            code: "UML_CROSS_DOMAIN_RULES_UNVERIFIED".into(),
+            subject_id: project.id.clone(),
+            message: "Cross-domain dependencies prevent closed UML evaluation: relational and global rules are suspended; independent scalar contracts and local graph integrity are still checked".into(),
+        });
+        if let Err(error) = validate_partial_uml_integrity(&projection, &external) {
+            diagnostics.push(integrity_diagnostic(project, error));
+        }
+        for element in crate::uml::root::Model::from_project(&projection).elements() {
+            diagnostics.extend(
+                crate::uml::schema::validate_element(element)
+                    .into_iter()
+                    .map(semantic_diagnostic),
+            );
+        }
+    } else {
+        match validate_uml_integrity(&projection) {
+            Err(error) => diagnostics.push(integrity_diagnostic(project, error)),
+            Ok(()) => diagnostics.extend(
+                validate_structural_model(&projection)
+                    .into_iter()
+                    .map(semantic_diagnostic),
+            ),
         }
     }
     diagnostics.push(Diagnostic {
         severity: "error",
         code: "UML_MODEL_SEMANTICS_UNVERIFIED".into(),
         subject_id: project.id.clone(),
-        message: "Mixed-domain model: UML rule evaluation was not performed, including the UML subset; external-domain mapping is required".into(),
+        message: "Mixed-domain model: implemented UML checks ran only within the reported coverage; external-domain semantics remain unverified and this result does not establish whole-model validity".into(),
     });
     diagnostics
+}
+
+fn semantic_diagnostic(diagnostic: crate::StructuralDiagnostic) -> Diagnostic {
+    Diagnostic {
+        severity: match diagnostic.severity {
+            StructuralSeverity::Error => "error",
+            StructuralSeverity::Warning => "warning",
+        },
+        code: diagnostic.code.into(),
+        subject_id: diagnostic.subject_id,
+        message: diagnostic.message,
+    }
+}
+
+fn has_cross_domain_dependencies(project: &crate::Project, external: &HashSet<&str>) -> bool {
+    if project
+        .root_model
+        .as_deref()
+        .is_some_and(|root| external.contains(root))
+    {
+        return true;
+    }
+    let uml: HashSet<_> = project
+        .elements
+        .iter()
+        .filter(|element| element.kind.starts_with("uml."))
+        .map(|element| element.id.as_str())
+        .chain(
+            project
+                .relations
+                .iter()
+                .filter(|relation| relation.kind.starts_with("uml."))
+                .map(|relation| relation.id.as_str()),
+        )
+        .collect();
+    for relation in &project.relations {
+        let source_external = external.contains(relation.from.as_str());
+        let target_external = external.contains(relation.to.as_str());
+        if (relation.kind.starts_with("uml.") && (source_external || target_external))
+            || (external.contains(relation.id.as_str())
+                && (uml.contains(relation.from.as_str()) || uml.contains(relation.to.as_str())))
+            || (relation.kind == "owns" && source_external != target_external)
+        {
+            return true;
+        }
+    }
+    for (identifier, properties) in project
+        .elements
+        .iter()
+        .map(|element| (&element.id, &element.properties))
+        .chain(
+            project
+                .relations
+                .iter()
+                .map(|relation| (&relation.id, &relation.properties)),
+        )
+    {
+        let mut crosses = false;
+        let targets = if external.contains(identifier.as_str()) {
+            &uml
+        } else {
+            external
+        };
+        for value in properties.values() {
+            visit_external_references(value, targets, &mut |_| crosses = true);
+        }
+        if crosses {
+            return true;
+        }
+    }
+    false
+}
+
+fn validate_partial_uml_integrity(
+    project: &crate::Project,
+    external: &HashSet<&str>,
+) -> Result<(), crate::GraphError> {
+    let model = crate::uml::root::Model::from_project(project);
+    model.root().map_err(crate::GraphError::InvalidRoot)?;
+    let identities: HashSet<_> = model.elements().map(|element| element.id()).collect();
+    let mut owners = HashSet::new();
+    for relation in &project.relations {
+        for endpoint in [&relation.from, &relation.to] {
+            if !external.contains(endpoint.as_str()) && !identities.contains(endpoint.as_str()) {
+                return Err(crate::GraphError::MissingEndpoint {
+                    relation: relation.id.clone(),
+                    endpoint: endpoint.clone(),
+                });
+            }
+        }
+        if relation.kind == "owns" && !owners.insert(relation.to.as_str()) {
+            return Err(crate::GraphError::MultipleOwners(relation.to.clone()));
+        }
+    }
+    if !crate::GraphIndex::new(project)
+        .cyclic_components("owns")
+        .is_empty()
+    {
+        return Err(crate::GraphError::Cycle("owns".into()));
+    }
+    Ok(())
 }
 
 fn visit_external_references(

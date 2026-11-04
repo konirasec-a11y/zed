@@ -160,7 +160,10 @@ fn mixed_domain_project_remains_unverified_after_save_reopen_and_repair() -> Flo
         json!([{"$ref":"external-rust"},{"$ref":"external-c4"},{"$ref":"external-rust"}]);
     let expected = validate(&mixed)?;
     assert_eq!(expected["validity"], "unverified");
-    assert_eq!(expected["coverage"], "mixed_domain_semantics_unverified");
+    assert_eq!(
+        expected["coverage"],
+        "implemented_uml_scalars_and_integrity_only"
+    );
     assert_eq!(
         expected["has_errors"], true,
         "Error-only consumers must not see success"
@@ -212,8 +215,266 @@ fn mixed_domain_project_remains_unverified_after_save_reopen_and_repair() -> Flo
     let blocked = validate(&independently_invalid)?;
     assert_eq!(blocked["validity"], "unverified");
     assert_eq!(blocked["has_errors"], true);
+    assert!(
+        blocked["diagnostics"]
+            .as_array()
+            .ok_or("missing diagnostics")?
+            .iter()
+            .any(|diagnostic| diagnostic["code"] == "UML_PROPERTY_VALUE"
+                && diagnostic["subject_id"] == "root"
+                && diagnostic["severity"] == "error")
+    );
     println!("When I restore the original pure UML graph, its earlier findings return unchanged");
     assert_eq!(validate(&original)?, valid);
     assert_eq!(validate(&mixed)?, expected);
+    Ok(())
+}
+
+fn reopen_mixed_flow(name: &str, envelope: &Value, expected: &Value) -> FlowResult<()> {
+    let project: Project = serde_json::from_value(envelope["model"].clone())?;
+    let saved = SavedFlow::new(name)?;
+    for (format, name) in [(Format::Json, "json"), (Format::Protobuf, "protobuf")] {
+        println!("And I save, close and reopen this authored state using {name}");
+        let path = saved.0.join(name);
+        fs::write(&path, encode(&project, format)?)?;
+        let reopened: Value = serde_json::from_str(
+            &decode_model_document(&fs::read(path)?, name).map_err(std::io::Error::other)?,
+        )?;
+        assert_eq!(reopened["model"], serde_json::to_value(&project)?);
+        assert_eq!(&validate(&reopened)?, expected);
+    }
+    Ok(())
+}
+
+fn model_element_mut<'a>(envelope: &'a mut Value, identifier: &str) -> FlowResult<&'a mut Value> {
+    envelope["model"]["elements"]
+        .as_array_mut()
+        .ok_or("missing elements")?
+        .iter_mut()
+        .find(|element| element["id"] == identifier)
+        .ok_or_else(|| format!("missing element {identifier}").into())
+}
+
+#[test]
+fn closed_uml_subset_reports_namespace_errors_through_mixed_project_repair() -> FlowResult<()> {
+    assert!(
+        include_str!("features/kernel_boundary.feature")
+            .contains("Scenario: Validate the closed UML graph alongside unmapped domains")
+    );
+    println!("Given a valid imported UML class project with an unrelated Rust object");
+    let original = imported_project()?;
+    let mut mixed = original.clone();
+    mixed["model"]["elements"]
+        .as_array_mut()
+        .ok_or("missing elements")?
+        .push(
+            json!({"id":"external", "kind":"rust.struct", "name":"Customer",
+            "properties":{"isAbstract":"not a UML Boolean"}}),
+        );
+    let accepted_subset = validate(&mixed)?;
+    assert_eq!(
+        accepted_subset["coverage"],
+        "implemented_uml_subset_rules_only"
+    );
+    assert_eq!(accepted_subset["validity"], "unverified");
+    assert_eq!(accepted_subset["has_errors"], true);
+    let errors: Vec<_> = accepted_subset["diagnostics"]
+        .as_array()
+        .ok_or("missing diagnostics")?
+        .iter()
+        .filter(|diagnostic| diagnostic["severity"] == "error")
+        .collect();
+    assert_eq!(
+        errors.len(),
+        1,
+        "External Rust properties must not be evaluated as UML: {accepted_subset}"
+    );
+    assert_eq!(errors[0]["code"], "UML_MODEL_SEMANTICS_UNVERIFIED");
+    reopen_mixed_flow("closed-subset", &mixed, &accepted_subset)?;
+
+    println!("When I introduce two indistinguishable UML members in the same namespace");
+    let mut invalid_pure = original.clone();
+    model_element_mut(&mut invalid_pure, "order")?["name"] = json!("Customer");
+    let pure_errors = validate(&invalid_pure)?;
+    assert!(
+        pure_errors["diagnostics"]
+            .as_array()
+            .ok_or("missing diagnostics")?
+            .iter()
+            .any(
+                |diagnostic| diagnostic["code"] == "UML_NAMESPACE_MEMBERS_DISTINGUISHABLE"
+                    && diagnostic["severity"] == "error"
+            ),
+        "{pure_errors}"
+    );
+    let mut invalid_mixed = mixed.clone();
+    model_element_mut(&mut invalid_mixed, "order")?["name"] = json!("Customer");
+    let partial = validate(&invalid_mixed)?;
+    assert_eq!(partial["coverage"], "implemented_uml_subset_rules_only");
+    assert_eq!(partial["validity"], "unverified");
+    let semantic_diagnostics: Vec<_> = partial["diagnostics"]
+        .as_array()
+        .ok_or("missing diagnostics")?
+        .iter()
+        .filter(|diagnostic| {
+            !matches!(
+                diagnostic["code"].as_str(),
+                Some("UML_MODEL_SEMANTICS_UNVERIFIED" | "UML_EXTERNAL_DOMAIN_UNVERIFIED")
+            )
+        })
+        .cloned()
+        .collect();
+    assert_eq!(
+        json!(semantic_diagnostics),
+        pure_errors["diagnostics"],
+        "The complete UML graph must retain the same global namespace findings"
+    );
+    reopen_mixed_flow("closed-invalid-subset", &invalid_mixed, &partial)?;
+    println!("Then repair restores the earlier UML findings without claiming external validity");
+    assert_eq!(validate(&mixed)?, accepted_subset);
+    assert_eq!(validate(&invalid_mixed)?, partial);
+    Ok(())
+}
+
+#[test]
+fn cross_domain_namespace_and_type_references_preserve_provable_scalar_errors() -> FlowResult<()> {
+    assert!(include_str!("features/kernel_boundary.feature").contains(
+        "Scenario: Suspend global rules at external references while retaining proved UML errors"
+    ));
+    println!("Given an imported UML graph with external Type and namespace references");
+    let original = imported_project()?;
+    let mut cross_domain = original.clone();
+    cross_domain["model"]["elements"]
+        .as_array_mut()
+        .ok_or("missing elements")?
+        .extend([
+            json!({"id":"external-type", "kind":"rust.struct", "name":"Price"}),
+            json!({"id":"external-namespace", "kind":"c4.software_system", "name":"Orders"}),
+        ]);
+    model_element_mut(&mut cross_domain, "price")?["properties"]["type"] =
+        json!({"$ref":"external-type"});
+    cross_domain["model"]["relations"].as_array_mut().ok_or("missing relations")?.push(
+        json!({"id":"external-import", "kind":"uml.package_import", "from":"domain", "to":"external-namespace"}));
+    let unknown = validate(&cross_domain)?;
+    assert_eq!(
+        unknown["coverage"],
+        "implemented_uml_scalars_and_integrity_only"
+    );
+    assert_eq!(unknown["validity"], "unverified");
+    let errors: Vec<_> = unknown["diagnostics"]
+        .as_array()
+        .ok_or("missing diagnostics")?
+        .iter()
+        .filter(|diagnostic| diagnostic["severity"] == "error")
+        .collect();
+    assert_eq!(
+        errors.len(),
+        1,
+        "External references must not become false missing/type/namespace errors: {unknown}"
+    );
+    assert_eq!(errors[0]["code"], "UML_MODEL_SEMANTICS_UNVERIFIED");
+    for subject in ["price", "external-import"] {
+        assert!(
+            unknown["diagnostics"]
+                .as_array()
+                .ok_or("missing diagnostics")?
+                .iter()
+                .any(
+                    |diagnostic| diagnostic["code"] == "UML_EXTERNAL_REFERENCE_UNVERIFIED"
+                        && diagnostic["subject_id"] == subject
+                ),
+            "{unknown}"
+        );
+    }
+    reopen_mixed_flow("cross-domain", &cross_domain, &unknown)?;
+
+    println!("When I introduce an independently invalid Boolean on a UML Class");
+    let mut invalid = cross_domain.clone();
+    model_element_mut(&mut invalid, "customer")?["properties"]["isAbstract"] = json!("yes");
+    let proved = validate(&invalid)?;
+    assert_eq!(proved["validity"], "unverified");
+    assert_eq!(proved["has_errors"], true);
+    let errors: Vec<_> = proved["diagnostics"]
+        .as_array()
+        .ok_or("missing diagnostics")?
+        .iter()
+        .filter(|diagnostic| diagnostic["severity"] == "error")
+        .collect();
+    assert_eq!(
+        errors.len(),
+        2,
+        "Only capacity and the proved scalar violation are errors: {proved}"
+    );
+    assert!(
+        errors
+            .iter()
+            .any(|diagnostic| diagnostic["code"] == "UML_PROPERTY_VALUE"
+                && diagnostic["subject_id"] == "customer")
+    );
+    reopen_mixed_flow("cross-domain-proved-error", &invalid, &proved)?;
+    println!("Then scalar repair removes only the proved violation, not the unverified boundary");
+    assert_eq!(validate(&cross_domain)?, unknown);
+
+    println!("When only an external object's reverse reference reaches the UML namespace");
+    let mut reverse = original.clone();
+    reverse["model"]["elements"]
+        .as_array_mut()
+        .ok_or("missing elements")?
+        .push(
+            json!({"id":"external-reverse", "kind":"rust.struct", "name":"Unmapped",
+            "properties":{"scope":{"$ref":"domain"}}}),
+        );
+    let reverse_response = validate(&reverse)?;
+    assert_eq!(
+        reverse_response["coverage"],
+        "implemented_uml_scalars_and_integrity_only"
+    );
+    assert_eq!(reverse_response["validity"], "unverified");
+    assert!(
+        reverse_response["diagnostics"]
+            .as_array()
+            .ok_or("missing diagnostics")?
+            .iter()
+            .any(
+                |diagnostic| diagnostic["code"] == "UML_EXTERNAL_REFERENCE_UNVERIFIED"
+                    && diagnostic["subject_id"] == "external-reverse"
+            )
+    );
+    reopen_mixed_flow("reverse-cross-domain", &reverse, &reverse_response)?;
+    println!("And the reverse reference remains a boundary on external ownership metadata");
+    model_element_mut(&mut reverse, "external-reverse")?["properties"] = json!({});
+    reverse["model"]["elements"]
+        .as_array_mut()
+        .ok_or("missing elements")?
+        .push(json!({"id":"external-container", "kind":"c4.software_system", "name":"Container"}));
+    reverse["model"]["relations"]
+        .as_array_mut()
+        .ok_or("missing relations")?
+        .push(
+            json!({"id":"external-ownership", "kind":"owns", "from":"external-container",
+            "to":"external-reverse", "properties":{"scope":{"$ref":"domain"}}}),
+        );
+    let ownership_boundary = validate(&reverse)?;
+    assert_eq!(
+        ownership_boundary["coverage"],
+        "implemented_uml_scalars_and_integrity_only"
+    );
+    assert_eq!(ownership_boundary["validity"], "unverified");
+    assert!(
+        ownership_boundary["diagnostics"]
+            .as_array()
+            .ok_or("missing diagnostics")?
+            .iter()
+            .any(
+                |diagnostic| diagnostic["code"] == "UML_EXTERNAL_REFERENCE_UNVERIFIED"
+                    && diagnostic["subject_id"] == "external-ownership"
+            )
+    );
+    reopen_mixed_flow("reverse-ownership-boundary", &reverse, &ownership_boundary)?;
+    println!(
+        "Then reverse dependencies also suspend global absence queries, and pure repair is repeatable"
+    );
+    assert_eq!(validate(&original)?["validity"], "no_violations_found");
+    assert_eq!(validate(&invalid)?, proved);
     Ok(())
 }

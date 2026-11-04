@@ -32,6 +32,7 @@ pub(super) struct WorkbenchState {
     active_diagram: Option<String>,
     selected_element: Option<String>,
     selected_view: Option<String>,
+    selected_explorer: Option<(String, Option<bellatrix_mde::ViewOccurrence>)>,
     selected_tool: Option<ModelingTool>,
     visual_draft_mode: bool,
     pending_relation_source: Option<PendingRelationEndpoint>,
@@ -44,6 +45,7 @@ impl WorkbenchState {
             active_diagram,
             selected_element: None,
             selected_view: None,
+            selected_explorer: None,
             selected_tool: None,
             visual_draft_mode: false,
             pending_relation_source: None,
@@ -61,6 +63,35 @@ impl WorkbenchState {
 
     pub fn selected_view(&self) -> Option<&str> {
         self.selected_view.as_deref()
+    }
+
+    pub fn selected_explorer_key(&self) -> Option<&str> {
+        self.selected_explorer.as_ref().map(|(key, _)| key.as_str())
+    }
+
+    pub fn selected_canvas_view(&self) -> Option<&str> {
+        self.selected_view().or_else(|| self.selected_explorer.as_ref()
+            .and_then(|(_, occurrence)| occurrence.as_ref()).map(|occurrence| occurrence.view_id.as_str()))
+    }
+
+    pub fn select_explorer_element(
+        &mut self, id: String, key: String, occurrence: Option<bellatrix_mde::ViewOccurrence>,
+    ) -> SelectionChange {
+        let mut change = self.select_element(id);
+        self.selected_explorer = Some((key, occurrence));
+        change.selection_changed = true;
+        change
+    }
+
+    pub fn reconcile_explorer_selection(&mut self, section: &bellatrix_mde::ModelingSection) {
+        let Some((key, _)) = &self.selected_explorer else { return; };
+        let rows = super::explorer::project_explorer(section, super::explorer::ExplorerSortOrder::Added);
+        if !rows.iter().any(|row| &row.key == key
+            && Some(row.element_id.as_str()) == self.selected_element()
+            && (row.diagram_context.is_none() || row.diagram_context.as_deref() == self.active_diagram()))
+        {
+            self.selected_explorer = None;
+        }
     }
 
     pub fn selected_tool(&self) -> Option<ModelingTool> {
@@ -88,7 +119,9 @@ impl WorkbenchState {
     }
 
     fn select_target(&mut self, subject: Option<String>, view: Option<String>) -> SelectionChange {
-        let selection_changed = self.selected_element != subject || self.selected_view != view;
+        let selection_changed = self.selected_element != subject || self.selected_view != view
+            || self.selected_explorer.is_some();
+        self.selected_explorer = None;
         let preserve_editor = self.edit_matches(subject.as_deref(), view.as_deref());
         if !preserve_editor {
             self.clear_edit();
@@ -139,6 +172,7 @@ impl WorkbenchState {
 
     pub fn select_diagram(&mut self, id: String) -> bool {
         let changed = self.active_diagram.as_deref() != Some(id.as_str());
+        self.selected_explorer = None;
         if changed {
             self.selected_view = None;
         }
@@ -169,7 +203,11 @@ impl WorkbenchState {
     }
 
     pub fn begin_element_edit(&mut self, id: String) {
-        self.select_element(id.clone());
+        // Editing the same subject must retain its selected canvas occurrence
+        // as well as an Explorer member's presentation anchor.
+        if self.selected_element() != Some(id.as_str()) {
+            self.select_element(id.clone());
+        }
         self.cancel_tool();
         self.editing_target = Some(InlineEditTarget::Element(id));
     }
@@ -252,6 +290,7 @@ impl WorkbenchState {
             self.clear_edit();
         }
         if diagram_changed || selection_changed {
+            self.selected_explorer = None;
             self.pending_relation_source = None;
         }
         if diagram_changed {
