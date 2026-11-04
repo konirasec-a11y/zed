@@ -1,6 +1,8 @@
 use bellatrix_mde::{
-    decode_model_document, encode_model_document, validate_uml_diagram, validate_uml_model,
+    apply_model_command, decode_model_document, encode_model_document, encode_model_section,
+    prepare_model_document, validate_uml_diagram, validate_uml_model,
 };
+use bellatrix_mde_contracts::protocol::{Command, ModelingElementKind, ModelingRelationKind};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{
@@ -16,7 +18,7 @@ type FlowResult<T> = Result<T, Box<dyn Error>>;
 struct Manifest {
     cases: Vec<Case>,
 }
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 struct Case {
     id: String,
     file: String,
@@ -29,12 +31,12 @@ struct Case {
     #[serde(default)]
     forbidden_diagnostics: Vec<ExpectedDiagnostic>,
 }
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 struct Diagram {
     diagram_id: String,
     diagram_kind: String,
 }
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 struct ExpectedDiagnostic {
     code: String,
     subject_id: String,
@@ -200,7 +202,8 @@ fn diagram_responses(
     envelope: &Value,
     failures: &mut Vec<String>,
 ) -> FlowResult<Vec<Value>> {
-    case.diagrams
+    let mut responses: Vec<Value> = case
+        .diagrams
         .iter()
         .map(|diagram| {
             let response = validation_response(
@@ -218,7 +221,284 @@ fn diagram_responses(
             }
             Ok(response)
         })
-        .collect()
+        .collect::<FlowResult<_>>()?;
+    if is_structural(case) {
+        let response = model_response(case, envelope)?;
+        if let Err(error) = check_outcome(case, &response) {
+            failures.push(format!("kernel model validation: {error}"));
+        }
+        responses.push(response);
+    }
+    Ok(responses)
+}
+
+fn is_structural(case: &Case) -> bool {
+    matches!(
+        case.diagram_kind.as_deref(),
+        Some(
+            "class"
+                | "object"
+                | "package"
+                | "component"
+                | "composite_structure"
+                | "deployment"
+                | "profile"
+        )
+    )
+}
+
+fn model_response(case: &Case, envelope: &Value) -> FlowResult<Value> {
+    let response = validation_response(
+        validate_uml_model(&envelope.to_string()),
+        "implemented_rules_only",
+    )?;
+    let validity = if response["has_errors"] == true {
+        "invalid"
+    } else {
+        "no_violations_found"
+    };
+    if response["validity"] != validity {
+        return Err(format!("{}: inconsistent kernel validity: {response}", case.id).into());
+    }
+    Ok(response)
+}
+
+fn apply_command(envelope: &Value, command: Command, revision: u64) -> FlowResult<Value> {
+    let document = prepare_model_document(&envelope.to_string()).map_err(std::io::Error::other)?;
+    let section = apply_model_command(
+        &document.id,
+        &document.name,
+        &document.section_json,
+        revision,
+        command.clone(),
+    )
+    .map_err(|error| format!("public command {command:?}: {error}"))?;
+    let bytes = encode_model_section(&document.id, &document.name, &section.to_string(), "json")
+        .map_err(std::io::Error::other)?;
+    Ok(serde_json::from_str(
+        &decode_model_document(&bytes, "json").map_err(std::io::Error::other)?,
+    )?)
+}
+
+fn state_responses(case: &Case, envelope: &Value) -> FlowResult<Vec<Value>> {
+    let responses = vec![validate(case, envelope)?, model_response(case, envelope)?];
+    for response in &responses {
+        check_outcome(case, response)?;
+    }
+    Ok(responses)
+}
+
+fn save_authored_state(
+    case: &Case,
+    envelope: &Value,
+    directory: &Path,
+    stage: &str,
+) -> FlowResult<Vec<Value>> {
+    let expected = state_responses(case, envelope)?;
+    let mut reopened_models = Vec::new();
+    for (format, extension) in [("json", "json"), ("protobuf", "blx")] {
+        let destination = directory.join(format!("{stage}.{extension}"));
+        fs::write(
+            &destination,
+            encode_model_document(&envelope.to_string(), format).map_err(std::io::Error::other)?,
+        )?;
+        let reopened: Value = serde_json::from_str(
+            &decode_model_document(&fs::read(&destination)?, format)
+                .map_err(std::io::Error::other)?,
+        )?;
+        if reopened != *envelope || state_responses(case, &reopened)? != expected {
+            return Err(format!(
+                "{}: {stage}/{format} changed the document or diagnostics",
+                case.id
+            )
+            .into());
+        }
+        reopened_models.push(reopened);
+    }
+    Ok(reopened_models)
+}
+
+fn added_identity(before: &Value, after: &Value, collection: &str) -> FlowResult<String> {
+    let identities = |envelope: &Value| -> FlowResult<BTreeSet<String>> {
+        envelope["model"][collection]
+            .as_array()
+            .ok_or("missing model collection")?
+            .iter()
+            .map(|record| {
+                record["id"]
+                    .as_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| "missing record identity".into())
+            })
+            .collect()
+    };
+    let before = identities(before)?;
+    let after = identities(after)?;
+    let added: Vec<_> = after.difference(&before).collect();
+    match added.as_slice() {
+        [identifier] => Ok(identifier.to_string()),
+        _ => Err(format!("expected exactly one new {collection} identity, got {added:?}").into()),
+    }
+}
+
+fn structural_authoring_flow(case: &Case, original: &Value, directory: &Path) -> FlowResult<()> {
+    let property = |element: &str, key: &str, value| Command::SetProperty {
+        element_id: element.into(),
+        path: format!("properties.{key}"),
+        value,
+    };
+    let owner = |element: &str, target: &str| Command::SetOwner {
+        element_id: element.into(),
+        owner_id: Some(target.into()),
+    };
+    let mut baseline = original.clone();
+    let mut cleanup = Vec::new();
+    let mut expected_invalid = case.clone();
+    expected_invalid.id = format!("{}-authored-invalid", case.id);
+    expected_invalid.expected = "invalid".into();
+    let mut errors: Vec<(&str, &str)> = Vec::new();
+    let (mutation, mut repairs) = match case.diagram_kind.as_deref() {
+        Some("class") => {
+            errors.extend([
+                ("UML_OPERATION_AT_MOST_ONE_RETURN", "submit"),
+                ("UML_OPERATION_PARAMETERS", "submit"),
+            ]);
+            (
+                property("submit-request", "direction", json!("return")),
+                vec![property("submit-request", "direction", json!("in"))],
+            )
+        }
+        Some("object") => {
+            errors.extend([
+                ("UML_INSTANCE_DEFINING_FEATURE", "order-1042"),
+                ("UML_SLOT_CONTRACT", "first-number"),
+            ]);
+            (
+                property("first-number", "definingFeature", json!({"$ref":"name"})),
+                vec![property(
+                    "first-number",
+                    "definingFeature",
+                    json!({"$ref":"number"}),
+                )],
+            )
+        }
+        Some("package") => {
+            errors.push(("UML_PACKAGE_MEMBER_VISIBILITY", "order"));
+            (
+                property("order", "visibility", json!("protected")),
+                vec![property("order", "visibility", json!("public"))],
+            )
+        }
+        Some("component") => {
+            baseline = apply_command(
+                original,
+                Command::CreateModelElement {
+                    owner_id: Some("root".into()),
+                    kind: ModelingElementKind::Class,
+                    name: Some("BddContainer".into()),
+                },
+                1,
+            )?;
+            let container = added_identity(original, &baseline, "elements")?;
+            cleanup.push(Command::DeleteElement {
+                element_id: container.clone(),
+            });
+            errors.push(("UML_COMPONENT_NO_PACKAGED_ELEMENTS", "checkout"));
+            (
+                owner("checkout", &container),
+                vec![owner("checkout", "root")],
+            )
+        }
+        Some("composite_structure") => {
+            errors.push(("UML_CONNECTOR_ROLES", "connector"));
+            (
+                property("storage-end", "role", json!({"$ref":"foreign-part"})),
+                vec![property(
+                    "storage-end",
+                    "role",
+                    json!({"$ref":"storage-part"}),
+                )],
+            )
+        }
+        Some("deployment") => {
+            errors.push(("UML_DEPLOYMENT_SPECIFICATION_TARGET", "specification"));
+            (
+                owner("deployment", "host"),
+                vec![owner("deployment", "runtime")],
+            )
+        }
+        Some("profile") => {
+            errors.push(("UML_PROFILE_METACLASS_REFERENCE_SPECIALIZATION", "profile"));
+            (
+                Command::CreateRelation {
+                    diagram_id: case.diagram_id.clone().ok_or("missing diagram identity")?,
+                    owner_id: Some("local".into()),
+                    kind: ModelingRelationKind::Generalization,
+                    from: "local".into(),
+                    to: "metaclass".into(),
+                },
+                Vec::new(),
+            )
+        }
+        _ => return Err("structural authoring requires a structural case".into()),
+    };
+    expected_invalid.diagnostics = errors
+        .into_iter()
+        .map(|(code, subject_id)| ExpectedDiagnostic {
+            code: code.into(),
+            subject_id: subject_id.into(),
+            severity: "error".into(),
+        })
+        .collect();
+    println!(
+        "Given the valid {} authoring baseline, including any public preparation commands",
+        case.id
+    );
+    save_authored_state(case, &baseline, directory, "authored-baseline")?;
+    println!("When a public command authors the specified semantic violation");
+    let invalid = apply_command(&baseline, mutation, 2)?;
+    if invalid == baseline {
+        return Err("invalidating command did not change the model".into());
+    }
+    if case.diagram_kind.as_deref() == Some("profile") {
+        repairs.push(Command::DeleteElement {
+            element_id: added_identity(&baseline, &invalid, "relations")?,
+        });
+    }
+    repairs.extend(cleanup);
+    let reopened = save_authored_state(&expected_invalid, &invalid, directory, "authored-invalid")?;
+    for (index, reopened) in reopened.iter().enumerate() {
+        println!(
+            "When I repair reopened invalid {} through public commands",
+            case.id
+        );
+        let mut repaired = reopened.clone();
+        for (revision, command) in repairs.iter().enumerate() {
+            repaired = apply_command(&repaired, command.clone(), 3 + revision as u64)?;
+        }
+        for key in original["model"]
+            .as_object()
+            .ok_or("missing original model")?
+            .keys()
+        {
+            if key != "diagrams" && repaired["model"][key] != original["model"][key] {
+                return Err(
+                    format!("{}: repair changed original model field {key}", case.id).into(),
+                );
+            }
+        }
+        save_authored_state(
+            case,
+            &repaired,
+            directory,
+            &format!("authored-repaired-{index}"),
+        )?;
+    }
+    println!(
+        "Then {} preserves exact invalid diagnostics, repairs both reopened formats, and returns to the original semantic model",
+        case.id
+    );
+    Ok(())
 }
 
 fn differences(left: &Value, right: &Value, path: &str, output: &mut Vec<String>) {
@@ -368,6 +648,11 @@ fn run_flow(group: &str, id: &str) -> FlowResult<()> {
             || diagram_responses(case, &reopened, &mut failures)? != original_diagrams
         {
             return Err(format!("{id}: {name} round-trip changed diagnostics").into());
+        }
+    }
+    if group == "structural" && case.expected == "valid" {
+        if let Err(error) = structural_authoring_flow(case, &envelope, &saved.0) {
+            failures.push(format!("public structural authoring: {error}"));
         }
     }
     if !failures.is_empty() {

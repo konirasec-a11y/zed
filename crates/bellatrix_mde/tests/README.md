@@ -114,3 +114,38 @@ microimplementation assertions/scenarios with an explicit rationale; do not
 create test-only APIs or move integration tests into private modules. Visibility
 closure follows migration, not the other way around. No one-for-one transfer or
 runtime coverage has been claimed.
+
+## Structural authoring lifecycle
+
+The same 14 structural fixture scenarios now validate both the model and selected
+diagram before and after JSON/BLX persistence. The seven valid scenarios also
+prepare a valid baseline, invalidate it through public application commands,
+assert exact kernel and diagram errors, persist the invalid draft in both
+formats, repair each reopened draft through public commands, and persist each
+repair in both formats. No scenario or unit test was added.
+
+The command mutations are explicit:
+
+- Class: change `submit-request.direction` to `return`, then restore `in`.
+- Object: change `first-number.definingFeature` from `number` to Customer `name`,
+  then restore it. Expect the instance defining-feature error on `order-1042`
+  and one slot-contract error on `first-number`.
+- Package: change `order.visibility` to `protected`, then restore `public`.
+- Component: create a temporary Class through `CreateModelElement`, move
+  `checkout` under it, and expect `UML_COMPONENT_NO_PACKAGED_ELEMENTS`. Move it
+  back to `root`, then delete only the temporary Class.
+- Composite structure: change `storage-end.role` to `foreign-part`, then restore
+  `storage-part`.
+- Deployment: move `deployment` from `runtime` to Device `host`, then back.
+- Profile: create the Generalization `local` to `metaclass`, then delete that
+  generated relationship using its observed identity.
+
+The original invalid fixtures are unchanged. Object classifier collections and
+Component nested-classifier collections are not writable through the current
+Inspector command, and element kinds are read-only. The supported authoring
+cycles therefore do not claim literal command repair of those three imported
+invalid fixtures. Profile creation may reroute existing diagram paths; repair
+compares the complete non-diagram model with the original, while every saved
+state compares the entire document and both validation responses on reopening.
+This is source work until the published commit is executed; no runtime pass is
+claimed by this description.
