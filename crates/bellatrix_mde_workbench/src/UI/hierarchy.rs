@@ -146,6 +146,7 @@ pub(crate) fn explorer_element_icon(
         "mdj.ERDRelationship" | "mdj.ERDRelationshipEnd" => "Association",
         "uml.attribute" | "uml.property" | "rust.field" => "Attribute",
         "uml.part" => "Part",
+        "depends_on" => "Dependency",
         "uml.composition" => "Composition",
         "uml.aggregation" => "Aggregation",
         "uml.nary_association" => "NaryAssociationNode",
