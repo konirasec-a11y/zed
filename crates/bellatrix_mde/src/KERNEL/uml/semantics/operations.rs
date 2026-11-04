@@ -64,7 +64,7 @@ fn unambiguous_parameter_role(
     Ok(found)
 }
 
-fn owned_parameter_evidence<'a>(
+pub(crate) fn owned_parameter_evidence<'a>(
     references: &ReferenceIndex<'a>,
     owner_id: &str,
 ) -> Result<(Vec<&'a Element>, Result<(), QueryError>), QueryError> {

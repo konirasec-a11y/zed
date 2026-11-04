@@ -133,15 +133,19 @@ Documentation uses the native multiline editor; semantic properties still use
 the existing Inspector command boundary. These controls require the native
 acceptance scenarios above, independently of headless command tests.
 
-The Model Explorer shows each semantic element once, under its UML owner, and
-places diagrams under their single resolved context. Diagram occurrences of those
-elements are selected on the canvas or from the semantic row's context menu,
-which lists each diagram occurrence, rather than repeated as extra model nodes.
-Occurrence selection keeps its diagram and view identity for the presentation
-Inspector and is also available in read-only previews.
-Visual components without a resolved semantic subject remain visible under their
-diagram. Selecting a bound canvas view reveals its semantic row in the Explorer.
-Explorer rows cannot be rearranged by dragging: legacy presentation-only placements
-are ignored so they cannot contradict semantic ownership. Missing or ambiguous
-diagram contexts remain visible at the root. No semantic ownership, diagram context,
-or saved view is changed by this projection.
+The Model Explorer lists each diagram once, with its persisted view occurrences
+beneath it. A single resolved UMLDI context can place a diagram beneath its
+unambiguous external element occurrence. Missing, ambiguous or cyclic contexts
+remain at the project root. Root uml.model containers are omitted from the tree
+and their children are promoted; model data remains unchanged. When a semantic subject has a diagram occurrence,
+its standalone row is omitted; distinct subjects with equal names and legitimate
+occurrences in different diagrams remain distinct. Items without a diagram view
+remain accessible through semantic ownership. Unpictured members of a pictured
+owner remain accessible under each owner occurrence, with diagram-scoped row
+identities, instead of recreating the owner above the diagrams. Diagram/view
+identity is retained for selection and presentation editing, including in
+read-only previews.
+Relationship rows show source, authored relationship name (or relationship type),
+relationship type, semantic endpoint markers and line style, and destination. Projection does not delete elements,
+change ownership, or modify any diagram or view. Explorer drag rearrangement stays
+disabled, and legacy cosmetic placements do not override the projected hierarchy.

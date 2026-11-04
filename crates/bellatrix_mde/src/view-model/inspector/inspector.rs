@@ -49,6 +49,8 @@ pub struct InspectorReferenceChoice {
 pub struct ElementInspector {
     pub element_id: String,
     pub kind: String,
+    // Composition changes the presentation without changing the canonical Association kind.
+    pub presentation_kind: String,
     pub name: String,
     pub display_label: String,
     pub properties: Vec<InspectorProperty>,
@@ -283,6 +285,7 @@ pub(crate) fn inspect_element_with_references(
         && (crate::uml::root::relationship_metaclass(&relation.kind).is_some() || relation.kind.starts_with("uml.") || section.diagrams.iter().any(|diagram|
             diagram.views.iter().any(|view| view.subject.as_deref() == Some(id))
         ))) {
+        let presentation = crate::relationship_presentation(relation);
         let source = section.elements.iter().find(|e|e.id==relation.from)
             .map(|e|e.name.as_str()).unwrap_or(relation.from.as_str());
         let target = section.elements.iter().find(|e|e.id==relation.to)
@@ -290,8 +293,10 @@ pub(crate) fn inspect_element_with_references(
         let mut properties=vec![
             InspectorProperty {path:"id".into(),label:"ID".into(),group:"Identity",
                 editor:PropertyEditor::ReadOnly,value:json!(relation.id),editable:false},
-            InspectorProperty {path:"kind".into(),label:"Relationship".into(),group:"Identity",
+            InspectorProperty {path:"kind".into(),label:"Stored kind".into(),group:"Identity",
                 editor:PropertyEditor::ReadOnly,value:json!(relation.kind),editable:false},
+            InspectorProperty {path:"presentation.type".into(),label:"Relationship type".into(),group:"Identity",
+                editor:PropertyEditor::ReadOnly,value:json!(crate::semantic_identity(&presentation.notation).type_label),editable:false},
             InspectorProperty {path:"from".into(),label:"Source".into(),group:"Endpoints",
                 editor:PropertyEditor::ReadOnly,value:json!(source),editable:false},
             InspectorProperty {path:"to".into(),label:"Target".into(),group:"Endpoints",
@@ -342,7 +347,7 @@ pub(crate) fn inspect_element_with_references(
         }
         apply_normative_contracts(crate::uml::root::ElementRef::Relationship(relation), &mut properties);
         return Some(ElementInspector {
-            element_id:relation.id.clone(),kind:relation.kind.clone(),
+            element_id:relation.id.clone(),kind:relation.kind.clone(),presentation_kind:presentation.notation,
             name:format!("{source} → {target}"),
             display_label:format!("{source} → {target}"),
             reference_choices,properties,attributes:Vec::new(),operations:Vec::new(),parameters:Vec::new(),receptions:Vec::new(),
@@ -515,7 +520,7 @@ pub(crate) fn inspect_element_with_references(
         }
     }
 
-    Some(ElementInspector {element_id:element.id.clone(),kind:element.kind.clone(),
+    Some(ElementInspector {element_id:element.id.clone(),kind:element.kind.clone(),presentation_kind:element.kind.clone(),
         name:semantic_name.into(),display_label,reference_choices,properties,attributes,operations,parameters,receptions,
         template_parameters,ports,parts})
 }

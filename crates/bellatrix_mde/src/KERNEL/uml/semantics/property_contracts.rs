@@ -405,7 +405,7 @@ fn validate_property_rules(
         let outcome = match &derived_union {
             Ok(false) => Satisfied,
             Ok(true) => match schema::read_effective_boolean(element, property) {
-                Ok(true) => Satisfied,
+                Ok(true) => PropertyOutcome::Satisfied,
                 Ok(false) => Violation(format!("isDerivedUnion requires {property} to be true")),
                 Err(error) => Unverified(error),
             },
@@ -532,46 +532,73 @@ fn validate_value_rules<'a>(
                 .diagnostic(element, "OpaqueExpression-language_body_size", "UML_OPAQUE_EXPRESSION_LANGUAGES"));
         }
     }
-    let Some(behavior_id) = element.properties().get("behavior")
-        .and_then(|value| reference_id(value).ok().flatten()) else { return; };
-    let Ok(behavior) = references.element(behavior_id) else { return; };
-    if !behavior.conforms_to("Behavior") { return; } // typed-reference diagnostic already emitted
-    let parameters = match operations::owned_parameters(references, behavior_id) {
-        Ok(parameters) => parameters,
-        Err(error) => {
-            issues.extend(Unverified(error)
-                .diagnostic(element, "OpaqueExpression-one_return_result_parameter", "UML_OPAQUE_EXPRESSION_PARAMETERS"));
-            return;
+    let (returns, permitted) = opaque_expression_parameters(references, element);
+    for (result, rule, message) in [
+        (returns, "OpaqueExpression-one_return_result_parameter", "referenced Behavior must have exactly one return Parameter"),
+        (permitted, "OpaqueExpression-only_in_or_return_parameters", "referenced Behavior allows only non-stream in/return Parameters"),
+    ] {
+        let outcome = match result {
+            Ok(true) => PropertyOutcome::Satisfied,
+            Ok(false) => Violation(message.into()),
+            Err(super::classifiers::QueryError::Invalid { message, .. }) => Violation(message),
+            Err(super::classifiers::QueryError::Unsupported { message, .. }) => Unverified(message),
+        };
+        issues.extend(outcome.diagnostic(element, rule, "UML_OPAQUE_EXPRESSION_PARAMETERS"));
+    }
+}
+
+fn opaque_expression_parameters(
+    references: &ReferenceIndex<'_>,
+    expression: ElementRef<'_>,
+) -> (Result<bool, super::classifiers::QueryError>, Result<bool, super::classifiers::QueryError>) {
+    use super::{classifiers::QueryError, feature_compatibility::require_all};
+    let evidence = || {
+        let Some(value) = expression.properties().get("behavior").filter(|value| !value.is_null()) else {
+            return Ok(None);
+        };
+        let descriptor = schema::uml_property("OpaqueExpression", "behavior")
+            .map_err(|error| QueryError::unsupported(expression.id(), error.to_string()))?
+            .ok_or_else(|| QueryError::unsupported(expression.id(), "missing OpaqueExpression behavior contract"))?;
+        match check_value(references, expression, descriptor, value) {
+            PropertyOutcome::Violation(message) => return Err(QueryError::invalid(expression.id(), message)),
+            PropertyOutcome::Unverified(message) => return Err(QueryError::unsupported(expression.id(), message)),
+            PropertyOutcome::Satisfied => {}
         }
+        let behavior_id = reference_id(value)
+            .map_err(|error| QueryError::invalid(expression.id(), error))?
+            .ok_or_else(|| QueryError::invalid(expression.id(), "behavior identity is missing"))?;
+        operations::owned_parameter_evidence(references, behavior_id).map(Some)
     };
+    let (parameters, completeness) = match evidence() {
+        Ok(None) => return (Ok(true), Ok(true)),
+        Ok(Some(evidence)) => evidence,
+        Err(error) => return (Err(error.clone()), Err(error)),
+    };
+    let mut return_checks = Vec::new();
+    let mut permitted_checks = vec![completeness.clone().map(|_| true)];
     let mut returns = 0;
-    let mut permitted = true;
-    for record in parameters {
-        let direction = match operations::direction(record) {
-            Ok(direction) => direction,
-            Err(error) => {
-                issues.extend(Violation(error)
-                    .diagnostic(element, "OpaqueExpression-only_in_or_return_parameters", "UML_OPAQUE_EXPRESSION_PARAMETERS"));
-                return;
+    for parameter in parameters {
+        let direction = operations::direction(parameter)
+            .map_err(|error| QueryError::invalid(&parameter.id, error));
+        match direction {
+            Ok(direction) => {
+                if direction == "return" { returns += 1; }
+                permitted_checks.push(Ok(matches!(direction.as_str(), "in" | "return")));
             }
-        };
-        let stream = match schema::read_effective_boolean(ElementRef::Object(record), "isStream") {
-            Ok(stream) => stream,
             Err(error) => {
-                issues.extend(Unverified(error)
-                    .diagnostic(element, "OpaqueExpression-only_in_or_return_parameters", "UML_OPAQUE_EXPRESSION_PARAMETERS"));
-                return;
+                return_checks.push(Err(error.clone()));
+                permitted_checks.push(Err(error));
             }
-        };
-        if direction == "return" { returns += 1; }
-        permitted &= !stream && matches!(direction.as_str(), "in" | "return");
+        }
+        permitted_checks.push(schema::read_effective_boolean(ElementRef::Object(parameter), "isStream")
+            .map(|stream| !stream)
+            .map_err(|error| QueryError::invalid(&parameter.id, error)));
     }
-    if returns != 1 {
-        issues.extend(Violation("referenced Behavior must have exactly one return Parameter".into())
-            .diagnostic(element, "OpaqueExpression-one_return_result_parameter", "UML_OPAQUE_EXPRESSION_PARAMETERS"));
-    }
-    if !permitted {
-        issues.extend(Violation("referenced Behavior allows only non-stream in/return Parameters".into())
-            .diagnostic(element, "OpaqueExpression-only_in_or_return_parameters", "UML_OPAQUE_EXPRESSION_PARAMETERS"));
-    }
+    // Unresolved members can add return Parameters but cannot remove two
+    // already established ones. Likewise a known out/stream member refutes
+    // the universal constraint even when other members are unavailable.
+    return_checks.push(if returns > 1 { Ok(false) } else {
+        completeness.map(|_| returns == 1)
+    });
+    (require_all(return_checks), require_all(permitted_checks))
 }

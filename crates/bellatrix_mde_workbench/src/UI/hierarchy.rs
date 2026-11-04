@@ -3,6 +3,8 @@ use bellatrix_mde::ModelingSection;
 
 #[derive(Clone)]
 pub struct ExplorerRow {
+    pub key: String,
+    pub diagram_context: Option<String>,
     pub element_id: String,
     pub label: String,
     pub kind: String,
@@ -11,160 +13,210 @@ pub struct ExplorerRow {
     pub view: Option<bellatrix_mde::VisualComponent>,
 }
 
-/// Diagram context is a reference, not ownership: display it under its single
-/// resolved context, and leave context-free or ambiguous diagrams at the root.
+fn semantic_key(id: &str) -> String {
+    format!("semantic:{id}")
+}
+
+fn diagram_key(id: &str) -> String {
+    format!("diagram:{id}")
+}
+
+fn view_key(diagram: &str, view: &str) -> String {
+    format!("view:{}:{diagram}:{view}", diagram.len())
+}
+
+fn relationship_label(section: &ModelingSection, relation: &bellatrix_mde::Relation) -> String {
+    use bellatrix_mde::RelationshipMarker;
+    let endpoint = |id: &str| {
+        section.elements.iter().find(|element| element.id == id)
+            .map(|element| element.name.trim())
+            .filter(|name| !name.is_empty())
+            .unwrap_or(id)
+            .to_owned()
+    };
+    let presentation = bellatrix_mde::relationship_presentation(relation);
+    let relation_type = bellatrix_mde::semantic_identity(&presentation.notation).type_label;
+    let name = presentation.name.as_deref()
+        .filter(|name| !name.trim().is_empty())
+        .map(|name| format!("{relation_type}: {name}"))
+        .unwrap_or_else(|| relation_type.to_owned());
+    let marker = |marker, source| match marker {
+        RelationshipMarker::None => "",
+        RelationshipMarker::OpenArrow => if source { "<" } else { ">" },
+        RelationshipMarker::Triangle => if source { "◁" } else { "▷" },
+        RelationshipMarker::FilledTriangle => if source { "◀" } else { "▶" },
+        RelationshipMarker::Diamond => "◇",
+        RelationshipMarker::FilledDiamond => "◆",
+        RelationshipMarker::FilledCircle => "●",
+        RelationshipMarker::OpenArrowAndCircle => if source { "○<" } else { ">○" },
+        RelationshipMarker::FilledTriangleAndCircle => if source { "○◀" } else { "▶○" },
+        RelationshipMarker::Containment => "⊕",
+    };
+    let line = match presentation.style.line_mode {
+        bellatrix_mde::LineMode::Solid => "─",
+        bellatrix_mde::LineMode::Dashed => "┄",
+        bellatrix_mde::LineMode::Dotted => "··",
+    };
+    format!("{} {}{line} {} {}{line}{} {}",
+        endpoint(&relation.from), marker(presentation.style.source_marker, true), name,
+        marker(presentation.style.middle_marker, false),
+        marker(presentation.style.target_marker, false), endpoint(&relation.to))
+}
+
+/// Diagram occurrences replace the standalone semantic row, without changing ownership.
 pub fn project_explorer(section: &ModelingSection) -> Vec<ExplorerRow> {
+    use std::collections::{HashMap, HashSet};
     let semantic = bellatrix_mde::project_hierarchy(section);
-    // Ownership comes from the semantic projection, never legacy presentation placements.
-    let mut parents = std::collections::HashMap::new();
+    let mut owners = HashMap::new();
     let mut ancestors = Vec::new();
     for row in &semantic {
         ancestors.truncate(row.depth);
-        parents.insert(row.element_id.clone(), ancestors.last().cloned());
+        owners.insert(row.element_id.clone(), ancestors.last().cloned());
         ancestors.push(row.element_id.clone());
     }
-    let semantic_ids = parents
-        .keys()
-        .cloned()
-        .collect::<std::collections::HashSet<_>>();
-    let mut nodes = semantic
-        .into_iter()
-        .map(|row| ExplorerRow {
-            element_id: row.element_id,
-            label: row.label,
-            kind: row.kind,
-            depth: 0,
-            diagram: false,
-            view: None,
-        })
-        .collect::<Vec<_>>();
-    let mut diagrams = section.diagrams.iter().collect::<Vec<_>>();
-    diagrams.sort_by(|a, b| {
-        a.name
-            .to_lowercase()
-            .cmp(&b.name.to_lowercase())
-            .then_with(|| a.id.cmp(&b.id))
-    });
-    for diagram in &diagrams {
-        let parent = if diagram.model_elements.len() == 1 {
-            diagram
-                .model_elements
-                .first()
-                .filter(|id| semantic_ids.contains(*id))
-                .cloned()
-        } else {
-            None
-        };
-        parents.insert(diagram.id.clone(), parent);
+    // The semantic root container is not an extra project node in the Explorer.
+    let root_containers = semantic.iter()
+        .filter(|row| row.kind == "uml.model" && owners.get(&row.element_id).is_none_or(|owner| owner.is_none()))
+        .map(|row| row.element_id.clone()).collect::<HashSet<_>>();
+    let mut views = bellatrix_mde::visual_components(section);
+    views.sort_by(|left, right| left.diagram_id.cmp(&right.diagram_id)
+        .then_with(|| left.view_id.cmp(&right.view_id)));
+    let mut occurrences: HashMap<String, Vec<(String, String)>> = HashMap::new();
+    for view in &views {
+        if let Some(subject) = &view.subject_id {
+            occurrences.entry(subject.clone()).or_default()
+                .push((view.diagram_id.clone(), view_key(&view.diagram_id, &view.view_id)));
+        }
     }
-    nodes.extend(diagrams.into_iter().map(|diagram| ExplorerRow {
-        element_id: diagram.id.clone(),
-        label: diagram.name.clone(),
-        kind: {
-            let context = if diagram.model_elements.len() == 1 {
-                section
-                    .elements
-                    .iter()
-                    .find(|element| element.id == diagram.model_elements[0])
-                    .map(|element| format!(" · context: {}", element.name))
-                    .unwrap_or_else(|| " · unresolved context".into())
-            } else if diagram.model_elements.len() > 1 {
-                " · multiple contexts".into()
-            } else {
-                String::new()
-            };
-            format!("{}{context}", diagram.uml_di_type)
-        },
-        depth: 0,
-        diagram: true,
-        view: None,
-    }));
-    nodes.extend(
-        bellatrix_mde::visual_components(section)
-            .into_iter()
-            // Bound views are occurrences of an existing semantic row, not extra model nodes.
-            .filter(|view| {
-                !view.subject_id.as_ref().is_some_and(|id| semantic_ids.contains(id))
-            })
-            .map(|view| ExplorerRow {
-                element_id: view.view_id.clone(),
-                label: view.label.clone(),
-                kind: view.kind.clone(),
+    let relation_labels = section.relations.iter()
+        .map(|relation| (relation.id.as_str(), relationship_label(section, relation)))
+        .collect::<HashMap<_, _>>();
+    let relation_kinds = section.relations.iter()
+        .map(|relation| (relation.id.as_str(), bellatrix_mde::relationship_presentation(relation).notation))
+        .collect::<HashMap<_, _>>();
+    let mut nodes = Vec::new();
+    let mut parents: HashMap<String, Option<String>> = HashMap::new();
+    let mut placements: HashMap<String, Vec<(Option<String>, String)>> = occurrences.iter()
+        .map(|(subject, rows)| (subject.clone(), rows.iter()
+            .map(|(diagram, key)| (Some(diagram.clone()), key.clone())).collect()))
+        .collect();
+    for row in semantic {
+        if root_containers.contains(&row.element_id) { continue; }
+        let owner = owners.get(&row.element_id).and_then(|owner| owner.as_ref())
+            .filter(|owner| !root_containers.contains(*owner));
+        let contexts = owner.and_then(|owner| placements.get(owner)).cloned()
+            .unwrap_or_else(|| vec![(None, owner.map(|owner| semantic_key(owner)).unwrap_or_default())]);
+        let mut row_placements = placements.get(&row.element_id).cloned().unwrap_or_default();
+        for (diagram_context, parent) in contexts {
+            // A pictured subject has no global duplicate, but its members still
+            // belong under owner occurrences in diagrams where they have no view.
+            if occurrences.get(&row.element_id).is_some_and(|views| {
+                diagram_context.as_ref().is_none_or(|diagram| views.iter().any(|(candidate, _)| candidate == diagram))
+            }) { continue; }
+            let key = if diagram_context.is_some() {
+                format!("member:{}:{parent}:{}", parent.len(), row.element_id)
+            } else { semantic_key(&row.element_id) };
+            parents.insert(key.clone(), (!parent.is_empty()).then_some(parent));
+            row_placements.push((diagram_context.clone(), key.clone()));
+            nodes.push(ExplorerRow {
+                key,
+                diagram_context,
+                label: relation_labels.get(row.element_id.as_str()).cloned().unwrap_or_else(|| row.label.clone()),
+                element_id: row.element_id.clone(),
+                kind: relation_kinds.get(row.element_id.as_str()).cloned().unwrap_or_else(|| row.kind.clone()),
                 depth: 0,
                 diagram: false,
-                view: Some(view),
-            }),
-    );
-    let ids = nodes
-        .iter()
-        .map(|row| row.element_id.clone())
-        .collect::<std::collections::HashSet<_>>();
-    let mut children: std::collections::HashMap<Option<String>, Vec<usize>> =
-        std::collections::HashMap::new();
-    for (index, row) in nodes.iter().enumerate() {
-        let parent = if let Some(view) = &row.view {
-            let valid_parent = section
-                .diagrams
-                .iter()
-                .find(|diagram| diagram.id == view.diagram_id)
-                .and_then(|diagram| {
-                    let mut seen = std::collections::HashSet::new();
-                    seen.insert(view.view_id.as_str());
-                    let mut cursor = view.parent_view_id.as_deref();
-                    let mut visible_parent = None;
-                    while let Some(id) = cursor {
-                        if !seen.insert(id) {
-                            return None;
-                        }
-                        let parent = diagram.views.iter().find(|candidate| candidate.id == id)?;
-                        if visible_parent.is_none() && ids.contains(id) {
-                            visible_parent = Some(id.to_owned());
-                        }
-                        cursor = parent
-                            .draft
-                            .as_ref()
-                            .and_then(|draft| draft.parent_view_id.as_deref());
-                    }
-                    visible_parent
-                });
-            Some(valid_parent.unwrap_or_else(|| view.diagram_id.clone()))
-        } else {
-            parents.get(&row.element_id).cloned().flatten()
-        };
-        let visible_parent = parent.filter(|id| ids.contains(id));
-        children.entry(visible_parent).or_default().push(index);
-    }
-    fn visit(
-        index: usize,
-        depth: usize,
-        nodes: &[ExplorerRow],
-        children: &std::collections::HashMap<Option<String>, Vec<usize>>,
-        seen: &mut std::collections::HashSet<usize>,
-        result: &mut Vec<ExplorerRow>,
-    ) {
-        if !seen.insert(index) {
-            return;
+                view: None,
+            });
         }
+        placements.insert(row.element_id, row_placements);
+    }
+    let mut diagrams = section.diagrams.iter().collect::<Vec<_>>();
+    diagrams.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase())
+        .then_with(|| left.id.cmp(&right.id)));
+    for diagram in diagrams {
+        let key = diagram_key(&diagram.id);
+        // UMLDI context is a reference, not ownership. Only an unambiguous
+        // external occurrence can locate this diagram without a self-cycle.
+        let context_parent = if let [context] = diagram.model_elements.as_slice() {
+            let candidates = placements.get(context).into_iter().flatten()
+                .filter(|(owner_diagram, _)| owner_diagram.as_ref() != Some(&diagram.id))
+                .map(|(_, key)| key).collect::<Vec<_>>();
+            match candidates.as_slice() {
+                [parent] => Some((*parent).clone()),
+                _ => None,
+            }
+        } else { None };
+        parents.insert(key.clone(), context_parent);
+        nodes.push(ExplorerRow {
+            key,
+            diagram_context: Some(diagram.id.clone()),
+            element_id: diagram.id.clone(),
+            label: diagram.name.clone(),
+            kind: diagram.uml_di_type.clone(),
+            depth: 0,
+            diagram: true,
+            view: None,
+        });
+    }
+    for view in views {
+        let key = view_key(&view.diagram_id, &view.view_id);
+        let visual_parent = view.parent_view_id.as_ref().filter(|parent| {
+            section.diagrams.iter().find(|diagram| diagram.id == view.diagram_id)
+                .is_some_and(|diagram| diagram.views.iter().any(|candidate| &candidate.id == *parent))
+        }).map(|parent| view_key(&view.diagram_id, parent));
+        let semantic_parent = view.subject_id.as_ref()
+            .and_then(|subject| owners.get(subject)).and_then(|owner| owner.as_ref())
+            .and_then(|owner| placements.get(owner))
+            .and_then(|views| views.iter().find(|(diagram, _)| diagram.as_ref() == Some(&view.diagram_id)))
+            .map(|(_, key)| key.clone());
+        parents.insert(key.clone(), Some(visual_parent.or(semantic_parent)
+            .unwrap_or_else(|| diagram_key(&view.diagram_id))));
+        nodes.push(ExplorerRow {
+            key,
+            diagram_context: Some(view.diagram_id.clone()),
+            element_id: view.view_id.clone(),
+            label: view.subject_id.as_deref().and_then(|id| relation_labels.get(id))
+                .cloned().unwrap_or_else(|| view.label.clone()),
+            kind: view.subject_id.as_deref().and_then(|id| relation_kinds.get(id))
+                .cloned().unwrap_or_else(|| view.kind.clone()),
+            depth: 0,
+            diagram: false,
+            view: Some(view),
+        });
+    }
+    let ids = nodes.iter().map(|row| row.key.clone()).collect::<HashSet<_>>();
+    let mut children: HashMap<Option<String>, Vec<usize>> = HashMap::new();
+    for (index, row) in nodes.iter().enumerate() {
+        let mut parent = parents.get(&row.key).cloned().flatten();
+        let mut cursor = parent.as_deref();
+        let mut seen = HashSet::from([row.key.as_str()]);
+        while let Some(id) = cursor {
+            if !seen.insert(id) {
+                parent = row.view.as_ref().map(|view| diagram_key(&view.diagram_id));
+                break;
+            }
+            cursor = parents.get(id).and_then(|parent| parent.as_deref());
+        }
+        children.entry(parent.filter(|id| ids.contains(id))).or_default().push(index);
+    }
+    fn visit(index: usize, depth: usize, nodes: &[ExplorerRow],
+        children: &HashMap<Option<String>, Vec<usize>>, seen: &mut HashSet<usize>,
+        result: &mut Vec<ExplorerRow>) {
+        if !seen.insert(index) { return; }
         let mut row = nodes[index].clone();
         row.depth = depth;
         result.push(row);
-        if let Some(child_indices) = children.get(&Some(nodes[index].element_id.clone())) {
-            for child in child_indices {
-                visit(*child, depth + 1, nodes, children, seen, result);
-            }
+        if let Some(child_indices) = children.get(&Some(nodes[index].key.clone())) {
+            for child in child_indices { visit(*child, depth + 1, nodes, children, seen, result); }
         }
     }
     let mut rows = Vec::new();
-    let mut seen = std::collections::HashSet::new();
+    let mut seen = HashSet::new();
     if let Some(roots) = children.get(&None) {
-        for root in roots {
-            visit(*root, 0, &nodes, &children, &mut seen, &mut rows);
-        }
+        for root in roots { visit(*root, 0, &nodes, &children, &mut seen, &mut rows); }
     }
-    // Malformed legacy cycles remain visible instead of silently dropping items.
-    for index in 0..nodes.len() {
-        visit(index, 0, &nodes, &children, &mut seen, &mut rows);
-    }
+    for index in 0..nodes.len() { visit(index, 0, &nodes, &children, &mut seen, &mut rows); }
     rows
 }
 
@@ -190,6 +242,11 @@ pub(crate) fn element_glyph(kind: &str) -> bellatrix_ui_symbols::ShapeKind {
     use bellatrix_ui_symbols::ShapeKind;
     let identity = bellatrix_mde::semantic_identity(kind);
     // Member and relationship symbols are metaclass based, never inferred from names.
+    match kind {
+        "uml.composition" => return ShapeKind::Composition,
+        "uml.aggregation" => return ShapeKind::Aggregate,
+        _ => {}
+    }
     match identity.type_label {
         "Attribute" | "Property" => return ShapeKind::Aggregate,
         "Operation" => return ShapeKind::Process,

@@ -24,6 +24,14 @@ fn display(value: &Value) -> String {
         .map_or_else(|| value.to_string(), str::to_owned)
 }
 
+fn property_text(property: &InspectorProperty) -> String {
+    if matches!(property.path.as_str(), "name" | "properties.name") && property.value.is_null() {
+        String::new()
+    } else {
+        display(&property.value)
+    }
+}
+
 fn reference_label(value: &Value, choices: &[InspectorReferenceChoice]) -> String {
     if value.is_null() {
         return "No type".into();
@@ -52,7 +60,7 @@ fn property_label(property: &InspectorProperty, choices: &[InspectorReferenceCho
     if property.editor == PropertyEditor::Reference || property.path == "properties.type" {
         reference_label(&property.value, choices)
     } else {
-        display(&property.value)
+        property_text(property)
     }
 }
 
@@ -163,7 +171,7 @@ pub(crate) fn reconcile_inputs(
             element: inspector.element_id.clone(),
             path: property.path.clone(),
         };
-        let canonical = display(&property.value);
+        let canonical = property_text(property);
         let draft = drafts.entry(key.clone()).or_insert_with(|| {
             let input = matches!(
                 property.editor,
@@ -388,7 +396,7 @@ pub(crate) fn flush_property_edits(
         else {
             continue;
         };
-        let canonical = display(&property.value);
+        let canonical = property_text(property);
         if same_value(property.editor, &text, &canonical) {
             draft.state.reload(&text, snapshot.revision);
             continue;
@@ -501,7 +509,7 @@ fn property_row(
             if property.editable =>
         {
             let Some(draft) = drafts.get(&key) else {
-                return compact_row(label, Label::new(display(&property.value)));
+                return compact_row(label, Label::new(property_text(property)));
             };
             let dirty = draft.state.dirty(&draft.text(cx));
             let pending = draft.pending.is_some();
@@ -518,7 +526,7 @@ fn property_row(
                 "".into()
             };
             let Some(field) = &draft.input else {
-                return compact_row(label, Label::new(display(&property.value)));
+                return compact_row(label, Label::new(property_text(property)));
             };
             let input = if property.editor == PropertyEditor::Multiline {
                 div()
@@ -575,7 +583,7 @@ fn property_row(
                                 if draft.pending.is_some() {
                                     return;
                                 }
-                                let canonical = display(&property.value);
+                                let canonical = property_text(property);
                                 draft.state.reload(&canonical, snapshot.revision);
                                 draft.state.queued = false;
                                 draft.last_observed = canonical.clone();
@@ -753,7 +761,7 @@ fn property_row(
                             }
                             draft
                                 .state
-                                .reload(&display(&property.value), snapshot.revision);
+                                .reload(&property_text(property), snapshot.revision);
                             draft.state.queued = false;
                             draft.discrete = None;
                             cx.notify();
@@ -837,7 +845,7 @@ pub(crate) fn render_inspector(
             .border_color(palette.border)
             .child(
                 svg()
-                    .data(glyph(element_glyph(&inspector.kind)))
+                    .data(glyph(element_glyph(&inspector.presentation_kind)))
                     .size(px(20.0))
                     .flex_none()
                     .text_color(palette.muted),
@@ -856,7 +864,7 @@ pub(crate) fn render_inspector(
                     .child(
                         Label::new(format!(
                             "{} · {selection_status}",
-                            display_kind(&inspector.kind)
+                            display_kind(&inspector.presentation_kind)
                         ))
                         .size(LabelSize::XSmall)
                         .color(Color::Muted),

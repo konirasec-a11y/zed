@@ -190,3 +190,169 @@ pub(crate) fn quick_edit_for_element(
         });
     (right, left, visibility)
 }
+
+pub(crate) fn quick_edit_for_relationship(
+    section: &bellatrix_mde::ModelingSection,
+    relation: &bellatrix_mde::Relation,
+    owner: Entity<MdeWorkbenchItem>,
+    project: ProjectId,
+    revision: u64,
+    read_only: bool,
+    window: &mut gpui::Window,
+    cx: &mut gpui::App,
+) -> Option<gpui::AnyElement> {
+    use crate::workbench_ui::{WorkbenchPalette, panels::element_glyph};
+    use bellatrix_mde::{PropertyEditor, inspect_element, relationship_presentation, semantic_identity};
+    use bellatrix_mde_cordis::{MdeUiCommand, ModelingSetPropertyRequested};
+    use bellatrix_ui_symbols::glyph;
+    use gpui::{MouseButton, div, prelude::*, px, svg};
+    use ui::{ContextMenu, DropdownMenu, Icon, IconButton, Label, Tooltip, prelude::*};
+
+    let inspection = inspect_element(section, &relation.id)?;
+    let presentation = relationship_presentation(relation);
+    let type_label = semantic_identity(&inspection.presentation_kind).type_label;
+    let palette = WorkbenchPalette::current(cx);
+    let mut controls = Vec::new();
+    for (id, role, icon) in [
+        (&relation.from, presentation.source_role, IconName::ArrowLeft),
+        (&relation.to, presentation.target_role, IconName::ArrowRight),
+    ] {
+        let endpoint = section.elements.iter().find(|element| element.id == *id);
+        let name = endpoint
+            .map(|element| element.name.as_str())
+            .filter(|name| !name.trim().is_empty())
+            .unwrap_or(id);
+        let tooltip = format!("Select {role}: {name}");
+        let target = owner.clone();
+        let endpoint_id = id.clone();
+        controls.push(
+            IconButton::new(format!("relationship-endpoint-{role}-{id}"), icon)
+                .aria_label(tooltip.clone())
+                .tooltip(Tooltip::text(tooltip))
+                .disabled(endpoint.is_none())
+                .on_click(move |_, _, cx| {
+                    target.update(cx, |item, cx| item.select_element(endpoint_id.clone(), cx));
+                    cx.stop_propagation();
+                })
+                .into_any_element(),
+        );
+    }
+    if !read_only {
+        for property in inspection.properties.iter().filter(|property| {
+            property.editable
+                && property.group != "Other properties"
+                && property.path != "properties.navigable"
+        }) {
+            let options: Vec<(String, serde_json::Value)> = match property.editor {
+                PropertyEditor::Choice(options) => options
+                    .iter()
+                    .map(|option| {
+                        ((*option).to_owned(), serde_json::Value::String((*option).into()))
+                    })
+                    .collect(),
+                PropertyEditor::Boolean => [false, true]
+                    .into_iter()
+                    .map(|value| (value.to_string(), serde_json::Value::Bool(value)))
+                    .collect(),
+                _ => continue,
+            };
+            let icon = match property.path.as_str() {
+                "properties.visibility" => IconName::Eye,
+                "properties.end1Aggregation" | "properties.end2Aggregation" => IconName::GitCommit,
+                _ => IconName::Settings,
+            };
+            let target = owner.clone();
+            let project = project.clone();
+            let element_id = relation.id.clone();
+            let path = property.path.clone();
+            let current = property.value.clone();
+            let menu = ContextMenu::build(window, cx, move |menu, _, _| {
+                options.into_iter().fold(menu, |menu, (label, value)| {
+                    let label = if value == current {
+                        format!("✓ {label}")
+                    } else {
+                        label
+                    };
+                    let target = target.clone();
+                    let project = project.clone();
+                    let element_id = element_id.clone();
+                    let path = path.clone();
+                    menu.entry(label, None, move |_, cx| {
+                        target.update(cx, |item, cx| {
+                            if item.source.is_read_only() {
+                                return;
+                            }
+                            if item.project_id() != &project
+                                || item.selected_element() != Some(element_id.as_str())
+                            {
+                                item.feedback = "Relationship edit not sent: the active selection changed".into();
+                                cx.notify();
+                                return;
+                            }
+                            // Keep the revision displayed by the menu; stale choices must not
+                            // overwrite newer endpoint or relationship edits.
+                            item.submit(
+                                MdeUiCommand::SetProperty(ModelingSetPropertyRequested {
+                                    project_id: project.clone(),
+                                    element_id: element_id.clone(),
+                                    path: path.clone(),
+                                    value: value.clone(),
+                                    expected_revision: revision,
+                                }),
+                                cx,
+                            );
+                        });
+                    })
+                })
+            });
+            let current = property.value.as_str().map(str::to_owned)
+                .unwrap_or_else(|| property.value.to_string());
+            let tooltip = format!("{}: {current}", property.label);
+            controls.push(
+                DropdownMenu::new_with_element(
+                    format!("relationship-quick-{}", property.path),
+                    Icon::new(icon).into_any_element(),
+                    menu,
+                )
+                .aria_label(property.label.clone())
+                .trigger_tooltip(Tooltip::text(tooltip))
+                .into_any_element(),
+            );
+        }
+    }
+    Some(
+        div()
+            .id(format!("relationship-quick-edit-{}", relation.id))
+            .flex()
+            .flex_col()
+            .gap_1()
+            .p_2()
+            .w_full()
+            .min_w_0()
+            .rounded_md()
+            .bg(palette.surface)
+            .border_1()
+            .border_color(palette.border)
+            .text_color(palette.text)
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .child(
+                div()
+                    .id("relationship-quick-type")
+                    .tooltip(Tooltip::text(type_label.to_owned()))
+                    .flex()
+                    .min_w_0()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        svg()
+                            .data(glyph(element_glyph(&inspection.presentation_kind)))
+                            .size(px(16.0))
+                            .flex_none()
+                            .text_color(palette.muted),
+                    )
+                    .child(Label::new(type_label.to_owned()).truncate()),
+            )
+            .child(div().flex().flex_wrap().items_center().gap_2().children(controls))
+            .into_any_element(),
+    )
+}

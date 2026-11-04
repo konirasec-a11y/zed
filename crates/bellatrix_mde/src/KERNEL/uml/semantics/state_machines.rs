@@ -750,6 +750,111 @@ fn state_machine_method(references: &ReferenceIndex<'_>, machine: ElementRef<'_>
         state_connections_empty(references, machine, "connectionPoint", "Pseudostate", "stateMachine"))
 }
 
+// Universal quantification over one direct composite edge. Forward, ownership
+// and opposite evidence form one identity set; descendants are not flattened.
+fn composite_for_all<'a>(
+    references: &ReferenceIndex<'a>, owner: ElementRef<'a>, role: &str,
+    target_type: &str, opposite_role: &str,
+    predicate: impl Fn(ElementRef<'a>) -> Result<bool, QueryError>,
+) -> Result<bool, QueryError> {
+    let metaclass = owner.metaclass().ok_or_else(|| QueryError::unsupported(owner.id(), "composite owner type is unresolved"))?;
+    let descriptor = schema::uml_property(metaclass, role)
+        .map_err(|error| QueryError::unsupported(owner.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(owner.id(), format!("missing {metaclass}::{role} contract")))?;
+    let opposite = schema::uml_property(target_type, opposite_role)
+        .map_err(|error| QueryError::unsupported(owner.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(owner.id(), format!("missing {target_type}::{opposite_role} contract")))?;
+    let mut checks = Vec::new();
+    let mut members = HashSet::new();
+    if let Some(value) = owner.properties().get(role) {
+        checks.push(match property_contracts::check_value(references, owner, descriptor, value) {
+            PropertyOutcome::Satisfied => Ok(true),
+            PropertyOutcome::Violation(message) => Err(QueryError::invalid(owner.id(), message)),
+            PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(owner.id(), message)),
+        });
+        if let Some(values) = value.as_array() {
+            for value in values {
+                if let Ok(Some(id)) = reference_id(value) { members.insert(id.to_owned()); }
+            }
+        }
+    }
+    for child in references.explicit_owned_elements(owner.id())
+        .map_err(|error| QueryError::invalid(owner.id(), error))?
+    {
+        if child.conforms_to(target_type) {
+            // All callers use the unique composite role for this target type:
+            // StateMachine::region, Region::subvertex or Region::transition.
+            members.insert(child.id().to_owned());
+            checks.push(classifiers::contributes_to_owned_union(owner, child, descriptor.id.fragment)
+                .and_then(|member| if member { Ok(true) } else {
+                    Err(QueryError::invalid(child.id(), "canonical ownership excludes its composite role"))
+                }));
+        } else if child.metaclass().is_none() {
+            checks.push(Err(QueryError::unsupported(child.id(), format!("{role} membership has an unresolved target type"))));
+        }
+    }
+    for child in references.model().elements().filter(|element| element.conforms_to(target_type)) {
+        let Some(value) = child.properties().get(opposite_role) else { continue; };
+        let canonical = references.model().owner(child)
+            .map_err(|error| QueryError::invalid(child.id(), error))?;
+        let canonical_member = canonical.is_some_and(|candidate| candidate.id() == owner.id());
+        match reference_id(value) {
+            Ok(Some(id)) if id == owner.id() => {
+                members.insert(child.id().to_owned());
+                if !canonical_member {
+                    checks.push(Err(QueryError::invalid(child.id(), format!("{opposite_role} contradicts canonical ownership"))));
+                }
+            }
+            Ok(_) => {
+                if canonical_member {
+                    checks.push(Err(QueryError::invalid(child.id(), format!("{opposite_role} excludes its canonical owner"))));
+                }
+                continue;
+            }
+            Err(_) if canonical.is_some() && !canonical_member => continue,
+            Err(_) => {}
+        }
+        checks.push(match property_contracts::check_value(references, child, opposite, value) {
+            PropertyOutcome::Satisfied => Ok(true),
+            PropertyOutcome::Violation(message) => Err(QueryError::invalid(child.id(), message)),
+            PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(child.id(), message)),
+        });
+    }
+    for id in members {
+        let child = references.element(&id).map_err(|error| QueryError::invalid(owner.id(), error))?;
+        if child.metaclass().is_none() {
+            checks.push(Err(QueryError::unsupported(child.id(), format!("{role} target type is unresolved"))));
+        } else if !child.conforms_to(target_type) {
+            checks.push(Err(QueryError::invalid(child.id(), format!("{role} requires {target_type}"))));
+        } else {
+            checks.push(predicate(child));
+        }
+    }
+    require_all(checks)
+}
+
+fn protocol_machine_contents(references: &ReferenceIndex<'_>, machine: ElementRef<'_>, rule: &str) -> Result<bool, QueryError> {
+    composite_for_all(references, machine, "region", "Region", "stateMachine", |region| {
+        if rule == "protocol_transitions" {
+            composite_for_all(references, region, "transition", "Transition", "container", |transition| {
+                // The normative OCL uses oclIsTypeOf, not oclIsKindOf.
+                Ok(transition.metaclass() == Some("ProtocolTransition"))
+            })
+        } else {
+            composite_for_all(references, region, "subvertex", "Vertex", "container", |vertex| {
+                if rule == "deep_or_shallow_history" && vertex.conforms_to("Pseudostate") {
+                    schema::read_effective_scalar(vertex, "kind")
+                        .map(|kind| !matches!(kind.as_str(), Some("deepHistory" | "shallowHistory")))
+                        .map_err(|error| QueryError::invalid(vertex.id(), error))
+                } else if rule == "entry_exit_do" && vertex.conforms_to("State") {
+                    require_all(["entry", "exit", "doActivity"].map(|role|
+                        composite_role_empty(references, vertex, role, "Behavior")))
+                } else { Ok(true) }
+            })
+        }
+    })
+}
+
 pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     for element in references.model().elements() {
@@ -846,6 +951,18 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             constraints.push((transition_segment_state(references, element, false),
                 "UML_TRANSITION_JOIN_SEGMENT_STATE", "MDE_TRANSITION_JOIN_SEGMENT_STATE_UNVERIFIED",
                 "Transition-join_segment_state", "a Transition to a join must originate at a State"));
+        }
+        if element.conforms_to("ProtocolStateMachine") {
+            for (rule, code, unknown, constraint, violation) in [
+                ("deep_or_shallow_history", "UML_PROTOCOL_STATE_MACHINE_DEEP_OR_SHALLOW_HISTORY", "MDE_PROTOCOL_STATE_MACHINE_DEEP_OR_SHALLOW_HISTORY_UNVERIFIED",
+                    "ProtocolStateMachine-deep_or_shallow_history", "a ProtocolStateMachine cannot have direct deepHistory or shallowHistory vertices in its Regions"),
+                ("entry_exit_do", "UML_PROTOCOL_STATE_MACHINE_ENTRY_EXIT_DO", "MDE_PROTOCOL_STATE_MACHINE_ENTRY_EXIT_DO_UNVERIFIED",
+                    "ProtocolStateMachine-entry_exit_do", "States directly in a ProtocolStateMachine Region cannot have entry, exit or doActivity Behavior"),
+                ("protocol_transitions", "UML_PROTOCOL_STATE_MACHINE_PROTOCOL_TRANSITIONS", "MDE_PROTOCOL_STATE_MACHINE_PROTOCOL_TRANSITIONS_UNVERIFIED",
+                    "ProtocolStateMachine-protocol_transitions", "Transitions directly in a ProtocolStateMachine Region must have exact type ProtocolTransition"),
+            ] {
+                constraints.push((protocol_machine_contents(references, element, rule), code, unknown, constraint, violation));
+            }
         }
         if element.conforms_to("ProtocolTransition") {
             constraints.push((composite_role_empty(references, element, "effect", "Behavior"),

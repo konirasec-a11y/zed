@@ -1,7 +1,7 @@
 use super::*;
 
 impl Render for MdeWorkbenchItem {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let snapshot = self.source.snapshot();
         if let Ok(snapshot) = &snapshot {
             self.reconcile_selection(&snapshot.section);
@@ -25,6 +25,7 @@ impl Render for MdeWorkbenchItem {
         let mut title = format!("MDE · {}", self.project_id().as_str());
         let details: String;
         let mut cards = Vec::new();
+        let mut relationship_controls = Vec::new();
         match snapshot {
             Ok(snapshot) => {
                 let references = bellatrix_mde::uml::references::ReferenceIndex::new(
@@ -125,6 +126,43 @@ impl Render for MdeWorkbenchItem {
                                         (point.y as f32 - min_y + padding) * zoom,
                                     )
                                 };
+                                if self.presentation.selected_element() == Some(subject)
+                                    && self.presentation.selected_view().map_or_else(
+                                        || diagram.views.iter()
+                                            .find(|candidate| candidate.subject.as_deref() == Some(subject))
+                                            .is_some_and(|candidate| candidate.id == view.id),
+                                        |selected| selected == view.id,
+                                    )
+                                    && self.presentation.selected_tool().is_none()
+                                {
+                                    if let Some(controls) = quick_edit_view::quick_edit_for_relationship(
+                                        &snapshot.section,
+                                        relation,
+                                        cx.entity(),
+                                        self.project_id().clone(),
+                                        snapshot.revision,
+                                        self.source.is_read_only(),
+                                        window,
+                                        cx,
+                                    ) {
+                                        relationship_controls.push(
+                                            // Anchor to the canvas viewport, not the path bounds:
+                                            // pan/zoom must not put editing controls outside its clip.
+                                            div()
+                                                .id("mde-relationship-quick-edit-viewport")
+                                                .absolute()
+                                                .left_0()
+                                                .top_0()
+                                                .w_full()
+                                                .max_w(px(320.0))
+                                                .max_h_full()
+                                                .overflow_y_scroll()
+                                                .on_scroll(|_, _, cx| cx.stop_propagation())
+                                                .child(controls)
+                                                .into_any_element(),
+                                        );
+                                    }
+                                }
                                 let presentation = relationship_presentation(relation);
                                 let local_segments = segments
                                     .iter()
@@ -746,6 +784,7 @@ impl Render for MdeWorkbenchItem {
             }
             Err(error) => details = error,
         }
+        cards.extend(relationship_controls);
         let owner = cx.weak_entity();
         let move_owner = cx.weak_entity();
         let up_owner = cx.weak_entity();

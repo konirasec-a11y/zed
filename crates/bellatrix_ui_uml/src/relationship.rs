@@ -442,6 +442,7 @@ impl RenderOnce for UmlRelationGlyph {
         let (source_anchor, target_anchor, middle, middle_direction) =
             path_label_anchors(from, &segments, self.scale);
         let labels = self.labels;
+        let selected = self.selected;
         let scale = self.scale;
         let glyph = canvas(
             |_, _, _| (),
@@ -576,7 +577,23 @@ impl RenderOnce for UmlRelationGlyph {
             .size_full()
             .child(glyph)
             .when_some(labels, |element, labels| {
+                let type_label = bellatrix_mde::semantic_identity(&labels.notation)
+                    .type_label
+                    .to_owned();
                 element
+                    .when(selected, |element| {
+                        element.child(label_block(
+                            LabelAnchor {
+                                position: (middle.0, middle.1 + 8.0 * scale),
+                                right_aligned: false,
+                                above: false,
+                            },
+                            [type_label],
+                            text_color,
+                            font_size,
+                            &appearance,
+                        ))
+                    })
                     .child(label_block(
                         source_anchor,
                         labels

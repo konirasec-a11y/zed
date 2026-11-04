@@ -102,16 +102,21 @@ impl RelationshipPresentation {
 pub fn relationship_presentation(relation: &Relation) -> RelationshipPresentation {
     let notation = match relation.kind.as_str() {
         "depends_on" => "uml.dependency",
-        "uml.association" => match relation
-            .properties
-            .get("end1Aggregation")
-            .or_else(|| relation.properties.get("end2Aggregation"))
-            .and_then(serde_json::Value::as_str)
-        {
-            Some("shared") => "uml.aggregation",
-            Some("composite") => "uml.composition",
-            _ => "uml.association",
-        },
+        "uml.association" | "uml.directed_association" => {
+            let aggregations = ["end1Aggregation", "end2Aggregation"].map(|key| {
+                relation
+                    .properties
+                    .get(key)
+                    .and_then(serde_json::Value::as_str)
+            });
+            if aggregations.contains(&Some("composite")) {
+                "uml.composition"
+            } else if aggregations.contains(&Some("shared")) {
+                "uml.aggregation"
+            } else {
+                relation.kind.as_str()
+            }
+        }
         other => other,
     };
     let label = notation
@@ -134,7 +139,6 @@ pub fn relationship_presentation(relation: &Relation) -> RelationshipPresentatio
         }
         "uml.aggregation" | "uml.composition" => ("whole", "part"),
         "uml.containment" => ("container", "contained"),
-        "uml.association" => ("end1", "end2"),
         _ => ("source", "target"),
     };
     let text = |key: &str| {
@@ -144,7 +148,14 @@ pub fn relationship_presentation(relation: &Relation) -> RelationshipPresentatio
             .and_then(serde_json::Value::as_str)
             .map(str::to_owned)
     };
-    let mut style = resolve_relationship_style(notation, &relation.properties);
+    let mut style = resolve_relationship_style(
+        if relation.kind == "uml.directed_association" {
+            &relation.kind
+        } else {
+            notation
+        },
+        &relation.properties,
+    );
 
     if matches!(
         relation.kind.as_str(),
