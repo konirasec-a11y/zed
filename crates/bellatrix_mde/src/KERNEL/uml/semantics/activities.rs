@@ -581,8 +581,8 @@ fn action_result_is_boolean(
     }
 }
 
-// Compare value.type -> destination.type, never the reverse. Only the two
-// write-action OCL implications permit an absent value reference.
+// Compare value.type -> destination.type, never the reverse. Absence is allowed
+// only for normative implications on optional value references (writes/link ends).
 fn action_value_type_conformance(
     references: &ReferenceIndex<'_>,
     action: ElementRef<'_>,
@@ -716,7 +716,7 @@ fn action_pins_unit_multiplicity(
 ) -> Result<bool, QueryError> {
     require_all(properties.iter().map(|property| {
         required_action_element(references, action, metaclass, property)
-            .and_then(|pin| pin_unit_multiplicity(references, pin))
+            .and_then(|pin| multiplicity_is_one(references, pin))
     }))
 }
 
@@ -735,7 +735,7 @@ fn optional_action_pin_unit_multiplicity(
     let pin = references
         .element(&identifier)
         .map_err(|error| QueryError::unsupported(action.id(), error))?;
-    pin_unit_multiplicity(references, pin)
+    multiplicity_is_one(references, pin)
 }
 
 fn action_pins_untyped(
@@ -752,7 +752,23 @@ fn action_pins_untyped(
     }))
 }
 
-fn pin_unit_multiplicity(
+// UML.xmi ReadExtentAction-multiplicity_of_result: result.is(0,*).
+fn read_extent_result_multiplicity(
+    references: &ReferenceIndex<'_>,
+    action: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let result = required_action_element(references, action, "ReadExtentAction", "result")?;
+    require_all([
+        value_specifications::lower_bound(references, result)
+            .map(|lower| lower == 0.into())
+            .map_err(|error| QueryError::unsupported(result.id(), error.to_string())),
+        value_specifications::upper_bound(references, result)
+            .map(|upper| upper.is_unlimited())
+            .map_err(|error| QueryError::unsupported(result.id(), error.to_string())),
+    ])
+}
+
+fn multiplicity_is_one(
     references: &ReferenceIndex<'_>,
     pin: ElementRef<'_>,
 ) -> Result<bool, QueryError> {
@@ -781,7 +797,7 @@ fn read_self_result_multiplicity(
     let result = references
         .element(&result_id)
         .map_err(|error| QueryError::unsupported(action.id(), error))?;
-    pin_unit_multiplicity(references, result)
+    multiplicity_is_one(references, result)
 }
 
 // UML.xmi DestroyObjectAction-multiplicity: target.is(1,1).
@@ -797,7 +813,7 @@ fn destroy_object_target_multiplicity(
     let target = references
         .element(&target_id)
         .map_err(|error| QueryError::unsupported(action.id(), error))?;
-    pin_unit_multiplicity(references, target)
+    multiplicity_is_one(references, target)
 }
 
 // UML.xmi DestroyObjectAction-no_type: target.type = null.
@@ -831,7 +847,7 @@ fn create_object_result_multiplicity(
     let result = references
         .element(&result_id)
         .map_err(|error| QueryError::unsupported(action.id(), error))?;
-    pin_unit_multiplicity(references, result)
+    multiplicity_is_one(references, result)
 }
 
 // UML.xmi CreateObjectAction-same_type: result.type = classifier.
@@ -1583,6 +1599,18 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
         }
         for (metaclass, destination_property, optional_value, code, unverified, rule) in [
             (
+                "LinkEndData", "end", true,
+                "UML_LINK_END_DATA_SAME_TYPE",
+                "MDE_LINK_END_DATA_SAME_TYPE_UNVERIFIED",
+                "LinkEndData-same_type",
+            ),
+            (
+                "QualifierValue", "qualifier", false,
+                "UML_QUALIFIER_VALUE_TYPE_OF_QUALIFIER",
+                "MDE_QUALIFIER_VALUE_TYPE_OF_QUALIFIER_UNVERIFIED",
+                "QualifierValue-type_of_qualifier",
+            ),
+            (
                 "ValueSpecificationAction", "result", false,
                 "UML_VALUE_SPECIFICATION_ACTION_COMPATIBLE_TYPE",
                 "MDE_VALUE_SPECIFICATION_ACTION_COMPATIBLE_TYPE_UNVERIFIED",
@@ -1614,6 +1642,13 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             }
         }
         if node.conforms_to("ReadExtentAction") {
+            checks.push((
+                read_extent_result_multiplicity(references, node),
+                "UML_READ_EXTENT_ACTION_MULTIPLICITY_OF_RESULT",
+                "MDE_READ_EXTENT_ACTION_MULTIPLICITY_OF_RESULT_UNVERIFIED",
+                "ReadExtentAction-multiplicity_of_result",
+                "the result OutputPin of a ReadExtentAction must have multiplicity 0..*",
+            ));
             checks.push((
                 read_extent_type_is_classifier(references, node),
                 "UML_READ_EXTENT_ACTION_TYPE_IS_CLASSIFIER",
@@ -1676,9 +1711,27 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 ));
             }
         }
+        if node.conforms_to("ReadLinkObjectEndQualifierAction") {
+            // The normative qualifier reference targets a Property, not a Pin.
+            checks.push((
+                required_action_element(references, node, "ReadLinkObjectEndQualifierAction", "qualifier")
+                    .and_then(|qualifier| multiplicity_is_one(references, qualifier)),
+                "UML_READ_LINK_OBJECT_END_QUALIFIER_ACTION_MULTIPLICITY_OF_QUALIFIER",
+                "MDE_READ_LINK_OBJECT_END_QUALIFIER_ACTION_MULTIPLICITY_OF_QUALIFIER_UNVERIFIED",
+                "ReadLinkObjectEndQualifierAction-multiplicity_of_qualifier",
+                "the qualifier Property must have multiplicity 1..1",
+            ));
+        }
         // UML action constraints below name specific Pins, not all inherited
         // inputs/outputs. In particular, TestIdentity multiplicity excludes result.
         for (metaclass, properties, code, unverified, rule) in [
+            (
+                "QualifierValue",
+                &["value"][..],
+                "UML_QUALIFIER_VALUE_MULTIPLICITY_OF_QUALIFIER",
+                "MDE_QUALIFIER_VALUE_MULTIPLICITY_OF_QUALIFIER_UNVERIFIED",
+                "QualifierValue-multiplicity_of_qualifier",
+            ),
             (
                 "ValueSpecificationAction",
                 &["result"][..],
@@ -1829,6 +1882,12 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             }
         }
         for (metaclass, property, code, unverified, rule) in [
+            (
+                "LinkEndData", "value",
+                "UML_LINK_END_DATA_MULTIPLICITY",
+                "MDE_LINK_END_DATA_MULTIPLICITY_UNVERIFIED",
+                "LinkEndData-multiplicity",
+            ),
             (
                 "WriteStructuralFeatureAction",
                 "result",
