@@ -309,13 +309,16 @@ fn outgoing_at_most(references: &ReferenceIndex<'_>, vertex: ElementRef<'_>, max
     transition_count(references, vertex, "source", 0, maximum)
 }
 
-fn pseudostate_incident_transitions(references: &ReferenceIndex<'_>, vertex: ElementRef<'_>, required_kind: &str) -> Result<bool, QueryError> {
+fn pseudostate_incident_transitions(
+    references: &ReferenceIndex<'_>, vertex: ElementRef<'_>, required_kind: &str,
+    incoming: (usize, usize), outgoing: (usize, usize),
+) -> Result<bool, QueryError> {
     let kind = schema::read_effective_scalar(vertex, "kind")
         .map_err(|error| QueryError::invalid(vertex.id(), error))?;
     if kind.as_str() != Some(required_kind) { return Ok(true); }
     require_all([
-        transition_count(references, vertex, "source", 1, usize::MAX),
-        transition_count(references, vertex, "target", 1, usize::MAX),
+        transition_count(references, vertex, "source", outgoing.0, outgoing.1),
+        transition_count(references, vertex, "target", incoming.0, incoming.1),
     ])
 }
 
@@ -340,10 +343,16 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "State-entry_or_exit", "connection points must have kind entryPoint or exitPoint"));
         }
         if element.conforms_to("Pseudostate") {
-            constraints.push((pseudostate_incident_transitions(references, element, "choice"),
+            constraints.push((pseudostate_incident_transitions(references, element, "fork", (1, 1), (2, usize::MAX)),
+                "UML_PSEUDOSTATE_FORK_VERTEX", "MDE_PSEUDOSTATE_FORK_VERTEX_UNVERIFIED",
+                "Pseudostate-fork_vertex", "a fork Pseudostate requires exactly one incoming and at least two outgoing Transitions"));
+            constraints.push((pseudostate_incident_transitions(references, element, "join", (2, usize::MAX), (1, 1)),
+                "UML_PSEUDOSTATE_JOIN_VERTEX", "MDE_PSEUDOSTATE_JOIN_VERTEX_UNVERIFIED",
+                "Pseudostate-join_vertex", "a join Pseudostate requires exactly one outgoing and at least two incoming Transitions"));
+            constraints.push((pseudostate_incident_transitions(references, element, "choice", (1, usize::MAX), (1, usize::MAX)),
                 "UML_PSEUDOSTATE_CHOICE_VERTEX", "MDE_PSEUDOSTATE_CHOICE_VERTEX_UNVERIFIED",
                 "Pseudostate-choice_vertex", "a choice Pseudostate requires at least one incoming and one outgoing Transition"));
-            constraints.push((pseudostate_incident_transitions(references, element, "junction"),
+            constraints.push((pseudostate_incident_transitions(references, element, "junction", (1, usize::MAX), (1, usize::MAX)),
                 "UML_PSEUDOSTATE_JUNCTION_VERTEX", "MDE_PSEUDOSTATE_JUNCTION_VERTEX_UNVERIFIED",
                 "Pseudostate-junction_vertex", "a junction Pseudostate requires at least one incoming and one outgoing Transition"));
             constraints.push((pseudostate_single_outgoing(references, element, &["initial"]),
