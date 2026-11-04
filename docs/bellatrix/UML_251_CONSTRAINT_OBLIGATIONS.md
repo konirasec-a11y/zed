@@ -119,6 +119,11 @@ FinalState::no_outgoing_transitions tem recorte publicado em
 `b6cee71d7fffb28ae138fcf5f1675af136efaa9c` (E75), com oito integrações e um
 teste unitário novos; gate completo **909/909, zero falhas e ignorados**.
 Essas duas obrigações também são adicionais aos 127 IDs do inventário inicial.
+Pseudostate::initial_vertex tem recorte publicado em
+`cf1bf8bf11bd240ed800f65f1ace65e29b7c7811` (E76), com oito testes novos e
+gate completo **917/917, zero falhas e ignorados**. A obrigação é adicional
+aos 127 IDs iniciais; o recorte verifica o limite de uma transição de saída,
+não os demais contratos de um vértice inicial.
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -234,7 +239,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E75 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E76 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -1243,6 +1248,50 @@ de execução nova. E12–E75 possuem os gates delimitados nas seções seguinte
   relações que não conformam a Transition não contam como outgoing.
   Diagnósticos: `UML_FINAL_STATE_NO_OUTGOING_TRANSITIONS` e
   `MDE_FINAL_STATE_OUTGOING_UNVERIFIED`.
+
+- **E76**: `semantics/state_machines.rs`, `pseudostate_initial_vertex`,
+  `outgoing_at_most` e `validate`; `pseudostate_initial_vertex.rs`, oito testes.
+  kind omitido usa o default normativo initial; outros valores válidos de kind
+  não ativam esta implicação. kind malformado não é tratado como antecedente
+  falso. O helper de cardinalidade é compartilhado com FinalState (limite
+  zero), mantendo Transition::source como evidência, incluindo ProtocolTransition,
+  objetos e relações, sem usar o cache outgoing. relation.from continua
+  canônico e source armazenado não pode contradizê-lo.
+  Distingue transições conhecidas de candidatas com source ausente/externo:
+  mais de uma saída conhecida refuta a regra; soma de conhecidas e possíveis
+  até um prova o limite, mesmo sem resolver todas as identidades. Se apenas
+  o limite superior excede um, permanece Unknown. Isso não converte source
+  incompleto em satisfação do contrato independente de propriedade.
+  Source local com outra identidade exclui membership mesmo com metaclasse
+  desconhecida; erros de representação, identidade duplicada e contradições
+  continuam Invalid, inclusive quando a contagem superior seria pequena.
+  Diagnósticos: `UML_PSEUDOSTATE_INITIAL_VERTEX` e
+  `MDE_PSEUDOSTATE_INITIAL_VERTEX_UNVERIFIED`.
+
+### Evidência publicada do limite de saída de Pseudostate inicial
+
+Commit inspecionado: `cf1bf8bf11bd240ed800f65f1ace65e29b7c7811`.
+Fonte normativa: `docs/bellatrix/standards/uml/20161101/UML.xmi`, ID
+`Pseudostate-initial_vertex`, sob o hash fixado acima. OCL publicado:
+`(kind = PseudostateKind::initial) implies (outgoing->size() <= 1)`.
+
+O log `/tmp/pseudostate-initial-kernel-gate.log` registra **917/917 aprovados,
+zero falhas e zero ignorados** no gate completo de `-p bellatrix_mde`,
+incluindo **8/8** no novo alvo pseudostate_initial_vertex. Casos incluem
+kind omitido/explícito, zero/uma/múltiplas saídas, ProtocolTransition,
+limites inferior/superior com source ausente ou externo, kind inválido,
+source malformado, identidade local diferente, entradas, cache outgoing,
+roundtrip JSON/Protobuf e API pública. SetProperty de choice para initial
+com duas saídas é rejeitado atomicamente; exclusão de uma transição repara
+uma importação inválida.
+
+Gate anterior à publicação, sem rerun no SHA publicado nem execução nova por
+esta matriz. O total foi conferido pela soma dos resultados dos alvos no log,
+não é percentual de cobertura. Não certifica autoria geral de transições,
+guards/effects, unicidade de vértice inicial por Region, todas as invariantes
+de Pseudostate, execução comportamental, UI, geração, interchange XMI/UMLDI
+ou conformidade UML completa. Unknown permanece quando as evidências não
+resolvem o limite; os contratos independentes de source continuam aplicáveis.
 
 ### Evidência publicada de regions e outgoing em FinalState
 
@@ -2922,7 +2971,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 ## Obrigações adicionais ao inventário estrutural inicial
 
-Estas seis linhas de StateMachines têm evidência própria. Não alteram a
+Estas sete linhas de StateMachines têm evidência própria. Não alteram a
 extração histórica das 127 invariantes diretas dos sete pacotes selecionados
 nem constituem inventário completo de StateMachines.
 
@@ -2965,6 +3014,15 @@ nem constituem inventário completo de StateMachines.
 - Deriva outgoing de source em Transition/ProtocolTransition, com relation.from
   canônico nas relações. Cache outgoing não é evidência; source externo ou não
   materializado sem testemunho de violação permanece Unknown.
+
+### `Pseudostate-initial_vertex`
+
+- Metaclass: `Pseudostate`. Estado: **P**. Evidência: E76; commit `cf1bf8bf11bd240ed800f65f1ace65e29b7c7811`.
+- OCL publicado: `(kind = PseudostateKind::initial) implies (outgoing->size() <= 1)`.
+- kind omitido usa initial. Contagem deriva de Transition::source, não do cache
+  outgoing. Mais de uma saída conhecida viola; conhecidas mais possíveis até
+  um satisfaz o limite; demais casos incompletos permanecem Unknown. Não prova
+  outros contratos do vértice inicial nem a validade de cada source.
 
 ## Plano executável e dependências
 

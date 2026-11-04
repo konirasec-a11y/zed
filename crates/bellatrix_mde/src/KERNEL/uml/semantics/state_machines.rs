@@ -304,10 +304,10 @@ fn outgoing_at_most(references: &ReferenceIndex<'_>, vertex: ElementRef<'_>, max
     require_all(checks)
 }
 
-fn pseudostate_initial_vertex(references: &ReferenceIndex<'_>, vertex: ElementRef<'_>) -> Result<bool, QueryError> {
+fn pseudostate_single_outgoing(references: &ReferenceIndex<'_>, vertex: ElementRef<'_>, kinds: &[&str]) -> Result<bool, QueryError> {
     let kind = schema::read_effective_scalar(vertex, "kind")
         .map_err(|error| QueryError::invalid(vertex.id(), error))?;
-    if kind.as_str() == Some("initial") { outgoing_at_most(references, vertex, 1) }
+    if kind.as_str().is_some_and(|kind| kinds.contains(&kind)) { outgoing_at_most(references, vertex, 1) }
     else { Ok(true) }
 }
 
@@ -325,9 +325,12 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "State-entry_or_exit", "connection points must have kind entryPoint or exitPoint"));
         }
         if element.conforms_to("Pseudostate") {
-            constraints.push((pseudostate_initial_vertex(references, element),
+            constraints.push((pseudostate_single_outgoing(references, element, &["initial"]),
                 "UML_PSEUDOSTATE_INITIAL_VERTEX", "MDE_PSEUDOSTATE_INITIAL_VERTEX_UNVERIFIED",
                 "Pseudostate-initial_vertex", "an initial Pseudostate can have at most one outgoing Transition"));
+            constraints.push((pseudostate_single_outgoing(references, element, &["deepHistory", "shallowHistory"]),
+                "UML_PSEUDOSTATE_HISTORY_VERTICES", "MDE_PSEUDOSTATE_HISTORY_VERTICES_UNVERIFIED",
+                "Pseudostate-history_vertices", "a history Pseudostate can have at most one outgoing Transition"));
         }
         if element.conforms_to("Region") {
             constraints.push((region_owned(references, element),
