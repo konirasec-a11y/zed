@@ -11,6 +11,7 @@ pub struct RightClickMenu<M: ManagedView> {
     id: ElementId,
     child_builder: Option<Box<dyn FnOnce(bool, &mut Window, &mut App) -> AnyElement + 'static>>,
     menu_builder: Option<Rc<dyn Fn(&mut Window, &mut App) -> Option<Entity<M>> + 'static>>,
+    trigger_filter: Option<Rc<dyn Fn(Point<Pixels>, &Window, &App) -> bool>>,
     anchor: Option<Anchor>,
     attach: Option<Anchor>,
 }
@@ -26,6 +27,15 @@ impl<M: ManagedView> RightClickMenu<M> {
         f: impl Fn(&mut Window, &mut App) -> Option<Entity<M>> + 'static,
     ) -> Self {
         self.menu_builder = Some(Rc::new(f));
+        self
+    }
+
+    /// Restrict the trigger to its visible shape without consuming misses.
+    pub fn trigger_filter(
+        mut self,
+        filter: impl Fn(Point<Pixels>, &Window, &App) -> bool + 'static,
+    ) -> Self {
+        self.trigger_filter = Some(Rc::new(filter));
         self
     }
 
@@ -77,6 +87,7 @@ pub fn right_click_menu<M: ManagedView>(id: impl Into<ElementId>) -> RightClickM
         id: id.into(),
         child_builder: None,
         menu_builder: None,
+        trigger_filter: None,
         anchor: None,
         attach: None,
     }
@@ -237,6 +248,7 @@ impl<M: ManagedView> Element for RightClickMenu<M> {
                     return;
                 };
 
+                let trigger_filter = this.trigger_filter.take();
                 let attach = this.attach;
                 let menu = element_state.menu.clone();
                 let position = element_state.position.clone();
@@ -247,6 +259,9 @@ impl<M: ManagedView> Element for RightClickMenu<M> {
                     if phase == DispatchPhase::Bubble
                         && event.button == MouseButton::Right
                         && hitbox_id.is_hovered(window)
+                        && trigger_filter
+                            .as_ref()
+                            .is_none_or(|filter| filter(event.position, window, cx))
                     {
                         cx.stop_propagation();
                         window.prevent_default();

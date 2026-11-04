@@ -25,6 +25,7 @@ impl Render for MdeWorkbenchItem {
         let mut title = format!("MDE · {}", self.project_id().as_str());
         let details: String;
         let mut cards = Vec::new();
+        let node_bounds = std::rc::Rc::new(std::cell::RefCell::new(Vec::<[f32; 4]>::new()));
         let mut relationship_controls = Vec::new();
         let mut incomplete_preview = false;
         match snapshot {
@@ -56,7 +57,7 @@ impl Render for MdeWorkbenchItem {
                     let views = imported_preview::ordered_views(&diagram.views);
                     for view in views {
                         if matches!(&view.geometry, Geometry::Layout { .. }) {
-                            if let Some(card) = self.render_imported_preview(view, cx) {
+                            if let Some(card) = self.render_imported_preview(view, &mut node_bounds.borrow_mut(), cx) {
                                 cards.push(card);
                             }
                             continue;
@@ -72,6 +73,7 @@ impl Render for MdeWorkbenchItem {
                                 diagram,
                                 snapshot.revision,
                                 &canvas_origin,
+                                &node_bounds,
                                 cx,
                             ) {
                                 cards.push(card);
@@ -132,7 +134,7 @@ impl Render for MdeWorkbenchItem {
                                     .map(|point| point.y)
                                     .fold(f64::NEG_INFINITY, f64::max)
                                     as f32;
-                                let padding = 24.0_f32;
+                                let padding = 24.0_f32.max(5.0 / zoom);
                                 let width = (max_x - min_x + 2.0 * padding).max(48.0) * zoom;
                                 let height = (max_y - min_y + 2.0 * padding).max(48.0) * zoom;
                                 let place = |point: bellatrix_mde::Point| {
@@ -141,6 +143,18 @@ impl Render for MdeWorkbenchItem {
                                         (point.y as f32 - min_y + padding) * zoom,
                                     )
                                 };
+                                // Imported coordinates may be finite f64 values outside GPUI's f32 range.
+                                if ![min_x, min_y, max_x, max_y, width, height,
+                                    (min_x - padding) * zoom + pan.0,
+                                    (min_y - padding) * zoom + pan.1]
+                                    .iter().all(|value| value.is_finite())
+                                    || points.iter().any(|point| {
+                                        let (x, y) = place(*point);
+                                        !x.is_finite() || !y.is_finite()
+                                    })
+                                {
+                                    continue;
+                                }
                                 if self.presentation.selected_element() == Some(subject)
                                     && self.presentation.selected_view().map_or_else(
                                         || diagram.views.iter()
@@ -216,6 +230,12 @@ impl Render for MdeWorkbenchItem {
                                 let menu_diagram = diagram.id.clone();
                                 let menu_view = view.id.clone();
                                 let menu_subject = relation.id.clone();
+                                let hit_geometry = geometry.clone();
+                                let hit_origin = canvas_origin.clone();
+                                let menu_geometry = hit_geometry.clone();
+                                let menu_origin = hit_origin.clone();
+                                let hit_nodes = node_bounds.clone();
+                                let menu_nodes = node_bounds.clone();
                                 cards.push(
                                     div()
                                         .id(format!("mde-edge-{}", view.id))
@@ -224,8 +244,10 @@ impl Render for MdeWorkbenchItem {
                                         .top(px((min_y - padding) * zoom + pan.1))
                                         .w(px(width))
                                         .h(px(height))
-                                        .cursor_pointer()
-                                        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                                        .on_mouse_down(MouseButton::Left, move |event, window, cx| {
+                                            if !relationship_hit_test(&hit_geometry, event.position, hit_origin.get(), pan, zoom, &hit_nodes.borrow()) {
+                                                return;
+                                            }
                                             if let Err(error) = edge_owner.update(cx, |item, cx| {
                                                 item.select_or_connect_edge(
                                                     edge_id.clone(),
@@ -244,6 +266,9 @@ impl Render for MdeWorkbenchItem {
                                                 view.id
                                             ))
                                             .trigger(move |_, _, _| glyph)
+                                            .trigger_filter(move |position, _, _| {
+                                                relationship_hit_test(&menu_geometry, position, menu_origin.get(), pan, zoom, &menu_nodes.borrow())
+                                            })
                                             .menu(
                                                 move |window, cx| {
                                                     Self::view_context_menu(
@@ -615,6 +640,12 @@ impl Render for MdeWorkbenchItem {
                         let resize_owner = cx.weak_entity();
                         let resize_id = view.id.clone();
                         let element_id = subject.to_owned();
+                        node_bounds.borrow_mut().push([
+                            local_x * zoom + pan.0,
+                            local_y * zoom + pan.1 - signature_top,
+                            local_width * zoom + signature_right,
+                            local_height * zoom + signature_top + signature_bottom,
+                        ]);
                         cards.push(
                             div()
                                 .id(format!("mde-view-{}", view.id))
@@ -1126,6 +1157,7 @@ impl MdeWorkbenchItem {
     fn render_imported_preview(
         &self,
         view: &bellatrix_mde::View,
+        node_bounds: &mut Vec<[f32; 4]>,
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
         if view.id.trim().is_empty() {
@@ -1157,6 +1189,7 @@ impl MdeWorkbenchItem {
         let owner = cx.weak_entity();
         let identifier = view.id.clone();
         let kind = view.presentation.kind.clone()?;
+        node_bounds.push([bounds.x, bounds.y, bounds.width, bounds.height]);
         Some(
             card.on_mouse_down(MouseButton::Left, move |_, _, cx| {
                 if let Err(error) = owner.update(cx, |item, cx| {
@@ -1170,4 +1203,151 @@ impl MdeWorkbenchItem {
             .into_any_element(),
         )
     }
+}
+
+pub(super) fn relationship_hit_test(
+    geometry: &Geometry,
+    position: gpui::Point<gpui::Pixels>,
+    origin: Option<(f64, f64)>,
+    pan: (f32, f32),
+    zoom: f32,
+    node_bounds: &[[f32; 4]],
+) -> bool {
+    let Some(origin) = origin else {
+        return false;
+    };
+    if !zoom.is_finite() || zoom <= 0.0 {
+        return false;
+    }
+    let canvas_x = f64::from(position.x) - origin.0;
+    let canvas_y = f64::from(position.y) - origin.1;
+    // Preserve paint order, but never let a crossing relationship steal a node's click.
+    if node_bounds.iter().any(|[x, y, width, height]| {
+        canvas_x >= f64::from(*x)
+            && canvas_x <= f64::from(*x + *width)
+            && canvas_y >= f64::from(*y)
+            && canvas_y <= f64::from(*y + *height)
+    }) {
+        return false;
+    }
+    let Geometry::Path { start, segments } = geometry else {
+        return false;
+    };
+    let (x, y) = canvas_model_position(
+        (f64::from(position.x), f64::from(position.y)),
+        origin,
+        pan,
+        zoom,
+    );
+    let position = bellatrix_mde::Point { x, y };
+    // Keep the clickable stroke narrow at every zoom; control points are not painted edges.
+    let tolerance = 5.0 / f64::from(zoom);
+    let flatness = 0.25 / f64::from(zoom);
+    let mut previous = *start;
+    for segment in segments {
+        let (hit, end) = match segment {
+            PathSegment::Line { to } => (
+                relationship_segment_distance(position, previous, *to) <= tolerance,
+                *to,
+            ),
+            PathSegment::Cubic {
+                control1,
+                control2,
+                to,
+            } => (
+                relationship_cubic_hit(
+                    position,
+                    [previous, *control1, *control2, *to],
+                    tolerance,
+                    flatness,
+                    0,
+                ),
+                *to,
+            ),
+        };
+        if hit {
+            return true;
+        }
+        previous = end;
+    }
+    false
+}
+
+fn relationship_segment_distance(
+    position: bellatrix_mde::Point,
+    start: bellatrix_mde::Point,
+    end: bellatrix_mde::Point,
+) -> f64 {
+    let delta_x = end.x - start.x;
+    let delta_y = end.y - start.y;
+    let length_squared = delta_x * delta_x + delta_y * delta_y;
+    let projection = if length_squared > f64::EPSILON {
+        (((position.x - start.x) * delta_x + (position.y - start.y) * delta_y) / length_squared)
+            .clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    (position.x - start.x - projection * delta_x).hypot(position.y - start.y - projection * delta_y)
+}
+
+fn relationship_cubic_hit(
+    position: bellatrix_mde::Point,
+    points: [bellatrix_mde::Point; 4],
+    tolerance: f64,
+    flatness: f64,
+    depth: u8,
+) -> bool {
+    let [start, control1, control2, end] = points;
+    let min_x = points
+        .iter()
+        .map(|point| point.x)
+        .fold(f64::INFINITY, f64::min);
+    let max_x = points
+        .iter()
+        .map(|point| point.x)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let min_y = points
+        .iter()
+        .map(|point| point.y)
+        .fold(f64::INFINITY, f64::min);
+    let max_y = points
+        .iter()
+        .map(|point| point.y)
+        .fold(f64::NEG_INFINITY, f64::max);
+    if position.x < min_x - tolerance
+        || position.x > max_x + tolerance
+        || position.y < min_y - tolerance
+        || position.y > max_y + tolerance
+    {
+        return false;
+    }
+    if depth >= 16
+        || (relationship_segment_distance(control1, start, end) <= flatness
+            && relationship_segment_distance(control2, start, end) <= flatness)
+    {
+        return relationship_segment_distance(position, start, end) <= tolerance;
+    }
+    let midpoint = |left: bellatrix_mde::Point, right: bellatrix_mde::Point| bellatrix_mde::Point {
+        x: left.x + (right.x - left.x) / 2.0,
+        y: left.y + (right.y - left.y) / 2.0,
+    };
+    let first = midpoint(start, control1);
+    let middle = midpoint(control1, control2);
+    let last = midpoint(control2, end);
+    let left = midpoint(first, middle);
+    let right = midpoint(middle, last);
+    let split = midpoint(left, right);
+    relationship_cubic_hit(
+        position,
+        [start, first, left, split],
+        tolerance,
+        flatness,
+        depth + 1,
+    ) || relationship_cubic_hit(
+        position,
+        [split, right, last, end],
+        tolerance,
+        flatness,
+        depth + 1,
+    )
 }

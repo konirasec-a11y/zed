@@ -33,6 +33,7 @@ impl MdeWorkbenchItem {
         diagram: &bellatrix_mde::Diagram,
         revision: u64,
         canvas_origin: &CanvasOrigin,
+        node_bounds: &std::rc::Rc<std::cell::RefCell<Vec<[f32; 4]>>>,
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
         let draft = view.draft.as_ref()?;
@@ -90,34 +91,37 @@ impl MdeWorkbenchItem {
                 (*x, *y, *width, *height, figure)
             }
             Geometry::Path { start, segments } => {
-                let points = std::iter::once(*start)
-                    .chain(segments.iter().map(|segment| match segment {
-                        PathSegment::Line { to } | PathSegment::Cubic { to, .. } => *to,
-                    }))
-                    .collect::<Vec<_>>();
+                let mut points = vec![*start];
+                for segment in segments {
+                    match segment {
+                        PathSegment::Line { to } => points.push(*to),
+                        PathSegment::Cubic { control1, control2, to } => points.extend([*control1, *control2, *to]),
+                    }
+                }
+                let padding = 24.0_f64.max(5.0 / f64::from(zoom));
                 let end = *points.last()?;
                 let min_x = points
                     .iter()
                     .map(|point| point.x)
                     .fold(f64::INFINITY, f64::min)
-                    - 24.0;
+                    - padding;
                 let min_y = points
                     .iter()
                     .map(|point| point.y)
                     .fold(f64::INFINITY, f64::min)
-                    - 24.0;
+                    - padding;
                 let width = points
                     .iter()
                     .map(|point| point.x)
                     .fold(f64::NEG_INFINITY, f64::max)
                     - min_x
-                    + 24.0;
+                    + padding;
                 let height = points
                     .iter()
                     .map(|point| point.y)
                     .fold(f64::NEG_INFINITY, f64::max)
                     - min_y
-                    + 24.0;
+                    + padding;
                 let place = |point: bellatrix_mde::Point| {
                     (
                         ((point.x - min_x) as f32) * zoom,
@@ -177,6 +181,7 @@ impl MdeWorkbenchItem {
             }
             _ => return None,
         };
+        let original_position = (x, y);
         match &self.gesture {
             Some(CanvasGesture::Move {
                 view_id, dx, dy, ..
@@ -192,6 +197,20 @@ impl MdeWorkbenchItem {
             }
             _ => {}
         }
+        if matches!(&view.geometry, Geometry::Rect { .. }) {
+            node_bounds.borrow_mut().push([
+                x as f32 * zoom + self.pan.0,
+                y as f32 * zoom + self.pan.1,
+                width as f32 * zoom,
+                height as f32 * zoom,
+            ]);
+        }
+        let hit_geometry = matches!(&view.geometry, Geometry::Path { .. }).then(|| view.geometry.clone());
+        let hit_nodes = node_bounds.clone();
+        let hit_pan = (
+            self.pan.0 + (x - original_position.0) as f32 * zoom,
+            self.pan.1 + (y - original_position.1) as f32 * zoom,
+        );
         let owner = cx.weak_entity();
         let click_origin = canvas_origin.clone();
         let id = view.id.clone();
@@ -240,10 +259,17 @@ impl MdeWorkbenchItem {
                 .top(px(y as f32 * zoom + self.pan.1))
                 .w(px(width as f32 * zoom))
                 .h(px(height as f32 * zoom))
-                .cursor_pointer()
+                .when(hit_geometry.is_none(), |element| element.cursor_pointer())
                 .on_mouse_down(
                     MouseButton::Left,
                     move |event: &MouseDownEvent, window, cx| {
+                        if hit_geometry.as_ref().is_some_and(|geometry| {
+                            !super::diagram_canvas::relationship_hit_test(
+                                geometry, event.position, click_origin.get(), hit_pan, zoom, &hit_nodes.borrow(),
+                            )
+                        }) {
+                            return;
+                        }
                         if let Err(error) = owner.update(cx, |item, cx| {
                             if event.click_count >= 2 && item.presentation.selected_tool().is_none() {
                                 item.begin_draft_label_edit(id.clone(), window, cx);
