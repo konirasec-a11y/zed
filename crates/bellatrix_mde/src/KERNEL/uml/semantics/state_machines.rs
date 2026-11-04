@@ -246,11 +246,14 @@ fn final_state_regions(references: &ReferenceIndex<'_>, state: ElementRef<'_>) -
     require_all(checks)
 }
 
-fn final_state_outgoing(references: &ReferenceIndex<'_>, state: ElementRef<'_>) -> Result<bool, QueryError> {
+fn outgoing_at_most(references: &ReferenceIndex<'_>, vertex: ElementRef<'_>, maximum: usize) -> Result<bool, QueryError> {
     let descriptor = schema::uml_property("Transition", "source")
-        .map_err(|error| QueryError::unsupported(state.id(), error.to_string()))?
-        .ok_or_else(|| QueryError::unsupported(state.id(), "missing Transition::source contract"))?;
+        .map_err(|error| QueryError::unsupported(vertex.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(vertex.id(), "missing Transition::source contract"))?;
     let mut checks = Vec::new();
+    let mut known = 0_usize;
+    let mut possible = 0_usize;
+    let mut unresolved = None;
     // Vertex::outgoing is derived from Transition::source. The persisted
     // outgoing cache is never evidence for either presence or absence.
     for transition in references.model().elements().filter(|element| element.conforms_to("Transition")) {
@@ -261,7 +264,8 @@ fn final_state_outgoing(references: &ReferenceIndex<'_>, state: ElementRef<'_>) 
         };
         let authored = transition.properties().get("source");
         let Some(source) = canonical.as_ref().or(authored) else {
-            checks.push(Err(QueryError::unsupported(transition.id(), "Transition source is not materialized")));
+            possible += 1;
+            unresolved.get_or_insert_with(|| QueryError::unsupported(transition.id(), "Transition source is not materialized"));
             continue;
         };
         let identity = reference_id(source).ok().flatten();
@@ -269,10 +273,14 @@ fn final_state_outgoing(references: &ReferenceIndex<'_>, state: ElementRef<'_>) 
             checks.push(match property_contracts::check_value(references, transition, descriptor, value) {
                 PropertyOutcome::Satisfied => Ok(true),
                 PropertyOutcome::Violation(message) => Err(QueryError::invalid(transition.id(), message)),
-                // A different known local source excludes this FinalState even
-                // if that source's metaclass or a redundant reference is unknown.
-                PropertyOutcome::Unverified(_) if identity.is_some() => Ok(true),
-                PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(transition.id(), message)),
+                // Complete local identities decide membership independently
+                // of unresolved metaclasses or redundant reference envelopes.
+                PropertyOutcome::Unverified(message) => {
+                    if identity.is_none() {
+                        unresolved.get_or_insert_with(|| QueryError::unsupported(transition.id(), message));
+                    }
+                    Ok(true)
+                },
             });
         }
         if let (Some(canonical), Some(authored)) = (canonical.as_ref(), authored)
@@ -282,10 +290,25 @@ fn final_state_outgoing(references: &ReferenceIndex<'_>, state: ElementRef<'_>) 
             checks.push(Err(QueryError::invalid(transition.id(), "authored source contradicts canonical relation.from")));
         }
         if let Some(source) = identity {
-            checks.push(Ok(source != state.id()));
+            if source == vertex.id() { known += 1; }
+        } else {
+            possible += 1;
         }
     }
+    // Every unresolved source contributes at most one additional Transition.
+    // A known bound violation dominates uncertainty, while an upper bound
+    // already within the limit does not need those source identities resolved.
+    checks.push(if known > maximum { Ok(false) }
+        else if known.saturating_add(possible) <= maximum { Ok(true) }
+        else { Err(unresolved.unwrap_or_else(|| QueryError::unsupported(vertex.id(), "outgoing source membership is unresolved"))) });
     require_all(checks)
+}
+
+fn pseudostate_initial_vertex(references: &ReferenceIndex<'_>, vertex: ElementRef<'_>) -> Result<bool, QueryError> {
+    let kind = schema::read_effective_scalar(vertex, "kind")
+        .map_err(|error| QueryError::invalid(vertex.id(), error))?;
+    if kind.as_str() == Some("initial") { outgoing_at_most(references, vertex, 1) }
+    else { Ok(true) }
 }
 
 pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
@@ -301,13 +324,18 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "UML_STATE_ENTRY_OR_EXIT", "MDE_STATE_ENTRY_OR_EXIT_UNVERIFIED",
                 "State-entry_or_exit", "connection points must have kind entryPoint or exitPoint"));
         }
+        if element.conforms_to("Pseudostate") {
+            constraints.push((pseudostate_initial_vertex(references, element),
+                "UML_PSEUDOSTATE_INITIAL_VERTEX", "MDE_PSEUDOSTATE_INITIAL_VERTEX_UNVERIFIED",
+                "Pseudostate-initial_vertex", "an initial Pseudostate can have at most one outgoing Transition"));
+        }
         if element.conforms_to("Region") {
             constraints.push((region_owned(references, element),
                 "UML_REGION_OWNED", "MDE_REGION_OWNED_UNVERIFIED",
                 "Region-owned", "a Region cannot have both state and stateMachine owners"));
         }
         if element.conforms_to("FinalState") {
-            constraints.push((final_state_outgoing(references, element),
+            constraints.push((outgoing_at_most(references, element, 0),
                 "UML_FINAL_STATE_NO_OUTGOING_TRANSITIONS", "MDE_FINAL_STATE_OUTGOING_UNVERIFIED",
                 "FinalState-no_outgoing_transitions", "a FinalState cannot have outgoing Transitions"));
             constraints.push((final_state_regions(references, element),

@@ -112,6 +112,13 @@ Region::owned tem recorte publicado em
 `b901416697fdc9fbe994befde77d77d312b50989` (E73), com oito testes novos e
 gate completo de `-p bellatrix_mde` **892/892, zero falhas e ignorados**.
 Exclusividade de state/stateMachine não exige owner para drafts sem owner.
+FinalState::no_regions tem recorte publicado em
+`3d489338c31886cc63f60f1f058c5e2cca1953e0` (E74), com oito testes novos e
+gate completo de `-p bellatrix_mde` **900/900, zero falhas e ignorados**.
+FinalState::no_outgoing_transitions tem recorte publicado em
+`b6cee71d7fffb28ae138fcf5f1675af136efaa9c` (E75), com oito integrações e um
+teste unitário novos; gate completo **909/909, zero falhas e ignorados**.
+Essas duas obrigações também são adicionais aos 127 IDs do inventário inicial.
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -227,7 +234,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E73 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E75 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -1205,6 +1212,72 @@ de execução nova. E12–E73 possuem os gates delimitados nas seções seguinte
   Unknown quando não há testemunho de violação ou contradição. Malformados e
   contradições conhecidas não são ocultados por Unknown. Diagnósticos:
   `UML_REGION_OWNED` e `MDE_REGION_OWNED_UNVERIFIED`.
+
+- **E74**: `semantics/state_machines.rs`, `final_state_regions` e `validate`;
+  `final_state_regions.rs`, oito testes. Confere State::region materializada,
+  Regions diretamente possuídas e o inverso Region::state. Cardinalidade
+  explicitamente não nula refuta a regra mesmo com membros externos ou de
+  metaclasse desconhecida. Um filho de metaclasse desconhecida, sem testemunho
+  de Region, permanece Unknown. Ownership canônico e inversos devem concordar;
+  coleções malformadas, referências locais inexistentes, tipos incorretos,
+  duplicatas e contradições permanecem Invalid. Um owner diferente exclui
+  membership neste FinalState mesmo com inverso externo; o contrato próprio
+  de Region continua sendo verificado separadamente. Descendentes indiretos
+  e flags armazenadas de isComposite não substituem membership direto.
+  Diagnósticos: `UML_FINAL_STATE_NO_REGIONS` e
+  `MDE_FINAL_STATE_REGIONS_UNVERIFIED`.
+
+- **E75**: `semantics/state_machines.rs`, `final_state_outgoing` e `validate`;
+  `final_state_outgoing.rs`, oito testes, mais o teste unitário
+  `final_state_transaction_gate_rejects_new_outgoing_source_and_accepts_repair`.
+  Deriva Vertex::outgoing pela identidade de Transition::source, incluindo
+  ProtocolTransition, tanto em objetos quanto em relações. Nas relações,
+  relation.from é canônico; source armazenado não pode contradizê-lo. O cache
+  outgoing não prova presença nem ausência. Source de objeto ausente ou externo
+  permanece Unknown sem testemunho independente; source local diferente
+  exclui este FinalState mesmo com metaclasse não resolvida, sem dispensar o
+  contrato de propriedade independente. Uma transição comprovadamente saindo
+  do FinalState refuta a regra apesar de vizinhos desconhecidos. Source
+  malformado, identidade duplicada, referência inexistente, tipo incorreto
+  e contradições não são ocultados por Unknown. Transições de entrada e
+  relações que não conformam a Transition não contam como outgoing.
+  Diagnósticos: `UML_FINAL_STATE_NO_OUTGOING_TRANSITIONS` e
+  `MDE_FINAL_STATE_OUTGOING_UNVERIFIED`.
+
+### Evidência publicada de regions e outgoing em FinalState
+
+Fontes normativas: `docs/bellatrix/standards/uml/20161101/UML.xmi`, IDs
+`FinalState-no_regions` e `FinalState-no_outgoing_transitions`, sob o hash
+fixado acima. Corpos publicados: `region->size() = 0` e
+`outgoing->size() = 0`, respectivamente; não substituir a segunda navegação
+por um cache persistido.
+
+Commit de no_regions inspecionado:
+`3d489338c31886cc63f60f1f058c5e2cca1953e0`. O log
+`/tmp/final-state-regions-kernel-gate.log` registra **900/900 aprovados,
+zero falhas e zero ignorados** no gate completo de `-p bellatrix_mde`,
+incluindo **8/8** no alvo final_state_regions. A evidência inclui roundtrip
+JSON/Protobuf, API pública, distinção de descendentes/flags, reparenting
+rejeitado atomicamente e reparo de importação inválida.
+
+Commit de no_outgoing_transitions inspecionado:
+`b6cee71d7fffb28ae138fcf5f1675af136efaa9c`. O log
+`/tmp/final-state-outgoing-kernel-gate.log` registra **909/909 aprovados,
+zero falhas e zero ignorados** no gate completo de `-p bellatrix_mde`,
+incluindo **8/8** no alvo final_state_outgoing e o novo teste unitário do
+validador transacional. A evidência inclui roundtrip JSON/Protobuf, API
+pública, objetos/relações, ProtocolTransition, source canônico versus
+armazenado, irrelevância do cache outgoing, reparo por exclusão e rejeição
+transacional de novo source proibido, com aceitação do reparo.
+
+Gates anteriores à publicação, sem rerun nos SHAs publicados nem execução
+nova por esta matriz. Os totais foram conferidos pela soma dos resultados dos
+alvos nos logs, não são percentuais de cobertura. Os predicados participam do
+validador compartilhado e não certificam autoria geral de region, source ou
+outgoing pelo editor, todos os contratos de FinalState/Transition,
+StateMachines integralmente, execução comportamental, UI, geração,
+interchange XMI/UMLDI ou conformidade UML completa. Referências externas e
+representações incompletas mantêm os limites Unknown descritos acima.
 
 ### Evidência publicada da exclusividade de ownership de Region
 
@@ -2849,7 +2922,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 ## Obrigações adicionais ao inventário estrutural inicial
 
-Estas quatro linhas de StateMachines têm evidência própria. Não alteram a
+Estas seis linhas de StateMachines têm evidência própria. Não alteram a
 extração histórica das 127 invariantes diretas dos sete pacotes selecionados
 nem constituem inventário completo de StateMachines.
 
@@ -2876,6 +2949,22 @@ nem constituem inventário completo de StateMachines.
 - Metaclass: `Region`. Estado: **P**. Evidência: E73; commit `b901416697fdc9fbe994befde77d77d312b50989`.
 - OCL publicado: `(stateMachine <> null implies state = null) and (state <> null implies stateMachine = null)`.
 - Exclusividade não exige owner: drafts sem owner permanecem permitidos. Evidência externa/incompleta ou owner de metaclasse desconhecida permanece Unknown sem testemunho independente de violação; inversos devem concordar com ownership canônico.
+
+### `FinalState-no_regions`
+
+- Metaclass: `FinalState`. Estado: **P**. Evidência: E74; commit `3d489338c31886cc63f60f1f058c5e2cca1953e0`.
+- OCL publicado: `region->size() = 0`.
+- Regions diretas, coleção materializada e inverso state são verificados;
+  cardinalidade não nula é decisiva mesmo com membro externo. Membership
+  incompleto sem testemunho permanece Unknown; isComposite não substitui region.
+
+### `FinalState-no_outgoing_transitions`
+
+- Metaclass: `FinalState`. Estado: **P**. Evidência: E75; commit `b6cee71d7fffb28ae138fcf5f1675af136efaa9c`.
+- OCL publicado: `outgoing->size() = 0`.
+- Deriva outgoing de source em Transition/ProtocolTransition, com relation.from
+  canônico nas relações. Cache outgoing não é evidência; source externo ou não
+  materializado sem testemunho de violação permanece Unknown.
 
 ## Plano executável e dependências
 
