@@ -30,6 +30,8 @@ pub enum ProjectError {
         "destination belongs to another bellatrix-project or is not a Bellatrix bellatrix-project: {0}"
     )]
     PathConflict(String),
+    #[error("destination already exists; choose a new filename: {0}")]
+    DestinationExists(String),
     #[error("bellatrix-project session was closed or replaced: {0}")]
     SessionChanged(String),
     #[error("invalid bellatrix-project file: {0}")]

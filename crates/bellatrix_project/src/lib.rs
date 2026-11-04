@@ -10,4 +10,4 @@ pub use document::{ProjectDocument, ProjectId};
 pub use error::ProjectError;
 pub use events::*;
 pub use plugin::ProjectPlugin;
-pub use store::{ProjectSaveTicket, ProjectService};
+pub use store::{ProjectPublishedFile, ProjectSaveTicket, ProjectService};

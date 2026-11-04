@@ -105,6 +105,8 @@ pub struct MdeUiBridge {
     journal: Arc<crate::ExecutionJournal>,
     _listeners: Vec<ListenerRegistration>,
     task: tokio::task::JoinHandle<()>,
+    mdj_session: Option<crate::MdjSession>,
+    mdj_shutdown: Option<watch::Sender<bool>>,
 }
 impl MdeUiBridge {
     pub fn start(ctx: &Context, project_id: ProjectId) -> Result<Self, ListenerRegistrationError> {
@@ -278,7 +280,12 @@ impl MdeUiBridge {
                     }
                     MdeUiCommand::CreateExplorerDiagram(request) => describe(
                         "Diagram created",
-                        cordis.query::<crate::ModelingCreateExplorerDiagram>(Routing::Unscoped, request).await,
+                        cordis
+                            .query::<crate::ModelingCreateExplorerDiagram>(
+                                Routing::Unscoped,
+                                request,
+                            )
+                            .await,
                     ),
                     MdeUiCommand::CreateDiagram(request) => describe(
                         "Diagram created",
@@ -306,7 +313,9 @@ impl MdeUiBridge {
                     ),
                     MdeUiCommand::CreateModelElement(request) => describe(
                         "Model element created",
-                        cordis.query::<crate::ModelingCreateModelElement>(Routing::Unscoped, request).await,
+                        cordis
+                            .query::<crate::ModelingCreateModelElement>(Routing::Unscoped, request)
+                            .await,
                     ),
                     MdeUiCommand::CreateElement(request) => describe(
                         "Element created",
@@ -458,11 +467,62 @@ impl MdeUiBridge {
             journal,
             _listeners: vec![listener, save_listener, trace_listener],
             task,
+            mdj_session: None,
+            mdj_shutdown: None,
         })
     }
+    /// Start a restricted MDJ session. Its snapshot advances only from an acknowledged
+    /// transactional MDJ edit, never from a project-id lookup or a generic event.
+    pub fn start_mdj(
+        ctx: &Context,
+        document: Arc<bellatrix_project::ProjectDocument>,
+    ) -> Result<Self, ListenerRegistrationError> {
+        let project_id = document.id().clone();
+        // Keep the native accessor type stable, but make raw MDJ sends fail closed.
+        // All accepted MDJ submissions must carry a pending guard via MdjSession.
+        let (command_tx, command_rx) = mpsc::channel(1);
+        drop(command_rx);
+        let (revision_tx, changes) = watch::channel(document.revision());
+        let (feedback_tx, feedback) = watch::channel(String::new());
+        let (validation_tx, validations) = watch::channel(None);
+        // Generic saved events carry no session identity and must not acknowledge MDJ I/O.
+        let (_, saves) = watch::channel(None);
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+        let (submission_tx, submission_rx) = mpsc::channel(64);
+        let session = crate::MdjSession::new(document, submission_tx, revision_tx.clone());
+        let task = tokio::spawn(crate::mdj_ui_bridge::run(
+            ctx.clone(),
+            session.clone(),
+            submission_rx,
+            shutdown_rx,
+            revision_tx,
+            feedback_tx,
+            validation_tx,
+        ));
+        Ok(Self {
+            project_id,
+            commands: command_tx,
+            changes,
+            feedback,
+            validations,
+            saves,
+            journal: Arc::new(crate::ExecutionJournal::default()),
+            _listeners: Vec::new(),
+            task,
+            mdj_session: Some(session),
+            mdj_shutdown: Some(shutdown_tx),
+        })
+    }
+
+    /// Retain this handle across bridge shutdown; await `wait_closed` before cleanup.
+    pub fn mdj_session(&self) -> Option<crate::MdjSession> {
+        self.mdj_session.clone()
+    }
+
     pub fn project_id(&self) -> &ProjectId {
         &self.project_id
     }
+    /// Native commands only. MDJ bridges return a closed sender; use MdjSession::submit.
     pub fn sender(&self) -> mpsc::Sender<MdeUiCommand> {
         self.commands.clone()
     }
@@ -487,7 +547,12 @@ impl MdeUiBridge {
 }
 impl Drop for MdeUiBridge {
     fn drop(&mut self) {
-        self.task.abort();
+        if let Some(shutdown) = &self.mdj_shutdown {
+            // Do not cancel an edit between its commit and delivery of the new Arc.
+            shutdown.send_replace(true);
+        } else {
+            self.task.abort();
+        }
         for listener in self._listeners.drain(..) {
             listener.remove();
         }

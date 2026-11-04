@@ -62,6 +62,8 @@ pub use views::{
     ModelingPlaceElementView, ModelingPlaceElementViewRequested, ModelingRemoveView,
     ModelingRemoveViewRequested,
 };
+mod mdj_ui_bridge;
+pub use mdj_ui_bridge::MdjSession;
 mod ui_bridge;
 use bellatrix_mde::Scope;
 use cordis::event::{ListenerRegistrationError, observer_sync};

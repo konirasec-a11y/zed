@@ -1,6 +1,6 @@
 //! A typed, lifecycle-owned source for Zed Items and Panels.
 use crate::workbench_ui::{MdeSnapshot, from_document};
-use bellatrix_mde_cordis::{MdeUiBridge, MdeUiCommand};
+use bellatrix_mde_cordis::{MdeUiBridge, MdeUiCommand, MdjSession};
 use bellatrix_project::{ProjectDocument, ProjectId, ProjectService};
 use std::sync::{
     Arc,
@@ -25,6 +25,8 @@ pub struct MdeUiSource {
     >,
     pub saves: watch::Receiver<Option<u64>>,
     pub journal: Arc<bellatrix_mde_cordis::ExecutionJournal>,
+    pub(crate) mdj_session: Option<Arc<MdjSession>>,
+    native_blocked: Arc<AtomicBool>,
     read_only_snapshot: Option<Arc<MdeSnapshot>>,
     read_only_document: Option<Arc<ProjectDocument>>,
     presentation_suspended: Arc<AtomicBool>,
@@ -42,6 +44,8 @@ impl MdeUiSource {
             validations: bridge.validations(),
             saves: bridge.saves(),
             journal: bridge.execution_journal(),
+            mdj_session: bridge.mdj_session().map(Arc::new),
+            native_blocked: Arc::new(AtomicBool::new(false)),
             read_only_snapshot: None,
             read_only_document: None,
             presentation_suspended: Arc::new(AtomicBool::new(false)),
@@ -69,13 +73,30 @@ impl MdeUiSource {
             validations,
             saves,
             journal,
+            mdj_session: None,
+            native_blocked: Arc::new(AtomicBool::new(false)),
             read_only_snapshot: Some(Arc::new(snapshot)),
             read_only_document: Some(document),
             presentation_suspended: Arc::new(AtomicBool::new(false)),
         }
     }
 
+    pub(crate) fn block_native_edits(&self, blocked: bool) {
+        self.native_blocked.store(blocked, Ordering::Release);
+    }
+
+    pub fn is_mdj(&self) -> bool {
+        self.mdj_session.is_some()
+    }
+
     pub fn snapshot_is_current(&self) -> bool {
+        if let Some(session) = &self.mdj_session {
+            return session.snapshot().is_ok_and(|expected| {
+                self.projects
+                    .snapshot(&self.project_id)
+                    .is_ok_and(|current| Arc::ptr_eq(&expected, &current))
+            });
+        }
         self.read_only_document.as_ref().is_none_or(|expected| {
             self.projects
                 .snapshot(&self.project_id)
@@ -84,7 +105,10 @@ impl MdeUiSource {
     }
 
     pub fn is_read_only(&self) -> bool {
-        self.read_only_snapshot.is_some() || self.is_presentation_suspended()
+        self.read_only_snapshot.is_some()
+            || self.is_presentation_suspended()
+            || self.native_blocked.load(Ordering::Acquire)
+            || !self.snapshot_is_current()
     }
 
     pub(crate) fn for_workspace(&self) -> Self {
@@ -108,10 +132,13 @@ impl MdeUiSource {
         if let Some(snapshot) = &self.read_only_snapshot {
             return Ok((**snapshot).clone());
         }
-        let document = self
-            .projects
-            .snapshot(&self.project_id)
-            .map_err(|error| error.to_string())?;
+        let document = if let Some(session) = &self.mdj_session {
+            session.snapshot()?
+        } else {
+            self.projects
+                .snapshot(&self.project_id)
+                .map_err(|error| error.to_string())?
+        };
         from_document(&document)
     }
 
@@ -207,6 +234,21 @@ impl MdeUiSource {
                 bellatrix_mde::TraceOutcome::Invalid,
             );
             return Err("Read-only preview: edit the source in the native editor, then close and reopen the preview".into());
+        }
+        if let Some(session) = &self.mdj_session {
+            let identity = identity.map(str::to_owned);
+            let result = session.submit(command);
+            self.journal.record_interaction(
+                revision,
+                action,
+                identity.as_deref(),
+                if result.is_ok() {
+                    bellatrix_mde::TraceOutcome::Success
+                } else {
+                    bellatrix_mde::TraceOutcome::Error
+                },
+            );
+            return result;
         }
         let permit = match self.commands.try_reserve() {
             Ok(permit) => permit,

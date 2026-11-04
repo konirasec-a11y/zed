@@ -35,6 +35,25 @@ impl ProjectSaveTicket {
     }
 }
 
+/// Created only after the complete reserved file was published. A later model
+/// change can still make acknowledgement fail; retain the published path then.
+#[derive(Clone, Debug)]
+pub struct ProjectPublishedFile {
+    ticket: ProjectSaveTicket,
+    cleanup_warning: Option<String>,
+}
+
+impl ProjectPublishedFile {
+    pub fn path(&self) -> &Path { self.ticket.path() }
+    pub fn document(&self) -> &Arc<ProjectDocument> { self.ticket.document() }
+    pub fn cleanup_warning(&self) -> Option<&str> { self.cleanup_warning.as_deref() }
+    pub fn acknowledge(&self) -> crate::ProjectAcknowledgeExternalSaveRequested {
+        crate::ProjectAcknowledgeExternalSaveRequested {
+            ticket: self.ticket.clone(), written_bytes: Arc::clone(&self.ticket.bytes),
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct ProjectService {
     projects: RwLock<BTreeMap<ProjectId, OpenProject>>,
@@ -224,6 +243,27 @@ impl ProjectService {
         }
         current.saved_revision = Some(ticket.document.revision());
         Ok(ticket.document.revision())
+    }
+
+    pub(crate) fn publish_new_file(&self, ticket: ProjectSaveTicket) -> Result<ProjectPublishedFile, ProjectError> {
+        let session = Arc::clone(&ticket.session);
+        let _guard = session.try_lock().map_err(|_| ProjectError::SaveInProgress)?;
+        {
+            let projects = self.projects.read().map_err(|_| ProjectError::Io(std::io::Error::other("project state lock poisoned")))?;
+            let id = ticket.document.id();
+            let current = projects.get(id).ok_or_else(|| ProjectError::NotOpen(id.as_str().into()))?;
+            if !Arc::ptr_eq(&current.save_lock, &ticket.session) {
+                return Err(ProjectError::SessionChanged(id.as_str().into()));
+            }
+            if !current.external_save.upgrade().is_some_and(|reservation| Arc::ptr_eq(&reservation, &ticket.reservation)) {
+                return Err(ProjectError::InvalidSaveTicket);
+            }
+            if !Arc::ptr_eq(&current.document, &ticket.document) {
+                return Err(ProjectError::Conflict { expected: ticket.document.revision(), current: current.document.revision() });
+            }
+        }
+        let cleanup_warning = crate::file::publish_new(ticket.path(), ticket.bytes())?;
+        Ok(ProjectPublishedFile { ticket, cleanup_warning })
     }
 
     pub(crate) fn replace(

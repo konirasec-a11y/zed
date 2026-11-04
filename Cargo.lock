@@ -2229,6 +2229,7 @@ dependencies = [
 name = "bellatrix_mde_workbench"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bellatrix_design_system",
  "bellatrix_mde",
  "bellatrix_mde_cordis",

@@ -17,6 +17,15 @@ impl Event for ModelingApplyMdjEdit {
     type Output = Result<u64, String>;
 }
 
+// A revision alone cannot identify a reopened session. The native bridge needs
+// the exact committed Arc without looking up an identity that may have changed.
+pub(crate) struct ModelingApplyMdjEditSnapshot;
+impl Event for ModelingApplyMdjEditSnapshot {
+    const NAME: &'static str = "bellatrix.mde.apply-mdj-edit-snapshot.v1";
+    type Args = ModelingApplyMdjEditRequested;
+    type Output = Result<Arc<ProjectDocument>, String>;
+}
+
 #[derive(Clone)]
 pub struct ModelingExportMdjRequested {
     pub document: Arc<ProjectDocument>,
@@ -110,6 +119,26 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
         .on::<ModelingApplyMdjEdit, _>(responder(
             move |context: Context, request: ModelingApplyMdjEditRequested| {
                 let projects = Arc::clone(&edits);
+                async move {
+                    Ok::<_, Infallible>(Some(
+                        crate::mutation::execute_mdj(
+                            &context,
+                            &projects,
+                            request.document,
+                            request.command,
+                        )
+                        .await
+                        .map(|document| document.revision()),
+                    ))
+                }
+            },
+        ))
+        .map_err(|error| io::Error::other(error.to_string()))?;
+    let snapshots = Arc::clone(&projects);
+    let _snapshot_edit = context
+        .on::<ModelingApplyMdjEditSnapshot, _>(responder(
+            move |context: Context, request: ModelingApplyMdjEditRequested| {
+                let projects = Arc::clone(&snapshots);
                 async move {
                     Ok::<_, Infallible>(Some(
                         crate::mutation::execute_mdj(

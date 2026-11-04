@@ -31,11 +31,45 @@ Setting `BELLATRIX_PROJECT_FILE` or `BELLATRIX_MODEL_FILE` before launching expl
 
 The adjacent **Open project** dropdown offers **Open MDE project (read-only preview)**. It uses the native file dialog, Project/worktree and shared text Buffer, validates the selected Bellatrix document, and renders its captured model through the existing Workbench. The preview has its own diagram chooser and pure validation control; selection and pan/zoom remain available. It does not enable model editing or native MDE save. Changes to the source text, file identity, dirty/conflict state or imported semantic snapshot mark the preview stale without overwriting source text. Close and reopen after resolving source changes. A document ID already owned by a configured/demo source is rejected explicitly, without substituting the fixture or cloning its ID.
 
-The native Explorer, Inspector, diagram list and diagnostics follow the active MDE document. Preview panels show that captured model and canonical read-only properties/styles, without edit controls. Switching back restores the configured Workbench's selection and unsent property/style drafts. Ordinary Editor tabs clear the MDE panel context and block stale editing callbacks. Panel bindings are weak and do not keep a closed preview session alive. The primary **MDE** button intentionally returns to the configured/demo Workbench. Native editable persistence and session restoration remain unfinished.
+The native Explorer, Inspector, diagram list and diagnostics follow the active MDE document. Preview panels show that captured model and canonical read-only properties/styles, without edit controls. Switching back restores the configured Workbench's selection and unsent property/style drafts. Ordinary Editor tabs clear the MDE panel context and block stale editing callbacks. Panel bindings are weak and do not keep a closed preview session alive. The primary **MDE** button intentionally returns to the configured/demo Workbench. General native in-place persistence and session restoration remain unfinished; the restricted MDJ copy flow is described below.
 
 The bridge relays typed Cordis commands and observes model revisions. The interim host still supplies one configured model or demo fixture; per-document `ProjectPath`/Buffer integration, native save acknowledgement and `SerializableItem` restoration remain incomplete. The visible-entry recovery does not claim those later integration gates passed.
 
 Implemented operation paths include Class/Interface creation, rename, view move/resize, project save and a drag-and-drop Toolbox. These use the MDE graph validation and versioned `bellatrix_project` service, rather than writing model data in the GUI.
+
+## Limited native MDJ editing and copy export
+
+The same open dialog admits a StarUML file for restricted editing only when the
+shared Buffer is clean and writable and raw UTF-8 disk bytes match its normalized
+text. Provenance uses those raw bytes (including CRLF), not reconstructed Buffer
+text. If that proof is unavailable, the existing read-only preview remains.
+Bellatrix JSON previews remain read-only.
+
+MDJ edits use the session's last confirmed snapshot, never a fresh project-ID
+lookup. Supported commands are names, labels, mapped properties and top-level
+styles; unsupported gestures and commands do not mutate the imported model.
+Native MDJ validation is not enabled: its control is disabled rather than
+dispatching a project-ID-only validation against another possible session.
+Inherited/composite styles and rendering remain partial. This is not full StarUML
+parity or native in-place persistence.
+
+Explicit Save opens a new-name copy dialog; Save As and autosave cannot open that
+flow. An unchanged document is a no-op. Export, reservation, atomic new-file
+publication and exact acknowledgement must complete before reporting a saved
+copy. Existing files and symlinks are never replaced. Source bytes and Buffer
+state are checked around I/O. The destination is compared with dirty text Buffers using canonical parent
+paths, including nonexistent filenames; unrelated dirty Buffers are allowed. No source Buffer is edited by saving.
+
+After confirmed publication, the tab is frozen and shows the copy's path; it no
+longer reports the original as its active project path. Close is clean only while
+the saved snapshot and source state still match and no command is pending. Reopen
+the copy to continue. Publication/acknowledgement conflicts retain dirty state and
+an explicit recovery message. A published copy is reported even if acknowledgement
+fails. The tab is not silently rebound to another Buffer. Cleanup first drains the
+bridge and waits for any in-flight copy save, then closes only its last confirmed
+snapshot. Explicit discard closes the projected session without modifying the
+original Buffer; the ended tab must be closed and the source reopened to resume.
+A save completing after discard cannot reactivate the tab.
 
 ## UI conventions
 

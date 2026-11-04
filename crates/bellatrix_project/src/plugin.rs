@@ -280,6 +280,18 @@ fn register_external_storage(
             }
         },
     )).map_err(|error| io::Error::other(error.to_string()))?;
+    let publish_service = Arc::clone(service);
+    let _listener = ctx.on::<ProjectPublishNewFile, _>(responder(
+        move |_, args: ProjectPublishNewFileRequested| {
+            let service = Arc::clone(&publish_service);
+            async move {
+                let result = tokio::task::spawn_blocking(move || service.publish_new_file(args.ticket))
+                    .await.map_err(|error| ProjectError::Io(io::Error::other(error.to_string())))
+                    .and_then(|result| result);
+                Ok::<_, Infallible>(Some(result))
+            }
+        },
+    )).map_err(|error| io::Error::other(error.to_string()))?;
     let service = Arc::clone(service);
     let _listener = ctx
         .on::<ProjectAcknowledgeExternalSave, _>(responder(

@@ -118,9 +118,10 @@ rejected at export instead of supplying defaults. Residue conflicts are errors.
 After an edit, export reimports its actual output and compares the entire
 authored contract before returning bytes. Unedited replay retains original bytes.
 
-This is an adapter/contract capability, not editable StarUML UI parity.
-The workbench still opens MDJ as a read-only preview and its imported renderer
-does not yet consume all typed style fields. `parentStyle` and computed appearance
+This is an adapter/contract capability, not StarUML UI parity. The workbench
+enables a restricted MDJ editing session only for verified clean UTF-8 source
+bytes matching its native Buffer; other imports remain read-only. Its imported
+renderer does not yet consume all typed style fields. `parentStyle` and computed appearance
 remain unresolved source behavior. `SetViewStyle` reaches top-level Views only;
 nested style is representable in the contract, without a matching authoring
 command yet. Generic opacity, custom stroke width/dashes and other unmapped style
@@ -143,17 +144,33 @@ not restricted merely because a model carries MDJ provenance.
 
 `ModelingExportMdj` returns verified bytes associated with that exact snapshot.
 `ProjectPrepareEncodedSave` reserves an externally encoded write for the snapshot;
-it does not write a file or mark a document clean. The adapter owns encoding,
-destination safety and actual I/O. `ProjectAcknowledgeExternalSave` clears dirty
+it does not write a file or mark a document clean. The adapter owns encoding.
+`ProjectPublishNewFile` publishes complete reserved bytes at an absent destination
+and returns a receipt without marking the document saved. `ProjectAcknowledgeExternalSave` clears dirty
 state only for matching written bytes and the matching session/revision. Additional
 platform engine sections are refused by MDJ interchange rather than omitted.
 
-These APIs do not enable native editable MDJ tabs by themselves. The existing
-preview remains read-only until its command routing, native dirty/close lifecycle
-and safe file writer are connected. The Cordis BDD specification is
-`bellatrix_mde_cordis/tests/features/mdj_edit_save_lifecycle.feature`, with real
-file save/reopen, refused edits, stale sessions, cancelled reservations and exact
-save receipts in its associated Rust flow harness.
+The native MDJ bridge routes enabled edits only through this verified boundary.
+Its session retains the exact confirmed snapshot, counts queued and in-flight
+commands as pending, and completes the active transaction before shutdown.
+Generic native saves and validation dispatch are unavailable on that bridge.
+Explicit native Save creates a new `.mdj` copy, then freezes the saved tab; reopen
+that copy to continue. It does not replace the original source or claim general
+in-place persistence. See `bellatrix_mde_workbench/README.md` for native lifecycle
+gates and remaining limitations.
+
+The new-file writer synchronizes staging contents and uses a same-directory hard
+link to publish atomically only if no destination entry exists. Filesystems that
+cannot create that link fail without an overwrite fallback. The directory is not
+synced, so power-loss durability of the new directory entry is not guaranteed.
+Failure to remove the staging link after publication is returned as a warning,
+not reported as an unwritten file.
+
+The existing Cordis BDD specification remains
+`bellatrix_mde_cordis/tests/features/mdj_edit_save_lifecycle.feature`. Its published
+integration harness covers file save/reopen, refused edits, stale sessions,
+cancelled reservations and exact receipts. This native copy integration has only
+been reviewed statically; it does not establish native GPUI interaction parity.
 
 ## Geometry boundary and remaining coupling
 

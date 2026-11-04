@@ -1,4 +1,4 @@
-use crate::{ProjectDocument, ProjectError, ProjectId, ProjectSaveTicket};
+use crate::{ProjectDocument, ProjectError, ProjectId, ProjectPublishedFile, ProjectSaveTicket};
 use cordis::Event;
 use serde_json::Value;
 use std::{path::PathBuf, sync::Arc};
@@ -179,6 +179,19 @@ impl Event for ProjectPrepareEncodedSave {
     const NAME: &'static str = "bellatrix.bellatrix-project.prepare-encoded-save.v1";
     type Args = ProjectPrepareEncodedSaveRequested;
     type Output = Result<ProjectSaveTicket, ProjectError>;
+}
+
+/// Publish reserved bytes under an absent filename. Existing files, directories
+/// and symlinks are never replaced. Publication itself does not clear dirty state.
+#[derive(Clone)]
+pub struct ProjectPublishNewFileRequested {
+    pub ticket: ProjectSaveTicket,
+}
+pub struct ProjectPublishNewFile;
+impl Event for ProjectPublishNewFile {
+    const NAME: &'static str = "bellatrix.bellatrix-project.publish-new-file.v1";
+    type Args = ProjectPublishNewFileRequested;
+    type Output = Result<ProjectPublishedFile, ProjectError>;
 }
 
 /// Submit only after the adapter has completed its native write successfully.

@@ -373,7 +373,13 @@ impl MdeWorkbenchItem {
         self.source.snapshot().ok().is_none_or(|snapshot| {
             snapshot.section.diagrams.iter()
                 .find(|diagram| Some(diagram.id.as_str()) == self.presentation.active_diagram())
-                .is_none_or(|diagram| !selection::supports_view_editing(diagram, view_id))
+                .is_none_or(|diagram| {
+                    if self.source.is_mdj() {
+                        !diagram.views.iter().any(|view| view.id == view_id && view.presentation.source.is_some())
+                    } else {
+                        !selection::supports_view_editing(diagram, view_id)
+                    }
+                })
         })
     }
 
@@ -799,7 +805,7 @@ impl MdeWorkbenchItem {
             return;
         }
         self.select_view(subject, view_id.clone(), cx);
-        if self.source.is_read_only() {
+        if self.source.is_read_only() || self.source.is_mdj() {
             return;
         }
         self.gesture = Some(CanvasGesture::Move {
@@ -820,7 +826,7 @@ impl MdeWorkbenchItem {
         position: Point<Pixels>,
         cx: &mut Context<Self>,
     ) {
-        if self.source.is_read_only() {
+        if self.source.is_read_only() || self.source.is_mdj() {
             return;
         }
         self.gesture = Some(CanvasGesture::Resize {
@@ -836,7 +842,7 @@ impl MdeWorkbenchItem {
         cx.notify();
     }
     fn update_gesture(&mut self, event: &MouseMoveEvent, cx: &mut Context<Self>) {
-        if self.source.is_read_only() {
+        if self.source.is_read_only() || self.source.is_mdj() {
             return;
         }
         if event.pressed_button != Some(MouseButton::Left) || !event.dragging() {
@@ -870,7 +876,7 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         }
-        if self.source.is_read_only() {
+        if self.source.is_read_only() || self.source.is_mdj() {
             self.source.record_interaction("canvas.gesture.read_only", Some(view_id), bellatrix_mde::TraceOutcome::Invalid);
             cx.notify();
             return;

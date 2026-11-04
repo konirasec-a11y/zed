@@ -17,7 +17,8 @@ pub(crate) async fn execute(
     expected_revision: u64,
     command: Command,
 ) -> Result<u64, String> {
-    execute_with_interchange(context, projects, project_id, expected_revision, command, None).await
+    execute_with_interchange(context, projects, project_id, expected_revision, command, None)
+        .await.map(|document| document.revision())
 }
 
 pub(crate) async fn execute_mdj(
@@ -25,7 +26,7 @@ pub(crate) async fn execute_mdj(
     projects: &ProjectService,
     document: Arc<ProjectDocument>,
     command: Command,
-) -> Result<u64, String> {
+) -> Result<Arc<ProjectDocument>, String> {
     execute_with_interchange(context, projects, document.id().clone(), document.revision(), command, Some(document)).await
 }
 
@@ -36,7 +37,7 @@ async fn execute_with_interchange(
     expected_revision: u64,
     command: Command,
     expected_snapshot: Option<Arc<ProjectDocument>>,
-) -> Result<u64, String> {
+) -> Result<Arc<ProjectDocument>, String> {
     let name = command_name(&command);
     let run_id = format!("command-{}-{}", std::process::id(), NEXT_MUTATION_RUN.fetch_add(1, Ordering::Relaxed));
     let mut trace = ExecutionTrace::new(run_id, Some(expected_revision.to_string()), 1000);
@@ -53,7 +54,7 @@ async fn execute_with_interchange(
 async fn execute_inner(
     context: &Context, projects: &ProjectService, project_id: ProjectId,
     expected_revision: u64, command: Command, expected_snapshot: Option<Arc<ProjectDocument>>, trace: &mut ExecutionTrace,
-) -> Result<u64, String> {
+) -> Result<Arc<ProjectDocument>, String> {
     let document = projects
         .snapshot(&project_id)
         .map_err(|error| error.to_string())?;
@@ -105,7 +106,7 @@ async fn execute_inner(
         .await
     }.map_err(|error| error.to_string())?;
     match replaced {
-        QueryOutcome::Answer(Ok(document)) => Ok(document.revision()),
+        QueryOutcome::Answer(Ok(document)) => Ok(document),
         QueryOutcome::Answer(Err(error)) => Err(error.to_string()),
         QueryOutcome::Miss => Err("ProjectService unavailable".into()),
     }
