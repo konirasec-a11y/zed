@@ -1,9 +1,10 @@
 use bellatrix_mde::{
-    MODELING_NAMESPACE, ModelingSection, Project, Style, commands::Command, mdj_conversion,
+    MODELING_NAMESPACE, ModelingSection, Project, Style, commands::Command,
 };
 use bellatrix_mde_cordis::{
-    MdePlugin, ModelingApplyMdjEdit, ModelingApplyMdjEditRequested, ModelingExportMdj,
-    ModelingExportMdjRequested, with_model,
+    MdePlugin, ModelingApplyMdjEdit, ModelingApplyMdjEditRequested, ModelingDocumentFormat,
+    ModelingExportMdj, ModelingExportMdjRequested, ModelingPrepareDocument,
+    ModelingPrepareDocumentRequested,
 };
 use bellatrix_project::*;
 use cordis::{
@@ -74,13 +75,19 @@ async fn start() -> FlowResult<(Context, Arc<ProjectService>, FiberHandle, Fiber
     Ok((context, service, provider, plugin))
 }
 
-fn document() -> FlowResult<ProjectDocument> {
-    let model = mdj_conversion::import(SOURCE)?.project;
-    Ok(with_model(
-        ProjectDocument::new(ProjectId::new(model.id.clone())?, model.name.clone())?,
-        &model,
-    )
-    .map_err(std::io::Error::other)?)
+async fn document(context: &Context, bytes: &[u8]) -> FlowResult<ProjectDocument> {
+    Ok(answer(
+        context
+            .query::<ModelingPrepareDocument>(
+                Routing::Unscoped,
+                ModelingPrepareDocumentRequested {
+                    bytes: bytes.to_vec(),
+                    format: ModelingDocumentFormat::StarUml,
+                },
+            )
+            .await?,
+    )?
+    .document)
 }
 
 fn model(document: &ProjectDocument) -> FlowResult<Project> {
@@ -139,6 +146,25 @@ async fn export(
     )
 }
 
+async fn reexport(bytes: &[u8]) -> FlowResult<Vec<u8>> {
+    let (context, _service, provider, plugin) = start().await?;
+    let reopened = answer(
+        context
+            .query::<ProjectImport>(
+                Routing::Unscoped,
+                ProjectImportRequested {
+                    document: document(&context, bytes).await?,
+                    is_saved: true,
+                },
+            )
+            .await?,
+    )?;
+    let exported = export(&context, &reopened).await?.bytes().to_vec();
+    plugin.dispose().await?;
+    provider.dispose().await?;
+    Ok(exported)
+}
+
 #[tokio::test]
 async fn mdj_edit_commit_and_external_save_acknowledgement_follow_the_actual_file() -> FlowResult<()>
 {
@@ -154,7 +180,7 @@ async fn mdj_edit_commit_and_external_save_acknowledgement_follow_the_actual_fil
             .query::<ProjectImport>(
                 Routing::Unscoped,
                 ProjectImportRequested {
-                    document: document()?,
+                    document: document(&context, SOURCE).await?,
                     is_saved: true,
                 },
             )
@@ -204,13 +230,7 @@ async fn mdj_edit_commit_and_external_save_acknowledgement_follow_the_actual_fil
     let exported = export(&context, &edited).await?;
     assert!(exported.matches_snapshot(&edited));
     assert_eq!(
-        style(
-            &with_model(
-                ProjectDocument::new(id.clone(), edited.name())?,
-                &mdj_conversion::import(exported.bytes())?.project
-            )
-            .map_err(std::io::Error::other)?
-        )?,
+        style(&document(&context, exported.bytes()).await?)?,
         style(&edited)?
     );
     let destination = saved.0.join("edited.mdj");
@@ -246,7 +266,7 @@ async fn mdj_edit_commit_and_external_save_acknowledgement_follow_the_actual_fil
     fs::write(&destination, ticket.bytes())?;
     let reopened = fs::read(&destination)?;
     assert_eq!(
-        mdj_conversion::export(&mdj_conversion::import(&reopened)?.project)?,
+        reexport(&reopened).await?,
         reopened
     );
     assert_eq!(
@@ -302,7 +322,7 @@ async fn mdj_save_preserves_newer_edits_and_rejects_closed_session_receipts() ->
     ));
     let saved = SavedFlow::new("sessions")?;
     let (context, service, provider, plugin) = start().await?;
-    let original = document()?;
+    let original = document(&context, SOURCE).await?;
     let opened = answer(
         context
             .query::<ProjectImport>(
@@ -417,7 +437,9 @@ async fn mdj_interchange_rejects_extra_sections_without_restricting_native_docum
     );
     let saved = SavedFlow::new("native-sections")?;
     let (context, service, provider, plugin) = start().await?;
-    let document = document()?.with_section("example.extra", json!({"future": [null, true]}))?;
+    let document = document(&context, SOURCE)
+        .await?
+        .with_section("example.extra", json!({"future": [null, true]}))?;
     let opened = answer(
         context
             .query::<ProjectImport>(

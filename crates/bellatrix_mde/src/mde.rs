@@ -5,9 +5,9 @@ pub const MODELING_NAMESPACE: &str = "bellatrix.mde";
 pub mod contracts;
 pub use contracts::*;
 #[path = "persistence/mdj.rs"]
-pub mod mdj;
+mod mdj;
 #[path = "persistence/mdj_conversion.rs"]
-pub mod mdj_conversion;
+mod mdj_conversion;
 #[path = "persistence/io.rs"]
 mod io;
 #[path = "persistence/wire.rs"]
@@ -174,7 +174,15 @@ pub use kernel_api_generation::analyze_generation_dependencies;
 
 #[path = "mde-api/document.rs"]
 mod mde_api_document;
-pub use mde_api_document::decode_model_document;
+pub use mde_api_document::{convert_model_document, decode_model_document, encode_model_document};
+
+#[path = "mde-api/interchange.rs"]
+mod mde_api_interchange;
+pub use mde_api_interchange::{export_mdj_document, import_mdj_document};
+
+#[path = "mde-api/presentation.rs"]
+mod mde_api_presentation;
+pub use mde_api_presentation::project_documentation;
 
 #[path = "mde-api/commands.rs"]
 mod mde_api_commands;

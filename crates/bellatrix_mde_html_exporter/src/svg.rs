@@ -1,8 +1,6 @@
 //! Headless SVG rendering; geometry uses domain coordinates, never GPUI pixels.
 use crate::pages::{esc, safe_id};
-use bellatrix_mde::{
-    Diagram, Geometry, PathSegment, Project, TextAlignment, TextVerticalAlignment, View,
-};
+use crate::document::{DiagramPage, Documentation, Geometry, PathSegment, RenderedView, TextAlignment, TextVerticalAlignment};
 
 fn color(input: Option<&str>, fallback: &str) -> String {
     let Some(input) = input else {
@@ -18,9 +16,9 @@ fn color(input: Option<&str>, fallback: &str) -> String {
     }
 }
 fn render_view(
-    project: &Project,
-    view: &View,
-    references: &bellatrix_mde::uml::references::ReferenceIndex<'_>,
+    project: &Documentation,
+    view: &RenderedView,
+    name: &str,
 ) -> String {
     let fill = color(view.style.fill.as_deref(), "#303641");
     let stroke = color(view.style.stroke.as_deref(), "#788397");
@@ -29,62 +27,16 @@ fn render_view(
     let opacity = view.style.opacity.unwrap_or(1.0);
     let font_size = view.style.font_size.unwrap_or(13.0);
     let radius = view.style.corner_radius.unwrap_or(3.0);
-    let notation_mode = view
-        .draft
-        .as_ref()
-        .map(|draft| {
-            bellatrix_mde::resolve_relationship_style(&draft.notation_kind, &draft.properties)
-                .line_mode
-        })
-        .or_else(|| {
-            view.subject.as_ref().and_then(|subject| {
-                project
-                    .relations
-                    .iter()
-                    .find(|relation| &relation.id == subject)
-                    .map(|relation| {
-                        bellatrix_mde::resolve_relationship_style(
-                            &relation.kind,
-                            &relation.properties,
-                        )
-                        .line_mode
-                    })
-            })
-        })
-        .unwrap_or(bellatrix_mde::LineMode::Solid);
-    let dashes = view
-        .style
-        .resolve_stroke_pattern(notation_mode)
-        .iter()
-        .map(ToString::to_string)
-        .collect::<Vec<_>>()
-        .join(",");
+    let dashes = view.style.dash_pattern.iter().map(ToString::to_string)
+        .collect::<Vec<_>>().join(",");
     let dash_attr = if dashes.is_empty() {
         String::new()
     } else {
         format!(" stroke-dasharray=\"{dashes}\"")
     };
     let font_family = esc(view.style.font_family.as_deref().unwrap_or("system-ui"));
-    let name = view
-        .label
-        .clone()
-        .or_else(|| {
-            view.subject
-                .as_ref()
-                .and_then(|id| project.element(id))
-                .map(|element| {
-                    element.label.clone().unwrap_or_else(|| {
-                        bellatrix_mde::format_element_label_for_view(
-                            element,
-                            references,
-                            &view.style,
-                        )
-                    })
-                })
-        })
-        .unwrap_or_default();
     let shape = match &view.geometry {
-        Geometry::Layout { .. } => format!(
+        Geometry::Layout => format!(
             "<g data-view-id=\"{}\" data-layout-status=\"unresolved\"><desc>View {} has unresolved layout. Authored bounds are preserved; no replacement shape is drawn.</desc></g>",
             esc(&view.id),
             esc(&view.id),
@@ -99,7 +51,7 @@ fn render_view(
             text = render_text(
                 view,
                 (*x, *y, *width, *height),
-                &name,
+                name,
                 font_size,
                 &font_family,
                 &text_fill
@@ -110,7 +62,7 @@ fn render_view(
             text = render_text(
                 view,
                 (cx - rx, cy - ry, rx * 2.0, ry * 2.0),
-                &name,
+                name,
                 font_size,
                 &font_family,
                 &text_fill
@@ -163,7 +115,7 @@ fn render_view(
     shape
 }
 fn render_text(
-    view: &View,
+    view: &RenderedView,
     bounds: (f64, f64, f64, f64),
     text: &str,
     size: f64,
@@ -187,10 +139,7 @@ fn render_text(
         esc(text)
     )
 }
-pub fn draw(project: &Project, diagram: &Diagram) -> String {
-    let references = bellatrix_mde::uml::references::ReferenceIndex::new(
-        bellatrix_mde::uml::root::Model::from_project(project),
-    );
+pub fn draw(project: &Documentation, diagram: &DiagramPage) -> String {
     let mut result = format!(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {} {}\" role=\"img\" aria-label=\"{}\">",
         diagram.width,
@@ -199,14 +148,14 @@ pub fn draw(project: &Project, diagram: &Diagram) -> String {
     );
     result.push_str("<defs><filter id=\"view-shadow\" x=\"-20%\" y=\"-20%\" width=\"150%\" height=\"150%\"><feDropShadow dx=\"2\" dy=\"3\" stdDeviation=\"2\" flood-opacity=\"0.25\"/></filter></defs>");
     result.push_str("<rect width=\"100%\" height=\"100%\" fill=\"#24282e\"/>");
-    let mut views = diagram.all_views().collect::<Vec<_>>();
+    let mut views = diagram.views.iter().collect::<Vec<_>>();
     let unresolved_layouts = views
         .iter()
-        .filter(|view| matches!(view.geometry, Geometry::Layout { .. }))
+        .filter(|view| matches!(view.geometry, Geometry::Layout))
         .count();
     views.sort_by_key(|view| view.z_index);
     for view in views {
-        result.push_str(&render_view(project, view, &references));
+        result.push_str(&render_view(project, view, &view.label));
     }
     if unresolved_layouts > 0 {
         result.push_str(&format!(

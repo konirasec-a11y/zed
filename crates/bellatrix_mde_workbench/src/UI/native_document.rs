@@ -1,8 +1,8 @@
 use crate::workbench_ui::native_document_guard::{
     NativeBufferState, NativeDocumentConflict, NativeDocumentGuard,
 };
-use crate::workbench_ui::{MdeUiSource, MdeWorkbenchItem, from_document};
-use bellatrix_project::{ProjectDocument, ProjectId};
+use crate::workbench_ui::{MdeUiSource, MdeWorkbenchItem};
+use bellatrix_project::ProjectDocument;
 use gpui::{
     App, AppContext, Context, Entity, EntityId, EventEmitter, FocusHandle, Focusable,
     PathPromptOptions, Subscription, Window, actions,
@@ -17,17 +17,20 @@ use workspace::{
 };
 
 type ImportFuture = Pin<Box<dyn Future<Output = Result<NativeDocumentLease, String>> + Send>>;
+type PrepareFuture = Pin<Box<dyn Future<Output = Result<(ProjectDocument, Vec<String>), String>> + Send>>;
 
 #[derive(Clone)]
-pub struct NativeDocumentImporter(
-    Arc<dyn Fn(ProjectDocument, bool, bool) -> ImportFuture + Send + Sync>,
-);
+pub struct NativeDocumentImporter {
+    prepare: Arc<dyn Fn(Vec<u8>, bool) -> PrepareFuture + Send + Sync>,
+    import: Arc<dyn Fn(ProjectDocument, bool, bool) -> ImportFuture + Send + Sync>,
+}
 
 impl NativeDocumentImporter {
     pub fn new(
+        prepare: impl Fn(Vec<u8>, bool) -> PrepareFuture + Send + Sync + 'static,
         import: impl Fn(ProjectDocument, bool, bool) -> ImportFuture + Send + Sync + 'static,
     ) -> Self {
-        Self(Arc::new(import))
+        Self { prepare: Arc::new(prepare), import: Arc::new(import) }
     }
 }
 
@@ -269,50 +272,19 @@ pub(crate) fn register_preview_action(
                 let original_bytes = raw.clone();
                 let baseline =
                     NativeDocumentGuard::new(state).map_err(|error| error.message().to_owned())?;
-                let (document, diagnostics) = cx.background_spawn(async move {
-                    let text = buffer_snapshot.text();
-                    let (document, diagnostics) = if is_mdj {
-                        let imported = bellatrix_mde::mdj_conversion::import(raw.as_deref().unwrap_or(text.as_bytes()))
-                            .map_err(|error| format!("Invalid StarUML MDJ document: {error}"))?;
-                        let id = ProjectId::new(imported.project.id.clone())
-                            .map_err(|error| error.to_string())?;
-                        let document = ProjectDocument::new(id, imported.project.name.clone())
-                            .map_err(|error| error.to_string())?;
-                        let document = bellatrix_mde_cordis::with_model(document, &imported.project)?;
-                        let mut diagnostics = vec![
-                            if editable { "Limited StarUML editing: supported top-level labels, names, properties and styles only. Save creates a new copy and never replaces the source. UML mapping, inherited/composite styles, rendering, routing and resources remain partial." } else { "Read-only StarUML preview: clean UTF-8 disk bytes matching the editor could not be verified. The source is not modified; editor text provenance does not guarantee original encoding or line endings." }.to_owned(),
-                        ];
-                        diagnostics.extend(read_diagnostic);
-                        if editable { diagnostics.push("Native MDJ validation is not enabled for this session; the validation control is unavailable.".into()); }
-                        diagnostics.extend(imported.diagnostics.into_iter().map(|diagnostic| {
-                            let path = if diagnostic.path.is_empty() {
-                                "/"
-                            } else {
-                                &diagnostic.path
-                            };
-                            format!("{path}: {}", diagnostic.message)
-                        }));
-                        (document, diagnostics)
-                    } else {
-                        let document: ProjectDocument = serde_json::from_str(&text)
-                            .map_err(|error| format!("Invalid Bellatrix project document: {error}"))?;
-                        (document, Vec::new())
-                    };
-                    let snapshot = from_document(&document)?;
-                    bellatrix_mde::Graph::new(
-                        &snapshot
-                            .section
-                            .to_model(document.id().as_str(), document.name()),
-                    )
-                    .validate_presentation()
-                    .map_err(|error| error.to_string())?;
-                    Ok::<_, String>((document, diagnostics))
-                }).await?;
+                let bytes = raw.unwrap_or_else(|| buffer_snapshot.text().into_bytes());
+                let (document, import_diagnostics) = (importer.prepare)(bytes, is_mdj).await?;
+                let mut diagnostics = if is_mdj {
+                    vec![if editable { "Limited StarUML editing: supported top-level labels, names, properties and styles only. Save creates a new copy and never replaces the source. UML mapping, inherited/composite styles, rendering, routing and resources remain partial." } else { "Read-only StarUML preview: clean UTF-8 disk bytes matching the editor could not be verified. The source is not modified; editor text provenance does not guarantee original encoding or line endings." }.to_owned()]
+                } else { Vec::new() };
+                diagnostics.extend(read_diagnostic);
+                if editable { diagnostics.push("Native MDJ validation is not enabled for this session; the validation control is unavailable.".into()); }
+                diagnostics.extend(import_diagnostics);
                 workspace
                     .update(cx, |_, cx| baseline.check(&buffer_state(&buffer, cx)))
                     .map_err(|error| error.to_string())?
                     .map_err(|error| error.message().to_owned())?;
-                let lease = (importer.0)(document, baseline.is_saved(), editable).await?;
+                let lease = (importer.import)(document, baseline.is_saved(), editable).await?;
                 workspace
                     .update_in(cx, |workspace, window, cx| {
                         baseline

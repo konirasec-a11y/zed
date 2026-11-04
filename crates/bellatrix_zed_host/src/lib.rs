@@ -1,12 +1,11 @@
 //! Bellatrix services embedded in Zed's existing application lifecycle.
 //! No GPUI Kit, separate Workspace, or parallel event bus is created here.
-use bellatrix_mde::Project;
-use bellatrix_mde_cordis::{MdePlugin, MdeUiBridge, with_model};
+use bellatrix_mde_cordis::{MdePlugin, MdeUiBridge};
 use bellatrix_mde_workbench::{
     MdeUiSource, NativeDocumentImporter, NativeDocumentLease, from_document, register_mde_workspace,
 };
 use bellatrix_project::{
-    ProjectCreate, ProjectCreateRequested, ProjectDocument, ProjectId, ProjectOpen,
+    ProjectCreate, ProjectCreateRequested, ProjectId, ProjectOpen,
     ProjectOpenRequested, ProjectPlugin, ProjectService,
 };
 use cordis::event::QueryOutcome;
@@ -37,8 +36,30 @@ impl BellatrixZedHost {
     fn native_document_importer(&self) -> NativeDocumentImporter {
         let runtime = self.runtime.handle().clone();
         let context = self._context.clone();
+        let prepare_runtime = runtime.clone();
+        let prepare_context = context.clone();
         let projects = Arc::clone(&self._projects);
-        NativeDocumentImporter::new(move |document, is_saved, editable_mdj| {
+        NativeDocumentImporter::new(move |bytes, is_mdj| {
+            let runtime = prepare_runtime.clone();
+            let context = prepare_context.clone();
+            Box::pin(async move {
+                runtime.spawn(async move {
+                    let format = if is_mdj {
+                        bellatrix_mde_cordis::ModelingDocumentFormat::StarUml
+                    } else {
+                        bellatrix_mde_cordis::ModelingDocumentFormat::ProjectJson
+                    };
+                    match context.query::<bellatrix_mde_cordis::ModelingPrepareDocument>(
+                        Routing::Unscoped,
+                        bellatrix_mde_cordis::ModelingPrepareDocumentRequested { bytes, format },
+                    ).await.map_err(|error| error.to_string())? {
+                        QueryOutcome::Answer(Ok(prepared)) => Ok((prepared.document, prepared.diagnostics)),
+                        QueryOutcome::Answer(Err(error)) => Err(error),
+                        QueryOutcome::Miss => Err("MDE document preparation service unavailable".into()),
+                    }
+                }).await.map_err(|error| error.to_string())?
+            })
+        }, move |document, is_saved, editable_mdj| {
             let runtime = runtime.clone();
             let context = context.clone();
             let projects = Arc::clone(&projects);
@@ -206,19 +227,26 @@ impl BellatrixZedHost {
                         .await
                         .map_err(Box::<dyn Error>::from),
                     None => {
-                        let model: Project = match std::env::var_os("BELLATRIX_MODEL_FILE") {
-                            Some(path) => serde_json::from_slice(&std::fs::read(path)?)?,
-                            None => serde_json::from_str(include_str!(
+                        let bytes = match std::env::var_os("BELLATRIX_MODEL_FILE") {
+                            Some(path) => std::fs::read(path)?,
+                            None => include_bytes!(
                                 "../../bellatrix_mde/fixtures/todo.json"
-                            ))?,
+                            ).to_vec(),
                         };
-                        let id = ProjectId::new(model.id.clone())?;
-                        let document = ProjectDocument::new(id, model.name.clone())?;
-                        let document = with_model(document, &model).map_err(io::Error::other)?;
+                        let prepared = match context.query::<bellatrix_mde_cordis::ModelingPrepareDocument>(
+                            Routing::Unscoped,
+                            bellatrix_mde_cordis::ModelingPrepareDocumentRequested {
+                                bytes,
+                                format: bellatrix_mde_cordis::ModelingDocumentFormat::ModelJson,
+                            },
+                        ).await? {
+                            QueryOutcome::Answer(result) => result.map_err(io::Error::other)?,
+                            QueryOutcome::Miss => return Err(io::Error::other("MDE document preparation service unavailable").into()),
+                        };
                         context
                             .query::<ProjectCreate>(
                                 Routing::Unscoped,
-                                ProjectCreateRequested { document },
+                                ProjectCreateRequested { document: prepared.document },
                             )
                             .await
                             .map_err(Box::<dyn Error>::from)

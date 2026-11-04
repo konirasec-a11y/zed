@@ -82,6 +82,8 @@ impl Plugin for MdePlugin {
         let projects = ctx
             .try_service::<ProjectService>()
             .map_err(|error| io::Error::other(error.to_string()))?;
+        crate::html_export::register(&ctx).map_err(|error| io::Error::other(error.to_string()))?;
+        crate::document_codec::register(&ctx).map_err(|error| io::Error::other(error.to_string()))?;
         crate::task_events::register(&ctx, Arc::clone(&projects))?;
         crate::diagrams::register(&ctx, Arc::clone(&projects))?;
         crate::views::register(&ctx, Arc::clone(&projects))?;

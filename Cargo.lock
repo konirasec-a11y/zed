@@ -2175,7 +2175,6 @@ version = "0.1.0"
 dependencies = [
  "bellatrix_mde",
  "bellatrix_mde_cordis",
- "bellatrix_mde_html_exporter",
  "bellatrix_mde_rust_generator",
  "clap",
  "cordis-rs",
@@ -2202,7 +2201,7 @@ dependencies = [
 name = "bellatrix_mde_html_exporter"
 version = "0.1.0"
 dependencies = [
- "bellatrix_mde",
+ "serde",
  "serde_json",
 ]
 
@@ -2336,13 +2335,11 @@ dependencies = [
 name = "bellatrix_zed_host"
 version = "0.1.0"
 dependencies = [
- "bellatrix_mde",
  "bellatrix_mde_cordis",
  "bellatrix_mde_workbench",
  "bellatrix_project",
  "cordis-rs",
  "gpui",
- "serde_json",
  "tokio",
 ]
 

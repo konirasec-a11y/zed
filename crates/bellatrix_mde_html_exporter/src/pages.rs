@@ -1,4 +1,4 @@
-use bellatrix_mde::{Element, Project};
+use crate::document::{Documentation, ElementPage};
 
 pub const CSS: &str = r#"
 :root{color-scheme:light dark;font:14px/1.55 system-ui,Segoe UI,Arial,sans-serif}
@@ -30,7 +30,7 @@ pub fn safe_id(id: &str) -> String {
     for byte in id.bytes() { output.push_str(&format!("{byte:02x}")); }
     output
 }
-fn nav(project: &Project, prefix: &str) -> String {
+fn nav(project: &Documentation, prefix: &str) -> String {
     let mut links = format!("<a href=\"{prefix}index.html\">Overview</a>");
     links.push_str("<h3>Diagrams</h3>");
     for diagram in &project.diagrams {
@@ -39,11 +39,11 @@ fn nav(project: &Project, prefix: &str) -> String {
     links.push_str("<h3>Elements</h3>");
     for element in &project.elements {
         links.push_str(&format!("<a href=\"{prefix}elements/{}.html\" title=\"{}\">{}</a>",
-            safe_id(&element.id), esc(&element.kind), esc(element.label.as_deref().unwrap_or(&element.name))));
+            safe_id(&element.id), esc(&element.kind), esc(&element.label)));
     }
     links
 }
-fn shell(project: &Project, title: &str, content: &str, prefix: &str) -> String {
+fn shell(project: &Documentation, title: &str, content: &str, prefix: &str) -> String {
     format!(r#"<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{} · {}</title><link rel="stylesheet" href="{}assets/style.css"></head>
@@ -52,14 +52,14 @@ fn shell(project: &Project, title: &str, content: &str, prefix: &str) -> String 
 <main>{}</main></div></body></html>"#,
         esc(title), esc(&project.name), prefix, esc(&project.name), nav(project, prefix), content)
 }
-pub fn index(project: &Project) -> String {
+pub fn index(project: &Documentation) -> String {
     let mut body = format!("<h1>{}</h1><p class=muted>Technical bellatrix-project documentation · Model snapshot</p>", esc(&project.name));
     body.push_str(&format!("<div class=kpis><div><b>{}</b> elements</div><div><b>{}</b> relations</div><div><b>{}</b> diagrams</div></div>",
         project.elements.len(), project.relations.len(), project.diagrams.len()));
     body.push_str("<h2>Model elements</h2><table class=table><thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead><tbody>");
     for element in &project.elements {
         body.push_str(&format!("<tr><td><a href=\"elements/{}.html\">{}</a></td><td>{}</td><td>{}</td></tr>",
-            safe_id(&element.id), esc(element.label.as_deref().unwrap_or(&element.name)), esc(&element.kind), esc(element.description.as_deref().unwrap_or(""))));
+            safe_id(&element.id), esc(&element.label), esc(&element.kind), esc(element.description.as_deref().unwrap_or(""))));
     }
     body.push_str("</tbody></table>"); body.push_str(&relations_index(project)); body.push_str("<h2>Diagrams</h2>");
     for diagram in &project.diagrams {
@@ -68,21 +68,21 @@ pub fn index(project: &Project) -> String {
     }
     shell(project, &project.name, &body, "")
 }
-fn relations_index(project: &Project) -> String {
+fn relations_index(project: &Documentation) -> String {
     if project.relations.is_empty() { return String::new(); }
     let mut body = String::from("<h2>Relationships</h2><table class=table><thead><tr><th>Type</th><th>From</th><th>To</th></tr></thead><tbody>");
     let mut relations = project.relations.iter().collect::<Vec<_>>();
     relations.sort_by(|left, right| (&left.kind, &left.from, &left.to, &left.id).cmp(&(&right.kind, &right.from, &right.to, &right.id)));
     for relation in relations {
         let linked = |id: &str| {
-            let name = project.element(id).map(|element| element.label.as_deref().unwrap_or(&element.name)).unwrap_or(id);
+            let name = project.element(id).map(|element| element.label.as_str()).unwrap_or(id);
             format!("<a href=\"elements/{}.html\">{}</a>", safe_id(id), esc(name))
         };
         body.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td></tr>", esc(&relation.kind), linked(&relation.from), linked(&relation.to)));
     }
     body.push_str("</tbody></table>"); body
 }
-fn relation_rows(project: &Project, element: &Element) -> String {
+fn relation_rows(project: &Documentation, element: &ElementPage) -> String {
     let mut body = String::from("<h2>Relationships</h2><table class=table><tbody>");
     for relation in project.relations.iter().filter(|relation| relation.from == element.id || relation.to == element.id) {
         let (other, direction) = if relation.from == element.id { (&relation.to, "outgoing") } else { (&relation.from, "incoming") };
@@ -91,13 +91,13 @@ fn relation_rows(project: &Project, element: &Element) -> String {
     }
     body.push_str("</tbody></table>"); body
 }
-pub fn element_page(project: &Project, element: &Element) -> String {
-    let label = element.label.as_deref().unwrap_or(&element.name);
+pub fn element_page(project: &Documentation, element: &ElementPage) -> String {
+    let label = &element.label;
     let mut body = format!("<h1>{}</h1><p class=muted>{} · {}</p>", esc(label), esc(&element.kind), esc(&element.id));
     if let Some(description) = &element.description { body.push_str(&format!("<h2>Description</h2><pre>{}</pre>", esc(description))); }
     if !element.properties.is_empty() {
         body.push_str("<h2>Properties</h2><table class=table><tbody>");
-        for (key, value) in &element.properties { body.push_str(&format!("<tr><th>{}</th><td><code>{}</code></td></tr>", esc(key), esc(&value.to_string()))); }
+        for (key, value) in &element.properties { body.push_str(&format!("<tr><th>{}</th><td><code>{}</code></td></tr>", esc(key), esc(value))); }
         body.push_str("</tbody></table>");
     }
     if !element.annotations.is_empty() {
@@ -108,8 +108,7 @@ pub fn element_page(project: &Project, element: &Element) -> String {
         body.push_str("<h2>Implementations</h2>");
         for implementation in &element.implementations { body.push_str(&format!("<h3>{}</h3><pre><code>{}</code></pre>", esc(&implementation.language), esc(&implementation.source))); }
     }
-    let diagrams = project.diagrams.iter().filter(|diagram| diagram.views.iter().any(|view|
-        view.subject.as_deref() == Some(element.id.as_str()))).collect::<Vec<_>>();
+    let diagrams = project.diagrams.iter().filter(|diagram| diagram.page_subjects.iter().any(|subject| subject == &element.id)).collect::<Vec<_>>();
     if !diagrams.is_empty() {
         body.push_str("<h2>Appears in</h2><div class=tags>");
         for diagram in diagrams { body.push_str(&format!("<a class=tag href=\"../index.html#diagram-{}\">{}</a>", safe_id(&diagram.id), esc(&diagram.name))); }

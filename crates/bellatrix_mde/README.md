@@ -9,7 +9,8 @@ artifacts and emission; it is not limited to passive validation.
 - `kernel-api/`: private function implementations for the public kernel boundary:
   validation, graph queries and generation analysis.
 - `mde-api/`: private function implementations for the public MDE document and
-  application boundary, currently decoding and semantic reparenting candidates.
+  application boundary: document codecs, MDJ interchange and semantic reparenting
+  candidates.
   Both boundaries share the private `api_contract.rs` envelope/codec helper;
   neither depends on the other.
 - `KERNEL/graph/`: graph integrity, indexing and graph-scope queries.
@@ -230,12 +231,20 @@ in `KERNEL/I_O/` document their actual effects and partial-failure limitations.
 external effects. It exposes no new internal types or public modules. Legacy
 exports remain during migration; complete API isolation is not yet achieved.
 
-`decode_model_document` and `reparent_uml_element` are implemented separately in
+`decode_model_document`, `encode_model_document`, `convert_model_document`,
+`import_mdj_document`, `export_mdj_document`, `reparent_uml_element` and
+`project_documentation` are implemented separately in
 [`mde-api/`](src/mde-api/README.md). They use the same document contract and shared
 versioned envelope without routing application operations through the kernel API.
-The existing `uml`, `contracts`, `commands`, `mdj` and `mdj_conversion` public
-modules and typed reexports remain available for consumers that have not migrated;
-this first separation does not close those modules or claim full encapsulation.
+The Cordis adapter invokes these functions for integration/project events.
+External UI, Zed, CLI and exporter consumers must use the event boundary, not a
+second direct MDE route. Internal MDE calls remain direct, and MDE has no UI/Zed
+dependency. Visual interaction state and events stay inside the UI.
+
+`mdj` and `mdj_conversion` are private after consumer migration. The existing
+`uml`, `contracts` and `commands` public modules and typed reexports remain
+exposed while other consumers and event payloads migrate. That incomplete
+encapsulation is not the intended external communication contract.
 
 UML style settings are serialized only under `style.uml`. Both `Style` and
 `UmlStyle` reject unknown fields. Documents that put those settings directly

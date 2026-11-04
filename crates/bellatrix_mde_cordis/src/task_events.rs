@@ -111,11 +111,10 @@ async fn execute(
                     &model,
                     &scope,
                     bellatrix_mde_rust_generator::GenerationOptions { skeleton },
-                )
+                ).map_err(|error| error.to_string())
             }
-            ModelingTaskKind::ExportHtml => bellatrix_mde_html_exporter::plan(&model),
-        }
-        .map_err(|error| error.to_string())?;
+            ModelingTaskKind::ExportHtml => crate::html_export::plan(&model),
+        }?;
         let count = plan.count();
         let destination = request.destination;
         if request.replace_generated {

@@ -1,12 +1,60 @@
 use bellatrix_mde::{
-    Format, Project,
+    Project,
     commands::{Command, apply},
-    decode, encode, mdj, mdj_conversion, validate_uml_model,
+    decode_model_document, encode_model_document, export_mdj_document, import_mdj_document,
+    validate_uml_model,
 };
 use serde_json::{Value, json};
 use std::{error::Error, fs, path::PathBuf};
 
 type FlowResult<T> = Result<T, Box<dyn Error>>;
+
+#[derive(serde::Deserialize)]
+struct ModelResponse {
+    model: Box<serde_json::value::RawValue>,
+}
+
+fn model_response(response: &str) -> FlowResult<Project> {
+    let response: ModelResponse = serde_json::from_str(response)?;
+    Ok(serde_json::from_str(response.model.get())?)
+}
+
+fn model_request(project: &Project) -> FlowResult<String> {
+    Ok(format!(
+        r#"{{"api_version":1,"model":{}}}"#,
+        serde_json::to_string(project)?
+    ))
+}
+
+fn import_mdj(bytes: &[u8]) -> FlowResult<Project> {
+    model_response(&import_mdj_document(bytes).map_err(std::io::Error::other)?)
+}
+
+fn export_mdj(project: &Project) -> FlowResult<Vec<u8>> {
+    Ok(export_mdj_document(&model_request(project)?).map_err(std::io::Error::other)?)
+}
+
+fn encode_model(project: &Project, format: &str) -> FlowResult<Vec<u8>> {
+    Ok(encode_model_document(&model_request(project)?, format).map_err(std::io::Error::other)?)
+}
+
+fn decode_model(bytes: &[u8], format: &str) -> FlowResult<Project> {
+    model_response(&decode_model_document(bytes, format).map_err(std::io::Error::other)?)
+}
+
+fn mdj_object<'a>(value: &'a Value, id: &str) -> Option<&'a serde_json::Map<String, Value>> {
+    match value {
+        Value::Object(object) => {
+            if object.get("_id").and_then(Value::as_str) == Some(id) {
+                Some(object)
+            } else {
+                object.values().find_map(|value| mdj_object(value, id))
+            }
+        }
+        Value::Array(values) => values.iter().find_map(|value| mdj_object(value, id)),
+        _ => None,
+    }
+}
 
 struct SavedFlow(PathBuf);
 
@@ -20,10 +68,10 @@ impl SavedFlow {
         Ok(Self(directory))
     }
 
-    fn reopen(&self, project: &Project, name: &str, format: Format) -> FlowResult<Project> {
+    fn reopen(&self, project: &Project, name: &str, format: &str) -> FlowResult<Project> {
         let path = self.0.join(name);
-        fs::write(&path, encode(project, format)?)?;
-        let reopened = decode(&fs::read(path)?, format)?;
+        fs::write(&path, encode_model(project, format)?)?;
+        let reopened = decode_model(&fs::read(path)?, format)?;
         assert_eq!(&reopened, project);
         assert_eq!(validate(&reopened)?, validate(project)?);
         Ok(reopened)
@@ -62,25 +110,24 @@ fn set_property(project: &Project, id: &str, path: &str, value: Value) -> FlowRe
 }
 
 fn assert_exported_multiplicities(project: &Project, left: Option<&str>) -> FlowResult<()> {
-    let bytes = mdj_conversion::export(project)?;
-    let document = mdj::decode(&bytes)?;
-    let index = mdj::Index::new(&document)?;
-    let first = index.object("left-end").ok_or("missing first MDJ end")?;
-    let second = index.object("right-end").ok_or("missing second MDJ end")?;
+    let bytes = export_mdj(project)?;
+    let document: Value = serde_json::from_slice(&bytes)?;
+    let first = mdj_object(&document, "left-end").ok_or("missing first MDJ end")?;
+    let second = mdj_object(&document, "right-end").ok_or("missing second MDJ end")?;
     assert_eq!(
-        first.properties.get("multiplicity").and_then(Value::as_str),
+        first.get("multiplicity").and_then(Value::as_str),
         left
     );
-    assert_eq!(second.properties.get("multiplicity"), Some(&json!("")));
+    assert_eq!(second.get("multiplicity"), Some(&json!("")));
     assert_eq!(
-        first.properties.get("navigable"),
+        first.get("navigable"),
         Some(&json!("notNavigable"))
     );
     assert_eq!(
-        second.properties.get("navigable"),
+        second.get("navigable"),
         Some(&json!("navigable"))
     );
-    let reimported = mdj_conversion::import(&bytes)?.project;
+    let reimported = import_mdj(&bytes)?;
     assert_eq!(validate(&reimported)?, validate(project)?);
     Ok(())
 }
@@ -92,8 +139,7 @@ fn omitted_multiplicity_survives_edit_save_reopen_and_restore() -> FlowResult<()
     ));
     println!("Given explicit navigation with omitted and explicit empty MDJ multiplicities");
     let original = include_bytes!("../fixtures/bdd/interchange/mdj-association-defaults.mdj");
-    let imported = mdj_conversion::import(original)?;
-    let project = imported.project;
+    let project = import_mdj(original)?;
     for id in ["left-end", "right-end"] {
         let end = project
             .elements
@@ -113,13 +159,13 @@ fn omitted_multiplicity_survives_edit_save_reopen_and_restore() -> FlowResult<()
         association.properties.get("navigableOwnedEnd"),
         Some(&json!([{"$ref":"right-end"}]))
     );
-    assert_eq!(mdj_conversion::export(&project)?, original.as_slice());
+    assert_eq!(export_mdj(&project)?, original.as_slice());
     let saved = SavedFlow::new("multiplicity")?;
     println!("When a class is renamed and the document is saved, closed and reopened");
     let renamed = set_property(&project, "left", "name", json!("RenamedLeft"))?;
     for (name, format) in [
-        ("renamed.json", Format::Json),
-        ("renamed.blx", Format::Protobuf),
+        ("renamed.json", "json"),
+        ("renamed.blx", "protobuf"),
     ] {
         let reopened = saved.reopen(&renamed, name, format)?;
         assert_exported_multiplicities(&reopened, None)?;
@@ -141,8 +187,8 @@ fn omitted_multiplicity_survives_edit_save_reopen_and_restore() -> FlowResult<()
         Some(&json!("0..*"))
     );
     for (name, format) in [
-        ("edited.json", Format::Json),
-        ("edited.blx", Format::Protobuf),
+        ("edited.json", "json"),
+        ("edited.blx", "protobuf"),
     ] {
         let reopened = saved.reopen(&edited, name, format)?;
         assert_exported_multiplicities(&reopened, Some("0..*"))?;
@@ -186,20 +232,19 @@ fn navigation_source() -> FlowResult<Vec<u8>> {
 }
 
 fn assert_navigation_export(project: &Project, left: Option<&str>, right: &str) -> FlowResult<()> {
-    let bytes = mdj_conversion::export(project)?;
-    let document = mdj::decode(&bytes)?;
-    let index = mdj::Index::new(&document)?;
-    let first = index.object("left-end").ok_or("missing first end")?;
-    let second = index.object("right-end").ok_or("missing second end")?;
+    let bytes = export_mdj(project)?;
+    let document: Value = serde_json::from_slice(&bytes)?;
+    let first = mdj_object(&document, "left-end").ok_or("missing first end")?;
+    let second = mdj_object(&document, "right-end").ok_or("missing second end")?;
     assert_eq!(
-        first.properties.get("navigable").and_then(Value::as_str),
+        first.get("navigable").and_then(Value::as_str),
         left
     );
     assert_eq!(
-        second.properties.get("navigable").and_then(Value::as_str),
+        second.get("navigable").and_then(Value::as_str),
         Some(right)
     );
-    let reimported = mdj_conversion::import(&bytes)?.project;
+    let reimported = import_mdj(&bytes)?;
     assert_eq!(reimported.authoring_knowledge, project.authoring_knowledge);
     assert_eq!(validate(&reimported)?, validate(project)?);
     Ok(())
@@ -278,8 +323,8 @@ fn unknown_navigation_survives_reopening_decisions_and_atomic_repair() -> FlowRe
     ));
     println!("Given absent and explicit unspecified navigation in an MDJ association");
     let source = navigation_source()?;
-    let project = mdj_conversion::import(&source)?.project;
-    assert_eq!(mdj_conversion::export(&project)?, source);
+    let project = import_mdj(&source)?;
+    assert_eq!(export_mdj(&project)?, source);
     assert_eq!(
         project.authoring_knowledge.associations.get("association"),
         Some(&AssociationKnowledge {
@@ -326,8 +371,8 @@ fn unknown_navigation_survives_reopening_decisions_and_atomic_repair() -> FlowRe
     println!("When I save, close, reopen and make an unrelated name edit");
     let renamed = set_property(&project, "left", "name", json!("RenamedLeft"))?;
     for (name, format) in [
-        ("unknown.json", Format::Json),
-        ("unknown.blx", Format::Protobuf),
+        ("unknown.json", "json"),
+        ("unknown.blx", "protobuf"),
     ] {
         let reopened = saved.reopen(&renamed, name, format)?;
         assert_navigation_export(&reopened, None, "unspecified")?;
@@ -349,8 +394,8 @@ fn unknown_navigation_survives_reopening_decisions_and_atomic_repair() -> FlowRe
         "UML_MODEL_SEMANTICS_UNVERIFIED"
     ));
     for (name, format) in [
-        ("decided.json", Format::Json),
-        ("decided.blx", Format::Protobuf),
+        ("decided.json", "json"),
+        ("decided.blx", "protobuf"),
     ] {
         let reopened = saved.reopen(&decided, name, format)?;
         assert_navigation_export(&reopened, Some("navigable"), "notNavigable")?;
@@ -372,12 +417,12 @@ fn unknown_navigation_survives_reopening_decisions_and_atomic_repair() -> FlowRe
                 navigation_unverified: references.into_iter().map(str::to_owned).collect(),
             },
         );
-        let reopened = saved.reopen(&invalid, "invalid.json", Format::Json)?;
+        let reopened = saved.reopen(&invalid, "invalid.json", "json")?;
         assert!(has_code(
             &validate(&reopened)?,
             "MDE_NAVIGATION_KNOWLEDGE_INVALID"
         ));
-        assert!(mdj_conversion::export(&reopened).is_err());
+        assert!(export_mdj(&reopened).is_err());
     }
     let mut conflicting = first_decision.clone();
     conflicting.authoring_knowledge = project.authoring_knowledge.clone();
@@ -385,7 +430,7 @@ fn unknown_navigation_survives_reopening_decisions_and_atomic_repair() -> FlowRe
         &validate(&conflicting)?,
         "MDE_NAVIGATION_KNOWLEDGE_INVALID"
     ));
-    assert!(mdj_conversion::export(&conflicting).is_err());
+    assert!(export_mdj(&conflicting).is_err());
     println!("And ambiguous authoring identities cannot disappear in a document or API envelope");
     let mut document = serde_json::to_value(&project)?;
     document["authoring_knowledge"] = Value::Null;
@@ -395,7 +440,7 @@ fn unknown_navigation_survives_reopening_decisions_and_atomic_repair() -> FlowRe
     );
     let path = saved.0.join("ambiguous.json");
     fs::write(&path, &ambiguous)?;
-    assert!(decode(&fs::read(path)?, Format::Json).is_err());
+    assert!(decode_model(&fs::read(path)?, "json").is_err());
     let envelope = format!(r#"{{"api_version":1,"model":{ambiguous}}}"#);
     assert!(validate_uml_model(&envelope).is_err());
     assert!(bellatrix_mde::validate_graph_model(&envelope).is_err());
@@ -417,7 +462,7 @@ fn unknown_navigation_survives_reopening_decisions_and_atomic_repair() -> FlowRe
         ))
         .is_err()
     );
-    let mut duplicate_wire = encode(&project, Format::Protobuf)?;
+    let mut duplicate_wire = encode_model(&project, "protobuf")?;
     let association_id = b"association";
     duplicate_wire.extend_from_slice(&[
         0x6a,
@@ -427,11 +472,11 @@ fn unknown_navigation_survives_reopening_decisions_and_atomic_repair() -> FlowRe
     ]);
     duplicate_wire.extend_from_slice(association_id);
     fs::write(saved.0.join("ambiguous.blx"), &duplicate_wire)?;
-    assert!(decode(&fs::read(saved.0.join("ambiguous.blx"))?, Format::Protobuf).is_err());
+    assert!(decode_model(&fs::read(saved.0.join("ambiguous.blx"))?, "protobuf").is_err());
     let mut native = project.clone();
     native.composition.clear();
     native.mdj_provenance = None;
-    let before = encode(&native, Format::Json)?;
+    let before = encode_model(&native, "json")?;
     assert!(
         apply(
             &native,
@@ -443,6 +488,6 @@ fn unknown_navigation_survives_reopening_decisions_and_atomic_repair() -> FlowRe
         )
         .is_err()
     );
-    assert_eq!(encode(&native, Format::Json)?, before);
+    assert_eq!(encode_model(&native, "json")?, before);
     Ok(())
 }

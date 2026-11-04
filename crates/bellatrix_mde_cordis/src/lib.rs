@@ -7,10 +7,13 @@ pub use bellatrix_mde::{ModelingRelationKind, ModelingSection, UmlQuickCreate};
 mod diagrams;
 mod trace_output;
 mod mutation;
+mod document_codec;
+pub use document_codec::{ModelingConvertDocument, ModelingConvertDocumentRequested};
 mod mdj_interchange;
 pub use mdj_interchange::{
     MdjExportReceipt, ModelingApplyMdjEdit, ModelingApplyMdjEditRequested,
-    ModelingExportMdj, ModelingExportMdjRequested,
+    ModelingDocumentFormat, ModelingExportMdj, ModelingExportMdjRequested,
+    ModelingPrepareDocument, ModelingPrepareDocumentRequested, PreparedModelingDocument,
 };
 pub use diagrams::{
     ModelingCreateExplorerDiagram, ModelingCreateExplorerDiagramRequested,
@@ -18,6 +21,11 @@ pub use diagrams::{
     ModelingDeleteDiagramRequested, ModelingRenameDiagram, ModelingRenameDiagramRequested,
     ModelingValidateDiagram, ModelingValidateDiagramRequested, ModelingValidateDiagramTraced,
     ModelingValidateDiagramTracedRequested, TracedDiagramValidationResult,
+};
+mod html_export;
+pub use html_export::{
+    ModelingPublishHtml, ModelingPublishHtmlRequested, ModelingRenderHtml,
+    ModelingRenderHtmlRequested,
 };
 mod task_events;
 pub use task_events::{
@@ -167,6 +175,8 @@ impl Plugin for ModelingPlugin {
         Ok(self.channels.clone())
     }
     async fn apply(&self, ctx: Context, input: &Self::Input) -> Result<(), Self::ApplyError> {
+        crate::html_export::register(&ctx)?;
+        crate::document_codec::register(&ctx)?;
         let request_sender = input.requests.clone();
         let _requested =
             ctx.on::<ModelingRequested, _>(observer_sync(move |_, command: ModelingCommand| {

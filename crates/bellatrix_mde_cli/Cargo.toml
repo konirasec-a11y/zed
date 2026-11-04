@@ -16,7 +16,6 @@ cordis-rs.workspace = true
 serde_json.workspace = true
 bellatrix_mde = { path = "../bellatrix_mde" }
 bellatrix_mde_rust_generator = { path = "../bellatrix_mde_rust_generator" }
-bellatrix_mde_html_exporter = { path = "../bellatrix_mde_html_exporter" }
 bellatrix_mde_cordis = { path = "../bellatrix_mde_cordis" }
 
 [dev-dependencies]

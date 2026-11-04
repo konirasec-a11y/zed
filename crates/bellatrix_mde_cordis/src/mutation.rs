@@ -75,7 +75,7 @@ async fn execute_inner(
     let (applied, failed_to_join) = match tokio::task::spawn_blocking(move || {
         let updated = commands::apply(&source, &command, expected_revision)?;
         if require_mdj_roundtrip {
-            bellatrix_mde::mdj_conversion::export(&updated)
+            crate::mdj_interchange::export_model_as_mdj(&updated)
                 .map_err(|error| format!("MDJ edit was not applied: {error}"))?;
         }
         Ok(updated)

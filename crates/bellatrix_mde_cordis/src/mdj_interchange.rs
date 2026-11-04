@@ -1,8 +1,104 @@
 use crate::project_integration::from_document;
-use bellatrix_mde::{MODELING_NAMESPACE, Project, commands::Command, mdj_conversion};
+use bellatrix_mde::{MODELING_NAMESPACE, Project, commands::Command, export_mdj_document};
 use bellatrix_project::{ProjectDocument, ProjectPrepareEncodedSaveRequested, ProjectService};
 use cordis::{Context, Event, event::responder};
 use std::{convert::Infallible, io, sync::Arc};
+
+#[derive(Clone, Copy, Debug)]
+pub enum ModelingDocumentFormat {
+    ProjectJson,
+    ModelJson,
+    ModelProtobuf,
+    StarUml,
+}
+
+#[derive(Clone, Debug)]
+pub struct ModelingPrepareDocumentRequested {
+    pub bytes: Vec<u8>,
+    pub format: ModelingDocumentFormat,
+}
+
+#[derive(Clone, Debug)]
+pub struct PreparedModelingDocument {
+    pub document: ProjectDocument,
+    pub diagnostics: Vec<String>,
+}
+
+pub struct ModelingPrepareDocument;
+impl Event for ModelingPrepareDocument {
+    const NAME: &'static str = "bellatrix.mde.prepare-document.v1";
+    type Args = ModelingPrepareDocumentRequested;
+    type Output = Result<PreparedModelingDocument, String>;
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ModelDocumentResponse {
+    api_version: u32,
+    model: Box<serde_json::value::RawValue>,
+    #[serde(default)]
+    diagnostics: Vec<MdjImportDiagnostic>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MdjImportDiagnostic {
+    path: String,
+    message: String,
+}
+
+fn api_error_message(error: String) -> String {
+    serde_json::from_str::<serde_json::Value>(&error).ok()
+        .and_then(|response| response.get("error")?.get("message")?.as_str().map(str::to_owned))
+        .unwrap_or(error)
+}
+
+fn document_from_response(response: &str) -> Result<PreparedModelingDocument, String> {
+    let imported: ModelDocumentResponse = serde_json::from_str(response)
+        .map_err(|error| format!("Invalid model document response: {error}"))?;
+    if imported.api_version != 1 {
+        return Err("Unsupported model document API version".into());
+    }
+    let model: Project = serde_json::from_str(imported.model.get())
+        .map_err(|error| format!("Invalid imported model: {error}"))?;
+    let id = bellatrix_project::ProjectId::new(model.id.clone())
+        .map_err(|error| error.to_string())?;
+    let document = ProjectDocument::new(id, model.name.clone())
+        .map_err(|error| error.to_string())?;
+    let document = crate::project_integration::with_model(document, &model)?;
+    let diagnostics = imported.diagnostics.into_iter().map(|diagnostic| {
+        let path = if diagnostic.path.is_empty() { "/" } else { &diagnostic.path };
+        format!("{path}: {}", diagnostic.message)
+    }).collect();
+    Ok(PreparedModelingDocument { document, diagnostics })
+}
+
+fn prepare_document(request: ModelingPrepareDocumentRequested) -> Result<PreparedModelingDocument, String> {
+    match request.format {
+        ModelingDocumentFormat::StarUml => {
+            let response = bellatrix_mde::import_mdj_document(&request.bytes)
+                .map_err(|error| format!("Invalid StarUML MDJ document: {}", api_error_message(error)))?;
+            document_from_response(&response)
+        }
+        ModelingDocumentFormat::ModelJson | ModelingDocumentFormat::ModelProtobuf => {
+            let format = match request.format {
+                ModelingDocumentFormat::ModelProtobuf => "protobuf",
+                _ => "json",
+            };
+            let response = bellatrix_mde::decode_model_document(&request.bytes, format)
+                .map_err(api_error_message)?;
+            document_from_response(&response)
+        }
+        ModelingDocumentFormat::ProjectJson => {
+            let document: ProjectDocument = serde_json::from_slice(&request.bytes)
+                .map_err(|error| format!("Invalid Bellatrix project document: {error}"))?;
+            let section = from_document(&document)?;
+            bellatrix_mde::Graph::new(&section.to_model(document.id().as_str(), document.name()))
+                .validate_presentation().map_err(|error| error.to_string())?;
+            Ok(PreparedModelingDocument { document, diagnostics: Vec::new() })
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct ModelingApplyMdjEditRequested {
@@ -85,6 +181,18 @@ pub(crate) fn ensure_mdj_document(
     Ok(())
 }
 
+pub(crate) fn export_model_as_mdj(model: &Project) -> Result<Vec<u8>, String> {
+    #[derive(serde::Serialize)]
+    struct ExportRequest<'a> {
+        api_version: u32,
+        model: &'a Project,
+    }
+
+    let request = serde_json::to_string(&ExportRequest { api_version: 1, model })
+        .map_err(|error| error.to_string())?;
+    export_mdj_document(&request).map_err(api_error_message)
+}
+
 async fn export_snapshot(
     projects: &ProjectService,
     request: ModelingExportMdjRequested,
@@ -97,10 +205,9 @@ async fn export_snapshot(
     }
     let model = from_document(&document)?.to_model(document.id().as_str(), document.name());
     ensure_mdj_document(&document, &model)?;
-    let bytes = tokio::task::spawn_blocking(move || mdj_conversion::export(&model))
+    let bytes = tokio::task::spawn_blocking(move || export_model_as_mdj(&model))
         .await
-        .map_err(|error| error.to_string())?
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| error.to_string())??;
     let current = projects
         .snapshot(document.id())
         .map_err(|error| error.to_string())?;
@@ -114,6 +221,15 @@ async fn export_snapshot(
 }
 
 pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Result<(), io::Error> {
+    let _prepare = context
+        .on::<ModelingPrepareDocument, _>(responder(
+            move |_: Context, request: ModelingPrepareDocumentRequested| async move {
+                let result = tokio::task::spawn_blocking(move || prepare_document(request))
+                    .await.map_err(|error| error.to_string()).and_then(|result| result);
+                Ok::<_, Infallible>(Some(result))
+            },
+        ))
+        .map_err(|error| io::Error::other(error.to_string()))?;
     let edits = Arc::clone(&projects);
     let _edit = context
         .on::<ModelingApplyMdjEdit, _>(responder(

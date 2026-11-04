@@ -1,8 +1,12 @@
 use bellatrix_mde::{
-    Format, Graph, Project, decode, decode_model_document, encode, publish_new, publish_replace,
+    Format, Graph, Project, decode, decode_model_document, publish_new, publish_replace,
     validate_graph_model,
 };
-use bellatrix_mde_cordis::ModelingOperation;
+use bellatrix_mde_cordis::{
+    ModelingConvertDocument, ModelingConvertDocumentRequested, ModelingOperation,
+    ModelingPublishHtml, ModelingPublishHtmlRequested,
+};
+use cordis::{Context, Routing, event::QueryOutcome};
 use serde_json::Value;
 use std::{fs, path::Path};
 
@@ -68,7 +72,57 @@ fn document_text<'a>(document: &'a Value, field: &str) -> Result<&'a str, String
         .ok_or_else(|| format!("kernel response is missing text field: {field}"))
 }
 
-pub fn run(operation: ModelingOperation) -> Result<String, String> {
+pub async fn run(context: &Context, operation: ModelingOperation) -> Result<String, String> {
+    match operation {
+        ModelingOperation::ExportHtml { source, destination, replace } => {
+            let document_format = format_name(&source).to_owned();
+            let bytes = tokio::task::spawn_blocking(move || fs::read(source))
+                .await.map_err(|error| error.to_string())?
+                .map_err(|error| error.to_string())?;
+            let response = context.query::<ModelingPublishHtml>(Routing::Unscoped, ModelingPublishHtmlRequested {
+                bytes, format: document_format, destination: destination.clone(), replace_generated: replace,
+            }).await.map_err(|error| error.to_string())?;
+            let count = match response {
+                QueryOutcome::Answer(result) => result?,
+                QueryOutcome::Miss => return Err("MDE HTML export handler unavailable".into()),
+            };
+            Ok(format!("Exported {count} HTML/SVG artifacts to {}", destination.display()))
+        }
+        ModelingOperation::Convert { source, destination } => {
+            let source_format = format_name(&source).to_owned();
+            let destination_format = format_name(&destination).to_owned();
+            let bytes = tokio::task::spawn_blocking(move || fs::read(source))
+                .await.map_err(|error| error.to_string())?
+                .map_err(|error| error.to_string())?;
+            let response = context.query::<ModelingConvertDocument>(Routing::Unscoped, ModelingConvertDocumentRequested {
+                bytes, source_format, destination_format,
+            }).await.map_err(|error| error.to_string())?;
+            let bytes = match response {
+                QueryOutcome::Answer(result) => result?,
+                QueryOutcome::Miss => return Err("MDE document codec handler unavailable".into()),
+            };
+            tokio::task::spawn_blocking(move || {
+                use std::io::Write;
+                let mut output = fs::OpenOptions::new().write(true).create_new(true)
+                    .open(&destination).map_err(|error| error.to_string())?;
+                output.write_all(&bytes).map_err(|error| error.to_string())?;
+                Ok::<String, String>(format!("Wrote {}", destination.display()))
+            }).await.map_err(|error| error.to_string())?
+        }
+        operation => tokio::task::spawn_blocking(move || run_local(operation))
+            .await.map_err(|error| error.to_string())?,
+    }
+}
+
+fn format_name(path: &Path) -> &'static str {
+    if matches!(path.extension().and_then(|extension| extension.to_str()), Some("pb" | "bellatrix")) {
+        "protobuf"
+    } else {
+        "json"
+    }
+}
+
+fn run_local(operation: ModelingOperation) -> Result<String, String> {
     match operation {
         ModelingOperation::Check { source } => {
             let model = load_validated_document(&source)?;
@@ -164,37 +218,8 @@ pub fn run(operation: ModelingOperation) -> Result<String, String> {
                 plan.diagnostics.len()
             ))
         }
-        ModelingOperation::ExportHtml {
-            source,
-            destination,
-            replace,
-        } => {
-            let model = load(&source)?;
-            let plan =
-                bellatrix_mde_html_exporter::plan(&model).map_err(|error| error.to_string())?;
-            if replace {
-                publish_replace(&plan, &destination)
-            } else {
-                publish_new(&plan, &destination)
-            }
-            .map_err(|error| error.to_string())?;
-            Ok(format!(
-                "Exported {} HTML/SVG artifacts to {}",
-                plan.count(),
-                destination.display()
-            ))
-        }
-        ModelingOperation::Convert {
-            source,
-            destination,
-        } => {
-            let model = load(&source)?;
-            let bytes = encode(&model, format(&destination)).map_err(|error| error.to_string())?;
-            if destination.exists() {
-                return Err("output exists; refusing to overwrite".into());
-            }
-            fs::write(&destination, bytes).map_err(|error| error.to_string())?;
-            Ok(format!("Wrote {}", destination.display()))
+        ModelingOperation::ExportHtml { .. } | ModelingOperation::Convert { .. } => {
+            Err("this operation requires its Cordis handler".into())
         }
     }
 }

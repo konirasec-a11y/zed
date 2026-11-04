@@ -58,7 +58,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .map_err(|_| io::Error::other("engine request event timed out"))?
         .ok_or_else(|| io::Error::other("engine event channel closed"))?;
     let id = command.correlation_id;
-    let result = tokio::task::spawn_blocking(move || runner::run(command.operation)).await?;
+    let result = runner::run(&context, command.operation).await;
     let completion = ModelingCompletion { correlation_id: id, success: result.is_ok(),
         summary: match &result { Ok(message) | Err(message) => message.clone() } };
     context.emit::<ModelingCompleted>(Routing::Unscoped, completion).await?;

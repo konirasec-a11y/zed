@@ -1,7 +1,8 @@
 use bellatrix_mde::{
-    Format, Project, Style, TextAlignment, TextVerticalAlignment, View,
+    Project, Style, TextAlignment, TextVerticalAlignment, View,
     commands::{Command, apply},
-    decode, encode, mdj_conversion, validate_uml_model,
+    decode_model_document, encode_model_document, export_mdj_document, import_mdj_document,
+    validate_uml_model,
 };
 use serde_json::{Value, json};
 use std::{error::Error, fs, path::PathBuf};
@@ -9,6 +10,56 @@ use std::{error::Error, fs, path::PathBuf};
 type FlowResult<T> = Result<T, Box<dyn Error>>;
 const SOURCE: &[u8] = include_bytes!("../fixtures/bdd/staruml/presentation.mdj");
 const SPECIFICATION: &str = include_str!("features/mdj_presentation_lifecycle.feature");
+
+#[derive(serde::Deserialize)]
+struct ModelResponse {
+    model: Box<serde_json::value::RawValue>,
+    #[serde(default)]
+    diagnostics: Vec<MdjDiagnostic>,
+}
+
+#[derive(serde::Deserialize)]
+struct MdjDiagnostic {
+    path: String,
+    message: String,
+}
+
+struct ImportedModel {
+    project: Project,
+    diagnostics: Vec<MdjDiagnostic>,
+}
+
+fn model_request(project: &Project) -> FlowResult<String> {
+    Ok(format!(
+        r#"{{"api_version":1,"model":{}}}"#,
+        serde_json::to_string(project)?
+    ))
+}
+
+fn import_mdj(bytes: &[u8]) -> FlowResult<ImportedModel> {
+    let response: ModelResponse = serde_json::from_str(
+        &import_mdj_document(bytes).map_err(std::io::Error::other)?,
+    )?;
+    Ok(ImportedModel {
+        project: serde_json::from_str(response.model.get())?,
+        diagnostics: response.diagnostics,
+    })
+}
+
+fn export_mdj(project: &Project) -> FlowResult<Vec<u8>> {
+    Ok(export_mdj_document(&model_request(project)?).map_err(std::io::Error::other)?)
+}
+
+fn encode_model(project: &Project, format: &str) -> FlowResult<Vec<u8>> {
+    Ok(encode_model_document(&model_request(project)?, format).map_err(std::io::Error::other)?)
+}
+
+fn decode_model(bytes: &[u8], format: &str) -> FlowResult<Project> {
+    let response: ModelResponse = serde_json::from_str(
+        &decode_model_document(bytes, format).map_err(std::io::Error::other)?,
+    )?;
+    Ok(serde_json::from_str(response.model.get())?)
+}
 
 struct SavedFlow(PathBuf);
 
@@ -22,25 +73,26 @@ impl SavedFlow {
         Ok(Self(directory))
     }
 
-    fn reopen(&self, project: &Project, name: &str, format: Format) -> FlowResult<Project> {
+    fn reopen(&self, project: &Project, name: &str, format: &str) -> FlowResult<Project> {
         let extension = match format {
-            Format::Json => "json",
-            Format::Protobuf => "blx",
+            "json" => "json",
+            "protobuf" => "blx",
+            _ => return Err("unrecognized persistence format".into()),
         };
         let path = self.0.join(format!("{name}.{extension}"));
-        fs::write(&path, encode(project, format)?)?;
+        fs::write(&path, encode_model(project, format)?)?;
         let bytes = fs::read(path)?;
-        let reopened = decode(&bytes, format)?;
+        let reopened = decode_model(&bytes, format)?;
         assert_eq!(&reopened, project);
         Ok(reopened)
     }
 
     fn export_reopen(&self, project: &Project, name: &str) -> FlowResult<Project> {
-        let bytes = mdj_conversion::export(project)?;
+        let bytes = export_mdj(project)?;
         let path = self.0.join(format!("{name}.mdj"));
         fs::write(&path, &bytes)?;
-        let reopened = mdj_conversion::import(&fs::read(path)?)?.project;
-        assert_eq!(mdj_conversion::export(&reopened)?, bytes);
+        let reopened = import_mdj(&fs::read(path)?)?.project;
+        assert_eq!(export_mdj(&reopened)?, bytes);
         assert_projection_equal(project, &reopened);
         Ok(reopened)
     }
@@ -104,7 +156,7 @@ fn authored_style_survives_command_save_reopen_and_mdj_export() -> FlowResult<()
     println!(
         "Given two occurrences of a Class, a nested label and an edge with authored MDJ style"
     );
-    let imported = mdj_conversion::import(SOURCE)?;
+    let imported = import_mdj(SOURCE)?;
     let original = imported.project;
     let baseline = findings(&original)?;
     let original_view = view(&original, "class-view")?;
@@ -141,10 +193,10 @@ fn authored_style_survives_command_save_reopen_and_mdj_export() -> FlowResult<()
     let saved = SavedFlow::new("authored")?;
     let source_path = saved.0.join("source.mdj");
     fs::write(&source_path, SOURCE)?;
-    for (name, format) in [("json", Format::Json), ("binary", Format::Protobuf)] {
+    for (name, format) in [("json", "json"), ("binary", "protobuf")] {
         println!("When I save and reopen the unchanged {name} contract");
         let reopened = saved.reopen(&original, &format!("original-{name}"), format)?;
-        assert_eq!(mdj_conversion::export(&reopened)?, SOURCE);
+        assert_eq!(export_mdj(&reopened)?, SOURCE);
         println!("When I edit one occurrence through SetViewStyle and reopen the exported MDJ");
         let mut style = view(&reopened, "class-view")?.style.clone();
         style.fill = Some("#FEDCBA".into());
@@ -162,7 +214,7 @@ fn authored_style_survives_command_save_reopen_and_mdj_export() -> FlowResult<()
         assert_eq!(findings(&edited)?, baseline);
         let edited = saved.reopen(&edited, &format!("edited-{name}"), format)?;
         let reopened = saved.export_reopen(&edited, &format!("edited-{name}"))?;
-        let document: Value = serde_json::from_slice(&mdj_conversion::export(&reopened)?)?;
+        let document: Value = serde_json::from_slice(&export_mdj(&reopened)?)?;
         let original_document: Value = serde_json::from_slice(SOURCE)?;
         assert_eq!(
             document["pluginPayload"],
@@ -222,7 +274,7 @@ fn authored_style_survives_command_save_reopen_and_mdj_export() -> FlowResult<()
         let cleared = restyle(&reopened, "class-view", cleared_style)?;
         let cleared = saved.reopen(&cleared, &format!("cleared-{name}"), format)?;
         let cleared = saved.export_reopen(&cleared, &format!("cleared-{name}"))?;
-        let document: Value = serde_json::from_slice(&mdj_conversion::export(&cleared)?)?;
+        let document: Value = serde_json::from_slice(&export_mdj(&cleared)?)?;
         let fields = document["ownedElements"][0]["ownedElements"][1]["ownedViews"][0]
             .as_object()
             .ok_or("missing View object")?;
@@ -269,7 +321,7 @@ fn unsupported_style_survives_unrelated_edit_and_blocks_conflicting_overwrite() 
         let source = serde_json::to_vec_pretty(&document)?;
         let source_path = saved.0.join(format!("source-{variant}.mdj"));
         fs::write(&source_path, &source)?;
-        let imported = mdj_conversion::import(&fs::read(&source_path)?)?;
+        let imported = import_mdj(&fs::read(&source_path)?)?;
         assert_eq!(
             view(&imported.project, "class-view")?.style,
             Style::default()
@@ -290,14 +342,14 @@ fn unsupported_style_survives_unrelated_edit_and_blocks_conflicting_overwrite() 
                     && diagnostic.message.contains("source residue")
             }));
         }
-        for (name, format) in [("json", Format::Json), ("binary", Format::Protobuf)] {
+        for (name, format) in [("json", "json"), ("binary", "protobuf")] {
             let original = saved.reopen(&imported.project, &format!("{variant}-{name}"), format)?;
-            assert_eq!(mdj_conversion::export(&original)?, source);
+            assert_eq!(export_mdj(&original)?, source);
             let mut renamed = original.clone();
             renamed.name = "Renamed without replacing source style".into();
             let renamed = saved.reopen(&renamed, &format!("renamed-{variant}-{name}"), format)?;
             let renamed = saved.export_reopen(&renamed, &format!("renamed-{variant}-{name}"))?;
-            let mut exported: Value = serde_json::from_slice(&mdj_conversion::export(&renamed)?)?;
+            let mut exported: Value = serde_json::from_slice(&export_mdj(&renamed)?)?;
             exported["name"] = document["name"].clone();
             assert_eq!(exported, document);
             let mut style = view(&renamed, "class-view")?.style.clone();
@@ -305,7 +357,7 @@ fn unsupported_style_survives_unrelated_edit_and_blocks_conflicting_overwrite() 
             let conflicting = restyle(&renamed, "class-view", style)?;
             let conflicting =
                 saved.reopen(&conflicting, &format!("conflict-{variant}-{name}"), format)?;
-            let error = mdj_conversion::export(&conflicting)
+            let error = export_mdj(&conflicting)
                 .err()
                 .ok_or("residue must not be overwritten")?;
             assert!(
@@ -315,7 +367,7 @@ fn unsupported_style_survives_unrelated_edit_and_blocks_conflicting_overwrite() 
             );
             assert_eq!(findings(&conflicting)?, findings(&original)?);
             assert_eq!(fs::read(&source_path)?, source);
-            assert_eq!(mdj_conversion::export(&original)?, source);
+            assert_eq!(export_mdj(&original)?, source);
         }
     }
     Ok(())
@@ -326,10 +378,10 @@ fn unsupported_edits_fail_after_reopening_and_repair_restores_exact_replay() -> 
     assert!(SPECIFICATION.contains(
         "Scenario: Reject unsupported style edits and recover without changing the source"
     ));
-    let original = mdj_conversion::import(SOURCE)?.project;
+    let original = import_mdj(SOURCE)?.project;
     let saved = SavedFlow::new("unsupported-edits")?;
     let baseline = findings(&original)?;
-    for (name, format) in [("json", Format::Json), ("binary", Format::Protobuf)] {
+    for (name, format) in [("json", "json"), ("binary", "protobuf")] {
         let original = saved.reopen(&original, &format!("original-{name}"), format)?;
         for (variant, expected_error) in [
             ("opacity", "cannot represent this edit losslessly"),
@@ -349,7 +401,7 @@ fn unsupported_edits_fail_after_reopening_and_repair_restores_exact_replay() -> 
             }
             let edited = restyle(&original, "class-view", style)?;
             let edited = saved.reopen(&edited, &format!("{variant}-{name}"), format)?;
-            let error = mdj_conversion::export(&edited)
+            let error = export_mdj(&edited)
                 .err()
                 .ok_or("unsupported edit must not export stale source")?;
             assert!(error.to_string().contains(expected_error), "{error}");
@@ -362,10 +414,10 @@ fn unsupported_edits_fail_after_reopening_and_repair_restores_exact_replay() -> 
             let repaired =
                 saved.reopen(&repaired, &format!("repaired-{variant}-{name}"), format)?;
             assert_eq!(repaired, original);
-            assert_eq!(mdj_conversion::export(&repaired)?, SOURCE);
+            assert_eq!(export_mdj(&repaired)?, SOURCE);
             assert_eq!(
-                mdj_conversion::export(&repaired)?,
-                mdj_conversion::export(&original)?
+                export_mdj(&repaired)?,
+                export_mdj(&original)?
             );
         }
     }
