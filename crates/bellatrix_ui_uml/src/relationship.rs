@@ -82,14 +82,6 @@ impl UmlRelationGlyph {
         }
         self
     }
-    pub fn cubic(mut self, control1: (f32, f32), control2: (f32, f32)) -> Self {
-        self.segments = vec![UmlLineSegment::Cubic {
-            control1,
-            control2,
-            to: self.to,
-        }];
-        self
-    }
     pub fn segments(mut self, segments: Vec<UmlLineSegment>) -> Self {
         self.segments = segments;
         self

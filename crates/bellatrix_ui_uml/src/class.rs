@@ -357,22 +357,6 @@ impl UmlClassifier {
         self.class_id = Some(id.into());
         self
     }
-    pub fn attribute(mut self, value: impl Into<SharedString>) -> Self {
-        self.attributes.push(MemberRow {
-            id: None,
-            title: value.into(),
-            presentation: MemberPresentation::default(),
-        });
-        self
-    }
-    pub fn operation(mut self, value: impl Into<SharedString>) -> Self {
-        self.operations.push(MemberRow {
-            id: None,
-            title: value.into(),
-            presentation: MemberPresentation::default(),
-        });
-        self
-    }
     pub fn attribute_with_id(
         mut self,
         id: impl Into<String>,
