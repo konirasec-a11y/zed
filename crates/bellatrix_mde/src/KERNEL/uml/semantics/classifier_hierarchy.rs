@@ -58,6 +58,12 @@ struct ParentEvidence<'a> {
     unresolved: Option<QueryError>,
 }
 
+struct AncestryEvidence<'a> {
+    direct: HashMap<&'a str, Vec<ElementRef<'a>>>,
+    postorder: Vec<&'a str>,
+    unresolved: Option<QueryError>,
+}
+
 pub(crate) struct HierarchyQueries<'index, 'model> {
     references: &'index ReferenceIndex<'model>,
     completed: HashMap<&'model str, ClassifierAncestry<'model>>,
@@ -142,11 +148,17 @@ impl<'index, 'model> HierarchyQueries<'index, 'model> {
                 "Generalization objects require a canonical relationship adapter",
             ));
         }
-        let mut seen = HashSet::new();
-        let parents = self.references
+        // Classifier::generalization is unordered. Stable edge identity decides
+        // error precedence without reordering any ordered UML member collection.
+        let mut generalizations = self
+            .references
             .model()
             .relationship_records()
             .filter(|relation| relation.kind == "uml.generalization" && relation.from == id)
+            .collect::<Vec<_>>();
+        generalizations.sort_by_key(|relation| relation.id.as_str());
+        let mut seen = HashSet::new();
+        let parents = generalizations.into_iter()
             .map(|relation| {
                 self.references
                     .element(&relation.id)
@@ -197,9 +209,49 @@ impl<'index, 'model> HierarchyQueries<'index, 'model> {
         })
     }
 
-    fn read_parents(&self, id: &str) -> Result<Vec<ElementRef<'model>>, QueryError> {
-        let evidence = self.parent_evidence(id)?;
-        evidence.unresolved.map_or(Ok(evidence.parents), Err)
+    fn ancestry_evidence(&self, id: &str) -> Result<AncestryEvidence<'model>, QueryError> {
+        let root = self
+            .references
+            .element(id)
+            .map_err(|error| QueryError::invalid(id, error))?;
+        let mut pending = vec![(root.id(), false)];
+        let mut active = HashSet::new();
+        let mut completed = HashSet::new();
+        let mut direct = HashMap::new();
+        let mut postorder = Vec::new();
+        let mut unresolved = None;
+        while let Some((id, exiting)) = pending.pop() {
+            if self.completed.contains_key(id) || completed.contains(id) {
+                continue;
+            }
+            if exiting {
+                active.remove(id);
+                completed.insert(id);
+                postorder.push(id);
+                continue;
+            }
+            if !active.insert(id) {
+                return Err(QueryError::invalid(id, "cycle in UML generalization"));
+            }
+            let evidence = self.parent_evidence(id)?;
+            if let Some(error) = evidence.unresolved {
+                unresolved.get_or_insert(error);
+            }
+            pending.push((id, true));
+            pending.extend(
+                evidence
+                    .parents
+                    .iter()
+                    .rev()
+                    .map(|parent| (parent.id(), false)),
+            );
+            direct.insert(id, evidence.parents);
+        }
+        Ok(AncestryEvidence {
+            direct,
+            postorder,
+            unresolved,
+        })
     }
 
     fn order_ancestors(
@@ -261,46 +313,31 @@ impl<'index, 'model> HierarchyQueries<'index, 'model> {
     }
 
     pub(crate) fn resolve(&mut self, id: &str) -> Result<ClassifierAncestry<'model>, QueryError> {
-        let root = self
-            .references
-            .element(id)
-            .map_err(|error| QueryError::invalid(id, error))?;
-        let mut pending = vec![(root.id(), false)];
-        let mut active = HashSet::new();
-        let mut direct = HashMap::<&str, Vec<ElementRef<'model>>>::new();
-        while let Some((id, exiting)) = pending.pop() {
-            if self.completed.contains_key(id) {
-                continue;
-            }
-            if exiting {
-                let parents = direct
-                    .remove(id)
-                    .ok_or_else(|| QueryError::invalid(id, "missing ancestry traversal state"))?;
-                let ancestors = self.order_ancestors(&parents)?;
-                let classifier = self
-                    .references
-                    .element(id)
-                    .map_err(|error| QueryError::invalid(id, error))?;
-                self.completed.insert(
-                    id,
-                    ClassifierAncestry {
-                        classifier,
-                        parents,
-                        ancestors,
-                    },
-                );
-                active.remove(id);
-            } else {
-                if !active.insert(id) {
-                    return Err(QueryError::invalid(id, "cycle in UML generalization"));
-                }
-                let parents = self.read_parents(id)?;
-                pending.push((id, true));
-                pending.extend(parents.iter().rev().map(|parent| (parent.id(), false)));
-                direct.insert(id, parents);
-            }
+        let mut evidence = self.ancestry_evidence(id)?;
+        // Incomplete ancestry must not enter the complete-query cache. Still
+        // inspect every known branch first: unknown cannot hide a local cycle.
+        if let Some(error) = evidence.unresolved {
+            return Err(error);
         }
-        self.get(root.id())
+        for ancestor_id in evidence.postorder {
+            let parents = evidence.direct.remove(ancestor_id).ok_or_else(|| {
+                QueryError::invalid(ancestor_id, "missing ancestry traversal state")
+            })?;
+            let ancestors = self.order_ancestors(&parents)?;
+            let classifier = self
+                .references
+                .element(ancestor_id)
+                .map_err(|error| QueryError::invalid(ancestor_id, error))?;
+            self.completed.insert(
+                ancestor_id,
+                ClassifierAncestry {
+                    classifier,
+                    parents,
+                    ancestors,
+                },
+            );
+        }
+        self.get(id)
             .cloned()
             .ok_or_else(|| QueryError::invalid(id, "missing ancestry result"))
     }
@@ -321,7 +358,30 @@ pub fn conforms_to(
     let other = references
         .element(other_id)
         .map_err(|error| QueryError::invalid(other_id, error))?;
-    Ok(resolve_ancestry(references, classifier_id)?.conforms_to(other))
+    let evidence = HierarchyQueries::new(references).ancestry_evidence(classifier_id)?;
+    if other.metaclass().is_none() {
+        return Err(QueryError::unsupported(
+            other_id,
+            "Type metaclass is unresolved",
+        ));
+    }
+    if !other.conforms_to("Classifier") {
+        return Ok(false);
+    }
+    // UML Classifier-conformsTo-spec is identity OR existential reachability,
+    // not a request to enumerate the complete transitive closure. Known paths
+    // prove it even beside unresolved branches; all known defects ran above.
+    if classifier_id == other_id
+        || evidence
+            .direct
+            .values()
+            .flatten()
+            .any(|parent| parent.id() == other_id)
+    {
+        Ok(true)
+    } else {
+        evidence.unresolved.map_or(Ok(false), Err)
+    }
 }
 
 /// Decide allParents()->includes without claiming to enumerate a complete
@@ -351,38 +411,18 @@ pub(crate) fn has_ancestor_matching(
     classifier_id: &str,
     predicate: impl Fn(ElementRef<'_>) -> bool,
 ) -> Result<bool, QueryError> {
-    let queries = HierarchyQueries::new(references);
-    let mut pending = vec![(classifier_id.to_owned(), false)];
-    let mut active = HashSet::new();
-    let mut completed = HashSet::new();
-    let mut found = false;
-    let mut unknown = None;
-    while let Some((id, exiting)) = pending.pop() {
-        if exiting {
-            active.remove(&id);
-            completed.insert(id);
-            continue;
-        }
-        if completed.contains(&id) {
-            continue;
-        }
-        if !active.insert(id.clone()) {
-            return Err(QueryError::invalid(&id, "cycle in UML generalization"));
-        }
-        let evidence = queries.parent_evidence(&id)?;
-        if let Some(error) = evidence.unresolved {
-            unknown = Some(error);
-        }
-        pending.push((id, true));
-        for parent in evidence.parents {
-            found |= predicate(parent);
-            pending.push((parent.id().to_owned(), false));
-        }
-    }
-    if found {
+    let evidence = HierarchyQueries::new(references).ancestry_evidence(classifier_id)?;
+    if evidence
+        .postorder
+        .iter()
+        .filter_map(|id| evidence.direct.get(id))
+        .flatten()
+        .copied()
+        .any(predicate)
+    {
         Ok(true)
     } else {
-        unknown.map_or(Ok(false), Err)
+        evidence.unresolved.map_or(Ok(false), Err)
     }
 }
 

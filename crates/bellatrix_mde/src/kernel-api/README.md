@@ -144,6 +144,20 @@ backward compatibility with earlier APIs or document formats.
 
 ## Graph queries
 
+UML type compatibility uses one shared, iterative Generalization traversal for
+complete ancestry and existential reachability. UML 2.5.1
+`Classifier-conformsTo-spec` is identity or a path to the requested Classifier,
+so a known local path can prove compatibility even when another branch remains
+unresolved. It does not certify the unknown branch or complete UML validity.
+Without a witness, an incomplete graph remains unverified rather than returning
+false. Known malformed edges, invalid specialization, final parents and cycles
+still take precedence over a positive witness. Complete ancestry queries inspect
+known branches before returning an unresolved result, and never cache a partial
+closure as complete. Unordered Generalization edges use stable relationship IDs
+for traversal and error precedence; ordered members retain their existing order.
+These semantics feed existing validation diagnostics, including Property
+subsetting and redefinition, without adding another validator or API contract.
+
 Two additional functions use the same `&str -> Result<String, String>` boundary:
 
 - `reachable_graph_nodes`: request fields `api_version`, `model`, `roots` (array
