@@ -309,10 +309,10 @@ fn outgoing_at_most(references: &ReferenceIndex<'_>, vertex: ElementRef<'_>, max
     transition_count(references, vertex, "source", 0, maximum)
 }
 
-fn junction_vertex(references: &ReferenceIndex<'_>, vertex: ElementRef<'_>) -> Result<bool, QueryError> {
+fn pseudostate_incident_transitions(references: &ReferenceIndex<'_>, vertex: ElementRef<'_>, required_kind: &str) -> Result<bool, QueryError> {
     let kind = schema::read_effective_scalar(vertex, "kind")
         .map_err(|error| QueryError::invalid(vertex.id(), error))?;
-    if kind.as_str() != Some("junction") { return Ok(true); }
+    if kind.as_str() != Some(required_kind) { return Ok(true); }
     require_all([
         transition_count(references, vertex, "source", 1, usize::MAX),
         transition_count(references, vertex, "target", 1, usize::MAX),
@@ -340,7 +340,10 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "State-entry_or_exit", "connection points must have kind entryPoint or exitPoint"));
         }
         if element.conforms_to("Pseudostate") {
-            constraints.push((junction_vertex(references, element),
+            constraints.push((pseudostate_incident_transitions(references, element, "choice"),
+                "UML_PSEUDOSTATE_CHOICE_VERTEX", "MDE_PSEUDOSTATE_CHOICE_VERTEX_UNVERIFIED",
+                "Pseudostate-choice_vertex", "a choice Pseudostate requires at least one incoming and one outgoing Transition"));
+            constraints.push((pseudostate_incident_transitions(references, element, "junction"),
                 "UML_PSEUDOSTATE_JUNCTION_VERTEX", "MDE_PSEUDOSTATE_JUNCTION_VERTEX_UNVERIFIED",
                 "Pseudostate-junction_vertex", "a junction Pseudostate requires at least one incoming and one outgoing Transition"));
             constraints.push((pseudostate_single_outgoing(references, element, &["initial"]),
