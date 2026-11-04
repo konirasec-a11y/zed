@@ -2283,38 +2283,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bellatrix_ui_c4"
-version = "0.1.0"
-dependencies = [
- "bellatrix_design_system",
- "gpui",
-]
-
-[[package]]
-name = "bellatrix_ui_canvas"
-version = "0.1.0"
-dependencies = [
- "bellatrix_design_system",
- "gpui",
-]
-
-[[package]]
-name = "bellatrix_ui_flow"
-version = "0.1.0"
-dependencies = [
- "bellatrix_design_system",
- "gpui",
-]
-
-[[package]]
-name = "bellatrix_ui_mindmap"
-version = "0.1.0"
-dependencies = [
- "bellatrix_design_system",
- "gpui",
-]
-
-[[package]]
 name = "bellatrix_ui_panels"
 version = "0.1.0"
 dependencies = [
@@ -2325,14 +2293,6 @@ dependencies = [
 
 [[package]]
 name = "bellatrix_ui_symbols"
-version = "0.1.0"
-dependencies = [
- "bellatrix_design_system",
- "gpui",
-]
-
-[[package]]
-name = "bellatrix_ui_tree"
 version = "0.1.0"
 dependencies = [
  "bellatrix_design_system",

@@ -24,11 +24,6 @@ CRATES = [
     "bellatrix_design_system",
     "bellatrix_ui_uml",
     "bellatrix_ui_symbols",
-    "bellatrix_ui_canvas",
-    "bellatrix_ui_c4",
-    "bellatrix_ui_flow",
-    "bellatrix_ui_mindmap",
-    "bellatrix_ui_tree",
     "bellatrix_ui_panels",
 ]
 HEADLESS = {

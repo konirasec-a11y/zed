@@ -3,7 +3,7 @@ publish.workspace = true
 name = "bellatrix_ui_panels"
 version = "0.1.0"
 edition = "2024"
-description = "Reusable dock panel content, property rows and empty states: Bellatrix Design reusable GPUI components"
+description = "Reusable dock panel headers: Bellatrix Design reusable GPUI components"
 
 [dependencies]
 gpui.workspace = true
