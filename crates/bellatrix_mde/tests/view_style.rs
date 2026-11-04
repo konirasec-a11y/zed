@@ -116,6 +116,15 @@ fn route_commands_author_curves_isolate_views_and_roundtrip()
             view["id"].as_str().ok_or("view identity missing")?
         )
         .into();
+        if let Some(endpoints) = view.get_mut("endpoints").and_then(Value::as_object_mut) {
+            for field in ["source_view_id", "target_view_id"] {
+                if let Some(endpoint) = endpoints.get_mut(field)
+                    && let Some(identifier) = endpoint.as_str()
+                {
+                    *endpoint = format!("other-{identifier}").into();
+                }
+            }
+        }
     }
     project["diagrams"]
         .as_array_mut()
@@ -306,6 +315,15 @@ fn presentation_alignment_and_stack_are_view_local_and_ignore_unrelated_semantic
             view["id"].as_str().ok_or("view identity missing")?
         )
         .into();
+        if let Some(endpoints) = view.get_mut("endpoints").and_then(Value::as_object_mut) {
+            for field in ["source_view_id", "target_view_id"] {
+                if let Some(endpoint) = endpoints.get_mut(field)
+                    && let Some(identifier) = endpoint.as_str()
+                {
+                    *endpoint = format!("other-{identifier}").into();
+                }
+            }
+        }
     }
     project["diagrams"]
         .as_array_mut()
