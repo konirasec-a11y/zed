@@ -39,8 +39,12 @@ exposes a documented data format, not the internal Rust structs.
 `Ok` contains a JSON object with:
 
 - `api_version`: 1.
-- `coverage`: `"implemented_rules_only"`.
-- `has_errors`: whether any reported diagnostic has severity `"error"`.
+- `coverage`: `"implemented_rules_only"`, or
+  `"mixed_domain_semantics_unverified"` when UML evaluation is suspended.
+- `validity`: `"unverified"` for a mixed-domain capacity blocker, `"invalid"`
+  when errors were found, or `"no_violations_found"`. None certifies conformance.
+- `has_errors`: whether any reported diagnostic has severity `"error"`, including
+  a capacity blocker that prevents semantic evaluation.
 - `diagnostics`: an array of objects with `severity` (`"error"` or `"warning"`),
   `code`, `subject_id` and `message`, all strings.
 
@@ -48,11 +52,38 @@ Diagnostics are ordered by `(code, subject_id, severity, message)`. Input array
 order is preserved when invoking existing semantics because ordered UML members
 are meaningful. A well-formed invalid model returns `Ok` with diagnostics.
 
-Graph integrity runs first. If it fails, the response contains one
-`GRAPH_INTEGRITY` error and skips semantic validation. Otherwise the existing
-structural-model validation runs. This does not run each diagram-specific rule,
-prove complete UML 2.5.1 conformance, or certify a project can be generated.
-Warnings and unsupported-capability diagnostics remain visible in the result.
+The UML entry point decodes only the semantic projection of the Bellatrix document:
+`schema_version`, `id`, `name`, `root_model`, `elements` and `relations`.
+Known document fields `diagrams`, `hierarchy`, `composition` and `mdj_provenance`
+are ignored without parsing their contents or checking presentation identities.
+Malformed visual content cannot hide UML errors. Unknown document fields and
+malformed semantic fields are still contract errors. This projection neither
+changes the input nor repairs or replaces a persisted document.
+
+Semantic identities are checked first. A failure returns one `GRAPH_INTEGRITY`
+error and skips evaluation. For pure UML models, root, endpoint and ownership
+integrity are checked next, followed by the existing structural-model rules.
+The graph and diagram APIs retain their own presentation validation.
+
+A model containing non-`uml.*` elements or relationships other than the `owns`
+ownership link is a mixed-domain model. It returns
+`UML_EXTERNAL_DOMAIN_UNVERIFIED`, explicit `UML_EXTERNAL_REFERENCE_UNVERIFIED`
+warnings for represented cross-domain endpoints and `$ref` values, and
+the error `UML_MODEL_SEMANTICS_UNVERIFIED`. This error reports an unsupported
+validation capability, not a proven UML violation. `validity` is `unverified`
+and `has_errors` is `true`, so legacy error-only consumers cannot report success.
+Its coverage is
+`mixed_domain_semantics_unverified`: UML rule evaluation was **not performed**,
+including for the UML subset. This temporary boundary avoids legacy adapters
+implicitly interpreting Rust types as UML. External-domain mapping and partial
+validation remain future work; no semantic records or collection members are
+silently removed or converted.
+
+`has_errors: false` means only that no error diagnostic was reported. It is
+not proof of validity; mixed-domain evaluation always returns a capacity error
+and explicit `unverified` validity. No response proves complete UML 2.5.1
+conformance or generation readiness. Warnings and unsupported-capability
+diagnostics remain visible.
 
 ## Contract errors
 

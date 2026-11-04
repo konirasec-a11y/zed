@@ -41,3 +41,28 @@ explicitly because their complete canonical role adapters are not implied by
 binary `from`/`to` fields. They must not be replaced by visual drafts to hide
 unsupported rules. Baselines exercise the supported representation, not a claim
 that every feature of each UML family is exhaustively covered.
+
+Activity incidence regressions additionally change canonical endpoints and their
+explicit properties together, keeping diagram attachments synchronized. Seven
+negative lifecycle scenarios cover InitialNode incoming/control edges, FinalNode
+outgoing edges (including ActivityFinalNode inheritance), ForkNode incoming count,
+JoinNode/MergeNode outgoing count and DecisionNode incoming count. The existing
+Activity positive scenario witnesses their permitted cardinalities. The rules
+read semantic ActivityEdge source/target, not stored inverse caches or drawings.
+Normative bodies: UML.xmi InitialNode-no_incoming_edges/control_edges,
+FinalNode-no_outgoing_edges, ForkNode-one_incoming_edge,
+JoinNode-one_outgoing_edge, MergeNode-one_outgoing_edge and
+DecisionNode-incoming_outgoing_edges. Other Activity constraints remain outside
+this increment; these scenarios do not claim exhaustive Activity conformance.
+
+The additional positive presentation round-trip scenario retains decimal
+Rect/Ellipse/Polygon/Path coordinates, a cubic segment, authored LayoutBounds
+values alongside null and missing fields, and an arbitrary-precision decimal in
+presentation properties. This checks document persistence without giving those
+presentation values semantic meaning in UML validation.
+
+Two further incidence flows retain a malformed ObjectFlow source and an external
+ControlFlow source. A malformed endpoint must report its edge property contract,
+not invent a FinalNode/InitialNode violation. The external ControlFlow may leave
+cardinality unresolved, but must not claim its already known ControlFlow type is
+unverified. The manifest's forbidden diagnostic witnesses enforce this distinction.

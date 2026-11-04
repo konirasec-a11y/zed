@@ -643,6 +643,7 @@ impl<'a> Model<'a> {
         issues.extend(super::operations::validate(&references));
         issues.extend(super::parameter_sets::validate(&references));
         issues.extend(super::state_machines::validate(&references));
+        issues.extend(super::activities::validate(&references));
         issues.extend(crate::templates::validate_bindings(&references));
         issues.extend(super::value_specifications::validate(&references));
         issues.extend(super::associations::validate(&references));

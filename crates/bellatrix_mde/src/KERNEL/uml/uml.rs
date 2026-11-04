@@ -56,3 +56,6 @@ pub mod profiles;
 
 #[path = "semantics/state_machines.rs"]
 mod state_machines;
+
+#[path = "semantics/activities.rs"]
+mod activities;

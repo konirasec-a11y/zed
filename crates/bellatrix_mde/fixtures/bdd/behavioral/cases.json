@@ -7,7 +7,7 @@
       "diagram_id": "use_case-diagram",
       "expected": "valid",
       "diagnostics": [],
-      "intent": "Baseline sem violação conhecida das regras implementadas."
+      "intent": "Baseline sem viola\u00e7\u00e3o conhecida das regras implementadas."
     },
     {
       "id": "use_case-invalid",
@@ -31,7 +31,7 @@
       "diagram_id": "activity-diagram",
       "expected": "valid",
       "diagnostics": [],
-      "intent": "Baseline sem violação conhecida das regras implementadas."
+      "intent": "Baseline sem viola\u00e7\u00e3o conhecida das regras implementadas."
     },
     {
       "id": "activity-invalid",
@@ -46,7 +46,7 @@
           "subject_id": "flow-1"
         }
       ],
-      "intent": "ControlFlow.target referencia Class Order, não ActivityNode; a projeção visual e os IDs permanecem íntegros."
+      "intent": "ControlFlow.target referencia Class Order, n\u00e3o ActivityNode; a proje\u00e7\u00e3o visual e os IDs permanecem \u00edntegros."
     },
     {
       "id": "state_machine-valid",
@@ -55,7 +55,7 @@
       "diagram_id": "state_machine-diagram",
       "expected": "valid",
       "diagnostics": [],
-      "intent": "Baseline sem violação conhecida das regras implementadas."
+      "intent": "Baseline sem viola\u00e7\u00e3o conhecida das regras implementadas."
     },
     {
       "id": "state_machine-invalid",
@@ -70,7 +70,147 @@
           "subject_id": "done"
         }
       ],
-      "intent": "Transição complete parte de FinalState done; source/target e attachments permanecem coerentes."
+      "intent": "Transi\u00e7\u00e3o complete parte de FinalState done; source/target e attachments permanecem coerentes."
+    },
+    {
+      "id": "activity-initial-incoming-invalid",
+      "file": "activity.initial-incoming.invalid.json",
+      "diagram_kind": "activity",
+      "diagram_id": "activity-diagram",
+      "expected": "invalid",
+      "diagnostics": [
+        {
+          "code": "UML_INITIAL_NODE_NO_INCOMING_EDGES",
+          "subject_id": "start",
+          "severity": "error"
+        }
+      ]
+    },
+    {
+      "id": "activity-initial-control-invalid",
+      "file": "activity.initial-control.invalid.json",
+      "diagram_kind": "activity",
+      "diagram_id": "activity-diagram",
+      "expected": "invalid",
+      "diagnostics": [
+        {
+          "code": "UML_INITIAL_NODE_CONTROL_EDGES",
+          "subject_id": "start",
+          "severity": "error"
+        }
+      ]
+    },
+    {
+      "id": "activity-final-outgoing-invalid",
+      "file": "activity.final-outgoing.invalid.json",
+      "diagram_kind": "activity",
+      "diagram_id": "activity-diagram",
+      "expected": "invalid",
+      "diagnostics": [
+        {
+          "code": "UML_FINAL_NODE_NO_OUTGOING_EDGES",
+          "subject_id": "finish",
+          "severity": "error"
+        }
+      ]
+    },
+    {
+      "id": "activity-fork-incoming-invalid",
+      "file": "activity.fork-incoming.invalid.json",
+      "diagram_kind": "activity",
+      "diagram_id": "activity-diagram",
+      "expected": "invalid",
+      "diagnostics": [
+        {
+          "code": "UML_FORK_NODE_ONE_INCOMING_EDGE",
+          "subject_id": "parallel",
+          "severity": "error"
+        }
+      ]
+    },
+    {
+      "id": "activity-join-outgoing-invalid",
+      "file": "activity.join-outgoing.invalid.json",
+      "diagram_kind": "activity",
+      "diagram_id": "activity-diagram",
+      "expected": "invalid",
+      "diagnostics": [
+        {
+          "code": "UML_JOIN_NODE_ONE_OUTGOING_EDGE",
+          "subject_id": "synchronize",
+          "severity": "error"
+        }
+      ]
+    },
+    {
+      "id": "activity-merge-outgoing-invalid",
+      "file": "activity.merge-outgoing.invalid.json",
+      "diagram_kind": "activity",
+      "diagram_id": "activity-diagram",
+      "expected": "invalid",
+      "diagnostics": [
+        {
+          "code": "UML_MERGE_NODE_ONE_OUTGOING_EDGE",
+          "subject_id": "merge",
+          "severity": "error"
+        }
+      ]
+    },
+    {
+      "id": "activity-decision-incoming-invalid",
+      "file": "activity.decision-incoming.invalid.json",
+      "diagram_kind": "activity",
+      "diagram_id": "activity-diagram",
+      "expected": "invalid",
+      "diagnostics": [
+        {
+          "code": "UML_DECISION_NODE_INCOMING_OUTGOING_EDGES",
+          "subject_id": "check",
+          "severity": "error"
+        }
+      ]
+    },
+    {
+      "id": "activity-presentation-roundtrip-valid",
+      "file": "activity.presentation-roundtrip.valid.json",
+      "diagram_kind": "activity",
+      "diagram_id": "activity-diagram",
+      "expected": "valid",
+      "diagnostics": []
+    },
+    {
+      "id": "activity-malformed-incidence-invalid",
+      "file": "activity.malformed-incidence.invalid.json",
+      "diagram_kind": "activity",
+      "diagram_id": "activity-diagram",
+      "expected": "invalid",
+      "diagnostics": [
+        {
+          "code": "UML_PROPERTY_CONTRACT",
+          "subject_id": "uncertain-edge",
+          "severity": "error"
+        },
+        {
+          "code": "UML_ACTIVITY_EDGE_SOURCE_AND_TARGET",
+          "subject_id": "uncertain-edge",
+          "severity": "error"
+        }
+      ]
+    },
+    {
+      "id": "activity-external-control-valid",
+      "file": "activity.external-control.valid.json",
+      "diagram_kind": "activity",
+      "diagram_id": "activity-diagram",
+      "expected": "valid",
+      "diagnostics": [],
+      "forbidden_diagnostics": [
+        {
+          "code": "MDE_INITIAL_NODE_CONTROL_EDGES_UNVERIFIED",
+          "subject_id": "start",
+          "severity": "warning"
+        }
+      ]
     }
   ]
 }

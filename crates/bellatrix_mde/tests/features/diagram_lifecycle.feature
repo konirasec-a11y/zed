@@ -36,7 +36,17 @@ Feature: Complete authored UML project lifecycle through the public kernel bound
       | use_case-valid |
       | use_case-invalid |
       | activity-valid |
+      | activity-malformed-incidence-invalid |
+      | activity-external-control-valid |
+      | activity-presentation-roundtrip-valid |
       | activity-invalid |
+      | activity-initial-incoming-invalid |
+      | activity-initial-control-invalid |
+      | activity-final-outgoing-invalid |
+      | activity-fork-incoming-invalid |
+      | activity-join-outgoing-invalid |
+      | activity-merge-outgoing-invalid |
+      | activity-decision-incoming-invalid |
       | state_machine-valid |
       | state_machine-invalid |
       | sequence-valid |

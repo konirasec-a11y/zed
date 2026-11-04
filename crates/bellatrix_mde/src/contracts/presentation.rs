@@ -118,16 +118,58 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Authored<T> {
     }
 }
 
+// Internally tagged enums buffer numbers through Serde's Content. With
+// arbitrary_precision enabled for lossless MDJ data, decimal numbers arrive
+// there as serde_json's private number map, which f64 cannot read directly.
+fn deserialize_coordinate<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<f64, D::Error> {
+    let number = serde_json::Number::deserialize(deserializer)?;
+    coordinate_from_number(number)
+}
+
+fn coordinate_from_number<E: serde::de::Error>(number: serde_json::Number) -> Result<f64, E> {
+    number
+        .as_f64()
+        .filter(|value| value.is_finite())
+        .ok_or_else(|| E::custom("geometry coordinates must be finite numbers"))
+}
+
+fn deserialize_authored_coordinate<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Authored<f64>, D::Error> {
+    match Option::<serde_json::Number>::deserialize(deserializer)? {
+        Some(number) => coordinate_from_number(number).map(Authored::Value),
+        None => Ok(Authored::Null),
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LayoutBounds {
-    #[serde(default, skip_serializing_if = "Authored::is_missing")]
+    #[serde(
+        default,
+        skip_serializing_if = "Authored::is_missing",
+        deserialize_with = "deserialize_authored_coordinate"
+    )]
     pub x: Authored<f64>,
-    #[serde(default, skip_serializing_if = "Authored::is_missing")]
+    #[serde(
+        default,
+        skip_serializing_if = "Authored::is_missing",
+        deserialize_with = "deserialize_authored_coordinate"
+    )]
     pub y: Authored<f64>,
-    #[serde(default, skip_serializing_if = "Authored::is_missing")]
+    #[serde(
+        default,
+        skip_serializing_if = "Authored::is_missing",
+        deserialize_with = "deserialize_authored_coordinate"
+    )]
     pub width: Authored<f64>,
-    #[serde(default, skip_serializing_if = "Authored::is_missing")]
+    #[serde(
+        default,
+        skip_serializing_if = "Authored::is_missing",
+        deserialize_with = "deserialize_authored_coordinate"
+    )]
     pub height: Authored<f64>,
 }
 
@@ -299,15 +341,23 @@ pub enum Geometry {
         bounds: LayoutBounds,
     },
     Rect {
+        #[serde(deserialize_with = "deserialize_coordinate")]
         x: f64,
+        #[serde(deserialize_with = "deserialize_coordinate")]
         y: f64,
+        #[serde(deserialize_with = "deserialize_coordinate")]
         width: f64,
+        #[serde(deserialize_with = "deserialize_coordinate")]
         height: f64,
     },
     Ellipse {
+        #[serde(deserialize_with = "deserialize_coordinate")]
         cx: f64,
+        #[serde(deserialize_with = "deserialize_coordinate")]
         cy: f64,
+        #[serde(deserialize_with = "deserialize_coordinate")]
         rx: f64,
+        #[serde(deserialize_with = "deserialize_coordinate")]
         ry: f64,
     },
     Polygon {
@@ -329,7 +379,9 @@ impl Default for Geometry {
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Point {
+    #[serde(deserialize_with = "deserialize_coordinate")]
     pub x: f64,
+    #[serde(deserialize_with = "deserialize_coordinate")]
     pub y: f64,
 }
 

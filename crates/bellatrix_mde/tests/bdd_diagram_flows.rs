@@ -26,6 +26,8 @@ struct Case {
     #[serde(default)]
     diagrams: Vec<Diagram>,
     diagnostics: Vec<ExpectedDiagnostic>,
+    #[serde(default)]
+    forbidden_diagnostics: Vec<ExpectedDiagnostic>,
 }
 #[derive(Deserialize)]
 struct Diagram {
@@ -145,6 +147,16 @@ fn check_outcome(case: &Case, response: &Value) -> FlowResult<()> {
             .into());
         }
     }
+    for forbidden in &case.forbidden_diagnostics {
+        if diagnostics.iter().any(|actual| {
+            actual["code"] == forbidden.code
+                && actual["subject_id"] == forbidden.subject_id
+                && actual["severity"] == forbidden.severity
+        }) {
+            return Err(format!("{}: forbidden diagnostic {}/{}/{}", case.id,
+                forbidden.code, forbidden.subject_id, forbidden.severity).into());
+        }
+    }
     let mut expected_errors: Vec<_> = case
         .diagnostics
         .iter()
@@ -236,12 +248,12 @@ fn run_flow(group: &str, id: &str) -> FlowResult<()> {
         .map(str::trim)
         .filter(|id| *id != "case_id")
         .collect();
-    if examples.len() != 30
-        || examples.iter().collect::<BTreeSet<_>>().len() != 30
+    if examples.len() != 40
+        || examples.iter().collect::<BTreeSet<_>>().len() != 40
         || !examples.contains(&id)
     {
         return Err(format!(
-            "Gherkin inventory must contain exactly 30 unique scenarios including {id}"
+            "Gherkin inventory must contain exactly 40 unique scenarios including {id}"
         )
         .into());
     }
@@ -318,6 +330,7 @@ fn run_flow(group: &str, id: &str) -> FlowResult<()> {
         println!("And the TodoList pair differs in exactly one semantic field: {delta:?}");
     }
     println!("When I import and validate through the public pure API");
+    bellatrix_mde::decode(&serde_json::to_vec(&envelope["model"])?, Format::Json)?;
     let original = validate(case, &envelope)?;
     let mut failures = Vec::new();
     if let Err(error) = check_outcome(case, &original) {
@@ -390,3 +403,20 @@ flows!("interaction";
     timing_valid => "timing-valid", timing_invalid => "timing-invalid",
 );
 flows!("todolist"; todolist_valid => "todolist-valid", todolist_invalid => "todolist-invalid");
+
+flows!("behavioral";
+    activity_initial_incoming_invalid => "activity-initial-incoming-invalid",
+    activity_initial_control_invalid => "activity-initial-control-invalid",
+    activity_final_outgoing_invalid => "activity-final-outgoing-invalid",
+    activity_fork_incoming_invalid => "activity-fork-incoming-invalid",
+    activity_join_outgoing_invalid => "activity-join-outgoing-invalid",
+    activity_merge_outgoing_invalid => "activity-merge-outgoing-invalid",
+    activity_decision_incoming_invalid => "activity-decision-incoming-invalid",
+);
+
+flows!("behavioral"; activity_presentation_roundtrip_valid => "activity-presentation-roundtrip-valid");
+
+flows!("behavioral";
+ activity_malformed_incidence_invalid => "activity-malformed-incidence-invalid",
+ activity_external_control_valid => "activity-external-control-valid",
+);
