@@ -186,3 +186,12 @@ Feature: ControlFlow object-node endpoint semantics across the authored Activity
     And dangling local selection references remain unverified
     Then each state survives JSON and BLX reopening without materializing defaults
     And restoring the original document restores the baseline result
+
+  Scenario: Preserve Pin control flag implication through repair
+    Given imported InputPin and OutputPin subclasses with normative false defaults
+    When isControl is true and isControlType is false then control_pins is violated
+    And a control-type Pin need not have isControl true
+    And malformed flags keep their scalar errors separate from unverified rule outcomes
+    And a false antecedent or true consequent proves the implication despite the other unknown flag
+    Then all states survive JSON and BLX reopening without materializing defaults
+    And restoring the original document restores the baseline result

@@ -2189,3 +2189,142 @@ fn object_node_selection_rule(response: &Value, severity: Option<&str>) -> FlowR
     }
     Ok(())
 }
+
+#[test]
+fn pin_control_flag_implication_survives_defaults_unknowns_and_repair() -> FlowResult<()> {
+    assert!(
+        include_str!("features/activity_edge_lifecycle.feature")
+            .contains("Scenario: Preserve Pin control flag implication through repair")
+    );
+    let original = imported_activity()?;
+    let baseline = validate(&original)?;
+    for pin in ["order-input", "order-output"] {
+        pin_control_rule(&baseline, pin, None)?;
+        reopen(&format!("pin-control-defaults-{pin}"), &original, &baseline)?;
+        let mut implicit = original.clone();
+        element(&mut implicit, pin)?["properties"]["isControl"] = json!(true);
+        let default_type = validate(&implicit)?;
+        pin_control_rule(&default_type, pin, Some("error"))?;
+        assert!(
+            element(&mut implicit, pin)?["properties"]
+                .get("isControlType")
+                .is_none()
+        );
+        reopen(
+            &format!("pin-control-default-type-{pin}"),
+            &implicit,
+            &default_type,
+        )?;
+        for (name, control, control_type, severity, malformed) in [
+            ("both-false", json!(false), json!(false), None, false),
+            (
+                "control-without-type",
+                json!(true),
+                json!(false),
+                Some("error"),
+                false,
+            ),
+            (
+                "type-without-control",
+                json!(false),
+                json!(true),
+                None,
+                false,
+            ),
+            ("both-true", json!(true), json!(true), None, false),
+            (
+                "unknown-control-false-type",
+                json!("true"),
+                json!(false),
+                Some("warning"),
+                true,
+            ),
+            (
+                "unknown-control-true-type",
+                json!("true"),
+                json!(true),
+                None,
+                true,
+            ),
+            (
+                "false-control-unknown-type",
+                json!(false),
+                json!("true"),
+                None,
+                true,
+            ),
+            (
+                "true-control-unknown-type",
+                json!(true),
+                json!("true"),
+                Some("warning"),
+                true,
+            ),
+            (
+                "null-control",
+                Value::Null,
+                json!(false),
+                Some("warning"),
+                true,
+            ),
+            (
+                "null-control-type",
+                json!(true),
+                Value::Null,
+                Some("warning"),
+                true,
+            ),
+            ("both-unknown", json!([]), json!({}), Some("warning"), true),
+        ] {
+            let mut edited = original.clone();
+            element(&mut edited, pin)?["properties"]["isControl"] = control;
+            element(&mut edited, pin)?["properties"]["isControlType"] = control_type;
+            let response = validate(&edited)?;
+            pin_control_rule(&response, pin, severity)?;
+            if malformed {
+                assert!(
+                    response["diagnostics"]
+                        .as_array()
+                        .ok_or("missing diagnostics")?
+                        .iter()
+                        .any(|d| d["subject_id"] == pin
+                            && d["code"] == "UML_PROPERTY_VALUE"
+                            && d["severity"] == "error"),
+                    "{response}"
+                );
+            }
+            assert_eq!(
+                response["has_errors"],
+                malformed || severity == Some("error"),
+                "{response}"
+            );
+            reopen(&format!("pin-control-{pin}-{name}"), &edited, &response)?;
+        }
+    }
+    let repaired = validate(&original)?;
+    assert_eq!(repaired, baseline);
+    reopen("pin-control-repaired", &original, &repaired)?;
+    Ok(())
+}
+
+fn pin_control_rule(response: &Value, pin: &str, severity: Option<&str>) -> FlowResult<()> {
+    let matching: Vec<_> = response["diagnostics"]
+        .as_array()
+        .ok_or("missing diagnostics")?
+        .iter()
+        .filter(|d| {
+            d["subject_id"] == pin
+                && matches!(
+                    d["code"].as_str(),
+                    Some("UML_PIN_CONTROL_PINS" | "MDE_PIN_CONTROL_PINS_UNVERIFIED")
+                )
+        })
+        .collect();
+    if let Some(severity) = severity {
+        assert_eq!(matching.len(), 1, "{response}");
+        assert_eq!(matching[0]["severity"], severity, "{response}");
+    } else {
+        assert!(matching.is_empty(), "{response}");
+    }
+    Ok(())
+}

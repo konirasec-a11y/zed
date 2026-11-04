@@ -164,3 +164,10 @@ invalid ordering leave equality unverified with separate contract findings.
 This is not a one-way implication and does not validate Behavior parameters.
 The OutputPin lifecycle covers all ordering literals, both selection states,
 external/malformed values, JSON/BLX reopen and repair.
+
+Pin-control_pins requires isControlType when isControl is true; it does not impose
+the reverse implication or depend on incident edge kinds. Effective defaults
+come from UML.xmi and malformed flags remain separate scalar errors. A known
+false antecedent or true consequent proves the implication despite the other
+unknown flag. The lifecycle exercises InputPin/OutputPin, every Boolean pair,
+null/malformed flags, implicit defaults, JSON/BLX reopen and baseline repair.

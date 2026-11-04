@@ -496,6 +496,21 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
     let mut issues = Vec::new();
     for node in references.model().elements() {
         let mut checks = Vec::new();
+        if node.conforms_to("Pin") {
+            checks.push((
+                accept_any([
+                    schema::read_effective_boolean(node, "isControl")
+                        .map(|control| !control)
+                        .map_err(|error| QueryError::unsupported(node.id(), error)),
+                    schema::read_effective_boolean(node, "isControlType")
+                        .map_err(|error| QueryError::unsupported(node.id(), error)),
+                ]),
+                "UML_PIN_CONTROL_PINS",
+                "MDE_PIN_CONTROL_PINS_UNVERIFIED",
+                "Pin-control_pins",
+                "a Pin with isControl=true must also have isControlType=true",
+            ));
+        }
         if node.conforms_to("ObjectNode") {
             checks.push((
                 object_node_selection(references, node),
