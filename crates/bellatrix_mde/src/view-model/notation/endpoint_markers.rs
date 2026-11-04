@@ -154,6 +154,8 @@ pub fn resolve_relationship_view(
         .find(|relation| relation.id == subject);
     let (kind, presentation) = if let Some(relation) = relation {
         (relation.kind.clone(), relationship_presentation(relation))
+    } else if let Some(presentation) = imported_relationship_presentation(section, view) {
+        (format!("view.{}", presentation.label), presentation)
     } else {
         let object = section
             .elements
@@ -234,4 +236,67 @@ pub fn resolve_relationship_view(
         resolved.markers = Some((source, target));
     }
     Some(resolved)
+}
+
+fn imported_relationship_presentation(
+    section: &ModelingSection,
+    view: &View,
+) -> Option<RelationshipPresentation> {
+    let source = view.presentation.source.as_ref()?;
+    if source.format != "mdj" || !matches!(&view.geometry, crate::Geometry::Path { .. }) {
+        return None;
+    }
+    let (model_kind, notation) = match source.type_name.as_str() {
+        "UMLExtensionView" => ("mdj.UMLExtension", "uml.extension"),
+        "UMLGeneralizationView" => ("mdj.UMLGeneralization", "uml.generalization"),
+        "UMLDependencyView" => ("mdj.UMLDependency", "uml.dependency"),
+        "UMLRealizationView" => ("mdj.UMLRealization", "uml.realization"),
+        "UMLInterfaceRealizationView" => {
+            ("mdj.UMLInterfaceRealization", "uml.interface_realization")
+        }
+        _ => return None,
+    };
+    let object = section.elements.iter().find(|element| {
+        view.subject.as_deref() == Some(element.id.as_str()) && element.kind == model_kind
+    })?;
+    let mut style = relationship_style_for_notation(notation);
+    if view
+        .presentation
+        .interface_connection
+        .as_ref()
+        .is_some_and(|connection| !connection.target_unverified)
+        && let Some(target_id) = view
+            .endpoints
+            .as_ref()
+            .and_then(|endpoints| endpoints.target_view_id.as_deref())
+        && let Some(target) = section
+            .diagrams
+            .iter()
+            .find(|diagram| diagram.all_views().any(|candidate| candidate.id == view.id))
+            .and_then(|diagram| {
+                diagram
+                    .all_views()
+                    .find(|candidate| candidate.id == target_id)
+            })
+        && target.presentation.interface_icon.is_some()
+        && matches!(
+            target.style.uml.stereotype_display,
+            Some(crate::StereotypeDisplay::Icon | crate::StereotypeDisplay::IconLabel)
+        )
+    {
+        // The target icon owns the ball/socket. A second arrowhead would
+        // contradict the same presentation already projected for that View.
+        style.target_marker = crate::RelationshipMarker::None;
+        style.line_mode = crate::LineMode::Solid;
+    }
+    Some(RelationshipPresentation {
+        name: (!object.name.is_empty()).then(|| object.name.clone()),
+        source_labels: RelationshipEndpointLabels::default(),
+        target_labels: RelationshipEndpointLabels::default(),
+        label: notation.strip_prefix("uml.")?.to_owned(),
+        notation: notation.to_owned(),
+        style,
+        source_role: "source",
+        target_role: "target",
+    })
 }

@@ -255,6 +255,10 @@ impl Render for MdeWorkbenchItem {
                                         },
                                     })
                                     .collect();
+                                let render_style = imported_preview::render_style(
+                                    view,
+                                    bellatrix_design_system::Palette::current(cx),
+                                );
                                 let glyph = UmlRelationGlyph::new(
                                     resolved.style,
                                     width,
@@ -262,7 +266,7 @@ impl Render for MdeWorkbenchItem {
                                     place(*start),
                                     place(end),
                                 )
-                                .view_style(&view.render_style)
+                                .view_style(&render_style)
                                 .segments(local_segments)
                                 .communication_message(resolved.communication_message)
                                 .labels(presentation)
@@ -1066,7 +1070,7 @@ impl Render for MdeWorkbenchItem {
                         .border_color(border)
                         .child(
                             Label::new(
-                                format!("Partial imported preview: supported rectangles, labels and stored association paths are drawn. Unresolved data, other view types, styles and resources may not be rendered; their data is preserved. {}", marker_diagnostics.join("; ")),
+                                format!("Partial imported preview: supported shapes, labels and stored relationship paths are drawn. Unresolved data, other view types, styles and resources may not be rendered; their data is preserved. {}", marker_diagnostics.join("; ")),
                             )
                             .color(ui::Color::Warning),
                         ),
@@ -1233,7 +1237,8 @@ impl MdeWorkbenchItem {
         let shape = imported_preview::imported_shape(view)?;
         let bounds = imported_preview::resolve_layout_bounds(&view.geometry, self.zoom, self.pan)?;
         let palette = bellatrix_design_system::Palette::current(cx);
-        let appearance = bellatrix_ui_uml::ViewAppearance::new(view.render_style.clone());
+        let appearance =
+            bellatrix_ui_uml::ViewAppearance::new(imported_preview::render_style(view, palette));
         let selected = self.presentation.selected_view() == Some(view.id.as_str());
         let mut card = div()
             .absolute()

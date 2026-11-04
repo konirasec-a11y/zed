@@ -23,6 +23,25 @@ pub(super) fn project(
     let Some(binding) = &view.presentation.label_binding else {
         return rendered;
     };
+    // Opaque MDJ members have source labels but no canonical UML semantics.
+    // Reuse that text without treating a preserved member as a broken Property.
+    if rendered.text.is_some()
+        && view
+            .presentation
+            .source
+            .as_ref()
+            .is_some_and(|source| source.format == "mdj")
+        && section.elements.iter().any(|element| {
+            view.subject.as_deref() == Some(element.id.as_str())
+                && matches!(
+                    (binding.role, element.kind.as_str()),
+                    (SubjectLabelRole::Attribute, "mdj.UMLAttribute")
+                        | (SubjectLabelRole::Operation, "mdj.UMLOperation")
+                )
+        })
+    {
+        return rendered;
+    }
     let result = (|| {
         let element = view
             .subject

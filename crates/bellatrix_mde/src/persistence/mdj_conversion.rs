@@ -973,6 +973,7 @@ fn diagram_type(kind: &str) -> &'static str {
         "UMLComponentDiagram" => "UMLComponentDiagram",
         "UMLDeploymentDiagram" => "UMLDeploymentDiagram",
         "UMLPackageDiagram" => "UMLPackageDiagram",
+        "UMLProfileDiagram" => "UMLProfileDiagram",
         _ => "MDJUnsupportedDiagram",
     }
 }

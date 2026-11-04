@@ -1,4 +1,6 @@
+use bellatrix_design_system::Palette;
 use bellatrix_mde_cordis::Geometry;
+use bellatrix_mde_cordis::presentation_contract::RenderStyle;
 use bellatrix_mde_cordis::projection::View;
 
 pub(super) struct CanvasBounds {
@@ -73,10 +75,50 @@ pub(super) fn imported_shape(view: &View) -> Option<ImportedShape> {
         return Some(ImportedShape::Label);
     }
     match view.presentation.kind.as_deref()? {
-        "RectangleView" | "UMLClassView" => Some(ImportedShape::Rectangle),
-        "LabelView" | "NodeLabelView" | "EdgeLabelView" => Some(ImportedShape::Label),
+        "RectangleView" | "UMLClassView" | "UMLMetaClassView" | "UMLStereotypeView" => {
+            Some(ImportedShape::Rectangle)
+        }
+        "LabelView" | "NodeLabelView" | "EdgeLabelView" | "UMLAttributeView"
+        | "UMLOperationView" => Some(ImportedShape::Label),
         _ => None,
     }
+}
+
+pub(super) fn render_style(view: &View, palette: Palette) -> RenderStyle {
+    let mut style = view.render_style.clone();
+    if !view.presentation.has_source {
+        return style;
+    }
+    let matches_color = |color: Option<&str>, expected: &str| {
+        color.is_some_and(|color| {
+            color.eq_ignore_ascii_case(expected)
+                || color.eq_ignore_ascii_case(&format!("{expected}ff"))
+        })
+    };
+    // Source palette defaults are paint inputs, not the editor's theme. Keep
+    // authored colors in the document and retain non-default color accents.
+    let themed_surface = style.fill.is_none()
+        || matches_color(style.fill.as_deref(), "#ffffff")
+        || matches_color(style.fill.as_deref(), "#e2e2e2");
+    if themed_surface {
+        let fill = if matches!(&view.geometry, Geometry::Path { .. }) {
+            palette.canvas
+        } else if matches_color(style.fill.as_deref(), "#e2e2e2") {
+            palette.panel_alt
+        } else {
+            palette.panel
+        };
+        style.fill = Some(format!("#{fill:06x}"));
+        if matches_color(style.text_color.as_deref(), "#000000") {
+            style.text_color = None;
+        }
+    }
+    if (themed_surface || matches!(&view.geometry, Geometry::Path { .. }))
+        && matches_color(style.stroke.as_deref(), "#000000")
+    {
+        style.stroke = None;
+    }
+    style
 }
 
 pub(super) fn ordered_views(views: &[View]) -> Vec<&View> {
