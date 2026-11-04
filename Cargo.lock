@@ -2161,6 +2161,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "bellatrix_mde_contracts",
+ "bellatrix_mde_rust_generator",
  "petgraph",
  "prost",
  "serde",
