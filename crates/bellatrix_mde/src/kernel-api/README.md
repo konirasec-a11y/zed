@@ -162,6 +162,18 @@ checks use `upperBound()` without requiring the lower bound to be evaluated.
 These diagnostics describe the implemented
 rules, not complete UML conformance or a complete `memberEnd` query.
 
+Association specialization uses checked immediate Generalization parents, as
+required by `Association-specialized_end_number` and
+`Association-specialized_end_types`. An unresolved parent declaration or another
+ancestor branch does not erase a known parent's incompatible end count or Type.
+The size of a well-formed represented `memberEnd` collection remains available
+when targets are external. Type comparisons retain the original end positions;
+skipping an unresolved end never shifts later ends into a different pairing.
+Known violations use `UML_ASSOCIATION_ENDS` with the applicable rule in the
+message. Missing evidence remains `MDE_ASSOCIATION_UNSUPPORTED`. This evaluation
+runs independently of complete end-Type and ancestry queries, and the editing
+gate shares the same predicate. It does not resolve external documents.
+
 UML type compatibility uses one shared, iterative Generalization traversal for
 complete ancestry and existential reachability. UML 2.5.1
 `Classifier-conformsTo-spec` is identity or a path to the requested Classifier,

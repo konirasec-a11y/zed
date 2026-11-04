@@ -470,7 +470,8 @@ pub fn multiplicity(
 }
 
 struct MemberEndEvidence<'a> {
-    known: Vec<&'a Element>,
+    known: Vec<(usize, &'a Element)>,
+    cardinality: usize,
     unresolved: Option<classifiers::QueryError>,
 }
 
@@ -507,7 +508,7 @@ fn member_end_evidence<'a>(
         ..*property
     };
     let mut known = Vec::new();
-    for value in values {
+    for (position, value) in values.iter().enumerate() {
         match check_value(references, association, &member, value) {
             PropertyOutcome::Satisfied => {}
             PropertyOutcome::Violation(message) => {
@@ -523,7 +524,7 @@ fn member_end_evidence<'a>(
             .validate(&member, value)
             .map_err(|error| QueryError::invalid(association.id(), error))?
         {
-            Some(ElementRef::Object(property)) => known.push(property),
+            Some(ElementRef::Object(property)) => known.push((position, property)),
             _ => {
                 return Err(QueryError::invalid(
                     association.id(),
@@ -532,7 +533,11 @@ fn member_end_evidence<'a>(
             }
         }
     }
-    Ok(MemberEndEvidence { known, unresolved })
+    Ok(MemberEndEvidence {
+        known,
+        cardinality: values.len(),
+        unresolved,
+    })
 }
 
 // UML.xmi Association-ends_must_be_typed and Association-binary_associations.
@@ -565,7 +570,7 @@ fn association_end_constraints(
             .clone()
             .map(Err)
             .into_iter()
-            .chain(evidence.known.iter().map(|end| {
+            .chain(evidence.known.iter().map(|(_, end)| {
                 if end.properties.get("type").is_none_or(Value::is_null) {
                     Ok(false)
                 } else {
@@ -581,7 +586,7 @@ fn association_end_constraints(
         let aggregations = evidence
             .known
             .iter()
-            .map(|end| aggregation(end).map_err(|error| QueryError::invalid(&end.id, error)))
+            .map(|(_, end)| aggregation(end).map_err(|error| QueryError::invalid(&end.id, error)))
             .collect::<Result<Vec<_>, _>>()?;
         let aggregate_count = aggregations.iter().filter(|kind| **kind != "none").count();
         // Two distinct local aggregates can never satisfy the binary rule.
@@ -647,10 +652,19 @@ fn validate_association(
     {
         return Err(issue.message.clone());
     }
-    structure?;
-    end_issues.first().map_or(Ok(()), |issue| {
-        Err(format!("Unsupported {}", issue.message))
-    })
+    let mut unresolved = end_issues
+        .first()
+        .map(|issue| format!("Unsupported {}", issue.message));
+    for result in [structure, validate_specialization(references, association)] {
+        match result {
+            Err(message) if message.starts_with("Unsupported ") => {
+                unresolved.get_or_insert(message);
+            }
+            Err(message) => return Err(message),
+            Ok(()) => {}
+        }
+    }
+    unresolved.map_or(Ok(()), Err)
 }
 
 fn validate_association_structure(
@@ -782,7 +796,6 @@ fn validate_association_structure(
             );
         }
     }
-    validate_specialization(references, association, &ends)?;
     if association.conforms_to("AssociationClass") {
         match association_class_cannot_be_defined(references, association) {
             Ok(true) => {}
@@ -833,33 +846,56 @@ fn validate_association_structure(
 fn validate_specialization(
     references: &ReferenceIndex<'_>,
     association: ElementRef<'_>,
-    ends: &[&Element],
 ) -> Result<(), String> {
-    let ancestry = classifier_hierarchy::resolve_ancestry(references, association.id())
+    // UML Association-specialized_end_number/types quantify immediate parents,
+    // not their complete transitive closure. Reuse the hierarchy's checked
+    // direct evidence without claiming that unresolved parents are absent.
+    let evidence = classifier_hierarchy::HierarchyQueries::new(references)
+        .parent_evidence(association.id())
         .map_err(|error| error.to_string())?;
-    let mut unsupported = None;
-    for general in ancestry
+    let mut unsupported = evidence.unresolved.map(|error| error.to_string());
+    let parents = evidence
         .parents
-        .iter()
+        .into_iter()
         .filter(|parent| parent.conforms_to("Association"))
-    {
-        if !general.properties().contains_key("memberEnd") {
-            unsupported = Some(format!(
-                "Unsupported Association specialization: general {} has no materialized memberEnd identities",
-                general.id(),
-            ));
-            continue;
+        .collect::<Vec<_>>();
+    if parents.is_empty() {
+        return unsupported.map_or(Ok(()), Err);
+    }
+    let ends = member_end_evidence(references, association).map_err(|error| error.to_string())?;
+    if let Some(error) = &ends.unresolved {
+        unsupported.get_or_insert_with(|| error.to_string());
+    }
+    for general in parents {
+        let general_ends = match member_end_evidence(references, general) {
+            Ok(ends) => ends,
+            Err(error @ classifiers::QueryError::Unsupported { .. }) => {
+                unsupported.get_or_insert_with(|| error.to_string());
+                continue;
+            }
+            Err(error) => return Err(error.to_string()),
+        };
+        if let Some(error) = &general_ends.unresolved {
+            unsupported.get_or_insert_with(|| error.to_string());
         }
-        let general_ends = member_ends(references, general.id())?;
-        if ends.len() != general_ends.len() {
+        // A well-formed ordered reference collection has a represented size
+        // even when some targets are external. Never collapse unknown slots.
+        if ends.cardinality != general_ends.cardinality {
             return Err(format!(
                 "Association::specialized_end_number requires the same number of member ends as general {} ({} instead of {})",
                 general.id(),
-                ends.len(),
-                general_ends.len(),
+                ends.cardinality,
+                general_ends.cardinality,
             ));
         }
-        for (position, (specific, general_end)) in ends.iter().zip(general_ends).enumerate() {
+        for (position, specific) in &ends.known {
+            let Some((_, general_end)) = general_ends
+                .known
+                .iter()
+                .find(|(general_position, _)| general_position == position)
+            else {
+                continue;
+            };
             match compare_type_conformance(
                 references,
                 ElementRef::Object(specific),
@@ -876,7 +912,7 @@ fn validate_specialization(
                     ));
                 }
                 Err(error @ classifiers::QueryError::Unsupported { .. }) => {
-                    unsupported = Some(error.to_string());
+                    unsupported.get_or_insert_with(|| error.to_string());
                 }
                 Err(error) => return Err(error.to_string()),
             }
@@ -1136,24 +1172,37 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
         // This specific rule already has its own diagnostic above. The command
         // gate uses the same rule, but global output reports it only once.
         let end_issues = association_end_constraints(references, association);
-        if member_ends(references, association.id()).is_ok()
-            && let Err(message) =
-                validate_association_structure(references, association, end_issues.is_empty())
-            && !message.contains("AssociationClass-cannot_be_defined:")
-            && !message.contains("CommunicationPath-association_ends:")
-        {
-            if message.starts_with("Unsupported ") {
-                issues.push(StructuralDiagnostic {
-                    severity: StructuralSeverity::Warning,
-                    code: "MDE_ASSOCIATION_UNSUPPORTED",
-                    subject_id: association.id().into(),
-                    message,
-                });
-            } else {
-                issues.push(issue("UML_ASSOCIATION_ENDS", association.id(), message));
+        let structure = if member_ends(references, association.id()).is_ok() {
+            validate_association_structure(references, association, end_issues.is_empty())
+        } else {
+            Ok(())
+        };
+        issues.extend(end_issues);
+        for result in [structure, validate_specialization(references, association)] {
+            if let Err(message) = result
+                && !message.contains("AssociationClass-cannot_be_defined:")
+                && !message.contains("CommunicationPath-association_ends:")
+            {
+                let diagnostic = if message.starts_with("Unsupported ") {
+                    StructuralDiagnostic {
+                        severity: StructuralSeverity::Warning,
+                        code: "MDE_ASSOCIATION_UNSUPPORTED",
+                        subject_id: association.id().into(),
+                        message,
+                    }
+                } else {
+                    issue("UML_ASSOCIATION_ENDS", association.id(), message)
+                };
+                if !issues.iter().any(|existing| {
+                    existing.code == diagnostic.code
+                        && existing.subject_id == diagnostic.subject_id
+                        && existing.severity == diagnostic.severity
+                        && existing.message == diagnostic.message
+                }) {
+                    issues.push(diagnostic);
+                }
             }
         }
-        issues.extend(end_issues);
         if let Ok(ends) = member_ends(references, association.id()) {
             for end in ends {
                 if membership.insert(&end.id, association.id()).is_some() {

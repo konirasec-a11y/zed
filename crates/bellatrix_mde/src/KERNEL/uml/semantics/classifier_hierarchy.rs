@@ -53,9 +53,9 @@ impl ClassifierAncestry<'_> {
     }
 }
 
-struct ParentEvidence<'a> {
-    parents: Vec<ElementRef<'a>>,
-    unresolved: Option<QueryError>,
+pub(crate) struct ParentEvidence<'a> {
+    pub(crate) parents: Vec<ElementRef<'a>>,
+    pub(crate) unresolved: Option<QueryError>,
 }
 
 struct AncestryEvidence<'a> {
@@ -81,7 +81,7 @@ impl<'index, 'model> HierarchyQueries<'index, 'model> {
         self.completed.get(id)
     }
 
-    fn parent_evidence(&self, id: &str) -> Result<ParentEvidence<'model>, QueryError> {
+    pub(crate) fn parent_evidence(&self, id: &str) -> Result<ParentEvidence<'model>, QueryError> {
         let classifier = self
             .references
             .element(id)
