@@ -206,3 +206,13 @@ occurrence parent or cosmetic placement is changed. The same revision guard and
 Cordis CreateDiagram command are used. The existing projection nests the diagram
 under an unambiguous external placement of its context; multiple placements remain
 at the project level rather than inventing ownership or duplicating the diagram.
+
+Semantic owner context menus expose Attribute, Operation, Reception and Parameter
+creation according to the same UmlType capability checks used by AddMember.
+Actions capture the actual owner ID and menu revision, submit AddMember through
+Cordis, and expand the clicked owner occurrence after successful enqueue. They
+work without an active diagram. The kernel assigns fresh identities, ownership
+and unique default names, and may grow classifier views to fit new compartments.
+No canvas coordinates, duplicate semantic elements, cosmetic parents or invented
+container rules are used. New-member selection/rename on commit is not yet wired;
+queue acceptance is not reported as completed publication.

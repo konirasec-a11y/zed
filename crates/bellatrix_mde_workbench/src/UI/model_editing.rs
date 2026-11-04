@@ -430,18 +430,18 @@ impl MdeWorkbenchItem {
         Ok(())
     }
 
-    pub(super) fn submit_explorer_diagram_command(
+    pub(super) fn submit_explorer_command(
         &mut self, command: MdeUiCommand, project_id: &ProjectId,
         expected_revision: u64, cx: &mut Context<Self>,
     ) -> bool {
         let allowed = if self.source.is_read_only() || self.source.is_presentation_suspended() {
             Err("The active document is not editable".to_owned())
         } else if self.project_id() != project_id {
-            Err("The active project changed; reopen the diagram menu".to_owned())
+            Err("The active project changed; reopen the Explorer menu".to_owned())
         } else {
             self.source.snapshot().and_then(|snapshot| {
                 if snapshot.revision == expected_revision { Ok(()) }
-                else { Err("The model changed; reopen the diagram menu".to_owned()) }
+                else { Err("The model changed; reopen the Explorer menu".to_owned()) }
             })
         };
         if let Err(error) = allowed {

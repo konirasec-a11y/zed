@@ -328,3 +328,19 @@ is now outdated: an absent classifier property represents an empty collection,
 so the implemented existential check reports `UMLDI_CONTEXT_TYPE`. Unit tests
 were neither changed nor run in this slice; a successful kernel `cargo check`
 is compilation evidence only, not a green test-suite claim.
+
+## Normative context metaclass checks
+
+Direct diagram contexts use the kernel's normative metaclass mapping and
+inheritance, rather than the smaller editor-tool type catalog. In particular,
+CompositeStructure accepts supported Behavior subtypes that inherit Class and
+therefore StructuredClassifier (for example Activity, StateMachine and
+Interaction), as established by the pinned UML.xmi inheritance graph.
+
+For CompositeStructure and the behavioral/interaction context checks, a known
+incompatible metaclass produces `UMLDI_CONTEXT_TYPE`; an existing context with an
+unmapped extension metaclass produces warning `UMLDI_CONTEXT_TYPE_UNVERIFIED`.
+Unknown is not treated as either proven conformance or a proven type violation.
+Missing identities and context cardinality retain their existing errors, and
+other independent model diagnostics remain visible. InstanceSpecification
+contexts retain the separate classifier-witness check described above.

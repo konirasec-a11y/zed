@@ -33,6 +33,21 @@ impl gpui::Render for ExplorerElementDrag {
     }
 }
 
+pub(crate) fn member_creation_kinds(
+    section: &ModelingSection, subject: &str,
+) -> Vec<(bellatrix_mde::commands::ModelingMemberKind, &'static str)> {
+    use bellatrix_mde::{UmlCapability, UmlType, commands::ModelingMemberKind};
+    let Some(owner_type) = section.elements.iter().find(|element| element.id == subject)
+        .and_then(|element| UmlType::from_kind(&element.kind)) else { return Vec::new(); };
+    [
+        (ModelingMemberKind::Attribute, UmlCapability::Attribute, "Attribute"),
+        (ModelingMemberKind::Operation, UmlCapability::Operation, "Operation"),
+        (ModelingMemberKind::Reception, UmlCapability::Reception, "Reception"),
+        (ModelingMemberKind::Parameter, UmlCapability::Parameter, "Parameter"),
+    ].into_iter().filter(|(_, capability, _)| owner_type.supports(*capability))
+        .map(|(kind, _, label)| (kind, label)).collect()
+}
+
 pub(crate) fn contextual_diagram_kinds(
     section: &ModelingSection, subject: &str,
 ) -> Vec<bellatrix_mde::StructuralDiagramKind> {

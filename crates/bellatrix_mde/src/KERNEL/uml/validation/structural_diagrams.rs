@@ -125,6 +125,20 @@ fn problem(code: &'static str, id: &str, message: impl Into<String>) -> Structur
     }
 }
 
+fn context_type_diagnostic(context: &crate::Element, expected: &str) -> Option<StructuralDiagnostic> {
+    match crate::uml::root::object_metaclass(&context.kind) {
+        Some(metaclass) if crate::uml::metamodel::conforms_to(metaclass, expected) => None,
+        Some(_) => Some(problem("UMLDI_CONTEXT_TYPE", &context.id,
+            format!("This diagram requires a {expected} context"))),
+        None => Some(StructuralDiagnostic {
+            severity: StructuralSeverity::Warning,
+            code: "UMLDI_CONTEXT_TYPE_UNVERIFIED",
+            subject_id: context.id.clone(),
+            message: format!("Context metaclass is unresolved; {expected} conformance cannot be verified"),
+        }),
+    }
+}
+
 fn root_kind(metaclass: &str) -> RootMetaclass {
     if crate::uml::metamodel::conforms_to(metaclass, "Comment") {
         RootMetaclass::Comment
@@ -240,11 +254,11 @@ fn collect_structural_diagram_diagnostics(
         for context_id in &diagram.model_elements {
             match elements.get(context_id.as_str()) {
                 None => issues.push(problem("UMLDI_CONTEXT_MISSING", context_id, "The diagram context does not identify a model Element")),
-                Some(context) if !crate::uml::root::object_metaclass(&context.kind)
-                    .is_some_and(|metaclass| crate::uml::metamodel::conforms_to(metaclass, expected)) => {
-                    issues.push(problem("UMLDI_CONTEXT_TYPE", context_id, format!("This diagram requires a {expected} context")));
+                Some(context) => {
+                    if let Some(issue) = context_type_diagnostic(context, expected) {
+                        issues.push(issue);
+                    }
                 }
-                Some(_) => {}
             }
         }
     } else if kind != StructuralDiagramKind::CompositeStructure {
@@ -291,14 +305,11 @@ fn collect_structural_diagram_diagnostics(
                         }),
                     }
                 }
-                Some(context)
-                    if !UmlType::from_kind(&context.kind)
-                        .is_some_and(UmlType::is_structured_classifier) =>
-                {
-                    issues.push(problem("UMLDI_CONTEXT_TYPE", context_id,
-                        "Composite structure context must be a StructuredClassifier or a conforming InstanceSpecification"));
+                Some(context) => {
+                    if let Some(issue) = context_type_diagnostic(context, "StructuredClassifier") {
+                        issues.push(issue);
+                    }
                 }
-                Some(_) => {}
             }
         }
     }
