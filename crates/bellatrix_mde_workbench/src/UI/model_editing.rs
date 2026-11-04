@@ -5,7 +5,7 @@ impl MdeWorkbenchItem {
         if self.source.is_read_only() {
             return;
         }
-        let Some(owner_id) = self.presentation.selected_element.clone() else {
+        let Some(owner_id) = self.presentation.selected_element().map(str::to_owned) else {
             self.feedback = "Select a classifier first".into();
             cx.notify();
             return;
@@ -138,7 +138,7 @@ impl MdeWorkbenchItem {
         if self.source.is_read_only() {
             return;
         }
-        let Some(element_id) = self.presentation.selected_element.clone() else {
+        let Some(element_id) = self.presentation.selected_element().map(str::to_owned) else {
             self.feedback = "Select a model element first".into();
             cx.notify();
             return;
@@ -163,7 +163,7 @@ impl MdeWorkbenchItem {
         if self.source.is_read_only() {
             return;
         }
-        let Some(element_id) = self.presentation.selected_element.clone() else {
+        let Some(element_id) = self.presentation.selected_element().map(str::to_owned) else {
             self.feedback = "Select an element to delete".into();
             cx.notify();
             return;
@@ -181,11 +181,8 @@ impl MdeWorkbenchItem {
             }),
             cx,
         );
-        self.presentation.selected_element = None;
-        self.presentation.selected_view = None;
-        self.inline_editor = None;
-        self.inline_draft = None;
-        self.presentation.clear_edit();
+        let change = self.presentation.clear_selection();
+        self.apply_selection_change(change, cx);
         self.gesture = None;
         cx.notify();
     }
@@ -200,9 +197,9 @@ impl MdeWorkbenchItem {
     pub(super) fn reconcile_selection(&mut self, section: &bellatrix_mde::ModelingSection) {
         let selection = selection::reconcile_selection(
             section,
-            self.presentation.active_diagram.as_deref(),
-            self.presentation.selected_view.as_deref(),
-            self.presentation.selected_element.as_deref(),
+            self.presentation.active_diagram(),
+            self.presentation.selected_view(),
+            self.presentation.selected_element(),
             self.presentation.editing_id(),
         );
         let change = self.presentation.reconcile(selection);
@@ -280,7 +277,7 @@ impl MdeWorkbenchItem {
             .section
             .diagrams
             .iter()
-            .find(|diagram| Some(diagram.id.as_str()) == self.presentation.active_diagram.as_deref())
+            .find(|diagram| Some(diagram.id.as_str()) == self.presentation.active_diagram())
         else {
             self.feedback = "Select a diagram to place the Interface presentation".into();
             cx.notify();
@@ -330,8 +327,7 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
-        let diagram_id = self.presentation.active_diagram
-            .as_deref()
+        let diagram_id = self.presentation.active_diagram()
             .and_then(|id| {
                 snapshot
                     .section
@@ -346,8 +342,8 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
-        let owner_id = creation_owner(kind, self.presentation.selected_element.as_deref());
-        if self.presentation.visual_draft_mode {
+        let owner_id = creation_owner(kind, self.presentation.selected_element());
+        if self.presentation.visual_draft_mode() {
             let (width, height) = snapshot
                 .section
                 .diagrams
@@ -418,7 +414,7 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
-        let Some(diagram) = self.presentation.active_diagram.as_deref().and_then(|id| {
+        let Some(diagram) = self.presentation.active_diagram().and_then(|id| {
             snapshot
                 .section
                 .diagrams

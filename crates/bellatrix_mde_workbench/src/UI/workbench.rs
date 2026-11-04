@@ -2,7 +2,7 @@
 //! Zed owns presentation; bellatrix_mde owns semantics; Cordis publishes revisions.
 #[path = "../view-model/workbench_state.rs"]
 mod workbench_state;
-use workbench_state::{PendingRelationEndpoint, WorkbenchState};
+use workbench_state::{PendingRelationEndpoint, SelectionChange, WorkbenchState};
 #[cfg(test)]
 use workbench_state::switch_diagram_selection;
 
@@ -302,28 +302,33 @@ impl MdeWorkbenchItem {
         &self.source.project_id
     }
     pub fn selected_element(&self) -> Option<&str> {
-        self.presentation.selected_element.as_deref()
+        self.presentation.selected_element()
     }
     pub fn selected_tool(&self) -> Option<ModelingTool> {
-        self.presentation.selected_tool
+        self.presentation.selected_tool()
     }
     pub fn active_diagram(&self) -> Option<&str> {
-        self.presentation.active_diagram.as_deref()
+        self.presentation.active_diagram()
     }
     pub fn select_element(&mut self, id: String, cx: &mut Context<Self>) {
         let change = self.presentation.select_element(id);
+        self.apply_selection_change(change, cx);
+    }
+
+    fn apply_selection_change(&mut self, change: SelectionChange, cx: &mut Context<Self>) {
         if !change.preserve_editor {
             self.inline_editor = None;
             self.inline_draft = None;
         }
         if change.selection_changed {
+            self.gesture = None;
             cx.notify();
         }
     }
 
     fn select_view(&mut self, subject: String, view_id: String, cx: &mut Context<Self>) {
-        self.select_element(subject, cx);
-        self.presentation.selected_view = Some(view_id);
+        let change = self.presentation.select_view(Some(subject), view_id);
+        self.apply_selection_change(change, cx);
         cx.notify();
     }
 
@@ -340,9 +345,9 @@ impl MdeWorkbenchItem {
             Err(error) => { self.feedback = error; cx.notify(); return; }
         };
         self.select_diagram(diagram_id, cx);
-        self.presentation.selected_element = subject;
-        self.presentation.selected_view = Some(view_id);
-        self.feedback = if self.presentation.selected_element.is_none() {
+        let change = self.presentation.select_view(subject, view_id);
+        self.apply_selection_change(change, cx);
+        self.feedback = if self.presentation.selected_element().is_none() {
             "Visual View selected; no semantic subject is required".into()
         } else { "Diagram View selected".into() };
         cx.notify();
@@ -353,8 +358,8 @@ impl MdeWorkbenchItem {
             return;
         }
         let Some((diagram_id, view_id)) = selected_view_target(
-            self.presentation.active_diagram.as_deref(),
-            self.presentation.selected_view.as_deref(),
+            self.presentation.active_diagram(),
+            self.presentation.selected_view(),
         ) else {
             self.feedback = "Select a view in the active diagram to remove".into();
             cx.notify();
@@ -434,7 +439,7 @@ impl MdeWorkbenchItem {
         bellatrix_mde::commands::name_expression_text(element)
     }
     pub(crate) fn run_quick_action(&mut self, action: UmlQuickCreate, cx: &mut Context<Self>) {
-        let Some(element_id) = self.presentation.selected_element.clone() else {
+        let Some(element_id) = self.presentation.selected_element().map(str::to_owned) else {
             self.feedback = "Select a UML element first".into();
             cx.notify();
             return;
@@ -459,7 +464,7 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         }
-        let Some(diagram_id) = self.presentation.active_diagram.clone().or_else(|| {
+        let Some(diagram_id) = self.presentation.active_diagram().map(str::to_owned).or_else(|| {
             snapshot
                 .section
                 .diagrams
@@ -648,7 +653,7 @@ impl MdeWorkbenchItem {
             diagram_kind_label(kind),
             snapshot.section.diagrams.len().saturating_add(1)
         );
-        let model_elements = diagram_creation_context(kind, self.presentation.selected_element.as_deref());
+        let model_elements = diagram_creation_context(kind, self.presentation.selected_element());
         self.submit(
             MdeUiCommand::CreateDiagram(bellatrix_mde_cordis::ModelingCreateDiagramRequested {
                 project_id: self.project_id().clone(),
@@ -674,7 +679,7 @@ impl MdeWorkbenchItem {
         if self.source.is_read_only() {
             return;
         }
-        if self.presentation.selected_tool == Some(kind) {
+        if self.presentation.selected_tool() == Some(kind) {
             self.cancel_tool(cx);
         } else {
             self.arm_drag_tool(kind, cx);
@@ -758,7 +763,7 @@ impl MdeWorkbenchItem {
         position: Point<Pixels>,
         cx: &mut Context<Self>,
     ) {
-        if let Some(ModelingTool::Relation(kind)) = self.presentation.selected_tool {
+        if let Some(ModelingTool::Relation(kind)) = self.presentation.selected_tool() {
             self.connect_relation_view(kind, view_id, None, cx);
             return;
         }

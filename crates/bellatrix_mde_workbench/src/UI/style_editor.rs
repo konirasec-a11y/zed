@@ -98,8 +98,8 @@ fn target_is_active(
     panel.is_bound_to(item)
         && !item_state.source().is_read_only()
         && item_state.project_id().as_str() == key.0
-        && item_state.presentation.active_diagram.as_deref() == Some(key.1.as_str())
-        && item_state.presentation.selected_view.as_deref() == Some(key.2.as_str())
+        && item_state.presentation.active_diagram() == Some(key.1.as_str())
+        && item_state.presentation.selected_view() == Some(key.2.as_str())
 }
 
 pub(crate) fn reconcile_style_inputs(

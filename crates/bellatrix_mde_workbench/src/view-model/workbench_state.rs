@@ -15,7 +15,11 @@ pub(super) struct PendingRelationEndpoint {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum InlineEditTarget {
     Element(String),
-    View(String),
+    View {
+        id: String,
+        revision: u64,
+        pending: bool,
+    },
 }
 
 pub(super) struct SelectionChange {
@@ -25,14 +29,12 @@ pub(super) struct SelectionChange {
 }
 
 pub(super) struct WorkbenchState {
-    pub active_diagram: Option<String>,
-    pub selected_element: Option<String>,
-    pub selected_view: Option<String>,
-    pub selected_tool: Option<ModelingTool>,
-    pub visual_draft_mode: bool,
-    pub pending_relation_source: Option<PendingRelationEndpoint>,
-    pub draft_label_revision: Option<u64>,
-    pub draft_label_pending: bool,
+    active_diagram: Option<String>,
+    selected_element: Option<String>,
+    selected_view: Option<String>,
+    selected_tool: Option<ModelingTool>,
+    visual_draft_mode: bool,
+    pending_relation_source: Option<PendingRelationEndpoint>,
     editing_target: Option<InlineEditTarget>,
 }
 
@@ -45,23 +47,93 @@ impl WorkbenchState {
             selected_tool: None,
             visual_draft_mode: false,
             pending_relation_source: None,
-            draft_label_revision: None,
-            draft_label_pending: false,
             editing_target: None,
         }
     }
 
+    pub fn active_diagram(&self) -> Option<&str> {
+        self.active_diagram.as_deref()
+    }
+
+    pub fn selected_element(&self) -> Option<&str> {
+        self.selected_element.as_deref()
+    }
+
+    pub fn selected_view(&self) -> Option<&str> {
+        self.selected_view.as_deref()
+    }
+
+    pub fn selected_tool(&self) -> Option<ModelingTool> {
+        self.selected_tool
+    }
+
+    pub fn visual_draft_mode(&self) -> bool {
+        self.visual_draft_mode
+    }
+
+    pub fn pending_relation_source(&self) -> Option<&PendingRelationEndpoint> {
+        self.pending_relation_source.as_ref()
+    }
+
     pub fn select_element(&mut self, id: String) -> SelectionChange {
-        let selection_changed = self.selected_view.take().is_some();
-        let subject_changed = self.selected_element.as_deref() != Some(id.as_str());
-        if subject_changed {
-            self.selected_element = Some(id);
+        self.select_target(Some(id), None)
+    }
+
+    pub fn select_view(&mut self, subject: Option<String>, view_id: String) -> SelectionChange {
+        self.select_target(subject, Some(view_id))
+    }
+
+    pub fn clear_selection(&mut self) -> SelectionChange {
+        self.select_target(None, None)
+    }
+
+    fn select_target(&mut self, subject: Option<String>, view: Option<String>) -> SelectionChange {
+        let selection_changed = self.selected_element != subject || self.selected_view != view;
+        let preserve_editor = self.edit_matches(subject.as_deref(), view.as_deref());
+        if !preserve_editor {
             self.clear_edit();
         }
+        if selection_changed {
+            self.clear_relation_source();
+        }
+        self.selected_element = subject;
+        self.selected_view = view;
         SelectionChange {
             diagram_changed: false,
-            selection_changed: selection_changed || subject_changed,
-            preserve_editor: !subject_changed,
+            selection_changed,
+            preserve_editor,
+        }
+    }
+
+    pub fn begin_relation(&mut self, source: PendingRelationEndpoint) -> SelectionChange {
+        let change = self.select_target(source.subject_id.clone(), source.view_id.clone());
+        self.pending_relation_source = Some(source);
+        change
+    }
+
+    pub fn select_relation_target(
+        &mut self,
+        subject: Option<String>,
+        view: Option<String>,
+    ) -> SelectionChange {
+        // The second endpoint changes selection without abandoning the first endpoint.
+        let source = self.pending_relation_source.take();
+        let change = self.select_target(subject, view);
+        self.pending_relation_source = source;
+        change
+    }
+
+    pub fn clear_relation_source(&mut self) {
+        self.pending_relation_source = None;
+    }
+
+    fn edit_matches(&self, element: Option<&str>, view: Option<&str>) -> bool {
+        match &self.editing_target {
+            Some(InlineEditTarget::Element(id)) => element == Some(id.as_str()),
+            Some(InlineEditTarget::View { id, .. }) => {
+                view == Some(id.as_str()) && element.is_none()
+            }
+            None => false,
         }
     }
 
@@ -94,19 +166,54 @@ impl WorkbenchState {
 
     pub fn clear_edit(&mut self) {
         self.editing_target = None;
-        self.draft_label_revision = None;
-        self.draft_label_pending = false;
     }
 
     pub fn begin_element_edit(&mut self, id: String) {
-        self.clear_edit();
+        self.select_element(id.clone());
+        self.cancel_tool();
         self.editing_target = Some(InlineEditTarget::Element(id));
     }
 
     pub fn begin_view_edit(&mut self, id: String, revision: u64) {
-        self.clear_edit();
-        self.editing_target = Some(InlineEditTarget::View(id));
-        self.draft_label_revision = Some(revision);
+        self.select_view(None, id.clone());
+        self.cancel_tool();
+        self.editing_target = Some(InlineEditTarget::View {
+            id,
+            revision,
+            pending: false,
+        });
+    }
+
+    pub fn draft_label_revision(&self) -> Option<u64> {
+        match self.editing_target.as_ref() {
+            Some(InlineEditTarget::View { revision, .. }) => Some(*revision),
+            _ => None,
+        }
+    }
+
+    pub fn draft_label_pending(&self) -> bool {
+        matches!(
+            self.editing_target,
+            Some(InlineEditTarget::View { pending: true, .. })
+        )
+    }
+
+    pub fn view_label_sent(&mut self) {
+        if let Some(InlineEditTarget::View { pending, .. }) = &mut self.editing_target {
+            *pending = true;
+        }
+    }
+
+    pub fn view_label_completed(&mut self, latest_revision: Option<u64>) {
+        if let Some(InlineEditTarget::View {
+            revision, pending, ..
+        }) = &mut self.editing_target
+        {
+            *pending = false;
+            if let Some(latest_revision) = latest_revision {
+                *revision = latest_revision;
+            }
+        }
     }
 
     pub fn editing_element(&self) -> Option<&str> {
@@ -118,7 +225,7 @@ impl WorkbenchState {
 
     pub fn editing_view(&self) -> Option<&str> {
         match &self.editing_target {
-            Some(InlineEditTarget::View(id)) => Some(id),
+            Some(InlineEditTarget::View { id, .. }) => Some(id),
             _ => None,
         }
     }
@@ -136,13 +243,10 @@ impl WorkbenchState {
         let selection_changed = selection.selected_element != self.selected_element
             || selection.selected_view != self.selected_view;
         // Semantic and visual identifiers may have the same spelling, but are not interchangeable.
-        let matching_target = match &self.editing_target {
-            Some(InlineEditTarget::Element(id)) => selection.selected_element.as_ref() == Some(id),
-            Some(InlineEditTarget::View(id)) => {
-                selection.selected_view.as_ref() == Some(id) && selection.selected_element.is_none()
-            }
-            None => false,
-        };
+        let matching_target = self.edit_matches(
+            selection.selected_element.as_deref(),
+            selection.selected_view.as_deref(),
+        );
         let preserve_editor = selection.preserve_editor && matching_target;
         if !preserve_editor {
             self.clear_edit();
