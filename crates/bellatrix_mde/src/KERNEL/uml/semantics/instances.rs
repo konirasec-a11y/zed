@@ -11,6 +11,7 @@ use super::{
     references::{ReferenceIndex, reference_id},
     root::{Element, ElementRef, Model},
     schema,
+    value_specifications::{self, EvaluationError, LiteralValue},
 };
 use crate::{StructuralDiagnostic, StructuralSeverity};
 use serde_json::Value;
@@ -48,6 +49,14 @@ impl<'a> InstanceSpecificationRef<'a> {
             .into_iter()
             .filter_map(SlotRef::from_element)
             .collect())
+    }
+
+    /// Evaluate the optional owned specification without executing expression text.
+    pub fn specification(self, model: Model<'a>) -> Result<Option<LiteralValue>, QueryError> {
+        Ok(evaluate_owned_values(
+            &ReferenceIndex::new(model), self.0, "InstanceSpecification", "specification",
+            "InstanceSpecification-specification",
+        )?.into_iter().next())
     }
 
     /// The adapter stores classifier identities, never classifier names or DTO copies.
@@ -95,6 +104,13 @@ impl<'a> SlotRef<'a> {
             .then_some(element)
             .filter(|element| element.conforms_to("Slot"))
             .map(Self)
+    }
+
+    /// Preserve the authored UML value order, rather than inventing one from ownership edges.
+    pub fn values(self, model: Model<'a>) -> Result<Vec<LiteralValue>, QueryError> {
+        evaluate_owned_values(
+            &ReferenceIndex::new(model), self.0, "Slot", "value", "Slot-value",
+        )
     }
 
     pub fn owning_instance(self, model: Model<'a>) -> Result<InstanceSpecificationRef<'a>, String> {
@@ -151,13 +167,101 @@ impl From<String> for AssignmentError {
     }
 }
 
-fn populated(value: Option<&Value>) -> bool {
-    value.is_some_and(|value| !value.is_null() && !value.as_array().is_some_and(Vec::is_empty))
+fn evaluate_owned_values(
+    references: &ReferenceIndex<'_>,
+    owner: ElementRef<'_>,
+    metaclass: &str,
+    property: &str,
+    role: &'static str,
+) -> Result<Vec<LiteralValue>, QueryError> {
+    use super::property_contracts::{self, PropertyOutcome};
+    let descriptor = schema::uml_property(metaclass, property)
+        .map_err(|error| QueryError::unsupported(owner.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(owner.id(), "missing owned value contract"))?;
+    let mut unknown = None;
+    let authored = owner.properties().get(property);
+    let mut values = Vec::new();
+    if let Some(authored) = authored {
+        match property_contracts::check_value(references, owner, descriptor, authored) {
+            PropertyOutcome::Violation(message) => return Err(QueryError::invalid(owner.id(), message)),
+            PropertyOutcome::Unverified(message) => unknown = Some(QueryError::unsupported(owner.id(), message)),
+            PropertyOutcome::Satisfied => {}
+        }
+        let members = if matches!(descriptor.upper, "0" | "1") {
+            std::slice::from_ref(authored)
+        } else {
+            authored.as_array().ok_or_else(|| QueryError::invalid(owner.id(), "value requires a reference collection"))?
+        };
+        for member in members {
+            if super::references::external_reference_href(member)
+                .map_err(|error| QueryError::invalid(owner.id(), error))?.is_some()
+            {
+                continue;
+            }
+            if let Some(id) = reference_id(member).map_err(|error| QueryError::invalid(owner.id(), error))? {
+                values.push(references.element(id).map_err(|error| QueryError::invalid(owner.id(), error))?);
+            }
+        }
+    }
+    let mut owned_values = Vec::new();
+    for child in references.explicit_owned_elements(owner.id())
+        .map_err(|error| QueryError::invalid(owner.id(), error))?
+    {
+        match classifiers::contributes_to_owned_union(owner, child, role) {
+            Ok(true) => owned_values.push(child),
+            Ok(false) => {}
+            Err(error @ QueryError::Invalid { .. }) => return Err(error),
+            Err(error) => {
+                // An unresolved role does not repair malformed literal data on
+                // a known canonical child. Check that independently without
+                // assigning the child to this property or inventing its order.
+                if child.conforms_to("ValueSpecification") {
+                    match value_specifications::evaluate(references, child.id()) {
+                        Err(EvaluationError::Invalid { subject_id, message }) => {
+                            return Err(QueryError::invalid(&subject_id, message));
+                        }
+                        Ok(_) | Err(EvaluationError::Unsupported { .. }) => {}
+                    }
+                }
+                unknown = Some(error);
+            }
+        }
+    }
+    if matches!(descriptor.upper, "0" | "1") && owned_values.len() > 1 {
+        return Err(QueryError::invalid(owner.id(), format!("{property} permits at most one owned ValueSpecification")));
+    }
+    if authored.is_none() {
+        values = owned_values;
+        // Canonical ownership establishes membership, not the order of UML's
+        // ordered Slot::value. A singleton needs no separate ordering witness.
+        if descriptor.is_ordered && values.len() > 1 {
+            unknown = Some(QueryError::unsupported(owner.id(), "ordered Slot values require an explicit value reference collection"));
+        }
+    } else {
+        for child in owned_values {
+            if !values.iter().any(|value| value.id() == child.id()) {
+                return Err(QueryError::invalid(owner.id(), format!("{property} omits a canonical owned value")));
+            }
+        }
+    }
+    let mut evaluated = Vec::new();
+    for value in values {
+        match value_specifications::evaluate(references, value.id()) {
+            Ok(value) => evaluated.push(value),
+            Err(EvaluationError::Invalid { subject_id, message }) => return Err(QueryError::invalid(&subject_id, message)),
+            Err(EvaluationError::Unsupported { subject_id, message }) => {
+                unknown = Some(QueryError::unsupported(&subject_id, message));
+            }
+        }
+    }
+    match unknown {
+        Some(error) => Err(error),
+        None => Ok(evaluated),
+    }
 }
 
 fn validate_instance<'a>(
     instance: InstanceSpecificationRef<'a>,
-    model: Model<'a>,
     references: &ReferenceIndex<'a>,
 ) -> Result<Vec<ElementRef<'a>>, AssignmentError> {
     let classifiers = instance.classifiers_with(references)?;
@@ -166,20 +270,10 @@ fn validate_instance<'a>(
             "slot must be projected from the canonical ownership edge".into(),
         ));
     }
-    if instance
-        .0
-        .properties()
-        .get("specification")
-        .is_some_and(|value| !value.is_null())
-        || model
-            .owned_elements(instance)?
-            .iter()
-            .any(|element| element.conforms_to("ValueSpecification"))
-    {
-        return Err(AssignmentError::Unsupported(
-            "InstanceSpecification specification values are not yet evaluated".into(),
-        ));
-    }
+    evaluate_owned_values(
+        references, instance.0, "InstanceSpecification", "specification",
+        "InstanceSpecification-specification",
+    )?;
     Ok(classifiers)
 }
 
@@ -210,17 +304,16 @@ fn validate_assignment_with<'a>(
         ));
     }
     let feature = slot.defining_feature_with(references)?;
-    let classifiers = validate_instance(owner, model, references)?;
-    if populated(slot.0.properties().get("value"))
-        || model
-            .owned_elements(slot)?
-            .iter()
-            .any(|element| element.conforms_to("ValueSpecification"))
-    {
-        return Err(AssignmentError::Unsupported(
-            "Slot values are not yet evaluated".into(),
-        ));
-    }
+    let classifiers = validate_instance(owner, references);
+    let values = evaluate_owned_values(references, slot.0, "Slot", "value", "Slot-value")
+        .map_err(AssignmentError::from);
+    // Inspect both owned value sets before selecting Unsupported: an opaque
+    // specification must not hide a malformed Slot literal, or vice versa.
+    let (classifiers, values) = match (classifiers, values) {
+        (Err(error @ AssignmentError::Invalid(_)), _) | (_, Err(error @ AssignmentError::Invalid(_))) => return Err(error),
+        (Err(error), _) | (_, Err(error)) => return Err(error),
+        (Ok(classifiers), Ok(values)) => (classifiers, values),
+    };
     if classifiers.is_empty() {
         return Err(AssignmentError::Invalid(
             "A Slot definingFeature requires a classifier of its owning InstanceSpecification"
@@ -253,6 +346,13 @@ fn validate_assignment_with<'a>(
                     .iter()
                     .any(|candidate| candidate.id() == feature.id()) =>
             {
+                // Computing literals alone does not establish conformance to
+                // the definingFeature's type, multiplicity or uniqueness.
+                if !values.is_empty() {
+                    return Err(AssignmentError::Unsupported(
+                        "Slot literals are evaluated, but definingFeature value conformance is not yet verified".into(),
+                    ));
+                }
                 return Ok(());
             }
             Ok(_) => {}
@@ -429,7 +529,7 @@ pub(crate) fn validate<'a>(
         .elements()
         .filter_map(InstanceSpecificationRef::from_element)
         .filter_map(|instance| {
-            validate_instance(instance, model, references)
+            validate_instance(instance, references)
                 .err()
                 .map(|error| StructuralDiagnostic {
                     severity: match &error {
