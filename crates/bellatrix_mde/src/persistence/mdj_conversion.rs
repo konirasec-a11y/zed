@@ -1,7 +1,7 @@
 use super::mdj::{self, Diagnostic, MdjError};
 use crate::{
     Authored, Diagram, Element, Geometry, LayoutBounds, MdjObjectResidual, MdjProvenance,
-    PresentationSource, Project, Style, View, ViewPresentation,
+    PresentationSource, Project, Relation, Style, View, ViewPresentation,
 };
 use serde_json::{Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
@@ -14,8 +14,8 @@ pub struct Import {
     pub diagnostics: Vec<Diagnostic>,
 }
 
-/// A conservative interchange projection, not a StarUML renderer or UML adapter.
-/// Semantic objects retain their MDJ namespace until a canonical UML adapter exists.
+/// A conservative interchange projection, not a StarUML renderer.
+/// Only models, packages and classes have a canonical UML mapping.
 pub fn import(bytes: &[u8]) -> Result<Import, MdjError> {
     let document = mdj::decode(bytes)?;
     let (mut imported, residuals, paths) = project_document(&document)?;
@@ -130,20 +130,57 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
         let mut mapped_fields = BTreeSet::new();
         let name = take_name(&mut residue, &mut mapped_fields);
         if object.id != project.id {
-            // MDJ names are not assumed to be canonical UML metaclasses.
+            let canonical_kind = canonical_kind_for_object(object.type_name, &object.path);
+            if canonical_kind.is_some() {
+                if let Some(parent) = residue
+                    .get("_parent")
+                    .and_then(Value::as_object)
+                    .filter(|reference| reference.len() == 1)
+                    .and_then(|reference| reference.get("$ref"))
+                    .and_then(Value::as_str)
+                    .filter(|parent| {
+                        index.object(parent).is_some_and(|parent| {
+                            canonical_kind_for_object(parent.type_name, &parent.path).is_some()
+                        })
+                    })
+                {
+                    project.relations.push(Relation {
+                        id: ownership_relation_id(object.id, &paths),
+                        kind: "owns".into(),
+                        from: parent.into(),
+                        to: object.id.into(),
+                        properties: BTreeMap::new(),
+                    });
+                    residue.remove("_parent");
+                    mapped_fields.insert("_parent".into());
+                }
+            }
             project.elements.push(Element {
                 id: object.id.into(),
-                kind: format!("mdj.{}", object.type_name),
+                kind: canonical_kind
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| format!("mdj.{}", object.type_name)),
                 name,
                 label: None,
                 description: None,
-                properties: residue,
+                // Opaque MDJ properties must not accidentally become UML properties.
+                properties: if canonical_kind.is_some() {
+                    BTreeMap::new()
+                } else {
+                    std::mem::take(&mut residue)
+                },
                 annotations: Vec::new(),
                 implementations: Vec::new(),
                 content: None,
             });
-            residue = BTreeMap::new();
-            diagnostics.push(Diagnostic { path: object.path.clone(), message: format!("{} preserved as an MDJ object; canonical UML mapping (including associations and ends) is not implemented", object.type_name) });
+            diagnostics.push(Diagnostic {
+                path: object.path.clone(),
+                message: if canonical_kind.is_some() {
+                    format!("{} mapped by identity, name and supported explicit ownership only; remaining MDJ properties are preserved as source residue", object.type_name)
+                } else {
+                    format!("{} preserved as an MDJ object; canonical UML mapping (including associations and ends) is not implemented", object.type_name)
+                },
+            });
         }
         residuals.insert(
             object.id.into(),
@@ -402,7 +439,7 @@ fn metadata_after_export(project: &Project) -> Project {
                 if !element.name.is_empty() {
                     metadata.mapped_fields.insert("name".into());
                 }
-                if let Some(kind) = element.kind.strip_prefix("mdj.") {
+                if let Some(kind) = mdj_kind(&element.kind) {
                     metadata.type_name = kind.into();
                 }
             }
@@ -448,17 +485,66 @@ fn export_document(project: &Project) -> Result<Value, MdjError> {
                     "new semantic objects are not supported by the MDJ adapter",
                 )
             })?;
-        let kind = element
-            .kind
-            .strip_prefix("mdj.")
-            .ok_or_else(|| failure("", "canonical UML export is not implemented"))?;
+        let kind = mdj_kind(&element.kind)
+            .ok_or_else(|| failure("", "this canonical UML kind has no MDJ export mapping"))?;
+        let path = provenance
+            .object_paths
+            .get(&element.id)
+            .ok_or_else(|| failure("", "missing semantic object composition path"))?;
+        let canonical = canonical_kind_for_object(&metadata.type_name, path).is_some();
+        if canonical == element.kind.starts_with("mdj.") {
+            return Err(failure(
+                "",
+                "changing between opaque MDJ and canonical UML objects is not supported",
+            ));
+        }
+        let mut residual = if canonical {
+            metadata.residual.clone()
+        } else {
+            element.properties.clone()
+        };
+        if canonical && metadata.mapped_fields.contains("_parent") {
+            let relation_id = ownership_relation_id(&element.id, &provenance.object_paths);
+            let ownership = project
+                .relations
+                .iter()
+                .find(|relation| relation.id == relation_id)
+                .ok_or_else(|| failure("", "mapped MDJ ownership is missing"))?;
+            if ownership.kind != "owns"
+                || ownership.to != element.id
+                || !project.elements.iter().any(|parent| {
+                    parent.id == ownership.from
+                        && matches!(
+                            parent.kind.as_str(),
+                            "uml.model" | "uml.package" | "uml.class"
+                        )
+                })
+            {
+                return Err(failure(
+                    "",
+                    "mapped MDJ ownership cannot reference an unsupported or missing parent",
+                ));
+            }
+            if residual
+                .insert(
+                    "_parent".into(),
+                    serde_json::json!({"$ref": ownership.from}),
+                )
+                .is_some()
+            {
+                return Err(failure(
+                    "",
+                    "mapped ownership conflicts with source residue",
+                ));
+            }
+        }
         objects.insert(
             element.id.clone(),
             named_object(
                 &element.id,
                 kind,
                 &element.name,
-                &element.properties,
+                &residual,
                 &metadata.mapped_fields,
             )?,
         );
@@ -603,6 +689,42 @@ fn string<'a>(object: &'a Map<String, Value>, key: &str) -> Result<&'a str, MdjE
         .get(key)
         .and_then(Value::as_str)
         .ok_or_else(|| failure(key, "expected string"))
+}
+
+fn canonical_kind(kind: &str) -> Option<&'static str> {
+    match kind {
+        "UMLModel" => Some("uml.model"),
+        "UMLPackage" => Some("uml.package"),
+        "UMLClass" => Some("uml.class"),
+        _ => None,
+    }
+}
+
+fn canonical_kind_for_object(kind: &str, path: &str) -> Option<&'static str> {
+    // Objects occupying presentation slots must not acquire semantic authority.
+    if in_view_composition(path) {
+        None
+    } else {
+        canonical_kind(kind)
+    }
+}
+
+fn mdj_kind(kind: &str) -> Option<&str> {
+    match kind {
+        "uml.model" => Some("UMLModel"),
+        "uml.package" => Some("UMLPackage"),
+        "uml.class" => Some("UMLClass"),
+        _ => kind.strip_prefix("mdj."),
+    }
+}
+
+fn ownership_relation_id(child: &str, paths: &Paths) -> String {
+    // Derived contract edges are not MDJ objects and never receive composition slots.
+    let mut id = format!("mdj.owns:{child}");
+    while paths.contains_key(&id) {
+        id.insert(0, ':');
+    }
+    id
 }
 
 fn in_view_composition(path: &str) -> bool {
