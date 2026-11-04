@@ -1449,10 +1449,10 @@ impl MdeWorkbenchItem {
                 .bg(if segment { palette.surface } else { palette.selection })
                 .when(segment || control, |handle| handle.rounded_full())
                 .cursor_move()
-                .tooltip(move |_, cx| ui::Tooltip::text(
+                .tooltip(ui::Tooltip::text(
                     if segment { "Drag segment; endpoints stay attached" }
                     else if control { "Drag curve control" }
-                    else { "Drag route point" }, cx))
+                    else { "Drag route point" }))
                 .on_mouse_down(MouseButton::Left, move |event, window, cx| {
                     if let Err(error) = owner.update(cx, |item, cx| {
                         item.start_path_edit(diagram_id.clone(), view_id.clone(), revision, handle, event.position, cx);
