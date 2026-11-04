@@ -344,8 +344,8 @@ pub(crate) fn apply_with_diagram_operations(project: &Project, command: &Command
         } => views::remove(&mut section, diagram_id, view_id)?,
         Command::ReorderView { diagram_id, view_id, order } => view_style::reorder(&mut section, diagram_id, view_id, *order)?,
         Command::SetViewLabel { view_id, label } => {
-            let view = section.diagrams.iter_mut().flat_map(|diagram| &mut diagram.views)
-                .find(|view| view.id == *view_id).ok_or("view not found")?;
+            let view = section.diagrams.iter_mut()
+                .find_map(|diagram| diagram.view_mut(view_id)).ok_or("view not found")?;
             view.label = label.clone();
         }
         Command::SetViewTiming { view_id, timing } => views::set_timing(&mut section, view_id, timing)?,

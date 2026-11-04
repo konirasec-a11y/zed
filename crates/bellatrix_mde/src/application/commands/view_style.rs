@@ -10,8 +10,7 @@ fn view<'a>(
         .iter()
         .find(|diagram| diagram.id == diagram_id)
         .ok_or("diagram not found")?
-        .views
-        .iter()
+        .all_views()
         .find(|view| view.id == view_id)
         .ok_or_else(|| "view not found in diagram".into())
 }
@@ -26,9 +25,7 @@ fn view_mut<'a>(
         .iter_mut()
         .find(|diagram| diagram.id == diagram_id)
         .ok_or("diagram not found")?
-        .views
-        .iter_mut()
-        .find(|view| view.id == view_id)
+        .view_mut(view_id)
         .ok_or_else(|| "view not found in diagram".into())
 }
 

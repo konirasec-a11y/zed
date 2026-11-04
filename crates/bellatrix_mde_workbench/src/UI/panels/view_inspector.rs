@@ -43,7 +43,7 @@ impl MdeRightPanel {
                         .iter()
                         .find(|diagram| diagram.id == diagram_id)
                         .is_none_or(|diagram| {
-                            !crate::workbench_ui::selection::supports_view_editing(
+                            !crate::workbench_ui::selection::supports_view_style_editing(
                                 diagram, &view.id,
                             )
                         })
@@ -210,14 +210,19 @@ impl MdeRightPanel {
             presentation_rows.append(&mut inspector_rows);
             inspector_rows = presentation_rows;
         }
-        if !read_only && let Some((diagram_id, view, _)) = style_target {
+        if !read_only && !item.read(cx).source().is_mdj()
+            && let Some((diagram_id, view, _)) = style_target
+        {
             let is_timing_lifeline = snapshot.as_ref().is_some_and(|snapshot| {
                 let timing_diagram = snapshot
                     .section
                     .diagrams
                     .iter()
                     .find(|diagram| diagram.id == diagram_id)
-                    .is_some_and(|diagram| diagram.interaction_kind.as_deref() == Some("timing"));
+                    .is_some_and(|diagram| {
+                        diagram.interaction_kind.as_deref() == Some("timing")
+                            && crate::workbench_ui::selection::supports_view_editing(diagram, &view.id)
+                    });
                 let kind = view
                     .draft
                     .as_ref()

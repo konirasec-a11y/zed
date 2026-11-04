@@ -99,11 +99,16 @@ fn target_is_active(
 ) -> bool {
     let item_state = item.read(cx);
     panel.is_bound_to(item)
-        && !item_state.selected_view_is_inspection_only()
         && !item_state.source().is_read_only()
         && item_state.project_id().as_str() == key.0
         && item_state.presentation.active_diagram() == Some(key.1.as_str())
         && item_state.presentation.selected_view() == Some(key.2.as_str())
+        && item_state.source().snapshot().ok().is_some_and(|snapshot| {
+            snapshot.section.diagrams.iter().any(|diagram| {
+                diagram.id == key.1
+                    && super::selection::supports_view_style_editing(diagram, &key.2)
+            })
+        })
 }
 
 pub(crate) fn reconcile_style_inputs(
@@ -269,7 +274,7 @@ pub(crate) fn flush_style_edits(
             .diagrams
             .iter()
             .find(|diagram| diagram.id == key.1)
-            .and_then(|diagram| diagram.views.iter().find(|view| view.id == key.2))
+            .and_then(|diagram| diagram.all_views().find(|view| view.id == key.2))
         else {
             draft.state.error = Some("The original diagram view no longer exists".into());
             continue;
@@ -416,6 +421,13 @@ pub(crate) fn render_styles(
         return rows;
     }
     let Some(draft) = draft else { return rows };
+    let layout_editable = !item.read(cx).source().is_mdj()
+        && item.read(cx).source().snapshot().ok().is_some_and(|snapshot| {
+            snapshot.section.diagrams.iter().any(|diagram| {
+                diagram.id == diagram_id
+                    && super::selection::supports_view_layout_editing(diagram, &view.id)
+            })
+        });
     let key = (
         item.read(cx).project_id().as_str().to_owned(),
         diagram_id.to_owned(),
@@ -842,7 +854,9 @@ pub(crate) fn render_styles(
                 })),
         );
     }
-    controls = controls.child(ordering);
+    if layout_editable {
+        controls = controls.child(ordering);
+    }
     if draft.state.conflict || draft.state.error.is_some() {
         let reload_key = key.clone();
         let target = item.clone();
@@ -896,7 +910,7 @@ pub(crate) fn render_styles(
                 .into_any_element(),
         );
     }
-    if is_edge {
+    if is_edge && layout_editable {
         let mut routing_row = div()
             .max_w_full()
             .flex_none()
@@ -1005,9 +1019,18 @@ impl MdeWorkbenchItem {
         }
         let snapshot = self.source().snapshot()?;
         if !snapshot.section.diagrams.iter().any(|diagram| {
-            diagram.id == key.1 && super::selection::supports_view_editing(diagram, &key.2)
+            diagram.id == key.1 && super::selection::supports_view_style_editing(diagram, &key.2)
         }) {
             return Err("This view supports inspection only".into());
+        }
+        if (submission.order.is_some() || submission.routing.is_some())
+            && (self.source().is_mdj()
+                || !snapshot.section.diagrams.iter().any(|diagram| {
+                    diagram.id == key.1
+                        && super::selection::supports_view_layout_editing(diagram, &key.2)
+                }))
+        {
+            return Err("Routing and stacking changes require a supported flat editable diagram".into());
         }
         let command = if let Some(order) = submission.order {
             MdeUiCommand::ReorderViewTracked {

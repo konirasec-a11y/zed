@@ -13,15 +13,18 @@ use std::rc::Rc;
 use ui_input::InputField;
 
 #[derive(Clone, Default)]
-pub(crate) struct ViewAppearance(pub(crate) RenderStyle);
+pub struct ViewAppearance(pub(crate) RenderStyle);
 impl ViewAppearance {
+    pub fn new(style: RenderStyle) -> Self {
+        Self(style)
+    }
     fn color(&self, value: Option<&str>, fallback: u32) -> gpui::Rgba {
         value
             .and_then(|value| gpui::Rgba::try_from(value).ok())
             .unwrap_or_else(|| rgb(fallback))
             .opacity(self.0.opacity.unwrap_or(1.0) as f32)
     }
-    pub(crate) fn fill(&self, fallback: u32) -> gpui::Rgba {
+    pub fn fill(&self, fallback: u32) -> gpui::Rgba {
         self.color(self.0.fill.as_deref(), fallback)
     }
     pub(crate) fn stroke(&self, palette: Palette, selected: bool) -> gpui::Rgba {
@@ -53,7 +56,7 @@ impl ViewAppearance {
             .map(|value| px(*value as f32 * scale))
             .collect()
     }
-    pub(crate) fn apply_rectangle_border(
+    pub fn apply_rectangle_border(
         &self,
         element: gpui::Div,
         palette: Palette,
@@ -144,7 +147,7 @@ impl ViewAppearance {
             None => element,
         }
     }
-    pub(crate) fn apply_surface<T: gpui::Styled>(&self, element: T, scale: f32) -> T {
+    pub fn apply_surface<T: gpui::Styled>(&self, element: T, scale: f32) -> T {
         match self.0.show_shadow {
             Some(true) => element.shadow(vec![
                 gpui::BoxShadow::new(
@@ -182,7 +185,7 @@ impl ViewAppearance {
             None => element,
         }
     }
-    pub(crate) fn align_column<T: gpui::Styled>(&self, element: T) -> T {
+    pub fn align_column<T: gpui::Styled>(&self, element: T) -> T {
         let element = self.align_text(element);
         let element = match self.0.text_align {
             Some(TextAlignment::Left) => element.items_start(),
@@ -202,6 +205,34 @@ impl ViewAppearance {
             .font_size
             .map_or(default, |value| value as f32 * default / 12.0)
             * scale
+    }
+    pub fn apply_text_style<T: gpui::Styled>(
+        &self,
+        element: T,
+        default_size: f32,
+        default_color: u32,
+        scale: f32,
+    ) -> T {
+        let mut element = element
+            .text_size(px(self.font_size(default_size, scale)))
+            .text_color(self.text(default_color));
+        if let Some(family) = &self.0.font_family {
+            element = element.font_family(family.clone());
+        }
+        if let Some(weight) = self.0.font_weight {
+            element = element.font_weight(gpui::FontWeight(f32::from(weight)));
+        }
+        element = match self.0.font_italic {
+            Some(true) => element.italic(),
+            Some(false) => element.not_italic(),
+            None => element,
+        };
+        element = match self.0.font_underline {
+            Some(true) => element.underline(),
+            Some(false) => element.text_decoration_none(),
+            None => element,
+        };
+        self.align_text(element)
     }
 }
 

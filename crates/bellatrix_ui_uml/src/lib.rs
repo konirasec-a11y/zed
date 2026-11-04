@@ -8,7 +8,7 @@ mod interface_presentation;
 mod quick_edit;
 mod relationship;
 mod timing;
-pub use class::UmlClassifier;
+pub use class::{UmlClassifier, ViewAppearance};
 pub use figures::UmlFigure;
 pub use figure_geometry::{TemplateSignatureLayout, template_signature_layout};
 pub use inline_edit::UmlInlineNameEditor;

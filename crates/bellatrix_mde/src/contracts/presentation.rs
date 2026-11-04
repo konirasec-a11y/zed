@@ -246,6 +246,21 @@ pub struct PresentationSource {
 }
 
 impl Diagram {
+    pub fn view_mut(&mut self, id: &str) -> Option<&mut View> {
+        fn find<'a>(views: &'a mut [View], id: &str) -> Option<&'a mut View> {
+            for view in views {
+                if view.id == id {
+                    return Some(view);
+                }
+                if let Some(found) = find(&mut view.children, id) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+        find(&mut self.views, id)
+    }
+
     pub fn all_views(&self) -> impl Iterator<Item = &View> {
         let mut pending: Vec<_> = self.views.iter().rev().collect();
         std::iter::from_fn(move || {

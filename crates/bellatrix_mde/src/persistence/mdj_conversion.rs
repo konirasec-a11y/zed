@@ -53,7 +53,8 @@ pub fn export(project: &Project) -> Result<Vec<u8>, MdjError> {
     if equivalent(project, &original_import.project, &residuals, &paths) {
         return Ok(provenance.source_bytes_for_verification().to_vec());
     }
-    let document = export_document(project)?;
+    let original_index = mdj::Index::new(&original)?;
+    let document = export_document(project, &original_index)?;
     // Reimport the actual result, not a digest supplied by the persisted source.
     // This also rejects edits to contract fields with no inverse MDJ mapping.
     let (reimported, residuals, paths) = project_document(&document)?;
@@ -513,7 +514,7 @@ fn metadata_after_export(project: &Project) -> Project {
     expected
 }
 
-fn export_document(project: &Project) -> Result<Value, MdjError> {
+fn export_document(project: &Project, original: &mdj::Index<'_>) -> Result<Value, MdjError> {
     let provenance = project
         .mdj_provenance
         .as_ref()
@@ -639,7 +640,7 @@ fn export_document(project: &Project) -> Result<Value, MdjError> {
             )?,
         );
         for view in diagram.all_views() {
-            objects.insert(view.id.clone(), export_view(view)?);
+            objects.insert(view.id.clone(), export_view(view, original.object(&view.id))?);
         }
     }
     if objects.len() != provenance.object_paths.len()
@@ -710,7 +711,7 @@ fn base_object(
     Ok(object)
 }
 
-fn export_view(view: &View) -> Result<Value, MdjError> {
+fn export_view(view: &View, original: Option<&mdj::Object<'_>>) -> Result<Value, MdjError> {
     let source = view
         .presentation
         .source
@@ -726,7 +727,10 @@ fn export_view(view: &View) -> Result<Value, MdjError> {
     }
     view_projection::export_endpoints(view, &mut object)?;
     style_projection::export_style(view, &mut object)?;
-    if view_projection::export_path(view, &mut object)? { return Ok(Value::Object(object)); }
+    let original = original.filter(|original| original.type_name == source.type_name);
+    if view_projection::export_path(view, original, &mut object)? {
+        return Ok(Value::Object(object));
+    }
     let Geometry::Layout { bounds } = &view.geometry else {
         return Err(failure(
             "",

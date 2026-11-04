@@ -62,7 +62,7 @@ impl Render for MdeWorkbenchItem {
                             }
                             continue;
                         }
-                        // Native nested editing still assumes top-level view identity.
+                        // Native geometry rendering and gestures still require top-level Views.
                         if !diagram.views.iter().any(|root| std::ptr::eq(root, view)) {
                             incomplete_preview = true;
                             continue;
@@ -1133,44 +1133,55 @@ impl MdeWorkbenchItem {
         }
         let shape = imported_preview::imported_shape(view)?;
         let bounds = imported_preview::resolve_layout_bounds(&view.geometry, self.zoom, self.pan)?;
-        let palette = WorkbenchPalette::current(cx);
+        let palette = bellatrix_design_system::Palette::current(cx);
+        let appearance = bellatrix_ui_uml::ViewAppearance::new(view.render_style.clone());
+        let selected = self.presentation.selected_view() == Some(view.id.as_str());
         let mut card = div()
-            .id(format!("mde-imported-view-{}", view.id))
             .absolute()
             .left(px(bounds.x))
             .top(px(bounds.y))
             .w(px(bounds.width))
             .h(px(bounds.height))
             .overflow_hidden()
-            .text_color(palette.text);
+            .flex()
+            .flex_col()
+            .map(|element| appearance.align_column(element))
+            .map(|element| appearance.apply_text_style(element, 12.0, palette.text, self.zoom))
+            .map(|element| appearance.apply_surface(element, self.zoom));
         match shape {
             imported_preview::ImportedShape::Rectangle => {
-                card = card.border_1().border_color(palette.border);
+                card = appearance.apply_rectangle_border(
+                    card.bg(appearance.fill(palette.panel)),
+                    palette,
+                    selected,
+                    self.zoom,
+                    0.0,
+                );
             }
             imported_preview::ImportedShape::Label => {
-                card = card.text_size(px(12.0 * self.zoom));
+                if selected {
+                    card = card.border_1().border_color(gpui::rgb(palette.selection));
+                }
             }
         }
-        if self.presentation.selected_view() == Some(view.id.as_str()) {
-            card = card.border_1().border_color(palette.selection);
-        }
         if let Some(label) = &view.label {
-            card = card.child(label.clone());
+            card = card.child(div().w_full().min_w_0().flex_none().child(label.clone()));
         }
         let owner = cx.weak_entity();
         let identifier = view.id.clone();
         let diagram_id = diagram_id.to_owned();
         node_bounds.push([bounds.x, bounds.y, bounds.width, bounds.height]);
         Some(
-            card.on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                if let Err(error) = owner.update(cx, |item, cx| {
-                    item.select_diagram_view(diagram_id.clone(), identifier.clone(), cx);
-                }) {
-                    eprintln!("MDE imported preview inspection failed: {error}");
-                }
-                cx.stop_propagation();
-            })
-            .into_any_element(),
+            card.id(format!("mde-imported-view-{}", view.id))
+                .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                    if let Err(error) = owner.update(cx, |item, cx| {
+                        item.select_diagram_view(diagram_id.clone(), identifier.clone(), cx);
+                    }) {
+                        eprintln!("MDE imported preview inspection failed: {error}");
+                    }
+                    cx.stop_propagation();
+                })
+                .into_any_element(),
         )
     }
 }

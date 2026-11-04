@@ -5,33 +5,8 @@ use crate::{
 };
 
 pub(super) fn take_path(residual: &mut BTreeMap<String, Value>) -> Option<Geometry> {
-    // Curved/rounded source routes cannot be flattened into straight segments.
-    if residual
-        .get("lineStyle")
-        .is_some_and(|value| !matches!(value.as_i64(), Some(0 | 1)))
-    {
-        return None;
-    }
-    let text = residual.get("points")?.as_str()?;
-    let points = text
-        .split(';')
-        .map(|pair| {
-            let (x, y) = pair.split_once(':')?;
-            let coordinate = |text: &str| {
-                let value: f64 = text.parse().ok()?;
-                (value.is_finite() && decimal_key(text) == decimal_key(&value.to_string()))
-                    .then_some(value)
-            };
-            Some(Point {
-                x: coordinate(x)?,
-                y: coordinate(y)?,
-            })
-        })
-        .collect::<Option<Vec<_>>>()?;
+    let points = read_points(residual.get("points")?.as_str()?, residual.get("lineStyle"))?;
     let (start, rest) = points.split_first()?;
-    if rest.is_empty() {
-        return None;
-    }
     let geometry = Geometry::Path {
         start: *start,
         segments: rest
@@ -43,6 +18,29 @@ pub(super) fn take_path(residual: &mut BTreeMap<String, Value>) -> Option<Geomet
     Some(geometry)
 }
 
+fn read_points(text: &str, line_style: Option<&Value>) -> Option<Vec<Point>> {
+    // Curved/rounded source routes cannot be flattened into straight segments.
+    if line_style.is_some_and(|value| !matches!(value.as_i64(), Some(0 | 1))) {
+        return None;
+    }
+    let points = text
+        .split(';')
+        .map(|pair| {
+            let (x, y) = pair.split_once(':')?;
+            Some(Point {
+                x: read_coordinate(x)?,
+                y: read_coordinate(y)?,
+            })
+        })
+        .collect::<Option<Vec<_>>>()?;
+    (points.len() >= 2).then_some(points)
+}
+
+fn read_coordinate(text: &str) -> Option<f64> {
+    let value: f64 = text.parse().ok()?;
+    (value.is_finite() && decimal_key(text) == decimal_key(&value.to_string())).then_some(value)
+}
+
 pub(super) fn take_endpoints(residual: &mut BTreeMap<String, Value>) -> Option<ViewEndpoints> {
     let source_view_id = take_reference(residual, "tail");
     let target_view_id = take_reference(residual, "head");
@@ -52,7 +50,11 @@ pub(super) fn take_endpoints(residual: &mut BTreeMap<String, Value>) -> Option<V
     })
 }
 
-pub(super) fn export_path(view: &View, object: &mut Map<String, Value>) -> Result<bool, MdjError> {
+pub(super) fn export_path(
+    view: &View,
+    original: Option<&mdj::Object<'_>>,
+    object: &mut Map<String, Value>,
+) -> Result<bool, MdjError> {
     let Geometry::Path { start, segments } = &view.geometry else {
         return Ok(false);
     };
@@ -75,18 +77,50 @@ pub(super) fn export_path(view: &View, object: &mut Map<String, Value>) -> Resul
     {
         return Err(failure(&view.id, "non-finite MDJ path coordinate"));
     }
+    // Source bytes only supply spelling after the same import validation. The
+    // authored geometry remains authoritative, even if provenance was replaced.
+    let original_points = original.and_then(|original| {
+        let text = original.properties.get("points")?.as_str()?;
+        if read_points(text, original.properties.get("lineStyle"))?.len() != points.len() {
+            return None;
+        }
+        text.split(';')
+            .map(|pair| pair.split_once(':'))
+            .collect::<Option<Vec<_>>>()
+    });
     insert_mapped(
         object,
         "points",
         Value::String(
             points
                 .iter()
-                .map(|point| format!("{}:{}", point.x, point.y))
+                .enumerate()
+                .map(|(position, point)| {
+                    let original = original_points
+                        .as_ref()
+                        .and_then(|points| points.get(position));
+                    format!(
+                        "{}:{}",
+                        export_coordinate(point.x, original.map(|(x, _)| *x)),
+                        export_coordinate(point.y, original.map(|(_, y)| *y)),
+                    )
+                })
                 .collect::<Vec<_>>()
                 .join(";"),
         ),
     )?;
     Ok(true)
+}
+
+fn export_coordinate(value: f64, original: Option<&str>) -> String {
+    original
+        .filter(|text| {
+            // Ordinary f64 equality would replay the old spelling after an
+            // authored change between positive and negative zero.
+            read_coordinate(text).is_some_and(|previous| previous.to_bits() == value.to_bits())
+        })
+        .map(str::to_owned)
+        .unwrap_or_else(|| value.to_string())
 }
 
 pub(super) fn export_endpoints(

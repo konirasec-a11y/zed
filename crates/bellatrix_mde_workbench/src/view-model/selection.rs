@@ -119,3 +119,15 @@ pub(super) fn supports_view_editing(diagram: &Diagram, view_id: &str) -> bool {
         view.id == view_id && matches!(view.geometry, Geometry::Rect { .. } | Geometry::Path { .. })
     })
 }
+
+pub(super) fn supports_view_style_editing(diagram: &Diagram, view_id: &str) -> bool {
+    // Appearance changes do not reposition a nested View or resolve its layout.
+    diagram.all_views().any(|view| view.id == view_id)
+}
+
+pub(super) fn supports_view_layout_editing(diagram: &Diagram, view_id: &str) -> bool {
+    supports_view_editing(diagram, view_id)
+        && !diagram.all_views().any(|view| {
+            !view.children.is_empty() || matches!(view.geometry, Geometry::Layout { .. })
+        })
+}
