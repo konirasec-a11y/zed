@@ -115,6 +115,7 @@ fn render_struct(
         "rust/struct.rs.tera",
         &json!({
             "annotations": rust_annotations(element), "name": &element.name,
+            "visibility": element.properties.get("visibility").and_then(|value| value.as_str()).unwrap_or("pub "),
             "fields": fields, "methods": methods, "requires": &unit.requires,
         }),
     )?)

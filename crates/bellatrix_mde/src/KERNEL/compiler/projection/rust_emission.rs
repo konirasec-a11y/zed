@@ -117,8 +117,11 @@ fn declaration_file(model: &Project, element: &Element) -> Result<PathBuf, Box<d
         }
         return Ok(physical_path(model, &file.id)?);
     }
-    let fallback: String = element
-        .name
+    standalone_declaration_file(&element.name)
+}
+
+pub(super) fn standalone_declaration_file(name: &str) -> Result<PathBuf, Box<dyn Error>> {
+    let fallback: String = name
         .chars()
         .map(|character| {
             if character.is_ascii_alphanumeric() || character == '_' {

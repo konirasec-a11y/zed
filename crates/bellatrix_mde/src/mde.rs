@@ -38,6 +38,8 @@ mod graph;
 mod hierarchy;
 #[path = "KERNEL/compiler/projection/rust_emission.rs"]
 mod kernel_rust_emission;
+#[path = "KERNEL/compiler/projection/uml_rust_struct.rs"]
+mod kernel_uml_rust_struct;
 #[path = "view-model/hierarchy/visual_consistency.rs"]
 mod visual_consistency;
 pub(crate) use visual_consistency::{VisualComponent, visual_components};
@@ -181,7 +183,7 @@ pub use kernel_api_graph::{reachable_graph_nodes, shortest_graph_path};
 
 #[path = "kernel-api/generation.rs"]
 mod kernel_api_generation;
-pub use kernel_api_generation::analyze_generation_dependencies;
+pub use kernel_api_generation::{analyze_generation_dependencies, generate_rust_struct};
 
 #[path = "mde-api/document.rs"]
 mod mde_api_document;

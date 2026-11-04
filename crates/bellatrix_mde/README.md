@@ -7,7 +7,8 @@ formalism and the mini-compiler implementation from model analysis to project
 artifacts and emission; it is not limited to passive validation.
 
 - `kernel-api/`: private function implementations for the public kernel boundary:
-  validation, graph queries and generation analysis.
+  validation, graph queries, generation analysis and standalone UML Class-to-Rust
+  artifacts in memory.
 - `mde-api/`: private function implementations for the public MDE document and
   application boundary: document codecs, MDJ interchange and semantic reparenting
   candidates.
@@ -232,10 +233,11 @@ follow this layout. No handwritten catalog copy is introduced.
 The compiler is implemented across existing headless crates, with public APIs
 kept stable rather than copying their implementations into this crate:
 
-- `bellatrix_mde_rust_generator/src/KERNEL/compiler/`: Rust/Cargo planning,
-  declaration lowering, physical file artifacts and target templates. Its public
-  planner validates graph integrity, selects scope, analyzes dependencies,
-  renders target artifacts and returns the shared `Plan`.
+- `bellatrix_mde_rust_generator/src/KERNEL/compiler/`: pure Rust/Cargo rendering
+  of prepared emission tasks with the existing target templates. Source graph
+  selection and placement stay in the kernel projection. The standalone
+  `generate_rust_struct` kernel API lowers one UML Class to those tasks without
+  resolving a Cargo project or persisting a target model.
 - `bellatrix_mde_templates/src/KERNEL/compiler/text/`: target-neutral Tera text
   emission from serialized contexts. It performs neither UML rules nor I/O.
 - `bellatrix_mde_html_exporter`: an HTML/SVG documentation export adapter using

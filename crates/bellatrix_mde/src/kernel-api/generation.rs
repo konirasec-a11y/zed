@@ -78,3 +78,81 @@ pub fn analyze_generation_dependencies(input_json: &str) -> Result<String, Strin
         .collect::<Vec<_>>();
     Ok(json!({"api_version":API_VERSION,"coverage":"generation_dependency_analysis","units":units}).to_string())
 }
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StructRequest {
+    api_version: u32,
+    model: Box<serde_json::value::RawValue>,
+    element_id: String,
+}
+
+/// Lower one UML Class to a standalone Rust library artifact in memory.
+///
+/// Accepts `{api_version:1, model, element_id}` and returns `artifacts` with
+/// deterministic relative `path`, UTF-8 `contents` and source `origin`, plus
+/// source-ID `trace`, `uml_validation` and an explicit Rust library target.
+/// Uses the existing semantic UML validation, type identities, path policy,
+/// artifact plan and Rust renderer. Unsupported mappings return a versioned
+/// `RUST_STRUCT_UNSUPPORTED` error; invalid UML returns `UML_GENERATION_BLOCKED`.
+/// No project placement/dependency resolution, persisted target model, I/O or
+/// compiler invocation. Source names are preserved, not validated as Rust;
+/// only an external `rustc --crate-type lib` can establish target compilation.
+pub fn generate_rust_struct(input_json: &str) -> Result<String, String> {
+    let request: StructRequest = serde_json::from_str(input_json).map_err(invalid_request)?;
+    let model = crate::kernel_api_contract::decode_uml_model(request.api_version, &request.model)?;
+    let validation = crate::kernel_api_validation::evaluate_uml_model(&model);
+    if validation.has_errors {
+        return Err(json!({
+            "api_version": API_VERSION,
+            "error": {"code": "UML_GENERATION_BLOCKED", "message": "UML validation blocks generation"},
+            "uml_validation": validation,
+        }).to_string());
+    }
+    if model.element(&request.element_id).is_none() {
+        return Err(error_response(
+            "UNKNOWN_SELECTION",
+            format!("unknown source element: {}", request.element_id),
+        ));
+    }
+    let projection = crate::kernel_uml_rust_struct::project(&model, &request.element_id)
+        .map_err(|error| error_response("RUST_STRUCT_UNSUPPORTED", error))?;
+    let rendered = bellatrix_mde_rust_generator::render(
+        &json!({
+            "api_version": API_VERSION, "emission": projection["emission"],
+        })
+        .to_string(),
+    )
+    .map_err(|error| error_response("RUST_EMISSION_FAILED", error))?;
+    let rendered: serde_json::Value = serde_json::from_str(&rendered)
+        .map_err(|error| error_response("RUST_EMISSION_FAILED", error.to_string()))?;
+    let artifacts = rendered["artifacts"]
+        .as_array()
+        .ok_or_else(|| error_response("RUST_EMISSION_FAILED", "missing rendered artifacts"))?;
+    let [artifact] = artifacts.as_slice() else {
+        return Err(error_response(
+            "RUST_EMISSION_FAILED",
+            "expected one struct artifact",
+        ));
+    };
+    let path = artifact["path"]
+        .as_str()
+        .ok_or_else(|| error_response("RUST_EMISSION_FAILED", "missing artifact path"))?;
+    let bytes: Vec<u8> = serde_json::from_value(artifact["contents"].clone())
+        .map_err(|error| error_response("RUST_EMISSION_FAILED", error.to_string()))?;
+    let contents = String::from_utf8(bytes)
+        .map_err(|error| error_response("RUST_EMISSION_FAILED", error.to_string()))?;
+    let mut plan = crate::Plan::new();
+    plan.file(path, contents.as_bytes().to_vec(), &request.element_id)
+        .map_err(|error| error_response("INVALID_ARTIFACT_PLAN", error.to_string()))?;
+    Ok(json!({
+        "api_version": API_VERSION,
+        "coverage": "uml_class_to_rust_struct_subset",
+        "target": {"language": "rust", "edition": "2024", "crate_type": "lib"},
+        "artifacts": [{"path": path, "contents": contents, "origin": request.element_id}],
+        "trace": projection["trace"],
+        "uml_validation": validation,
+        "diagnostics": rendered["diagnostics"],
+    })
+    .to_string())
+}

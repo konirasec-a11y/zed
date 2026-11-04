@@ -17,12 +17,12 @@ struct ValidationRequest {
 }
 
 #[derive(Serialize)]
-struct ValidationResponse {
+pub(super) struct ValidationResponse {
     api_version: u32,
     coverage: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     validity: Option<&'static str>,
-    has_errors: bool,
+    pub(super) has_errors: bool,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -75,16 +75,21 @@ struct Diagnostic {
 pub fn validate_uml_model(input_json: &str) -> Result<String, String> {
     let request: ValidationRequest = serde_json::from_str(input_json).map_err(invalid_request)?;
     let model = decode_uml_model(request.api_version, &request.model)?;
-    let mut diagnostics = match validate_semantic_identifiers(&model) {
-        Err(error) => vec![integrity_diagnostic(&model, error)],
+    serde_json::to_string(&evaluate_uml_model(&model))
+        .map_err(|error| error_response("RESPONSE_SERIALIZATION_FAILED", error.to_string()))
+}
+
+pub(super) fn evaluate_uml_model(model: &crate::Project) -> ValidationResponse {
+    let mut diagnostics = match validate_semantic_identifiers(model) {
+        Err(error) => vec![integrity_diagnostic(model, error)],
         Ok(()) => {
-            let unsupported = mixed_domain_diagnostics(&model);
+            let unsupported = mixed_domain_diagnostics(model);
             if !unsupported.is_empty() {
                 unsupported
             } else {
-                match validate_uml_integrity(&model) {
-                    Err(error) => vec![integrity_diagnostic(&model, error)],
-                    Ok(()) => validate_structural_model(&model)
+                match validate_uml_integrity(model) {
+                    Err(error) => vec![integrity_diagnostic(model, error)],
+                    Ok(()) => validate_structural_model(model)
                         .into_iter()
                         .map(semantic_diagnostic)
                         .collect(),
@@ -106,7 +111,7 @@ pub fn validate_uml_model(input_json: &str) -> Result<String, String> {
     let has_errors = diagnostics
         .iter()
         .any(|diagnostic| diagnostic.severity == "error");
-    let response = ValidationResponse {
+    ValidationResponse {
         api_version: API_VERSION,
         coverage: if diagnostics
             .iter()
@@ -132,9 +137,7 @@ pub fn validate_uml_model(input_json: &str) -> Result<String, String> {
         }),
         has_errors,
         diagnostics,
-    };
-    serde_json::to_string(&response)
-        .map_err(|error| error_response("RESPONSE_SERIALIZATION_FAILED", error.to_string()))
+    }
 }
 
 fn integrity_diagnostic(model: &crate::Project, error: crate::GraphError) -> Diagnostic {

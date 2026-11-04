@@ -1,4 +1,4 @@
-{{ annotations }}pub struct {{ name }} {
+{{ annotations }}{{ visibility }}struct {{ name }} {
 {% for field in fields %}    {{ field }}
 {% endfor %}}
 {% if methods %}

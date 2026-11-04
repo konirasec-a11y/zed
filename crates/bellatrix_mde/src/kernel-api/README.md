@@ -449,3 +449,52 @@ Defaults are verified against the bundled StarUML reference:
 (`UMLRelationshipEnd`) and its `metamodel.json`. The save/reopen/decision flows are
 specified in `tests/features/mdj_association_lifecycle.feature` and implemented in
 `tests/bdd_mdj_association_flows.rs`.
+
+## Standalone UML Class to Rust struct
+
+`generate_rust_struct(&str) -> Result<String, String>` accepts exactly
+`api_version:1`, `model` and `element_id`. The existing semantic document contract
+is used, including its `id` and `name` metadata, but no UML root, Cargo package,
+filesystem model, declaration placement or project dependency graph is required.
+Presentation is ignored as in `validate_uml_model`. The same UML evaluator runs
+first; errors block emission and return `UML_GENERATION_BLOCKED` together with
+its full `uml_validation` response. Warnings remain visible in successful output.
+This does not certify complete UML conformance or Rust compilability.
+
+The initial mapping is deliberately bounded: one `uml.class`, its explicitly
+owned `uml.attribute` fields in existing ownership order, multiplicity `1..1`,
+and source-qualified Boolean/String identities from the pinned OMG primitive
+libraries. Those types map to `bool` and `::std::string::String`. A local type
+named `String` or authored type text is not substituted for a library identity.
+Numeric ranges/precision, optional or collection fields, associations, inheritance,
+generics, methods, nested declarations, defaults and other unmapped properties
+return `RUST_STRUCT_UNSUPPORTED` rather than disappearing or acquiring guessed
+semantics. Explicit inactive/default flags are accepted; nondefault flags require
+an implemented mapping. This is a target transformation limit, not a UML violation.
+
+Public visibility maps to `pub`; private or absent visibility emits no export.
+Other visibility kinds are unsupported. Names are preserved verbatim: the kernel
+does not parse Rust, escape keywords or claim that a valid UML name is a valid
+Rust identifier. That remains the external compiler's responsibility. The existing
+standalone filename policy lowercases ASCII letters and replaces characters other
+than ASCII alphanumerics/underscore with `_`, then appends `.rs`. The existing
+artifact path gate checks the result; it does not consult a filesystem graph.
+For example `UserProfile` resolves to `userprofile.rs`.
+
+The response contains `coverage:"uml_class_to_rust_struct_subset"`,
+`target:{language:"rust",edition:"2024",crate_type:"lib"}`, one standard artifact
+`{path,contents,origin}`, source-ID `trace` entries and the original UML/renderer
+diagnostics. `contents` is UTF-8 source text; `origin` is the UML Class ID. Trace
+entries correlate class/field IDs with target kinds and names within that artifact.
+These are derived return values, never an independently editable target model.
+The existing Rust renderer/templates and artifact plan are reused.
+
+An isolated struct is a **library**, not an executable. No `main` is invented.
+A caller can later compile the returned content with
+`rustc --edition 2024 --crate-type lib userprofile.rs`, but this API performs no
+filesystem writes, compiler invocation, project resolution or caching. Repeated
+calls, edits and restoration derive their results from the current input only.
+`tests/uml_rust_struct_flow.rs` is one public-boundary scenario covering generation,
+identity/filename changes, unsupported mappings, UML rejection, repair and external
+Rust compilation through stdin. A Rust keyword name is intentionally left for
+rustc to reject, demonstrating the two validation authorities.
