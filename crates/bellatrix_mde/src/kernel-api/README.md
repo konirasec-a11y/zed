@@ -281,3 +281,25 @@ Existing Explorer overrides are preserved, so an old presentation override can
 still visually mask the new semantic owner. Reconciliation of those placements
 requires an explicit application policy; semantic reparenting does not silently
 delete presentation information or reinterpret diagram placement as UML ownership.
+
+## Ownership checks in rootless drafts
+
+Model and diagram validation check authored semantic ownership even when the
+model has no designated `root_model`. The existing ownership-role checks and
+semantic cycle traversal now run with the shared contracts, including ownership
+derived from specialized relationship sources. An absent root does not make an
+invalid owner/child composite role or a mixed explicit/derived ownership cycle
+valid. Unsupported role evidence remains a warning, not a fabricated violation.
+
+Rootless drafts may still omit owners: this change does not enable the rooted
+model's `mustBeOwned`, namespace visibility or designated-root requirements for
+those drafts. Graph integrity remains a separate prerequisite and its explicit
+`owns` cycle checks are unchanged. Rooted models retain the same checks without
+duplicating their ownership diagnostics. This is implemented-rule coverage only.
+
+Legacy textual composite declarations retain their unresolved status when
+ownership roles are inspected, just as in property-contract validation. A known
+explicit composite role can still establish membership independently. Relevant
+stored roles are all inspected before accepting that proof or returning unknown,
+so a malformed/duplicate reference remains an error even alongside unresolved
+legacy or external evidence; unknown evidence is not treated as false membership.

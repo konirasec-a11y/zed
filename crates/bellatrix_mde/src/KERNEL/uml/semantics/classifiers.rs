@@ -171,6 +171,10 @@ fn contains_reference(
     let mut seen = HashSet::new();
     let mut external = HashSet::new();
     for value in values {
+        if schema::uses_legacy_text_adapter(property, value) {
+            unknown = Some("text declaration is not a resolved UML reference");
+            continue;
+        }
         if let Some(href) = external_reference_href(value)
             .map_err(|error| QueryError::invalid(subject, error))?
         {
@@ -206,6 +210,7 @@ pub(crate) fn ownership_roles(
     let mut candidates = Vec::new();
     let mut excluded_by_explicit_role = false;
     let mut unresolved_type = false;
+    let mut unresolved_role = None;
     for property in properties(owner)? {
         if property.aggregation != Aggregation::Composite || property.is_derived {
             continue;
@@ -231,11 +236,19 @@ pub(crate) fn ownership_roles(
                 }
                 continue;
             }
-            let contains = contains_reference(value, child.id(), owner.id(), property)?;
+            let contains = match contains_reference(value, child.id(), owner.id(), property) {
+                Ok(contains) => contains,
+                Err(error @ QueryError::Invalid { .. }) => return Err(error),
+                Err(error @ QueryError::Unsupported { .. }) => {
+                    unresolved_role.get_or_insert(error);
+                    continue;
+                }
+            };
             if contains {
                 if !type_is_resolved {
-                    return Err(QueryError::unsupported(owner.id(),
+                    unresolved_role.get_or_insert_with(|| QueryError::unsupported(owner.id(),
                         "composite ownership role has an unresolved target type"));
+                    continue;
                 }
                 explicit.push(property);
             } else if compatible {
@@ -245,8 +258,13 @@ pub(crate) fn ownership_roles(
             candidates.push(property);
         }
     }
+    // A known role proves membership, but only after all relevant stored roles
+    // have been inspected: unresolved evidence must not mask a proven violation.
     if !explicit.is_empty() {
         return Ok(OwnershipRoles { properties: explicit, is_resolved: true });
+    }
+    if let Some(error) = unresolved_role {
+        return Err(error);
     }
     // A canonical Association memberEnd plus ownership identifies ownedEnd,
     // including AssociationClass, whose ownedAttribute has the same target type.

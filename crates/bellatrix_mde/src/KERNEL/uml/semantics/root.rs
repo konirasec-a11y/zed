@@ -485,30 +485,10 @@ impl<'a> Model<'a> {
         {
             let owner = match self.owner(element) {
                 Ok(owner) => owner,
-                Err(message) => {
-                    error("UML_ELEMENT_OWNER", element.id(), message);
-                    continue;
-                }
+                // Shared contracts below report this error once for rooted and
+                // rootless models; namespace checks cannot proceed without it.
+                Err(_) => continue,
             };
-            if let Some(owner) = owner {
-                match super::classifiers::contributes_to_owned_union(owner, element, "Element-ownedElement") {
-                    Ok(true) => {}
-                    Ok(false) => error(
-                        "UML_ELEMENT_OWNERSHIP_ROLE", element.id(),
-                        "The canonical ownership role must contribute to Element::ownedElement".into(),
-                    ),
-                    Err(super::classifiers::QueryError::Invalid { message, .. }) =>
-                        error("UML_ELEMENT_OWNERSHIP_ROLE", element.id(), message),
-                    Err(super::classifiers::QueryError::Unsupported { message, .. }) => {
-                        unresolved_namespaces.push(StructuralDiagnostic {
-                            severity: StructuralSeverity::Warning,
-                            code: "UML_ELEMENT_OWNERSHIP_ROLE_UNVERIFIED",
-                            subject_id: element.id().into(),
-                            message,
-                        });
-                    }
-                }
-            }
             if owner.is_none() && !element.conforms_to("Package") {
                 error(
                     "UML_ELEMENT_HAS_OWNER",
@@ -522,25 +502,6 @@ impl<'a> Model<'a> {
                     element.id(),
                     "The designated root Model must not have an owner".into(),
                 );
-            }
-            let mut current = owner;
-            let mut visited = HashSet::from([element.id()]);
-            while let Some(parent) = current {
-                if !visited.insert(parent.id()) {
-                    error(
-                        "UML_ELEMENT_NOT_OWN_SELF",
-                        element.id(),
-                        "An Element cannot directly or indirectly own itself".into(),
-                    );
-                    break;
-                }
-                current = match self.owner(parent) {
-                    Ok(owner) => owner,
-                    Err(message) => {
-                        error("UML_ELEMENT_OWNER", parent.id(), message);
-                        break;
-                    }
-                };
             }
             if let Some(named) = element.named() {
                 let namespace = match self.namespace(named) {
@@ -604,10 +565,74 @@ impl<'a> Model<'a> {
         issues
     }
 
+    // A rootless draft may omit owners, but authored ownership must still be
+    // well-typed and acyclic, including owners derived from relationship sources.
+    fn validate_authored_ownership(self) -> Vec<StructuralDiagnostic> {
+        let mut issues = Vec::new();
+        let mut unresolved_ownership = Vec::new();
+        let mut error = |code, id: &str, message: String| {
+            issues.push(StructuralDiagnostic {
+                severity: StructuralSeverity::Error,
+                code,
+                subject_id: id.into(),
+                message,
+            })
+        };
+        for element in self.elements().filter(|element| element.metaclass().is_some()) {
+            let owner = match self.owner(element) {
+                Ok(owner) => owner,
+                Err(message) => {
+                    error("UML_ELEMENT_OWNER", element.id(), message);
+                    continue;
+                }
+            };
+            if let Some(owner) = owner {
+                match super::classifiers::contributes_to_owned_union(owner, element, "Element-ownedElement") {
+                    Ok(true) => {}
+                    Ok(false) => error(
+                        "UML_ELEMENT_OWNERSHIP_ROLE", element.id(),
+                        "The canonical ownership role must contribute to Element::ownedElement".into(),
+                    ),
+                    Err(super::classifiers::QueryError::Invalid { message, .. }) =>
+                        error("UML_ELEMENT_OWNERSHIP_ROLE", element.id(), message),
+                    Err(super::classifiers::QueryError::Unsupported { message, .. }) => {
+                        unresolved_ownership.push(StructuralDiagnostic {
+                            severity: StructuralSeverity::Warning,
+                            code: "UML_ELEMENT_OWNERSHIP_ROLE_UNVERIFIED",
+                            subject_id: element.id().into(),
+                            message,
+                        });
+                    }
+                }
+            }
+            let mut current = owner;
+            let mut visited = HashSet::from([element.id()]);
+            while let Some(parent) = current {
+                if !visited.insert(parent.id()) {
+                    error(
+                        "UML_ELEMENT_NOT_OWN_SELF",
+                        element.id(),
+                        "An Element cannot directly or indirectly own itself".into(),
+                    );
+                    break;
+                }
+                current = match self.owner(parent) {
+                    Ok(owner) => owner,
+                    Err(message) => {
+                        error("UML_ELEMENT_OWNER", parent.id(), message);
+                        break;
+                    }
+                };
+            }
+        }
+        issues.extend(unresolved_ownership);
+        issues
+    }
+
     // Rootless authoring drafts still execute the same property and semantic
     // contracts, without requiring complete document ownership.
     pub(crate) fn validate_contracts(self) -> Vec<StructuralDiagnostic> {
-        let mut issues = Vec::new();
+        let mut issues = self.validate_authored_ownership();
         for element in self.elements() {
             issues.extend(super::schema::validate_element(element));
         }
