@@ -1,5 +1,7 @@
 use crate::workbench_ui::property_editor::compact_row;
-use crate::workbench_ui::style_drafts::{FIELDS, StyleEditState, StyleSubmission, field_error, style_value};
+use crate::workbench_ui::style_drafts::{
+    FIELDS, StyleEditState, StyleSubmission, field_error, style_value,
+};
 use crate::workbench_ui::{MdeWorkbenchItem, panels::MdeRightPanel};
 use bellatrix_mde::{RelationshipRouting, View, commands::ViewOrder};
 use bellatrix_mde_cordis::{
@@ -166,7 +168,9 @@ pub(crate) fn reconcile_style_inputs(
                                 if let Some(draft) = panel.style_drafts.get_mut(&key) {
                                     draft.capture_inputs(Some(field), cx);
                                 }
-                                crate::workbench_ui::property_editor::flush_property_edits(panel, &item, cx);
+                                crate::workbench_ui::property_editor::flush_property_edits(
+                                    panel, &item, cx,
+                                );
                                 flush_style_edits(panel, &item, cx);
                                 cx.notify();
                             }) {
@@ -414,57 +418,89 @@ pub(crate) fn render_styles(
         diagram_id.to_owned(),
         view.id.clone(),
     );
-    for fields in [
-        &["font_family", "font_size"][..],
-        &["fill", "stroke", "text_color"][..],
-        &["stroke_width", "opacity"][..],
+    let mut fields = div()
+        .w_full()
+        .min_w_0()
+        .px_3()
+        .py_1()
+        .flex()
+        .flex_wrap()
+        .gap_2();
+    for field in [
+        "font_family",
+        "font_size",
+        "fill",
+        "stroke",
+        "text_color",
+        "stroke_width",
+        "opacity",
     ] {
-        let mut row = div().px_3().py_1().flex().items_center().gap_1();
-        for field in fields {
-            if is_edge && *field == "fill" {
-                continue;
-            }
-            let Some(input) = draft.inputs.get(*field) else {
-                continue;
-            };
-            let (icon, description) = match *field {
-                "font_family" => (IconName::Font, "Font family · blank inherits IDE theme"),
-                "font_size" => (IconName::FontSize, "Font size · blank inherits IDE theme"),
-                "fill" => (IconName::Box, "Fill color · #RRGGBB or #RRGGBBAA"),
-                "stroke" => (IconName::Pencil, "Outline color · #RRGGBB or #RRGGBBAA"),
-                "text_color" => (IconName::CaseSensitive, "Text color · #RRGGBB or #RRGGBBAA"),
-                "stroke_width" => (IconName::LineHeight, "Outline width"),
-                _ => (IconName::Eye, "Opacity · 0 to 1"),
-            };
-            let color = input.read(cx).text(cx);
-            let swatch = gpui::Rgba::try_from(color.trim()).ok();
-            row = row.child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .items_center()
-                    .gap_1()
-                    .child(
-                        IconButton::new(format!("mde-style-{field}-hint"), icon)
-                            .tooltip(Tooltip::text(description)),
-                    )
-                    .when(matches!(*field, "fill" | "stroke" | "text_color"), |cell| {
-                        cell.child(
-                            div()
-                                .size(px(10.0))
-                                .flex_none()
-                                .border_1()
-                                .border_color(cx.theme().colors().border)
-                                .when_some(swatch, |swatch, color| swatch.bg(color)),
-                        )
-                    })
-                    .child(div().flex_1().min_w_0().child(input.clone())),
-            );
+        if is_edge && field == "fill" {
+            continue;
         }
-        rows.push(row.into_any_element());
+        let Some(input) = draft.inputs.get(field) else {
+            continue;
+        };
+        let (icon, description) = match field {
+            "font_family" => (IconName::Font, "Font family · blank inherits IDE theme"),
+            "font_size" => (IconName::FontSize, "Font size · blank inherits IDE theme"),
+            "fill" => (IconName::Box, "Fill color · #RRGGBB or #RRGGBBAA"),
+            "stroke" => (IconName::Pencil, "Outline color · #RRGGBB or #RRGGBBAA"),
+            "text_color" => (IconName::CaseSensitive, "Text color · #RRGGBB or #RRGGBBAA"),
+            "stroke_width" => (IconName::LineHeight, "Outline width"),
+            _ => (IconName::Eye, "Opacity · 0 to 1"),
+        };
+        let color = input.read(cx).text(cx);
+        let swatch = gpui::Rgba::try_from(color.trim()).ok();
+        fields = fields.child(
+            div()
+                .flex_1()
+                .flex_basis(px(if field == "font_family" { 180.0 } else { 150.0 }))
+                .min_w_0()
+                .max_w(px(240.0))
+                .flex()
+                .items_center()
+                .gap_1()
+                .child(
+                    IconButton::new(format!("mde-style-{field}-hint"), icon)
+                        .aria_label(description)
+                        .tooltip(Tooltip::text(description)),
+                )
+                .when(matches!(field, "fill" | "stroke" | "text_color"), |cell| {
+                    cell.child(
+                        div()
+                            .size(px(10.0))
+                            .flex_none()
+                            .border_1()
+                            .border_color(cx.theme().colors().border)
+                            .when_some(swatch, |swatch, color| swatch.bg(color)),
+                    )
+                })
+                .child(div().flex_1().min_w_0().child(input.clone())),
+        );
     }
-    let mut format = div().px_3().py_1().flex().gap_1();
+    rows.push(fields.into_any_element());
+    let controls_index = rows.len();
+    let mut controls = div()
+        .w_full()
+        .min_w_0()
+        .px_3()
+        .py_1()
+        .flex()
+        .flex_wrap()
+        .items_start()
+        .gap_2();
+
+    let mut format = div()
+        .max_w_full()
+        .flex_none()
+        .p_1()
+        .flex()
+        .flex_wrap()
+        .gap_1()
+        .border_1()
+        .border_color(cx.theme().colors().border)
+        .rounded_sm();
     for (field, icon, description) in [
         (
             "word_wrap",
@@ -491,6 +527,7 @@ pub(crate) fn render_styles(
                 } else {
                     Icon::new(icon).size(IconSize::Small)
                 })
+                .aria_label(description)
                 .tooltip(Tooltip::text(description))
                 .toggle_state(enabled)
                 .disabled(draft.state.conflict)
@@ -534,6 +571,7 @@ pub(crate) fn render_styles(
                         Icon::from_path(format!("icons/bellatrix-{field}.svg"))
                             .size(IconSize::Small),
                     )
+                    .aria_label(description)
                     .tooltip(Tooltip::text(description))
                     .toggle_state(enabled)
                     .disabled(draft.state.conflict)
@@ -550,9 +588,18 @@ pub(crate) fn render_styles(
             );
         }
     }
-    rows.push(format.into_any_element());
+    controls = controls.child(format);
     if !is_edge {
-        let mut stereotypes = div().px_3().py_1().flex().gap_1();
+        let mut stereotypes = div()
+            .max_w_full()
+            .flex_none()
+            .p_1()
+            .flex()
+            .flex_wrap()
+            .gap_1()
+            .border_1()
+            .border_color(cx.theme().colors().border)
+            .rounded_sm();
         for (value, icon, description) in [
             ("", IconName::RefreshTitle, "Inherit stereotype display"),
             (
@@ -570,6 +617,7 @@ pub(crate) fn render_styles(
             let key = key.clone();
             stereotypes = stereotypes.child(
                 IconButton::new(format!("mde-style-stereotype-{value}"), icon)
+                    .aria_label(description)
                     .tooltip(Tooltip::text(description))
                     .toggle_state(
                         draft
@@ -584,10 +632,19 @@ pub(crate) fn render_styles(
                     })),
             );
         }
-        rows.push(stereotypes.into_any_element());
+        controls = controls.child(stereotypes);
     }
     if !is_edge {
-        let mut labels = div().px_3().py_1().flex().gap_1();
+        let mut labels = div()
+            .max_w_full()
+            .flex_none()
+            .p_1()
+            .flex()
+            .flex_wrap()
+            .gap_1()
+            .border_1()
+            .border_color(cx.theme().colors().border)
+            .rounded_sm();
         for (field, description) in [
             ("show_visibility", "Show member visibility"),
             ("show_type", "Show member and parameter types"),
@@ -609,6 +666,7 @@ pub(crate) fn render_styles(
                         Icon::from_path(format!("icons/bellatrix-{field}.svg"))
                             .size(IconSize::Small),
                     )
+                    .aria_label(description)
                     .tooltip(Tooltip::text(description))
                     .toggle_state(enabled)
                     .disabled(draft.state.conflict)
@@ -624,9 +682,18 @@ pub(crate) fn render_styles(
                     })),
             );
         }
-        rows.push(labels.into_any_element());
+        controls = controls.child(labels);
     }
-    let mut patterns = div().px_3().py_1().flex().gap_1();
+    let mut patterns = div()
+        .max_w_full()
+        .flex_none()
+        .p_1()
+        .flex()
+        .flex_wrap()
+        .gap_1()
+        .border_1()
+        .border_color(cx.theme().colors().border)
+        .rounded_sm();
     for (value, glyph, description) in [
         ("", "inherit", "Inherit the notation's line pattern"),
         ("solid", "solid", "Solid outline · visual override only"),
@@ -641,6 +708,7 @@ pub(crate) fn render_styles(
                     Icon::from_path(format!("icons/bellatrix-line-{glyph}.svg"))
                         .size(IconSize::Small),
                 )
+                .aria_label(description)
                 .tooltip(Tooltip::text(description))
                 .toggle_state(draft.state.values.get("line_mode").is_some_and(|current| {
                     current == value
@@ -664,11 +732,21 @@ pub(crate) fn render_styles(
         || !draft.state.baseline.dash_pattern.is_empty()
     {
         patterns = patterns.child(IconButton::new("mde-custom-notation-warning", IconName::Warning)
+            .aria_label("Custom line or text placement may differ from standard UML notation")
             .icon_color(Color::Warning)
             .tooltip(Tooltip::text("Custom line or text placement may differ from standard UML notation. Semantic meaning is unchanged. Restore IDE theme / inherit to return to the renderer’s notation defaults.")));
     }
-    rows.push(patterns.into_any_element());
-    let mut alignment = div().px_3().py_1().flex().gap_1();
+    controls = controls.child(patterns);
+    let mut alignment = div()
+        .max_w_full()
+        .flex_none()
+        .p_1()
+        .flex()
+        .flex_wrap()
+        .gap_1()
+        .border_1()
+        .border_color(cx.theme().colors().border)
+        .rounded_sm();
     for (field, value, glyph, description) in [
         ("text_align", "left", "left", "Align text left"),
         ("text_align", "center", "center", "Center text horizontally"),
@@ -695,6 +773,7 @@ pub(crate) fn render_styles(
                     Icon::from_path(format!("icons/bellatrix-text-align-{glyph}.svg"))
                         .size(IconSize::Small),
                 )
+                .aria_label(description)
                 .tooltip(Tooltip::text(description))
                 .toggle_state(
                     draft
@@ -709,8 +788,17 @@ pub(crate) fn render_styles(
                 })),
         );
     }
-    rows.push(alignment.into_any_element());
-    let mut ordering = div().px_3().py_1().flex().gap_1();
+    controls = controls.child(alignment);
+    let mut ordering = div()
+        .max_w_full()
+        .flex_none()
+        .p_1()
+        .flex()
+        .flex_wrap()
+        .gap_1()
+        .border_1()
+        .border_color(cx.theme().colors().border)
+        .rounded_sm();
     for (id, description, order) in [
         ("front", "Bring to front", ViewOrder::BringToFront),
         (
@@ -733,6 +821,7 @@ pub(crate) fn render_styles(
                     Icon::from_path(format!("icons/bellatrix-order-{id}.svg"))
                         .size(IconSize::Small),
                 )
+                .aria_label(description)
                 .tooltip(Tooltip::text(description))
                 .disabled(draft.state.conflict || draft.state.pending.is_some())
                 .on_click(cx.listener(move |panel, _, _, cx| {
@@ -750,7 +839,7 @@ pub(crate) fn render_styles(
                 })),
         );
     }
-    rows.push(ordering.into_any_element());
+    controls = controls.child(ordering);
     if draft.state.conflict || draft.state.error.is_some() {
         let reload_key = key.clone();
         let target = item.clone();
@@ -804,37 +893,17 @@ pub(crate) fn render_styles(
                 .into_any_element(),
         );
     }
-    let theme_key = key.clone();
-    let theme_item = item.clone();
-    rows.push(
-        div()
-            .px_3()
-            .child(
-                IconButton::new("mde-style-restore-theme", IconName::RefreshTitle)
-                    .tooltip(Tooltip::text(if draft.state.dirty() {
-                        "Restore IDE theme and discard draft"
-                    } else {
-                        "Restore IDE theme"
-                    }))
-                    .disabled(draft.state.conflict || draft.state.pending.is_some())
-                    .on_click(cx.listener(move |panel, _, _, cx| {
-                        if !target_is_active(panel, &theme_item, &theme_key, cx) {
-                            return;
-                        }
-                        if let Some(draft) = panel.style_drafts.get_mut(&theme_key) {
-                            if draft.state.conflict || draft.state.pending.is_some() {
-                                return;
-                            }
-                            draft.state.restore_theme();
-                        }
-                        flush_style_edits(panel, &theme_item, cx);
-                        cx.notify();
-                    })),
-            )
-            .into_any_element(),
-    );
     if is_edge {
-        let mut routing_row = div().px_3().py_1().flex().gap_1();
+        let mut routing_row = div()
+            .max_w_full()
+            .flex_none()
+            .p_1()
+            .flex()
+            .flex_wrap()
+            .gap_1()
+            .border_1()
+            .border_color(cx.theme().colors().border)
+            .rounded_sm();
         for (id, description, routing) in [
             ("straight", "Straight line", RelationshipRouting::Straight),
             (
@@ -852,6 +921,7 @@ pub(crate) fn render_styles(
                         Icon::from_path(format!("icons/bellatrix-route-{id}.svg"))
                             .size(IconSize::Small),
                     )
+                    .aria_label(description)
                     .tooltip(Tooltip::text(description))
                     .toggle_state(draft.state.displayed_routing() == Some(routing))
                     .disabled(draft.state.conflict)
@@ -870,8 +940,40 @@ pub(crate) fn render_styles(
                     })),
             );
         }
-        rows.push(routing_row.into_any_element());
+        controls = controls.child(routing_row);
     }
+    let theme_key = key.clone();
+    let theme_item = item.clone();
+    controls = controls.child(
+        div().flex_none().p_1().child(
+            IconButton::new("mde-style-restore-theme", IconName::RefreshTitle)
+                .aria_label(if draft.state.dirty() {
+                    "Restore IDE theme and discard draft"
+                } else {
+                    "Restore IDE theme"
+                })
+                .tooltip(Tooltip::text(if draft.state.dirty() {
+                    "Restore IDE theme and discard draft"
+                } else {
+                    "Restore IDE theme"
+                }))
+                .disabled(draft.state.conflict || draft.state.pending.is_some())
+                .on_click(cx.listener(move |panel, _, _, cx| {
+                    if !target_is_active(panel, &theme_item, &theme_key, cx) {
+                        return;
+                    }
+                    if let Some(draft) = panel.style_drafts.get_mut(&theme_key) {
+                        if draft.state.conflict || draft.state.pending.is_some() {
+                            return;
+                        }
+                        draft.state.restore_theme();
+                    }
+                    flush_style_edits(panel, &theme_item, cx);
+                    cx.notify();
+                })),
+        ),
+    );
+    rows.insert(controls_index, controls.into_any_element());
     rows
 }
 
