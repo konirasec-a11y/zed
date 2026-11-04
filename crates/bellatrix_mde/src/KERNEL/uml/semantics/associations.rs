@@ -50,6 +50,10 @@ pub fn owned_ends<'a>(
     association_id: &str,
 ) -> Result<Vec<&'a Element>, String> {
     let association = references.element(association_id)?;
+    // Resolve the collection first so an invalid explicit ownedEnd retains its
+    // ownership-integrity diagnostic instead of becoming a disjointness error.
+    // The model validator checks disjointness independently of this full query.
+    let owned = resolve_owned_ends(references, association_id)?;
     if association.conforms_to("AssociationClass") {
         match association_class_disjoint_attributes_ends(references, association) {
             Ok(true) => {}
@@ -60,7 +64,7 @@ pub fn owned_ends<'a>(
             Err(classifiers::QueryError::Unsupported { .. }) => {}
         }
     }
-    resolve_owned_ends(references, association_id)
+    Ok(owned)
 }
 
 fn resolve_owned_ends<'a>(

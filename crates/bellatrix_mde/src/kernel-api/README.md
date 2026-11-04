@@ -169,7 +169,8 @@ the existing public `UML_ASSOCIATION_ENDS` error, with
 evidence without a local collision produces
 `MDE_ASSOCIATION_CLASS_DISJOINT_ATTRIBUTES_ENDS_UNVERIFIED`. Type resolution is
 not needed for this identity-based rule. The complete `owned_ends` query rejects
-proven conflicts with the same predicate; attribute-role uncertainty remains a
+proven conflicts with the same predicate after checking the collection's own
+reference and canonical ownership integrity; attribute-role uncertainty remains a
 separate validation result. Navigation uses the owned-end projection directly,
 so neither an attribute collision nor its uncertainty hides navigation knowledge
 or turns unknown disjointness into an invalid navigation declaration. The model
