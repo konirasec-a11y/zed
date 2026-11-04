@@ -55,9 +55,19 @@ pub fn owned_ends<'a>(
             Ok(true) => {}
             Ok(false) => return Err("AssociationClass-disjoint_attributes_ends: ownedAttribute and ownedEnd must be disjoint".into()),
             Err(classifiers::QueryError::Invalid { message, .. }) => return Err(format!("AssociationClass-disjoint_attributes_ends: {message}")),
-            Err(error) => return Err(format!("Unsupported AssociationClass-disjoint_attributes_ends: {error}")),
+            // Attribute-role uncertainty does not make the ownedEnd collection
+            // incomplete. The independent validator reports this Unknown.
+            Err(classifiers::QueryError::Unsupported { .. }) => {}
         }
     }
+    resolve_owned_ends(references, association_id)
+}
+
+fn resolve_owned_ends<'a>(
+    references: &ReferenceIndex<'a>,
+    association_id: &str,
+) -> Result<Vec<&'a Element>, String> {
+    let association = references.element(association_id)?;
     let members = member_ends(references, association_id)?;
     let children = references.explicit_owned_elements(association_id)?;
     let explicit = association
@@ -132,7 +142,9 @@ fn declared_navigable_owned_ends<'a>(
     association_id: &str,
 ) -> Result<Vec<&'a Element>, String> {
     let association = references.element(association_id)?;
-    let owned = owned_ends(references, association_id)?;
+    // Navigation checks membership in ownedEnd, not disjointness with the
+    // independent attribute role; neither constraint may hide the other.
+    let owned = resolve_owned_ends(references, association_id)?;
     let descriptor = schema::uml_property("Association", "navigableOwnedEnd")
         .map_err(|error| error.to_string())?
         .ok_or("Association::navigableOwnedEnd contract is missing")?;
@@ -173,7 +185,7 @@ pub(crate) fn validate_navigation_declarations(
     else {
         return Ok(());
     };
-    let owned = owned_ends(references, association_id)?;
+    let owned = resolve_owned_ends(references, association_id)?;
     let mut seen = HashSet::new();
     for id in &knowledge.navigation_unverified {
         if !seen.insert(id) {

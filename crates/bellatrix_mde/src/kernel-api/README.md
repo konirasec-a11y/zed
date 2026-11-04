@@ -167,8 +167,12 @@ A known Property in both roles produces
 `UML_ASSOCIATION_CLASS_DISJOINT_ATTRIBUTES_ENDS`; unresolved role/ownership
 evidence without a local collision produces
 `MDE_ASSOCIATION_CLASS_DISJOINT_ATTRIBUTES_ENDS_UNVERIFIED`. Type resolution is
-not needed for this identity-based rule. The complete `owned_ends` query reuses
-the same predicate, and the model report emits the rule once.
+not needed for this identity-based rule. The complete `owned_ends` query rejects
+proven conflicts with the same predicate; attribute-role uncertainty remains a
+separate validation result. Navigation uses the owned-end projection directly,
+so neither an attribute collision nor its uncertainty hides navigation knowledge
+or turns unknown disjointness into an invalid navigation declaration. The model
+report emits the disjointness rule once.
 
 Without a decisive local counterexample, unresolved evidence produces
 `MDE_ASSOCIATION_END_TYPES_UNVERIFIED` or
