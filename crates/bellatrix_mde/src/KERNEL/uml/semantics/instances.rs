@@ -434,16 +434,25 @@ fn validate_instance<'a>(
     instance: InstanceSpecificationRef<'a>,
     references: &ReferenceIndex<'a>,
 ) -> Result<Vec<ElementRef<'a>>, AssignmentError> {
-    let classifiers = instance.classifiers_with(references)?;
+    let empty = Value::Array(Vec::new());
+    let (classifiers, unknown) = instance_reference_evidence(
+        references, instance.0, "InstanceSpecification", "classifier",
+        instance.0.properties().get("classifier").unwrap_or(&empty),
+    )?;
+    // Value errors are independent of whether every classifier identity is
+    // resolved. A missing local target remains Invalid, an external one Unknown.
+    evaluate_owned_values(
+        references, instance.0, "InstanceSpecification", "specification",
+        "InstanceSpecification-specification",
+    )?;
     if instance.0.properties().contains_key("slot") {
         return Err(AssignmentError::Unsupported(
             "slot must be projected from the canonical ownership edge".into(),
         ));
     }
-    evaluate_owned_values(
-        references, instance.0, "InstanceSpecification", "specification",
-        "InstanceSpecification-specification",
-    )?;
+    if unknown {
+        return Err(AssignmentError::Unsupported("InstanceSpecification classifier identity is unresolved".into()));
+    }
     Ok(classifiers)
 }
 
@@ -463,77 +472,85 @@ fn validate_assignment_with<'a>(
     model: Model<'a>,
     references: &ReferenceIndex<'a>,
 ) -> Result<(), AssignmentError> {
+    use super::feature_compatibility::{accept_any, require_all};
+    let mut checks = Vec::new();
     if slot.0.properties().contains_key("owningInstance")
         || owner.0.properties().contains_key("slot")
-        || model
-            .owner(slot)?
-            .is_some_and(|previous| previous.properties().contains_key("slot"))
+        || model.owner(slot)?.is_some_and(|previous| previous.properties().contains_key("slot"))
     {
-        return Err(AssignmentError::Unsupported(
-            "slot and owningInstance must be projected from the canonical ownership edge".into(),
-        ));
+        checks.push(Err(QueryError::unsupported(slot.id(),
+            "slot and owningInstance must be projected from the canonical ownership edge")));
     }
-    let feature = slot.defining_feature_with(references)?;
-    let classifiers = validate_instance(owner, references);
-    let values = slot_values_conform(references, slot.0, feature)
-        .map_err(AssignmentError::from)
-        .and_then(|conforms| if conforms { Ok(()) } else {
-            Err(AssignmentError::Invalid(
-                "Slot values must conform to the definingFeature type, multiplicity and uniqueness".into(),
-            ))
-        });
-    // Inspect both owned value sets before selecting Unsupported: an opaque
-    // specification must not hide a malformed Slot literal, or vice versa.
-    let classifiers = match (classifiers, values) {
-        (Err(error @ AssignmentError::Invalid(_)), _) | (_, Err(error @ AssignmentError::Invalid(_))) => return Err(error),
-        (Err(error), _) | (_, Err(error)) => return Err(error),
-        (Ok(classifiers), Ok(())) => classifiers,
-    };
-    if classifiers.is_empty() {
-        return Err(AssignmentError::Invalid(
-            "A Slot definingFeature requires a classifier of its owning InstanceSpecification"
-                .into(),
-        ));
+    let (features, unknown_feature) = instance_reference_evidence(
+        references, slot.0, "Slot", "definingFeature",
+        slot.0.properties().get("definingFeature").unwrap_or(&Value::Null),
+    )?;
+    let feature = features.first().copied();
+    if unknown_feature {
+        checks.push(Err(QueryError::unsupported(slot.id(), "definingFeature Type or identity is unresolved")));
     }
-    for other in owner.slots(model)? {
-        if other.id() != slot.id() && other.defining_feature_with(references)?.id() == feature.id()
-        {
-            return Err(AssignmentError::Invalid(
-                "InstanceSpecification cannot have two Slots with the same definingFeature".into(),
-            ));
-        }
-    }
-    let mut unresolved = None;
-    for classifier in classifiers {
-        let features = classifiers::query(references, classifier.id())
-            .and_then(|query| {
-                query.classifier.ok_or_else(|| {
-                    QueryError::invalid(
-                        classifier.id(),
-                        "InstanceSpecification classifier must be a Classifier",
-                    )
-                })
-            })
-            .and_then(|query| query.all_slottable_features);
-        match features {
-            Ok(features)
-                if features
-                    .iter()
-                    .any(|candidate| candidate.id() == feature.id()) =>
-            {
-                return Ok(());
+    let empty = Value::Array(Vec::new());
+    let (classifiers, unknown_classifier) = instance_reference_evidence(
+        references, owner.0, "InstanceSpecification", "classifier",
+        owner.0.properties().get("classifier").unwrap_or(&empty),
+    )?;
+    checks.push(evaluate_owned_values(
+        references, owner.0, "InstanceSpecification", "specification",
+        "InstanceSpecification-specification",
+    ).map(|_| true));
+    if let Some(feature) = feature.filter(|feature| feature.conforms_to("StructuralFeature")) {
+        checks.push(slot_values_conform(references, slot.0, feature));
+    } else {
+        // The missing feature prevents compatibility proof, not independent
+        // checks of the value records and their declared Type references.
+        match owned_value_evidence(references, slot.0, "Slot", "value", "Slot-value") {
+            Err(error) => checks.push(Err(error)),
+            Ok(evidence) => {
+                for specification in evidence.specifications {
+                    checks.push(declared_value_type_contract(references, specification));
+                }
+                if let Some(error) = evidence.unknown { checks.push(Err(error)); }
             }
-            Ok(_) => {}
-            Err(error @ QueryError::Unsupported { .. }) => unresolved = Some(error),
-            Err(error) => return Err(error.into()),
+        }
+        checks.push(Err(QueryError::unsupported(slot.id(), "value compatibility needs a resolved definingFeature")));
+    }
+    let mut membership = Vec::new();
+    if unknown_classifier {
+        membership.push(Err(QueryError::unsupported(owner.id(), "unresolved classifier may supply definingFeature")));
+    }
+    for classifier in classifiers {
+        membership.push(match feature {
+            Some(feature) => slottable_membership(references, classifier, feature.id()),
+            None => slottable_features(references, classifier).and_then(|features| {
+                if features.is_empty() { Ok(false) }
+                else { Err(QueryError::unsupported(slot.id(), "external definingFeature identity is unresolved")) }
+            }),
+        });
+    }
+    // Assignment requires an existential witness in the classifier graph, not
+    // resolution of every classifier. Malformed graph evidence still dominates.
+    checks.push(accept_any(membership));
+    let (slots, unknown_slot) = instance_slots_evidence(references, owner.0)?;
+    if unknown_slot {
+        checks.push(Err(QueryError::unsupported(owner.id(), "unresolved owned Slot may duplicate definingFeature")));
+    }
+    for other in slots.into_iter().filter(|other| other.id() != slot.id()) {
+        let (other_features, unknown) = instance_reference_evidence(
+            references, other, "Slot", "definingFeature",
+            other.properties().get("definingFeature").unwrap_or(&Value::Null),
+        )?;
+        if let (Some(feature), Some(other_feature)) = (feature, other_features.first()) {
+            checks.push(Ok(feature.id() != other_feature.id()));
+        } else if unknown || unknown_feature {
+            checks.push(Err(QueryError::unsupported(other.id(), "Slot definingFeature equality is unresolved")));
         }
     }
-    if let Some(error) = unresolved {
-        return Err(error.into());
+    match require_all(checks)? {
+        true => Ok(()),
+        false => Err(AssignmentError::Invalid(
+            "Slot assignment violates definingFeature membership, uniqueness or value compatibility".into(),
+        )),
     }
-    Err(AssignmentError::Invalid(
-        "Slot definingFeature is not a slottable feature of any owning InstanceSpecification classifier".into(),
-    ))
 }
 
 fn instance_reference_evidence<'a>(
@@ -571,16 +588,28 @@ fn instance_reference_evidence<'a>(
     Ok((known, unknown))
 }
 
+fn slottable_features<'a>(
+    references: &ReferenceIndex<'a>, classifier: ElementRef<'_>,
+) -> Result<Vec<ElementRef<'a>>, QueryError> {
+    if classifier.metaclass().is_none() {
+        return Err(QueryError::unsupported(classifier.id(), "classifier metaclass is unresolved"));
+    }
+    classifiers::query(references, classifier.id()).and_then(|query| {
+        query.classifier.ok_or_else(|| QueryError::unsupported(classifier.id(), "Classifier query is unresolved"))?
+            .all_slottable_features
+    })
+}
+
 fn slottable_membership(
     references: &ReferenceIndex<'_>, classifier: ElementRef<'_>, feature_id: &str,
 ) -> Result<bool, QueryError> {
-    let complete = classifiers::query(references, classifier.id()).and_then(|query| {
-        query.classifier.ok_or_else(|| QueryError::unsupported(classifier.id(), "Classifier query is unresolved"))?
-            .all_slottable_features
-    });
+    let complete = slottable_features(references, classifier);
     match complete {
         Ok(features) => Ok(features.iter().any(|feature| feature.id() == feature_id)),
         Err(error @ QueryError::Invalid { .. }) => Err(error),
+        // has_feature also requires a known Namespace metaclass. An unresolved
+        // classifier cannot enter that fallback without becoming falsely Invalid.
+        Err(error) if classifier.metaclass().is_none() => Err(error),
         Err(error) => match classifiers::has_feature(references, classifier.id(), feature_id) {
             // A known StructuralFeature in allFeatures is also in member and
             // therefore allSlottableFeatures. Do not infer the converse.
@@ -674,10 +703,7 @@ fn instance_defining_feature(
             } else {
                 // An unresolved feature cannot belong to a proven empty set.
                 // Otherwise its identity is needed to decide membership.
-                classifiers::query(references, classifier.id()).and_then(|query| {
-                    let features = query.classifier
-                        .ok_or_else(|| QueryError::unsupported(classifier.id(), "Classifier query is unresolved"))?
-                        .all_slottable_features?;
+                slottable_features(references, *classifier).and_then(|features| {
                     if features.is_empty() { Ok(false) }
                     else { Err(QueryError::unsupported(slot.id(), "external definingFeature identity is unresolved")) }
                 })

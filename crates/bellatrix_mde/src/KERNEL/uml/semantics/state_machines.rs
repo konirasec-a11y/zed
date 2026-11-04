@@ -102,8 +102,8 @@ fn composite_role_empty(
     require_all(checks)
 }
 
-fn final_state_submachine(references: &ReferenceIndex<'_>, state: ElementRef<'_>) -> Result<bool, QueryError> {
-    let descriptor = schema::uml_property("FinalState", "submachine")
+fn state_submachine_empty(references: &ReferenceIndex<'_>, state: ElementRef<'_>) -> Result<bool, QueryError> {
+    let descriptor = schema::uml_property("State", "submachine")
         .map_err(|error| QueryError::unsupported(state.id(), error.to_string()))?
         .ok_or_else(|| QueryError::unsupported(state.id(), "missing submachine contract"))?;
     let opposite = schema::uml_property("StateMachine", "submachineState")
@@ -219,8 +219,8 @@ fn region_owned(references: &ReferenceIndex<'_>, region: ElementRef<'_>) -> Resu
     require_all(checks)
 }
 
-fn final_state_regions(references: &ReferenceIndex<'_>, state: ElementRef<'_>) -> Result<bool, QueryError> {
-    let descriptor = schema::uml_property("FinalState", "region")
+fn state_regions_empty(references: &ReferenceIndex<'_>, state: ElementRef<'_>) -> Result<bool, QueryError> {
+    let descriptor = schema::uml_property("State", "region")
         .map_err(|error| QueryError::unsupported(state.id(), error.to_string()))?
         .ok_or_else(|| QueryError::unsupported(state.id(), "missing State::region contract"))?;
     let opposite = schema::uml_property("Region", "state")
@@ -263,7 +263,7 @@ fn final_state_regions(references: &ReferenceIndex<'_>, state: ElementRef<'_>) -
             }
             Ok(_) => continue,
             Err(_) => {
-                // A different canonical owner excludes this FinalState even
+                // A different canonical owner excludes this State even
                 // when the stored inverse is incomplete. Its own contract is
                 // still checked on the Region; do not spread that uncertainty.
                 let owner = references.model().owner(region)
@@ -443,6 +443,30 @@ fn transition_external(references: &ReferenceIndex<'_>, transition: ElementRef<'
     is_pseudostate_kind(transition_endpoint(references, transition, "source"), "entryPoint").map(|entry| !entry)
 }
 
+fn transition_local(references: &ReferenceIndex<'_>, transition: ElementRef<'_>) -> Result<bool, QueryError> {
+    let kind = schema::read_effective_scalar(transition, "kind")
+        .map_err(|error| QueryError::invalid(transition.id(), error))?;
+    if kind.as_str() != Some("local") { return Ok(true); }
+    let source = transition_endpoint(references, transition, "source")?;
+    if source.metaclass().is_none() {
+        return Err(QueryError::unsupported(source.id(), "source metaclass is unresolved"));
+    }
+    if source.conforms_to("State") {
+        // UML State::isComposite = region->notEmpty(). A serialized derived
+        // Boolean is not evidence of the underlying graph's cardinality.
+        state_regions_empty(references, source).map(|empty| !empty)
+    } else {
+        is_pseudostate_kind(Ok(source), "entryPoint")
+    }
+}
+
+fn state_submachine_or_regions(references: &ReferenceIndex<'_>, state: ElementRef<'_>) -> Result<bool, QueryError> {
+    // isComposite implies not isSubmachineState, evaluated from the two
+    // association projections, including their authored opposite evidence.
+    implies(state_regions_empty(references, state).map(|empty| !empty),
+        state_submachine_empty(references, state))
+}
+
 fn transition_segment_state(references: &ReferenceIndex<'_>, transition: ElementRef<'_>, fork: bool) -> Result<bool, QueryError> {
     let (condition_role, state_role, kind) = if fork { ("source", "target", "fork") } else { ("target", "source", "join") };
     implies(
@@ -604,6 +628,11 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "UML_STATE_ENTRY_OR_EXIT", "MDE_STATE_ENTRY_OR_EXIT_UNVERIFIED",
                 "State-entry_or_exit", "connection points must have kind entryPoint or exitPoint"));
         }
+        if element.conforms_to("State") {
+            constraints.push((state_submachine_or_regions(references, element),
+                "UML_STATE_SUBMACHINE_OR_REGIONS", "MDE_STATE_SUBMACHINE_OR_REGIONS_UNVERIFIED",
+                "State-submachine_or_regions", "a composite State cannot also be a submachine State"));
+        }
         if element.conforms_to("Pseudostate") {
             constraints.push((pseudostate_outgoing_from_initial(references, element),
                 "UML_PSEUDOSTATE_OUTGOING_FROM_INITIAL", "MDE_PSEUDOSTATE_OUTGOING_FROM_INITIAL_UNVERIFIED",
@@ -641,6 +670,9 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "Region-owned", "a Region cannot have both state and stateMachine owners"));
         }
         if element.conforms_to("Transition") {
+            constraints.push((transition_local(references, element),
+                "UML_TRANSITION_STATE_IS_LOCAL", "MDE_TRANSITION_STATE_IS_LOCAL_UNVERIFIED",
+                "Transition-state_is_local", "a local Transition must originate at a composite State or entryPoint"));
             constraints.push((transition_segment_guards(references, element, true),
                 "UML_TRANSITION_FORK_SEGMENT_GUARDS", "MDE_TRANSITION_FORK_SEGMENT_GUARDS_UNVERIFIED",
                 "Transition-fork_segment_guards", "a Transition from a fork cannot have a guard or triggers"));
@@ -682,10 +714,10 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             constraints.push((outgoing_at_most(references, element, 0),
                 "UML_FINAL_STATE_NO_OUTGOING_TRANSITIONS", "MDE_FINAL_STATE_OUTGOING_UNVERIFIED",
                 "FinalState-no_outgoing_transitions", "a FinalState cannot have outgoing Transitions"));
-            constraints.push((final_state_regions(references, element),
+            constraints.push((state_regions_empty(references, element),
                 "UML_FINAL_STATE_NO_REGIONS", "MDE_FINAL_STATE_REGIONS_UNVERIFIED",
                 "FinalState-no_regions", "a FinalState cannot have Regions"));
-            constraints.push((final_state_submachine(references, element),
+            constraints.push((state_submachine_empty(references, element),
                 "UML_FINAL_STATE_CANNOT_REFERENCE_SUBMACHINE", "MDE_FINAL_STATE_SUBMACHINE_UNVERIFIED",
                 "FinalState-cannot_reference_submachine", "a FinalState cannot reference a submachine"));
         }
