@@ -4,6 +4,8 @@ pub const MODELING_NAMESPACE: &str = "bellatrix.mde";
 
 pub mod contracts;
 pub use contracts::*;
+#[path = "persistence/mdj.rs"]
+pub mod mdj;
 #[path = "persistence/io.rs"]
 mod io;
 #[path = "persistence/wire.rs"]
