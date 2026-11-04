@@ -666,6 +666,31 @@ fn state_submachine_states(references: &ReferenceIndex<'_>, state: ElementRef<'_
         state_connections_empty(references, state, "connection", "ConnectionPointReference").map(|empty| !empty))
 }
 
+fn connection_reference_kinds(
+    references: &ReferenceIndex<'_>, connection: ElementRef<'_>, role: &str, kind: &str,
+) -> Result<bool, QueryError> {
+    let descriptor = schema::uml_property("ConnectionPointReference", role)
+        .map_err(|error| QueryError::unsupported(connection.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(connection.id(), format!("missing ConnectionPointReference::{role} contract")))?;
+    let Some(value) = connection.properties().get(role) else { return Ok(true); };
+    let mut checks = vec![match property_contracts::check_value(references, connection, descriptor, value) {
+        PropertyOutcome::Satisfied => Ok(true),
+        PropertyOutcome::Violation(message) => Err(QueryError::invalid(connection.id(), message)),
+        PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(connection.id(), message)),
+    }];
+    // Preserve every locally provable counterexample even beside unresolved
+    // external members. These are reference roles, not containment projections.
+    if let Some(values) = value.as_array() {
+        for value in values {
+            if let Ok(Some(id)) = reference_id(value) {
+                checks.push(is_pseudostate_kind(
+                    references.element(id).map_err(|error| QueryError::invalid(connection.id(), error)), kind));
+            }
+        }
+    }
+    require_all(checks)
+}
+
 pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     for element in references.model().elements() {
@@ -712,6 +737,14 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             constraints.push((pseudostate_single_outgoing(references, element, &["deepHistory", "shallowHistory"]),
                 "UML_PSEUDOSTATE_HISTORY_VERTICES", "MDE_PSEUDOSTATE_HISTORY_VERTICES_UNVERIFIED",
                 "Pseudostate-history_vertices", "a history Pseudostate can have at most one outgoing Transition"));
+        }
+        if element.conforms_to("ConnectionPointReference") {
+            constraints.push((connection_reference_kinds(references, element, "entry", "entryPoint"),
+                "UML_CONNECTION_POINT_REFERENCE_ENTRY_PSEUDOSTATES", "MDE_CONNECTION_POINT_REFERENCE_ENTRY_PSEUDOSTATES_UNVERIFIED",
+                "ConnectionPointReference-entry_pseudostates", "entry references must identify entryPoint Pseudostates"));
+            constraints.push((connection_reference_kinds(references, element, "exit", "exitPoint"),
+                "UML_CONNECTION_POINT_REFERENCE_EXIT_PSEUDOSTATES", "MDE_CONNECTION_POINT_REFERENCE_EXIT_PSEUDOSTATES_UNVERIFIED",
+                "ConnectionPointReference-exit_pseudostates", "exit references must identify exitPoint Pseudostates"));
         }
         if element.conforms_to("Region") {
             for (kind, code, unknown, constraint) in [
