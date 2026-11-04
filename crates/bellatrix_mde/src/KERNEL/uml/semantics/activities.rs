@@ -1,6 +1,9 @@
 use super::{
     classifiers::{self, QueryError},
-    feature_compatibility::{accept_any, compare_type_conformance, require_all},
+    feature_compatibility::{
+        accept_any, compare_resolved_types, compare_type_conformance, require_all,
+        resolve_feature_type,
+    },
     operations,
     property_contracts::{self, PropertyOutcome},
     references::{ReferenceIndex, external_reference_href, reference_id},
@@ -544,6 +547,48 @@ fn required_action_element<'a>(
     references
         .element(&identifier)
         .map_err(|error| QueryError::unsupported(action.id(), error))
+}
+
+// Compare value.type -> destination.type, never the reverse. Only the two
+// write-action OCL implications permit an absent value reference.
+fn action_value_type_conformance(
+    references: &ReferenceIndex<'_>,
+    action: ElementRef<'_>,
+    metaclass: &str,
+    destination_property: &str,
+    optional_value: bool,
+) -> Result<bool, QueryError> {
+    let value_id = optional_activity_reference(references, action, metaclass, "value")?;
+    let Some(value_id) = value_id else {
+        return if optional_value {
+            Ok(true)
+        } else {
+            Err(QueryError::unsupported(
+                action.id(),
+                "required value is unresolved",
+            ))
+        };
+    };
+    let value = references
+        .element(&value_id)
+        .map_err(|error| QueryError::unsupported(action.id(), error))?;
+    let destination = required_action_element(references, action, metaclass, destination_property)?;
+    compare_type_conformance(references, value, destination)
+        .map_err(|error| QueryError::unsupported(action.id(), error.to_string()))
+}
+
+// UML.xmi UnmarshallAction-object_type: object.type.conformsTo(unmarshallType).
+fn unmarshall_object_type(
+    references: &ReferenceIndex<'_>,
+    action: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let object = required_action_element(references, action, "UnmarshallAction", "object")?;
+    let target_type =
+        required_action_element(references, action, "UnmarshallAction", "unmarshallType")?;
+    let object_type = resolve_feature_type(references, object)
+        .map_err(|error| QueryError::unsupported(action.id(), error.to_string()))?;
+    compare_resolved_types(references, object_type, target_type)
+        .map_err(|error| QueryError::unsupported(action.id(), error.to_string()))
 }
 
 fn action_result_matching_type(
@@ -1417,6 +1462,47 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "ActivityPartition-dimension_not_contained",
                 "an ActivityPartition with isDimension=true must not be contained by another ActivityPartition",
             ));
+        }
+        if node.conforms_to("UnmarshallAction") {
+            checks.push((
+                unmarshall_object_type(references, node),
+                "UML_UNMARSHALL_ACTION_OBJECT_TYPE",
+                "MDE_UNMARSHALL_ACTION_OBJECT_TYPE_UNVERIFIED",
+                "UnmarshallAction-object_type",
+                "the object InputPin type must conform to unmarshallType",
+            ));
+        }
+        for (metaclass, destination_property, optional_value, code, unverified, rule) in [
+            (
+                "ValueSpecificationAction", "result", false,
+                "UML_VALUE_SPECIFICATION_ACTION_COMPATIBLE_TYPE",
+                "MDE_VALUE_SPECIFICATION_ACTION_COMPATIBLE_TYPE_UNVERIFIED",
+                "ValueSpecificationAction-compatible_type",
+            ),
+            (
+                "WriteStructuralFeatureAction", "structuralFeature", true,
+                "UML_WRITE_STRUCTURAL_FEATURE_ACTION_TYPE_OF_VALUE",
+                "MDE_WRITE_STRUCTURAL_FEATURE_ACTION_TYPE_OF_VALUE_UNVERIFIED",
+                "WriteStructuralFeatureAction-type_of_value",
+            ),
+            (
+                "WriteVariableAction", "variable", true,
+                "UML_WRITE_VARIABLE_ACTION_VALUE_TYPE",
+                "MDE_WRITE_VARIABLE_ACTION_VALUE_TYPE_UNVERIFIED",
+                "WriteVariableAction-value_type",
+            ),
+        ] {
+            if node.conforms_to(metaclass) {
+                checks.push((
+                    action_value_type_conformance(
+                        references, node, metaclass, destination_property, optional_value,
+                    ),
+                    code,
+                    unverified,
+                    rule,
+                    "the value type must conform to the type required by this action constraint",
+                ));
+            }
         }
         if node.conforms_to("ReadExtentAction") {
             checks.push((
