@@ -195,3 +195,13 @@ Feature: ControlFlow object-node endpoint semantics across the authored Activity
     And a false antecedent or true consequent proves the implication despite the other unknown flag
     Then all states survive JSON and BLX reopening without materializing defaults
     And restoring the original document restores the baseline result
+
+  Scenario: Preserve Pin non-unique multiplicity through explicit repair
+    Given imported InputPin and OutputPin with explicitly non-unique multiplicity
+    When isUnique is omitted then the inherited true default violates Pin-not_unique
+    And validation never materializes a replacement false default
+    When true is authored then the rule is violated
+    When false is authored then the rule is satisfied
+    And null or malformed values preserve scalar errors and leave the rule unverified
+    Then every edited state survives JSON and BLX reopening
+    And authoring false explicitly restores the original valid baseline

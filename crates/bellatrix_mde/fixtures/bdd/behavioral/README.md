@@ -171,3 +171,11 @@ come from UML.xmi and malformed flags remain separate scalar errors. A known
 false antecedent or true consequent proves the implication despite the other
 unknown flag. The lifecycle exercises InputPin/OutputPin, every Boolean pair,
 null/malformed flags, implicit defaults, JSON/BLX reopen and baseline repair.
+
+Pin-not_unique requires isUnique=false even though the inherited normative
+MultiplicityElement default is true. The Activity corpus now authors false
+explicitly on its two Pins: this corrects previously under-validated fixtures,
+not the metamodel default or expected error manifests. The lifecycle removes
+that property to prove absence still violates the rule without data mutation,
+then checks true/false, null/malformed values, JSON/BLX reopening and explicit
+repair. Invalid scalars retain PROPERTY_VALUE and do not fabricate rule errors.

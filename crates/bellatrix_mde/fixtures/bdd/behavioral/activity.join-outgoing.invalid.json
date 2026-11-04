@@ -176,7 +176,8 @@
       "properties": {
         "type": {
           "$ref": "order"
-        }
+        },
+        "isUnique": false
       }
     },
     {
@@ -186,7 +187,8 @@
       "properties": {
         "type": {
           "$ref": "order"
-        }
+        },
+        "isUnique": false
       }
     },
     {

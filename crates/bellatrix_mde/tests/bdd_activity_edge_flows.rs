@@ -2328,3 +2328,100 @@ fn pin_control_rule(response: &Value, pin: &str, severity: Option<&str>) -> Flow
     }
     Ok(())
 }
+
+#[test]
+fn pin_uniqueness_uses_inherited_true_default_and_explicit_repair() -> FlowResult<()> {
+    assert!(
+        include_str!("features/activity_edge_lifecycle.feature")
+            .contains("Scenario: Preserve Pin non-unique multiplicity through explicit repair")
+    );
+    let original = imported_activity()?;
+    let baseline = validate(&original)?;
+    assert_eq!(baseline["has_errors"], false, "{baseline}");
+    for pin in ["order-input", "order-output"] {
+        assert_eq!(
+            element(&mut original.clone(), pin)?["properties"]["isUnique"],
+            false
+        );
+        pin_uniqueness_rule(&baseline, pin, None)?;
+        let mut omitted = original.clone();
+        element(&mut omitted, pin)?["properties"]
+            .as_object_mut()
+            .ok_or("missing properties")?
+            .remove("isUnique");
+        let inherited_true = validate(&omitted)?;
+        pin_uniqueness_rule(&inherited_true, pin, Some("error"))?;
+        assert!(
+            element(&mut omitted, pin)?["properties"]
+                .get("isUnique")
+                .is_none()
+        );
+        assert_eq!(inherited_true["has_errors"], true, "{inherited_true}");
+        reopen(
+            &format!("pin-not-unique-inherited-true-{pin}"),
+            &omitted,
+            &inherited_true,
+        )?;
+        for (name, value, severity, malformed) in [
+            ("false", json!(false), None, false),
+            ("true", json!(true), Some("error"), false),
+            ("null", Value::Null, Some("warning"), true),
+            ("string", json!("false"), Some("warning"), true),
+            ("number", json!(0), Some("warning"), true),
+        ] {
+            let mut edited = original.clone();
+            element(&mut edited, pin)?["properties"]["isUnique"] = value;
+            let response = validate(&edited)?;
+            pin_uniqueness_rule(&response, pin, severity)?;
+            if malformed {
+                assert!(
+                    response["diagnostics"]
+                        .as_array()
+                        .ok_or("missing diagnostics")?
+                        .iter()
+                        .any(|d| d["subject_id"] == pin
+                            && d["code"] == "UML_PROPERTY_VALUE"
+                            && d["severity"] == "error"),
+                    "{response}"
+                );
+            }
+            assert_eq!(
+                response["has_errors"],
+                malformed || severity == Some("error"),
+                "{response}"
+            );
+            reopen(&format!("pin-not-unique-{pin}-{name}"), &edited, &response)?;
+        }
+        element(&mut omitted, pin)?["properties"]["isUnique"] = json!(false);
+        let repaired = validate(&omitted)?;
+        assert_eq!(repaired, baseline);
+        reopen(
+            &format!("pin-not-unique-repaired-{pin}"),
+            &omitted,
+            &repaired,
+        )?;
+    }
+    Ok(())
+}
+
+fn pin_uniqueness_rule(response: &Value, pin: &str, severity: Option<&str>) -> FlowResult<()> {
+    let matching: Vec<_> = response["diagnostics"]
+        .as_array()
+        .ok_or("missing diagnostics")?
+        .iter()
+        .filter(|d| {
+            d["subject_id"] == pin
+                && matches!(
+                    d["code"].as_str(),
+                    Some("UML_PIN_NOT_UNIQUE" | "MDE_PIN_NOT_UNIQUE_UNVERIFIED")
+                )
+        })
+        .collect();
+    if let Some(severity) = severity {
+        assert_eq!(matching.len(), 1, "{response}");
+        assert_eq!(matching[0]["severity"], severity, "{response}");
+    } else {
+        assert!(matching.is_empty(), "{response}");
+    }
+    Ok(())
+}

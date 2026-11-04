@@ -498,6 +498,15 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
         let mut checks = Vec::new();
         if node.conforms_to("Pin") {
             checks.push((
+                schema::read_effective_boolean(node, "isUnique")
+                    .map(|unique| !unique)
+                    .map_err(|error| QueryError::unsupported(node.id(), error)),
+                "UML_PIN_NOT_UNIQUE",
+                "MDE_PIN_NOT_UNIQUE_UNVERIFIED",
+                "Pin-not_unique",
+                "a Pin must have isUnique=false",
+            ));
+            checks.push((
                 accept_any([
                     schema::read_effective_boolean(node, "isControl")
                         .map(|control| !control)
