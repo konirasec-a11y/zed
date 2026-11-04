@@ -92,6 +92,8 @@ errors use `RESPONSE_SERIALIZATION_FAILED`.
 `{"api_version":1,"model":...}` and returns MDJ bytes. Import diagnostics are not
 accepted as an extra request field. The full document decoder runs its existing
 schema/integrity checks, then the existing MDJ exporter requires provenance.
+MDJ export is experimental: only supported mappings are emitted, unsupported
+edits fail explicitly, and full compatibility with StarUML is not guaranteed.
 An unchanged projection returns original source bytes. For supported edits, the
 exporter reimports its actual output and compares the complete supported
 projection. Unsupported edits fail instead of dropping data or replaying stale
@@ -273,7 +275,7 @@ Paths in this table are relative to `crates/bellatrix_mde/src/`.
 | Function names | Definition file | Boundary |
 | --- | --- | --- |
 | `decode_model_document`, `encode_model_document`, `convert_model_document`, `prepare_model_document`, `validate_model_section`, `encode_model_section` | `mde-api/document.rs` | Document codec and platform-section preparation |
-| `import_mdj_document`, `export_mdj_document`, `export_mdj_section` | `mde-api/interchange.rs` | MDJ interchange and verified native export |
+| `import_mdj_document`, `export_mdj_document`, `export_mdj_section` | `mde-api/interchange.rs` | MDJ import and experimental export of supported mappings |
 | `reparent_uml_element`, `apply_model_command` | `mde-api/commands.rs` | Atomic application-command candidates |
 | `project_model_section` | `mde-api/projection.rs` | Transient read projection |
 | `project_documentation` | `mde-api/presentation.rs` | Neutral documentation projection |

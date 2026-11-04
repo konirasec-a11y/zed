@@ -142,6 +142,11 @@ successful reopening in the StarUML application.
 
 ### Transactional MDJ adapter boundary
 
+MDJ export is **experimental** and remains available as an optional save-copy path.
+It supports only the existing mappings and rejects unsupported edits; it does not
+guarantee full StarUML compatibility or visual equivalence. Current development
+prioritizes MDJ import into the universal contract and faithful visualization.
+
 `bellatrix_mde_cordis::ModelingApplyMdjEdit` accepts the exact shared platform
 snapshot and an existing model command. It computes a candidate without changing
 the live document, verifies the MDJ inverse, then publishes through an atomic

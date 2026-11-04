@@ -630,13 +630,18 @@ impl Item for NativeMdePreviewItem {
         format!(
             "{} · {}",
             if self.lease.source.is_mdj() {
-                "MDJ · Save a copy"
+                "MDJ · Export experimental"
             } else {
                 "MDE Preview (read-only)"
             },
             self.lease.source.project_id.as_str()
         )
         .into()
+    }
+    fn tab_tooltip_text(&self, _: &App) -> Option<SharedString> {
+        self.lease.source.is_mdj().then(|| {
+            "MDJ export is experimental. Save creates a new copy using the currently supported mappings; unsupported edits are rejected. Full StarUML compatibility is not guaranteed, and the original file is not replaced.".into()
+        })
     }
     fn active_project_path(&self, cx: &App) -> Option<ProjectPath> {
         if self.discarded || self.saved_copy.is_some() {

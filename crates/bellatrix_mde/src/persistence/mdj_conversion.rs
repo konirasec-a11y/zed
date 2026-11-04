@@ -1,5 +1,7 @@
 #[path = "mdj_associations.rs"]
 mod associations;
+#[path = "mdj_members.rs"]
+mod members;
 #[path = "mdj_style_projection.rs"]
 mod style_projection;
 #[path = "mdj_view_projection.rs"]
@@ -14,8 +16,6 @@ use serde_json::{Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
 const PROJECTION_VERSION: u32 = 2;
-const CLASS_BOOLEAN_FIELDS: [&str; 2] = ["isAbstract", "isActive"];
-const SEMANTIC_FIELDS: [&str; 4] = ["isAbstract", "isActive", "visibility", "stereotype"];
 
 #[derive(Debug)]
 pub struct Import {
@@ -153,8 +153,8 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
         let mut mapped_fields = BTreeSet::new();
         let name = take_name(&mut residue, &mut mapped_fields);
         if object.id != project.id {
-            let canonical_kind = canonical_kind_for_object(object, &index);
-            if canonical_kind.is_some() {
+            let mapped_kind = canonical_kind_for_object(object, &index);
+            if mapped_kind.is_some() {
                 mapped_fields.insert("_type".into());
                 if let Some(parent) = residue
                     .get("_parent")
@@ -179,23 +179,14 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
                     mapped_fields.insert("_parent".into());
                 }
             }
-            let properties = if canonical_kind.is_some() {
-                let mut properties = BTreeMap::new();
-                // Vendored StarUML and kernel defaults agree: false for class
-                // flags, public for visibility. Keep absence distinct from authored values.
-                for field in SEMANTIC_FIELDS {
-                    if let Some(value) = residue.remove(field) {
-                        properties.insert(field.into(), value);
-                        mapped_fields.insert(field.into());
-                    }
-                }
-                properties
+            let properties = if mapped_kind.is_some() {
+                members::import_properties(object.type_name, &mut residue, &mut mapped_fields)
             } else {
                 std::mem::take(&mut residue)
             };
             project.elements.push(Element {
                 id: object.id.into(),
-                kind: canonical_kind
+                kind: mapped_kind
                     .map(str::to_owned)
                     .unwrap_or_else(|| format!("mdj.{}", object.type_name)),
                 name,
@@ -209,13 +200,13 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
             });
             diagnostics.push(Diagnostic {
                 path: object.path.clone(),
-                message: if canonical_kind.is_some() {
-                    format!("{} mapped by identity, name, supported explicit ownership, visibility, Boolean class flags and uninterpreted stereotype variants only; remaining MDJ properties are preserved as source residue", object.type_name)
-                } else if matches!(object.type_name, "UMLModel" | "UMLPackage" | "UMLClass") {
+                message: if mapped_kind.is_some() {
+                    format!("{} mapped by identity, name, explicit ownership and representable properties; class members and operation parameters preserve source order, textual types remain unresolved declarations, and source-only encoding stays in residue", object.type_name)
+                } else if canonical_kind(object.type_name).is_some() {
                     let fields = object.properties.iter()
                         .filter(|(field, value)| !supported_semantic_field(object.type_name, field, value))
                         .map(|(field, _)| field.clone()).collect::<Vec<_>>().join(", ");
-                    format!("{} kept opaque, not promoted to UML: unmapped or unrepresentable fields [{}], a non-string name, presentation containment or an unmappable explicit ownership chain; source semantics must not be replaced with UML defaults", object.type_name, fields)
+                    format!("{} kept opaque, not promoted to UML: unsupported fields [{}], an opaque/misplaced owned member, mismatched member slot and _parent, a non-string name, presentation containment or an unmappable ownership chain; source semantics must not be replaced with UML defaults", object.type_name, fields)
                 } else {
                     format!("{} preserved as an MDJ object; this object has no supported canonical UML mapping", object.type_name)
                 },
@@ -499,13 +490,7 @@ fn metadata_after_export(project: &Project) -> Project {
                     metadata.type_name = kind.into();
                 }
                 if metadata.mapped_fields.contains("_type") {
-                    for field in SEMANTIC_FIELDS {
-                        if element.properties.contains_key(field) {
-                            metadata.mapped_fields.insert(field.into());
-                        } else {
-                            metadata.mapped_fields.remove(field);
-                        }
-                    }
+                    members::update_metadata(element, metadata);
                 }
             }
         }
@@ -576,6 +561,11 @@ fn export_document(project: &Project, original: &mdj::Index<'_>) -> Result<Value
                         "canonical UML property has no lossless MDJ mapping",
                     ));
                 }
+                if !metadata.mapped_fields.contains(field)
+                    && members::preserves_omitted_default(kind, field, value)
+                {
+                    continue;
+                }
                 if residual.insert(field.clone(), value.clone()).is_some() {
                     return Err(failure(
                         "",
@@ -597,7 +587,7 @@ fn export_document(project: &Project, original: &mdj::Index<'_>) -> Result<Value
                     parent.id == ownership.from
                         && matches!(
                             parent.kind.as_str(),
-                            "uml.model" | "uml.package" | "uml.class"
+                            "uml.model" | "uml.package" | "uml.class" | "uml.operation"
                         )
                 })
             {
@@ -788,33 +778,21 @@ fn canonical_kind(kind: &str) -> Option<&'static str> {
         "UMLModel" => Some("uml.model"),
         "UMLPackage" => Some("uml.package"),
         "UMLClass" => Some("uml.class"),
+        "UMLAttribute" => Some("uml.attribute"),
+        "UMLOperation" => Some("uml.operation"),
+        "UMLParameter" => Some("uml.parameter"),
         _ => None,
     }
 }
 
 fn supported_semantic_field(kind: &str, field: &str, value: &Value) -> bool {
-    matches!(
-        field,
-        "_id" | "_type" | "name" | "_parent" | "ownedElements"
-    ) || supported_semantic_property(kind, field, value)
+    matches!(field, "_id" | "_type" | "name" | "_parent")
+        || (field == "ownedElements" && value.is_array())
+        || members::supported_field(kind, field, value)
 }
 
 fn supported_semantic_property(kind: &str, field: &str, value: &Value) -> bool {
-    if field == "stereotype" && canonical_kind(kind).is_some() {
-        matches!(
-            crate::StereotypeValue::read(Some(value)),
-            crate::StereotypeValue::Null
-                | crate::StereotypeValue::Text(_)
-                | crate::StereotypeValue::Reference(_)
-        )
-    } else if field == "visibility" && canonical_kind(kind).is_some() {
-        matches!(
-            value.as_str(),
-            Some("public" | "private" | "protected" | "package")
-        )
-    } else {
-        kind == "UMLClass" && CLASS_BOOLEAN_FIELDS.contains(&field) && value.is_boolean()
-    }
+    members::supported_property(kind, field, value)
 }
 
 fn canonical_kind_for_object<'document>(
@@ -838,6 +816,7 @@ fn canonical_kind_for_object<'document>(
                 .properties
                 .iter()
                 .any(|(field, value)| !supported_semantic_field(current.type_name, field, value))
+            || !members::supported_structure(current, index)
         {
             return None;
         }
@@ -862,6 +841,9 @@ fn mdj_kind(kind: &str) -> Option<&str> {
         "uml.model" => Some("UMLModel"),
         "uml.package" => Some("UMLPackage"),
         "uml.class" => Some("UMLClass"),
+        "uml.attribute" => Some("UMLAttribute"),
+        "uml.operation" => Some("UMLOperation"),
+        "uml.parameter" => Some("UMLParameter"),
         _ => kind.strip_prefix("mdj."),
     }
 }

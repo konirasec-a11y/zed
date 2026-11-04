@@ -33,7 +33,8 @@ pub fn import_mdj_document(document: &[u8]) -> Result<String, String> {
     Ok(json!({"api_version": API_VERSION, "model": model, "diagnostics": diagnostics}).to_string())
 }
 
-/// Export a versioned universal model envelope as verified MDJ bytes.
+/// Experimental: export a universal model envelope through the supported MDJ mappings.
+/// Unsupported edits are rejected; this does not guarantee full StarUML compatibility.
 ///
 /// Input contains exactly `api_version: 1` and `model`, without import diagnostics.
 /// The current adapter requires imported provenance. An unchanged projection
@@ -55,7 +56,8 @@ pub fn export_mdj_document(input_json: &str) -> Result<Vec<u8>, String> {
         .map_err(|error| error_response("MDJ_EXPORT_FAILED", error.to_string()))
 }
 
-/// Verify and export an immutable canonical section with platform identity as MDJ.
+/// Experimental: export an immutable canonical section through the supported MDJ mappings.
+/// Unsupported edits are rejected; this does not guarantee full StarUML compatibility.
 /// The integration layer must reject unrelated platform sections and guard the snapshot.
 /// Original provenance bytes and the existing inverse-mapping verification are preserved.
 pub fn export_mdj_section(project_id: &str, name: &str, section_json: &str) -> Result<Vec<u8>, String> {
