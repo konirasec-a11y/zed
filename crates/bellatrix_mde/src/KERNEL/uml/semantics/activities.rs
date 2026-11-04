@@ -273,6 +273,66 @@ fn object_flow_behavior_parameters(
     require_all(checks)
 }
 
+// UML.xmi DecisionNode-zero_input_parameters. Incoming is derived from the
+// target endpoint, not source incidence or an authored inverse collection.
+fn decision_zero_input_parameters(
+    references: &ReferenceIndex<'_>,
+    node: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let incoming_control = accept_any(activity_edge_candidates(references).into_iter().map(|edge| {
+        let control = if edge.metaclass().is_some() {
+            Ok(edge.conforms_to("ControlFlow"))
+        } else {
+            Err(QueryError::unsupported(edge.id(), "ActivityEdge metaclass is unresolved"))
+        };
+        require_all([
+            activity_endpoint(references, edge, "target")
+                .map(|target| target.id() == node.id()),
+            control,
+        ])
+    }));
+    let guard = require_all([
+        activity_reference_present(references, node, "DecisionNode", "decisionInput"),
+        activity_reference_present(references, node, "DecisionNode", "decisionInputFlow")
+            .map(|present| !present),
+        incoming_control,
+    ]);
+    let no_inputs = (|| {
+        let identifier =
+            optional_activity_reference(references, node, "DecisionNode", "decisionInput")?
+                .ok_or_else(|| {
+                    QueryError::unsupported(node.id(), "decisionInput Behavior is not represented")
+                })?;
+        let (parameters, completeness) =
+            operations::owned_parameter_evidence(references, &identifier)
+                .map_err(|error| QueryError::unsupported(node.id(), error.to_string()))?;
+        let mut uncertainty = completeness
+            .err()
+            .map(|error| QueryError::unsupported(node.id(), error.to_string()));
+        let mut has_input = false;
+        for parameter in parameters {
+            match operations::direction(parameter) {
+                Ok(direction) => {
+                    has_input |= matches!(direction.as_str(), "in" | "inout");
+                }
+                Err(error) => {
+                    uncertainty = Some(QueryError::unsupported(parameter.id.as_str(), error));
+                }
+            }
+        }
+        // One canonical input disproves emptiness despite unknown neighbors.
+        // No known input proves emptiness only when membership is complete.
+        if has_input {
+            Ok(false)
+        } else if let Some(error) = uncertainty {
+            Err(error)
+        } else {
+            Ok(true)
+        }
+    })();
+    accept_any([guard.map(|applies| !applies), no_inputs])
+}
+
 fn object_node_selection(
     references: &ReferenceIndex<'_>,
     node: ElementRef<'_>,
@@ -884,6 +944,13 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             ));
         }
         if node.conforms_to("DecisionNode") {
+            checks.push((
+                decision_zero_input_parameters(references, node),
+                "UML_DECISION_NODE_ZERO_INPUT_PARAMETERS",
+                "MDE_DECISION_NODE_ZERO_INPUT_PARAMETERS_UNVERIFIED",
+                "DecisionNode-zero_input_parameters",
+                "a DecisionNode with incoming ControlFlow and no decisionInputFlow must have no input Parameters on its decisionInput Behavior",
+            ));
             checks.push((
                 uniform_activity_edges_excluding(references, node, optional_activity_reference(references, node, "DecisionNode", "decisionInputFlow")),
                 "UML_DECISION_NODE_EDGES",
