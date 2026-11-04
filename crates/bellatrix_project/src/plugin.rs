@@ -31,6 +31,7 @@ impl Plugin for ProjectPlugin {
         register_external_storage(&ctx, service)?;
         register_open(&ctx, service)?;
         register_replace(&ctx, service)?;
+        register_replace_snapshot(&ctx, service)?;
         register_save(&ctx, service)?;
         register_close(&ctx, service)?;
         register_close_snapshot(&ctx, service)?;
@@ -126,6 +127,38 @@ fn register_replace(ctx: &Context, service: &Arc<ProjectService>) -> Result<(), 
             }
         }))
         .map_err(|e| io::Error::other(e.to_string()))?;
+    Ok(())
+}
+
+fn register_replace_snapshot(ctx: &Context, service: &Arc<ProjectService>) -> Result<(), io::Error> {
+    let service = Arc::clone(service);
+    let _listener = ctx.on::<ProjectReplaceSnapshot, _>(responder(
+        move |ctx, args: ProjectReplaceSnapshotRequested| {
+            let service = Arc::clone(&service);
+            async move {
+                let result = service.replace_snapshot(&args.document, args.namespace.clone(), args.state);
+                let result = match result {
+                    Ok((document, changed)) => {
+                        if changed {
+                            let state = document.section(&args.namespace)
+                                .ok_or(ProjectError::InvalidNamespace).cloned();
+                            match state {
+                                Ok(state) => notify::<ProjectStateChangedEvent>(&ctx, ProjectStateChanged {
+                                    id: document.id().clone(), namespace: args.namespace,
+                                    previous_revision: args.document.revision(), revision: document.revision(),
+                                    state: Arc::new(state),
+                                }).await,
+                                Err(error) => return Ok::<_, Infallible>(Some(Err(error))),
+                            }
+                        }
+                        Ok(document)
+                    }
+                    Err(error) => Err(error),
+                };
+                Ok::<_, Infallible>(Some(result))
+            }
+        },
+    )).map_err(|error| io::Error::other(error.to_string()))?;
     Ok(())
 }
 
@@ -238,6 +271,15 @@ fn register_external_storage(
             },
         ))
         .map_err(|e| io::Error::other(e.to_string()))?;
+    let encoded_service = Arc::clone(service);
+    let _listener = ctx.on::<ProjectPrepareEncodedSave, _>(responder(
+        move |_, args: ProjectPrepareEncodedSaveRequested| {
+            let service = Arc::clone(&encoded_service);
+            async move {
+                Ok::<_, Infallible>(Some(service.prepare_encoded_save(args.document, args.path, args.bytes)))
+            }
+        },
+    )).map_err(|error| io::Error::other(error.to_string()))?;
     let service = Arc::clone(service);
     let _listener = ctx
         .on::<ProjectAcknowledgeExternalSave, _>(responder(

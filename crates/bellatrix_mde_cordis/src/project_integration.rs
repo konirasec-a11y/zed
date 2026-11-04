@@ -86,6 +86,7 @@ impl Plugin for MdePlugin {
         crate::diagrams::register(&ctx, Arc::clone(&projects))?;
         crate::views::register(&ctx, Arc::clone(&projects))?;
         crate::view_style::register(&ctx, Arc::clone(&projects))?;
+        crate::mdj_interchange::register(&ctx, Arc::clone(&projects))?;
         let quick_projects = Arc::clone(&projects);
         let _quick_edit = ctx
             .on::<crate::ModelingQuickEdit, _>(responder(

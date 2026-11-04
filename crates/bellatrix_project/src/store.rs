@@ -113,6 +113,25 @@ impl ProjectService {
         expected_revision: u64,
         path: PathBuf,
     ) -> Result<ProjectSaveTicket, ProjectError> {
+        self.prepare_save(id, expected_revision, path, None)
+    }
+
+    pub(crate) fn prepare_encoded_save(
+        &self,
+        document: Arc<ProjectDocument>,
+        path: PathBuf,
+        bytes: Arc<[u8]>,
+    ) -> Result<ProjectSaveTicket, ProjectError> {
+        self.prepare_save(document.id(), document.revision(), path, Some((&document, bytes)))
+    }
+
+    fn prepare_save(
+        &self,
+        id: &ProjectId,
+        expected_revision: u64,
+        path: PathBuf,
+        encoded: Option<(&Arc<ProjectDocument>, Arc<[u8]>)>,
+    ) -> Result<ProjectSaveTicket, ProjectError> {
         let session = {
             let projects = self
                 .projects
@@ -148,7 +167,15 @@ impl ProjectService {
                 current: current.document.revision(),
             });
         }
-        let bytes = serde_json::to_vec_pretty(&*current.document)?.into();
+        let bytes = match encoded {
+            Some((expected, bytes)) => {
+                if !Arc::ptr_eq(expected, &current.document) {
+                    return Err(ProjectError::SessionChanged(id.as_str().into()));
+                }
+                bytes
+            }
+            None => serde_json::to_vec_pretty(&*current.document)?.into(),
+        };
         let reservation = Arc::new(());
         current.external_save = Arc::downgrade(&reservation);
         Ok(ProjectSaveTicket {
@@ -206,6 +233,27 @@ impl ProjectService {
         expected: u64,
         value: Value,
     ) -> Result<Option<Arc<ProjectDocument>>, ProjectError> {
+        self.replace_matching(id, namespace, expected, value, None)
+            .map(|(document, changed)| changed.then_some(document))
+    }
+
+    pub(crate) fn replace_snapshot(
+        &self,
+        document: &Arc<ProjectDocument>,
+        namespace: String,
+        value: Value,
+    ) -> Result<(Arc<ProjectDocument>, bool), ProjectError> {
+        self.replace_matching(document.id(), namespace, document.revision(), value, Some(document))
+    }
+
+    fn replace_matching(
+        &self,
+        id: &ProjectId,
+        namespace: String,
+        expected: u64,
+        value: Value,
+        snapshot: Option<&Arc<ProjectDocument>>,
+    ) -> Result<(Arc<ProjectDocument>, bool), ProjectError> {
         let mut projects = self
             .projects
             .write()
@@ -219,12 +267,15 @@ impl ProjectService {
                 current: current.document.revision(),
             });
         }
+        if snapshot.is_some_and(|snapshot| !Arc::ptr_eq(snapshot, &current.document)) {
+            return Err(ProjectError::SessionChanged(id.as_str().into()));
+        }
         let mut next = (*current.document).clone();
         if !next.replace(namespace, value)? {
-            return Ok(None);
+            return Ok((Arc::clone(&current.document), false));
         }
         current.document = Arc::new(next);
-        Ok(Some(Arc::clone(&current.document)))
+        Ok((Arc::clone(&current.document), true))
     }
 
     /// A close waits for any in-flight save of *this* bellatrix-project to finish.

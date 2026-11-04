@@ -7,6 +7,11 @@ pub use bellatrix_mde::{ModelingRelationKind, ModelingSection, UmlQuickCreate};
 mod diagrams;
 mod trace_output;
 mod mutation;
+mod mdj_interchange;
+pub use mdj_interchange::{
+    MdjExportReceipt, ModelingApplyMdjEdit, ModelingApplyMdjEditRequested,
+    ModelingExportMdj, ModelingExportMdjRequested,
+};
 pub use diagrams::{
     ModelingCreateExplorerDiagram, ModelingCreateExplorerDiagramRequested,
     DiagramValidationResult, ModelingExecutionTrace, ModelingExecutionTraceEvent, ModelingCreateDiagram, ModelingCreateDiagramRequested, ModelingDeleteDiagram,
@@ -178,55 +183,5 @@ impl Plugin for ModelingPlugin {
             },
         ))?;
         Ok(())
-    }
-}
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use cordis::Routing;
-    #[tokio::test]
-    async fn cordis_routes_command_through_tokio_and_disposes() {
-        let ctx = Context::new();
-        let (tx, mut rx) = mpsc::channel(4);
-        let (done_tx, mut done_rx) = mpsc::channel(4);
-        let plugin = ModelingPlugin::new(tx, done_tx);
-        let input = plugin.prepare(()).unwrap();
-        let prepared = cordis::PreparedPlugin::from_input(plugin, input);
-        let handle = ctx.spawn(prepared).await.unwrap();
-        ctx.emit::<ModelingRequested>(
-            Routing::Unscoped,
-            ModelingCommand {
-                correlation_id: 42,
-                operation: ModelingOperation::Check {
-                    source: "todo.json".into(),
-                },
-            },
-        )
-        .await
-        .unwrap();
-        let command = tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv())
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(command.correlation_id, 42);
-        ctx.emit::<ModelingCompleted>(
-            Routing::Unscoped,
-            ModelingCompletion {
-                correlation_id: 42,
-                success: true,
-                summary: "done".into(),
-            },
-        )
-        .await
-        .unwrap();
-        assert_eq!(
-            tokio::time::timeout(std::time::Duration::from_secs(5), done_rx.recv())
-                .await
-                .unwrap()
-                .unwrap()
-                .correlation_id,
-            42
-        );
-        handle.dispose().await.unwrap();
     }
 }

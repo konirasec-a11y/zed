@@ -40,6 +40,21 @@ impl Event for ProjectReplace {
     type Output = Result<Arc<ProjectDocument>, ProjectError>;
 }
 
+/// Compare the exact immutable snapshot under the replacement lock. This also
+/// rejects commands prepared before a project was closed and reopened at revision zero.
+#[derive(Clone)]
+pub struct ProjectReplaceSnapshotRequested {
+    pub document: Arc<ProjectDocument>,
+    pub namespace: String,
+    pub state: Value,
+}
+pub struct ProjectReplaceSnapshot;
+impl Event for ProjectReplaceSnapshot {
+    const NAME: &'static str = "bellatrix.bellatrix-project.replace-snapshot.v1";
+    type Args = ProjectReplaceSnapshotRequested;
+    type Output = Result<Arc<ProjectDocument>, ProjectError>;
+}
+
 #[derive(Clone)]
 pub struct ProjectSaveRequested {
     pub id: ProjectId,
@@ -146,6 +161,23 @@ pub struct ProjectPrepareExternalSave;
 impl Event for ProjectPrepareExternalSave {
     const NAME: &'static str = "bellatrix.bellatrix-project.prepare-external-save.v1";
     type Args = ProjectPrepareExternalSaveRequested;
+    type Output = Result<ProjectSaveTicket, ProjectError>;
+}
+
+/// Reserve a verified external encoding of this exact snapshot. The platform
+/// treats engine sections and file encodings as opaque: the adapter must prove
+/// the complete document is representable before calling this operation.
+/// This does not write, authorize overwriting a destination, or mark anything saved.
+#[derive(Clone)]
+pub struct ProjectPrepareEncodedSaveRequested {
+    pub document: Arc<ProjectDocument>,
+    pub path: PathBuf,
+    pub bytes: Arc<[u8]>,
+}
+pub struct ProjectPrepareEncodedSave;
+impl Event for ProjectPrepareEncodedSave {
+    const NAME: &'static str = "bellatrix.bellatrix-project.prepare-encoded-save.v1";
+    type Args = ProjectPrepareEncodedSaveRequested;
     type Output = Result<ProjectSaveTicket, ProjectError>;
 }
 

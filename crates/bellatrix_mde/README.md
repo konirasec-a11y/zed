@@ -132,6 +132,29 @@ style commands, JSON/BLX disk persistence, MDJ export/reimport, source preservat
 and rejection/repair. These flows do not establish native visual equivalence or
 successful reopening in the StarUML application.
 
+### Transactional MDJ adapter boundary
+
+`bellatrix_mde_cordis::ModelingApplyMdjEdit` accepts the exact shared platform
+snapshot and an existing model command. It computes a candidate without changing
+the live document, verifies the MDJ inverse, then publishes through an atomic
+snapshot comparison. Unsupported edits and stale or closed/reopened sessions
+leave the shared snapshot and revision unchanged. Ordinary native authoring is
+not restricted merely because a model carries MDJ provenance.
+
+`ModelingExportMdj` returns verified bytes associated with that exact snapshot.
+`ProjectPrepareEncodedSave` reserves an externally encoded write for the snapshot;
+it does not write a file or mark a document clean. The adapter owns encoding,
+destination safety and actual I/O. `ProjectAcknowledgeExternalSave` clears dirty
+state only for matching written bytes and the matching session/revision. Additional
+platform engine sections are refused by MDJ interchange rather than omitted.
+
+These APIs do not enable native editable MDJ tabs by themselves. The existing
+preview remains read-only until its command routing, native dirty/close lifecycle
+and safe file writer are connected. The Cordis BDD specification is
+`bellatrix_mde_cordis/tests/features/mdj_edit_save_lifecycle.feature`, with real
+file save/reopen, refused edits, stale sessions, cancelled reservations and exact
+save receipts in its associated Rust flow harness.
+
 ## Geometry boundary and remaining coupling
 
 For `SetViewRouting`, the view-model receives an immutable document snapshot and
