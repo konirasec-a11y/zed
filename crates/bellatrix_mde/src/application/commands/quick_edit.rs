@@ -57,15 +57,6 @@ pub(super) fn apply(
         )?;
         return Ok(());
     }
-    if !matches!(action, UmlQuickCreate::Note | UmlQuickCreate::Constraint) {
-        let model = crate::uml::root::Model::from_section(section);
-        let subject = model
-            .element(element_id)
-            .ok_or("Quick Edit subject not found")?;
-        if model.owner(subject)?.is_none() {
-            crate::uml::root::adopt_root_model(section, project_id, "Model")?;
-        }
-    }
     let diagram = section
         .diagrams
         .iter()
@@ -273,13 +264,12 @@ pub(super) fn apply(
             .owner(subject)?
             .filter(|owner| owner.conforms_to("Namespace"))
             .map(|owner| owner.id().to_owned());
-        let owner_id = match namespace {
-            Some(id) => id,
-            None => crate::uml::root::adopt_root_model(section, project_id, "Model")?,
-        };
-        crate::uml::root::set_owner(section, project_id, &new_id, &owner_id)?;
-        if matches!(rule.kind, "uml.association" | "uml.usage") {
-            crate::uml::root::set_owner(section, project_id, &relation_id, &owner_id)?;
+        let owner_id = namespace.or(model.root()?.map(|root| root.element().id().to_owned()));
+        if let Some(owner_id) = owner_id {
+            crate::uml::root::set_owner(section, project_id, &new_id, &owner_id)?;
+            if matches!(rule.kind, "uml.association" | "uml.usage") {
+                crate::uml::root::set_owner(section, project_id, &relation_id, &owner_id)?;
+            }
         }
     }
     reroute_relationships(section, diagram_id);

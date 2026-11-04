@@ -1061,9 +1061,10 @@ fn create_element(
     let resolved_owner = if let Some(owner_id) = owner_id {
         Some(owner_id.clone())
     } else if crate::uml::root::object_metaclass(kind.model_kind()).is_some() {
-        Some(crate::uml::root::adopt_root_model(
-            section, project_id, "Model",
-        )?)
+        // Creating one element must not adopt unrelated rootless elements.
+        crate::uml::root::Model::from_section(section)
+            .root()?
+            .map(|root| root.element().id().to_owned())
     } else {
         None
     };
@@ -1091,14 +1092,19 @@ fn create_element(
     if requested_name.is_none() {
         let base = chosen_name.clone();
         for sequence in 1_u64.. {
-            let duplicate = section.elements.iter().any(|element| {
-                element.name == chosen_name
-                    && section.relations.iter().any(|relation| {
-                        relation.kind == "owns"
-                            && Some(&relation.from) == resolved_owner.as_ref()
-                            && relation.to == element.id
-                    })
-            });
+            let model = crate::uml::root::Model::from_section(section);
+            let mut duplicate = false;
+            for element in section
+                .elements
+                .iter()
+                .filter(|element| element.name == chosen_name)
+            {
+                let owner = model.owner(crate::uml::root::ElementRef::Object(element))?;
+                if owner.map(|owner| owner.id()) == resolved_owner.as_deref() {
+                    duplicate = true;
+                    break;
+                }
+            }
             if !duplicate {
                 break;
             }
