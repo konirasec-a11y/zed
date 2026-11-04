@@ -430,6 +430,39 @@ impl MdeWorkbenchItem {
         Ok(())
     }
 
+    pub(super) fn submit_explorer_diagram_command(
+        &mut self, command: MdeUiCommand, project_id: &ProjectId,
+        expected_revision: u64, cx: &mut Context<Self>,
+    ) -> bool {
+        let allowed = if self.source.is_read_only() || self.source.is_presentation_suspended() {
+            Err("The active document is not editable".to_owned())
+        } else if self.project_id() != project_id {
+            Err("The active project changed; reopen the diagram menu".to_owned())
+        } else {
+            self.source.snapshot().and_then(|snapshot| {
+                if snapshot.revision == expected_revision { Ok(()) }
+                else { Err("The model changed; reopen the diagram menu".to_owned()) }
+            })
+        };
+        if let Err(error) = allowed {
+            self.feedback = error;
+            cx.notify();
+            return false;
+        }
+        let sent = match self.source.submit(command) {
+            Ok(()) => {
+                self.feedback = "Command sent to Cordis".into();
+                true
+            }
+            Err(error) => {
+                self.feedback = format!("Command not sent: {error}");
+                false
+            }
+        };
+        cx.notify();
+        sent
+    }
+
     pub(super) fn validate_explorer_reparent(
         &self, drag: &hierarchy::ExplorerElementDrag, owner_id: &str,
     ) -> Result<(), String> {

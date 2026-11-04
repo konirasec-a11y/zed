@@ -147,8 +147,7 @@ identity is retained for selection and presentation editing, including in
 read-only previews.
 Relationship rows show source, authored relationship name (or relationship type),
 relationship type, semantic endpoint markers and line style, and destination. Projection does not delete elements,
-change ownership, or modify any diagram or view. Explorer drag rearrangement stays
-disabled, and legacy cosmetic placements do not override the projected hierarchy.
+change ownership, or modify any diagram or view. Legacy cosmetic placements do not override the projected hierarchy.
 
 Explorer navigation follows the StarUML interaction contract for selecting a
 right-clicked target before opening its menu, revealing selected nodes through
@@ -156,8 +155,8 @@ collapsed ancestors, and expanding or collapsing the tree. These navigation
 controls are icon-only, have tooltips and accessible names, and remain available
 in read-only previews. Reveal can be requested again for an unchanged selection.
 Disclosure clicks change expansion without selecting the row. This is a bounded
-parity step: semantic relocation, keyboard tree navigation, inline rename and
-full diagram/project context menus are not claimed as implemented.
+parity step: keyboard tree navigation, element inline rename and full StarUML
+menu coverage are not claimed as implemented.
 
 Dragging an existing semantic element from the Explorer onto the active canvas
 reuses PlaceElementView at the canvas coordinates. An existing view in that
@@ -185,3 +184,14 @@ item's path. Added/Name ordering only sorts siblings, never changes ownership or
 IDs, and keeps operation parameters in their semantic order. Added uses persisted
 collection order rather than inventing creation timestamps for imported models.
 Search and ordering are local panel state and remain usable in read-only previews.
+
+Project context menus offer diagram kinds that require no UML context, without
+inferring a context from an unrelated selected element. Kinds requiring a specific
+model context are not offered at the project root. Diagram context menus select the target and offer Open, Rename
+and Delete. Rename and delete use a compact draft/confirmation row with icon-only
+controls, tooltips and accessible labels. Delete explicitly warns that diagram
+views are removed while model elements remain. Commands retain the menu's project,
+diagram identity and revision and pass through Cordis CAS; stale, read-only or
+suspended operations are rejected. Switching documents clears pending drafts and
+restores focus. Project rename/delete and nested-diagram creation are not offered
+without a supported semantic command.
