@@ -591,6 +591,35 @@ fn unmarshall_object_type(
         .map_err(|error| QueryError::unsupported(action.id(), error.to_string()))
 }
 
+// UML MultiplicityElement::compatibleWith, applied in the direction
+// feature/variable -> result. Do not require interval validation to establish
+// an independent bound comparison; interval/value invariants are separate.
+fn action_read_multiplicity_compatible(
+    references: &ReferenceIndex<'_>,
+    action: ElementRef<'_>,
+    metaclass: &str,
+    source_property: &str,
+) -> Result<bool, QueryError> {
+    let source = required_action_element(references, action, metaclass, source_property)?;
+    let result = required_action_element(references, action, metaclass, "result")?;
+    let source_lower = value_specifications::lower_bound(references, source)
+        .map_err(|error| QueryError::unsupported(source.id(), error.to_string()));
+    let result_lower = value_specifications::lower_bound(references, result)
+        .map_err(|error| QueryError::unsupported(result.id(), error.to_string()));
+    let lower_clause = (|| Ok(result_lower? <= source_lower?))();
+    let source_upper = value_specifications::upper_bound(references, source)
+        .map_err(|error| QueryError::unsupported(source.id(), error.to_string()));
+    let result_upper = value_specifications::upper_bound(references, result)
+        .map_err(|error| QueryError::unsupported(result.id(), error.to_string()));
+    // An unlimited destination makes the upper clause true even when the
+    // source upper bound is opaque. Conversely a finite mismatch proves false.
+    let upper_clause = accept_any([
+        result_upper.clone().map(|upper| upper.is_unlimited()),
+        (|| Ok(source_upper?.fits_within(&result_upper?)))(),
+    ]);
+    require_all([lower_clause, upper_clause])
+}
+
 fn action_result_matching_type(
     references: &ReferenceIndex<'_>,
     action: ElementRef<'_>,
@@ -1462,6 +1491,30 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "ActivityPartition-dimension_not_contained",
                 "an ActivityPartition with isDimension=true must not be contained by another ActivityPartition",
             ));
+        }
+        for (metaclass, source_property, code, unverified, rule) in [
+            (
+                "ReadStructuralFeatureAction", "structuralFeature",
+                "UML_READ_STRUCTURAL_FEATURE_ACTION_MULTIPLICITY",
+                "MDE_READ_STRUCTURAL_FEATURE_ACTION_MULTIPLICITY_UNVERIFIED",
+                "ReadStructuralFeatureAction-multiplicity",
+            ),
+            (
+                "ReadVariableAction", "variable",
+                "UML_READ_VARIABLE_ACTION_COMPATIBLE_MULTIPLICITY",
+                "MDE_READ_VARIABLE_ACTION_COMPATIBLE_MULTIPLICITY_UNVERIFIED",
+                "ReadVariableAction-compatible_multiplicity",
+            ),
+        ] {
+            if node.conforms_to(metaclass) {
+                checks.push((
+                    action_read_multiplicity_compatible(references, node, metaclass, source_property),
+                    code,
+                    unverified,
+                    rule,
+                    "the result OutputPin multiplicity must contain the source multiplicity",
+                ));
+            }
         }
         if node.conforms_to("UnmarshallAction") {
             checks.push((
