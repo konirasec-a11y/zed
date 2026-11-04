@@ -148,7 +148,7 @@ mod ownership_manifest;
 
 #[path = "kernel-api/validation.rs"]
 mod kernel_api_validation;
-pub use kernel_api_validation::{validate_graph_model, validate_uml_model};
+pub use kernel_api_validation::{validate_graph_model, validate_uml_diagram, validate_uml_model};
 
 #[path = "kernel-api/contract.rs"]
 mod kernel_api_contract;

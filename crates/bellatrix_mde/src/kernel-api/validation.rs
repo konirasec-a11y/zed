@@ -1,4 +1,7 @@
-use crate::{Graph, StructuralSeverity, validate_structural_model};
+use crate::{
+    Graph, StructuralDiagramKind, StructuralSeverity, validate_structural_diagram,
+    validate_structural_model,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -128,4 +131,106 @@ pub fn validate_graph_model(input_json: &str) -> Result<String, String> {
     };
     serde_json::to_string(&response)
         .map_err(|_| error_response("RESPONSE_SERIALIZATION_FAILED", "validation response cannot be encoded as JSON"))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DiagramValidationRequest {
+    api_version: u32,
+    model: Value,
+    diagram_id: String,
+    diagram_kind: String,
+}
+
+/// Validate one diagram projection and whole-model semantics through a pure function.
+///
+/// Input contains exactly `api_version: 1`, `model`, `diagram_id` and
+/// `diagram_kind`. Kind names are `class`, `object`, `package`, `component`,
+/// `composite_structure`, `deployment`, `profile`, `use_case`, `activity`,
+/// `state_machine`, `sequence`, `communication`, `interaction_overview`, `timing`.
+/// The explicit kind is checked against the stored UMLDI type and interaction kind.
+///
+/// Output uses the model validation diagnostic envelope with coverage
+/// `implemented_model_and_diagram_rules_only`. Graph integrity and presentation
+/// run first; failure produces one `GRAPH_INTEGRITY` error and skips semantics.
+/// Otherwise whole-model rules and the selected diagram's existing projection
+/// rules run. Missing diagrams and kind mismatches are validation diagnostics,
+/// not contract errors. Other diagrams' projection rules are not evaluated.
+/// Unsupported semantic coverage and visual drafts retain their warnings.
+/// This does not certify full UML/UMLDI conformance or generation readiness.
+///
+/// # Errors
+/// Contract failures use the same versioned JSON errors as `validate_uml_model`.
+/// An unrecognized requested kind returns `UNSUPPORTED_DIAGRAM_KIND`.
+///
+/// # Effects and determinism
+/// No I/O, clock, callbacks, logging, retained state or input mutation. Diagnostics
+/// are sorted by code, subject identity, severity and message. Internal model and
+/// diagram types do not appear in the public signature.
+pub fn validate_uml_diagram(input_json: &str) -> Result<String, String> {
+    let request: DiagramValidationRequest =
+        serde_json::from_str(input_json).map_err(invalid_request)?;
+    let model = decode_model(request.api_version, &request.model)?;
+    let kind = match request.diagram_kind.as_str() {
+        "class" => StructuralDiagramKind::Class,
+        "object" => StructuralDiagramKind::Object,
+        "package" => StructuralDiagramKind::Package,
+        "component" => StructuralDiagramKind::Component,
+        "composite_structure" => StructuralDiagramKind::CompositeStructure,
+        "deployment" => StructuralDiagramKind::Deployment,
+        "profile" => StructuralDiagramKind::Profile,
+        "use_case" => StructuralDiagramKind::UseCase,
+        "activity" => StructuralDiagramKind::Activity,
+        "state_machine" => StructuralDiagramKind::StateMachine,
+        "sequence" => StructuralDiagramKind::Sequence,
+        "communication" => StructuralDiagramKind::Communication,
+        "interaction_overview" => StructuralDiagramKind::InteractionOverview,
+        "timing" => StructuralDiagramKind::Timing,
+        _ => {
+            return Err(error_response(
+                "UNSUPPORTED_DIAGRAM_KIND",
+                "diagram_kind must name a supported version-1 diagram category",
+            ));
+        }
+    };
+    let mut diagnostics: Vec<Diagnostic> = match Graph::new(&model).validate() {
+        Err(error) => vec![Diagnostic {
+            severity: "error",
+            code: "GRAPH_INTEGRITY".into(),
+            subject_id: model.id.clone(),
+            message: error.to_string(),
+        }],
+        Ok(()) => validate_structural_diagram(&model, &request.diagram_id, kind)
+            .into_iter()
+            .map(|diagnostic| Diagnostic {
+                severity: match diagnostic.severity {
+                    StructuralSeverity::Error => "error",
+                    StructuralSeverity::Warning => "warning",
+                },
+                code: diagnostic.code.into(),
+                subject_id: diagnostic.subject_id,
+                message: diagnostic.message,
+            })
+            .collect(),
+    };
+    diagnostics.sort_by(|left, right| {
+        (&left.code, &left.subject_id, left.severity, &left.message).cmp(&(
+            &right.code,
+            &right.subject_id,
+            right.severity,
+            &right.message,
+        ))
+    });
+    let response = ValidationResponse {
+        api_version: API_VERSION,
+        coverage: "implemented_model_and_diagram_rules_only",
+        has_errors: diagnostics.iter().any(|diagnostic| diagnostic.severity == "error"),
+        diagnostics,
+    };
+    serde_json::to_string(&response).map_err(|_| {
+        error_response(
+            "RESPONSE_SERIALIZATION_FAILED",
+            "validation response cannot be encoded as JSON",
+        )
+    })
 }

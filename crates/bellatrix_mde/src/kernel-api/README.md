@@ -195,3 +195,34 @@ requirement. For selected clients, this returns `GENERATION_UNSUPPORTED_TARGET`
 (including external targets outside the selection), rather than silently omitting
 it from `requires`. The shared analyzer enforces this rule for legacy consumers
 as well. Unsupported dependencies of unselected clients do not expand the scope.
+
+## Diagram validation
+
+`validate_uml_diagram(input_json: &str) -> Result<String, String>` accepts exactly
+`api_version:1`, `model`, `diagram_id` (string) and `diagram_kind` (string).
+The explicit requested kind prevents a stored diagram from silently being checked
+as a different category. Accepted kind names are `class`, `object`, `package`,
+`component`, `composite_structure`, `deployment`, `profile`, `use_case`, `activity`,
+`state_machine`, `sequence`, `communication`, `interaction_overview` and `timing`.
+Names are case-sensitive; other names return `UNSUPPORTED_DIAGRAM_KIND` in the
+versioned error envelope. API/model decoding is checked before the kind name.
+
+The successful response uses the validation diagnostic shape with coverage
+`implemented_model_and_diagram_rules_only`. Full graph integrity and presentation
+checks run first; a failure returns one `GRAPH_INTEGRITY` error and skips semantic
+and projection validation. Otherwise existing whole-model semantics and the
+selected diagram's projection rules run. A missing diagram produces
+`UMLDI_DIAGRAM_MISSING`; an incompatible stored category or interaction kind
+produces `UMLDI_DIAGRAM_KIND_MISMATCH`. Unknown stored categories retain the
+existing `UMLDI_UNSUPPORTED_DIAGRAM_TYPE` diagnostic.
+
+The projection checks include context type/multiplicity, shape/edge geometry and
+visible endpoints under existing editor policy. Visual draft and unsupported
+coverage warnings are preserved. Whole-model errors may concern elements outside
+the selected diagram. Other diagrams receive graph/presentation integrity checks,
+but their projection rules do not run. This is not complete UML/UMLDI conformance
+or generation certification. No new normative rules are claimed by this adapter.
+
+Like the other boundary functions, this function has no external effects or
+retained state and returns sorted diagnostics. The original model-only and graph
+validation contracts remain unchanged. No UI or CLI migration is included.
