@@ -98,10 +98,80 @@ fn incident_edges<'a>(
     require_all(checks)
 }
 
+fn control_flow_endpoint(
+    references: &ReferenceIndex<'_>,
+    edge: ElementRef<'_>,
+    role: &str,
+) -> Result<bool, QueryError> {
+    let descriptor = schema::uml_property("ActivityEdge", role)
+        .map_err(|error| QueryError::unsupported(edge.id(), error.to_string()))?
+        .ok_or_else(|| {
+            QueryError::unsupported(edge.id(), format!("missing ActivityEdge::{role} contract"))
+        })?;
+    let canonical = match edge {
+        ElementRef::Relationship(relation) => Some(serde_json::json!({"$ref":
+            if role == "source" { &relation.from } else { &relation.to }})),
+        ElementRef::Object(_) => None,
+    };
+    let authored = edge.properties().get(role);
+    if canonical.is_none() && authored.is_none() {
+        return Err(QueryError::unsupported(
+            edge.id(),
+            format!("ControlFlow::{role} endpoint is not represented"),
+        ));
+    }
+    if let (Some(canonical), Some(authored)) = (canonical.as_ref(), authored)
+        && !matches!((reference_id(canonical), reference_id(authored)),
+            (Ok(Some(expected)), Ok(Some(actual))) if expected == actual)
+    {
+        return Err(QueryError::unsupported(
+            edge.id(),
+            format!("authored {role} does not establish the canonical edge endpoint",),
+        ));
+    }
+    let value = canonical.as_ref().or(authored).ok_or_else(|| {
+        QueryError::unsupported(
+            edge.id(),
+            format!("ControlFlow::{role} endpoint is not represented"),
+        )
+    })?;
+    match property_contracts::check_value(references, edge, descriptor, value) {
+        PropertyOutcome::Satisfied => {}
+        // Property validation reports malformed data separately. It does not
+        // prove the ObjectNode predicate false when its endpoint is unresolved.
+        PropertyOutcome::Violation(message) | PropertyOutcome::Unverified(message) => {
+            return Err(QueryError::unsupported(edge.id(), message));
+        }
+    }
+    let identifier = reference_id(value)
+        .map_err(|error| QueryError::unsupported(edge.id(), error))?
+        .ok_or_else(|| QueryError::unsupported(edge.id(), "ActivityEdge endpoint is unresolved"))?;
+    let endpoint = references
+        .element(identifier)
+        .map_err(|error| QueryError::unsupported(edge.id(), error))?;
+    if !endpoint.conforms_to("ObjectNode") {
+        return Ok(true);
+    }
+    schema::read_effective_boolean(endpoint, "isControlType")
+        .map_err(|error| QueryError::unsupported(endpoint.id(), error))
+}
+
 pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     for node in references.model().elements() {
         let mut checks = Vec::new();
+        if node.conforms_to("ControlFlow") {
+            checks.push((
+                require_all([
+                    control_flow_endpoint(references, node, "source"),
+                    control_flow_endpoint(references, node, "target"),
+                ]),
+                "UML_CONTROL_FLOW_OBJECT_NODES",
+                "MDE_CONTROL_FLOW_OBJECT_NODES_UNVERIFIED",
+                "ControlFlow-object_nodes",
+                "ObjectNode endpoints of a ControlFlow must have isControlType=true",
+            ));
+        }
         if node.conforms_to("InitialNode") {
             checks.push((
                 incident_edges(references, node, "target", 0, 0, false),

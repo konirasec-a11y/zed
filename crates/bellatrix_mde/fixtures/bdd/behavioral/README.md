@@ -66,3 +66,13 @@ ControlFlow source. A malformed endpoint must report its edge property contract,
 not invent a FinalNode/InitialNode violation. The external ControlFlow may leave
 cardinality unresolved, but must not claim its already known ControlFlow type is
 unverified. The manifest's forbidden diagnostic witnesses enforce this distinction.
+
+The dedicated `bdd_activity_edge_flows` lifecycle harness covers
+`ControlFlow-object_nodes` from the pinned UML.xmi: both ObjectNode endpoints,
+including InputPin/OutputPin subtypes, require `isControlType=true` (default false).
+It exercises relation and object-record representations, independent endpoint
+repairs, malformed Booleans, contradictory endpoint properties, unresolved hrefs,
+and unknown metaclasses through JSON/BLX save-close-reopen flows. Malformed scalar
+or endpoint data retains its own property-contract errors; it does not falsely
+prove `ControlFlow-object_nodes` violated. Unresolved or contradictory endpoints
+leave that rule unverified, while an independently known violating endpoint fails.
