@@ -97,6 +97,11 @@
           "code": "UML_INITIAL_NODE_CONTROL_EDGES",
           "subject_id": "start",
           "severity": "error"
+        },
+        {
+          "code": "UML_OBJECT_FLOW_NO_EXECUTABLE_NODES",
+          "subject_id": "flow-1",
+          "severity": "error"
         }
       ]
     },
@@ -192,6 +197,11 @@
         },
         {
           "code": "UML_ACTIVITY_EDGE_SOURCE_AND_TARGET",
+          "subject_id": "uncertain-edge",
+          "severity": "error"
+        },
+        {
+          "code": "UML_OBJECT_FLOW_NO_EXECUTABLE_NODES",
           "subject_id": "uncertain-edge",
           "severity": "error"
         }

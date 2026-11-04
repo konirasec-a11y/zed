@@ -188,3 +188,10 @@ belong to another Activity or Operation proves exclusion when the Activity's
 parameter collection is complete. No ancestor containingActivity or visual tree
 is substituted for ActivityNode::activity. The lifecycle includes references,
 projection membership/order conflicts, JSON/BLX reopening and repair.
+
+ObjectFlow-no_executable_nodes excludes ExecutableNode subclasses at either
+endpoint, not merely Action's direct metaclass. Endpoint contracts and ambiguous
+representations remain separate; a known executable endpoint proves violation
+even when the opposite endpoint is unknown. The lifecycle covers both binary
+relations and object records, source/target witnesses, malformed and unresolved
+endpoints, JSON/BLX reopen and repair.

@@ -636,6 +636,17 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
         }
         if node.conforms_to("ObjectFlow") {
             checks.push((
+                accept_any(["source", "target"].map(|role| {
+                    activity_endpoint(references, node, role)
+                        .map(|endpoint| endpoint.conforms_to("ExecutableNode"))
+                }))
+                .map(|executable| !executable),
+                "UML_OBJECT_FLOW_NO_EXECUTABLE_NODES",
+                "MDE_OBJECT_FLOW_NO_EXECUTABLE_NODES_UNVERIFIED",
+                "ObjectFlow-no_executable_nodes",
+                "an ObjectFlow must not have an ExecutableNode at either endpoint",
+            ));
+            checks.push((
                 accept_any([
                     activity_reference_present(references, node, "ObjectFlow", "selection")
                         .map(|present| !present),

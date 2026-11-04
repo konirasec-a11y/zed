@@ -215,3 +215,11 @@ Feature: ControlFlow object-node endpoint semantics across the authored Activity
     And malformed projections, unresolved references or incomplete ownership stay unverified
     Then each edited state survives JSON and BLX reopening
     And restoring the original document restores the baseline result
+
+  Scenario: Preserve ObjectFlow executable endpoint exclusion through repair
+    Given an imported ObjectFlow between Pins in relation and object representations
+    When either or both endpoints become Actions then no_executable_nodes is violated
+    And malformed endpoint contracts remain separate from unverified rule outcomes
+    And external or contradictory endpoints remain unverified when the other end is safe
+    And a known ExecutableNode at either end proves the violation despite the other unknown end
+    Then each state survives JSON and BLX reopening and baseline repair

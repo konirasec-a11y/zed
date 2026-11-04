@@ -589,6 +589,12 @@ fn join_outgoing_family_follows_object_input_existence_through_repair_and_self_l
     let baseline = validate(&original)?;
     join_rule(&baseline, "synchronize", None)?;
     let mut authored = original.clone();
+    // Keep the ObjectFlow branches legal at the far ends while preserving
+    // the same incoming/outgoing incidence on the JoinNode under test.
+    relation(&mut authored, "flow-8")?["to"] = json!("order-input");
+    relation(&mut authored, "flow-8")?["properties"]["target"] = json!({"$ref":"order-input"});
+    element(&mut authored, "order-input")?["properties"]["isControlType"] = json!(true);
+
     println!("When its output becomes ObjectFlow without an incoming ObjectFlow");
     relation(&mut authored, "flow-8")?["kind"] = json!("uml.object_flow");
     let wrong_default_branch = validate(&authored)?;
@@ -596,6 +602,9 @@ fn join_outgoing_family_follows_object_input_existence_through_repair_and_self_l
     reopen("join-no-object-input", &authored, &wrong_default_branch)?;
     println!("When one incoming edge becomes ObjectFlow, remaining ControlFlow inputs are allowed");
     relation(&mut authored, "flow-6")?["kind"] = json!("uml.object_flow");
+    relation(&mut authored, "flow-6")?["from"] = json!("order-output");
+    relation(&mut authored, "flow-6")?["properties"]["source"] = json!({"$ref":"order-output"});
+
     let object_branch = validate(&authored)?;
     join_rule(&object_branch, "synchronize", None)?;
     assert_eq!(object_branch["has_errors"], false, "{object_branch}");
@@ -611,8 +620,13 @@ fn join_outgoing_family_follows_object_input_existence_through_repair_and_self_l
         &authored,
         &wrong_object_branch,
     )?;
-    relation(&mut authored, "flow-6")?["kind"] = json!("uml.control_flow");
+    let mut repair_source = original.clone();
+    for id in ["flow-6", "flow-8"] {
+        *relation(&mut authored, id)? = relation(&mut repair_source, id)?.clone();
+    }
+    *element(&mut authored, "order-input")? = element(&mut repair_source, "order-input")?.clone();
     assert_eq!(validate(&authored)?, baseline);
+    reopen("join-branches-repaired", &authored, &baseline)?;
 
     println!("When an isolated Join has an empty input and output set");
     let mut isolated = original.clone();
@@ -825,7 +839,7 @@ fn decision_edge_exclusion_survives_import_edit_persistence_and_repair() -> Flow
         &mut edited,
         "decision-input",
         "uml.object_flow",
-        json!({"$ref":"receive"}),
+        json!({"$ref":"order-output"}),
         json!({"$ref":"check"}),
     )?;
     let mixed = validate(&edited)?;
@@ -1163,9 +1177,20 @@ fn object_flow_selection_requires_object_source_through_persistence_and_repair()
                     "{response}"
                 );
             }
+            // This flow intentionally tests Action sources. Their separate
+            // ObjectFlow endpoint violation must remain visible even when
+            // selection is absent and selection_behavior itself is vacuous.
+            object_flow_executable_rule(
+                &response,
+                if source == "receive" {
+                    Some("error")
+                } else {
+                    None
+                },
+            )?;
             assert_eq!(
                 response["has_errors"],
-                contract || severity == Some("error"),
+                contract || severity == Some("error") || source == "receive",
                 "{response}"
             );
             reopen(
@@ -2567,6 +2592,165 @@ fn parameter_membership_rule(response: &Value, severity: Option<&str>) -> FlowRe
                     Some(
                         "UML_ACTIVITY_PARAMETER_NODE_HAS_PARAMETERS"
                             | "MDE_ACTIVITY_PARAMETER_NODE_HAS_PARAMETERS_UNVERIFIED"
+                    )
+                )
+        })
+        .collect();
+    if let Some(severity) = severity {
+        assert_eq!(matching.len(), 1, "{response}");
+        assert_eq!(matching[0]["severity"], severity, "{response}");
+    } else {
+        assert!(matching.is_empty(), "{response}");
+    }
+    Ok(())
+}
+
+#[test]
+fn object_flow_executable_endpoints_preserve_unknowns_and_repair() -> FlowResult<()> {
+    assert!(
+        include_str!("features/activity_edge_lifecycle.feature")
+            .contains("Scenario: Preserve ObjectFlow executable endpoint exclusion through repair")
+    );
+    for object_record in [false, true] {
+        let mut original = imported_activity()?;
+        if object_record {
+            let edge = relation(&mut original, "order-data")?.clone();
+            original["model"]["relations"]
+                .as_array_mut()
+                .ok_or("missing relations")?
+                .retain(|relation| relation["id"] != "order-data");
+            let mut properties = edge["properties"].clone();
+            properties["source"] = json!({"$ref":"order-output"});
+            properties["target"] = json!({"$ref":"order-input"});
+            original["model"]["elements"].as_array_mut().ok_or("missing elements")?
+                .push(json!({"id":"order-data","kind":"uml.object_flow","name":"order-data","properties":properties}));
+        }
+        let baseline = validate(&original)?;
+        object_flow_executable_rule(&baseline, None)?;
+        reopen(
+            &format!("object-flow-endpoints-baseline-{object_record}"),
+            &original,
+            &baseline,
+        )?;
+        for (name, source, target, severity, contract) in [
+            (
+                "source-action",
+                "receive",
+                "order-input",
+                Some("error"),
+                false,
+            ),
+            (
+                "target-action",
+                "order-output",
+                "reserve",
+                Some("error"),
+                false,
+            ),
+            ("both-actions", "receive", "reserve", Some("error"), false),
+            (
+                "class-source",
+                "order",
+                "order-input",
+                Some("warning"),
+                true,
+            ),
+        ] {
+            let mut edited = original.clone();
+            let edge = if object_record {
+                element(&mut edited, "order-data")?
+            } else {
+                relation(&mut edited, "order-data")?
+            };
+            edge["properties"]["source"] = json!({"$ref":source});
+            edge["properties"]["target"] = json!({"$ref":target});
+            if !object_record {
+                edge["from"] = json!(source);
+                edge["to"] = json!(target);
+            }
+            let response = validate(&edited)?;
+            object_flow_executable_rule(&response, severity)?;
+            if contract {
+                assert!(
+                    response["diagnostics"]
+                        .as_array()
+                        .ok_or("missing diagnostics")?
+                        .iter()
+                        .any(|d| d["subject_id"] == "order-data"
+                            && d["code"] == "UML_PROPERTY_CONTRACT"
+                            && d["severity"] == "error"),
+                    "{response}"
+                );
+            }
+            reopen(
+                &format!("object-flow-endpoints-{name}-{object_record}"),
+                &edited,
+                &response,
+            )?;
+        }
+        for unknown_role in ["source", "target"] {
+            let mut edited = original.clone();
+            let edge = if object_record {
+                element(&mut edited, "order-data")?
+            } else {
+                relation(&mut edited, "order-data")?
+            };
+            edge["properties"][unknown_role] = if object_record {
+                json!({"href":"external.uml#node"})
+            } else {
+                json!({"$ref":"receive"})
+            };
+            let uncertain = validate(&edited)?;
+            object_flow_executable_rule(&uncertain, Some("warning"))?;
+            reopen(
+                &format!("object-flow-endpoints-unknown-{unknown_role}-{object_record}"),
+                &edited,
+                &uncertain,
+            )?;
+            let other_role = if unknown_role == "source" {
+                "target"
+            } else {
+                "source"
+            };
+            let edge = if object_record {
+                element(&mut edited, "order-data")?
+            } else {
+                relation(&mut edited, "order-data")?
+            };
+            edge["properties"][other_role] = json!({"$ref":"reserve"});
+            if !object_record {
+                edge[if other_role == "source" { "from" } else { "to" }] = json!("reserve");
+            }
+            let witnessed = validate(&edited)?;
+            object_flow_executable_rule(&witnessed, Some("error"))?;
+            reopen(
+                &format!("object-flow-endpoints-witness-{unknown_role}-{object_record}"),
+                &edited,
+                &witnessed,
+            )?;
+        }
+        assert_eq!(validate(&original)?, baseline);
+        reopen(
+            &format!("object-flow-endpoints-repaired-{object_record}"),
+            &original,
+            &baseline,
+        )?;
+    }
+    Ok(())
+}
+
+fn object_flow_executable_rule(response: &Value, severity: Option<&str>) -> FlowResult<()> {
+    let matching: Vec<_> = response["diagnostics"]
+        .as_array()
+        .ok_or("missing diagnostics")?
+        .iter()
+        .filter(|d| {
+            d["subject_id"] == "order-data"
+                && matches!(
+                    d["code"].as_str(),
+                    Some(
+                        "UML_OBJECT_FLOW_NO_EXECUTABLE_NODES"
+                            | "MDE_OBJECT_FLOW_NO_EXECUTABLE_NODES_UNVERIFIED"
                     )
                 )
         })
