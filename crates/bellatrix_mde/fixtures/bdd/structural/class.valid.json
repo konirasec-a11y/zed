@@ -1,0 +1,756 @@
+{
+  "schema_version": 1,
+  "id": "class-project",
+  "name": "Order management domain",
+  "root_model": "root",
+  "elements": [
+    {
+      "id": "root",
+      "kind": "uml.model",
+      "name": "Order management domain",
+      "properties": {}
+    },
+    {
+      "id": "domain",
+      "kind": "uml.package",
+      "name": "Orders",
+      "properties": {}
+    },
+    {
+      "id": "string",
+      "kind": "uml.primitive_type",
+      "name": "String",
+      "properties": {}
+    },
+    {
+      "id": "integer",
+      "kind": "uml.primitive_type",
+      "name": "Integer",
+      "properties": {}
+    },
+    {
+      "id": "money",
+      "kind": "uml.data_type",
+      "name": "Money",
+      "properties": {}
+    },
+    {
+      "id": "amount",
+      "kind": "uml.attribute",
+      "name": "amount",
+      "properties": {
+        "type": {
+          "$ref": "integer"
+        },
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "currency",
+      "kind": "uml.attribute",
+      "name": "currency",
+      "properties": {
+        "type": {
+          "$ref": "string"
+        },
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "status",
+      "kind": "uml.enumeration",
+      "name": "OrderStatus",
+      "properties": {}
+    },
+    {
+      "id": "pending",
+      "kind": "uml.enumeration_literal",
+      "name": "Pending",
+      "properties": {}
+    },
+    {
+      "id": "paid",
+      "kind": "uml.enumeration_literal",
+      "name": "Paid",
+      "properties": {}
+    },
+    {
+      "id": "shipped",
+      "kind": "uml.enumeration_literal",
+      "name": "Shipped",
+      "properties": {}
+    },
+    {
+      "id": "entity",
+      "kind": "uml.class",
+      "name": "Entity",
+      "properties": {
+        "isAbstract": true
+      }
+    },
+    {
+      "id": "customer",
+      "kind": "uml.class",
+      "name": "Customer",
+      "properties": {}
+    },
+    {
+      "id": "order",
+      "kind": "uml.class",
+      "name": "Order",
+      "properties": {}
+    },
+    {
+      "id": "line",
+      "kind": "uml.class",
+      "name": "OrderLine",
+      "properties": {}
+    },
+    {
+      "id": "product",
+      "kind": "uml.class",
+      "name": "Product",
+      "properties": {}
+    },
+    {
+      "id": "ident",
+      "kind": "uml.attribute",
+      "name": "id",
+      "properties": {
+        "type": {
+          "$ref": "string"
+        },
+        "visibility": "protected",
+        "multiplicity": "1",
+        "isReadOnly": true
+      }
+    },
+    {
+      "id": "customer-name",
+      "kind": "uml.attribute",
+      "name": "name",
+      "properties": {
+        "type": {
+          "$ref": "string"
+        },
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "order-status",
+      "kind": "uml.attribute",
+      "name": "status",
+      "properties": {
+        "type": {
+          "$ref": "status"
+        },
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "quantity",
+      "kind": "uml.attribute",
+      "name": "quantity",
+      "properties": {
+        "type": {
+          "$ref": "integer"
+        },
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "price",
+      "kind": "uml.attribute",
+      "name": "price",
+      "properties": {
+        "type": {
+          "$ref": "money"
+        },
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "sku",
+      "kind": "uml.attribute",
+      "name": "sku",
+      "properties": {
+        "type": {
+          "$ref": "string"
+        },
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "submit",
+      "kind": "uml.operation",
+      "name": "submit",
+      "properties": {
+        "visibility": "public",
+        "isQuery": false
+      }
+    },
+    {
+      "id": "submit-request",
+      "kind": "uml.parameter",
+      "name": "requestedBy",
+      "properties": {
+        "direction": "in",
+        "type": {
+          "$ref": "customer"
+        },
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "submit-result",
+      "kind": "uml.parameter",
+      "name": "acceptedOrder",
+      "properties": {
+        "direction": "return",
+        "type": {
+          "$ref": "order"
+        },
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "repository",
+      "kind": "uml.interface",
+      "name": "OrderRepository",
+      "properties": {}
+    },
+    {
+      "id": "find",
+      "kind": "uml.operation",
+      "name": "find",
+      "properties": {
+        "isQuery": true,
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "find-key",
+      "kind": "uml.parameter",
+      "name": "id",
+      "properties": {
+        "direction": "in",
+        "type": {
+          "$ref": "string"
+        }
+      }
+    },
+    {
+      "id": "find-result",
+      "kind": "uml.parameter",
+      "name": "order",
+      "properties": {
+        "direction": "return",
+        "type": {
+          "$ref": "order"
+        },
+        "multiplicity": "0..1"
+      }
+    },
+    {
+      "id": "order-lines",
+      "kind": "uml.nary_association",
+      "name": "OrderContents",
+      "properties": {
+        "memberEnd": [
+          {
+            "$ref": "whole"
+          },
+          {
+            "$ref": "parts"
+          }
+        ],
+        "ownedEnd": [
+          {
+            "$ref": "whole"
+          },
+          {
+            "$ref": "parts"
+          }
+        ]
+      }
+    },
+    {
+      "id": "whole",
+      "kind": "uml.attribute",
+      "name": "order",
+      "properties": {
+        "type": {
+          "$ref": "order"
+        },
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "parts",
+      "kind": "uml.attribute",
+      "name": "lines",
+      "properties": {
+        "type": {
+          "$ref": "line"
+        },
+        "multiplicity": "1..*",
+        "aggregation": "composite"
+      }
+    },
+    {
+      "id": "audit",
+      "kind": "uml.comment",
+      "name": "",
+      "properties": {
+        "body": "Submitting an order freezes its identifier.",
+        "annotatedElement": [
+          {
+            "$ref": "order"
+          }
+        ]
+      }
+    }
+  ],
+  "relations": [
+    {
+      "id": "owns-domain",
+      "kind": "owns",
+      "from": "root",
+      "to": "domain",
+      "properties": {}
+    },
+    {
+      "id": "owns-string",
+      "kind": "owns",
+      "from": "root",
+      "to": "string",
+      "properties": {}
+    },
+    {
+      "id": "owns-integer",
+      "kind": "owns",
+      "from": "root",
+      "to": "integer",
+      "properties": {}
+    },
+    {
+      "id": "owns-money",
+      "kind": "owns",
+      "from": "domain",
+      "to": "money",
+      "properties": {}
+    },
+    {
+      "id": "owns-amount",
+      "kind": "owns",
+      "from": "money",
+      "to": "amount",
+      "properties": {}
+    },
+    {
+      "id": "owns-currency",
+      "kind": "owns",
+      "from": "money",
+      "to": "currency",
+      "properties": {}
+    },
+    {
+      "id": "owns-status",
+      "kind": "owns",
+      "from": "domain",
+      "to": "status",
+      "properties": {}
+    },
+    {
+      "id": "owns-pending",
+      "kind": "owns",
+      "from": "status",
+      "to": "pending",
+      "properties": {}
+    },
+    {
+      "id": "owns-paid",
+      "kind": "owns",
+      "from": "status",
+      "to": "paid",
+      "properties": {}
+    },
+    {
+      "id": "owns-shipped",
+      "kind": "owns",
+      "from": "status",
+      "to": "shipped",
+      "properties": {}
+    },
+    {
+      "id": "owns-entity",
+      "kind": "owns",
+      "from": "domain",
+      "to": "entity",
+      "properties": {}
+    },
+    {
+      "id": "owns-customer",
+      "kind": "owns",
+      "from": "domain",
+      "to": "customer",
+      "properties": {}
+    },
+    {
+      "id": "owns-order",
+      "kind": "owns",
+      "from": "domain",
+      "to": "order",
+      "properties": {}
+    },
+    {
+      "id": "owns-line",
+      "kind": "owns",
+      "from": "domain",
+      "to": "line",
+      "properties": {}
+    },
+    {
+      "id": "owns-product",
+      "kind": "owns",
+      "from": "domain",
+      "to": "product",
+      "properties": {}
+    },
+    {
+      "id": "owns-ident",
+      "kind": "owns",
+      "from": "entity",
+      "to": "ident",
+      "properties": {}
+    },
+    {
+      "id": "owns-customer-name",
+      "kind": "owns",
+      "from": "customer",
+      "to": "customer-name",
+      "properties": {}
+    },
+    {
+      "id": "owns-order-status",
+      "kind": "owns",
+      "from": "order",
+      "to": "order-status",
+      "properties": {}
+    },
+    {
+      "id": "owns-quantity",
+      "kind": "owns",
+      "from": "line",
+      "to": "quantity",
+      "properties": {}
+    },
+    {
+      "id": "owns-price",
+      "kind": "owns",
+      "from": "product",
+      "to": "price",
+      "properties": {}
+    },
+    {
+      "id": "owns-sku",
+      "kind": "owns",
+      "from": "product",
+      "to": "sku",
+      "properties": {}
+    },
+    {
+      "id": "owns-submit",
+      "kind": "owns",
+      "from": "order",
+      "to": "submit",
+      "properties": {}
+    },
+    {
+      "id": "owns-submit-request",
+      "kind": "owns",
+      "from": "submit",
+      "to": "submit-request",
+      "properties": {}
+    },
+    {
+      "id": "owns-submit-result",
+      "kind": "owns",
+      "from": "submit",
+      "to": "submit-result",
+      "properties": {}
+    },
+    {
+      "id": "owns-repository",
+      "kind": "owns",
+      "from": "domain",
+      "to": "repository",
+      "properties": {}
+    },
+    {
+      "id": "owns-find",
+      "kind": "owns",
+      "from": "repository",
+      "to": "find",
+      "properties": {}
+    },
+    {
+      "id": "owns-find-key",
+      "kind": "owns",
+      "from": "find",
+      "to": "find-key",
+      "properties": {}
+    },
+    {
+      "id": "owns-find-result",
+      "kind": "owns",
+      "from": "find",
+      "to": "find-result",
+      "properties": {}
+    },
+    {
+      "id": "general-customer",
+      "kind": "uml.generalization",
+      "from": "customer",
+      "to": "entity",
+      "properties": {}
+    },
+    {
+      "id": "general-order",
+      "kind": "uml.generalization",
+      "from": "order",
+      "to": "entity",
+      "properties": {}
+    },
+    {
+      "id": "general-product",
+      "kind": "uml.generalization",
+      "from": "product",
+      "to": "entity",
+      "properties": {}
+    },
+    {
+      "id": "owns-order-lines",
+      "kind": "owns",
+      "from": "domain",
+      "to": "order-lines",
+      "properties": {}
+    },
+    {
+      "id": "owns-whole",
+      "kind": "owns",
+      "from": "order-lines",
+      "to": "whole",
+      "properties": {}
+    },
+    {
+      "id": "owns-parts",
+      "kind": "owns",
+      "from": "order-lines",
+      "to": "parts",
+      "properties": {}
+    },
+    {
+      "id": "owns-audit",
+      "kind": "owns",
+      "from": "order",
+      "to": "audit",
+      "properties": {}
+    }
+  ],
+  "diagrams": [
+    {
+      "id": "diagram",
+      "name": "Order management domain",
+      "uml_di_type": "UMLClassDiagram",
+      "width": 1240,
+      "height": 800,
+      "model_elements": [],
+      "views": [
+        {
+          "id": "view-entity",
+          "subject": "entity",
+          "geometry": {
+            "kind": "rect",
+            "x": 40,
+            "y": 40,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-customer",
+          "subject": "customer",
+          "geometry": {
+            "kind": "rect",
+            "x": 325,
+            "y": 40,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-order",
+          "subject": "order",
+          "geometry": {
+            "kind": "rect",
+            "x": 610,
+            "y": 40,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-line",
+          "subject": "line",
+          "geometry": {
+            "kind": "rect",
+            "x": 895,
+            "y": 40,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-product",
+          "subject": "product",
+          "geometry": {
+            "kind": "rect",
+            "x": 40,
+            "y": 220,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-repository",
+          "subject": "repository",
+          "geometry": {
+            "kind": "rect",
+            "x": 325,
+            "y": 220,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-money",
+          "subject": "money",
+          "geometry": {
+            "kind": "rect",
+            "x": 610,
+            "y": 220,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-status",
+          "subject": "status",
+          "geometry": {
+            "kind": "rect",
+            "x": 895,
+            "y": 220,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-order-lines",
+          "subject": "order-lines",
+          "geometry": {
+            "kind": "rect",
+            "x": 40,
+            "y": 400,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-general-customer",
+          "subject": "general-customer",
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 565,
+              "y": 105
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 40,
+                  "y": 105
+                }
+              }
+            ]
+          },
+          "endpoints": {
+            "source_view_id": "view-customer",
+            "target_view_id": "view-entity"
+          },
+          "z_index": 1
+        },
+        {
+          "id": "view-general-order",
+          "subject": "general-order",
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 850,
+              "y": 105
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 40,
+                  "y": 105
+                }
+              }
+            ]
+          },
+          "endpoints": {
+            "source_view_id": "view-order",
+            "target_view_id": "view-entity"
+          },
+          "z_index": 1
+        },
+        {
+          "id": "view-general-product",
+          "subject": "general-product",
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 280,
+              "y": 285
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 40,
+                  "y": 105
+                }
+              }
+            ]
+          },
+          "endpoints": {
+            "source_view_id": "view-product",
+            "target_view_id": "view-entity"
+          },
+          "z_index": 1
+        }
+      ]
+    }
+  ]
+}

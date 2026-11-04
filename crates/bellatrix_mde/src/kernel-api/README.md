@@ -76,10 +76,10 @@ No external effects: no filesystem, network, process, clock, sink or external
 callback. It does not mutate the input or retain caller state. Returned bytes
 are repeatable for the same input and implementation, including A-B-A calls.
 
-This is a functional migration slice, not completed encapsulation. Existing
-legacy exports remain available so current consumers keep compiling. Their
-removal and migration to this boundary are separate steps; the presence of this
-function must not be advertised as having made every kernel internal private.
+This is a functional migration slice, not completed encapsulation. Some current
+consumers still access internal types and modules; they must migrate to this
+boundary before those exports can be removed. This beta does not guarantee
+backward compatibility with earlier APIs or document formats.
 
 ## Graph queries
 
@@ -133,8 +133,8 @@ codec defaults and normalization are preserved; this is not lossless preservatio
 of source JSON formatting or unknown fields. Decoding does not validate semantics.
 Errors are `UNSUPPORTED_FORMAT`, `INVALID_MODEL`, or
 `RESPONSE_SERIALIZATION_FAILED`, with the existing versioned error envelope.
-The output version is explicit; incompatible future codec boundary behavior must
-use a new function/version rather than silently changing version-1 semantics.
+The output version identifies the current contract and permits explicit rejection
+of unsupported versions. It does not promise support for earlier beta contracts.
 
 `validate_graph_model(input_json: &str) -> Result<String, String>` accepts the
 same envelope as `validate_uml_model`. It returns the same diagnostic shape with
@@ -344,3 +344,27 @@ Unknown is not treated as either proven conformance or a proven type violation.
 Missing identities and context cardinality retain their existing errors, and
 other independent model diagnostics remain visible. InstanceSpecification
 contexts retain the separate classifier-witness check described above.
+
+## Basic classifier authoring and semantic views
+
+The existing application `CreateElement` command now permits Class and Interface
+creation without an explicitly selected owner by using its existing deterministic
+Model adoption path. Their views receive real semantic subject IDs. An explicit
+owner is never silently replaced: the canonical `set_owner` composite-role check
+accepts valid package/nested-classifier ownership and rejects unsupported pairs.
+Other tool categories retain their existing owner requirements.
+
+The operation remains copy-on-write and goes through the existing graph,
+association, template and semantic change-validation gates before returning.
+`CreateElementOrVisualDraft` still preserves genuine semantic failures as visual
+drafts with their diagnostic reason; the change removes the avoidable early
+selection restriction only for basic Class/Interface authoring. No UI, revision
+publication or new public Rust contract is introduced.
+
+Model adoption may assign existing unowned packageable elements to its root,
+according to the existing adoption policy. Basic classifier ownership identities
+now come from `set_owner`'s collision-checked model-derived allocation, rather
+than the package-only command's revision-seeded ownership edge allocation.
+Existing semantic associations already materialize member ends and AddMember
+already creates semantic operations; those paths are unchanged by this slice.
+Unit tests were neither edited nor run; compilation is not a suite pass.

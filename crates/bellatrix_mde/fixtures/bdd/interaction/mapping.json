@@ -1,0 +1,71 @@
+[
+  {
+    "kind": "sequence",
+    "valid": "sequence.valid.json",
+    "invalid": "sequence.invalid.json",
+    "diagram_id": "sequence-diagram",
+    "subject_id": "submit",
+    "mutation_property": "receiveEvent",
+    "before": {
+      "$ref": "submit-receive"
+    },
+    "after": {
+      "$ref": "service"
+    },
+    "normative_rule": "Message-receiveEvent",
+    "expected_error_code": "UML_PROPERTY_CONTRACT",
+    "execution_status": "not_run"
+  },
+  {
+    "kind": "communication",
+    "valid": "communication.valid.json",
+    "invalid": "communication.invalid.json",
+    "diagram_id": "communication-diagram",
+    "subject_id": "service",
+    "mutation_property": "represents",
+    "before": {
+      "$ref": "service-role"
+    },
+    "after": {
+      "$ref": "service-type"
+    },
+    "normative_rule": "Lifeline-represents",
+    "expected_error_code": "UML_PROPERTY_CONTRACT",
+    "execution_status": "not_run"
+  },
+  {
+    "kind": "timing",
+    "valid": "timing.valid.json",
+    "invalid": "timing.invalid.json",
+    "diagram_id": "timing-diagram",
+    "subject_id": "latency",
+    "mutation_property": "firstEvent",
+    "before": [
+      true,
+      false
+    ],
+    "after": [
+      true
+    ],
+    "normative_rule": "DurationConstraint-first_event",
+    "expected_error_code": "UML_DURATION_CONSTRAINT_FIRST_EVENT",
+    "execution_status": "not_run"
+  },
+  {
+    "kind": "interaction_overview",
+    "valid": "interaction_overview.valid.json",
+    "invalid": "interaction_overview.invalid.json",
+    "diagram_id": "overview-diagram",
+    "subject_id": "use-authenticate",
+    "mutation_property": "refersTo",
+    "before": {
+      "$ref": "authenticate"
+    },
+    "after": {
+      "$ref": "system"
+    },
+    "normative_rule": "InteractionUse-refersTo",
+    "expected_error_code": "UML_PROPERTY_CONTRACT",
+    "execution_status": "not_run"
+  }
+]

@@ -1,0 +1,397 @@
+{
+  "schema_version": 1,
+  "id": "profile-project",
+  "name": "Service architecture profile",
+  "root_model": "root",
+  "elements": [
+    {
+      "id": "root",
+      "kind": "uml.model",
+      "name": "Service architecture profile",
+      "properties": {}
+    },
+    {
+      "id": "profile",
+      "kind": "uml.profile",
+      "name": "ServiceArchitecture",
+      "properties": {
+        "metaclassReference": [
+          {
+            "$ref": "class-import"
+          }
+        ]
+      }
+    },
+    {
+      "id": "metamodel",
+      "kind": "uml.package",
+      "name": "UMLMetamodel",
+      "properties": {}
+    },
+    {
+      "id": "metaclass",
+      "kind": "uml.class",
+      "name": "Class",
+      "properties": {}
+    },
+    {
+      "id": "local",
+      "kind": "uml.class",
+      "name": "LocalHelper",
+      "properties": {}
+    },
+    {
+      "id": "service",
+      "kind": "uml.stereotype",
+      "name": "Service",
+      "properties": {}
+    },
+    {
+      "id": "entity",
+      "kind": "uml.stereotype",
+      "name": "Entity",
+      "properties": {}
+    },
+    {
+      "id": "string",
+      "kind": "uml.primitive_type",
+      "name": "String",
+      "properties": {}
+    },
+    {
+      "id": "service-name",
+      "kind": "uml.attribute",
+      "name": "serviceName",
+      "properties": {
+        "type": {
+          "$ref": "string"
+        },
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "service-extension",
+      "kind": "uml.extension",
+      "name": "service-extension",
+      "properties": {
+        "memberEnd": [
+          {
+            "$ref": "service-extension-base"
+          },
+          {
+            "$ref": "service-extension-end"
+          }
+        ],
+        "ownedEnd": {
+          "$ref": "service-extension-end"
+        }
+      }
+    },
+    {
+      "id": "service-extension-base",
+      "kind": "uml.attribute",
+      "name": "base_Class",
+      "properties": {
+        "type": {
+          "$ref": "metaclass"
+        },
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "service-extension-end",
+      "kind": "uml.extension_end",
+      "name": "extension_service",
+      "properties": {
+        "type": {
+          "$ref": "service"
+        },
+        "aggregation": "composite",
+        "multiplicity": "0..1"
+      }
+    },
+    {
+      "id": "entity-extension",
+      "kind": "uml.extension",
+      "name": "entity-extension",
+      "properties": {
+        "memberEnd": [
+          {
+            "$ref": "entity-extension-base"
+          },
+          {
+            "$ref": "entity-extension-end"
+          }
+        ],
+        "ownedEnd": {
+          "$ref": "entity-extension-end"
+        }
+      }
+    },
+    {
+      "id": "entity-extension-base",
+      "kind": "uml.attribute",
+      "name": "base_Class",
+      "properties": {
+        "type": {
+          "$ref": "metaclass"
+        },
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "entity-extension-end",
+      "kind": "uml.extension_end",
+      "name": "extension_entity",
+      "properties": {
+        "type": {
+          "$ref": "entity"
+        },
+        "aggregation": "composite",
+        "multiplicity": "0..1"
+      }
+    }
+  ],
+  "relations": [
+    {
+      "id": "owns-profile",
+      "kind": "owns",
+      "from": "root",
+      "to": "profile",
+      "properties": {}
+    },
+    {
+      "id": "owns-metamodel",
+      "kind": "owns",
+      "from": "root",
+      "to": "metamodel",
+      "properties": {}
+    },
+    {
+      "id": "owns-metaclass",
+      "kind": "owns",
+      "from": "metamodel",
+      "to": "metaclass",
+      "properties": {}
+    },
+    {
+      "id": "owns-local",
+      "kind": "owns",
+      "from": "profile",
+      "to": "local",
+      "properties": {}
+    },
+    {
+      "id": "class-import",
+      "kind": "uml.element_import",
+      "from": "profile",
+      "to": "metaclass",
+      "properties": {}
+    },
+    {
+      "id": "owns-class-import",
+      "kind": "owns",
+      "from": "profile",
+      "to": "class-import",
+      "properties": {}
+    },
+    {
+      "id": "owns-service",
+      "kind": "owns",
+      "from": "profile",
+      "to": "service",
+      "properties": {}
+    },
+    {
+      "id": "owns-entity",
+      "kind": "owns",
+      "from": "profile",
+      "to": "entity",
+      "properties": {}
+    },
+    {
+      "id": "owns-string",
+      "kind": "owns",
+      "from": "root",
+      "to": "string",
+      "properties": {}
+    },
+    {
+      "id": "owns-service-name",
+      "kind": "owns",
+      "from": "service",
+      "to": "service-name",
+      "properties": {}
+    },
+    {
+      "id": "owns-service-extension",
+      "kind": "owns",
+      "from": "profile",
+      "to": "service-extension",
+      "properties": {}
+    },
+    {
+      "id": "owns-service-extension-base",
+      "kind": "owns",
+      "from": "service",
+      "to": "service-extension-base",
+      "properties": {}
+    },
+    {
+      "id": "owns-service-extension-end",
+      "kind": "owns",
+      "from": "service-extension",
+      "to": "service-extension-end",
+      "properties": {}
+    },
+    {
+      "id": "owns-entity-extension",
+      "kind": "owns",
+      "from": "profile",
+      "to": "entity-extension",
+      "properties": {}
+    },
+    {
+      "id": "owns-entity-extension-base",
+      "kind": "owns",
+      "from": "entity",
+      "to": "entity-extension-base",
+      "properties": {}
+    },
+    {
+      "id": "owns-entity-extension-end",
+      "kind": "owns",
+      "from": "entity-extension",
+      "to": "entity-extension-end",
+      "properties": {}
+    },
+    {
+      "id": "invalid-specialization",
+      "kind": "uml.generalization",
+      "from": "local",
+      "to": "metaclass",
+      "properties": {}
+    }
+  ],
+  "diagrams": [
+    {
+      "id": "diagram",
+      "name": "Service architecture profile",
+      "uml_di_type": "UMLProfileDiagram",
+      "width": 1240,
+      "height": 800,
+      "model_elements": [],
+      "views": [
+        {
+          "id": "view-profile",
+          "subject": "profile",
+          "geometry": {
+            "kind": "rect",
+            "x": 40,
+            "y": 40,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-metaclass",
+          "subject": "metaclass",
+          "geometry": {
+            "kind": "rect",
+            "x": 325,
+            "y": 40,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-service",
+          "subject": "service",
+          "geometry": {
+            "kind": "rect",
+            "x": 610,
+            "y": 40,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-entity",
+          "subject": "entity",
+          "geometry": {
+            "kind": "rect",
+            "x": 895,
+            "y": 40,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-service-extension",
+          "subject": "service-extension",
+          "geometry": {
+            "kind": "rect",
+            "x": 40,
+            "y": 220,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-entity-extension",
+          "subject": "entity-extension",
+          "geometry": {
+            "kind": "rect",
+            "x": 325,
+            "y": 220,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-local",
+          "subject": "local",
+          "geometry": {
+            "kind": "rect",
+            "x": 610,
+            "y": 220,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-class-import",
+          "subject": "class-import",
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 280,
+              "y": 105
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 325,
+                  "y": 105
+                }
+              }
+            ]
+          },
+          "endpoints": {
+            "source_view_id": "view-profile",
+            "target_view_id": "view-metaclass"
+          },
+          "z_index": 1
+        }
+      ]
+    }
+  ]
+}

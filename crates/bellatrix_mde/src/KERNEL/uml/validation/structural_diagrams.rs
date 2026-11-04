@@ -23,10 +23,22 @@ pub enum StructuralDiagramKind {
     Timing,
 }
 impl StructuralDiagramKind {
-    pub const ALL_DIAGRAMS: [Self; 14] = [Self::Class, Self::Object, Self::Package,
-        Self::Component, Self::CompositeStructure, Self::Deployment, Self::Profile,
-        Self::UseCase, Self::Activity, Self::StateMachine, Self::Sequence,
-        Self::Communication, Self::InteractionOverview, Self::Timing];
+    pub const ALL_DIAGRAMS: [Self; 14] = [
+        Self::Class,
+        Self::Object,
+        Self::Package,
+        Self::Component,
+        Self::CompositeStructure,
+        Self::Deployment,
+        Self::Profile,
+        Self::UseCase,
+        Self::Activity,
+        Self::StateMachine,
+        Self::Sequence,
+        Self::Communication,
+        Self::InteractionOverview,
+        Self::Timing,
+    ];
     pub const ALL: [Self; 7] = [
         Self::Class,
         Self::Object,
@@ -48,7 +60,9 @@ impl StructuralDiagramKind {
             Self::UseCase => "UMLUseCaseDiagram",
             Self::Activity => "UMLActivityDiagram",
             Self::StateMachine => "UMLStateMachineDiagram",
-            Self::Sequence | Self::Communication | Self::InteractionOverview | Self::Timing => "UMLInteractionDiagram",
+            Self::Sequence | Self::Communication | Self::InteractionOverview | Self::Timing => {
+                "UMLInteractionDiagram"
+            }
         }
     }
     pub const fn interaction_kind(self) -> Option<&'static str> {
@@ -64,7 +78,9 @@ impl StructuralDiagramKind {
         match self {
             Self::Activity => Some("Activity"),
             Self::StateMachine => Some("StateMachine"),
-            Self::Sequence | Self::Communication | Self::InteractionOverview | Self::Timing => Some("Interaction"),
+            Self::Sequence | Self::Communication | Self::InteractionOverview | Self::Timing => {
+                Some("Interaction")
+            }
             _ => None,
         }
     }
@@ -125,16 +141,24 @@ fn problem(code: &'static str, id: &str, message: impl Into<String>) -> Structur
     }
 }
 
-fn context_type_diagnostic(context: &crate::Element, expected: &str) -> Option<StructuralDiagnostic> {
+fn context_type_diagnostic(
+    context: &crate::Element,
+    expected: &str,
+) -> Option<StructuralDiagnostic> {
     match crate::uml::root::object_metaclass(&context.kind) {
         Some(metaclass) if crate::uml::metamodel::conforms_to(metaclass, expected) => None,
-        Some(_) => Some(problem("UMLDI_CONTEXT_TYPE", &context.id,
-            format!("This diagram requires a {expected} context"))),
+        Some(_) => Some(problem(
+            "UMLDI_CONTEXT_TYPE",
+            &context.id,
+            format!("This diagram requires a {expected} context"),
+        )),
         None => Some(StructuralDiagnostic {
             severity: StructuralSeverity::Warning,
             code: "UMLDI_CONTEXT_TYPE_UNVERIFIED",
             subject_id: context.id.clone(),
-            message: format!("Context metaclass is unresolved; {expected} conformance cannot be verified"),
+            message: format!(
+                "Context metaclass is unresolved; {expected} conformance cannot be verified"
+            ),
         }),
     }
 }
@@ -183,7 +207,11 @@ fn collect_structural_diagram_diagnostics(
     kind: StructuralDiagramKind,
 ) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
-    if let Some(diagram) = project.diagrams.iter().find(|diagram| diagram.id == diagram_id) {
+    if let Some(diagram) = project
+        .diagrams
+        .iter()
+        .find(|diagram| diagram.id == diagram_id)
+    {
         for view in &diagram.views {
             if let Some(draft) = &view.draft {
                 issues.push(StructuralDiagnostic {
@@ -192,12 +220,27 @@ fn collect_structural_diagram_diagnostics(
                     subject_id: view.id.clone(),
                     message: format!("Visual draft {} has not been validated as a semantic UML element or relationship", draft.notation_kind),
                 });
-                for identifier in draft.parent_view_id.iter().chain(view.endpoints.iter().flat_map(|endpoints|
-                    endpoints.source_view_id.iter().chain(endpoints.target_view_id.iter()))) {
-                    if !diagram.views.iter().any(|candidate| &candidate.id == identifier) {
-                        issues.push(StructuralDiagnostic { severity: StructuralSeverity::Warning,
-                            code: "VISUAL_DRAFT_ORPHANED_LINK", subject_id: view.id.clone(),
-                            message: format!("Visual draft references removed view {identifier}"), });
+                for identifier in draft
+                    .parent_view_id
+                    .iter()
+                    .chain(view.endpoints.iter().flat_map(|endpoints| {
+                        endpoints
+                            .source_view_id
+                            .iter()
+                            .chain(endpoints.target_view_id.iter())
+                    }))
+                {
+                    if !diagram
+                        .views
+                        .iter()
+                        .any(|candidate| &candidate.id == identifier)
+                    {
+                        issues.push(StructuralDiagnostic {
+                            severity: StructuralSeverity::Warning,
+                            code: "VISUAL_DRAFT_ORPHANED_LINK",
+                            subject_id: view.id.clone(),
+                            message: format!("Visual draft references removed view {identifier}"),
+                        });
                     }
                 }
             }
@@ -248,12 +291,19 @@ fn collect_structural_diagram_diagnostics(
     // context, never the subjects of its contained Views.
     if let Some(expected) = kind.context_metaclass() {
         if diagram.model_elements.len() != 1 {
-            issues.push(problem("UMLDI_CONTEXT_MULTIPLICITY", &diagram.id,
-                format!("This diagram requires exactly one {expected} context")));
+            issues.push(problem(
+                "UMLDI_CONTEXT_MULTIPLICITY",
+                &diagram.id,
+                format!("This diagram requires exactly one {expected} context"),
+            ));
         }
         for context_id in &diagram.model_elements {
             match elements.get(context_id.as_str()) {
-                None => issues.push(problem("UMLDI_CONTEXT_MISSING", context_id, "The diagram context does not identify a model Element")),
+                None => issues.push(problem(
+                    "UMLDI_CONTEXT_MISSING",
+                    context_id,
+                    "The diagram context does not identify a model Element",
+                )),
                 Some(context) => {
                     if let Some(issue) = context_type_diagnostic(context, expected) {
                         issues.push(issue);
@@ -286,11 +336,21 @@ fn collect_structural_diagram_diagnostics(
                     "The diagram context does not identify a model Element",
                 )),
                 Some(context) if context.kind == "uml.instance_specification" => {
-                    use crate::uml::{classifiers::QueryError, root::{ElementRef, Model}};
-                    let conformance = ElementRef::Object(context).instance_specification()
-                        .ok_or_else(|| QueryError::unsupported(context_id,
-                            "InstanceSpecification context adapter is unavailable"))
-                        .and_then(|instance| instance.has_structured_classifier(Model::from_project(project)));
+                    use crate::uml::{
+                        classifiers::QueryError,
+                        root::{ElementRef, Model},
+                    };
+                    let conformance = ElementRef::Object(context)
+                        .instance_specification()
+                        .ok_or_else(|| {
+                            QueryError::unsupported(
+                                context_id,
+                                "InstanceSpecification context adapter is unavailable",
+                            )
+                        })
+                        .and_then(|instance| {
+                            instance.has_structured_classifier(Model::from_project(project))
+                        });
                     match conformance {
                         Ok(true) => {}
                         Ok(false) => issues.push(problem("UMLDI_CONTEXT_TYPE", context_id,
@@ -318,7 +378,11 @@ fn collect_structural_diagram_diagnostics(
         .iter()
         .map(|relation| (relation.id.as_str(), relation))
         .collect::<HashMap<_, _>>();
-    let views = diagram.views.iter().map(|view| (view.id.as_str(), view)).collect::<HashMap<_, _>>();
+    let views = diagram
+        .views
+        .iter()
+        .map(|view| (view.id.as_str(), view))
+        .collect::<HashMap<_, _>>();
     let subjects = diagram
         .views
         .iter()
@@ -331,10 +395,20 @@ fn collect_structural_diagram_diagnostics(
         if let Some(relation) = relations.get(subject) {
             // Attachment identities belong to the editor projection, not UML semantics.
             // Legacy views without explicit attachments still resolve by subject.
-            if view.draft.is_none() && let Some(endpoints) = &view.endpoints {
+            if view.draft.is_none()
+                && let Some(endpoints) = &view.endpoints
+            {
                 for (side, identifier, expected) in [
-                    ("source", endpoints.source_view_id.as_deref(), relation.from.as_str()),
-                    ("target", endpoints.target_view_id.as_deref(), relation.to.as_str()),
+                    (
+                        "source",
+                        endpoints.source_view_id.as_deref(),
+                        relation.from.as_str(),
+                    ),
+                    (
+                        "target",
+                        endpoints.target_view_id.as_deref(),
+                        relation.to.as_str(),
+                    ),
                 ] {
                     match identifier {
                         None => issues.push(problem("UMLDI_ENDPOINT_UNATTACHED", &view.id,
@@ -368,16 +442,25 @@ fn collect_structural_diagram_diagnostics(
                 ));
             }
         } else if let Some(element) = elements.get(subject)
-            && matches!(&view.geometry, Geometry::Path { .. })
+            && let Geometry::Path { segments, .. } = &view.geometry
         {
-            issues.push(problem(
-                "UMLDI_EXPECTED_SHAPE",
-                &view.id,
-                format!(
-                    "element {} needs Shape geometry in the current editor projection",
-                    element.id
-                ),
-            ));
+            // UML Message is a NamedElement, not a Relationship, but interaction
+            // diagrams present it as an Edge rather than a classifier Shape.
+            if element.kind == "uml.message" && kind.interaction_kind().is_some() {
+                if segments.is_empty() {
+                    issues.push(problem("UMLDI_EXPECTED_EDGE", &view.id,
+                        format!("message {subject} needs a nonempty Edge Path in the current editor projection")));
+                }
+            } else {
+                issues.push(problem(
+                    "UMLDI_EXPECTED_SHAPE",
+                    &view.id,
+                    format!(
+                        "element {} needs Shape geometry in the current editor projection",
+                        element.id
+                    ),
+                ));
+            }
         }
     }
     issues
@@ -495,8 +578,17 @@ fn collect_structural_model_diagnostics(project: &Project) -> Vec<StructuralDiag
             ));
         }
         // Property-reference and editor links remain supported without becoming UML Relationships.
-        if relationship_root_kind(relation).is_none() && relation.kind.starts_with("uml.")
-            && !matches!(relation.kind.as_str(), "uml.parametered_element" | "uml.constraining_classifier" | "uml.note_link" | "uml.constraint_link" | "uml.containment") {
+        if relationship_root_kind(relation).is_none()
+            && relation.kind.starts_with("uml.")
+            && !matches!(
+                relation.kind.as_str(),
+                "uml.parametered_element"
+                    | "uml.constraining_classifier"
+                    | "uml.note_link"
+                    | "uml.constraint_link"
+                    | "uml.containment"
+            )
+        {
             issues.push(problem(
                 "UML_UNKNOWN_RELATIONSHIP",
                 &relation.id,
@@ -522,7 +614,22 @@ fn collect_structural_model_diagnostics(project: &Project) -> Vec<StructuralDiag
     } else {
         issues.extend(model.validate_contracts());
     }
-    issues.extend(crate::structural_rules::validate(project));
+    for issue in crate::structural_rules::validate(project) {
+        // Rooted namespace validation and the rootless-draft check can report
+        // the same package visibility violation. Keep both checks, including
+        // their different coverage and representation diagnostics, but report
+        // that shared violation only once.
+        if issue.code == "UML_PACKAGE_MEMBER_VISIBILITY"
+            && issues.iter().any(|existing| {
+                existing.code == issue.code
+                    && existing.subject_id == issue.subject_id
+                    && existing.severity == issue.severity
+            })
+        {
+            continue;
+        }
+        issues.push(issue);
+    }
     issues.extend(crate::templates::validate(project));
     issues
 }
@@ -532,26 +639,62 @@ mod tests {
     use super::*;
     use crate::{PathSegment, Point, Style, View};
 
-    fn assert_legacy_association_warnings(issues: Vec<StructuralDiagnostic>, subject: &str, aggregation: bool, association_class: bool) {
-        let distinguishability = format!("Unsupported UML namespace capability on {subject}: Association memberEnd identities are not materialized; migrate the legacy binary notation first");
-        let endpoints = format!("Unsupported UML graph representation at {subject}: Association memberEnd identities are not materialized; related Elements are unverified");
+    fn assert_legacy_association_warnings(
+        issues: Vec<StructuralDiagnostic>,
+        subject: &str,
+        aggregation: bool,
+        association_class: bool,
+    ) {
+        let distinguishability = format!(
+            "Unsupported UML namespace capability on {subject}: Association memberEnd identities are not materialized; migrate the legacy binary notation first"
+        );
+        let endpoints = format!(
+            "Unsupported UML graph representation at {subject}: Association memberEnd identities are not materialized; related Elements are unverified"
+        );
         let mut expected = vec![
-            ("UML_NAMESPACE_DISTINGUISHABILITY_UNSUPPORTED", distinguishability.as_str()),
-            ("MDE_ASSOCIATION_ENDS_UNMATERIALIZED", "Association memberEnd identities are not materialized; legacy endpoint notation is not a complete Association kernel model"),
-            ("UML_NAMESPACE_QUERY_UNSUPPORTED", "Association memberEnd identities are not materialized; migrate the legacy binary notation first"),
-            ("MDE_PROPERTY_CONTRACT_UNVERIFIED", "Association-memberEnd: required reference/collection needs its canonical role projection"),
+            (
+                "UML_NAMESPACE_DISTINGUISHABILITY_UNSUPPORTED",
+                distinguishability.as_str(),
+            ),
+            (
+                "MDE_ASSOCIATION_ENDS_UNMATERIALIZED",
+                "Association memberEnd identities are not materialized; legacy endpoint notation is not a complete Association kernel model",
+            ),
+            (
+                "UML_NAMESPACE_QUERY_UNSUPPORTED",
+                "Association memberEnd identities are not materialized; migrate the legacy binary notation first",
+            ),
+            (
+                "MDE_PROPERTY_CONTRACT_UNVERIFIED",
+                "Association-memberEnd: required reference/collection needs its canonical role projection",
+            ),
         ];
         if association_class {
             expected.extend([
-                ("MDE_ASSOCIATION_CLASS_UNVERIFIED", "AssociationClass-cannot_be_defined: memberEnd identities are not materialized"),
+                (
+                    "MDE_ASSOCIATION_CLASS_UNVERIFIED",
+                    "AssociationClass-cannot_be_defined: memberEnd identities are not materialized",
+                ),
                 ("MDE_RELATIONSHIP_ENDPOINTS_UNVERIFIED", endpoints.as_str()),
             ]);
         }
         if aggregation {
-            expected.push(("MDE_PROPERTY_CONTRACT_UNVERIFIED", "end1Aggregation: no normative property or registered extension contract"));
+            expected.push((
+                "MDE_PROPERTY_CONTRACT_UNVERIFIED",
+                "end1Aggregation: no normative property or registered extension contract",
+            ));
         }
-        assert!(issues.iter().all(|issue| issue.severity == StructuralSeverity::Warning && issue.subject_id == subject), "{issues:#?}");
-        let mut actual = issues.iter().map(|issue| (issue.code, issue.message.as_str())).collect::<Vec<_>>();
+        assert!(
+            issues
+                .iter()
+                .all(|issue| issue.severity == StructuralSeverity::Warning
+                    && issue.subject_id == subject),
+            "{issues:#?}"
+        );
+        let mut actual = issues
+            .iter()
+            .map(|issue| (issue.code, issue.message.as_str()))
+            .collect::<Vec<_>>();
         actual.sort_unstable();
         expected.sort_unstable();
         assert_eq!(actual, expected);
@@ -562,7 +705,8 @@ mod tests {
     }
     #[test]
     fn structural_diagrams_are_the_seven_uml_di_classes() {
-        const XML: &str = include_str!("../../../../../../docs/bellatrix/standards/uml/20161101/UMLDI.xmi");
+        const XML: &str =
+            include_str!("../../../../../../docs/bellatrix/standards/uml/20161101/UMLDI.xmi");
         for kind in StructuralDiagramKind::ALL {
             assert!(XML.contains(&format!("xmi:id=\"{}\"", kind.uml_di_type())));
             assert_eq!(
@@ -577,7 +721,8 @@ mod tests {
     }
     #[test]
     fn root_specialization_matches_uml_251() {
-        const XML: &str = include_str!("../../../../../../docs/bellatrix/standards/uml/20161101/UML.xmi");
+        const XML: &str =
+            include_str!("../../../../../../docs/bellatrix/standards/uml/20161101/UML.xmi");
         for name in ["Element", "Relationship", "DirectedRelationship", "Comment"] {
             assert!(XML.contains(&format!("xmi:id=\"{name}\"")));
         }
@@ -592,13 +737,32 @@ mod tests {
     }
     #[test]
     fn explicitly_typed_class_diagram_validates() {
-        let issues = validate_structural_diagram(&fixture(), "diagram-tasks", StructuralDiagramKind::Class);
-        assert!(issues.iter().all(|issue| issue.severity == StructuralSeverity::Warning && issue.code == "MDE_PROPERTY_CONTRACT_UNVERIFIED"), "{issues:#?}");
-        let mut actual = issues.iter().map(|issue| (issue.subject_id.as_str(), issue.message.as_str())).collect::<Vec<_>>();
+        let issues =
+            validate_structural_diagram(&fixture(), "diagram-tasks", StructuralDiagramKind::Class);
+        assert!(
+            issues
+                .iter()
+                .all(|issue| issue.severity == StructuralSeverity::Warning
+                    && issue.code == "MDE_PROPERTY_CONTRACT_UNVERIFIED"),
+            "{issues:#?}"
+        );
+        let mut actual = issues
+            .iter()
+            .map(|issue| (issue.subject_id.as_str(), issue.message.as_str()))
+            .collect::<Vec<_>>();
         actual.sort_unstable();
         let declaration = "declaration: no normative property or registered extension contract";
         let signature = "signature: no normative property or registered extension contract";
-        assert_eq!(actual, vec![("field-completed", declaration), ("field-tasks", declaration), ("field-title", declaration), ("fn-add", signature), ("fn-complete", signature)]);
+        assert_eq!(
+            actual,
+            vec![
+                ("field-completed", declaration),
+                ("field-tasks", declaration),
+                ("field-title", declaration),
+                ("fn-add", signature),
+                ("fn-complete", signature)
+            ]
+        );
     }
     #[test]
     fn edges_must_be_paths_not_class_rectangles() {
@@ -924,7 +1088,7 @@ mod tests {
                 diagram.views.push(View {
                     endpoints: None,
                     timing: None,
-            draft: None,
+                    draft: None,
                     id: "visible-context".into(),
                     subject: Some("context".into()),
                     label: None,
@@ -1075,7 +1239,12 @@ mod tests {
                     Some(RootMetaclass::Relationship)
                 );
             }
-            assert_legacy_association_warnings(validate_structural_model(&project), "specialization", true, false);
+            assert_legacy_association_warnings(
+                validate_structural_model(&project),
+                "specialization",
+                true,
+                false,
+            );
         }
         Ok(())
     }

@@ -443,7 +443,8 @@ fn create_element(
     }
     let requested_name = name.as_deref();
     let mut chosen_name = requested_name.unwrap_or(kind.default_name()).to_owned();
-    if kind.requires_owner() && owner_id.is_none() {
+    let basic_classifier = matches!(kind, ModelingElementKind::Class | ModelingElementKind::Interface);
+    if kind.requires_owner() && owner_id.is_none() && !basic_classifier {
         return Err(if kind.requires_nested_owner() {
             "Select the containing Activity, StateMachine, State, Region, or Interaction first"
         } else { "this element requires an explicit Package or Model owner" }.into());
@@ -457,8 +458,10 @@ fn create_element(
             .iter()
             .find(|element| element.id == *owner_id)
             .ok_or("element owner not found")?;
-        // This creation slice supports package ownership, not every UML ownership context.
-        if !kind.requires_nested_owner() && !matches!(owner.kind.as_str(), "uml.package" | "uml.model") {
+        // Basic classifiers use the canonical composite-role check below,
+        // including nestedClassifier, rather than guessing from the selection.
+        if !kind.requires_nested_owner() && !basic_classifier
+            && !matches!(owner.kind.as_str(), "uml.package" | "uml.model") {
             return Err("this creation command requires a Package or Model owner".into());
         }
     }
@@ -544,10 +547,12 @@ fn create_element(
         content: None,
     });
     if let Some(owner_id) = resolved_owner {
-        if kind.requires_nested_owner() {
+        if kind.requires_nested_owner() || basic_classifier {
             crate::uml::root::set_owner(section, project_id, &element_id, &owner_id)?;
-            features::reposition_boundary_nodes(section, diagram_id, &owner_id);
-            features::layout_interaction_operands(section, diagram_id, &owner_id);
+            if kind.requires_nested_owner() {
+                features::reposition_boundary_nodes(section, diagram_id, &owner_id);
+                features::layout_interaction_operands(section, diagram_id, &owner_id);
+            }
         } else {
         section.relations.push(Relation {
             id: ownership_id,

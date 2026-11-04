@@ -1,0 +1,316 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "class-valid",
+      "file": "class.valid.json",
+      "diagram_kind": "class",
+      "diagram_id": "diagram",
+      "expected": "valid",
+      "diagnostics": [],
+      "coverage": [
+        "Package",
+        "abstract Class",
+        "Generalization",
+        "Interface",
+        "DataType",
+        "PrimitiveType",
+        "Enumeration/literals",
+        "Property/multiplicity/visibility/readOnly",
+        "Operation/Parameter/return",
+        "composite Association/member ends",
+        "Comment"
+      ],
+      "rule": "Baseline with no semantic errors; unsupported warnings remain visible.",
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+    },
+    {
+      "id": "class-invalid",
+      "file": "class.invalid.json",
+      "diagram_kind": "class",
+      "diagram_id": "diagram",
+      "expected": "invalid",
+      "diagnostics": [
+        {
+          "code": "UML_OPERATION_AT_MOST_ONE_RETURN",
+          "subject_id": "submit",
+          "severity": "error"
+        },
+        {
+          "code": "UML_OPERATION_PARAMETERS",
+          "subject_id": "submit",
+          "severity": "error"
+        }
+      ],
+      "coverage": [
+        "Package",
+        "abstract Class",
+        "Generalization",
+        "Interface",
+        "DataType",
+        "PrimitiveType",
+        "Enumeration/literals",
+        "Property/multiplicity/visibility/readOnly",
+        "Operation/Parameter/return",
+        "composite Association/member ends",
+        "Comment"
+      ],
+      "rule": "Operation-at_most_one_return: two return parameters on submit also make the return-parameter projection invalid",
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+    },
+    {
+      "id": "object-valid",
+      "file": "object.valid.json",
+      "diagram_kind": "object",
+      "diagram_id": "diagram",
+      "expected": "valid",
+      "diagnostics": [],
+      "coverage": [
+        "InstanceSpecification",
+        "classifier identity",
+        "Slot/definingFeature",
+        "LiteralString",
+        "LiteralInteger"
+      ],
+      "rule": "Baseline with no semantic errors; unsupported warnings remain visible.",
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+    },
+    {
+      "id": "object-invalid",
+      "file": "object.invalid.json",
+      "diagram_kind": "object",
+      "diagram_id": "diagram",
+      "expected": "invalid",
+      "diagnostics": [
+        {
+          "code": "UML_INSTANCE_DEFINING_FEATURE",
+          "subject_id": "order-1042",
+          "severity": "error"
+        },
+        {
+          "code": "UML_SLOT_CONTRACT",
+          "subject_id": "first-number",
+          "severity": "error"
+        },
+        {
+          "code": "UML_SLOT_CONTRACT",
+          "subject_id": "first-total",
+          "severity": "error"
+        }
+      ],
+      "coverage": [
+        "InstanceSpecification",
+        "classifier identity",
+        "Slot/definingFeature",
+        "LiteralString",
+        "LiteralInteger"
+      ],
+      "rule": "InstanceSpecification-defining_feature: both existing slots refer to features absent from the new classifier, invalidating their assignments",
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+    },
+    {
+      "id": "package-valid",
+      "file": "package.valid.json",
+      "diagram_kind": "package",
+      "diagram_id": "diagram",
+      "expected": "valid",
+      "diagnostics": [],
+      "coverage": [
+        "nested Package",
+        "public/private packaged elements",
+        "PackageImport",
+        "ElementImport/alias"
+      ],
+      "rule": "Baseline with no semantic errors; unsupported warnings remain visible.",
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+    },
+    {
+      "id": "package-invalid",
+      "file": "package.invalid.json",
+      "diagram_kind": "package",
+      "diagram_id": "diagram",
+      "expected": "invalid",
+      "diagnostics": [
+        {
+          "code": "UML_PACKAGE_MEMBER_VISIBILITY",
+          "subject_id": "order",
+          "severity": "error"
+        }
+      ],
+      "coverage": [
+        "nested Package",
+        "public/private packaged elements",
+        "PackageImport",
+        "ElementImport/alias"
+      ],
+      "rule": "Package-elements_public_or_private: packaged Class cannot have protected visibility",
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+    },
+    {
+      "id": "component-valid",
+      "file": "component.valid.json",
+      "diagram_kind": "component",
+      "diagram_id": "diagram",
+      "expected": "valid",
+      "diagnostics": [],
+      "coverage": [
+        "Component",
+        "packaged implementation Class",
+        "Port/Interface",
+        "Usage",
+        "InterfaceRealization"
+      ],
+      "rule": "Baseline with no semantic errors; unsupported warnings remain visible.",
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+    },
+    {
+      "id": "component-invalid",
+      "file": "component.invalid.json",
+      "diagram_kind": "component",
+      "diagram_id": "diagram",
+      "expected": "invalid",
+      "diagnostics": [
+        {
+          "code": "UML_COMPONENT_NO_NESTED_CLASSIFIERS",
+          "subject_id": "checkout",
+          "severity": "error"
+        }
+      ],
+      "coverage": [
+        "Component",
+        "packaged implementation Class",
+        "Port/Interface",
+        "Usage",
+        "InterfaceRealization"
+      ],
+      "rule": "Component-no_nested_classifiers: component declares nestedClassifier",
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+    },
+    {
+      "id": "composite_structure-valid",
+      "file": "composite_structure.valid.json",
+      "diagram_kind": "composite_structure",
+      "diagram_id": "diagram",
+      "expected": "valid",
+      "diagnostics": [],
+      "coverage": [
+        "StructuredClassifier context",
+        "composite parts",
+        "Port",
+        "Connector",
+        "ConnectorEnd/role/multiplicity"
+      ],
+      "rule": "Baseline with no semantic errors; unsupported warnings remain visible.",
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+    },
+    {
+      "id": "composite_structure-invalid",
+      "file": "composite_structure.invalid.json",
+      "diagram_kind": "composite_structure",
+      "diagram_id": "diagram",
+      "expected": "invalid",
+      "diagnostics": [
+        {
+          "code": "UML_CONNECTOR_ROLES",
+          "subject_id": "connector",
+          "severity": "error"
+        }
+      ],
+      "coverage": [
+        "StructuredClassifier context",
+        "composite parts",
+        "Port",
+        "Connector",
+        "ConnectorEnd/role/multiplicity"
+      ],
+      "rule": "Connector-roles: end role is neither a role of owning StructuredClassifier nor a port of one of its parts",
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+    },
+    {
+      "id": "deployment-valid",
+      "file": "deployment.valid.json",
+      "diagram_kind": "deployment",
+      "diagram_id": "diagram",
+      "expected": "valid",
+      "diagnostics": [],
+      "coverage": [
+        "Device",
+        "nested ExecutionEnvironment",
+        "Artifact/fileName",
+        "Deployment/deployedArtifact",
+        "DeploymentSpecification",
+        "Manifestation/Component",
+        "CommunicationPath"
+      ],
+      "rule": "Baseline with no semantic errors; unsupported warnings remain visible.",
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+    },
+    {
+      "id": "deployment-invalid",
+      "file": "deployment.invalid.json",
+      "diagram_kind": "deployment",
+      "diagram_id": "diagram",
+      "expected": "invalid",
+      "diagnostics": [
+        {
+          "code": "UML_DEPLOYMENT_SPECIFICATION_TARGET",
+          "subject_id": "specification",
+          "severity": "error"
+        }
+      ],
+      "coverage": [
+        "Device",
+        "nested ExecutionEnvironment",
+        "Artifact/fileName",
+        "Deployment/deployedArtifact",
+        "DeploymentSpecification",
+        "Manifestation/Component",
+        "CommunicationPath"
+      ],
+      "rule": "DeploymentSpecification-deployment_target: configured deployment location is Node, not ExecutionEnvironment",
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+    },
+    {
+      "id": "profile-valid",
+      "file": "profile.valid.json",
+      "diagram_kind": "profile",
+      "diagram_id": "diagram",
+      "expected": "valid",
+      "diagnostics": [],
+      "coverage": [
+        "Profile/metaclassReference",
+        "ElementImport",
+        "Stereotype",
+        "base_Class Property",
+        "Extension/ExtensionEnd",
+        "typed stereotype attribute"
+      ],
+      "rule": "Baseline with no semantic errors; unsupported warnings remain visible.",
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+    },
+    {
+      "id": "profile-invalid",
+      "file": "profile.invalid.json",
+      "diagram_kind": "profile",
+      "diagram_id": "diagram",
+      "expected": "invalid",
+      "diagnostics": [
+        {
+          "code": "UML_PROFILE_METACLASS_REFERENCE_SPECIALIZATION",
+          "subject_id": "profile",
+          "severity": "error"
+        }
+      ],
+      "coverage": [
+        "Profile/metaclassReference",
+        "ElementImport",
+        "Stereotype",
+        "base_Class Property",
+        "Extension/ExtensionEnd",
+        "typed stereotype attribute"
+      ],
+      "rule": "Profile-metaclass_reference_not_specialized: owned Class specializes an imported metaclass",
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+    }
+  ]
+}

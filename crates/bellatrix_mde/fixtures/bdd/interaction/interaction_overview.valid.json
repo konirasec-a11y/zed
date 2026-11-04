@@ -1,0 +1,705 @@
+{
+  "schema_version": 1,
+  "id": "overview-project",
+  "name": "Order interaction overview",
+  "root_model": "root",
+  "elements": [
+    {
+      "id": "root",
+      "kind": "uml.model",
+      "name": "Interaction fixture",
+      "properties": {}
+    },
+    {
+      "id": "system",
+      "kind": "uml.class",
+      "name": "CheckoutSystem",
+      "properties": {}
+    },
+    {
+      "id": "interaction",
+      "kind": "uml.interaction",
+      "name": "Order interaction overview",
+      "properties": {
+        "lifeline": [
+          {
+            "$ref": "customer"
+          },
+          {
+            "$ref": "service"
+          },
+          {
+            "$ref": "stock"
+          }
+        ],
+        "fragment": [
+          {
+            "$ref": "use-authenticate"
+          },
+          {
+            "$ref": "use-fulfill"
+          }
+        ],
+        "message": []
+      }
+    },
+    {
+      "id": "customer-type",
+      "kind": "uml.class",
+      "name": "Customer",
+      "properties": {}
+    },
+    {
+      "id": "customer-role",
+      "kind": "uml.property",
+      "name": "customer",
+      "properties": {
+        "type": {
+          "$ref": "customer-type"
+        }
+      }
+    },
+    {
+      "id": "customer",
+      "kind": "uml.lifeline",
+      "name": "customer",
+      "properties": {
+        "represents": {
+          "$ref": "customer-role"
+        },
+        "interaction": {
+          "$ref": "interaction"
+        }
+      }
+    },
+    {
+      "id": "service-type",
+      "kind": "uml.class",
+      "name": "CheckoutService",
+      "properties": {}
+    },
+    {
+      "id": "service-role",
+      "kind": "uml.property",
+      "name": "service",
+      "properties": {
+        "type": {
+          "$ref": "service-type"
+        }
+      }
+    },
+    {
+      "id": "service",
+      "kind": "uml.lifeline",
+      "name": "service",
+      "properties": {
+        "represents": {
+          "$ref": "service-role"
+        },
+        "interaction": {
+          "$ref": "interaction"
+        }
+      }
+    },
+    {
+      "id": "stock-type",
+      "kind": "uml.class",
+      "name": "Inventory",
+      "properties": {}
+    },
+    {
+      "id": "stock-role",
+      "kind": "uml.property",
+      "name": "stock",
+      "properties": {
+        "type": {
+          "$ref": "stock-type"
+        }
+      }
+    },
+    {
+      "id": "stock",
+      "kind": "uml.lifeline",
+      "name": "stock",
+      "properties": {
+        "represents": {
+          "$ref": "stock-role"
+        },
+        "interaction": {
+          "$ref": "interaction"
+        }
+      }
+    },
+    {
+      "id": "authenticate",
+      "kind": "uml.interaction",
+      "name": "Authenticate customer",
+      "properties": {}
+    },
+    {
+      "id": "use-authenticate",
+      "kind": "uml.interaction_use",
+      "name": "Authenticate customer",
+      "properties": {
+        "refersTo": {
+          "$ref": "authenticate"
+        },
+        "covered": [
+          {
+            "$ref": "customer"
+          },
+          {
+            "$ref": "service"
+          },
+          {
+            "$ref": "stock"
+          }
+        ]
+      }
+    },
+    {
+      "id": "fulfill",
+      "kind": "uml.interaction",
+      "name": "Fulfill order",
+      "properties": {}
+    },
+    {
+      "id": "use-fulfill",
+      "kind": "uml.interaction_use",
+      "name": "Fulfill order",
+      "properties": {
+        "refersTo": {
+          "$ref": "fulfill"
+        },
+        "covered": [
+          {
+            "$ref": "customer"
+          },
+          {
+            "$ref": "service"
+          },
+          {
+            "$ref": "stock"
+          }
+        ]
+      }
+    },
+    {
+      "id": "flow",
+      "kind": "uml.activity",
+      "name": "Overview control flow",
+      "properties": {}
+    },
+    {
+      "id": "initial",
+      "kind": "uml.initial_node",
+      "name": "Start",
+      "properties": {}
+    },
+    {
+      "id": "auth-call",
+      "kind": "uml.call_behavior_action",
+      "name": "Authenticate customer",
+      "properties": {
+        "behavior": {
+          "$ref": "authenticate"
+        },
+        "isSynchronous": true
+      }
+    },
+    {
+      "id": "decision",
+      "kind": "uml.decision_node",
+      "name": "Authorized?",
+      "properties": {}
+    },
+    {
+      "id": "fulfill-call",
+      "kind": "uml.call_behavior_action",
+      "name": "Fulfill order",
+      "properties": {
+        "behavior": {
+          "$ref": "fulfill"
+        },
+        "isSynchronous": true
+      }
+    },
+    {
+      "id": "final",
+      "kind": "uml.activity_final_node",
+      "name": "Finished",
+      "properties": {}
+    },
+    {
+      "id": "authorized-guard",
+      "kind": "uml.opaque_expression",
+      "name": "authorized",
+      "properties": {
+        "language": [
+          "OCL"
+        ],
+        "body": [
+          "authorized"
+        ],
+        "visibility": null
+      }
+    },
+    {
+      "id": "denied-guard",
+      "kind": "uml.opaque_expression",
+      "name": "else",
+      "properties": {
+        "language": [
+          "OCL"
+        ],
+        "body": [
+          "else"
+        ],
+        "visibility": null
+      }
+    }
+  ],
+  "relations": [
+    {
+      "id": "owns-system",
+      "kind": "owns",
+      "from": "root",
+      "to": "system"
+    },
+    {
+      "id": "owns-interaction",
+      "kind": "owns",
+      "from": "system",
+      "to": "interaction"
+    },
+    {
+      "id": "owns-customer-type",
+      "kind": "owns",
+      "from": "root",
+      "to": "customer-type"
+    },
+    {
+      "id": "owns-customer-role",
+      "kind": "owns",
+      "from": "system",
+      "to": "customer-role"
+    },
+    {
+      "id": "owns-customer",
+      "kind": "owns",
+      "from": "interaction",
+      "to": "customer"
+    },
+    {
+      "id": "owns-service-type",
+      "kind": "owns",
+      "from": "root",
+      "to": "service-type"
+    },
+    {
+      "id": "owns-service-role",
+      "kind": "owns",
+      "from": "system",
+      "to": "service-role"
+    },
+    {
+      "id": "owns-service",
+      "kind": "owns",
+      "from": "interaction",
+      "to": "service"
+    },
+    {
+      "id": "owns-stock-type",
+      "kind": "owns",
+      "from": "root",
+      "to": "stock-type"
+    },
+    {
+      "id": "owns-stock-role",
+      "kind": "owns",
+      "from": "system",
+      "to": "stock-role"
+    },
+    {
+      "id": "owns-stock",
+      "kind": "owns",
+      "from": "interaction",
+      "to": "stock"
+    },
+    {
+      "id": "owns-authenticate",
+      "kind": "owns",
+      "from": "system",
+      "to": "authenticate"
+    },
+    {
+      "id": "owns-use-authenticate",
+      "kind": "owns",
+      "from": "interaction",
+      "to": "use-authenticate"
+    },
+    {
+      "id": "owns-fulfill",
+      "kind": "owns",
+      "from": "system",
+      "to": "fulfill"
+    },
+    {
+      "id": "owns-use-fulfill",
+      "kind": "owns",
+      "from": "interaction",
+      "to": "use-fulfill"
+    },
+    {
+      "id": "owns-flow",
+      "kind": "owns",
+      "from": "system",
+      "to": "flow"
+    },
+    {
+      "id": "owns-initial",
+      "kind": "owns",
+      "from": "flow",
+      "to": "initial"
+    },
+    {
+      "id": "owns-auth-call",
+      "kind": "owns",
+      "from": "flow",
+      "to": "auth-call"
+    },
+    {
+      "id": "owns-decision",
+      "kind": "owns",
+      "from": "flow",
+      "to": "decision"
+    },
+    {
+      "id": "owns-fulfill-call",
+      "kind": "owns",
+      "from": "flow",
+      "to": "fulfill-call"
+    },
+    {
+      "id": "owns-final",
+      "kind": "owns",
+      "from": "flow",
+      "to": "final"
+    },
+    {
+      "id": "start-auth",
+      "kind": "uml.control_flow",
+      "from": "initial",
+      "to": "auth-call",
+      "properties": {}
+    },
+    {
+      "id": "owns-start-auth",
+      "kind": "owns",
+      "from": "flow",
+      "to": "start-auth"
+    },
+    {
+      "id": "auth-decision",
+      "kind": "uml.control_flow",
+      "from": "auth-call",
+      "to": "decision",
+      "properties": {}
+    },
+    {
+      "id": "owns-auth-decision",
+      "kind": "owns",
+      "from": "flow",
+      "to": "auth-decision"
+    },
+    {
+      "id": "owns-authorized-guard",
+      "kind": "owns",
+      "from": "authorized",
+      "to": "authorized-guard"
+    },
+    {
+      "id": "authorized",
+      "kind": "uml.control_flow",
+      "from": "decision",
+      "to": "fulfill-call",
+      "properties": {
+        "guard": {
+          "$ref": "authorized-guard"
+        }
+      }
+    },
+    {
+      "id": "owns-authorized",
+      "kind": "owns",
+      "from": "flow",
+      "to": "authorized"
+    },
+    {
+      "id": "owns-denied-guard",
+      "kind": "owns",
+      "from": "denied",
+      "to": "denied-guard"
+    },
+    {
+      "id": "denied",
+      "kind": "uml.control_flow",
+      "from": "decision",
+      "to": "final",
+      "properties": {
+        "guard": {
+          "$ref": "denied-guard"
+        }
+      }
+    },
+    {
+      "id": "owns-denied",
+      "kind": "owns",
+      "from": "flow",
+      "to": "denied"
+    },
+    {
+      "id": "finish-order",
+      "kind": "uml.control_flow",
+      "from": "fulfill-call",
+      "to": "final",
+      "properties": {}
+    },
+    {
+      "id": "owns-finish-order",
+      "kind": "owns",
+      "from": "flow",
+      "to": "finish-order"
+    }
+  ],
+  "diagrams": [
+    {
+      "id": "overview-diagram",
+      "name": "Order interaction overview",
+      "uml_di_type": "UMLInteractionDiagram",
+      "interaction_kind": "overview",
+      "model_elements": [
+        "interaction"
+      ],
+      "width": 1200,
+      "height": 900,
+      "views": [
+        {
+          "id": "view-initial",
+          "subject": "initial",
+          "geometry": {
+            "kind": "rect",
+            "x": 560,
+            "y": 40,
+            "width": 30,
+            "height": 30
+          },
+          "style": {},
+          "z_index": 1
+        },
+        {
+          "id": "view-use-authenticate",
+          "subject": "use-authenticate",
+          "geometry": {
+            "kind": "rect",
+            "x": 800,
+            "y": 110,
+            "width": 280,
+            "height": 100
+          },
+          "style": {},
+          "z_index": 1
+        },
+        {
+          "id": "view-decision",
+          "subject": "decision",
+          "geometry": {
+            "kind": "rect",
+            "x": 560,
+            "y": 270,
+            "width": 50,
+            "height": 50
+          },
+          "style": {},
+          "z_index": 1
+        },
+        {
+          "id": "view-use-fulfill",
+          "subject": "use-fulfill",
+          "geometry": {
+            "kind": "rect",
+            "x": 800,
+            "y": 390,
+            "width": 280,
+            "height": 100
+          },
+          "style": {},
+          "z_index": 1
+        },
+        {
+          "id": "view-final",
+          "subject": "final",
+          "geometry": {
+            "kind": "rect",
+            "x": 560,
+            "y": 620,
+            "width": 40,
+            "height": 40
+          },
+          "style": {},
+          "z_index": 1
+        },
+        {
+          "id": "view-start-auth",
+          "subject": "start-auth",
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 575,
+              "y": 70
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 575,
+                  "y": 110
+                }
+              }
+            ]
+          },
+          "style": {},
+          "z_index": 0
+        },
+        {
+          "id": "view-auth-decision",
+          "subject": "auth-decision",
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 575,
+              "y": 210
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 575,
+                  "y": 270
+                }
+              }
+            ]
+          },
+          "style": {},
+          "z_index": 0
+        },
+        {
+          "id": "view-authorized",
+          "subject": "authorized",
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 585,
+              "y": 320
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 585,
+                  "y": 390
+                }
+              }
+            ]
+          },
+          "style": {},
+          "z_index": 0
+        },
+        {
+          "id": "view-denied",
+          "subject": "denied",
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 610,
+              "y": 295
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 900,
+                  "y": 295
+                }
+              },
+              {
+                "kind": "line",
+                "to": {
+                  "x": 900,
+                  "y": 640
+                }
+              },
+              {
+                "kind": "line",
+                "to": {
+                  "x": 600,
+                  "y": 640
+                }
+              }
+            ]
+          },
+          "style": {},
+          "z_index": 0
+        },
+        {
+          "id": "view-finish-order",
+          "subject": "finish-order",
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 575,
+              "y": 490
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 575,
+                  "y": 620
+                }
+              }
+            ]
+          },
+          "style": {},
+          "z_index": 0
+        },
+        {
+          "id": "view-auth-call",
+          "subject": "auth-call",
+          "geometry": {
+            "kind": "rect",
+            "x": 440,
+            "y": 110,
+            "width": 280,
+            "height": 100
+          },
+          "style": {},
+          "z_index": 1
+        },
+        {
+          "id": "view-fulfill-call",
+          "subject": "fulfill-call",
+          "geometry": {
+            "kind": "rect",
+            "x": 440,
+            "y": 390,
+            "width": 280,
+            "height": 100
+          },
+          "style": {},
+          "z_index": 1
+        }
+      ]
+    }
+  ]
+}

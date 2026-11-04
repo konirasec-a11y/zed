@@ -1,0 +1,430 @@
+{
+  "schema_version": 1,
+  "id": "object-project",
+  "name": "Order snapshot with typed slots",
+  "root_model": "root",
+  "elements": [
+    {
+      "id": "root",
+      "kind": "uml.model",
+      "name": "Order snapshot with typed slots",
+      "properties": {}
+    },
+    {
+      "id": "string",
+      "kind": "uml.primitive_type",
+      "name": "String",
+      "properties": {}
+    },
+    {
+      "id": "integer",
+      "kind": "uml.primitive_type",
+      "name": "Integer",
+      "properties": {}
+    },
+    {
+      "id": "customer",
+      "kind": "uml.class",
+      "name": "Customer",
+      "properties": {}
+    },
+    {
+      "id": "order",
+      "kind": "uml.class",
+      "name": "Order",
+      "properties": {}
+    },
+    {
+      "id": "other",
+      "kind": "uml.class",
+      "name": "Unrelated",
+      "properties": {}
+    },
+    {
+      "id": "name",
+      "kind": "uml.attribute",
+      "name": "name",
+      "properties": {
+        "type": {
+          "$ref": "string"
+        },
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "number",
+      "kind": "uml.attribute",
+      "name": "number",
+      "properties": {
+        "type": {
+          "$ref": "string"
+        },
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "total",
+      "kind": "uml.attribute",
+      "name": "total",
+      "properties": {
+        "type": {
+          "$ref": "integer"
+        },
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "alice",
+      "kind": "uml.instance_specification",
+      "name": "alice",
+      "properties": {
+        "classifier": [
+          {
+            "$ref": "customer"
+          }
+        ]
+      }
+    },
+    {
+      "id": "order-1042",
+      "kind": "uml.instance_specification",
+      "name": "order-1042",
+      "properties": {
+        "classifier": [
+          {
+            "$ref": "other"
+          }
+        ]
+      }
+    },
+    {
+      "id": "order-1043",
+      "kind": "uml.instance_specification",
+      "name": "order-1043",
+      "properties": {
+        "classifier": [
+          {
+            "$ref": "order"
+          }
+        ]
+      }
+    },
+    {
+      "id": "alice-name",
+      "kind": "uml.slot",
+      "name": "",
+      "properties": {
+        "definingFeature": {
+          "$ref": "name"
+        },
+        "value": [
+          {
+            "$ref": "alice-name-value"
+          }
+        ]
+      }
+    },
+    {
+      "id": "alice-name-value",
+      "kind": "uml.literal_string",
+      "name": "",
+      "properties": {
+        "value": "Alice",
+        "visibility": null
+      }
+    },
+    {
+      "id": "first-number",
+      "kind": "uml.slot",
+      "name": "",
+      "properties": {
+        "definingFeature": {
+          "$ref": "number"
+        },
+        "value": [
+          {
+            "$ref": "first-number-value"
+          }
+        ]
+      }
+    },
+    {
+      "id": "first-number-value",
+      "kind": "uml.literal_string",
+      "name": "",
+      "properties": {
+        "value": "1042",
+        "visibility": null
+      }
+    },
+    {
+      "id": "first-total",
+      "kind": "uml.slot",
+      "name": "",
+      "properties": {
+        "definingFeature": {
+          "$ref": "total"
+        },
+        "value": [
+          {
+            "$ref": "first-total-value"
+          }
+        ]
+      }
+    },
+    {
+      "id": "first-total-value",
+      "kind": "uml.literal_integer",
+      "name": "",
+      "properties": {
+        "value": 125,
+        "visibility": null
+      }
+    },
+    {
+      "id": "second-number",
+      "kind": "uml.slot",
+      "name": "",
+      "properties": {
+        "definingFeature": {
+          "$ref": "number"
+        },
+        "value": [
+          {
+            "$ref": "second-number-value"
+          }
+        ]
+      }
+    },
+    {
+      "id": "second-number-value",
+      "kind": "uml.literal_string",
+      "name": "",
+      "properties": {
+        "value": "1043",
+        "visibility": null
+      }
+    },
+    {
+      "id": "second-total",
+      "kind": "uml.slot",
+      "name": "",
+      "properties": {
+        "definingFeature": {
+          "$ref": "total"
+        },
+        "value": [
+          {
+            "$ref": "second-total-value"
+          }
+        ]
+      }
+    },
+    {
+      "id": "second-total-value",
+      "kind": "uml.literal_integer",
+      "name": "",
+      "properties": {
+        "value": 80,
+        "visibility": null
+      }
+    }
+  ],
+  "relations": [
+    {
+      "id": "owns-string",
+      "kind": "owns",
+      "from": "root",
+      "to": "string",
+      "properties": {}
+    },
+    {
+      "id": "owns-integer",
+      "kind": "owns",
+      "from": "root",
+      "to": "integer",
+      "properties": {}
+    },
+    {
+      "id": "owns-customer",
+      "kind": "owns",
+      "from": "root",
+      "to": "customer",
+      "properties": {}
+    },
+    {
+      "id": "owns-order",
+      "kind": "owns",
+      "from": "root",
+      "to": "order",
+      "properties": {}
+    },
+    {
+      "id": "owns-other",
+      "kind": "owns",
+      "from": "root",
+      "to": "other",
+      "properties": {}
+    },
+    {
+      "id": "owns-name",
+      "kind": "owns",
+      "from": "customer",
+      "to": "name",
+      "properties": {}
+    },
+    {
+      "id": "owns-number",
+      "kind": "owns",
+      "from": "order",
+      "to": "number",
+      "properties": {}
+    },
+    {
+      "id": "owns-total",
+      "kind": "owns",
+      "from": "order",
+      "to": "total",
+      "properties": {}
+    },
+    {
+      "id": "owns-alice",
+      "kind": "owns",
+      "from": "root",
+      "to": "alice",
+      "properties": {}
+    },
+    {
+      "id": "owns-order-1042",
+      "kind": "owns",
+      "from": "root",
+      "to": "order-1042",
+      "properties": {}
+    },
+    {
+      "id": "owns-order-1043",
+      "kind": "owns",
+      "from": "root",
+      "to": "order-1043",
+      "properties": {}
+    },
+    {
+      "id": "owns-alice-name",
+      "kind": "owns",
+      "from": "alice",
+      "to": "alice-name",
+      "properties": {}
+    },
+    {
+      "id": "owns-alice-name-value",
+      "kind": "owns",
+      "from": "alice-name",
+      "to": "alice-name-value",
+      "properties": {}
+    },
+    {
+      "id": "owns-first-number",
+      "kind": "owns",
+      "from": "order-1042",
+      "to": "first-number",
+      "properties": {}
+    },
+    {
+      "id": "owns-first-number-value",
+      "kind": "owns",
+      "from": "first-number",
+      "to": "first-number-value",
+      "properties": {}
+    },
+    {
+      "id": "owns-first-total",
+      "kind": "owns",
+      "from": "order-1042",
+      "to": "first-total",
+      "properties": {}
+    },
+    {
+      "id": "owns-first-total-value",
+      "kind": "owns",
+      "from": "first-total",
+      "to": "first-total-value",
+      "properties": {}
+    },
+    {
+      "id": "owns-second-number",
+      "kind": "owns",
+      "from": "order-1043",
+      "to": "second-number",
+      "properties": {}
+    },
+    {
+      "id": "owns-second-number-value",
+      "kind": "owns",
+      "from": "second-number",
+      "to": "second-number-value",
+      "properties": {}
+    },
+    {
+      "id": "owns-second-total",
+      "kind": "owns",
+      "from": "order-1043",
+      "to": "second-total",
+      "properties": {}
+    },
+    {
+      "id": "owns-second-total-value",
+      "kind": "owns",
+      "from": "second-total",
+      "to": "second-total-value",
+      "properties": {}
+    }
+  ],
+  "diagrams": [
+    {
+      "id": "diagram",
+      "name": "Order snapshot with typed slots",
+      "uml_di_type": "UMLObjectDiagram",
+      "width": 1240,
+      "height": 800,
+      "model_elements": [],
+      "views": [
+        {
+          "id": "view-alice",
+          "subject": "alice",
+          "geometry": {
+            "kind": "rect",
+            "x": 40,
+            "y": 40,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-order-1042",
+          "subject": "order-1042",
+          "geometry": {
+            "kind": "rect",
+            "x": 325,
+            "y": 40,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-order-1043",
+          "subject": "order-1043",
+          "geometry": {
+            "kind": "rect",
+            "x": 610,
+            "y": 40,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        }
+      ]
+    }
+  ]
+}

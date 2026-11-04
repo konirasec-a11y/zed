@@ -1,0 +1,13 @@
+--- valid.json
++++ invalid.json
+@@ -806,7 +806,9 @@
+       "kind": "uml.state",
+       "name": "Open",
+       "properties": {
+-        "submachine": null
++        "submachine": {
++          "$ref": "lifecycle-recovery"
++        }
+       }
+     },
+     {

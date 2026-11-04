@@ -1,0 +1,76 @@
+{
+  "cases": [
+    {
+      "id": "use_case-valid",
+      "file": "use_case.valid.json",
+      "diagram_kind": "use_case",
+      "diagram_id": "use_case-diagram",
+      "expected": "valid",
+      "diagnostics": [],
+      "intent": "Baseline sem violação conhecida das regras implementadas."
+    },
+    {
+      "id": "use_case-invalid",
+      "file": "use_case.invalid.json",
+      "diagram_kind": "use_case",
+      "diagram_id": "use_case-diagram",
+      "expected": "invalid",
+      "diagnostics": [
+        {
+          "code": "UML_PROPERTY_CONTRACT",
+          "severity": "error",
+          "subject_id": "discount-extension"
+        }
+      ],
+      "intent": "Extend.extensionLocation esvaziado: viola multiplicidade 1..*."
+    },
+    {
+      "id": "activity-valid",
+      "file": "activity.valid.json",
+      "diagram_kind": "activity",
+      "diagram_id": "activity-diagram",
+      "expected": "valid",
+      "diagnostics": [],
+      "intent": "Baseline sem violação conhecida das regras implementadas."
+    },
+    {
+      "id": "activity-invalid",
+      "file": "activity.invalid.json",
+      "diagram_kind": "activity",
+      "diagram_id": "activity-diagram",
+      "expected": "invalid",
+      "diagnostics": [
+        {
+          "code": "UML_PROPERTY_CONTRACT",
+          "severity": "error",
+          "subject_id": "flow-1"
+        }
+      ],
+      "intent": "ControlFlow.target referencia Class Order, não ActivityNode; a projeção visual e os IDs permanecem íntegros."
+    },
+    {
+      "id": "state_machine-valid",
+      "file": "state_machine.valid.json",
+      "diagram_kind": "state_machine",
+      "diagram_id": "state_machine-diagram",
+      "expected": "valid",
+      "diagnostics": [],
+      "intent": "Baseline sem violação conhecida das regras implementadas."
+    },
+    {
+      "id": "state_machine-invalid",
+      "file": "state_machine.invalid.json",
+      "diagram_kind": "state_machine",
+      "diagram_id": "state_machine-diagram",
+      "expected": "invalid",
+      "diagnostics": [
+        {
+          "code": "UML_FINAL_STATE_NO_OUTGOING_TRANSITIONS",
+          "severity": "error",
+          "subject_id": "done"
+        }
+      ],
+      "intent": "Transição complete parte de FinalState done; source/target e attachments permanecem coerentes."
+    }
+  ]
+}

@@ -1,0 +1,288 @@
+{
+  "schema_version": 1,
+  "id": "composite_structure-project",
+  "name": "Checkout internal collaboration",
+  "root_model": "root",
+  "elements": [
+    {
+      "id": "root",
+      "kind": "uml.model",
+      "name": "Checkout internal collaboration",
+      "properties": {}
+    },
+    {
+      "id": "system",
+      "kind": "uml.class",
+      "name": "CheckoutSystem",
+      "properties": {}
+    },
+    {
+      "id": "worker",
+      "kind": "uml.class",
+      "name": "Worker",
+      "properties": {}
+    },
+    {
+      "id": "storage",
+      "kind": "uml.class",
+      "name": "Storage",
+      "properties": {}
+    },
+    {
+      "id": "foreign",
+      "kind": "uml.class",
+      "name": "ExternalSystem",
+      "properties": {}
+    },
+    {
+      "id": "worker-part",
+      "kind": "uml.attribute",
+      "name": "worker",
+      "properties": {
+        "type": {
+          "$ref": "worker"
+        },
+        "aggregation": "composite",
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "storage-part",
+      "kind": "uml.attribute",
+      "name": "storage",
+      "properties": {
+        "type": {
+          "$ref": "storage"
+        },
+        "aggregation": "composite",
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "foreign-part",
+      "kind": "uml.attribute",
+      "name": "external",
+      "properties": {
+        "type": {
+          "$ref": "storage"
+        },
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "connector",
+      "kind": "uml.connector",
+      "name": "persistence",
+      "properties": {
+        "end": [
+          {
+            "$ref": "worker-end"
+          },
+          {
+            "$ref": "storage-end"
+          }
+        ]
+      }
+    },
+    {
+      "id": "worker-end",
+      "kind": "uml.connector_end",
+      "name": "",
+      "properties": {
+        "role": {
+          "$ref": "worker-part"
+        },
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "storage-end",
+      "kind": "uml.connector_end",
+      "name": "",
+      "properties": {
+        "role": {
+          "$ref": "foreign-part"
+        },
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "api",
+      "kind": "uml.interface",
+      "name": "CheckoutAPI",
+      "properties": {}
+    },
+    {
+      "id": "public-port",
+      "kind": "uml.port",
+      "name": "checkout",
+      "properties": {
+        "type": {
+          "$ref": "api"
+        },
+        "aggregation": "composite",
+        "multiplicity": "1"
+      }
+    }
+  ],
+  "relations": [
+    {
+      "id": "owns-system",
+      "kind": "owns",
+      "from": "root",
+      "to": "system",
+      "properties": {}
+    },
+    {
+      "id": "owns-worker",
+      "kind": "owns",
+      "from": "root",
+      "to": "worker",
+      "properties": {}
+    },
+    {
+      "id": "owns-storage",
+      "kind": "owns",
+      "from": "root",
+      "to": "storage",
+      "properties": {}
+    },
+    {
+      "id": "owns-foreign",
+      "kind": "owns",
+      "from": "root",
+      "to": "foreign",
+      "properties": {}
+    },
+    {
+      "id": "owns-worker-part",
+      "kind": "owns",
+      "from": "system",
+      "to": "worker-part",
+      "properties": {}
+    },
+    {
+      "id": "owns-storage-part",
+      "kind": "owns",
+      "from": "system",
+      "to": "storage-part",
+      "properties": {}
+    },
+    {
+      "id": "owns-foreign-part",
+      "kind": "owns",
+      "from": "foreign",
+      "to": "foreign-part",
+      "properties": {}
+    },
+    {
+      "id": "owns-connector",
+      "kind": "owns",
+      "from": "system",
+      "to": "connector",
+      "properties": {}
+    },
+    {
+      "id": "owns-worker-end",
+      "kind": "owns",
+      "from": "connector",
+      "to": "worker-end",
+      "properties": {}
+    },
+    {
+      "id": "owns-storage-end",
+      "kind": "owns",
+      "from": "connector",
+      "to": "storage-end",
+      "properties": {}
+    },
+    {
+      "id": "owns-api",
+      "kind": "owns",
+      "from": "root",
+      "to": "api",
+      "properties": {}
+    },
+    {
+      "id": "owns-public-port",
+      "kind": "owns",
+      "from": "system",
+      "to": "public-port",
+      "properties": {}
+    }
+  ],
+  "diagrams": [
+    {
+      "id": "diagram",
+      "name": "Checkout internal collaboration",
+      "uml_di_type": "UMLCompositeStructureDiagram",
+      "width": 1240,
+      "height": 800,
+      "model_elements": [
+        "system"
+      ],
+      "views": [
+        {
+          "id": "view-system",
+          "subject": "system",
+          "geometry": {
+            "kind": "rect",
+            "x": 40,
+            "y": 40,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-worker-part",
+          "subject": "worker-part",
+          "geometry": {
+            "kind": "rect",
+            "x": 325,
+            "y": 40,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-storage-part",
+          "subject": "storage-part",
+          "geometry": {
+            "kind": "rect",
+            "x": 610,
+            "y": 40,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-public-port",
+          "subject": "public-port",
+          "geometry": {
+            "kind": "rect",
+            "x": 895,
+            "y": 40,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-connector",
+          "subject": "connector",
+          "geometry": {
+            "kind": "rect",
+            "x": 40,
+            "y": 220,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        }
+      ]
+    }
+  ]
+}

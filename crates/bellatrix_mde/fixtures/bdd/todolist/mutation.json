@@ -1,0 +1,16 @@
+{
+  "operation": "replace",
+  "path": "/elements/88/properties/submachine",
+  "subject_id": "open",
+  "before": null,
+  "after": {
+    "$ref": "lifecycle-recovery"
+  },
+  "constraint": "State-submachine_states",
+  "expected_code": "UML_STATE_SUBMACHINE_STATES",
+  "specification": "UML 2.5.1 normative XMI, State-submachine_states",
+  "source": "https://www.omg.org/spec/UML/2.5.1/PDF",
+  "xmi": "docs/bellatrix/standards/uml/20161101/UML.xmi#State-submachine_states",
+  "ocl": "isSubmachineState implies connection->notEmpty( )",
+  "note": "The published OCL and explanatory prose have opposite implications. This fixture follows the normative OCL, as the kernel does."
+}

@@ -1,0 +1,430 @@
+{
+  "schema_version": 1,
+  "id": "package-project",
+  "name": "Layered commerce packages",
+  "root_model": "root",
+  "elements": [
+    {
+      "id": "root",
+      "kind": "uml.model",
+      "name": "Layered commerce packages",
+      "properties": {}
+    },
+    {
+      "id": "contracts",
+      "kind": "uml.package",
+      "name": "Contracts",
+      "properties": {}
+    },
+    {
+      "id": "domain",
+      "kind": "uml.package",
+      "name": "Domain",
+      "properties": {}
+    },
+    {
+      "id": "application",
+      "kind": "uml.package",
+      "name": "Application",
+      "properties": {}
+    },
+    {
+      "id": "infrastructure",
+      "kind": "uml.package",
+      "name": "Infrastructure",
+      "properties": {}
+    },
+    {
+      "id": "shared",
+      "kind": "uml.package",
+      "name": "Shared",
+      "properties": {}
+    },
+    {
+      "id": "sales",
+      "kind": "uml.package",
+      "name": "Sales",
+      "properties": {}
+    },
+    {
+      "id": "identifier",
+      "kind": "uml.data_type",
+      "name": "Identifier",
+      "properties": {
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "port",
+      "kind": "uml.interface",
+      "name": "OrderPort",
+      "properties": {
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "order",
+      "kind": "uml.class",
+      "name": "Order",
+      "properties": {
+        "visibility": "protected"
+      }
+    },
+    {
+      "id": "handler",
+      "kind": "uml.class",
+      "name": "OrderHandler",
+      "properties": {
+        "visibility": "private"
+      }
+    },
+    {
+      "id": "adapter",
+      "kind": "uml.class",
+      "name": "SqlOrderAdapter",
+      "properties": {
+        "visibility": "private"
+      }
+    }
+  ],
+  "relations": [
+    {
+      "id": "owns-contracts",
+      "kind": "owns",
+      "from": "root",
+      "to": "contracts",
+      "properties": {}
+    },
+    {
+      "id": "owns-domain",
+      "kind": "owns",
+      "from": "root",
+      "to": "domain",
+      "properties": {}
+    },
+    {
+      "id": "owns-application",
+      "kind": "owns",
+      "from": "root",
+      "to": "application",
+      "properties": {}
+    },
+    {
+      "id": "owns-infrastructure",
+      "kind": "owns",
+      "from": "root",
+      "to": "infrastructure",
+      "properties": {}
+    },
+    {
+      "id": "owns-shared",
+      "kind": "owns",
+      "from": "contracts",
+      "to": "shared",
+      "properties": {}
+    },
+    {
+      "id": "owns-sales",
+      "kind": "owns",
+      "from": "domain",
+      "to": "sales",
+      "properties": {}
+    },
+    {
+      "id": "owns-identifier",
+      "kind": "owns",
+      "from": "shared",
+      "to": "identifier",
+      "properties": {}
+    },
+    {
+      "id": "owns-port",
+      "kind": "owns",
+      "from": "contracts",
+      "to": "port",
+      "properties": {}
+    },
+    {
+      "id": "owns-order",
+      "kind": "owns",
+      "from": "sales",
+      "to": "order",
+      "properties": {}
+    },
+    {
+      "id": "owns-handler",
+      "kind": "owns",
+      "from": "application",
+      "to": "handler",
+      "properties": {}
+    },
+    {
+      "id": "owns-adapter",
+      "kind": "owns",
+      "from": "infrastructure",
+      "to": "adapter",
+      "properties": {}
+    },
+    {
+      "id": "application-contracts",
+      "kind": "uml.package_import",
+      "from": "application",
+      "to": "contracts",
+      "properties": {
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "owns-application-contracts",
+      "kind": "owns",
+      "from": "application",
+      "to": "application-contracts",
+      "properties": {}
+    },
+    {
+      "id": "domain-shared",
+      "kind": "uml.package_import",
+      "from": "domain",
+      "to": "shared",
+      "properties": {
+        "visibility": "private"
+      }
+    },
+    {
+      "id": "owns-domain-shared",
+      "kind": "owns",
+      "from": "domain",
+      "to": "domain-shared",
+      "properties": {}
+    },
+    {
+      "id": "infrastructure-contracts",
+      "kind": "uml.package_import",
+      "from": "infrastructure",
+      "to": "contracts",
+      "properties": {
+        "visibility": "private"
+      }
+    },
+    {
+      "id": "owns-infrastructure-contracts",
+      "kind": "owns",
+      "from": "infrastructure",
+      "to": "infrastructure-contracts",
+      "properties": {}
+    },
+    {
+      "id": "identifier-import",
+      "kind": "uml.element_import",
+      "from": "sales",
+      "to": "identifier",
+      "properties": {
+        "visibility": "private",
+        "alias": "OrderId"
+      }
+    },
+    {
+      "id": "owns-identifier-import",
+      "kind": "owns",
+      "from": "sales",
+      "to": "identifier-import",
+      "properties": {}
+    }
+  ],
+  "diagrams": [
+    {
+      "id": "diagram",
+      "name": "Layered commerce packages",
+      "uml_di_type": "UMLPackageDiagram",
+      "width": 1240,
+      "height": 800,
+      "model_elements": [],
+      "views": [
+        {
+          "id": "view-contracts",
+          "subject": "contracts",
+          "geometry": {
+            "kind": "rect",
+            "x": 40,
+            "y": 40,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-domain",
+          "subject": "domain",
+          "geometry": {
+            "kind": "rect",
+            "x": 325,
+            "y": 40,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-application",
+          "subject": "application",
+          "geometry": {
+            "kind": "rect",
+            "x": 610,
+            "y": 40,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-infrastructure",
+          "subject": "infrastructure",
+          "geometry": {
+            "kind": "rect",
+            "x": 895,
+            "y": 40,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-shared",
+          "subject": "shared",
+          "geometry": {
+            "kind": "rect",
+            "x": 40,
+            "y": 220,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-sales",
+          "subject": "sales",
+          "geometry": {
+            "kind": "rect",
+            "x": 325,
+            "y": 220,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-identifier",
+          "subject": "identifier",
+          "geometry": {
+            "kind": "rect",
+            "x": 610,
+            "y": 220,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-application-contracts",
+          "subject": "application-contracts",
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 850,
+              "y": 105
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 40,
+                  "y": 105
+                }
+              }
+            ]
+          },
+          "endpoints": {
+            "source_view_id": "view-application",
+            "target_view_id": "view-contracts"
+          },
+          "z_index": 1
+        },
+        {
+          "id": "view-domain-shared",
+          "subject": "domain-shared",
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 565,
+              "y": 105
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 40,
+                  "y": 285
+                }
+              }
+            ]
+          },
+          "endpoints": {
+            "source_view_id": "view-domain",
+            "target_view_id": "view-shared"
+          },
+          "z_index": 1
+        },
+        {
+          "id": "view-infrastructure-contracts",
+          "subject": "infrastructure-contracts",
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 1135,
+              "y": 105
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 40,
+                  "y": 105
+                }
+              }
+            ]
+          },
+          "endpoints": {
+            "source_view_id": "view-infrastructure",
+            "target_view_id": "view-contracts"
+          },
+          "z_index": 1
+        },
+        {
+          "id": "view-identifier-import",
+          "subject": "identifier-import",
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 565,
+              "y": 285
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 610,
+                  "y": 285
+                }
+              }
+            ]
+          },
+          "endpoints": {
+            "source_view_id": "view-sales",
+            "target_view_id": "view-identifier"
+          },
+          "z_index": 1
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "cases": [
+    {
+      "id": "todolist-valid",
+      "file": "valid.json",
+      "expected": "valid",
+      "diagrams": [
+        {
+          "diagram_id": "requirements-view",
+          "diagram_kind": "use_case"
+        },
+        {
+          "diagram_id": "architecture-view",
+          "diagram_kind": "component"
+        },
+        {
+          "diagram_id": "classes-view",
+          "diagram_kind": "class"
+        },
+        {
+          "diagram_id": "create-request-view",
+          "diagram_kind": "activity"
+        },
+        {
+          "diagram_id": "lifecycle-view",
+          "diagram_kind": "state_machine"
+        },
+        {
+          "diagram_id": "deployment-view",
+          "diagram_kind": "deployment"
+        }
+      ],
+      "diagnostics": []
+    },
+    {
+      "id": "todolist-invalid",
+      "file": "invalid.json",
+      "expected": "invalid",
+      "diagrams": [
+        {
+          "diagram_id": "requirements-view",
+          "diagram_kind": "use_case"
+        },
+        {
+          "diagram_id": "architecture-view",
+          "diagram_kind": "component"
+        },
+        {
+          "diagram_id": "classes-view",
+          "diagram_kind": "class"
+        },
+        {
+          "diagram_id": "create-request-view",
+          "diagram_kind": "activity"
+        },
+        {
+          "diagram_id": "lifecycle-view",
+          "diagram_kind": "state_machine"
+        },
+        {
+          "diagram_id": "deployment-view",
+          "diagram_kind": "deployment"
+        }
+      ],
+      "diagnostics": [
+        {
+          "code": "UML_STATE_SUBMACHINE_STATES",
+          "severity": "error",
+          "subject_id": "open"
+        }
+      ]
+    }
+  ]
+}

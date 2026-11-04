@@ -1,0 +1,3760 @@
+{
+  "schema_version": 1,
+  "id": "todolist-web-api",
+  "name": "TodoList Web API",
+  "root_model": "model",
+  "elements": [
+    {
+      "id": "model",
+      "kind": "uml.model",
+      "name": "TodoList",
+      "properties": {}
+    },
+    {
+      "id": "requirements",
+      "kind": "uml.package",
+      "name": "Requirements",
+      "properties": {}
+    },
+    {
+      "id": "presentation",
+      "kind": "uml.package",
+      "name": "Presentation",
+      "properties": {}
+    },
+    {
+      "id": "application",
+      "kind": "uml.package",
+      "name": "Application",
+      "properties": {}
+    },
+    {
+      "id": "domain",
+      "kind": "uml.package",
+      "name": "Domain",
+      "properties": {}
+    },
+    {
+      "id": "infrastructure",
+      "kind": "uml.package",
+      "name": "Infrastructure",
+      "properties": {}
+    },
+    {
+      "id": "runtime",
+      "kind": "uml.package",
+      "name": "Runtime",
+      "properties": {}
+    },
+    {
+      "id": "string",
+      "kind": "uml.primitive_type",
+      "name": "String",
+      "properties": {}
+    },
+    {
+      "id": "boolean",
+      "kind": "uml.primitive_type",
+      "name": "Boolean",
+      "properties": {}
+    },
+    {
+      "id": "integer",
+      "kind": "uml.primitive_type",
+      "name": "Integer",
+      "properties": {}
+    },
+    {
+      "id": "user",
+      "kind": "uml.actor",
+      "name": "Authenticated user",
+      "properties": {},
+      "description": "A user manages only their own lists and tasks."
+    },
+    {
+      "id": "browser",
+      "kind": "uml.component",
+      "name": "Todo Web Client",
+      "properties": {},
+      "description": "Calls the JSON API over HTTPS."
+    },
+    {
+      "id": "api",
+      "kind": "uml.component",
+      "name": "Todo API",
+      "properties": {},
+      "description": "Validates bearer identity and exposes task CRUD endpoints."
+    },
+    {
+      "id": "storage",
+      "kind": "uml.component",
+      "name": "PostgreSQL Adapter",
+      "properties": {},
+      "description": "Persists lists and tasks in a transaction."
+    },
+    {
+      "id": "controller",
+      "kind": "uml.class",
+      "name": "TodoController",
+      "properties": {},
+      "description": "HTTP boundary: GET /lists/{id}/todos; POST; PATCH /todos/{id}; DELETE /todos/{id}."
+    },
+    {
+      "id": "service",
+      "kind": "uml.class",
+      "name": "TodoService",
+      "properties": {},
+      "description": "Checks ownership and coordinates CRUD transactions."
+    },
+    {
+      "id": "repository",
+      "kind": "uml.interface",
+      "name": "TodoRepository",
+      "properties": {},
+      "description": "Persistence contract used by application service."
+    },
+    {
+      "id": "sql-repository",
+      "kind": "uml.class",
+      "name": "PostgresTodoRepository",
+      "properties": {},
+      "description": "Implements the repository using parameterized SQL."
+    },
+    {
+      "id": "account",
+      "kind": "uml.class",
+      "name": "Account",
+      "properties": {},
+      "description": "Authenticated resource owner."
+    },
+    {
+      "id": "list",
+      "kind": "uml.class",
+      "name": "TodoList",
+      "properties": {},
+      "description": "Named collection belonging to an account."
+    },
+    {
+      "id": "todo",
+      "kind": "uml.class",
+      "name": "Todo",
+      "properties": {},
+      "description": "A task can be open, completed, reopened or archived."
+    },
+    {
+      "id": "request",
+      "kind": "uml.data_type",
+      "name": "CreateTodoRequest",
+      "properties": {},
+      "description": "Request DTO with title and listId."
+    },
+    {
+      "id": "response",
+      "kind": "uml.data_type",
+      "name": "TodoResponse",
+      "properties": {},
+      "description": "Response DTO with identity, title and completion status."
+    },
+    {
+      "id": "account-id",
+      "kind": "uml.attribute",
+      "name": "id",
+      "properties": {
+        "type": {
+          "$ref": "string"
+        },
+        "multiplicity": "1",
+        "visibility": "private"
+      }
+    },
+    {
+      "id": "list-id",
+      "kind": "uml.attribute",
+      "name": "id",
+      "properties": {
+        "type": {
+          "$ref": "string"
+        },
+        "multiplicity": "1",
+        "visibility": "private"
+      }
+    },
+    {
+      "id": "list-title",
+      "kind": "uml.attribute",
+      "name": "title",
+      "properties": {
+        "type": {
+          "$ref": "string"
+        },
+        "multiplicity": "1",
+        "visibility": "private"
+      }
+    },
+    {
+      "id": "todo-id",
+      "kind": "uml.attribute",
+      "name": "id",
+      "properties": {
+        "type": {
+          "$ref": "string"
+        },
+        "multiplicity": "1",
+        "visibility": "private"
+      }
+    },
+    {
+      "id": "todo-title",
+      "kind": "uml.attribute",
+      "name": "title",
+      "properties": {
+        "type": {
+          "$ref": "string"
+        },
+        "multiplicity": "1",
+        "visibility": "private"
+      }
+    },
+    {
+      "id": "todo-completed",
+      "kind": "uml.attribute",
+      "name": "completed",
+      "properties": {
+        "type": {
+          "$ref": "boolean"
+        },
+        "multiplicity": "1",
+        "visibility": "private"
+      }
+    },
+    {
+      "id": "todo-version",
+      "kind": "uml.attribute",
+      "name": "version",
+      "properties": {
+        "type": {
+          "$ref": "integer"
+        },
+        "multiplicity": "1",
+        "visibility": "private"
+      }
+    },
+    {
+      "id": "request-title",
+      "kind": "uml.attribute",
+      "name": "title",
+      "properties": {
+        "type": {
+          "$ref": "string"
+        },
+        "multiplicity": "1",
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "request-listId",
+      "kind": "uml.attribute",
+      "name": "listId",
+      "properties": {
+        "type": {
+          "$ref": "string"
+        },
+        "multiplicity": "1",
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "response-id",
+      "kind": "uml.attribute",
+      "name": "id",
+      "properties": {
+        "type": {
+          "$ref": "string"
+        },
+        "multiplicity": "1",
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "response-title",
+      "kind": "uml.attribute",
+      "name": "title",
+      "properties": {
+        "type": {
+          "$ref": "string"
+        },
+        "multiplicity": "1",
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "response-completed",
+      "kind": "uml.attribute",
+      "name": "completed",
+      "properties": {
+        "type": {
+          "$ref": "boolean"
+        },
+        "multiplicity": "1",
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "controller-listTodos",
+      "kind": "uml.operation",
+      "name": "listTodos",
+      "properties": {
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "controller-createTodo",
+      "kind": "uml.operation",
+      "name": "createTodo",
+      "properties": {
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "controller-updateTodo",
+      "kind": "uml.operation",
+      "name": "updateTodo",
+      "properties": {
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "controller-deleteTodo",
+      "kind": "uml.operation",
+      "name": "deleteTodo",
+      "properties": {
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "service-listOwnedTodos",
+      "kind": "uml.operation",
+      "name": "listOwnedTodos",
+      "properties": {
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "service-createOwnedTodo",
+      "kind": "uml.operation",
+      "name": "createOwnedTodo",
+      "properties": {
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "service-updateOwnedTodo",
+      "kind": "uml.operation",
+      "name": "updateOwnedTodo",
+      "properties": {
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "service-deleteOwnedTodo",
+      "kind": "uml.operation",
+      "name": "deleteOwnedTodo",
+      "properties": {
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "repository-findByList",
+      "kind": "uml.operation",
+      "name": "findByList",
+      "properties": {
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "repository-insert",
+      "kind": "uml.operation",
+      "name": "insert",
+      "properties": {
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "repository-update",
+      "kind": "uml.operation",
+      "name": "update",
+      "properties": {
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "repository-delete",
+      "kind": "uml.operation",
+      "name": "delete",
+      "properties": {
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "sql-repository-findByList",
+      "kind": "uml.operation",
+      "name": "findByList",
+      "properties": {
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "sql-repository-insert",
+      "kind": "uml.operation",
+      "name": "insert",
+      "properties": {
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "sql-repository-update",
+      "kind": "uml.operation",
+      "name": "update",
+      "properties": {
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "sql-repository-delete",
+      "kind": "uml.operation",
+      "name": "delete",
+      "properties": {
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "todo-complete",
+      "kind": "uml.operation",
+      "name": "complete",
+      "properties": {
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "todo-reopen",
+      "kind": "uml.operation",
+      "name": "reopen",
+      "properties": {
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "todo-archive",
+      "kind": "uml.operation",
+      "name": "archive",
+      "properties": {
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "account-lists-a",
+      "kind": "uml.attribute",
+      "name": "account",
+      "properties": {
+        "type": {
+          "$ref": "account"
+        },
+        "multiplicity": "1",
+        "aggregation": "none",
+        "visibility": null
+      }
+    },
+    {
+      "id": "account-lists-b",
+      "kind": "uml.attribute",
+      "name": "lists",
+      "properties": {
+        "type": {
+          "$ref": "list"
+        },
+        "multiplicity": "0..*",
+        "aggregation": "none",
+        "visibility": null
+      }
+    },
+    {
+      "id": "list-todos-a",
+      "kind": "uml.attribute",
+      "name": "list",
+      "properties": {
+        "type": {
+          "$ref": "list"
+        },
+        "multiplicity": "1",
+        "aggregation": "none",
+        "visibility": null
+      }
+    },
+    {
+      "id": "list-todos-b",
+      "kind": "uml.attribute",
+      "name": "todos",
+      "properties": {
+        "type": {
+          "$ref": "todo"
+        },
+        "multiplicity": "0..*",
+        "aggregation": "none",
+        "visibility": null
+      }
+    },
+    {
+      "id": "uc-create",
+      "kind": "uml.use_case",
+      "name": "Create todo",
+      "properties": {},
+      "description": "POST validates title, checks list ownership and returns 201 with the persisted Todo."
+    },
+    {
+      "id": "user-create-a",
+      "kind": "uml.attribute",
+      "name": "actor",
+      "properties": {
+        "type": {
+          "$ref": "user"
+        },
+        "multiplicity": "0..*",
+        "aggregation": "none",
+        "visibility": null
+      }
+    },
+    {
+      "id": "user-create-b",
+      "kind": "uml.attribute",
+      "name": "capability",
+      "properties": {
+        "type": {
+          "$ref": "uc-create"
+        },
+        "multiplicity": "0..*",
+        "aggregation": "none",
+        "visibility": null
+      }
+    },
+    {
+      "id": "uc-read",
+      "kind": "uml.use_case",
+      "name": "List todos",
+      "properties": {},
+      "description": "GET returns only tasks in a list owned by the caller."
+    },
+    {
+      "id": "user-read-a",
+      "kind": "uml.attribute",
+      "name": "actor",
+      "properties": {
+        "type": {
+          "$ref": "user"
+        },
+        "multiplicity": "0..*",
+        "aggregation": "none",
+        "visibility": null
+      }
+    },
+    {
+      "id": "user-read-b",
+      "kind": "uml.attribute",
+      "name": "capability",
+      "properties": {
+        "type": {
+          "$ref": "uc-read"
+        },
+        "multiplicity": "0..*",
+        "aggregation": "none",
+        "visibility": null
+      }
+    },
+    {
+      "id": "uc-update",
+      "kind": "uml.use_case",
+      "name": "Complete or reopen todo",
+      "properties": {},
+      "description": "PATCH updates title or completed with optimistic version checking."
+    },
+    {
+      "id": "user-update-a",
+      "kind": "uml.attribute",
+      "name": "actor",
+      "properties": {
+        "type": {
+          "$ref": "user"
+        },
+        "multiplicity": "0..*",
+        "aggregation": "none",
+        "visibility": null
+      }
+    },
+    {
+      "id": "user-update-b",
+      "kind": "uml.attribute",
+      "name": "capability",
+      "properties": {
+        "type": {
+          "$ref": "uc-update"
+        },
+        "multiplicity": "0..*",
+        "aggregation": "none",
+        "visibility": null
+      }
+    },
+    {
+      "id": "uc-delete",
+      "kind": "uml.use_case",
+      "name": "Delete todo",
+      "properties": {},
+      "description": "DELETE archives the task and returns 204; unknown or foreign IDs return 404."
+    },
+    {
+      "id": "user-delete-a",
+      "kind": "uml.attribute",
+      "name": "actor",
+      "properties": {
+        "type": {
+          "$ref": "user"
+        },
+        "multiplicity": "0..*",
+        "aggregation": "none",
+        "visibility": null
+      }
+    },
+    {
+      "id": "user-delete-b",
+      "kind": "uml.attribute",
+      "name": "capability",
+      "properties": {
+        "type": {
+          "$ref": "uc-delete"
+        },
+        "multiplicity": "0..*",
+        "aggregation": "none",
+        "visibility": null
+      }
+    },
+    {
+      "id": "create-flow",
+      "kind": "uml.activity",
+      "name": "Create todo request",
+      "properties": {
+        "isReadOnly": false
+      }
+    },
+    {
+      "id": "request-start",
+      "kind": "uml.initial_node",
+      "name": "Request received",
+      "properties": {}
+    },
+    {
+      "id": "authenticate",
+      "kind": "uml.opaque_action",
+      "name": "Authenticate bearer token",
+      "properties": {
+        "language": [
+          "text"
+        ],
+        "body": [
+          "Authenticate bearer token"
+        ]
+      }
+    },
+    {
+      "id": "authorized",
+      "kind": "uml.decision_node",
+      "name": "Identity accepted?",
+      "properties": {}
+    },
+    {
+      "id": "unauthorized",
+      "kind": "uml.opaque_action",
+      "name": "Return 401",
+      "properties": {
+        "language": [
+          "text"
+        ],
+        "body": [
+          "Return 401"
+        ]
+      }
+    },
+    {
+      "id": "validate",
+      "kind": "uml.opaque_action",
+      "name": "Validate title and list ownership",
+      "properties": {
+        "language": [
+          "text"
+        ],
+        "body": [
+          "Validate title and list ownership"
+        ]
+      }
+    },
+    {
+      "id": "accepted",
+      "kind": "uml.decision_node",
+      "name": "Request accepted?",
+      "properties": {}
+    },
+    {
+      "id": "rejected",
+      "kind": "uml.opaque_action",
+      "name": "Return 400 or 404",
+      "properties": {
+        "language": [
+          "text"
+        ],
+        "body": [
+          "Return 400 or 404"
+        ]
+      }
+    },
+    {
+      "id": "persist",
+      "kind": "uml.opaque_action",
+      "name": "Insert todo in transaction",
+      "properties": {
+        "language": [
+          "text"
+        ],
+        "body": [
+          "Insert todo in transaction"
+        ]
+      }
+    },
+    {
+      "id": "created",
+      "kind": "uml.opaque_action",
+      "name": "Return 201 TodoResponse",
+      "properties": {
+        "language": [
+          "text"
+        ],
+        "body": [
+          "Return 201 TodoResponse"
+        ]
+      }
+    },
+    {
+      "id": "request-end",
+      "kind": "uml.activity_final_node",
+      "name": "Request complete",
+      "properties": {}
+    },
+    {
+      "id": "guard-2",
+      "kind": "uml.literal_string",
+      "name": "Guard 2",
+      "properties": {
+        "value": "invalid identity",
+        "visibility": null
+      }
+    },
+    {
+      "id": "guard-3",
+      "kind": "uml.literal_string",
+      "name": "Guard 3",
+      "properties": {
+        "value": "valid identity",
+        "visibility": null
+      }
+    },
+    {
+      "id": "guard-6",
+      "kind": "uml.literal_string",
+      "name": "Guard 6",
+      "properties": {
+        "value": "invalid title or inaccessible list",
+        "visibility": null
+      }
+    },
+    {
+      "id": "guard-7",
+      "kind": "uml.literal_string",
+      "name": "Guard 7",
+      "properties": {
+        "value": "valid title and owned list",
+        "visibility": null
+      }
+    },
+    {
+      "id": "lifecycle",
+      "kind": "uml.state_machine",
+      "name": "Todo lifecycle",
+      "properties": {}
+    },
+    {
+      "id": "lifecycle-region",
+      "kind": "uml.region",
+      "name": "Lifecycle",
+      "properties": {}
+    },
+    {
+      "id": "lifecycle-start",
+      "kind": "uml.pseudostate",
+      "name": "Initial",
+      "properties": {
+        "kind": "initial"
+      }
+    },
+    {
+      "id": "open",
+      "kind": "uml.state",
+      "name": "Open",
+      "properties": {
+        "submachine": null
+      }
+    },
+    {
+      "id": "completed",
+      "kind": "uml.state",
+      "name": "Completed",
+      "properties": {}
+    },
+    {
+      "id": "archived",
+      "kind": "uml.final_state",
+      "name": "Archived",
+      "properties": {
+        "submachine": null
+      }
+    },
+    {
+      "id": "event-complete",
+      "kind": "uml.call_event",
+      "name": "complete",
+      "properties": {
+        "operation": {
+          "$ref": "todo-complete"
+        }
+      }
+    },
+    {
+      "id": "trigger-complete",
+      "kind": "uml.trigger",
+      "name": "complete",
+      "properties": {
+        "event": {
+          "$ref": "event-complete"
+        }
+      }
+    },
+    {
+      "id": "event-reopen",
+      "kind": "uml.call_event",
+      "name": "reopen",
+      "properties": {
+        "operation": {
+          "$ref": "todo-reopen"
+        }
+      }
+    },
+    {
+      "id": "trigger-reopen",
+      "kind": "uml.trigger",
+      "name": "reopen",
+      "properties": {
+        "event": {
+          "$ref": "event-reopen"
+        }
+      }
+    },
+    {
+      "id": "event-archive",
+      "kind": "uml.call_event",
+      "name": "archive",
+      "properties": {
+        "operation": {
+          "$ref": "todo-archive"
+        }
+      }
+    },
+    {
+      "id": "trigger-archive-open",
+      "kind": "uml.trigger",
+      "name": "archive",
+      "properties": {
+        "event": {
+          "$ref": "event-archive"
+        }
+      }
+    },
+    {
+      "id": "trigger-archive-completed",
+      "kind": "uml.trigger",
+      "name": "archive",
+      "properties": {
+        "event": {
+          "$ref": "event-archive"
+        }
+      }
+    },
+    {
+      "id": "lifecycle-recovery",
+      "kind": "uml.state_machine",
+      "name": "Recovery workflow",
+      "properties": {},
+      "description": "Independent compensation behavior; never a submachine of Archived."
+    },
+    {
+      "id": "recovery-region",
+      "kind": "uml.region",
+      "name": "Recovery",
+      "properties": {}
+    },
+    {
+      "id": "recovery-start",
+      "kind": "uml.pseudostate",
+      "name": "Initial",
+      "properties": {
+        "kind": "initial"
+      }
+    },
+    {
+      "id": "recovery-done",
+      "kind": "uml.final_state",
+      "name": "Recovered",
+      "properties": {}
+    },
+    {
+      "id": "client-device",
+      "kind": "uml.device",
+      "name": "Client device",
+      "properties": {}
+    },
+    {
+      "id": "api-device",
+      "kind": "uml.device",
+      "name": "Application host",
+      "properties": {}
+    },
+    {
+      "id": "db-device",
+      "kind": "uml.device",
+      "name": "Database host",
+      "properties": {}
+    },
+    {
+      "id": "browser-runtime",
+      "kind": "uml.execution_environment",
+      "name": "Browser runtime",
+      "properties": {}
+    },
+    {
+      "id": "api-runtime",
+      "kind": "uml.execution_environment",
+      "name": "API process",
+      "properties": {}
+    },
+    {
+      "id": "db-runtime",
+      "kind": "uml.execution_environment",
+      "name": "PostgreSQL engine",
+      "properties": {}
+    },
+    {
+      "id": "web-bundle",
+      "kind": "uml.artifact",
+      "name": "web-client.js",
+      "properties": {}
+    },
+    {
+      "id": "api-image",
+      "kind": "uml.artifact",
+      "name": "todo-api image",
+      "properties": {}
+    },
+    {
+      "id": "schema",
+      "kind": "uml.artifact",
+      "name": "todo schema migration",
+      "properties": {}
+    }
+  ],
+  "relations": [
+    {
+      "id": "owns-requirements",
+      "kind": "owns",
+      "from": "model",
+      "to": "requirements"
+    },
+    {
+      "id": "owns-presentation",
+      "kind": "owns",
+      "from": "model",
+      "to": "presentation"
+    },
+    {
+      "id": "owns-application",
+      "kind": "owns",
+      "from": "model",
+      "to": "application"
+    },
+    {
+      "id": "owns-domain",
+      "kind": "owns",
+      "from": "model",
+      "to": "domain"
+    },
+    {
+      "id": "owns-infrastructure",
+      "kind": "owns",
+      "from": "model",
+      "to": "infrastructure"
+    },
+    {
+      "id": "owns-runtime",
+      "kind": "owns",
+      "from": "model",
+      "to": "runtime"
+    },
+    {
+      "id": "owns-string",
+      "kind": "owns",
+      "from": "domain",
+      "to": "string"
+    },
+    {
+      "id": "owns-boolean",
+      "kind": "owns",
+      "from": "domain",
+      "to": "boolean"
+    },
+    {
+      "id": "owns-integer",
+      "kind": "owns",
+      "from": "domain",
+      "to": "integer"
+    },
+    {
+      "id": "owns-user",
+      "kind": "owns",
+      "from": "requirements",
+      "to": "user"
+    },
+    {
+      "id": "owns-browser",
+      "kind": "owns",
+      "from": "presentation",
+      "to": "browser"
+    },
+    {
+      "id": "owns-api",
+      "kind": "owns",
+      "from": "application",
+      "to": "api"
+    },
+    {
+      "id": "owns-storage",
+      "kind": "owns",
+      "from": "infrastructure",
+      "to": "storage"
+    },
+    {
+      "id": "owns-controller",
+      "kind": "owns",
+      "from": "presentation",
+      "to": "controller"
+    },
+    {
+      "id": "owns-service",
+      "kind": "owns",
+      "from": "application",
+      "to": "service"
+    },
+    {
+      "id": "owns-repository",
+      "kind": "owns",
+      "from": "application",
+      "to": "repository"
+    },
+    {
+      "id": "owns-sql-repository",
+      "kind": "owns",
+      "from": "infrastructure",
+      "to": "sql-repository"
+    },
+    {
+      "id": "owns-account",
+      "kind": "owns",
+      "from": "domain",
+      "to": "account"
+    },
+    {
+      "id": "owns-list",
+      "kind": "owns",
+      "from": "domain",
+      "to": "list"
+    },
+    {
+      "id": "owns-todo",
+      "kind": "owns",
+      "from": "domain",
+      "to": "todo"
+    },
+    {
+      "id": "owns-request",
+      "kind": "owns",
+      "from": "presentation",
+      "to": "request"
+    },
+    {
+      "id": "owns-response",
+      "kind": "owns",
+      "from": "presentation",
+      "to": "response"
+    },
+    {
+      "id": "owns-account-id",
+      "kind": "owns",
+      "from": "account",
+      "to": "account-id"
+    },
+    {
+      "id": "owns-list-id",
+      "kind": "owns",
+      "from": "list",
+      "to": "list-id"
+    },
+    {
+      "id": "owns-list-title",
+      "kind": "owns",
+      "from": "list",
+      "to": "list-title"
+    },
+    {
+      "id": "owns-todo-id",
+      "kind": "owns",
+      "from": "todo",
+      "to": "todo-id"
+    },
+    {
+      "id": "owns-todo-title",
+      "kind": "owns",
+      "from": "todo",
+      "to": "todo-title"
+    },
+    {
+      "id": "owns-todo-completed",
+      "kind": "owns",
+      "from": "todo",
+      "to": "todo-completed"
+    },
+    {
+      "id": "owns-todo-version",
+      "kind": "owns",
+      "from": "todo",
+      "to": "todo-version"
+    },
+    {
+      "id": "owns-request-title",
+      "kind": "owns",
+      "from": "request",
+      "to": "request-title"
+    },
+    {
+      "id": "owns-request-listId",
+      "kind": "owns",
+      "from": "request",
+      "to": "request-listId"
+    },
+    {
+      "id": "owns-response-id",
+      "kind": "owns",
+      "from": "response",
+      "to": "response-id"
+    },
+    {
+      "id": "owns-response-title",
+      "kind": "owns",
+      "from": "response",
+      "to": "response-title"
+    },
+    {
+      "id": "owns-response-completed",
+      "kind": "owns",
+      "from": "response",
+      "to": "response-completed"
+    },
+    {
+      "id": "owns-controller-listTodos",
+      "kind": "owns",
+      "from": "controller",
+      "to": "controller-listTodos"
+    },
+    {
+      "id": "owns-controller-createTodo",
+      "kind": "owns",
+      "from": "controller",
+      "to": "controller-createTodo"
+    },
+    {
+      "id": "owns-controller-updateTodo",
+      "kind": "owns",
+      "from": "controller",
+      "to": "controller-updateTodo"
+    },
+    {
+      "id": "owns-controller-deleteTodo",
+      "kind": "owns",
+      "from": "controller",
+      "to": "controller-deleteTodo"
+    },
+    {
+      "id": "owns-service-listOwnedTodos",
+      "kind": "owns",
+      "from": "service",
+      "to": "service-listOwnedTodos"
+    },
+    {
+      "id": "owns-service-createOwnedTodo",
+      "kind": "owns",
+      "from": "service",
+      "to": "service-createOwnedTodo"
+    },
+    {
+      "id": "owns-service-updateOwnedTodo",
+      "kind": "owns",
+      "from": "service",
+      "to": "service-updateOwnedTodo"
+    },
+    {
+      "id": "owns-service-deleteOwnedTodo",
+      "kind": "owns",
+      "from": "service",
+      "to": "service-deleteOwnedTodo"
+    },
+    {
+      "id": "owns-repository-findByList",
+      "kind": "owns",
+      "from": "repository",
+      "to": "repository-findByList"
+    },
+    {
+      "id": "owns-repository-insert",
+      "kind": "owns",
+      "from": "repository",
+      "to": "repository-insert"
+    },
+    {
+      "id": "owns-repository-update",
+      "kind": "owns",
+      "from": "repository",
+      "to": "repository-update"
+    },
+    {
+      "id": "owns-repository-delete",
+      "kind": "owns",
+      "from": "repository",
+      "to": "repository-delete"
+    },
+    {
+      "id": "owns-sql-repository-findByList",
+      "kind": "owns",
+      "from": "sql-repository",
+      "to": "sql-repository-findByList"
+    },
+    {
+      "id": "owns-sql-repository-insert",
+      "kind": "owns",
+      "from": "sql-repository",
+      "to": "sql-repository-insert"
+    },
+    {
+      "id": "owns-sql-repository-update",
+      "kind": "owns",
+      "from": "sql-repository",
+      "to": "sql-repository-update"
+    },
+    {
+      "id": "owns-sql-repository-delete",
+      "kind": "owns",
+      "from": "sql-repository",
+      "to": "sql-repository-delete"
+    },
+    {
+      "id": "owns-todo-complete",
+      "kind": "owns",
+      "from": "todo",
+      "to": "todo-complete"
+    },
+    {
+      "id": "owns-todo-reopen",
+      "kind": "owns",
+      "from": "todo",
+      "to": "todo-reopen"
+    },
+    {
+      "id": "owns-todo-archive",
+      "kind": "owns",
+      "from": "todo",
+      "to": "todo-archive"
+    },
+    {
+      "id": "account-lists",
+      "kind": "uml.association",
+      "from": "account",
+      "to": "list",
+      "properties": {
+        "memberEnd": [
+          {
+            "$ref": "account-lists-a"
+          },
+          {
+            "$ref": "account-lists-b"
+          }
+        ],
+        "sourceRole": "account",
+        "targetRole": "lists",
+        "sourceMultiplicity": "1",
+        "targetMultiplicity": "0..*",
+        "name": "account-lists",
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "owns-account-lists",
+      "kind": "owns",
+      "from": "domain",
+      "to": "account-lists"
+    },
+    {
+      "id": "owns-account-lists-a",
+      "kind": "owns",
+      "from": "account-lists",
+      "to": "account-lists-a"
+    },
+    {
+      "id": "owns-account-lists-b",
+      "kind": "owns",
+      "from": "account-lists",
+      "to": "account-lists-b"
+    },
+    {
+      "id": "list-todos",
+      "kind": "uml.association",
+      "from": "list",
+      "to": "todo",
+      "properties": {
+        "memberEnd": [
+          {
+            "$ref": "list-todos-a"
+          },
+          {
+            "$ref": "list-todos-b"
+          }
+        ],
+        "sourceRole": "list",
+        "targetRole": "todos",
+        "sourceMultiplicity": "1",
+        "targetMultiplicity": "0..*",
+        "name": "list-todos",
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "owns-list-todos",
+      "kind": "owns",
+      "from": "domain",
+      "to": "list-todos"
+    },
+    {
+      "id": "owns-list-todos-a",
+      "kind": "owns",
+      "from": "list-todos",
+      "to": "list-todos-a"
+    },
+    {
+      "id": "owns-list-todos-b",
+      "kind": "owns",
+      "from": "list-todos",
+      "to": "list-todos-b"
+    },
+    {
+      "id": "controller-service",
+      "kind": "uml.usage",
+      "from": "controller",
+      "to": "service",
+      "properties": {
+        "name": "controller-service",
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "owns-controller-service",
+      "kind": "owns",
+      "from": "presentation",
+      "to": "controller-service"
+    },
+    {
+      "id": "service-repository",
+      "kind": "uml.usage",
+      "from": "service",
+      "to": "repository",
+      "properties": {
+        "name": "service-repository",
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "owns-service-repository",
+      "kind": "owns",
+      "from": "application",
+      "to": "service-repository"
+    },
+    {
+      "id": "sql-contract",
+      "kind": "uml.interface_realization",
+      "from": "sql-repository",
+      "to": "repository",
+      "properties": {
+        "name": "sql-contract",
+        "visibility": null
+      }
+    },
+    {
+      "id": "owns-sql-contract",
+      "kind": "owns",
+      "from": "sql-repository",
+      "to": "sql-contract"
+    },
+    {
+      "id": "repository-todo",
+      "kind": "uml.usage",
+      "from": "repository",
+      "to": "todo",
+      "properties": {
+        "name": "repository-todo",
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "owns-repository-todo",
+      "kind": "owns",
+      "from": "application",
+      "to": "repository-todo"
+    },
+    {
+      "id": "controller-request",
+      "kind": "uml.usage",
+      "from": "controller",
+      "to": "request",
+      "properties": {
+        "name": "controller-request",
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "owns-controller-request",
+      "kind": "owns",
+      "from": "presentation",
+      "to": "controller-request"
+    },
+    {
+      "id": "controller-response",
+      "kind": "uml.usage",
+      "from": "controller",
+      "to": "response",
+      "properties": {
+        "name": "controller-response",
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "owns-controller-response",
+      "kind": "owns",
+      "from": "presentation",
+      "to": "controller-response"
+    },
+    {
+      "id": "https",
+      "kind": "uml.usage",
+      "from": "browser",
+      "to": "api",
+      "properties": {
+        "name": "HTTPS / JSON",
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "owns-https",
+      "kind": "owns",
+      "from": "presentation",
+      "to": "https"
+    },
+    {
+      "id": "sql",
+      "kind": "uml.usage",
+      "from": "api",
+      "to": "storage",
+      "properties": {
+        "name": "Repository / SQL",
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "owns-sql",
+      "kind": "owns",
+      "from": "application",
+      "to": "sql"
+    },
+    {
+      "id": "owns-uc-create",
+      "kind": "owns",
+      "from": "requirements",
+      "to": "uc-create"
+    },
+    {
+      "id": "user-create",
+      "kind": "uml.association",
+      "from": "user",
+      "to": "uc-create",
+      "properties": {
+        "memberEnd": [
+          {
+            "$ref": "user-create-a"
+          },
+          {
+            "$ref": "user-create-b"
+          }
+        ],
+        "sourceRole": "actor",
+        "targetRole": "capability",
+        "sourceMultiplicity": "0..*",
+        "targetMultiplicity": "0..*",
+        "name": "user-create",
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "owns-user-create",
+      "kind": "owns",
+      "from": "requirements",
+      "to": "user-create"
+    },
+    {
+      "id": "owns-user-create-a",
+      "kind": "owns",
+      "from": "user-create",
+      "to": "user-create-a"
+    },
+    {
+      "id": "owns-user-create-b",
+      "kind": "owns",
+      "from": "user-create",
+      "to": "user-create-b"
+    },
+    {
+      "id": "owns-uc-read",
+      "kind": "owns",
+      "from": "requirements",
+      "to": "uc-read"
+    },
+    {
+      "id": "user-read",
+      "kind": "uml.association",
+      "from": "user",
+      "to": "uc-read",
+      "properties": {
+        "memberEnd": [
+          {
+            "$ref": "user-read-a"
+          },
+          {
+            "$ref": "user-read-b"
+          }
+        ],
+        "sourceRole": "actor",
+        "targetRole": "capability",
+        "sourceMultiplicity": "0..*",
+        "targetMultiplicity": "0..*",
+        "name": "user-read",
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "owns-user-read",
+      "kind": "owns",
+      "from": "requirements",
+      "to": "user-read"
+    },
+    {
+      "id": "owns-user-read-a",
+      "kind": "owns",
+      "from": "user-read",
+      "to": "user-read-a"
+    },
+    {
+      "id": "owns-user-read-b",
+      "kind": "owns",
+      "from": "user-read",
+      "to": "user-read-b"
+    },
+    {
+      "id": "owns-uc-update",
+      "kind": "owns",
+      "from": "requirements",
+      "to": "uc-update"
+    },
+    {
+      "id": "user-update",
+      "kind": "uml.association",
+      "from": "user",
+      "to": "uc-update",
+      "properties": {
+        "memberEnd": [
+          {
+            "$ref": "user-update-a"
+          },
+          {
+            "$ref": "user-update-b"
+          }
+        ],
+        "sourceRole": "actor",
+        "targetRole": "capability",
+        "sourceMultiplicity": "0..*",
+        "targetMultiplicity": "0..*",
+        "name": "user-update",
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "owns-user-update",
+      "kind": "owns",
+      "from": "requirements",
+      "to": "user-update"
+    },
+    {
+      "id": "owns-user-update-a",
+      "kind": "owns",
+      "from": "user-update",
+      "to": "user-update-a"
+    },
+    {
+      "id": "owns-user-update-b",
+      "kind": "owns",
+      "from": "user-update",
+      "to": "user-update-b"
+    },
+    {
+      "id": "owns-uc-delete",
+      "kind": "owns",
+      "from": "requirements",
+      "to": "uc-delete"
+    },
+    {
+      "id": "user-delete",
+      "kind": "uml.association",
+      "from": "user",
+      "to": "uc-delete",
+      "properties": {
+        "memberEnd": [
+          {
+            "$ref": "user-delete-a"
+          },
+          {
+            "$ref": "user-delete-b"
+          }
+        ],
+        "sourceRole": "actor",
+        "targetRole": "capability",
+        "sourceMultiplicity": "0..*",
+        "targetMultiplicity": "0..*",
+        "name": "user-delete",
+        "visibility": "public"
+      }
+    },
+    {
+      "id": "owns-user-delete",
+      "kind": "owns",
+      "from": "requirements",
+      "to": "user-delete"
+    },
+    {
+      "id": "owns-user-delete-a",
+      "kind": "owns",
+      "from": "user-delete",
+      "to": "user-delete-a"
+    },
+    {
+      "id": "owns-user-delete-b",
+      "kind": "owns",
+      "from": "user-delete",
+      "to": "user-delete-b"
+    },
+    {
+      "id": "owns-create-flow",
+      "kind": "owns",
+      "from": "application",
+      "to": "create-flow"
+    },
+    {
+      "id": "owns-request-start",
+      "kind": "owns",
+      "from": "create-flow",
+      "to": "request-start"
+    },
+    {
+      "id": "owns-authenticate",
+      "kind": "owns",
+      "from": "create-flow",
+      "to": "authenticate"
+    },
+    {
+      "id": "owns-authorized",
+      "kind": "owns",
+      "from": "create-flow",
+      "to": "authorized"
+    },
+    {
+      "id": "owns-unauthorized",
+      "kind": "owns",
+      "from": "create-flow",
+      "to": "unauthorized"
+    },
+    {
+      "id": "owns-validate",
+      "kind": "owns",
+      "from": "create-flow",
+      "to": "validate"
+    },
+    {
+      "id": "owns-accepted",
+      "kind": "owns",
+      "from": "create-flow",
+      "to": "accepted"
+    },
+    {
+      "id": "owns-rejected",
+      "kind": "owns",
+      "from": "create-flow",
+      "to": "rejected"
+    },
+    {
+      "id": "owns-persist",
+      "kind": "owns",
+      "from": "create-flow",
+      "to": "persist"
+    },
+    {
+      "id": "owns-created",
+      "kind": "owns",
+      "from": "create-flow",
+      "to": "created"
+    },
+    {
+      "id": "owns-request-end",
+      "kind": "owns",
+      "from": "create-flow",
+      "to": "request-end"
+    },
+    {
+      "id": "flow-0",
+      "kind": "uml.control_flow",
+      "from": "request-start",
+      "to": "authenticate",
+      "properties": {
+        "name": "flow-0",
+        "visibility": null,
+        "source": {
+          "$ref": "request-start"
+        },
+        "target": {
+          "$ref": "authenticate"
+        }
+      }
+    },
+    {
+      "id": "owns-flow-0",
+      "kind": "owns",
+      "from": "create-flow",
+      "to": "flow-0"
+    },
+    {
+      "id": "flow-1",
+      "kind": "uml.control_flow",
+      "from": "authenticate",
+      "to": "authorized",
+      "properties": {
+        "name": "flow-1",
+        "visibility": null,
+        "source": {
+          "$ref": "authenticate"
+        },
+        "target": {
+          "$ref": "authorized"
+        }
+      }
+    },
+    {
+      "id": "owns-flow-1",
+      "kind": "owns",
+      "from": "create-flow",
+      "to": "flow-1"
+    },
+    {
+      "id": "owns-guard-2",
+      "kind": "owns",
+      "from": "flow-2",
+      "to": "guard-2"
+    },
+    {
+      "id": "flow-2",
+      "kind": "uml.control_flow",
+      "from": "authorized",
+      "to": "unauthorized",
+      "properties": {
+        "guard": {
+          "$ref": "guard-2"
+        },
+        "name": "flow-2",
+        "visibility": null,
+        "source": {
+          "$ref": "authorized"
+        },
+        "target": {
+          "$ref": "unauthorized"
+        }
+      }
+    },
+    {
+      "id": "owns-flow-2",
+      "kind": "owns",
+      "from": "create-flow",
+      "to": "flow-2"
+    },
+    {
+      "id": "owns-guard-3",
+      "kind": "owns",
+      "from": "flow-3",
+      "to": "guard-3"
+    },
+    {
+      "id": "flow-3",
+      "kind": "uml.control_flow",
+      "from": "authorized",
+      "to": "validate",
+      "properties": {
+        "guard": {
+          "$ref": "guard-3"
+        },
+        "name": "flow-3",
+        "visibility": null,
+        "source": {
+          "$ref": "authorized"
+        },
+        "target": {
+          "$ref": "validate"
+        }
+      }
+    },
+    {
+      "id": "owns-flow-3",
+      "kind": "owns",
+      "from": "create-flow",
+      "to": "flow-3"
+    },
+    {
+      "id": "flow-4",
+      "kind": "uml.control_flow",
+      "from": "unauthorized",
+      "to": "request-end",
+      "properties": {
+        "name": "flow-4",
+        "visibility": null,
+        "source": {
+          "$ref": "unauthorized"
+        },
+        "target": {
+          "$ref": "request-end"
+        }
+      }
+    },
+    {
+      "id": "owns-flow-4",
+      "kind": "owns",
+      "from": "create-flow",
+      "to": "flow-4"
+    },
+    {
+      "id": "flow-5",
+      "kind": "uml.control_flow",
+      "from": "validate",
+      "to": "accepted",
+      "properties": {
+        "name": "flow-5",
+        "visibility": null,
+        "source": {
+          "$ref": "validate"
+        },
+        "target": {
+          "$ref": "accepted"
+        }
+      }
+    },
+    {
+      "id": "owns-flow-5",
+      "kind": "owns",
+      "from": "create-flow",
+      "to": "flow-5"
+    },
+    {
+      "id": "owns-guard-6",
+      "kind": "owns",
+      "from": "flow-6",
+      "to": "guard-6"
+    },
+    {
+      "id": "flow-6",
+      "kind": "uml.control_flow",
+      "from": "accepted",
+      "to": "rejected",
+      "properties": {
+        "guard": {
+          "$ref": "guard-6"
+        },
+        "name": "flow-6",
+        "visibility": null,
+        "source": {
+          "$ref": "accepted"
+        },
+        "target": {
+          "$ref": "rejected"
+        }
+      }
+    },
+    {
+      "id": "owns-flow-6",
+      "kind": "owns",
+      "from": "create-flow",
+      "to": "flow-6"
+    },
+    {
+      "id": "owns-guard-7",
+      "kind": "owns",
+      "from": "flow-7",
+      "to": "guard-7"
+    },
+    {
+      "id": "flow-7",
+      "kind": "uml.control_flow",
+      "from": "accepted",
+      "to": "persist",
+      "properties": {
+        "guard": {
+          "$ref": "guard-7"
+        },
+        "name": "flow-7",
+        "visibility": null,
+        "source": {
+          "$ref": "accepted"
+        },
+        "target": {
+          "$ref": "persist"
+        }
+      }
+    },
+    {
+      "id": "owns-flow-7",
+      "kind": "owns",
+      "from": "create-flow",
+      "to": "flow-7"
+    },
+    {
+      "id": "flow-8",
+      "kind": "uml.control_flow",
+      "from": "rejected",
+      "to": "request-end",
+      "properties": {
+        "name": "flow-8",
+        "visibility": null,
+        "source": {
+          "$ref": "rejected"
+        },
+        "target": {
+          "$ref": "request-end"
+        }
+      }
+    },
+    {
+      "id": "owns-flow-8",
+      "kind": "owns",
+      "from": "create-flow",
+      "to": "flow-8"
+    },
+    {
+      "id": "flow-9",
+      "kind": "uml.control_flow",
+      "from": "persist",
+      "to": "created",
+      "properties": {
+        "name": "flow-9",
+        "visibility": null,
+        "source": {
+          "$ref": "persist"
+        },
+        "target": {
+          "$ref": "created"
+        }
+      }
+    },
+    {
+      "id": "owns-flow-9",
+      "kind": "owns",
+      "from": "create-flow",
+      "to": "flow-9"
+    },
+    {
+      "id": "flow-10",
+      "kind": "uml.control_flow",
+      "from": "created",
+      "to": "request-end",
+      "properties": {
+        "name": "flow-10",
+        "visibility": null,
+        "source": {
+          "$ref": "created"
+        },
+        "target": {
+          "$ref": "request-end"
+        }
+      }
+    },
+    {
+      "id": "owns-flow-10",
+      "kind": "owns",
+      "from": "create-flow",
+      "to": "flow-10"
+    },
+    {
+      "id": "owns-lifecycle",
+      "kind": "owns",
+      "from": "todo",
+      "to": "lifecycle"
+    },
+    {
+      "id": "owns-lifecycle-region",
+      "kind": "owns",
+      "from": "lifecycle",
+      "to": "lifecycle-region"
+    },
+    {
+      "id": "owns-lifecycle-start",
+      "kind": "owns",
+      "from": "lifecycle-region",
+      "to": "lifecycle-start"
+    },
+    {
+      "id": "owns-open",
+      "kind": "owns",
+      "from": "lifecycle-region",
+      "to": "open"
+    },
+    {
+      "id": "owns-completed",
+      "kind": "owns",
+      "from": "lifecycle-region",
+      "to": "completed"
+    },
+    {
+      "id": "owns-archived",
+      "kind": "owns",
+      "from": "lifecycle-region",
+      "to": "archived"
+    },
+    {
+      "id": "transition-initialize",
+      "kind": "uml.transition",
+      "from": "lifecycle-start",
+      "to": "open",
+      "properties": {
+        "name": "transition-initialize",
+        "visibility": null,
+        "source": {
+          "$ref": "lifecycle-start"
+        },
+        "target": {
+          "$ref": "open"
+        }
+      }
+    },
+    {
+      "id": "owns-transition-initialize",
+      "kind": "owns",
+      "from": "lifecycle-region",
+      "to": "transition-initialize"
+    },
+    {
+      "id": "owns-event-complete",
+      "kind": "owns",
+      "from": "domain",
+      "to": "event-complete"
+    },
+    {
+      "id": "owns-trigger-complete",
+      "kind": "owns",
+      "from": "transition-complete",
+      "to": "trigger-complete"
+    },
+    {
+      "id": "transition-complete",
+      "kind": "uml.transition",
+      "from": "open",
+      "to": "completed",
+      "properties": {
+        "trigger": [
+          {
+            "$ref": "trigger-complete"
+          }
+        ],
+        "name": "transition-complete",
+        "visibility": null,
+        "source": {
+          "$ref": "open"
+        },
+        "target": {
+          "$ref": "completed"
+        }
+      }
+    },
+    {
+      "id": "owns-transition-complete",
+      "kind": "owns",
+      "from": "lifecycle-region",
+      "to": "transition-complete"
+    },
+    {
+      "id": "owns-event-reopen",
+      "kind": "owns",
+      "from": "domain",
+      "to": "event-reopen"
+    },
+    {
+      "id": "owns-trigger-reopen",
+      "kind": "owns",
+      "from": "transition-reopen",
+      "to": "trigger-reopen"
+    },
+    {
+      "id": "transition-reopen",
+      "kind": "uml.transition",
+      "from": "completed",
+      "to": "open",
+      "properties": {
+        "trigger": [
+          {
+            "$ref": "trigger-reopen"
+          }
+        ],
+        "name": "transition-reopen",
+        "visibility": null,
+        "source": {
+          "$ref": "completed"
+        },
+        "target": {
+          "$ref": "open"
+        }
+      }
+    },
+    {
+      "id": "owns-transition-reopen",
+      "kind": "owns",
+      "from": "lifecycle-region",
+      "to": "transition-reopen"
+    },
+    {
+      "id": "owns-event-archive",
+      "kind": "owns",
+      "from": "domain",
+      "to": "event-archive"
+    },
+    {
+      "id": "owns-trigger-archive-open",
+      "kind": "owns",
+      "from": "transition-archive-open",
+      "to": "trigger-archive-open"
+    },
+    {
+      "id": "transition-archive-open",
+      "kind": "uml.transition",
+      "from": "open",
+      "to": "archived",
+      "properties": {
+        "trigger": [
+          {
+            "$ref": "trigger-archive-open"
+          }
+        ],
+        "name": "transition-archive-open",
+        "visibility": null,
+        "source": {
+          "$ref": "open"
+        },
+        "target": {
+          "$ref": "archived"
+        }
+      }
+    },
+    {
+      "id": "owns-transition-archive-open",
+      "kind": "owns",
+      "from": "lifecycle-region",
+      "to": "transition-archive-open"
+    },
+    {
+      "id": "owns-trigger-archive-completed",
+      "kind": "owns",
+      "from": "transition-archive-completed",
+      "to": "trigger-archive-completed"
+    },
+    {
+      "id": "transition-archive-completed",
+      "kind": "uml.transition",
+      "from": "completed",
+      "to": "archived",
+      "properties": {
+        "trigger": [
+          {
+            "$ref": "trigger-archive-completed"
+          }
+        ],
+        "name": "transition-archive-completed",
+        "visibility": null,
+        "source": {
+          "$ref": "completed"
+        },
+        "target": {
+          "$ref": "archived"
+        }
+      }
+    },
+    {
+      "id": "owns-transition-archive-completed",
+      "kind": "owns",
+      "from": "lifecycle-region",
+      "to": "transition-archive-completed"
+    },
+    {
+      "id": "owns-lifecycle-recovery",
+      "kind": "owns",
+      "from": "application",
+      "to": "lifecycle-recovery"
+    },
+    {
+      "id": "owns-recovery-region",
+      "kind": "owns",
+      "from": "lifecycle-recovery",
+      "to": "recovery-region"
+    },
+    {
+      "id": "owns-recovery-start",
+      "kind": "owns",
+      "from": "recovery-region",
+      "to": "recovery-start"
+    },
+    {
+      "id": "owns-recovery-done",
+      "kind": "owns",
+      "from": "recovery-region",
+      "to": "recovery-done"
+    },
+    {
+      "id": "recovery-transition",
+      "kind": "uml.transition",
+      "from": "recovery-start",
+      "to": "recovery-done",
+      "properties": {
+        "name": "recovery-transition",
+        "visibility": null,
+        "source": {
+          "$ref": "recovery-start"
+        },
+        "target": {
+          "$ref": "recovery-done"
+        }
+      }
+    },
+    {
+      "id": "owns-recovery-transition",
+      "kind": "owns",
+      "from": "recovery-region",
+      "to": "recovery-transition"
+    },
+    {
+      "id": "owns-client-device",
+      "kind": "owns",
+      "from": "runtime",
+      "to": "client-device"
+    },
+    {
+      "id": "owns-api-device",
+      "kind": "owns",
+      "from": "runtime",
+      "to": "api-device"
+    },
+    {
+      "id": "owns-db-device",
+      "kind": "owns",
+      "from": "runtime",
+      "to": "db-device"
+    },
+    {
+      "id": "owns-browser-runtime",
+      "kind": "owns",
+      "from": "client-device",
+      "to": "browser-runtime"
+    },
+    {
+      "id": "owns-api-runtime",
+      "kind": "owns",
+      "from": "api-device",
+      "to": "api-runtime"
+    },
+    {
+      "id": "owns-db-runtime",
+      "kind": "owns",
+      "from": "db-device",
+      "to": "db-runtime"
+    },
+    {
+      "id": "owns-web-bundle",
+      "kind": "owns",
+      "from": "runtime",
+      "to": "web-bundle"
+    },
+    {
+      "id": "deploy-web-bundle",
+      "kind": "uml.deployment",
+      "from": "browser-runtime",
+      "to": "web-bundle",
+      "properties": {
+        "name": "deploy-web-bundle",
+        "visibility": null,
+        "location": {
+          "$ref": "browser-runtime"
+        },
+        "deployedArtifact": [
+          {
+            "$ref": "web-bundle"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owns-deploy-web-bundle",
+      "kind": "owns",
+      "from": "browser-runtime",
+      "to": "deploy-web-bundle"
+    },
+    {
+      "id": "manifest-web-bundle",
+      "kind": "uml.manifestation",
+      "from": "web-bundle",
+      "to": "browser",
+      "properties": {
+        "name": "manifest-web-bundle",
+        "visibility": null
+      }
+    },
+    {
+      "id": "owns-manifest-web-bundle",
+      "kind": "owns",
+      "from": "web-bundle",
+      "to": "manifest-web-bundle"
+    },
+    {
+      "id": "owns-api-image",
+      "kind": "owns",
+      "from": "runtime",
+      "to": "api-image"
+    },
+    {
+      "id": "deploy-api-image",
+      "kind": "uml.deployment",
+      "from": "api-runtime",
+      "to": "api-image",
+      "properties": {
+        "name": "deploy-api-image",
+        "visibility": null,
+        "location": {
+          "$ref": "api-runtime"
+        },
+        "deployedArtifact": [
+          {
+            "$ref": "api-image"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owns-deploy-api-image",
+      "kind": "owns",
+      "from": "api-runtime",
+      "to": "deploy-api-image"
+    },
+    {
+      "id": "manifest-api-image",
+      "kind": "uml.manifestation",
+      "from": "api-image",
+      "to": "api",
+      "properties": {
+        "name": "manifest-api-image",
+        "visibility": null
+      }
+    },
+    {
+      "id": "owns-manifest-api-image",
+      "kind": "owns",
+      "from": "api-image",
+      "to": "manifest-api-image"
+    },
+    {
+      "id": "owns-schema",
+      "kind": "owns",
+      "from": "runtime",
+      "to": "schema"
+    },
+    {
+      "id": "deploy-schema",
+      "kind": "uml.deployment",
+      "from": "db-runtime",
+      "to": "schema",
+      "properties": {
+        "name": "deploy-schema",
+        "visibility": null,
+        "location": {
+          "$ref": "db-runtime"
+        },
+        "deployedArtifact": [
+          {
+            "$ref": "schema"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owns-deploy-schema",
+      "kind": "owns",
+      "from": "db-runtime",
+      "to": "deploy-schema"
+    },
+    {
+      "id": "manifest-schema",
+      "kind": "uml.manifestation",
+      "from": "schema",
+      "to": "storage",
+      "properties": {
+        "name": "manifest-schema",
+        "visibility": null
+      }
+    },
+    {
+      "id": "owns-manifest-schema",
+      "kind": "owns",
+      "from": "schema",
+      "to": "manifest-schema"
+    }
+  ],
+  "diagrams": [
+    {
+      "id": "requirements-view",
+      "name": "01 · TodoList capabilities",
+      "uml_di_type": "UMLUseCaseDiagram",
+      "model_elements": [],
+      "width": 1360,
+      "height": 780,
+      "views": [
+        {
+          "id": "requirements-view-view-user",
+          "subject": "user",
+          "geometry": {
+            "kind": "rect",
+            "x": 60,
+            "y": 70,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "requirements-view-view-uc-create",
+          "subject": "uc-create",
+          "geometry": {
+            "kind": "rect",
+            "x": 370,
+            "y": 70,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "requirements-view-view-uc-read",
+          "subject": "uc-read",
+          "geometry": {
+            "kind": "rect",
+            "x": 680,
+            "y": 70,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "requirements-view-view-uc-update",
+          "subject": "uc-update",
+          "geometry": {
+            "kind": "rect",
+            "x": 990,
+            "y": 70,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "requirements-view-view-uc-delete",
+          "subject": "uc-delete",
+          "geometry": {
+            "kind": "rect",
+            "x": 60,
+            "y": 245,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "requirements-view-view-user-create",
+          "subject": "user-create",
+          "endpoints": {
+            "source_view_id": "requirements-view-view-user",
+            "target_view_id": "requirements-view-view-uc-create"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 185,
+              "y": 115
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 495,
+                  "y": 115
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "requirements-view-view-user-read",
+          "subject": "user-read",
+          "endpoints": {
+            "source_view_id": "requirements-view-view-user",
+            "target_view_id": "requirements-view-view-uc-read"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 185,
+              "y": 115
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 805,
+                  "y": 115
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "requirements-view-view-user-update",
+          "subject": "user-update",
+          "endpoints": {
+            "source_view_id": "requirements-view-view-user",
+            "target_view_id": "requirements-view-view-uc-update"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 185,
+              "y": 115
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 1115,
+                  "y": 115
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "requirements-view-view-user-delete",
+          "subject": "user-delete",
+          "endpoints": {
+            "source_view_id": "requirements-view-view-user",
+            "target_view_id": "requirements-view-view-uc-delete"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 185,
+              "y": 115
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 185,
+                  "y": 290
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "architecture-view",
+      "name": "02 · Web, API and persistence",
+      "uml_di_type": "UMLComponentDiagram",
+      "model_elements": [],
+      "width": 1360,
+      "height": 780,
+      "views": [
+        {
+          "id": "architecture-view-view-browser",
+          "subject": "browser",
+          "geometry": {
+            "kind": "rect",
+            "x": 60,
+            "y": 70,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "architecture-view-view-api",
+          "subject": "api",
+          "geometry": {
+            "kind": "rect",
+            "x": 370,
+            "y": 70,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "architecture-view-view-storage",
+          "subject": "storage",
+          "geometry": {
+            "kind": "rect",
+            "x": 680,
+            "y": 70,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "architecture-view-view-https",
+          "subject": "https",
+          "endpoints": {
+            "source_view_id": "architecture-view-view-browser",
+            "target_view_id": "architecture-view-view-api"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 185,
+              "y": 115
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 495,
+                  "y": 115
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "architecture-view-view-sql",
+          "subject": "sql",
+          "endpoints": {
+            "source_view_id": "architecture-view-view-api",
+            "target_view_id": "architecture-view-view-storage"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 495,
+              "y": 115
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 805,
+                  "y": 115
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "classes-view",
+      "name": "03 · Layers and domain contracts",
+      "uml_di_type": "UMLClassDiagram",
+      "model_elements": [],
+      "width": 1360,
+      "height": 780,
+      "views": [
+        {
+          "id": "classes-view-view-controller",
+          "subject": "controller",
+          "geometry": {
+            "kind": "rect",
+            "x": 60,
+            "y": 70,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "classes-view-view-service",
+          "subject": "service",
+          "geometry": {
+            "kind": "rect",
+            "x": 370,
+            "y": 70,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "classes-view-view-repository",
+          "subject": "repository",
+          "geometry": {
+            "kind": "rect",
+            "x": 680,
+            "y": 70,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "classes-view-view-sql-repository",
+          "subject": "sql-repository",
+          "geometry": {
+            "kind": "rect",
+            "x": 990,
+            "y": 70,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "classes-view-view-account",
+          "subject": "account",
+          "geometry": {
+            "kind": "rect",
+            "x": 60,
+            "y": 245,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "classes-view-view-list",
+          "subject": "list",
+          "geometry": {
+            "kind": "rect",
+            "x": 370,
+            "y": 245,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "classes-view-view-todo",
+          "subject": "todo",
+          "geometry": {
+            "kind": "rect",
+            "x": 680,
+            "y": 245,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "classes-view-view-request",
+          "subject": "request",
+          "geometry": {
+            "kind": "rect",
+            "x": 990,
+            "y": 245,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "classes-view-view-response",
+          "subject": "response",
+          "geometry": {
+            "kind": "rect",
+            "x": 60,
+            "y": 420,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "classes-view-view-account-lists",
+          "subject": "account-lists",
+          "endpoints": {
+            "source_view_id": "classes-view-view-account",
+            "target_view_id": "classes-view-view-list"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 185,
+              "y": 290
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 495,
+                  "y": 290
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "classes-view-view-list-todos",
+          "subject": "list-todos",
+          "endpoints": {
+            "source_view_id": "classes-view-view-list",
+            "target_view_id": "classes-view-view-todo"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 495,
+              "y": 290
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 805,
+                  "y": 290
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "classes-view-view-controller-service",
+          "subject": "controller-service",
+          "endpoints": {
+            "source_view_id": "classes-view-view-controller",
+            "target_view_id": "classes-view-view-service"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 185,
+              "y": 115
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 495,
+                  "y": 115
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "classes-view-view-service-repository",
+          "subject": "service-repository",
+          "endpoints": {
+            "source_view_id": "classes-view-view-service",
+            "target_view_id": "classes-view-view-repository"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 495,
+              "y": 115
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 805,
+                  "y": 115
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "classes-view-view-sql-contract",
+          "subject": "sql-contract",
+          "endpoints": {
+            "source_view_id": "classes-view-view-sql-repository",
+            "target_view_id": "classes-view-view-repository"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 1115,
+              "y": 115
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 805,
+                  "y": 115
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "classes-view-view-repository-todo",
+          "subject": "repository-todo",
+          "endpoints": {
+            "source_view_id": "classes-view-view-repository",
+            "target_view_id": "classes-view-view-todo"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 805,
+              "y": 115
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 805,
+                  "y": 290
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "classes-view-view-controller-request",
+          "subject": "controller-request",
+          "endpoints": {
+            "source_view_id": "classes-view-view-controller",
+            "target_view_id": "classes-view-view-request"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 185,
+              "y": 115
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 1115,
+                  "y": 290
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "classes-view-view-controller-response",
+          "subject": "controller-response",
+          "endpoints": {
+            "source_view_id": "classes-view-view-controller",
+            "target_view_id": "classes-view-view-response"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 185,
+              "y": 115
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 185,
+                  "y": 465
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "create-request-view",
+      "name": "04 · POST request end to end",
+      "uml_di_type": "UMLActivityDiagram",
+      "model_elements": [
+        "create-flow"
+      ],
+      "width": 1360,
+      "height": 780,
+      "views": [
+        {
+          "id": "create-request-view-view-request-start",
+          "subject": "request-start",
+          "geometry": {
+            "kind": "rect",
+            "x": 60,
+            "y": 70,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "create-request-view-view-authenticate",
+          "subject": "authenticate",
+          "geometry": {
+            "kind": "rect",
+            "x": 370,
+            "y": 70,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "create-request-view-view-authorized",
+          "subject": "authorized",
+          "geometry": {
+            "kind": "rect",
+            "x": 680,
+            "y": 70,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "create-request-view-view-unauthorized",
+          "subject": "unauthorized",
+          "geometry": {
+            "kind": "rect",
+            "x": 990,
+            "y": 70,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "create-request-view-view-validate",
+          "subject": "validate",
+          "geometry": {
+            "kind": "rect",
+            "x": 60,
+            "y": 245,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "create-request-view-view-accepted",
+          "subject": "accepted",
+          "geometry": {
+            "kind": "rect",
+            "x": 370,
+            "y": 245,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "create-request-view-view-rejected",
+          "subject": "rejected",
+          "geometry": {
+            "kind": "rect",
+            "x": 680,
+            "y": 245,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "create-request-view-view-persist",
+          "subject": "persist",
+          "geometry": {
+            "kind": "rect",
+            "x": 990,
+            "y": 245,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "create-request-view-view-created",
+          "subject": "created",
+          "geometry": {
+            "kind": "rect",
+            "x": 60,
+            "y": 420,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "create-request-view-view-request-end",
+          "subject": "request-end",
+          "geometry": {
+            "kind": "rect",
+            "x": 370,
+            "y": 420,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "create-request-view-view-flow-0",
+          "subject": "flow-0",
+          "endpoints": {
+            "source_view_id": "create-request-view-view-request-start",
+            "target_view_id": "create-request-view-view-authenticate"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 185,
+              "y": 115
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 495,
+                  "y": 115
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "create-request-view-view-flow-1",
+          "subject": "flow-1",
+          "endpoints": {
+            "source_view_id": "create-request-view-view-authenticate",
+            "target_view_id": "create-request-view-view-authorized"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 495,
+              "y": 115
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 805,
+                  "y": 115
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "create-request-view-view-flow-2",
+          "subject": "flow-2",
+          "endpoints": {
+            "source_view_id": "create-request-view-view-authorized",
+            "target_view_id": "create-request-view-view-unauthorized"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 805,
+              "y": 115
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 1115,
+                  "y": 115
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "create-request-view-view-flow-3",
+          "subject": "flow-3",
+          "endpoints": {
+            "source_view_id": "create-request-view-view-authorized",
+            "target_view_id": "create-request-view-view-validate"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 805,
+              "y": 115
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 185,
+                  "y": 290
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "create-request-view-view-flow-4",
+          "subject": "flow-4",
+          "endpoints": {
+            "source_view_id": "create-request-view-view-unauthorized",
+            "target_view_id": "create-request-view-view-request-end"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 1115,
+              "y": 115
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 495,
+                  "y": 465
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "create-request-view-view-flow-5",
+          "subject": "flow-5",
+          "endpoints": {
+            "source_view_id": "create-request-view-view-validate",
+            "target_view_id": "create-request-view-view-accepted"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 185,
+              "y": 290
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 495,
+                  "y": 290
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "create-request-view-view-flow-6",
+          "subject": "flow-6",
+          "endpoints": {
+            "source_view_id": "create-request-view-view-accepted",
+            "target_view_id": "create-request-view-view-rejected"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 495,
+              "y": 290
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 805,
+                  "y": 290
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "create-request-view-view-flow-7",
+          "subject": "flow-7",
+          "endpoints": {
+            "source_view_id": "create-request-view-view-accepted",
+            "target_view_id": "create-request-view-view-persist"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 495,
+              "y": 290
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 1115,
+                  "y": 290
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "create-request-view-view-flow-8",
+          "subject": "flow-8",
+          "endpoints": {
+            "source_view_id": "create-request-view-view-rejected",
+            "target_view_id": "create-request-view-view-request-end"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 805,
+              "y": 290
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 495,
+                  "y": 465
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "create-request-view-view-flow-9",
+          "subject": "flow-9",
+          "endpoints": {
+            "source_view_id": "create-request-view-view-persist",
+            "target_view_id": "create-request-view-view-created"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 1115,
+              "y": 290
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 185,
+                  "y": 465
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "create-request-view-view-flow-10",
+          "subject": "flow-10",
+          "endpoints": {
+            "source_view_id": "create-request-view-view-created",
+            "target_view_id": "create-request-view-view-request-end"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 185,
+              "y": 465
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 495,
+                  "y": 465
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifecycle-view",
+      "name": "05 · Todo lifecycle",
+      "uml_di_type": "UMLStateMachineDiagram",
+      "model_elements": [
+        "lifecycle"
+      ],
+      "width": 1360,
+      "height": 780,
+      "views": [
+        {
+          "id": "lifecycle-view-view-lifecycle-start",
+          "subject": "lifecycle-start",
+          "geometry": {
+            "kind": "rect",
+            "x": 60,
+            "y": 70,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "lifecycle-view-view-open",
+          "subject": "open",
+          "geometry": {
+            "kind": "rect",
+            "x": 370,
+            "y": 70,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "lifecycle-view-view-completed",
+          "subject": "completed",
+          "geometry": {
+            "kind": "rect",
+            "x": 680,
+            "y": 70,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "lifecycle-view-view-archived",
+          "subject": "archived",
+          "geometry": {
+            "kind": "rect",
+            "x": 990,
+            "y": 70,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "lifecycle-view-view-transition-initialize",
+          "subject": "transition-initialize",
+          "endpoints": {
+            "source_view_id": "lifecycle-view-view-lifecycle-start",
+            "target_view_id": "lifecycle-view-view-open"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 185,
+              "y": 115
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 495,
+                  "y": 115
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "lifecycle-view-view-transition-complete",
+          "subject": "transition-complete",
+          "endpoints": {
+            "source_view_id": "lifecycle-view-view-open",
+            "target_view_id": "lifecycle-view-view-completed"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 495,
+              "y": 115
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 805,
+                  "y": 115
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "lifecycle-view-view-transition-reopen",
+          "subject": "transition-reopen",
+          "endpoints": {
+            "source_view_id": "lifecycle-view-view-completed",
+            "target_view_id": "lifecycle-view-view-open"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 805,
+              "y": 115
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 495,
+                  "y": 115
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "lifecycle-view-view-transition-archive-open",
+          "subject": "transition-archive-open",
+          "endpoints": {
+            "source_view_id": "lifecycle-view-view-open",
+            "target_view_id": "lifecycle-view-view-archived"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 495,
+              "y": 115
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 1115,
+                  "y": 115
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "lifecycle-view-view-transition-archive-completed",
+          "subject": "transition-archive-completed",
+          "endpoints": {
+            "source_view_id": "lifecycle-view-view-completed",
+            "target_view_id": "lifecycle-view-view-archived"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 805,
+              "y": 115
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 1115,
+                  "y": 115
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "deployment-view",
+      "name": "06 · Runtime deployment",
+      "uml_di_type": "UMLDeploymentDiagram",
+      "model_elements": [],
+      "width": 1360,
+      "height": 780,
+      "views": [
+        {
+          "id": "deployment-view-view-client-device",
+          "subject": "client-device",
+          "geometry": {
+            "kind": "rect",
+            "x": 60,
+            "y": 70,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "deployment-view-view-api-device",
+          "subject": "api-device",
+          "geometry": {
+            "kind": "rect",
+            "x": 370,
+            "y": 70,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "deployment-view-view-db-device",
+          "subject": "db-device",
+          "geometry": {
+            "kind": "rect",
+            "x": 680,
+            "y": 70,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "deployment-view-view-browser-runtime",
+          "subject": "browser-runtime",
+          "geometry": {
+            "kind": "rect",
+            "x": 990,
+            "y": 70,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "deployment-view-view-api-runtime",
+          "subject": "api-runtime",
+          "geometry": {
+            "kind": "rect",
+            "x": 60,
+            "y": 245,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "deployment-view-view-db-runtime",
+          "subject": "db-runtime",
+          "geometry": {
+            "kind": "rect",
+            "x": 370,
+            "y": 245,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "deployment-view-view-web-bundle",
+          "subject": "web-bundle",
+          "geometry": {
+            "kind": "rect",
+            "x": 680,
+            "y": 245,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "deployment-view-view-api-image",
+          "subject": "api-image",
+          "geometry": {
+            "kind": "rect",
+            "x": 990,
+            "y": 245,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "deployment-view-view-schema",
+          "subject": "schema",
+          "geometry": {
+            "kind": "rect",
+            "x": 60,
+            "y": 420,
+            "width": 250,
+            "height": 90
+          }
+        },
+        {
+          "id": "deployment-view-view-deploy-web-bundle",
+          "subject": "deploy-web-bundle",
+          "endpoints": {
+            "source_view_id": "deployment-view-view-browser-runtime",
+            "target_view_id": "deployment-view-view-web-bundle"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 1115,
+              "y": 115
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 805,
+                  "y": 290
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "deployment-view-view-deploy-api-image",
+          "subject": "deploy-api-image",
+          "endpoints": {
+            "source_view_id": "deployment-view-view-api-runtime",
+            "target_view_id": "deployment-view-view-api-image"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 185,
+              "y": 290
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 1115,
+                  "y": 290
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "deployment-view-view-deploy-schema",
+          "subject": "deploy-schema",
+          "endpoints": {
+            "source_view_id": "deployment-view-view-db-runtime",
+            "target_view_id": "deployment-view-view-schema"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 495,
+              "y": 290
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 185,
+                  "y": 465
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

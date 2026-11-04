@@ -1,0 +1,595 @@
+{
+  "schema_version": 1,
+  "id": "use_case-project",
+  "name": "Use Case",
+  "root_model": "root",
+  "elements": [
+    {
+      "id": "root",
+      "kind": "uml.model",
+      "name": "Behavioral acceptance corpus",
+      "properties": {}
+    },
+    {
+      "id": "customer",
+      "kind": "uml.actor",
+      "name": "Customer",
+      "properties": {}
+    },
+    {
+      "id": "member",
+      "kind": "uml.actor",
+      "name": "Registered customer",
+      "properties": {}
+    },
+    {
+      "id": "gateway",
+      "kind": "uml.actor",
+      "name": "Payment gateway",
+      "properties": {}
+    },
+    {
+      "id": "shop",
+      "kind": "uml.class",
+      "name": "Online shop",
+      "properties": {}
+    },
+    {
+      "id": "checkout",
+      "kind": "uml.use_case",
+      "name": "Complete checkout",
+      "properties": {
+        "subject": [
+          {
+            "$ref": "shop"
+          }
+        ],
+        "extensionPoint": [
+          {
+            "$ref": "loyalty-point"
+          }
+        ]
+      }
+    },
+    {
+      "id": "payment",
+      "kind": "uml.use_case",
+      "name": "Authorize payment",
+      "properties": {
+        "subject": [
+          {
+            "$ref": "shop"
+          }
+        ]
+      }
+    },
+    {
+      "id": "discount",
+      "kind": "uml.use_case",
+      "name": "Apply loyalty discount",
+      "properties": {
+        "subject": [
+          {
+            "$ref": "shop"
+          }
+        ]
+      }
+    },
+    {
+      "id": "receipt",
+      "kind": "uml.use_case",
+      "name": "Issue receipt",
+      "properties": {
+        "subject": [
+          {
+            "$ref": "shop"
+          }
+        ]
+      }
+    },
+    {
+      "id": "loyalty-point",
+      "kind": "uml.extension_point",
+      "name": "Before total calculation",
+      "properties": {
+        "useCase": {
+          "$ref": "checkout"
+        }
+      }
+    },
+    {
+      "id": "customer-checkout-actor",
+      "kind": "uml.property",
+      "name": "customer",
+      "properties": {
+        "type": {
+          "$ref": "customer"
+        }
+      }
+    },
+    {
+      "id": "customer-checkout-case",
+      "kind": "uml.property",
+      "name": "checkout",
+      "properties": {
+        "type": {
+          "$ref": "checkout"
+        }
+      }
+    },
+    {
+      "id": "gateway-payment-actor",
+      "kind": "uml.property",
+      "name": "gateway",
+      "properties": {
+        "type": {
+          "$ref": "gateway"
+        }
+      }
+    },
+    {
+      "id": "gateway-payment-case",
+      "kind": "uml.property",
+      "name": "payment",
+      "properties": {
+        "type": {
+          "$ref": "payment"
+        }
+      }
+    }
+  ],
+  "relations": [
+    {
+      "id": "owns-customer",
+      "kind": "owns",
+      "from": "root",
+      "to": "customer"
+    },
+    {
+      "id": "owns-member",
+      "kind": "owns",
+      "from": "root",
+      "to": "member"
+    },
+    {
+      "id": "owns-gateway",
+      "kind": "owns",
+      "from": "root",
+      "to": "gateway"
+    },
+    {
+      "id": "owns-shop",
+      "kind": "owns",
+      "from": "root",
+      "to": "shop"
+    },
+    {
+      "id": "owns-checkout",
+      "kind": "owns",
+      "from": "root",
+      "to": "checkout"
+    },
+    {
+      "id": "owns-payment",
+      "kind": "owns",
+      "from": "root",
+      "to": "payment"
+    },
+    {
+      "id": "owns-discount",
+      "kind": "owns",
+      "from": "root",
+      "to": "discount"
+    },
+    {
+      "id": "owns-receipt",
+      "kind": "owns",
+      "from": "root",
+      "to": "receipt"
+    },
+    {
+      "id": "owns-loyalty-point",
+      "kind": "owns",
+      "from": "checkout",
+      "to": "loyalty-point"
+    },
+    {
+      "id": "member-generalization",
+      "kind": "uml.generalization",
+      "from": "member",
+      "to": "customer",
+      "properties": {}
+    },
+    {
+      "id": "checkout-payment",
+      "kind": "uml.include",
+      "from": "checkout",
+      "to": "payment",
+      "properties": {
+        "includingCase": {
+          "$ref": "checkout"
+        },
+        "addition": {
+          "$ref": "payment"
+        },
+        "name": "Checkout payment"
+      }
+    },
+    {
+      "id": "owns-checkout-payment",
+      "kind": "owns",
+      "from": "checkout",
+      "to": "checkout-payment"
+    },
+    {
+      "id": "checkout-receipt",
+      "kind": "uml.include",
+      "from": "checkout",
+      "to": "receipt",
+      "properties": {
+        "includingCase": {
+          "$ref": "checkout"
+        },
+        "addition": {
+          "$ref": "receipt"
+        },
+        "name": "Checkout receipt"
+      }
+    },
+    {
+      "id": "owns-checkout-receipt",
+      "kind": "owns",
+      "from": "checkout",
+      "to": "checkout-receipt"
+    },
+    {
+      "id": "discount-extension",
+      "kind": "uml.extend",
+      "from": "discount",
+      "to": "checkout",
+      "properties": {
+        "extension": {
+          "$ref": "discount"
+        },
+        "extendedCase": {
+          "$ref": "checkout"
+        },
+        "extensionLocation": [
+          {
+            "$ref": "loyalty-point"
+          }
+        ],
+        "name": "Discount extension"
+      }
+    },
+    {
+      "id": "owns-discount-extension",
+      "kind": "owns",
+      "from": "discount",
+      "to": "discount-extension"
+    },
+    {
+      "id": "customer-checkout",
+      "kind": "uml.association",
+      "from": "customer",
+      "to": "checkout",
+      "properties": {
+        "memberEnd": [
+          {
+            "$ref": "customer-checkout-actor"
+          },
+          {
+            "$ref": "customer-checkout-case"
+          }
+        ],
+        "ownedEnd": [
+          {
+            "$ref": "customer-checkout-actor"
+          },
+          {
+            "$ref": "customer-checkout-case"
+          }
+        ],
+        "name": "Customer checkout",
+        "sourceRole": "customer",
+        "targetRole": "checkout"
+      }
+    },
+    {
+      "id": "owns-customer-checkout",
+      "kind": "owns",
+      "from": "root",
+      "to": "customer-checkout"
+    },
+    {
+      "id": "owns-customer-checkout-actor",
+      "kind": "owns",
+      "from": "customer-checkout",
+      "to": "customer-checkout-actor"
+    },
+    {
+      "id": "owns-customer-checkout-case",
+      "kind": "owns",
+      "from": "customer-checkout",
+      "to": "customer-checkout-case"
+    },
+    {
+      "id": "gateway-payment",
+      "kind": "uml.association",
+      "from": "gateway",
+      "to": "payment",
+      "properties": {
+        "memberEnd": [
+          {
+            "$ref": "gateway-payment-actor"
+          },
+          {
+            "$ref": "gateway-payment-case"
+          }
+        ],
+        "ownedEnd": [
+          {
+            "$ref": "gateway-payment-actor"
+          },
+          {
+            "$ref": "gateway-payment-case"
+          }
+        ],
+        "name": "Gateway payment",
+        "sourceRole": "gateway",
+        "targetRole": "payment"
+      }
+    },
+    {
+      "id": "owns-gateway-payment",
+      "kind": "owns",
+      "from": "root",
+      "to": "gateway-payment"
+    },
+    {
+      "id": "owns-gateway-payment-actor",
+      "kind": "owns",
+      "from": "gateway-payment",
+      "to": "gateway-payment-actor"
+    },
+    {
+      "id": "owns-gateway-payment-case",
+      "kind": "owns",
+      "from": "gateway-payment",
+      "to": "gateway-payment-case"
+    }
+  ],
+  "diagrams": [
+    {
+      "id": "use_case-diagram",
+      "name": "Use Case",
+      "uml_di_type": "UMLUseCaseDiagram",
+      "width": 1800,
+      "height": 1200,
+      "model_elements": [],
+      "views": [
+        {
+          "id": "view-customer",
+          "subject": "customer",
+          "geometry": {
+            "kind": "rect",
+            "x": 80,
+            "y": 80,
+            "width": 220,
+            "height": 100
+          }
+        },
+        {
+          "id": "view-member",
+          "subject": "member",
+          "geometry": {
+            "kind": "rect",
+            "x": 400,
+            "y": 80,
+            "width": 220,
+            "height": 100
+          }
+        },
+        {
+          "id": "view-gateway",
+          "subject": "gateway",
+          "geometry": {
+            "kind": "rect",
+            "x": 720,
+            "y": 80,
+            "width": 220,
+            "height": 100
+          }
+        },
+        {
+          "id": "view-checkout",
+          "subject": "checkout",
+          "geometry": {
+            "kind": "rect",
+            "x": 1040,
+            "y": 80,
+            "width": 220,
+            "height": 100
+          }
+        },
+        {
+          "id": "view-payment",
+          "subject": "payment",
+          "geometry": {
+            "kind": "rect",
+            "x": 1360,
+            "y": 80,
+            "width": 220,
+            "height": 100
+          }
+        },
+        {
+          "id": "view-discount",
+          "subject": "discount",
+          "geometry": {
+            "kind": "rect",
+            "x": 80,
+            "y": 260,
+            "width": 220,
+            "height": 100
+          }
+        },
+        {
+          "id": "view-receipt",
+          "subject": "receipt",
+          "geometry": {
+            "kind": "rect",
+            "x": 400,
+            "y": 260,
+            "width": 220,
+            "height": 100
+          }
+        },
+        {
+          "id": "view-member-generalization",
+          "subject": "member-generalization",
+          "endpoints": {
+            "source_view_id": "view-member",
+            "target_view_id": "view-customer"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 620,
+              "y": 130
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 80,
+                  "y": 130
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "view-checkout-payment",
+          "subject": "checkout-payment",
+          "endpoints": {
+            "source_view_id": "view-checkout",
+            "target_view_id": "view-payment"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 1260,
+              "y": 130
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 1360,
+                  "y": 130
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "view-checkout-receipt",
+          "subject": "checkout-receipt",
+          "endpoints": {
+            "source_view_id": "view-checkout",
+            "target_view_id": "view-receipt"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 1260,
+              "y": 130
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 400,
+                  "y": 310
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "view-discount-extension",
+          "subject": "discount-extension",
+          "endpoints": {
+            "source_view_id": "view-discount",
+            "target_view_id": "view-checkout"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 300,
+              "y": 310
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 1040,
+                  "y": 130
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "view-customer-checkout",
+          "subject": "customer-checkout",
+          "endpoints": {
+            "source_view_id": "view-customer",
+            "target_view_id": "view-checkout"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 300,
+              "y": 130
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 1040,
+                  "y": 130
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "view-gateway-payment",
+          "subject": "gateway-payment",
+          "endpoints": {
+            "source_view_id": "view-gateway",
+            "target_view_id": "view-payment"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 940,
+              "y": 130
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 1360,
+                  "y": 130
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

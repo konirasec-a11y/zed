@@ -1,0 +1,92 @@
+{
+  "cases": [
+    {
+      "id": "sequence-valid",
+      "file": "sequence.valid.json",
+      "diagram_kind": "sequence",
+      "diagram_id": "sequence-diagram",
+      "expected": "valid",
+      "diagnostics": []
+    },
+    {
+      "id": "sequence-invalid",
+      "file": "sequence.invalid.json",
+      "diagram_kind": "sequence",
+      "diagram_id": "sequence-diagram",
+      "expected": "invalid",
+      "diagnostics": [
+        {
+          "code": "UML_PROPERTY_CONTRACT",
+          "severity": "error",
+          "subject_id": "submit"
+        }
+      ]
+    },
+    {
+      "id": "communication-valid",
+      "file": "communication.valid.json",
+      "diagram_kind": "communication",
+      "diagram_id": "communication-diagram",
+      "expected": "valid",
+      "diagnostics": []
+    },
+    {
+      "id": "communication-invalid",
+      "file": "communication.invalid.json",
+      "diagram_kind": "communication",
+      "diagram_id": "communication-diagram",
+      "expected": "invalid",
+      "diagnostics": [
+        {
+          "code": "UML_PROPERTY_CONTRACT",
+          "severity": "error",
+          "subject_id": "service"
+        }
+      ]
+    },
+    {
+      "id": "timing-valid",
+      "file": "timing.valid.json",
+      "diagram_kind": "timing",
+      "diagram_id": "timing-diagram",
+      "expected": "valid",
+      "diagnostics": []
+    },
+    {
+      "id": "timing-invalid",
+      "file": "timing.invalid.json",
+      "diagram_kind": "timing",
+      "diagram_id": "timing-diagram",
+      "expected": "invalid",
+      "diagnostics": [
+        {
+          "code": "UML_DURATION_CONSTRAINT_FIRST_EVENT",
+          "severity": "error",
+          "subject_id": "latency"
+        }
+      ]
+    },
+    {
+      "id": "interaction_overview-valid",
+      "file": "interaction_overview.valid.json",
+      "diagram_kind": "interaction_overview",
+      "diagram_id": "overview-diagram",
+      "expected": "valid",
+      "diagnostics": []
+    },
+    {
+      "id": "interaction_overview-invalid",
+      "file": "interaction_overview.invalid.json",
+      "diagram_kind": "interaction_overview",
+      "diagram_id": "overview-diagram",
+      "expected": "invalid",
+      "diagnostics": [
+        {
+          "code": "UML_PROPERTY_CONTRACT",
+          "severity": "error",
+          "subject_id": "use-authenticate"
+        }
+      ]
+    }
+  ]
+}

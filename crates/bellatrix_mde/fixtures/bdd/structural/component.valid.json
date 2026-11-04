@@ -1,0 +1,410 @@
+{
+  "schema_version": 1,
+  "id": "component-project",
+  "name": "Checkout service components",
+  "root_model": "root",
+  "elements": [
+    {
+      "id": "root",
+      "kind": "uml.model",
+      "name": "Checkout service components",
+      "properties": {}
+    },
+    {
+      "id": "contracts",
+      "kind": "uml.package",
+      "name": "Contracts",
+      "properties": {}
+    },
+    {
+      "id": "payment-api",
+      "kind": "uml.interface",
+      "name": "PaymentAPI",
+      "properties": {}
+    },
+    {
+      "id": "inventory-api",
+      "kind": "uml.interface",
+      "name": "InventoryAPI",
+      "properties": {}
+    },
+    {
+      "id": "checkout",
+      "kind": "uml.component",
+      "name": "CheckoutService",
+      "properties": {
+        "packagedElement": [
+          {
+            "$ref": "implementation"
+          }
+        ]
+      }
+    },
+    {
+      "id": "payments",
+      "kind": "uml.component",
+      "name": "PaymentService",
+      "properties": {
+        "packagedElement": []
+      }
+    },
+    {
+      "id": "inventory",
+      "kind": "uml.component",
+      "name": "InventoryService",
+      "properties": {
+        "packagedElement": []
+      }
+    },
+    {
+      "id": "implementation",
+      "kind": "uml.class",
+      "name": "CheckoutImplementation",
+      "properties": {}
+    },
+    {
+      "id": "checkout-payments",
+      "kind": "uml.port",
+      "name": "checkout-payments",
+      "properties": {
+        "type": {
+          "$ref": "payment-api"
+        },
+        "aggregation": "composite",
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "payment-port",
+      "kind": "uml.port",
+      "name": "payment-port",
+      "properties": {
+        "type": {
+          "$ref": "payment-api"
+        },
+        "aggregation": "composite",
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "inventory-port",
+      "kind": "uml.port",
+      "name": "inventory-port",
+      "properties": {
+        "type": {
+          "$ref": "inventory-api"
+        },
+        "aggregation": "composite",
+        "multiplicity": "1"
+      }
+    }
+  ],
+  "relations": [
+    {
+      "id": "owns-contracts",
+      "kind": "owns",
+      "from": "root",
+      "to": "contracts",
+      "properties": {}
+    },
+    {
+      "id": "owns-payment-api",
+      "kind": "owns",
+      "from": "contracts",
+      "to": "payment-api",
+      "properties": {}
+    },
+    {
+      "id": "owns-inventory-api",
+      "kind": "owns",
+      "from": "contracts",
+      "to": "inventory-api",
+      "properties": {}
+    },
+    {
+      "id": "owns-checkout",
+      "kind": "owns",
+      "from": "root",
+      "to": "checkout",
+      "properties": {}
+    },
+    {
+      "id": "owns-payments",
+      "kind": "owns",
+      "from": "root",
+      "to": "payments",
+      "properties": {}
+    },
+    {
+      "id": "owns-inventory",
+      "kind": "owns",
+      "from": "root",
+      "to": "inventory",
+      "properties": {}
+    },
+    {
+      "id": "owns-implementation",
+      "kind": "owns",
+      "from": "checkout",
+      "to": "implementation",
+      "properties": {}
+    },
+    {
+      "id": "owns-checkout-payments",
+      "kind": "owns",
+      "from": "checkout",
+      "to": "checkout-payments",
+      "properties": {}
+    },
+    {
+      "id": "owns-payment-port",
+      "kind": "owns",
+      "from": "payments",
+      "to": "payment-port",
+      "properties": {}
+    },
+    {
+      "id": "owns-inventory-port",
+      "kind": "owns",
+      "from": "inventory",
+      "to": "inventory-port",
+      "properties": {}
+    },
+    {
+      "id": "uses-payment",
+      "kind": "uml.usage",
+      "from": "checkout",
+      "to": "payment-api",
+      "properties": {
+        "name": "UsesPaymentAPI"
+      }
+    },
+    {
+      "id": "uses-inventory",
+      "kind": "uml.usage",
+      "from": "checkout",
+      "to": "inventory-api",
+      "properties": {
+        "name": "UsesInventoryAPI"
+      }
+    },
+    {
+      "id": "provides-payment",
+      "kind": "uml.interface_realization",
+      "from": "payments",
+      "to": "payment-api",
+      "properties": {
+        "visibility": null
+      }
+    },
+    {
+      "id": "owns-provides-payment",
+      "kind": "owns",
+      "from": "payments",
+      "to": "provides-payment",
+      "properties": {}
+    },
+    {
+      "id": "provides-inventory",
+      "kind": "uml.interface_realization",
+      "from": "inventory",
+      "to": "inventory-api",
+      "properties": {
+        "visibility": null
+      }
+    },
+    {
+      "id": "owns-provides-inventory",
+      "kind": "owns",
+      "from": "inventory",
+      "to": "provides-inventory",
+      "properties": {}
+    },
+    {
+      "id": "owns-uses-payment",
+      "kind": "owns",
+      "from": "root",
+      "to": "uses-payment",
+      "properties": {}
+    },
+    {
+      "id": "owns-uses-inventory",
+      "kind": "owns",
+      "from": "root",
+      "to": "uses-inventory",
+      "properties": {}
+    }
+  ],
+  "diagrams": [
+    {
+      "id": "diagram",
+      "name": "Checkout service components",
+      "uml_di_type": "UMLComponentDiagram",
+      "width": 1240,
+      "height": 800,
+      "model_elements": [],
+      "views": [
+        {
+          "id": "view-checkout",
+          "subject": "checkout",
+          "geometry": {
+            "kind": "rect",
+            "x": 40,
+            "y": 40,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-payments",
+          "subject": "payments",
+          "geometry": {
+            "kind": "rect",
+            "x": 325,
+            "y": 40,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-inventory",
+          "subject": "inventory",
+          "geometry": {
+            "kind": "rect",
+            "x": 610,
+            "y": 40,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-payment-api",
+          "subject": "payment-api",
+          "geometry": {
+            "kind": "rect",
+            "x": 895,
+            "y": 40,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-inventory-api",
+          "subject": "inventory-api",
+          "geometry": {
+            "kind": "rect",
+            "x": 40,
+            "y": 220,
+            "width": 240,
+            "height": 130
+          },
+          "z_index": 2
+        },
+        {
+          "id": "view-uses-payment",
+          "subject": "uses-payment",
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 280,
+              "y": 105
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 895,
+                  "y": 105
+                }
+              }
+            ]
+          },
+          "endpoints": {
+            "source_view_id": "view-checkout",
+            "target_view_id": "view-payment-api"
+          },
+          "z_index": 1
+        },
+        {
+          "id": "view-uses-inventory",
+          "subject": "uses-inventory",
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 280,
+              "y": 105
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 40,
+                  "y": 285
+                }
+              }
+            ]
+          },
+          "endpoints": {
+            "source_view_id": "view-checkout",
+            "target_view_id": "view-inventory-api"
+          },
+          "z_index": 1
+        },
+        {
+          "id": "view-provides-payment",
+          "subject": "provides-payment",
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 565,
+              "y": 105
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 895,
+                  "y": 105
+                }
+              }
+            ]
+          },
+          "endpoints": {
+            "source_view_id": "view-payments",
+            "target_view_id": "view-payment-api"
+          },
+          "z_index": 1
+        },
+        {
+          "id": "view-provides-inventory",
+          "subject": "provides-inventory",
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 850,
+              "y": 105
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 40,
+                  "y": 285
+                }
+              }
+            ]
+          },
+          "endpoints": {
+            "source_view_id": "view-inventory",
+            "target_view_id": "view-inventory-api"
+          },
+          "z_index": 1
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,679 @@
+{
+  "schema_version": 1,
+  "id": "state_machine-project",
+  "name": "State Machine",
+  "root_model": "root",
+  "elements": [
+    {
+      "id": "root",
+      "kind": "uml.model",
+      "name": "Behavioral acceptance corpus",
+      "properties": {}
+    },
+    {
+      "id": "order-lifecycle",
+      "kind": "uml.state_machine",
+      "name": "Order lifecycle",
+      "properties": {
+        "region": [
+          {
+            "$ref": "main"
+          }
+        ]
+      }
+    },
+    {
+      "id": "main",
+      "kind": "uml.region",
+      "name": "Lifecycle",
+      "properties": {
+        "stateMachine": {
+          "$ref": "order-lifecycle"
+        }
+      }
+    },
+    {
+      "id": "initial",
+      "kind": "uml.pseudostate",
+      "name": "Initial",
+      "properties": {
+        "kind": "initial",
+        "container": {
+          "$ref": "main"
+        }
+      }
+    },
+    {
+      "id": "pending",
+      "kind": "uml.state",
+      "name": "Pending",
+      "properties": {
+        "container": {
+          "$ref": "main"
+        }
+      }
+    },
+    {
+      "id": "processing",
+      "kind": "uml.state",
+      "name": "Processing",
+      "properties": {
+        "container": {
+          "$ref": "main"
+        },
+        "region": [
+          {
+            "$ref": "processing-region"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cancelled",
+      "kind": "uml.state",
+      "name": "Cancelled",
+      "properties": {
+        "container": {
+          "$ref": "main"
+        }
+      }
+    },
+    {
+      "id": "done",
+      "kind": "uml.final_state",
+      "name": "Done",
+      "properties": {
+        "container": {
+          "$ref": "main"
+        }
+      }
+    },
+    {
+      "id": "processing-region",
+      "kind": "uml.region",
+      "name": "Processing detail",
+      "properties": {
+        "state": {
+          "$ref": "processing"
+        }
+      }
+    },
+    {
+      "id": "detail-initial",
+      "kind": "uml.pseudostate",
+      "name": "Detail initial",
+      "properties": {
+        "kind": "initial",
+        "container": {
+          "$ref": "processing-region"
+        }
+      }
+    },
+    {
+      "id": "packing",
+      "kind": "uml.state",
+      "name": "Packing",
+      "properties": {
+        "container": {
+          "$ref": "processing-region"
+        }
+      }
+    },
+    {
+      "id": "packed",
+      "kind": "uml.final_state",
+      "name": "Packed",
+      "properties": {
+        "container": {
+          "$ref": "processing-region"
+        }
+      }
+    }
+  ],
+  "relations": [
+    {
+      "id": "owns-order-lifecycle",
+      "kind": "owns",
+      "from": "root",
+      "to": "order-lifecycle"
+    },
+    {
+      "id": "owns-main",
+      "kind": "owns",
+      "from": "order-lifecycle",
+      "to": "main"
+    },
+    {
+      "id": "owns-initial",
+      "kind": "owns",
+      "from": "main",
+      "to": "initial"
+    },
+    {
+      "id": "owns-pending",
+      "kind": "owns",
+      "from": "main",
+      "to": "pending"
+    },
+    {
+      "id": "owns-processing",
+      "kind": "owns",
+      "from": "main",
+      "to": "processing"
+    },
+    {
+      "id": "owns-cancelled",
+      "kind": "owns",
+      "from": "main",
+      "to": "cancelled"
+    },
+    {
+      "id": "owns-done",
+      "kind": "owns",
+      "from": "main",
+      "to": "done"
+    },
+    {
+      "id": "owns-processing-region",
+      "kind": "owns",
+      "from": "processing",
+      "to": "processing-region"
+    },
+    {
+      "id": "owns-detail-initial",
+      "kind": "owns",
+      "from": "processing-region",
+      "to": "detail-initial"
+    },
+    {
+      "id": "owns-packing",
+      "kind": "owns",
+      "from": "processing-region",
+      "to": "packing"
+    },
+    {
+      "id": "owns-packed",
+      "kind": "owns",
+      "from": "processing-region",
+      "to": "packed"
+    },
+    {
+      "id": "begin",
+      "kind": "uml.transition",
+      "from": "initial",
+      "to": "pending",
+      "properties": {
+        "source": {
+          "$ref": "initial"
+        },
+        "target": {
+          "$ref": "pending"
+        },
+        "container": {
+          "$ref": "main"
+        },
+        "kind": "external",
+        "name": "Begin"
+      }
+    },
+    {
+      "id": "owns-begin",
+      "kind": "owns",
+      "from": "main",
+      "to": "begin"
+    },
+    {
+      "id": "approve",
+      "kind": "uml.transition",
+      "from": "pending",
+      "to": "processing",
+      "properties": {
+        "source": {
+          "$ref": "pending"
+        },
+        "target": {
+          "$ref": "processing"
+        },
+        "container": {
+          "$ref": "main"
+        },
+        "kind": "external",
+        "name": "Approve"
+      }
+    },
+    {
+      "id": "owns-approve",
+      "kind": "owns",
+      "from": "main",
+      "to": "approve"
+    },
+    {
+      "id": "cancel",
+      "kind": "uml.transition",
+      "from": "pending",
+      "to": "cancelled",
+      "properties": {
+        "source": {
+          "$ref": "pending"
+        },
+        "target": {
+          "$ref": "cancelled"
+        },
+        "container": {
+          "$ref": "main"
+        },
+        "kind": "external",
+        "name": "Cancel"
+      }
+    },
+    {
+      "id": "owns-cancel",
+      "kind": "owns",
+      "from": "main",
+      "to": "cancel"
+    },
+    {
+      "id": "complete",
+      "kind": "uml.transition",
+      "from": "processing",
+      "to": "done",
+      "properties": {
+        "source": {
+          "$ref": "processing"
+        },
+        "target": {
+          "$ref": "done"
+        },
+        "container": {
+          "$ref": "main"
+        },
+        "kind": "external",
+        "name": "Complete"
+      }
+    },
+    {
+      "id": "owns-complete",
+      "kind": "owns",
+      "from": "main",
+      "to": "complete"
+    },
+    {
+      "id": "close-cancelled",
+      "kind": "uml.transition",
+      "from": "cancelled",
+      "to": "done",
+      "properties": {
+        "source": {
+          "$ref": "cancelled"
+        },
+        "target": {
+          "$ref": "done"
+        },
+        "container": {
+          "$ref": "main"
+        },
+        "kind": "external",
+        "name": "Close cancelled"
+      }
+    },
+    {
+      "id": "owns-close-cancelled",
+      "kind": "owns",
+      "from": "main",
+      "to": "close-cancelled"
+    },
+    {
+      "id": "start-packing",
+      "kind": "uml.transition",
+      "from": "detail-initial",
+      "to": "packing",
+      "properties": {
+        "source": {
+          "$ref": "detail-initial"
+        },
+        "target": {
+          "$ref": "packing"
+        },
+        "container": {
+          "$ref": "processing-region"
+        },
+        "kind": "external",
+        "name": "Start packing"
+      }
+    },
+    {
+      "id": "owns-start-packing",
+      "kind": "owns",
+      "from": "processing-region",
+      "to": "start-packing"
+    },
+    {
+      "id": "finish-packing",
+      "kind": "uml.transition",
+      "from": "packing",
+      "to": "packed",
+      "properties": {
+        "source": {
+          "$ref": "packing"
+        },
+        "target": {
+          "$ref": "packed"
+        },
+        "container": {
+          "$ref": "processing-region"
+        },
+        "kind": "external",
+        "name": "Finish packing"
+      }
+    },
+    {
+      "id": "owns-finish-packing",
+      "kind": "owns",
+      "from": "processing-region",
+      "to": "finish-packing"
+    }
+  ],
+  "diagrams": [
+    {
+      "id": "state_machine-diagram",
+      "name": "State Machine",
+      "uml_di_type": "UMLStateMachineDiagram",
+      "width": 1800,
+      "height": 1200,
+      "model_elements": [
+        "order-lifecycle"
+      ],
+      "views": [
+        {
+          "id": "view-order-lifecycle",
+          "subject": "order-lifecycle",
+          "geometry": {
+            "kind": "rect",
+            "x": 80,
+            "y": 80,
+            "width": 220,
+            "height": 100
+          }
+        },
+        {
+          "id": "view-main",
+          "subject": "main",
+          "geometry": {
+            "kind": "rect",
+            "x": 400,
+            "y": 80,
+            "width": 220,
+            "height": 100
+          }
+        },
+        {
+          "id": "view-initial",
+          "subject": "initial",
+          "geometry": {
+            "kind": "rect",
+            "x": 720,
+            "y": 80,
+            "width": 220,
+            "height": 100
+          }
+        },
+        {
+          "id": "view-pending",
+          "subject": "pending",
+          "geometry": {
+            "kind": "rect",
+            "x": 1040,
+            "y": 80,
+            "width": 220,
+            "height": 100
+          }
+        },
+        {
+          "id": "view-processing",
+          "subject": "processing",
+          "geometry": {
+            "kind": "rect",
+            "x": 1360,
+            "y": 80,
+            "width": 220,
+            "height": 100
+          }
+        },
+        {
+          "id": "view-cancelled",
+          "subject": "cancelled",
+          "geometry": {
+            "kind": "rect",
+            "x": 80,
+            "y": 260,
+            "width": 220,
+            "height": 100
+          }
+        },
+        {
+          "id": "view-done",
+          "subject": "done",
+          "geometry": {
+            "kind": "rect",
+            "x": 400,
+            "y": 260,
+            "width": 220,
+            "height": 100
+          }
+        },
+        {
+          "id": "view-processing-region",
+          "subject": "processing-region",
+          "geometry": {
+            "kind": "rect",
+            "x": 720,
+            "y": 260,
+            "width": 220,
+            "height": 100
+          }
+        },
+        {
+          "id": "view-detail-initial",
+          "subject": "detail-initial",
+          "geometry": {
+            "kind": "rect",
+            "x": 1040,
+            "y": 260,
+            "width": 220,
+            "height": 100
+          }
+        },
+        {
+          "id": "view-packing",
+          "subject": "packing",
+          "geometry": {
+            "kind": "rect",
+            "x": 1360,
+            "y": 260,
+            "width": 220,
+            "height": 100
+          }
+        },
+        {
+          "id": "view-packed",
+          "subject": "packed",
+          "geometry": {
+            "kind": "rect",
+            "x": 80,
+            "y": 440,
+            "width": 220,
+            "height": 100
+          }
+        },
+        {
+          "id": "view-begin",
+          "subject": "begin",
+          "endpoints": {
+            "source_view_id": "view-initial",
+            "target_view_id": "view-pending"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 940,
+              "y": 130
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 1040,
+                  "y": 130
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "view-approve",
+          "subject": "approve",
+          "endpoints": {
+            "source_view_id": "view-pending",
+            "target_view_id": "view-processing"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 1260,
+              "y": 130
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 1360,
+                  "y": 130
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "view-cancel",
+          "subject": "cancel",
+          "endpoints": {
+            "source_view_id": "view-pending",
+            "target_view_id": "view-cancelled"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 1260,
+              "y": 130
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 80,
+                  "y": 310
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "view-complete",
+          "subject": "complete",
+          "endpoints": {
+            "source_view_id": "view-processing",
+            "target_view_id": "view-done"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 1580,
+              "y": 130
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 400,
+                  "y": 310
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "view-close-cancelled",
+          "subject": "close-cancelled",
+          "endpoints": {
+            "source_view_id": "view-cancelled",
+            "target_view_id": "view-done"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 300,
+              "y": 310
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 400,
+                  "y": 310
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "view-start-packing",
+          "subject": "start-packing",
+          "endpoints": {
+            "source_view_id": "view-detail-initial",
+            "target_view_id": "view-packing"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 1260,
+              "y": 310
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 1360,
+                  "y": 310
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "view-finish-packing",
+          "subject": "finish-packing",
+          "endpoints": {
+            "source_view_id": "view-packing",
+            "target_view_id": "view-packed"
+          },
+          "geometry": {
+            "kind": "path",
+            "start": {
+              "x": 1580,
+              "y": 310
+            },
+            "segments": [
+              {
+                "kind": "line",
+                "to": {
+                  "x": 80,
+                  "y": 490
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
