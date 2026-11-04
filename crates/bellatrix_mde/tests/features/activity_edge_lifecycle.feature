@@ -108,3 +108,14 @@ Feature: ControlFlow object-node endpoint semantics across the authored Activity
     And outgoing and self-loop identities are excluded without inventing incoming membership
     Then every state is saved and reopened as JSON and BLX with identical diagnostics
     And restoring the original document restores the baseline result
+
+  Scenario: Preserve ObjectFlow distribution flags through repair
+    Given an imported ObjectFlow as a canonical relation or object record
+    And absent distribution flags use their normative false defaults without mutation
+    When each Boolean combination is authored
+    Then only both true violates ObjectFlow-is_multicast_or_is_multireceive
+    When one or both flags are malformed
+    Then property-value errors remain separate from the unverified rule
+    And a known false proves the conjunction false in either operand order
+    Then every state is saved and reopened as JSON and BLX with identical diagnostics
+    And restoring the original document restores the baseline result

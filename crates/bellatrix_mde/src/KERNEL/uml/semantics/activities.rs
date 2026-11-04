@@ -330,6 +330,22 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
     let mut issues = Vec::new();
     for node in references.model().elements() {
         let mut checks = Vec::new();
+        if node.conforms_to("ObjectFlow") {
+            // Defaults come from the normative property descriptors. Malformed
+            // scalars have their own property diagnostics, not a fabricated
+            // violation of this conjunction. A known false still disproves it.
+            checks.push((
+                require_all(["isMulticast", "isMultireceive"].map(|property| {
+                    schema::read_effective_boolean(node, property)
+                        .map_err(|error| QueryError::unsupported(node.id(), error))
+                }))
+                .map(|both| !both),
+                "UML_OBJECT_FLOW_IS_MULTICAST_OR_IS_MULTIRECEIVE",
+                "MDE_OBJECT_FLOW_IS_MULTICAST_OR_IS_MULTIRECEIVE_UNVERIFIED",
+                "ObjectFlow-is_multicast_or_is_multireceive",
+                "ObjectFlow isMulticast and isMultireceive cannot both be true",
+            ));
+        }
         if node.conforms_to("ControlFlow") {
             checks.push((
                 require_all([

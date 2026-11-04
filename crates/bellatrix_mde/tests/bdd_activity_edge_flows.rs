@@ -921,3 +921,127 @@ fn decision_edge_exclusion_survives_import_edit_persistence_and_repair() -> Flow
     reopen("decision-repaired", &original, &repaired)?;
     Ok(())
 }
+
+#[test]
+fn object_flow_distribution_flags_preserve_defaults_unknowns_and_repairs() -> FlowResult<()> {
+    assert!(
+        include_str!("features/activity_edge_lifecycle.feature")
+            .contains("Scenario: Preserve ObjectFlow distribution flags through repair")
+    );
+    for object_record in [false, true] {
+        let mut original = imported_activity()?;
+        if object_record {
+            let edge = relation(&mut original, "order-data")?.clone();
+            original["model"]["relations"]
+                .as_array_mut()
+                .ok_or("missing relations")?
+                .retain(|relation| relation["id"] != "order-data");
+            let mut properties = edge["properties"].clone();
+            properties["source"] = json!({"$ref":"order-output"});
+            properties["target"] = json!({"$ref":"order-input"});
+            original["model"]["elements"].as_array_mut().ok_or("missing elements")?
+                .push(json!({"id":"order-data", "kind":"uml.object_flow", "name":"order-data", "properties":properties}));
+        }
+        let baseline = validate(&original)?;
+        println!("Given an imported ObjectFlow with implicit false distribution defaults");
+        assert_eq!(baseline["has_errors"], false, "{baseline}");
+        reopen(
+            &format!("object-flow-defaults-{object_record}"),
+            &original,
+            &baseline,
+        )?;
+        for (name, multicast, multireceive, expected, malformed) in [
+            ("null-left", Value::Null, json!(true), Some("warning"), true),
+            (
+                "null-right",
+                json!(true),
+                Value::Null,
+                Some("warning"),
+                true,
+            ),
+            ("number-right", json!(true), json!(1), Some("warning"), true),
+            ("false-false", json!(false), json!(false), None, false),
+            ("multicast", json!(true), json!(false), None, false),
+            ("multireceive", json!(false), json!(true), None, false),
+            ("both", json!(true), json!(true), Some("error"), false),
+            (
+                "unknown-right",
+                json!(true),
+                json!("true"),
+                Some("warning"),
+                true,
+            ),
+            (
+                "unknown-left",
+                json!("true"),
+                json!(true),
+                Some("warning"),
+                true,
+            ),
+            ("false-left", json!(false), json!("true"), None, true),
+            ("false-right", json!("true"), json!(false), None, true),
+            ("both-unknown", json!([]), json!({}), Some("warning"), true),
+        ] {
+            println!("When editing distribution flags to {name} in object-record={object_record}");
+            let mut edited = original.clone();
+            let edge = if object_record {
+                element(&mut edited, "order-data")?
+            } else {
+                relation(&mut edited, "order-data")?
+            };
+            edge["properties"]["isMulticast"] = multicast;
+            edge["properties"]["isMultireceive"] = multireceive;
+            let response = validate(&edited)?;
+            let diagnostics = response["diagnostics"]
+                .as_array()
+                .ok_or("missing diagnostics")?;
+            let matching: Vec<_> = diagnostics
+                .iter()
+                .filter(|diagnostic| {
+                    diagnostic["subject_id"] == "order-data"
+                        && matches!(
+                            diagnostic["code"].as_str(),
+                            Some(
+                                "UML_OBJECT_FLOW_IS_MULTICAST_OR_IS_MULTIRECEIVE"
+                                    | "MDE_OBJECT_FLOW_IS_MULTICAST_OR_IS_MULTIRECEIVE_UNVERIFIED"
+                            )
+                        )
+                })
+                .collect();
+            if let Some(severity) = expected {
+                assert_eq!(matching.len(), 1, "{response}");
+                assert_eq!(matching[0]["severity"], severity, "{response}");
+            } else {
+                assert!(matching.is_empty(), "{response}");
+            }
+            if malformed {
+                assert!(
+                    diagnostics
+                        .iter()
+                        .any(|diagnostic| diagnostic["subject_id"] == "order-data"
+                            && diagnostic["code"] == "UML_PROPERTY_VALUE"
+                            && diagnostic["severity"] == "error"),
+                    "{response}"
+                );
+            }
+            assert_eq!(
+                response["has_errors"],
+                malformed || expected == Some("error"),
+                "{response}"
+            );
+            reopen(
+                &format!("object-flow-flags-{name}-{object_record}"),
+                &edited,
+                &response,
+            )?;
+        }
+        let repaired = validate(&original)?;
+        assert_eq!(repaired, baseline);
+        reopen(
+            &format!("object-flow-flags-repaired-{object_record}"),
+            &original,
+            &repaired,
+        )?;
+    }
+    Ok(())
+}

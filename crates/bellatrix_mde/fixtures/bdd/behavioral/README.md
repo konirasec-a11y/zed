@@ -105,3 +105,10 @@ removal. Property-contract diagnostics remain separate. This slice does not
 implement decision_input_flow_incoming and does not discount the selected edge
 from the existing incoming/outgoing cardinality checks. The lifecycle flow saves
 and reopens every edited state as JSON and BLX before restoring the baseline.
+
+ObjectFlow-is_multicast_or_is_multireceive forbids both distribution flags being
+true. Effective Boolean defaults come from UML.xmi and are never materialized
+into the document. Malformed flags retain property-value errors; the rule stays
+unverified unless a known false independently disproves the conjunction. The
+lifecycle covers both canonical relations and object records, all Boolean
+combinations, either unknown operand, JSON/BLX reopen and baseline repair.
