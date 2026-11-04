@@ -1213,3 +1213,185 @@ fn selection_rule(response: &Value, severity: Option<&str>) -> FlowResult<()> {
     }
     Ok(())
 }
+
+#[test]
+fn activity_parameter_direction_survives_unknown_incidence_persistence_and_repair() -> FlowResult<()>
+{
+    assert!(
+        include_str!("features/activity_edge_lifecycle.feature")
+            .contains("Scenario: Preserve ActivityParameterNode flow direction through repair")
+    );
+    let mut original = imported_activity()?;
+    original["model"]["elements"].as_array_mut().ok_or("missing elements")?.extend([
+        json!({"id":"activity-parameter","kind":"uml.parameter","name":"incomingOrder","properties":{"direction":"in","type":{"$ref":"order"}}}),
+        json!({"id":"parameter-node","kind":"uml.activity_parameter_node","name":"parameterNode","properties":{"parameter":{"$ref":"activity-parameter"},"type":{"$ref":"order"}}}),
+    ]);
+    original["model"]["relations"].as_array_mut().ok_or("missing relations")?.extend([
+        json!({"id":"owns-activity-parameter","kind":"owns","from":"fulfillment","to":"activity-parameter"}),
+        json!({"id":"owns-parameter-node","kind":"owns","from":"fulfillment","to":"parameter-node"}),
+    ]);
+    let baseline = validate(&original)?;
+    parameter_direction_rule(&baseline, None)?;
+    reopen("parameter-empty", &original, &baseline)?;
+    for object_record in [false, true] {
+        let mut edited = original.clone();
+        if object_record {
+            add_activity_edge_object(
+                &mut edited,
+                "parameter-input",
+                "uml.object_flow",
+                json!({"$ref":"order-output"}),
+                json!({"$ref":"parameter-node"}),
+            )?;
+        } else {
+            edited["model"]["relations"].as_array_mut().ok_or("missing relations")?.extend([
+                json!({"id":"parameter-input","kind":"uml.object_flow","from":"order-output","to":"parameter-node","properties":{"activity":{"$ref":"fulfillment"}}}),
+                json!({"id":"owns-parameter-input","kind":"owns","from":"fulfillment","to":"parameter-input"}),
+            ]);
+        }
+        let incoming = validate(&edited)?;
+        parameter_direction_rule(&incoming, None)?;
+        reopen(
+            &format!("parameter-incoming-{object_record}"),
+            &edited,
+            &incoming,
+        )?;
+        add_activity_edge_object(
+            &mut edited,
+            "parameter-output",
+            "uml.object_flow",
+            json!({"href":"external.uml#source"}),
+            json!({"$ref":"order-input"}),
+        )?;
+        let uncertain = validate(&edited)?;
+        parameter_direction_rule(&uncertain, Some("warning"))?;
+        reopen(
+            &format!("parameter-unknown-outgoing-{object_record}"),
+            &edited,
+            &uncertain,
+        )?;
+        element(&mut edited, "parameter-output")?["properties"]["source"] =
+            json!({"$ref":"parameter-node"});
+        let both = validate(&edited)?;
+        parameter_direction_rule(&both, Some("error"))?;
+        reopen(&format!("parameter-both-{object_record}"), &edited, &both)?;
+        add_activity_edge_object(
+            &mut edited,
+            "parameter-unknown",
+            "uml.future_edge",
+            json!({"href":"external.uml#source"}),
+            json!({"$ref":"parameter-node"}),
+        )?;
+        let independent = validate(&edited)?;
+        parameter_direction_rule(&independent, Some("error"))?;
+        reopen(
+            &format!("parameter-known-witnesses-{object_record}"),
+            &edited,
+            &independent,
+        )?;
+        let edge = if object_record {
+            element(&mut edited, "parameter-input")?
+        } else {
+            relation(&mut edited, "parameter-input")?
+        };
+        if object_record {
+            edge["properties"]["target"] = json!({"$ref":"order-input"});
+        } else {
+            edge["to"] = json!("order-input");
+        }
+        let unknown_family = validate(&edited)?;
+        parameter_direction_rule(&unknown_family, Some("warning"))?;
+        reopen(
+            &format!("parameter-unknown-family-{object_record}"),
+            &edited,
+            &unknown_family,
+        )?;
+        element(&mut edited, "parameter-unknown")?["properties"]["target"] =
+            json!({"$ref":"order-input"});
+        let outgoing_only = validate(&edited)?;
+        parameter_direction_rule(&outgoing_only, None)?;
+        reopen(
+            &format!("parameter-outgoing-only-{object_record}"),
+            &edited,
+            &outgoing_only,
+        )?;
+        element(&mut edited, "parameter-output")?["properties"]["target"] =
+            json!({"$ref":"parameter-node"});
+        let self_loop = validate(&edited)?;
+        parameter_direction_rule(&self_loop, Some("error"))?;
+        reopen(
+            &format!("parameter-self-loop-{object_record}"),
+            &edited,
+            &self_loop,
+        )?;
+        element(&mut edited, "parameter-output")?["kind"] = json!("uml.control_flow");
+        element(&mut edited, "parameter-node")?["properties"]["isControlType"] = json!(true);
+        let control_loop = validate(&edited)?;
+        parameter_direction_rule(&control_loop, Some("error"))?;
+        reopen(
+            &format!("parameter-control-loop-{object_record}"),
+            &edited,
+            &control_loop,
+        )?;
+        element(&mut edited, "parameter-output")?["properties"]["source"] = json!(42);
+        let malformed = validate(&edited)?;
+        parameter_direction_rule(&malformed, Some("warning"))?;
+        assert!(
+            malformed["diagnostics"]
+                .as_array()
+                .ok_or("missing diagnostics")?
+                .iter()
+                .any(|d| d["subject_id"] == "parameter-output"
+                    && d["code"] == "UML_PROPERTY_CONTRACT"
+                    && d["severity"] == "error"),
+            "{malformed}"
+        );
+        reopen(
+            &format!("parameter-malformed-source-{object_record}"),
+            &edited,
+            &malformed,
+        )?;
+        add_activity_edge_object(
+            &mut edited,
+            "independent-output",
+            "uml.object_flow",
+            json!({"$ref":"parameter-node"}),
+            json!({"$ref":"order-input"}),
+        )?;
+        let witnessed = validate(&edited)?;
+        parameter_direction_rule(&witnessed, Some("error"))?;
+        reopen(
+            &format!("parameter-malformed-opposite-witness-{object_record}"),
+            &edited,
+            &witnessed,
+        )?;
+    }
+    assert_eq!(validate(&original)?, baseline);
+    reopen("parameter-repaired", &original, &baseline)?;
+    Ok(())
+}
+
+fn parameter_direction_rule(response: &Value, severity: Option<&str>) -> FlowResult<()> {
+    let matching: Vec<_> = response["diagnostics"]
+        .as_array()
+        .ok_or("missing diagnostics")?
+        .iter()
+        .filter(|d| {
+            d["subject_id"] == "parameter-node"
+                && matches!(
+                    d["code"].as_str(),
+                    Some(
+                        "UML_ACTIVITY_PARAMETER_NODE_NO_EDGES"
+                            | "MDE_ACTIVITY_PARAMETER_NODE_NO_EDGES_UNVERIFIED"
+                    )
+                )
+        })
+        .collect();
+    if let Some(severity) = severity {
+        assert_eq!(matching.len(), 1, "{response}");
+        assert_eq!(matching[0]["severity"], severity, "{response}");
+    } else {
+        assert!(matching.is_empty(), "{response}");
+    }
+    Ok(())
+}

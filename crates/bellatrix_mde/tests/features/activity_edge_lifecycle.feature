@@ -131,3 +131,14 @@ Feature: ControlFlow object-node endpoint semantics across the authored Activity
     And malformed selection retains its separate property-contract error
     Then canonical relation and object record edits survive JSON and BLX reopening
     And restoring the original document restores the baseline result
+
+  Scenario: Preserve ActivityParameterNode flow direction through repair
+    Given an imported Activity with a Parameter and an ActivityParameterNode
+    Then an unconnected node satisfies the direction constraint
+    When incoming and outgoing edges are edited as relation and object records
+    Then only having both directions violates ActivityParameterNode-no_edges
+    And unknown endpoints or edge families preserve unverified incidence
+    And known witnesses in both directions remain a violation despite unknown neighbors
+    And a self-loop proves both directions without double-counting identity
+    Then all edited states survive JSON and BLX reopening with identical findings
+    And restoring the original document restores the baseline result

@@ -122,3 +122,10 @@ source satisfies the consequent.
 Property-contract errors remain separate. Parameter-count/type and side-effect
 rules of the selected Behavior are outside this slice. Both edge representations
 are exercised through JSON/BLX save, reopen and repair.
+
+ActivityParameterNode-no_edges requires at least one of incoming/outgoing to be
+empty. Direction is derived from ActivityEdge target/source, with known edges in
+both directions proving a violation even alongside unknown edges. Unresolved
+incidence or family remains unverified; a self-loop proves both directions.
+Parameter type and direction constraints are separate rules outside this slice.
+The lifecycle covers relation/object edges, JSON/BLX reopen and baseline repair.

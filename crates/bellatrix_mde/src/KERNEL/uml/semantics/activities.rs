@@ -179,6 +179,32 @@ fn activity_edge_candidates<'a>(references: &ReferenceIndex<'a>) -> Vec<ElementR
     candidates
 }
 
+fn activity_parameter_one_direction(
+    references: &ReferenceIndex<'_>,
+    node: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let candidates = activity_edge_candidates(references);
+    let exists = |role| {
+        accept_any(candidates.iter().map(|edge| {
+            require_all([
+                activity_endpoint(references, *edge, role)
+                    .map(|endpoint| endpoint.id() == node.id()),
+                if edge.conforms_to("ActivityEdge") {
+                    Ok(true)
+                } else {
+                    Err(QueryError::unsupported(
+                        edge.id(),
+                        "ActivityEdge membership is unresolved",
+                    ))
+                },
+            ])
+        }))
+    };
+    // One known edge in each direction (including a self-loop) proves failure.
+    // Unresolved endpoints cannot erase witnesses or invent an absent direction.
+    require_all([exists("target"), exists("source")]).map(|both| !both)
+}
+
 fn uniform_activity_edges(
     references: &ReferenceIndex<'_>,
     node: ElementRef<'_>,
@@ -387,6 +413,15 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "MDE_CONTROL_FLOW_OBJECT_NODES_UNVERIFIED",
                 "ControlFlow-object_nodes",
                 "ObjectNode endpoints of a ControlFlow must have isControlType=true",
+            ));
+        }
+        if node.conforms_to("ActivityParameterNode") {
+            checks.push((
+                activity_parameter_one_direction(references, node),
+                "UML_ACTIVITY_PARAMETER_NODE_NO_EDGES",
+                "MDE_ACTIVITY_PARAMETER_NODE_NO_EDGES_UNVERIFIED",
+                "ActivityParameterNode-no_edges",
+                "an ActivityParameterNode must not have both incoming and outgoing ActivityEdges",
             ));
         }
         if node.conforms_to("InitialNode") {
