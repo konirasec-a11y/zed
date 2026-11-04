@@ -362,6 +362,94 @@ fn pseudostate_single_outgoing(references: &ReferenceIndex<'_>, vertex: ElementR
     else { Ok(true) }
 }
 
+fn transition_endpoint<'a>(
+    references: &ReferenceIndex<'a>, transition: ElementRef<'a>, role: &str,
+) -> Result<ElementRef<'a>, QueryError> {
+    references.element(transition.id()).map_err(|error| QueryError::invalid(transition.id(), error))?;
+    let descriptor = schema::uml_property("Transition", role)
+        .map_err(|error| QueryError::unsupported(transition.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(transition.id(), format!("missing Transition::{role} contract")))?;
+    let canonical = match transition {
+        ElementRef::Relationship(relation) => Some(serde_json::json!({"$ref": if role == "source" { &relation.from } else { &relation.to }})),
+        ElementRef::Object(_) => None,
+    };
+    let authored = transition.properties().get(role);
+    for value in canonical.as_ref().into_iter().chain(authored) {
+        if let PropertyOutcome::Violation(message) = property_contracts::check_value(references, transition, descriptor, value) {
+            return Err(QueryError::invalid(transition.id(), message));
+        }
+    }
+    if let (Some(canonical), Some(authored)) = (canonical.as_ref(), authored)
+        && let (Ok(expected), Ok(actual)) = (reference_id(canonical), reference_id(authored))
+        && expected != actual
+    {
+        return Err(QueryError::invalid(transition.id(), format!("authored {role} contradicts canonical relation endpoint")));
+    }
+    let value = canonical.as_ref().or(authored)
+        .ok_or_else(|| QueryError::unsupported(transition.id(), format!("Transition {role} is not materialized")))?;
+    let id = reference_id(value).ok().flatten()
+        .ok_or_else(|| QueryError::unsupported(transition.id(), format!("Transition {role} is unresolved")))?;
+    references.element(id).map_err(|error| QueryError::invalid(transition.id(), error))
+}
+
+fn is_state(endpoint: Result<ElementRef<'_>, QueryError>) -> Result<bool, QueryError> {
+    let endpoint = endpoint?;
+    if endpoint.metaclass().is_none() {
+        Err(QueryError::unsupported(endpoint.id(), "endpoint metaclass is unresolved"))
+    } else { Ok(endpoint.conforms_to("State")) }
+}
+
+fn is_pseudostate_kind(endpoint: Result<ElementRef<'_>, QueryError>, kind: &str) -> Result<bool, QueryError> {
+    let endpoint = endpoint?;
+    if endpoint.metaclass().is_none() {
+        return Err(QueryError::unsupported(endpoint.id(), "endpoint metaclass is unresolved"));
+    }
+    if !endpoint.conforms_to("Pseudostate") { return Ok(false); }
+    schema::read_effective_scalar(endpoint, "kind")
+        .map(|value| value.as_str() == Some(kind))
+        .map_err(|error| QueryError::invalid(endpoint.id(), error))
+}
+
+fn implies(antecedent: Result<bool, QueryError>, consequent: Result<bool, QueryError>) -> Result<bool, QueryError> {
+    // Invalid contracts cannot be concealed by an unrelated Boolean result.
+    match (antecedent, consequent) {
+        (Err(error @ QueryError::Invalid { .. }), _) | (_, Err(error @ QueryError::Invalid { .. })) => Err(error),
+        (Ok(false), _) | (_, Ok(true)) => Ok(true),
+        (Ok(true), result) => result,
+        (Err(error), _) => Err(error),
+    }
+}
+
+fn transition_internal(references: &ReferenceIndex<'_>, transition: ElementRef<'_>) -> Result<bool, QueryError> {
+    let kind = schema::read_effective_scalar(transition, "kind")
+        .map_err(|error| QueryError::invalid(transition.id(), error))?;
+    if kind.as_str() != Some("internal") { return Ok(true); }
+    let source = transition_endpoint(references, transition, "source");
+    let target = transition_endpoint(references, transition, "target");
+    let state = is_state(transition_endpoint(references, transition, "source"));
+    let identical = match (source, target) {
+        (Ok(source), Ok(target)) => Ok(source.id() == target.id()),
+        (Err(error @ QueryError::Invalid { .. }), _) | (_, Err(error @ QueryError::Invalid { .. })) => Err(error),
+        (Err(error), _) | (_, Err(error)) => Err(error),
+    };
+    require_all([state, identical])
+}
+
+fn transition_external(references: &ReferenceIndex<'_>, transition: ElementRef<'_>) -> Result<bool, QueryError> {
+    let kind = schema::read_effective_scalar(transition, "kind")
+        .map_err(|error| QueryError::invalid(transition.id(), error))?;
+    if kind.as_str() != Some("external") { return Ok(true); }
+    is_pseudostate_kind(transition_endpoint(references, transition, "source"), "entryPoint").map(|entry| !entry)
+}
+
+fn transition_segment_state(references: &ReferenceIndex<'_>, transition: ElementRef<'_>, fork: bool) -> Result<bool, QueryError> {
+    let (condition_role, state_role, kind) = if fork { ("source", "target", "fork") } else { ("target", "source", "join") };
+    implies(
+        is_pseudostate_kind(transition_endpoint(references, transition, condition_role), kind),
+        is_state(transition_endpoint(references, transition, state_role)),
+    )
+}
+
 pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     for element in references.model().elements() {
@@ -399,6 +487,20 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             constraints.push((region_owned(references, element),
                 "UML_REGION_OWNED", "MDE_REGION_OWNED_UNVERIFIED",
                 "Region-owned", "a Region cannot have both state and stateMachine owners"));
+        }
+        if element.conforms_to("Transition") {
+            constraints.push((transition_internal(references, element),
+                "UML_TRANSITION_STATE_IS_INTERNAL", "MDE_TRANSITION_STATE_IS_INTERNAL_UNVERIFIED",
+                "Transition-state_is_internal", "an internal Transition requires the same State as source and target"));
+            constraints.push((transition_external(references, element),
+                "UML_TRANSITION_STATE_IS_EXTERNAL", "MDE_TRANSITION_STATE_IS_EXTERNAL_UNVERIFIED",
+                "Transition-state_is_external", "an external Transition cannot originate at an entryPoint"));
+            constraints.push((transition_segment_state(references, element, true),
+                "UML_TRANSITION_FORK_SEGMENT_STATE", "MDE_TRANSITION_FORK_SEGMENT_STATE_UNVERIFIED",
+                "Transition-fork_segment_state", "a Transition from a fork must target a State"));
+            constraints.push((transition_segment_state(references, element, false),
+                "UML_TRANSITION_JOIN_SEGMENT_STATE", "MDE_TRANSITION_JOIN_SEGMENT_STATE_UNVERIFIED",
+                "Transition-join_segment_state", "a Transition to a join must originate at a State"));
         }
         if element.conforms_to("ProtocolTransition") {
             constraints.push((composite_behavior_empty(references, element, "effect"),
