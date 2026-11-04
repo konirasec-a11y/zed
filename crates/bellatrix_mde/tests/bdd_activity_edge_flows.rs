@@ -1592,3 +1592,203 @@ fn parameter_enum_rule(response: &Value, role: &str, severity: Option<&str>) -> 
     }
     Ok(())
 }
+
+#[test]
+fn activity_parameter_type_identity_survives_nullable_external_types_and_repair() -> FlowResult<()>
+{
+    assert!(
+        include_str!("features/activity_edge_lifecycle.feature")
+            .contains("Scenario: Preserve Activity Parameter type identity through repair")
+    );
+    let mut original = imported_activity()?;
+    original["model"]["elements"].as_array_mut().ok_or("missing elements")?.extend([
+        json!({"id":"type-parameter","kind":"uml.parameter","name":"orderParam","properties":{"type":{"$ref":"order"}}}),
+        json!({"id":"type-node","kind":"uml.activity_parameter_node","name":"parameterNode","properties":{"parameter":{"$ref":"type-parameter"},"type":{"$ref":"order"}}}),
+        json!({"id":"special-order","kind":"uml.class","name":"SpecialOrder","properties":{}}),
+    ]);
+    original["model"]["relations"].as_array_mut().ok_or("missing relations")?.extend([
+        json!({"id":"owns-type-parameter","kind":"owns","from":"fulfillment","to":"type-parameter"}),
+        json!({"id":"owns-type-node","kind":"owns","from":"fulfillment","to":"type-node"}),
+        json!({"id":"owns-special-order","kind":"owns","from":"root","to":"special-order"}),
+        json!({"id":"special-order-base","kind":"uml.generalization","from":"special-order","to":"order","properties":{}}),
+        json!({"id":"owns-special-order-base","kind":"owns","from":"special-order","to":"special-order-base"}),
+    ]);
+    let baseline = validate(&original)?;
+    parameter_type_rule(&baseline, None)?;
+    assert_eq!(baseline["has_errors"], false, "{baseline}");
+    reopen("parameter-type-baseline", &original, &baseline)?;
+    for (name, node_type, parameter_type, severity, contract) in [
+        (
+            "subtype-not-equal",
+            json!({"$ref":"special-order"}),
+            json!({"$ref":"order"}),
+            Some("error"),
+            false,
+        ),
+        (
+            "supertype-not-equal",
+            json!({"$ref":"order"}),
+            json!({"$ref":"special-order"}),
+            Some("error"),
+            false,
+        ),
+        (
+            "same-subtype",
+            json!({"$ref":"special-order"}),
+            json!({"$ref":"special-order"}),
+            None,
+            false,
+        ),
+        ("both-null", Value::Null, Value::Null, None, false),
+        (
+            "node-null",
+            Value::Null,
+            json!({"$ref":"order"}),
+            Some("error"),
+            false,
+        ),
+        (
+            "parameter-null",
+            json!({"$ref":"order"}),
+            Value::Null,
+            Some("error"),
+            false,
+        ),
+        (
+            "external-node",
+            json!({"href":"external.uml#Order"}),
+            json!({"$ref":"order"}),
+            Some("warning"),
+            false,
+        ),
+        (
+            "external-parameter",
+            json!({"$ref":"order"}),
+            json!({"href":"external.uml#Order"}),
+            Some("warning"),
+            false,
+        ),
+        (
+            "malformed-node",
+            json!(42),
+            json!({"$ref":"order"}),
+            Some("warning"),
+            true,
+        ),
+        (
+            "malformed-parameter",
+            json!({"$ref":"order"}),
+            json!(42),
+            Some("warning"),
+            true,
+        ),
+        (
+            "wrong-type",
+            json!({"$ref":"type-parameter"}),
+            json!({"$ref":"order"}),
+            Some("warning"),
+            true,
+        ),
+    ] {
+        let mut edited = original.clone();
+        element(&mut edited, "type-node")?["properties"]["type"] = node_type;
+        element(&mut edited, "type-parameter")?["properties"]["type"] = parameter_type;
+        let response = validate(&edited)?;
+        parameter_type_rule(&response, severity)?;
+        if contract {
+            assert!(
+                response["diagnostics"]
+                    .as_array()
+                    .ok_or("missing diagnostics")?
+                    .iter()
+                    .any(|d| matches!(
+                        d["subject_id"].as_str(),
+                        Some("type-node" | "type-parameter")
+                    ) && d["code"] == "UML_TYPED_ELEMENT_TYPE"
+                        && d["severity"] == "error"),
+                "{response}"
+            );
+        }
+        assert_eq!(
+            response["has_errors"],
+            contract || severity == Some("error"),
+            "{response}"
+        );
+        reopen(&format!("parameter-type-{name}"), &edited, &response)?;
+    }
+    let mut absent = original.clone();
+    for subject in ["type-node", "type-parameter"] {
+        element(&mut absent, subject)?["properties"]
+            .as_object_mut()
+            .ok_or("missing properties")?
+            .remove("type");
+    }
+    let untyped = validate(&absent)?;
+    parameter_type_rule(&untyped, None)?;
+    reopen("parameter-type-both-absent", &absent, &untyped)?;
+    element(&mut absent, "type-node")?["properties"]["type"] = Value::Null;
+    let null_absent = validate(&absent)?;
+    parameter_type_rule(&null_absent, None)?;
+    reopen("parameter-type-null-absent", &absent, &null_absent)?;
+    element(&mut absent, "type-node")?["properties"]["parameter"] =
+        json!({"href":"external.uml#parameter"});
+    let external = validate(&absent)?;
+    parameter_type_rule(&external, Some("warning"))?;
+    reopen(
+        "parameter-type-external-parameter-reference",
+        &absent,
+        &external,
+    )?;
+    element(&mut absent, "type-node")?["properties"]
+        .as_object_mut()
+        .ok_or("missing properties")?
+        .remove("parameter");
+    let missing = validate(&absent)?;
+    parameter_type_rule(&missing, Some("warning"))?;
+    reopen(
+        "parameter-type-missing-parameter-reference",
+        &absent,
+        &missing,
+    )?;
+    element(&mut absent, "type-node")?["properties"]["parameter"] = Value::Null;
+    let null_parameter = validate(&absent)?;
+    parameter_type_rule(&null_parameter, Some("warning"))?;
+    reopen(
+        "parameter-type-null-parameter-reference",
+        &absent,
+        &null_parameter,
+    )?;
+    let mut dangling = original.clone();
+    element(&mut dangling, "type-node")?["properties"]["type"] = json!({"$ref":"missing-type"});
+    let unresolved = validate(&dangling)?;
+    parameter_type_rule(&unresolved, Some("warning"))?;
+    reopen("parameter-type-dangling-reference", &dangling, &unresolved)?;
+    assert_eq!(validate(&original)?, baseline);
+    reopen("parameter-type-repaired", &original, &baseline)?;
+    Ok(())
+}
+
+fn parameter_type_rule(response: &Value, severity: Option<&str>) -> FlowResult<()> {
+    let matching: Vec<_> = response["diagnostics"]
+        .as_array()
+        .ok_or("missing diagnostics")?
+        .iter()
+        .filter(|d| {
+            d["subject_id"] == "type-node"
+                && matches!(
+                    d["code"].as_str(),
+                    Some(
+                        "UML_ACTIVITY_PARAMETER_NODE_SAME_TYPE"
+                            | "MDE_ACTIVITY_PARAMETER_NODE_SAME_TYPE_UNVERIFIED"
+                    )
+                )
+        })
+        .collect();
+    if let Some(severity) = severity {
+        assert_eq!(matching.len(), 1, "{response}");
+        assert_eq!(matching[0]["severity"], severity, "{response}");
+    } else {
+        assert!(matching.is_empty(), "{response}");
+    }
+    Ok(())
+}

@@ -153,3 +153,13 @@ Feature: ControlFlow object-node endpoint semantics across the authored Activity
     And an allowed direction proves the implication despite uncertain incidence
     And empty or bidirectional nodes make these implications vacuous
     Then every edited state survives JSON and BLX reopening and baseline repair
+
+  Scenario: Preserve Activity Parameter type identity through repair
+    Given an imported ActivityParameterNode and Parameter with the same type
+    When their resolved type identities differ then same_type is violated
+    And subtype compatibility does not replace identity equality
+    And absent or null optional types compare as no type
+    And unresolved external types or malformed references remain unverified
+    And malformed references retain separate property-contract errors
+    And a missing or external Parameter reference cannot establish type equality
+    Then every edited state survives JSON and BLX reopening and baseline repair

@@ -138,3 +138,11 @@ from rule violations. Empty/bidirectional guards are false, and an allowed
 direction proves the implication despite uncertain incidence. The lifecycle
 covers every enum value, default in, malformed/external values, uncertain guards,
 JSON/BLX persistence and repair. Ownership and type equality remain separate.
+
+ActivityParameterNode-same_type compares exact resolved type identities, not
+subtype compatibility. Absent/null optional TypedElement types both mean no type;
+one typed and one untyped is a violation. External or invalid references remain
+unverified with their separate contract findings. A missing required Parameter
+cannot establish equality even when the node is untyped. The lifecycle includes
+generalization-backed subtype mismatches, nullable/unknown types and JSON/BLX
+reopen and repair. It does not infer ownership or resolve external definitions.

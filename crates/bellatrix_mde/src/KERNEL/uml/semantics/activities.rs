@@ -217,6 +217,29 @@ fn activity_parameter_one_direction(
     .map(|both| !both)
 }
 
+fn activity_parameter_same_type(
+    references: &ReferenceIndex<'_>,
+    node: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let identifier =
+        optional_activity_reference(references, node, "ActivityParameterNode", "parameter")?
+            .ok_or_else(|| {
+                QueryError::unsupported(
+                    node.id(),
+                    "ActivityParameterNode parameter is not represented",
+                )
+            })?;
+    let parameter = references
+        .element(&identifier)
+        .map_err(|error| QueryError::unsupported(node.id(), error))?;
+    // TypedElement::type is optional. Absent and explicit null both denote
+    // no type; resolved types compare identity, never subtype compatibility.
+    let node_type = optional_activity_reference(references, node, "TypedElement", "type")?;
+    let parameter_type =
+        optional_activity_reference(references, parameter, "TypedElement", "type")?;
+    Ok(node_type == parameter_type)
+}
+
 fn activity_parameter_direction(
     references: &ReferenceIndex<'_>,
     node: ElementRef<'_>,
@@ -462,6 +485,13 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             ));
         }
         if node.conforms_to("ActivityParameterNode") {
+            checks.push((
+                activity_parameter_same_type(references, node),
+                "UML_ACTIVITY_PARAMETER_NODE_SAME_TYPE",
+                "MDE_ACTIVITY_PARAMETER_NODE_SAME_TYPE_UNVERIFIED",
+                "ActivityParameterNode-same_type",
+                "an ActivityParameterNode must have the same type as its Parameter",
+            ));
             checks.push((
                 activity_parameter_direction(references, node, "source", "target", &["in", "inout"]),
                 "UML_ACTIVITY_PARAMETER_NODE_NO_INCOMING_EDGES",
