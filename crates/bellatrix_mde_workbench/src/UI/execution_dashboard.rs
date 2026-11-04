@@ -80,7 +80,7 @@ impl MdeExecutionDashboard {
         }
     }
     pub(crate) fn bind(&mut self, item: Option<&Entity<MdeWorkbenchItem>>, cx: &mut Context<Self>) {
-        let previous_item = self.item.as_ref().map(WeakEntity::entity_id);
+        let previous_item = self.item.as_ref().map(|item| item.entity_id());
         let next_item = item.map(Entity::entity_id);
         if previous_item != next_item {
             self.item = item.map(Entity::downgrade);

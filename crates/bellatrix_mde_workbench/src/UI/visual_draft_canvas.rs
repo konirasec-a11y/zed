@@ -293,6 +293,7 @@ impl MdeWorkbenchItem {
                                         dx: 0.0,
                                         dy: 0.0,
                                         revision,
+                                        began: false,
                                     });
                                 }
                                 cx.notify();
