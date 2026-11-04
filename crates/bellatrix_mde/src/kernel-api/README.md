@@ -245,3 +245,39 @@ boundary. Their migration remains separate. Execution trace timestamps and host
 run identifiers are observability data, not deterministic kernel results. Report
 ordering does not promise invariance under input array permutations: those arrays
 can express ordered UML members and graph first-error selection remains unchanged.
+
+## Semantic reparenting candidate
+
+`reparent_uml_element(input_json: &str) -> Result<String, String>` accepts exactly
+`api_version:1`, `model`, `element_id` and `owner_id`. The IDs are required strings;
+null/omitted owners are rejected rather than silently detaching an element. The
+result is `{api_version:1, model:...}`, suitable for subsequent validation.
+
+This pure function reuses the existing transactional `SetOwner` command, not an
+Explorer placement override. It first requires graph/presentation integrity,
+then applies the supported UML composite ownership rules, root/derived-owner
+restrictions, cycle checks and the command's semantic change-validation policy.
+A rejected candidate returns no partial model and never changes the input.
+Existing ownership relation identity is retained when reparenting; a new ownership
+relation receives the existing deterministic, collision-checked model-derived ID.
+Other normalization performed by the command, including association projection
+synchronization, remains in force; this is not a raw single-edge rewrite.
+
+Errors use the standard envelope: `INVALID_REQUEST`, `UNSUPPORTED_API_VERSION`,
+`INVALID_MODEL`, `GRAPH_INTEGRITY`, `OWNERSHIP_REPARENT_REJECTED`, or
+`RESPONSE_SERIALIZATION_FAILED`. The rejection message carries the existing
+command reason. Existing semantic errors may remain under the command's delta
+policy: success is not full UML conformance certification. Full validation remains
+a separate operation and should inform the caller's publication policy.
+
+There is no I/O, clock, callback, retained state, file move or publication. The
+returned document is a candidate only. The application must compare the source
+revision and publish atomically with compare-and-swap; this function does not
+invent or advance a revision. Existing Cordis `ModelingSetOwnerRequested` and
+`MdeUiCommand::SetOwner` already use the snapshot/revision/ProjectReplace path.
+No UI integration is changed by this boundary.
+
+Existing Explorer overrides are preserved, so an old presentation override can
+still visually mask the new semantic owner. Reconciliation of those placements
+requires an explicit application policy; semantic reparenting does not silently
+delete presentation information or reinterpret diagram placement as UML ownership.

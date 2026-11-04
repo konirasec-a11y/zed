@@ -1,0 +1,62 @@
+use crate::kernel_api_contract::{API_VERSION, decode_model, error_response, invalid_request};
+use crate::{Graph, commands};
+use serde::Deserialize;
+use serde_json::{Value, json};
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReparentRequest {
+    api_version: u32,
+    model: Value,
+    element_id: String,
+    owner_id: String,
+}
+
+/// Compute an atomic semantic ownership change without publishing it.
+///
+/// Input contains exactly `api_version: 1`, `model`, `element_id` and `owner_id`.
+/// Both identities are required strings. Detaching to an absent owner is not
+/// part of this contract. Output is `{api_version: 1, model: ...}`, directly
+/// consumable by the model validation functions.
+///
+/// The existing SetOwner command enforces supported UML composite ownership,
+/// root restrictions, graph integrity/cycles and its semantic change checks.
+/// It preserves pre-existing semantic diagnostics according to that command's
+/// change-validation policy; success does not certify complete UML conformance.
+/// This is a semantic move, not an Explorer placement or filesystem move.
+/// Presentation overrides are preserved and may still mask the semantic owner.
+///
+/// # Errors
+/// Contract errors use the standard versioned JSON envelope. Invalid input graph
+/// integrity returns `GRAPH_INTEGRITY`; rejected changes return
+/// `OWNERSHIP_REPARENT_REJECTED`. No partial model is returned on any failure.
+///
+/// # Effects and determinism
+/// No I/O, clock, sink, callback or retained state. The input is unchanged and the
+/// result depends only on it. This function computes a candidate, not a commit:
+/// the caller must check the source revision and publish with compare-and-swap.
+/// No revision supplied by a client can replace that application-level check.
+/// Internal model and command types do not appear in the public signature.
+pub fn reparent_uml_element(input_json: &str) -> Result<String, String> {
+    let request: ReparentRequest =
+        serde_json::from_str(input_json).map_err(invalid_request)?;
+    let model = decode_model(request.api_version, &request.model)?;
+    Graph::new(&model)
+        .validate()
+        .map_err(|error| error_response("GRAPH_INTEGRITY", error.to_string()))?;
+    let command = commands::Command::SetOwner {
+        element_id: request.element_id,
+        owner_id: Some(request.owner_id),
+    };
+    // SetOwner allocates ownership identities from the model, not this revision
+    // seed. Revision locking belongs to the application publishing the candidate.
+    let updated = commands::apply(&model, &command, 0)
+        .map_err(|error| error_response("OWNERSHIP_REPARENT_REJECTED", error))?;
+    let model = serde_json::to_value(updated).map_err(|_| {
+        error_response(
+            "RESPONSE_SERIALIZATION_FAILED",
+            "updated model cannot be encoded as JSON",
+        )
+    })?;
+    Ok(json!({"api_version": API_VERSION, "model": model}).to_string())
+}

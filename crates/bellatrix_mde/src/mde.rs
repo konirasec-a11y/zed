@@ -163,3 +163,7 @@ pub use kernel_api_document::decode_model_document;
 #[path = "kernel-api/generation.rs"]
 mod kernel_api_generation;
 pub use kernel_api_generation::analyze_generation_dependencies;
+
+#[path = "kernel-api/ownership.rs"]
+mod kernel_api_ownership;
+pub use kernel_api_ownership::reparent_uml_element;
