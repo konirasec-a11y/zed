@@ -5,7 +5,7 @@ use super::{
     property_contracts::{self, PropertyOutcome},
     references::{ReferenceIndex, external_reference_href, reference_id},
     root::ElementRef,
-    schema,
+    schema, value_specifications,
 };
 use crate::{StructuralDiagnostic, StructuralSeverity};
 
@@ -199,15 +199,16 @@ fn activity_reference_present(
         .map(|reference| reference.is_some())
 }
 
-// UML.xmi ObjectFlow-transformation_behavior and Behavior inputParameters /
-// outputParameters. This checks the formal parameter-count constraint, not the
-// additional type compatibility or absence of side effects described in prose.
-fn object_flow_transformation(
+// UML.xmi ObjectFlow transformation_behavior / input_and_output_parameter and
+// Behavior inputParameters / outputParameters. These are the formal OCL checks;
+// type compatibility and absence of side effects mentioned in prose are separate.
+fn object_flow_behavior_parameters(
     references: &ReferenceIndex<'_>,
     edge: ElementRef<'_>,
+    property: &str,
 ) -> Result<bool, QueryError> {
     let Some(identifier) =
-        optional_activity_reference(references, edge, "ObjectFlow", "transformation")?
+        optional_activity_reference(references, edge, "ObjectFlow", property)?
     else {
         return Ok(true);
     };
@@ -218,11 +219,37 @@ fn object_flow_transformation(
         .map(|error| QueryError::unsupported(edge.id(), error.to_string()));
     let mut inputs = 0_usize;
     let mut outputs = 0_usize;
+    let mut checks = Vec::new();
     for parameter in parameters {
         match operations::direction(parameter) {
             Ok(direction) => {
                 if matches!(direction.as_str(), "in" | "inout") {
                     inputs += 1;
+                    if property == "selection" {
+                        let input = ElementRef::Object(parameter);
+                        checks.push(
+                            schema::read_effective_boolean(input, "isUnique")
+                                .map(|unique| !unique)
+                                .map_err(|error| QueryError::unsupported(input.id(), error)),
+                        );
+                        // MultiplicityElement::is compares the two bound queries
+                        // independently. A known mismatch must survive an opaque
+                        // opposite bound; malformed data has separate diagnostics.
+                        checks.push(
+                            value_specifications::lower_bound(references, input)
+                                .map(|lower| lower == 0.into())
+                                .map_err(|error| {
+                                    QueryError::unsupported(input.id(), error.to_string())
+                                }),
+                        );
+                        checks.push(
+                            value_specifications::upper_bound(references, input)
+                                .map(|upper| upper.is_unlimited())
+                                .map_err(|error| {
+                                    QueryError::unsupported(input.id(), error.to_string())
+                                }),
+                        );
+                    }
                 }
                 if matches!(direction.as_str(), "out" | "inout" | "return") {
                     outputs += 1;
@@ -235,13 +262,15 @@ fn object_flow_transformation(
     }
     // Additional unresolved members cannot remove two known inputs or outputs.
     // Conversely, a count of zero or one is conclusive only for a complete set.
-    if inputs > 1 || outputs > 1 {
-        return Ok(false);
-    }
-    if let Some(error) = uncertainty {
-        return Err(error);
-    }
-    Ok(inputs == 1 && outputs == 1)
+    checks.push(if inputs > 1 || outputs > 1 {
+        Ok(false)
+    } else if let Some(error) = uncertainty {
+        Err(error)
+    } else {
+        Ok(inputs == 1 && outputs == 1)
+    });
+    // A proven input restriction violation also survives incomplete counts.
+    require_all(checks)
 }
 
 fn object_node_selection(
@@ -681,7 +710,14 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
         }
         if node.conforms_to("ObjectFlow") {
             checks.push((
-                object_flow_transformation(references, node),
+                object_flow_behavior_parameters(references, node, "selection"),
+                "UML_OBJECT_FLOW_INPUT_AND_OUTPUT_PARAMETER",
+                "MDE_OBJECT_FLOW_INPUT_AND_OUTPUT_PARAMETER_UNVERIFIED",
+                "ObjectFlow-input_and_output_parameter",
+                "an ObjectFlow selection Behavior must have one input Parameter with non-unique multiplicity 0..* and one output Parameter",
+            ));
+            checks.push((
+                object_flow_behavior_parameters(references, node, "transformation"),
                 "UML_OBJECT_FLOW_TRANSFORMATION_BEHAVIOR",
                 "MDE_OBJECT_FLOW_TRANSFORMATION_BEHAVIOR_UNVERIFIED",
                 "ObjectFlow-transformation_behavior",
