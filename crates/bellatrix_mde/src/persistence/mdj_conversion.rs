@@ -1,17 +1,19 @@
 #[path = "mdj_associations.rs"]
 mod associations;
+#[path = "mdj_style_projection.rs"]
+mod style_projection;
 #[path = "mdj_view_projection.rs"]
 mod view_projection;
 
 use super::mdj::{self, Diagnostic, MdjError};
 use crate::{
     Authored, Diagram, Element, Geometry, LayoutBounds, MdjObjectResidual, MdjProvenance,
-    PresentationSource, Project, Relation, Style, View, ViewPresentation,
+    PresentationSource, Project, Relation, View, ViewPresentation,
 };
 use serde_json::{Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
-const PROJECTION_VERSION: u32 = 1;
+const PROJECTION_VERSION: u32 = 2;
 const CLASS_BOOLEAN_FIELDS: [&str; 2] = ["isAbstract", "isActive"];
 const SEMANTIC_FIELDS: [&str; 4] = ["isAbstract", "isActive", "visibility", "stereotype"];
 
@@ -240,8 +242,13 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
             }
             diagnostics.push(Diagnostic {
                 path: paths.get(&view.id).cloned().unwrap_or_default(),
-                message: "view/subview retained with subject, text, exact representable layout/path and attachments; unsupported style, route encodings, resources and other fields remain source residue; rendering is a partial preview".into(),
+                message: "view/subview retained with subject, text, exact representable layout/path, attachments and supported authored style; inherited or computed appearance, unsupported style, route encodings, resources and other fields remain source residue; rendering is a partial preview".into(),
             });
+            style_projection::diagnose(
+                view,
+                paths.get(&view.id).map(String::as_str).unwrap_or_default(),
+                &mut diagnostics,
+            );
         }
     }
     capture_composition(&index, &mut project, &residuals, &mut diagnostics)?;
@@ -293,6 +300,7 @@ fn read_views(value: Option<&Value>, ids: &mut BTreeSet<String>) -> Result<Vec<V
                 },
             });
             let endpoints = view_projection::take_endpoints(&mut residual);
+            let style = style_projection::take_style(&mut residual);
             let children = read_views(object.get("subViews"), ids)?;
             Ok(View {
                 id,
@@ -312,7 +320,7 @@ fn read_views(value: Option<&Value>, ids: &mut BTreeSet<String>) -> Result<Vec<V
                     }),
                     ..ViewPresentation::default()
                 },
-                style: Style::default(),
+                style,
                 z_index: i32::try_from(position).map_err(|_| failure("", "too many views"))?,
             })
         })
@@ -716,6 +724,7 @@ fn export_view(view: &View) -> Result<Value, MdjError> {
         insert_mapped(&mut object, "text", Value::String(label.clone()))?;
     }
     view_projection::export_endpoints(view, &mut object)?;
+    style_projection::export_style(view, &mut object)?;
     if view_projection::export_path(view, &mut object)? { return Ok(Value::Object(object)); }
     let Geometry::Layout { bounds } = &view.geometry else {
         return Err(failure(

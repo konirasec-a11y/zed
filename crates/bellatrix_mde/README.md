@@ -95,6 +95,43 @@ not `draft`. Unknown View, endpoint and draft fields are rejected with a decodin
 error, including the former draft-local endpoint fields; they are not migrated
 or silently discarded.
 
+## StarUML presentation interchange
+
+The MDJ adapter maps explicit `fillColor`, `lineColor` and `fontColor` to generic
+`Style` colors when they use `#RRGGBB` or `#RRGGBBAA`. Complete `font` strings map
+to family, size, normal/bold weight and italic. Underline, word wrap, shadow and
+horizontal/vertical alignment also have bidirectional mappings, including nested
+Views. Mapped values are removed from source residue and authored only once.
+
+This encoding follows the supplied StarUML reference's
+`resources/default/metamodel.json` and `src/core/graphics.js` (`Font.__read`,
+`Font.__write` and Canvas alignment constants), under
+`crates/bellatrix_design_system/docs/ref/staruml`. The adapter is an independent
+implementation of those file encodings, not copied rendering or application code.
+
+Missing values stay absent. Nulls, partial fonts (`?`), unknown encodings and
+noncanonical font-number spelling stay in source residue with diagnostics.
+The supported font-size range is 1–400; alternate numeric spelling, such as
+`13.00` or `1.3e1`, is not normalized by unrelated edits. An explicit complete
+font can be removed or edited; a partial typed font or unsupported weight is
+rejected at export instead of supplying defaults. Residue conflicts are errors.
+After an edit, export reimports its actual output and compares the entire
+authored contract before returning bytes. Unedited replay retains original bytes.
+
+This is an adapter/contract capability, not editable StarUML UI parity.
+The workbench still opens MDJ as a read-only preview and its imported renderer
+does not yet consume all typed style fields. `parentStyle` and computed appearance
+remain unresolved source behavior. `SetViewStyle` reaches top-level Views only;
+nested style is representable in the contract, without a matching authoring
+command yet. Generic opacity, custom stroke width/dashes and other unmapped style
+edits cannot be exported losslessly. Composition edits remain blocked.
+
+`tests/features/mdj_presentation_lifecycle.feature` and
+`tests/bdd_mdj_presentation_flows.rs` define integration flows for import, public
+style commands, JSON/BLX disk persistence, MDJ export/reimport, source preservation
+and rejection/repair. These flows do not establish native visual equivalence or
+successful reopening in the StarUML application.
+
 ## Geometry boundary and remaining coupling
 
 For `SetViewRouting`, the view-model receives an immutable document snapshot and

@@ -1,0 +1,75 @@
+{
+  "_type": "Project",
+  "_id": "project",
+  "name": "Authored presentation",
+  "pluginPayload": {"precise": 12345678901234567890.123456789, "enabled": null},
+  "ownedElements": [{
+    "_type": "UMLModel",
+    "_id": "model",
+    "_parent": {"$ref": "project"},
+    "name": "Model",
+    "ownedElements": [{
+      "_type": "UMLClass",
+      "_id": "class",
+      "_parent": {"$ref": "model"},
+      "name": "Invoice"
+    }, {
+      "_type": "UMLClassDiagram",
+      "_id": "diagram",
+      "_parent": {"$ref": "model"},
+      "name": "Invoice views",
+      "ownedViews": [{
+        "_type": "UMLClassView",
+        "_id": "class-view",
+        "_parent": {"$ref": "diagram"},
+        "model": {"$ref": "class"},
+        "left": 40,
+        "top": 50,
+        "width": 180,
+        "height": 120,
+        "fillColor": "#123456",
+        "lineColor": "#654321",
+        "fontColor": "#112233FF",
+        "font": "Inter;13.5;3",
+        "showShadow": false,
+        "parentStyle": false,
+        "vendorStyle": {"effects": ["glow", null]},
+        "subViews": [{
+          "_type": "LabelView",
+          "_id": "name-label",
+          "_parent": {"$ref": "class-view"},
+          "text": "Invoice",
+          "left": 50,
+          "top": 55,
+          "width": 160,
+          "height": 24,
+          "font": "Inter;11;0",
+          "fontColor": "#ABCDEF",
+          "underline": true,
+          "wordWrap": false,
+          "horizontalAlignment": 0,
+          "verticalAlignment": 3,
+          "parentStyle": true
+        }]
+      }, {
+        "_type": "UMLClassView",
+        "_id": "class-copy",
+        "_parent": {"$ref": "diagram"},
+        "model": {"$ref": "class"},
+        "left": 350,
+        "top": 50,
+        "width": 180,
+        "height": 120
+      }, {
+        "_type": "EdgeView",
+        "_id": "edge-view",
+        "_parent": {"$ref": "diagram"},
+        "tail": {"$ref": "class-view"},
+        "head": {"$ref": "class-copy"},
+        "points": "220:110;285:110;350:110",
+        "lineStyle": 0,
+        "lineColor": "#AABBCC"
+      }]
+    }]
+  }]
+}
