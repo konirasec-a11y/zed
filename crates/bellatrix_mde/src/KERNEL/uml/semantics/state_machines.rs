@@ -68,10 +68,10 @@ fn connection_points(references: &ReferenceIndex<'_>, owner: ElementRef<'_>) -> 
     require_all(checks)
 }
 
-// Behavior roles can share a target type (State entry/exit/doActivity).
+// Composite roles can share a target type (State entry/exit/doActivity).
 // Resolve canonical containment without arbitrarily choosing an ambiguous role.
-fn composite_behavior_empty(
-    references: &ReferenceIndex<'_>, owner: ElementRef<'_>, role: &str,
+fn composite_role_empty(
+    references: &ReferenceIndex<'_>, owner: ElementRef<'_>, role: &str, target_type: &str,
 ) -> Result<bool, QueryError> {
     let metaclass = owner.metaclass().ok_or_else(|| QueryError::unsupported(owner.id(), "owner metaclass is unresolved"))?;
     let descriptor = schema::uml_property(metaclass, role)
@@ -86,14 +86,15 @@ fn composite_behavior_empty(
         });
         // A well-formed external reference also establishes nonempty content.
         // Invalid contracts are still checked and dominate the cardinality result.
-        checks.push(Ok(value.is_null()));
+        checks.push(Ok(if descriptor.upper == "1" { value.is_null() }
+            else { value.as_array().is_some_and(Vec::is_empty) }));
     }
     for child in references.explicit_owned_elements(owner.id())
         .map_err(|error| QueryError::invalid(owner.id(), error))?
     {
         if child.metaclass().is_none() {
             checks.push(Err(QueryError::unsupported(child.id(), format!("owned element metaclass is unresolved; {role} membership is unknown"))));
-        } else if child.conforms_to("Behavior") {
+        } else if child.conforms_to(target_type) {
             checks.push(classifiers::contributes_to_owned_union(owner, child, descriptor.id.fragment)
                 .map(|member| !member));
         }
@@ -450,6 +451,30 @@ fn transition_segment_state(references: &ReferenceIndex<'_>, transition: Element
     )
 }
 
+fn transition_segment_guards(references: &ReferenceIndex<'_>, transition: ElementRef<'_>, fork: bool) -> Result<bool, QueryError> {
+    let (role, kind) = if fork { ("source", "fork") } else { ("target", "join") };
+    implies(
+        is_pseudostate_kind(transition_endpoint(references, transition, role), kind),
+        require_all([
+            composite_role_empty(references, transition, "guard", "Constraint"),
+            composite_role_empty(references, transition, "trigger", "Trigger"),
+        ]),
+    )
+}
+
+fn transition_outgoing_pseudostates(references: &ReferenceIndex<'_>, transition: ElementRef<'_>) -> Result<bool, QueryError> {
+    let condition = transition_endpoint(references, transition, "source").and_then(|source| {
+        if source.metaclass().is_none() {
+            return Err(QueryError::unsupported(source.id(), "source metaclass is unresolved"));
+        }
+        if !source.conforms_to("Pseudostate") { return Ok(false); }
+        schema::read_effective_scalar(source, "kind")
+            .map(|kind| kind.as_str() != Some("initial"))
+            .map_err(|error| QueryError::invalid(source.id(), error))
+    });
+    implies(condition, composite_role_empty(references, transition, "trigger", "Trigger"))
+}
+
 pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     for element in references.model().elements() {
@@ -489,6 +514,15 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "Region-owned", "a Region cannot have both state and stateMachine owners"));
         }
         if element.conforms_to("Transition") {
+            constraints.push((transition_segment_guards(references, element, true),
+                "UML_TRANSITION_FORK_SEGMENT_GUARDS", "MDE_TRANSITION_FORK_SEGMENT_GUARDS_UNVERIFIED",
+                "Transition-fork_segment_guards", "a Transition from a fork cannot have a guard or triggers"));
+            constraints.push((transition_segment_guards(references, element, false),
+                "UML_TRANSITION_JOIN_SEGMENT_GUARDS", "MDE_TRANSITION_JOIN_SEGMENT_GUARDS_UNVERIFIED",
+                "Transition-join_segment_guards", "a Transition to a join cannot have a guard or triggers"));
+            constraints.push((transition_outgoing_pseudostates(references, element),
+                "UML_TRANSITION_OUTGOING_PSEUDOSTATES", "MDE_TRANSITION_OUTGOING_PSEUDOSTATES_UNVERIFIED",
+                "Transition-outgoing_pseudostates", "a Transition from a non-initial Pseudostate cannot have triggers"));
             constraints.push((transition_internal(references, element),
                 "UML_TRANSITION_STATE_IS_INTERNAL", "MDE_TRANSITION_STATE_IS_INTERNAL_UNVERIFIED",
                 "Transition-state_is_internal", "an internal Transition requires the same State as source and target"));
@@ -503,7 +537,7 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "Transition-join_segment_state", "a Transition to a join must originate at a State"));
         }
         if element.conforms_to("ProtocolTransition") {
-            constraints.push((composite_behavior_empty(references, element, "effect"),
+            constraints.push((composite_role_empty(references, element, "effect", "Behavior"),
                 "UML_PROTOCOL_TRANSITION_ASSOCIATED_ACTIONS", "MDE_PROTOCOL_TRANSITION_ASSOCIATED_ACTIONS_UNVERIFIED",
                 "ProtocolTransition-associated_actions", "a ProtocolTransition cannot have an effect Behavior"));
         }
@@ -516,7 +550,7 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 ("doActivity", "UML_FINAL_STATE_NO_STATE_BEHAVIOR", "MDE_FINAL_STATE_STATE_BEHAVIOR_UNVERIFIED",
                     "FinalState-no_state_behavior", "a FinalState cannot have doActivity Behavior"),
             ] {
-                constraints.push((composite_behavior_empty(references, element, role), code, unknown, constraint, violation));
+                constraints.push((composite_role_empty(references, element, role, "Behavior"), code, unknown, constraint, violation));
             }
             constraints.push((outgoing_at_most(references, element, 0),
                 "UML_FINAL_STATE_NO_OUTGOING_TRANSITIONS", "MDE_FINAL_STATE_OUTGOING_UNVERIFIED",
