@@ -526,6 +526,52 @@ fn partition_represents_property_and_is_contained(
     accept_any([guard.map(|value| !value), consequence])
 }
 
+// These action rules constrain named, required composite Pins. Resolve each
+// property independently so a known violation survives another opaque Pin.
+fn required_action_pin<'a>(
+    references: &ReferenceIndex<'a>,
+    action: ElementRef<'_>,
+    metaclass: &str,
+    property: &str,
+) -> Result<ElementRef<'a>, QueryError> {
+    let identifier = optional_activity_reference(references, action, metaclass, property)?
+        .ok_or_else(|| {
+            QueryError::unsupported(
+                action.id(),
+                format!("required {metaclass}::{property} is unresolved"),
+            )
+        })?;
+    references
+        .element(&identifier)
+        .map_err(|error| QueryError::unsupported(action.id(), error))
+}
+
+fn action_pins_unit_multiplicity(
+    references: &ReferenceIndex<'_>,
+    action: ElementRef<'_>,
+    metaclass: &str,
+    properties: &[&str],
+) -> Result<bool, QueryError> {
+    require_all(properties.iter().map(|property| {
+        required_action_pin(references, action, metaclass, property)
+            .and_then(|pin| pin_unit_multiplicity(references, pin))
+    }))
+}
+
+fn action_pins_untyped(
+    references: &ReferenceIndex<'_>,
+    action: ElementRef<'_>,
+    metaclass: &str,
+    properties: &[&str],
+) -> Result<bool, QueryError> {
+    require_all(properties.iter().map(|property| {
+        required_action_pin(references, action, metaclass, property).and_then(|pin| {
+            activity_reference_present(references, pin, "TypedElement", "type")
+                .map(|present| !present)
+        })
+    }))
+}
+
 fn pin_unit_multiplicity(
     references: &ReferenceIndex<'_>,
     pin: ElementRef<'_>,
@@ -1297,6 +1343,88 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "ActivityPartition-dimension_not_contained",
                 "an ActivityPartition with isDimension=true must not be contained by another ActivityPartition",
             ));
+        }
+        // UML action constraints below name specific Pins, not all inherited
+        // inputs/outputs. In particular, TestIdentity multiplicity excludes result.
+        for (metaclass, properties, code, unverified, rule) in [
+            (
+                "StartObjectBehaviorAction",
+                &["object"][..],
+                "UML_START_OBJECT_BEHAVIOR_ACTION_MULTIPLICITY_OF_OBJECT",
+                "MDE_START_OBJECT_BEHAVIOR_ACTION_MULTIPLICITY_OF_OBJECT_UNVERIFIED",
+                "StartObjectBehaviorAction-multiplicity_of_object",
+            ),
+            (
+                "ReadIsClassifiedObjectAction",
+                &["object"][..],
+                "UML_READ_IS_CLASSIFIED_OBJECT_ACTION_MULTIPLICITY_OF_INPUT",
+                "MDE_READ_IS_CLASSIFIED_OBJECT_ACTION_MULTIPLICITY_OF_INPUT_UNVERIFIED",
+                "ReadIsClassifiedObjectAction-multiplicity_of_input",
+            ),
+            (
+                "ReadIsClassifiedObjectAction",
+                &["result"][..],
+                "UML_READ_IS_CLASSIFIED_OBJECT_ACTION_MULTIPLICITY_OF_OUTPUT",
+                "MDE_READ_IS_CLASSIFIED_OBJECT_ACTION_MULTIPLICITY_OF_OUTPUT_UNVERIFIED",
+                "ReadIsClassifiedObjectAction-multiplicity_of_output",
+            ),
+            (
+                "ReclassifyObjectAction",
+                &["object"][..],
+                "UML_RECLASSIFY_OBJECT_ACTION_MULTIPLICITY",
+                "MDE_RECLASSIFY_OBJECT_ACTION_MULTIPLICITY_UNVERIFIED",
+                "ReclassifyObjectAction-multiplicity",
+            ),
+            (
+                "TestIdentityAction",
+                &["first", "second"][..],
+                "UML_TEST_IDENTITY_ACTION_MULTIPLICITY",
+                "MDE_TEST_IDENTITY_ACTION_MULTIPLICITY_UNVERIFIED",
+                "TestIdentityAction-multiplicity",
+            ),
+        ] {
+            if node.conforms_to(metaclass) {
+                checks.push((
+                    action_pins_unit_multiplicity(references, node, metaclass, properties),
+                    code,
+                    unverified,
+                    rule,
+                    "the Pins named by this action constraint must have multiplicity 1..1",
+                ));
+            }
+        }
+        for (metaclass, properties, code, unverified, rule) in [
+            (
+                "ReadIsClassifiedObjectAction",
+                &["object"][..],
+                "UML_READ_IS_CLASSIFIED_OBJECT_ACTION_NO_TYPE",
+                "MDE_READ_IS_CLASSIFIED_OBJECT_ACTION_NO_TYPE_UNVERIFIED",
+                "ReadIsClassifiedObjectAction-no_type",
+            ),
+            (
+                "ReclassifyObjectAction",
+                &["object"][..],
+                "UML_RECLASSIFY_OBJECT_ACTION_INPUT_PIN",
+                "MDE_RECLASSIFY_OBJECT_ACTION_INPUT_PIN_UNVERIFIED",
+                "ReclassifyObjectAction-input_pin",
+            ),
+            (
+                "TestIdentityAction",
+                &["first", "second"][..],
+                "UML_TEST_IDENTITY_ACTION_NO_TYPE",
+                "MDE_TEST_IDENTITY_ACTION_NO_TYPE_UNVERIFIED",
+                "TestIdentityAction-no_type",
+            ),
+        ] {
+            if node.conforms_to(metaclass) {
+                checks.push((
+                    action_pins_untyped(references, node, metaclass, properties),
+                    code,
+                    unverified,
+                    rule,
+                    "the Pins named by this action constraint must have no type",
+                ));
+            }
         }
         if node.conforms_to("StartObjectBehaviorAction") {
             // UML.xmi no_onport forbids presence, independently of the object
