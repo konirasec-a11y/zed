@@ -1,0 +1,47 @@
+{
+  "_type": "Project",
+  "_id": "project",
+  "name": "Association defaults",
+  "ownedElements": [
+    {
+      "_type": "UMLModel",
+      "_id": "model",
+      "_parent": { "$ref": "project" },
+      "name": "Model",
+      "ownedElements": [
+        {
+          "_type": "UMLClass",
+          "_id": "left",
+          "_parent": { "$ref": "model" },
+          "name": "Left"
+        },
+        {
+          "_type": "UMLClass",
+          "_id": "right",
+          "_parent": { "$ref": "model" },
+          "name": "Right"
+        },
+        {
+          "_type": "UMLAssociation",
+          "_id": "association",
+          "_parent": { "$ref": "model" },
+          "end1": {
+            "_type": "UMLAssociationEnd",
+            "_id": "left-end",
+            "_parent": { "$ref": "association" },
+            "reference": { "$ref": "left" },
+            "navigable": "notNavigable"
+          },
+          "end2": {
+            "_type": "UMLAssociationEnd",
+            "_id": "right-end",
+            "_parent": { "$ref": "association" },
+            "reference": { "$ref": "right" },
+            "navigable": "navigable",
+            "multiplicity": ""
+          }
+        }
+      ]
+    }
+  ]
+}

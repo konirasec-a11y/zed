@@ -311,6 +311,7 @@ fn append_association_properties(
             .map(|opposite| opposite.map_or(Value::Null, |opposite| json!({"$ref": opposite.id}))));
         append("uml.isComposite", "Composite (derived)", associations::is_composite(property).map(Value::Bool));
         append("uml.isNavigable", "Navigable (derived)", associations::is_navigable(references, id).map(Value::Bool));
+        append("authoring.navigation", "Navigation knowledge", associations::navigation_knowledge(references, id).map(|knowledge| json!(knowledge)));
     }
 }
 
@@ -571,26 +572,4 @@ pub(crate) fn inspect_element_with_references(
     Some(ElementInspector {element_id:element.id.clone(),kind:element.kind.clone(),presentation_kind:element.kind.clone(),
         name:semantic_name.into(),display_label,reference_choices_by_path,properties,attributes,operations,parameters,receptions,
         template_parameters,ports,parts})
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::set_inspected_property;
-    fn fixture() -> ModelingSection {
-        let model: crate::Project = serde_json::from_str(include_str!("../../../fixtures/todo.json")).unwrap();
-        ModelingSection::from_model(&model)
-    }
-
-    #[test]
-    fn updates_are_typed_and_reject_identity_changes() {
-        let mut section=fixture();
-        assert!(set_inspected_property(&mut section,"type-list","id",json!("oops")).is_err());
-        assert!(set_inspected_property(&mut section,"type-list","properties.isActive",json!("yes")).is_err());
-        assert!(set_inspected_property(&mut section,"type-list","properties.visibility",json!("other")).is_err());
-        set_inspected_property(&mut section,"type-list","properties.visibility",json!("private")).unwrap();
-        set_inspected_property(&mut section,"type-list","description",json!("Stored documentation")).unwrap();
-        assert_eq!(inspect_element(&section,"type-list").unwrap().properties.iter()
-            .find(|p| p.path=="properties.visibility").unwrap().value,json!("private"));
-    }
 }

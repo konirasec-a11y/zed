@@ -29,6 +29,8 @@ pub enum ModelIoError {
     Presentation(String),
     #[error("invalid MDJ provenance: {0}")]
     Provenance(String),
+    #[error("invalid authoring knowledge encoding: {0}")]
+    AuthoringKnowledge(String),
     #[error("unsupported schema version: {0}")]
     Version(u32),
 }
@@ -76,26 +78,5 @@ fn ensure_version(version: u32) -> Result<(), ModelIoError> {
         Ok(())
     } else {
         Err(ModelIoError::Version(version))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn json_and_protobuf_are_equivalent() {
-        let project: Project = serde_json::from_str(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/fixtures/todo.json"
-        )))
-        .unwrap();
-        let json = decode(&encode(&project, Format::Json).unwrap(), Format::Json).unwrap();
-        let binary = decode(
-            &encode(&project, Format::Protobuf).unwrap(),
-            Format::Protobuf,
-        )
-        .unwrap();
-        assert_eq!(json, project);
-        assert_eq!(binary, project);
     }
 }

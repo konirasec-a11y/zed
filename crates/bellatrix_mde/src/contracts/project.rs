@@ -15,6 +15,8 @@ pub struct Project {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub root_model: Option<String>,
+    #[serde(default, skip_serializing_if = "super::AuthoringKnowledge::is_empty")]
+    pub authoring_knowledge: super::AuthoringKnowledge,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mdj_provenance: Option<super::MdjProvenance>,
     #[serde(

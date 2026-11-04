@@ -111,7 +111,7 @@ pub fn owned_ends<'a>(
     Ok(owned)
 }
 
-pub fn navigable_owned_ends<'a>(
+fn declared_navigable_owned_ends<'a>(
     references: &ReferenceIndex<'a>,
     association_id: &str,
 ) -> Result<Vec<&'a Element>, String> {
@@ -138,26 +138,141 @@ pub fn navigable_owned_ends<'a>(
         .collect()
 }
 
-pub fn is_navigable(
+/// Checks the authored declarations without claiming that the complete UML
+/// navigableOwnedEnd set is known.
+pub(crate) fn validate_navigation_declarations(
+    references: &ReferenceIndex<'_>,
+    association_id: &str,
+) -> Result<(), String> {
+    let association = references.element(association_id)?;
+    if !association.conforms_to("Association") {
+        return Err("navigation knowledge owner must be an Association".into());
+    }
+    let navigable = declared_navigable_owned_ends(references, association_id)?;
+    let Some(knowledge) = references.model().authoring_knowledge().associations.get(association_id) else {
+        return Ok(());
+    };
+    let owned = owned_ends(references, association_id)?;
+    let mut seen = HashSet::new();
+    for id in &knowledge.navigation_unverified {
+        if !seen.insert(id) {
+            return Err("unverified navigation references must be unique".into());
+        }
+        if !owned.iter().any(|end| end.id == *id) {
+            return Err(format!("unverified navigation {id} must reference an Association-owned memberEnd"));
+        }
+        if navigable.iter().any(|end| end.id == *id) {
+            return Err(format!("unverified navigation {id} conflicts with navigableOwnedEnd"));
+        }
+    }
+    Ok(())
+}
+
+pub fn navigable_owned_ends<'a>(
+    references: &ReferenceIndex<'a>,
+    association_id: &str,
+) -> Result<Vec<&'a Element>, String> {
+    validate_navigation_declarations(references, association_id)?;
+    if references.model().authoring_knowledge().associations.get(association_id)
+        .is_some_and(|knowledge| !knowledge.navigation_unverified.is_empty())
+    {
+        return Err("Unsupported complete navigableOwnedEnd query: authored navigation is unverified".into());
+    }
+    declared_navigable_owned_ends(references, association_id)
+}
+
+pub fn navigation_knowledge(
     references: &ReferenceIndex<'_>,
     property_id: &str,
-) -> Result<bool, String> {
+) -> Result<crate::NavigationKnowledge, String> {
     let property = references.element(property_id)?;
     if !property.conforms_to("Property") {
         return Err("Property::isNavigable requires a Property".into());
+    }
+    let association = association_of(references, property_id)?;
+    if let Some(association) = association {
+        validate_navigation_declarations(references, association.id())?;
+        if references.model().authoring_knowledge().associations.get(association.id())
+            .is_some_and(|knowledge| knowledge.navigation_unverified.iter().any(|id| id == property_id))
+        {
+            return Ok(crate::NavigationKnowledge::Unverified);
+        }
     }
     if let Some(owner) = references.model().owner(property)?
         && owner.conforms_to("Classifier")
         && classifiers::is_owned_attribute(owner, property).map_err(|error| error.to_string())?
     {
-        return Ok(true);
+        return Ok(crate::NavigationKnowledge::Known(true));
     }
-    let Some(association) = association_of(references, property_id)? else {
-        return Ok(false);
+    let Some(association) = association else {
+        return Ok(crate::NavigationKnowledge::Known(false));
     };
-    Ok(navigable_owned_ends(references, association.id())?
-        .iter()
-        .any(|end| end.id == property_id))
+    Ok(crate::NavigationKnowledge::Known(
+        declared_navigable_owned_ends(references, association.id())?
+            .iter().any(|end| end.id == property_id)
+    ))
+}
+
+pub fn is_navigable(
+    references: &ReferenceIndex<'_>,
+    property_id: &str,
+) -> Result<bool, String> {
+    match navigation_knowledge(references, property_id)? {
+        crate::NavigationKnowledge::Known(value) => Ok(value),
+        crate::NavigationKnowledge::Unverified => Err("Unsupported Property::isNavigable query: authored navigation is unverified".into()),
+    }
+}
+
+pub(crate) fn set_navigation_knowledge(
+    section: &mut ModelingSection,
+    association_id: &str,
+    property_id: &str,
+    navigation: crate::NavigationKnowledge,
+) -> Result<(), String> {
+    let references = ReferenceIndex::new(Model::from_section(section));
+    validate_navigation_declarations(&references, association_id)?;
+    if !owned_ends(&references, association_id)?.iter().any(|end| end.id == property_id) {
+        return Err("navigation declaration requires an Association-owned memberEnd".into());
+    }
+    let member_ids = member_ends(&references, association_id)?.iter().map(|end| end.id.clone()).collect::<Vec<_>>();
+    let mut navigable_ids = declared_navigable_owned_ends(&references, association_id)?
+        .iter().filter(|end| end.id != property_id).map(|end| end.id.clone()).collect::<HashSet<_>>();
+    if navigation == crate::NavigationKnowledge::Known(true) {
+        navigable_ids.insert(property_id.into());
+    }
+    let navigable = member_ids.iter().filter(|id| navigable_ids.contains(*id))
+        .map(|id| json!({"$ref":id})).collect::<Vec<_>>();
+    if let Some(association) = section.relations.iter_mut().find(|relation| relation.id == association_id) {
+        association.properties.insert("navigableOwnedEnd".into(), Value::Array(navigable));
+    } else {
+        section.elements.iter_mut().find(|element| element.id == association_id)
+            .ok_or("Association not found")?.properties.insert("navigableOwnedEnd".into(), Value::Array(navigable));
+    }
+    let knowledge = section.authoring_knowledge.associations.entry(association_id.into()).or_default();
+    knowledge.navigation_unverified.retain(|id| id != property_id);
+    if navigation == crate::NavigationKnowledge::Unverified {
+        knowledge.navigation_unverified.push(property_id.into());
+    }
+    knowledge.navigation_unverified.sort_by_key(|id| member_ids.iter().position(|member| member == id));
+    if knowledge.navigation_unverified.is_empty() {
+        section.authoring_knowledge.associations.remove(association_id);
+    }
+    validate_navigation_declarations(&ReferenceIndex::new(Model::from_section(section)), association_id)
+}
+
+pub(crate) fn validate_authoring_changes(before: &ModelingSection, after: &ModelingSection) -> Result<(), String> {
+    let previous = ReferenceIndex::new(Model::from_section(before));
+    let current = ReferenceIndex::new(Model::from_section(after));
+    for association_id in after.authoring_knowledge.associations.keys() {
+        if let Err(error) = validate_navigation_declarations(&current, association_id)
+            && (before.authoring_knowledge.associations.get(association_id)
+                != after.authoring_knowledge.associations.get(association_id)
+                || validate_navigation_declarations(&previous, association_id).as_ref().err() != Some(&error))
+        {
+            return Err(format!("MDE_NAVIGATION_KNOWLEDGE_INVALID: {error}"));
+        }
+    }
+    Ok(())
 }
 
 pub fn association_of<'a>(
@@ -283,7 +398,7 @@ fn validate_association(
     }
     let ends = member_ends(references, association.id())?;
     let owned = owned_ends(references, association.id())?;
-    navigable_owned_ends(references, association.id())?;
+    validate_navigation_declarations(references, association.id())?;
     if ends.len() > 2 && owned.len() != ends.len() {
         return Err(
             "Association::association_ends requires all n-ary member ends to be Association-owned"
@@ -565,6 +680,22 @@ fn communication_path_association_ends(
 
 pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
+    for (association_id, knowledge) in &references.model().authoring_knowledge().associations {
+        match validate_navigation_declarations(references, association_id) {
+            Err(message) => issues.push(issue("MDE_NAVIGATION_KNOWLEDGE_INVALID", association_id, message)),
+            Ok(()) if !knowledge.navigation_unverified.is_empty() => {
+                issues.push(StructuralDiagnostic {
+                    severity: StructuralSeverity::Warning,
+                    code: "MDE_ASSOCIATION_NAVIGATION_UNVERIFIED",
+                    subject_id: association_id.clone(),
+                    message: "Association navigation is not fully specified in authoring knowledge; this is not a proved UML violation".into(),
+                });
+                issues.push(issue("UML_MODEL_SEMANTICS_UNVERIFIED", association_id,
+                    "Association navigation is authored as unverified; known UML rules still run, but this model cannot be reported as semantically verified"));
+            },
+            Ok(()) => {}
+        }
+    }
     let mut membership = BTreeMap::<&str, &str>::new();
     for association in references
         .model()
@@ -997,6 +1128,11 @@ fn canonical_inputs_changed(
 ) -> bool {
     let previous_model = Model::from_section(before);
     let previous = previous_model.element(association.id());
+    if before.authoring_knowledge.associations.get(association.id())
+        != after.authoring_knowledge.associations.get(association.id())
+    {
+        return true;
+    }
     if previous.is_none_or(|previous| {
         ["memberEnd", "ownedEnd", "navigableOwnedEnd"].iter().any(|key| {
             previous.properties().get(*key) != association.properties().get(*key)
@@ -1154,7 +1290,7 @@ pub(crate) fn validate_changes(
         {
             return Err(format!("{}: {}", issue.code, issue.message));
         }
-        if issue.severity != StructuralSeverity::Error {
+        if issue.severity != StructuralSeverity::Error || issue.code == "UML_MODEL_SEMANTICS_UNVERIFIED" {
             continue;
         }
         if !existing.iter().any(|previous| {

@@ -1,13 +1,13 @@
 use crate::kernel_api_contract::{API_VERSION, decode_model, error_response, invalid_request};
 use crate::{Graph, commands};
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::json;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ReparentRequest {
     api_version: u32,
-    model: Value,
+    model: Box<serde_json::value::RawValue>,
     element_id: String,
     owner_id: String,
 }

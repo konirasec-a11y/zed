@@ -97,10 +97,10 @@ fn resolve_marker(
         let references = crate::uml::references::ReferenceIndex::new(
             crate::uml::root::Model::from_section(section),
         );
-        if crate::uml::associations::is_navigable(&references, &end.id)? {
-            NavigationDeclaration::Navigable
-        } else {
-            NavigationDeclaration::NotNavigable
+        match crate::uml::associations::navigation_knowledge(&references, &end.id)? {
+            crate::NavigationKnowledge::Known(true) => NavigationDeclaration::Navigable,
+            crate::NavigationKnowledge::Known(false) => NavigationDeclaration::NotNavigable,
+            crate::NavigationKnowledge::Unverified => NavigationDeclaration::Unspecified,
         }
     } else {
         return Err(format!("endpoint {} has no marker projection", end.id));

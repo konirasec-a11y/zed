@@ -14,7 +14,7 @@ use crate::kernel_api_contract::{
 #[serde(deny_unknown_fields)]
 struct ValidationRequest {
     api_version: u32,
-    model: Value,
+    model: Box<serde_json::value::RawValue>,
 }
 
 #[derive(Serialize)]
@@ -41,8 +41,9 @@ struct Diagnostic {
 /// existing Bellatrix model document. Output contains `api_version`,
 /// `coverage`, `validity`, `has_errors` and ordered `diagnostics`. Coverage is
 /// `implemented_rules_only` for pure UML, `implemented_uml_subset_rules_only`
-/// for a closed UML graph alongside external domains, or
-/// `implemented_uml_scalars_and_integrity_only` for cross-domain dependencies.
+/// for a closed UML graph alongside external domains,
+/// `implemented_uml_scalars_and_integrity_only` for cross-domain dependencies, or
+/// `implemented_rules_with_incomplete_authoring` for unresolved navigation.
 /// Each diagnostic contains `severity`, `code`, `subject_id` and `message`.
 /// Diagnostics are ordered by code, subject identity, severity and message.
 /// Array order inside the input model retains its existing semantic meaning.
@@ -55,7 +56,9 @@ struct Diagnostic {
 /// rules without external aliases; cross-domain dependencies conservatively
 /// suspend relational/global rules while retaining scalar and integrity checks.
 /// Pure UML models check root, endpoints and ownership before evaluating
-/// implemented rules. No errors does not mean complete UML conformance, and an
+/// implemented rules. Typed authoring knowledge is semantic input: unresolved
+/// Association navigation emits a capacity blocker without hiding proved UML
+/// violations. No errors does not mean complete UML conformance, and an
 /// unverified result must not be interpreted as successful semantic validation.
 ///
 /// # Errors
@@ -111,6 +114,8 @@ pub fn validate_uml_model(input_json: &str) -> Result<String, String> {
             .any(|diagnostic| diagnostic.code == "UML_CROSS_DOMAIN_RULES_UNVERIFIED")
         {
             "implemented_uml_scalars_and_integrity_only"
+        } else if diagnostics.iter().any(|diagnostic| diagnostic.code == "MDE_ASSOCIATION_NAVIGATION_UNVERIFIED") {
+            "implemented_rules_with_incomplete_authoring"
         } else if unverified {
             "implemented_uml_subset_rules_only"
         } else {
@@ -550,7 +555,7 @@ pub fn validate_graph_model(input_json: &str) -> Result<String, String> {
 #[serde(deny_unknown_fields)]
 struct DiagramValidationRequest {
     api_version: u32,
-    model: Value,
+    model: Box<serde_json::value::RawValue>,
     diagram_id: String,
     diagram_kind: String,
 }

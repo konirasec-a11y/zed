@@ -33,7 +33,10 @@ fn supported(field: &str, value: &Value, end: bool) -> bool {
         "isDerived" => value.is_boolean(),
         "end1" | "end2" if !end => value.is_object(),
         "reference" if end => reference(Some(value)).is_some(),
-        "navigable" if end => matches!(value.as_str(), Some("navigable" | "notNavigable")),
+        "navigable" if end => matches!(
+            value.as_str(),
+            Some("navigable" | "notNavigable" | "unspecified")
+        ),
         "aggregation" if end => value.as_str() == Some("none"),
         "multiplicity" if end => value.is_string(),
         "isReadOnly" | "isOrdered" | "isUnique" | "isID" if end => value.is_boolean(),
@@ -82,11 +85,13 @@ fn representable(object: &mdj::Object<'_>, index: &mdj::Index<'_>) -> bool {
             && end
                 .properties
                 .get("multiplicity")
-                .is_some_and(Value::is_string)
-            && matches!(
-                end.properties.get("navigable").and_then(Value::as_str),
-                Some("navigable" | "notNavigable")
-            )
+                .is_none_or(Value::is_string)
+            && end.properties.get("navigable").is_none_or(|value| {
+                matches!(
+                    value.as_str(),
+                    Some("navigable" | "notNavigable" | "unspecified")
+                )
+            })
             && end
                 .properties
                 .iter()
@@ -122,14 +127,14 @@ pub(super) fn import_associations(
                             unsupported.push(format!("end{}.{field}", position + 1));
                         }
                     }
-                    for field in ["_parent", "reference", "navigable", "multiplicity"] {
+                    for field in ["_parent", "reference"] {
                         if !end.properties.contains_key(field) {
                             unsupported.push(format!("end{}.{field} (absent)", position + 1));
                         }
                     }
                 }
             }
-            diagnostics.push(Diagnostic { path: object.path.clone(), message: format!("association and ends remain opaque: unmapped or absent fields [{}], or unrepresentable end/ownership structure. The supported encoding requires two association-owned ends, explicit navigable/notNavigable states, explicit multiplicity strings and aggregation absent/none; unspecified navigability, aggregation diamonds, ownerAttribute and qualifiers are not translated", unsupported.join(", ")) });
+            diagnostics.push(Diagnostic { path: object.path.clone(), message: format!("association and ends remain opaque: unmapped or absent fields [{}], or unrepresentable end/ownership structure. The supported encoding requires two association-owned ends, navigable/notNavigable/unspecified declarations or the omitted unspecified default, multiplicity strings or the omitted empty-string default, and aggregation absent/none; aggregation diamonds, ownerAttribute and qualifiers are not translated", unsupported.join(", ")) });
             continue;
         }
         let Some(ends) = ends(object, index) else {
@@ -181,6 +186,24 @@ pub(super) fn import_associations(
             residue.remove("_parent");
             fields.insert("_parent".into());
         }
+        let unverified = ends
+            .iter()
+            .filter(|end| {
+                matches!(
+                    end.properties.get("navigable").and_then(Value::as_str),
+                    None | Some("unspecified")
+                )
+            })
+            .map(|end| end.id.to_owned())
+            .collect::<Vec<_>>();
+        if !unverified.is_empty() {
+            project.authoring_knowledge.associations.insert(
+                object.id.into(),
+                crate::AssociationKnowledge {
+                    navigation_unverified: unverified,
+                },
+            );
+        }
         let mut relation = Relation {
             id: object.id.into(),
             kind: "uml.association".into(),
@@ -190,15 +213,13 @@ pub(super) fn import_associations(
         };
         for (position, end) in ends.into_iter().enumerate() {
             let mut residual = extract_residue(end.properties);
-            let mut mapped_fields = BTreeSet::from([
-                "_type".into(),
-                "_parent".into(),
-                "reference".into(),
-                "navigable".into(),
-            ]);
+            let mut mapped_fields =
+                BTreeSet::from(["_type".into(), "_parent".into(), "reference".into()]);
             let name = take_name(&mut residual, &mut mapped_fields);
             residual.remove("_parent");
-            residual.remove("navigable");
+            if residual.remove("navigable").is_some() {
+                mapped_fields.insert("navigable".into());
+            }
             let mut properties = BTreeMap::new();
             if let Some(value) = residual.remove("reference") {
                 properties.insert("type".into(), value);
@@ -209,6 +230,11 @@ pub(super) fn import_associations(
                     mapped_fields.insert(field.into());
                 }
             }
+            // StarUML UMLRelationshipEnd initializes missing multiplicity to an
+            // empty string. Omitting it canonically would assert UML's 1..1 default.
+            properties
+                .entry("multiplicity".into())
+                .or_insert_with(|| Value::String(String::new()));
             // MDJ defaults to false, UML to true. Presence metadata is encoding
             // only; the canonical false remains the sole semantic value.
             properties
@@ -286,6 +312,14 @@ pub(super) fn is_end(metadata: &MdjObjectResidual) -> bool {
     metadata.type_name == "UMLAssociationEnd" && metadata.mapped_fields.contains("_type")
 }
 
+fn preserves_omitted_default(field: &str, value: Option<&Value>) -> bool {
+    match field {
+        "isUnique" => value == Some(&Value::Bool(false)),
+        "multiplicity" => value.and_then(Value::as_str) == Some(""),
+        _ => false,
+    }
+}
+
 pub(super) fn update_metadata(project: &Project, provenance: &mut MdjProvenance) {
     for end in &project.elements {
         if let Some(metadata) = provenance
@@ -294,9 +328,8 @@ pub(super) fn update_metadata(project: &Project, provenance: &mut MdjProvenance)
             .filter(|metadata| is_end(metadata))
         {
             for field in END_FIELDS {
-                if field == "isUnique"
-                    && !metadata.mapped_fields.contains(field)
-                    && end.properties.get(field) == Some(&Value::Bool(false))
+                if !metadata.mapped_fields.contains(field)
+                    && preserves_omitted_default(field, end.properties.get(field))
                 {
                     continue;
                 }
@@ -318,6 +351,24 @@ pub(super) fn update_metadata(project: &Project, provenance: &mut MdjProvenance)
                     metadata.mapped_fields.insert(field.into());
                 } else {
                     metadata.mapped_fields.remove(field);
+                }
+            }
+        }
+        if let Some(members) = relation
+            .properties
+            .get("memberEnd")
+            .and_then(Value::as_array)
+        {
+            for id in members.iter().filter_map(|member| reference(Some(member))) {
+                let unverified = project
+                    .authoring_knowledge
+                    .associations
+                    .get(&relation.id)
+                    .is_some_and(|knowledge| {
+                        knowledge.navigation_unverified.iter().any(|end| end == id)
+                    });
+                if !unverified && let Some(metadata) = provenance.object_residuals.get_mut(id) {
+                    metadata.mapped_fields.insert("navigable".into());
                 }
             }
         }
@@ -424,9 +475,8 @@ pub(super) fn export_associations(
                             "aggregation shared/composite cannot yet be exported with equivalent StarUML end notation; the edit must not be discarded or move the diamond silently",
                         ));
                     }
-                    if field == "isUnique"
-                        && !end_metadata.mapped_fields.contains(field)
-                        && value == &Value::Bool(false)
+                    if !end_metadata.mapped_fields.contains(field)
+                        && preserves_omitted_default(field, Some(value))
                     {
                         continue;
                     }
@@ -441,18 +491,35 @@ pub(super) fn export_associations(
             let is_navigable = navigable
                 .iter()
                 .any(|value| reference(Some(value)) == Some(id));
-            insert_mapped(
-                &mut end_object,
-                "navigable",
-                Value::String(
-                    if is_navigable {
-                        "navigable"
-                    } else {
-                        "notNavigable"
-                    }
-                    .into(),
-                ),
-            )?;
+            let unverified = project
+                .authoring_knowledge
+                .associations
+                .get(&relation.id)
+                .is_some_and(|knowledge| {
+                    knowledge.navigation_unverified.iter().any(|end| end == id)
+                });
+            if unverified && is_navigable {
+                return Err(failure(
+                    &expected_path,
+                    "navigation is both known and unverified",
+                ));
+            }
+            if !unverified || end_metadata.mapped_fields.contains("navigable") {
+                insert_mapped(
+                    &mut end_object,
+                    "navigable",
+                    Value::String(
+                        if unverified {
+                            "unspecified"
+                        } else if is_navigable {
+                            "navigable"
+                        } else {
+                            "notNavigable"
+                        }
+                        .into(),
+                    ),
+                )?;
+            }
             export_owner(project, id, end_metadata, &mut end_object)?;
             project_endpoint(&mut expected, end, position);
             if objects

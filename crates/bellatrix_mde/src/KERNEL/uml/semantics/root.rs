@@ -346,6 +346,7 @@ pub struct Model<'a> {
     objects: &'a [ElementRecord],
     relationships: &'a [Relation],
     root_model: Option<&'a str>,
+    authoring_knowledge: &'a crate::AuthoringKnowledge,
 }
 
 impl<'a> Model<'a> {
@@ -354,6 +355,7 @@ impl<'a> Model<'a> {
             objects: &project.elements,
             relationships: &project.relations,
             root_model: project.root_model.as_deref(),
+            authoring_knowledge: &project.authoring_knowledge,
         }
     }
     pub fn from_section(section: &'a ModelingSection) -> Self {
@@ -361,7 +363,11 @@ impl<'a> Model<'a> {
             objects: &section.elements,
             relationships: &section.relations,
             root_model: section.root_model.as_deref(),
+            authoring_knowledge: &section.authoring_knowledge,
         }
+    }
+    pub fn authoring_knowledge(self) -> &'a crate::AuthoringKnowledge {
+        self.authoring_knowledge
     }
     pub fn elements(self) -> impl Iterator<Item = ElementRef<'a>> {
         self.objects.iter().map(ElementRef::Object).chain(

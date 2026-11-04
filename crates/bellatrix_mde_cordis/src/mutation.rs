@@ -93,6 +93,7 @@ fn command_name(command: &Command) -> &'static str {
         Command::SetRedefinedElements { .. } => "SetRedefinedElements",
         Command::SetSubsettedProperties { .. } => "SetSubsettedProperties",
         Command::SetNamespaceImport { .. } => "SetNamespaceImport",
+        Command::SetAssociationEndNavigation { .. } => "SetAssociationEndNavigation",
         Command::SetAssociationMemberEnds { .. } => "SetAssociationMemberEnds",
         Command::EditAssociationEnds { .. } => "EditAssociationEnds",
         Command::QuickEdit { .. } => "QuickEdit",

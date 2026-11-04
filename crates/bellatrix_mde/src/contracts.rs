@@ -7,6 +7,7 @@ mod provenance;
 mod section;
 pub mod semantic;
 pub mod uml_presentation;
+pub mod uml_authoring;
 
 pub use endpoint_presentation::{
     EndpointMarkerBinding, EndpointMarkerComposition, EndpointMarkerGlyph, EndpointMarkerPart,
@@ -21,6 +22,7 @@ pub use presentation::{
     TimingPresentation, View, ViewEndpoints, ViewOccurrence, ViewPresentation, VisualDraft,
 };
 pub use project::Project;
+pub use uml_authoring::{AssociationKnowledge, AuthoringKnowledge, NavigationKnowledge};
 pub use provenance::{MdjObjectResidual, MdjProjectionFingerprint, MdjProvenance};
 pub use section::ModelingSection;
 pub use semantic::{Annotation, Element, FileContent, Implementation, Relation, StereotypeValue};

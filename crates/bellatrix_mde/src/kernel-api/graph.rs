@@ -1,13 +1,12 @@
 use crate::{Graph, GraphIndex};
 use crate::kernel_api_contract::{API_VERSION, decode_model, error_response, invalid_request};
 use serde::Deserialize;
-use serde_json::Value;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ReachabilityRequest {
     api_version: u32,
-    model: Value,
+    model: Box<serde_json::value::RawValue>,
     roots: Vec<String>,
     relation_kinds: Vec<String>,
 }
@@ -16,7 +15,7 @@ struct ReachabilityRequest {
 #[serde(deny_unknown_fields)]
 struct PathRequest {
     api_version: u32,
-    model: Value,
+    model: Box<serde_json::value::RawValue>,
     from: String,
     to: String,
     relation_kind: Option<String>,

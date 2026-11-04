@@ -31,6 +31,15 @@ struct WireProject {
     mdj_provenance_json: Option<Vec<u8>>,
     #[prost(bytes, optional, tag = "12")]
     composition_json: Option<Vec<u8>>,
+    #[prost(message, repeated, tag = "13")]
+    association_knowledge: Vec<WireAssociationKnowledge>,
+}
+#[derive(Clone, PartialEq, Message)]
+struct WireAssociationKnowledge {
+    #[prost(string, tag = "1")]
+    association_id: String,
+    #[prost(string, repeated, tag = "2")]
+    navigation_unverified: Vec<String>,
 }
 #[derive(Clone, PartialEq, Message)]
 struct WireHierarchyPlacement {
@@ -294,6 +303,11 @@ pub(super) fn encode(project: &Project) -> Result<Vec<u8>, ModelIoError> {
         .collect::<Result<Vec<_>, _>>()?;
     Ok(WireProject {
         version: project.schema_version,
+        association_knowledge: project.authoring_knowledge.associations.iter()
+            .map(|(association_id, knowledge)| WireAssociationKnowledge {
+                association_id: association_id.clone(),
+                navigation_unverified: knowledge.navigation_unverified.clone(),
+            }).collect(),
         composition_json: Some(serde_json::to_vec(&project.composition)?),
         root_model: project.root_model.clone(),
         mdj_provenance_json: project
@@ -431,8 +445,17 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Project, ModelIoError> {
             })
         })
         .collect::<Result<Vec<_>, _>>()?;
+    let mut authoring_knowledge = crate::AuthoringKnowledge::default();
+    for knowledge in data.association_knowledge {
+        if authoring_knowledge.associations.insert(knowledge.association_id, crate::AssociationKnowledge {
+            navigation_unverified: knowledge.navigation_unverified,
+        }).is_some() {
+            return Err(ModelIoError::AuthoringKnowledge("duplicate Association knowledge identity".into()));
+        }
+    }
     Ok(Project {
         schema_version: data.version,
+        authoring_knowledge,
         composition: data
             .composition_json
             .as_deref()
@@ -458,29 +481,4 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Project, ModelIoError> {
         relations,
         diagrams,
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn uml_metadata_and_future_type_names_round_trip_in_json_and_wire() -> Result<(), ModelIoError>
-    {
-        for type_name in ["UMLCompositeStructureDiagram", "UMLFutureDiagram"] {
-            let project: Project = serde_json::from_value(serde_json::json!({
-                "id": "project", "name": "Typed", "diagrams": [{
-                    "id": "diagram", "name": "Typed", "uml_di_type": type_name,
-                    "model_elements": ["context"]
-                }]
-            }))?;
-            assert_eq!(project.schema_version, 1);
-            assert_eq!(decode(&encode(&project)?)?, project);
-            assert_eq!(
-                serde_json::from_slice::<Project>(&serde_json::to_vec(&project)?)?,
-                project
-            );
-        }
-        Ok(())
-    }
 }

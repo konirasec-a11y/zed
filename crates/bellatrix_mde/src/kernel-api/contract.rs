@@ -1,7 +1,6 @@
 use crate::ModelIoError;
 use crate::{Format, Project, decode};
 use serde::Deserialize;
-use serde_json::Value;
 
 pub(super) const API_VERSION: u32 = 1;
 
@@ -23,11 +22,9 @@ pub(super) fn check_version(api_version: u32) -> Result<(), String> {
     Ok(())
 }
 
-pub(super) fn decode_model(api_version: u32, model: &Value) -> Result<Project, String> {
+pub(super) fn decode_model(api_version: u32, model: &serde_json::value::RawValue) -> Result<Project, String> {
     check_version(api_version)?;
-    let model_json = serde_json::to_vec(model)
-        .map_err(|_| error_response("INVALID_MODEL", "model cannot be encoded as JSON"))?;
-    decode(&model_json, Format::Json).map_err(invalid_model)
+    decode(model.get().as_bytes(), Format::Json).map_err(invalid_model)
 }
 
 #[derive(Deserialize)]
@@ -39,6 +36,8 @@ struct UmlValidationDocument {
     name: String,
     #[serde(default)]
     root_model: Option<String>,
+    #[serde(default)]
+    authoring_knowledge: crate::AuthoringKnowledge,
     #[serde(default)]
     elements: Vec<crate::Element>,
     #[serde(default)]
@@ -57,9 +56,9 @@ fn model_schema_version() -> u32 {
     1
 }
 
-pub(super) fn decode_uml_model(api_version: u32, model: &Value) -> Result<Project, String> {
+pub(super) fn decode_uml_model(api_version: u32, model: &serde_json::value::RawValue) -> Result<Project, String> {
     check_version(api_version)?;
-    let document: UmlValidationDocument = serde_json::from_value(model.clone())
+    let document: UmlValidationDocument = serde_json::from_str(model.get())
         .map_err(|error| invalid_model(ModelIoError::Json(error)))?;
     if document.schema_version != 1 {
         return Err(invalid_model(ModelIoError::Version(
@@ -73,6 +72,7 @@ pub(super) fn decode_uml_model(api_version: u32, model: &Value) -> Result<Projec
         id: document.id,
         name: document.name,
         root_model: document.root_model,
+        authoring_knowledge: document.authoring_knowledge,
         elements: document.elements,
         relations: document.relations,
         diagrams: Vec::new(),

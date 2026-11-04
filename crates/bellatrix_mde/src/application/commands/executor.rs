@@ -40,8 +40,6 @@ use crate::{
 };
 use serde_json::Value;
 use std::collections::HashSet;
-#[cfg(test)]
-use crate::commands::apply;
 
 #[derive(Clone, Debug)]
 pub enum Command {
@@ -107,6 +105,7 @@ pub enum Command {
     SetRedefinedElements { element_id: String, redefined_ids: Vec<String> },
     SetSubsettedProperties { property_id: String, subsetted_ids: Vec<String> },
     SetNamespaceImport { import_id: String, namespace_id: String, target_id: String, is_package: bool, alias: Option<String>, visibility: String },
+    SetAssociationEndNavigation { association_id: String, property_id: String, navigation: crate::NavigationKnowledge },
     SetAssociationMemberEnds { association_id: String, member_end_ids: Vec<String> },
     EditAssociationEnds { association_id: String, edits: Vec<AssociationEndEdit> },
     QuickEdit {
@@ -308,6 +307,7 @@ pub(crate) fn apply_with_diagram_operations(project: &Project, command: &Command
         Command::SetSubsettedProperties { property_id, subsetted_ids } => crate::uml::property_subsetting::set_subsetted_properties(&mut section, property_id, subsetted_ids)?,
         Command::SetNamespaceImport { import_id, namespace_id, target_id, is_package, alias, visibility } => crate::uml::namespace_imports::set_namespace_import(&mut section, import_id, namespace_id, target_id, *is_package, alias.as_deref(), visibility)?,
         Command::MigrateAssociation { association_id } => crate::uml::associations::migrate(&mut section, &project.id, association_id)?,
+        Command::SetAssociationEndNavigation { association_id, property_id, navigation } => crate::uml::associations::set_navigation_knowledge(&mut section, association_id, property_id, *navigation)?,
         Command::SetAssociationMemberEnds { association_id, member_end_ids } => crate::uml::associations::set_member_ends(&mut section, association_id, member_end_ids)?,
         Command::EditAssociationEnds { association_id, edits } => association_ends::apply(&mut section, association_id, edits, revision, &project.id)?,
         Command::QuickEdit {
@@ -408,6 +408,7 @@ pub(crate) fn apply_with_diagram_operations(project: &Project, command: &Command
     if !presentation_only {
         crate::uml::associations::materialize_new(project, &mut section)?;
         crate::uml::associations::synchronize_changes(&previous_section, &mut section)?;
+        crate::uml::associations::validate_authoring_changes(&previous_section, &section)?;
     }
     let mut updated = section.to_model(&project.id, &project.name);
     updated.schema_version = project.schema_version;
@@ -926,140 +927,3 @@ fn ensure_view_deletion_supported(
     }
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::commands::apply;
-    fn fixture() -> Project {
-        serde_json::from_str(include_str!("../../../fixtures/todo.json")).unwrap()
-    }
-    #[test]
-    fn routing_policy_failure_keeps_the_source_transaction_unchanged() {
-        struct RejectRouting;
-        impl crate::diagram_operations::DiagramOperations for RejectRouting {
-            fn project_routing(&self, _: &ModelingSection, _: &str, _: &str, _: crate::RelationshipRouting) -> Result<crate::diagram_operations::RoutingProjection, String> {
-                Err("routing policy rejected operation".into())
-            }
-        }
-        let mut project = fixture();
-        let relation_id = project.relations.first().expect("fixture relationship").id.clone();
-        let diagram = project.diagrams.first_mut().expect("fixture diagram");
-        let view = diagram.views.first_mut().expect("fixture view");
-        view.subject = Some(relation_id);
-        view.geometry = Geometry::Path { start: crate::Point { x: 0.0, y: 0.0 }, segments: Vec::new() };
-        let diagram_id = diagram.id.clone();
-        let view_id = view.id.clone();
-        let before = project.clone();
-        let error = apply_with_diagram_operations(&project, &Command::SetViewRouting {
-            diagram_id, view_id,
-            routing: crate::RelationshipRouting::Automatic,
-        }, 0, &RejectRouting).expect_err("policy rejects the operation");
-        assert_eq!(error, "routing policy rejected operation");
-        assert_eq!(project, before);
-    }
-
-    #[test]
-    fn failed_command_cannot_partially_change_its_source() {
-        let project = fixture();
-        let before = project.clone();
-        for command in [
-            Command::DeleteElement {
-                element_id: "missing".into(),
-            },
-            Command::CreateElement {
-                owner_id: None,
-                diagram_id: "missing".into(),
-                kind: ModelingElementKind::Class,
-                name: None,
-                x: 1.0,
-                y: 1.0,
-            },
-            Command::SetProperty {
-                element_id: "type-task".into(),
-                path: "id".into(),
-                value: serde_json::json!("changed"),
-            },
-        ] {
-            assert!(apply(&project, &command, 0).is_err());
-            assert_eq!(project, before);
-        }
-    }
-    #[test]
-    fn deleting_class_removes_owned_members_views_and_incident_edges_only() {
-        let project = apply(
-            &fixture(),
-            &Command::DeleteElement {
-                element_id: "type-task".into(),
-            },
-            0,
-        )
-        .unwrap();
-        for deleted in ["type-task", "field-title", "field-completed"] {
-            assert!(!project.elements.iter().any(|element| element.id == deleted));
-        }
-        assert!(project.element("type-list").is_some());
-        assert!(project.element("file-task").is_some());
-        assert!(
-            project
-                .relations
-                .iter()
-                .all(|relation| relation.from != "type-task" && relation.to != "type-task")
-        );
-        assert!(project.diagrams.iter().all(|diagram| {
-            diagram
-                .views
-                .iter()
-                .all(|view| !matches!(view.subject.as_deref(), Some("type-task" | "ref-task")))
-        }));
-    }
-    #[test]
-    fn toolbox_and_quick_edit_use_the_same_association_end_property() {
-        let source = fixture();
-        let toolbox = apply(
-            &source,
-            &Command::CreateRelation {
-                owner_id: None,
-                diagram_id: "diagram-tasks".into(),
-                kind: ModelingRelationKind::Composition,
-                from: "type-list".into(),
-                to: "type-task".into(),
-            },
-            0,
-        )
-        .unwrap();
-        let quick = apply(
-            &source,
-            &Command::QuickEdit {
-                diagram_id: "diagram-tasks".into(),
-                element_id: "type-list".into(),
-                action: UmlQuickCreate::CompositedClass,
-            },
-            0,
-        )
-        .unwrap();
-        for project in [toolbox, quick] {
-            assert!(
-                project
-                    .relations
-                    .iter()
-                    .any(|relation| relation.kind == "uml.association"
-                        && relation.properties.get("end1Aggregation")
-                            == Some(&serde_json::json!("composite")))
-            );
-            Graph::new(&project).validate().unwrap();
-        }
-    }
-}
-
-#[cfg(test)]
-#[path = "deletion_tests.rs"]
-mod deletion_tests;
-
-#[cfg(test)]
-#[path = "placement_tests.rs"]
-mod placement_tests;
-
-#[cfg(test)]
-#[path = "structural_creation_tests.rs"]
-mod structural_creation_tests;

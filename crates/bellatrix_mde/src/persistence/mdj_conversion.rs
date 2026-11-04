@@ -84,6 +84,7 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
             .unwrap_or_default()
             .into(),
         root_model: None,
+        authoring_knowledge: Default::default(),
         mdj_provenance: None,
         hierarchy: BTreeMap::new(),
         composition: BTreeMap::new(),

@@ -40,8 +40,9 @@ exposes a documented data format, not the internal Rust structs.
 
 - `api_version`: 1.
 - `coverage`: `"implemented_rules_only"`, `"implemented_uml_subset_rules_only"`,
-  or `"implemented_uml_scalars_and_integrity_only"` (described below).
-- `validity`: `"unverified"` for a mixed-domain capacity blocker, `"invalid"`
+  `"implemented_uml_scalars_and_integrity_only"`, or
+  `"implemented_rules_with_incomplete_authoring"` (described below).
+- `validity`: `"unverified"` for a mixed-domain or incomplete-authoring capacity blocker, `"invalid"`
   when errors were found, or `"no_violations_found"`. None certifies conformance.
 - `has_errors`: whether any reported diagnostic has severity `"error"`, including
   a capacity blocker that prevents semantic evaluation.
@@ -53,7 +54,7 @@ order is preserved when invoking existing semantics because ordered UML members
 are meaningful. A well-formed invalid model returns `Ok` with diagnostics.
 
 The UML entry point decodes only the semantic projection of the Bellatrix document:
-`schema_version`, `id`, `name`, `root_model`, `elements` and `relations`.
+`schema_version`, `id`, `name`, `root_model`, `authoring_knowledge`, `elements` and `relations`.
 Known document fields `diagrams`, `hierarchy`, `composition` and `mdj_provenance`
 are ignored without parsing their contents or checking presentation identities.
 Malformed visual content cannot hide UML errors. Unknown document fields and
@@ -422,3 +423,49 @@ than the package-only command's revision-seeded ownership edge allocation.
 Existing semantic associations already materialize member ends and AddMember
 already creates semantic operations; those paths are unchanged by this slice.
 Unit tests were neither edited nor run; compilation is not a suite pass.
+
+
+## Incomplete Association navigation
+
+`authoring_knowledge` is a typed semantic input of the universal document, outside
+OMG UML properties and outside presentation or source provenance. Its
+`associations` map is keyed by Association identity. Each entry contains a
+`navigation_unverified` array of association-owned Property identities. Duplicate
+Association keys are rejected during JSON and BLX decoding. Duplicate, unresolved,
+non-owned or contradictory end references are preserved by the document codec
+and diagnosed only by the UML kernel.
+
+The kernel requires these identities to be unique, a subset of `ownedEnd`, and
+disjoint from `navigableOwnedEnd`. Classifier-owned ends cannot be marked unknown.
+`navigation_knowledge` returns `Known(true)`, `Known(false)` or `Unverified`.
+The normative Boolean query and complete `navigableOwnedEnd` collection query
+return an unsupported result if their required knowledge is incomplete. Known
+members still contribute to namespace checks without claiming set completeness.
+
+A valid unresolved declaration produces
+`MDE_ASSOCIATION_NAVIGATION_UNVERIFIED` and the error-severity capacity blocker
+`UML_MODEL_SEMANTICS_UNVERIFIED`. The API reports `validity: "unverified"`,
+`has_errors: true` and `coverage: "implemented_rules_with_incomplete_authoring"`.
+Independent UML violations remain in `diagnostics`. As with mixed domains,
+unverified status takes precedence and does not hide those violations.
+
+`SetAssociationEndNavigation` updates the normative navigable set and the
+knowledge gap atomically. Reparenting, removal and other edits cannot leave new
+stale knowledge references. Model markers and the Inspector consume the kernel's
+knowledge result rather than interpreting unknown as false. The Protobuf schema
+records this typed input in Project field 13; JSON and BLX preserve the same state.
+
+The MDJ adapter translates StarUML's absent or explicit `"unspecified"`
+navigation to this knowledge gap. Source field presence is encoding metadata
+only. StarUML's omitted multiplicity becomes the canonical empty string, not an
+invented UML `1..1`. Untouched export returns the source bytes, and edited export
+preserves absent fields while their defaults remain unchanged. Explicit decisions
+are serialized from current authoring knowledge and UML values. Aggregation
+`shared`/`composite`, `ownerAttribute`, qualifiers and unrecognized fields remain
+opaque until their inverse mappings are implemented.
+
+Defaults are verified against the bundled StarUML reference:
+`crates/bellatrix_design_system/docs/ref/staruml/extensions/essential/uml/elements.js`
+(`UMLRelationshipEnd`) and its `metamodel.json`. The save/reopen/decision flows are
+specified in `tests/features/mdj_association_lifecycle.feature` and implemented in
+`tests/bdd_mdj_association_flows.rs`.

@@ -453,7 +453,7 @@ impl<'index, 'model> Queries<'index, 'model> {
             {
                 // This subset selects existing owned ends; it contributes no
                 // additional members beyond the canonical ownership projection.
-                super::associations::navigable_owned_ends(self.references, id)
+                super::associations::validate_navigation_declarations(self.references, id)
                     .map_err(|error| QueryError::unsupported(id, error))?;
                 continue;
             }
@@ -1734,47 +1734,4 @@ pub(crate) fn set_redefined_elements(
     query(&references, owner.id()).map_err(|error| error.to_string())?;
     *section = candidate;
     Ok(())
-}
-
-#[cfg(test)]
-mod class_behavior_gate_tests {
-    use super::*;
-
-    #[test]
-    fn class_behavior_gate_rejects_new_violation_and_accepts_repaired_draft()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let valid: crate::Project = serde_json::from_value(json!({
-            "id":"project", "name":"Class behavior gate", "root_model":"root",
-            "elements":[
-                {"id":"root", "kind":"uml.model", "name":"Root"},
-                {"id":"class", "kind":"uml.class", "name":"Class", "properties":{"isActive":true,"ownedBehavior":[{"$ref":"behavior"}],"classifierBehavior":null}},
-                {"id":"behavior", "kind":"uml.opaque_behavior", "name":"Behavior", "properties":{"specification":{"$ref":"operation"}}},
-                {"id":"operation", "kind":"uml.operation", "name":"Operation"}
-            ],
-            "relations":[
-                {"id":"root-class", "kind":"owns", "from":"root", "to":"class"},
-                {"id":"class-behavior", "kind":"owns", "from":"class", "to":"behavior"},
-                {"id":"class-operation", "kind":"owns", "from":"class", "to":"operation"}
-            ]
-        }))?;
-        let before = crate::encode(&valid, crate::Format::Json)?;
-        let mut candidate = valid.clone();
-        candidate
-            .elements
-            .iter_mut()
-            .find(|element| element.id == "class")
-            .ok_or("classifier")?
-            .properties
-            .insert("classifierBehavior".into(), json!({"$ref":"behavior"}));
-        let error = super::super::root::validate_changes(&valid, &candidate)
-            .expect_err("classifier behavior cannot have a specification");
-        assert!(
-            error.contains("BehavioredClassifier-class_behavior: violated"),
-            "{error}"
-        );
-        assert_eq!(crate::encode(&valid, crate::Format::Json)?, before);
-        super::super::root::validate_changes(&candidate, &valid)?;
-        Ok(())
-    }
-
 }

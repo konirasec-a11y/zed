@@ -19,6 +19,11 @@ message Project {
   optional bytes mdj_provenance_json = 11;
   // Canonical CompositionPlacement map, not source provenance.
   optional bytes composition_json = 12;
+  repeated AssociationKnowledge association_knowledge = 13;
+}
+message AssociationKnowledge {
+  string association_id = 1;
+  repeated string navigation_unverified = 2;
 }
 message HierarchyPlacement {
   string subject_id = 1;
