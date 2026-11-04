@@ -411,9 +411,9 @@ fn render_style_inheritance(view: &View) -> Vec<AnyElement> {
         StyleInheritanceStatus::Unresolved => ("Partially resolved", Color::Warning),
     };
     let source = match &inheritance.source {
-        StyleInheritanceSource::Missing => "Missing source · no inheritance".to_owned(),
-        StyleInheritanceSource::Null => "Null source · no inheritance".to_owned(),
-        StyleInheritanceSource::Reference(source_id) => format!("Reference {source_id}"),
+        StyleInheritanceSource::Missing => "Missing source · no inheritance",
+        StyleInheritanceSource::Null => "Null source · no inheritance",
+        StyleInheritanceSource::Reference(_) => "Referenced style source",
     };
     let properties = if inheritance.properties.is_empty() {
         "None · no inheritance".to_owned()
@@ -443,21 +443,17 @@ fn render_style_inheritance(view: &View) -> Vec<AnyElement> {
             .into_any_element(),
     ];
     if inheritance.status == StyleInheritanceStatus::Inactive {
-        if let Some(source_id) =
-            inheritance
-                .diagnostics
-                .values()
-                .find_map(|diagnostic| match diagnostic {
-                    StyleInheritanceDiagnostic::NonViewSource { source_id } => Some(source_id),
-                    _ => None,
-                })
+        if inheritance
+            .diagnostics
+            .values()
+            .any(|diagnostic| matches!(diagnostic, StyleInheritanceDiagnostic::NonViewSource { .. }))
         {
             rows.push(
                 div()
                     .px_3()
                     .py_1()
                     .child(
-                        Label::new(format!("Source {source_id} has no view style. Inheritance is inactive; this view's authored styles remain in use."))
+                        Label::new("The source has no view style. Inheritance is inactive; this view's authored styles remain in use.")
                             .size(LabelSize::XSmall)
                             .color(Color::Warning),
                     )
@@ -468,23 +464,23 @@ fn render_style_inheritance(view: &View) -> Vec<AnyElement> {
     }
     for property in &inheritance.properties {
         let value = inherited_render_value(view, *property);
-        let (detail, color) = if let Some(origin) = inheritance.origins.get(property) {
+        let (detail, color) = if inheritance.origins.contains_key(property) {
             (
-                format!("{value} · inherited from view {origin}"),
+                format!("{value} · inherited from source view"),
                 Color::Muted,
             )
         } else {
             let diagnostic = match inheritance.diagnostics.get(property) {
-                Some(StyleInheritanceDiagnostic::MissingSource { source_id }) => {
-                    format!("Missing source {source_id}")
+                Some(StyleInheritanceDiagnostic::MissingSource { .. }) => {
+                    "Missing inheritance source"
                 }
-                Some(StyleInheritanceDiagnostic::NonViewSource { source_id }) => {
-                    format!("Source {source_id} is not a view")
+                Some(StyleInheritanceDiagnostic::NonViewSource { .. }) => {
+                    "The inheritance source is not a view"
                 }
-                Some(StyleInheritanceDiagnostic::Cycle { view_id }) => {
-                    format!("Inheritance cycle at view {view_id}")
+                Some(StyleInheritanceDiagnostic::Cycle { .. }) => {
+                    "Inheritance cycle between views"
                 }
-                None => "Inheritance unresolved".to_owned(),
+                None => "Inheritance unresolved",
             };
             (
                 format!("{diagnostic} · renderer / theme fallback; authored value is not used"),

@@ -108,12 +108,12 @@ impl MdeRightPanel {
         );
         if let Some((diagram_id, view, _)) = style_target {
             let mut presentation_rows = vec![
-                presentation_row("View", &view.id),
+                presentation_row("View", view_label(view)),
                 presentation_row(
                     "Kind",
                     view.presentation.kind.as_deref().unwrap_or("Native view"),
                 ),
-                presentation_row("Subject", view.subject.as_deref().unwrap_or("None")),
+                presentation_row("Subject", subject_label(view, snapshot.as_ref())),
                 presentation_row(
                     if view.rendered_label.bound {
                         "Stored label"
@@ -301,6 +301,54 @@ fn presentation_row(name: &str, value: &str) -> AnyElement {
     )
 }
 
+fn view_label(view: &bellatrix_mde_cordis::projection::View) -> &str {
+    view.rendered_label
+        .text
+        .as_deref()
+        .filter(|label| !label.trim().is_empty())
+        .or_else(|| (!view.display_label.trim().is_empty()).then_some(view.display_label.as_str()))
+        .or_else(|| view.label.as_deref().filter(|label| !label.trim().is_empty()))
+        .unwrap_or("Unnamed view")
+}
+
+fn subject_label<'a>(
+    view: &bellatrix_mde_cordis::projection::View,
+    snapshot: Option<&'a crate::workbench_ui::snapshot::MdeSnapshot>,
+) -> &'a str {
+    let Some(subject) = view.subject.as_deref() else {
+        return "None";
+    };
+    let Some(snapshot) = snapshot else {
+        return "Unresolved reference";
+    };
+    if let Some(element) = snapshot
+        .section
+        .elements
+        .iter()
+        .find(|element| element.id == subject)
+    {
+        return if element.name.trim().is_empty() {
+            "Unnamed element"
+        } else {
+            &element.name
+        };
+    }
+    if let Some(relation) = snapshot
+        .section
+        .relations
+        .iter()
+        .find(|relation| relation.id == subject)
+    {
+        return relation
+            .presentation
+            .name
+            .as_deref()
+            .filter(|name| !name.trim().is_empty())
+            .unwrap_or(&relation.presentation.type_label);
+    }
+    "Unresolved reference"
+}
+
 fn view_navigation(
     item: &Entity<MdeWorkbenchItem>,
     diagram_id: &str,
@@ -311,12 +359,8 @@ fn view_navigation(
     let owner = item.clone();
     let diagram_id = diagram_id.to_owned();
     let view_id = view.id.clone();
-    let label = view
-        .label
-        .as_deref()
-        .filter(|label| !label.is_empty())
-        .unwrap_or(&view.id);
-    let tooltip = format!("Inspect {relationship}: {label} · {}", view.id);
+    let label = view_label(view);
+    let tooltip = format!("Inspect {relationship}: {label}");
     div()
         .px_3()
         .py_1()
