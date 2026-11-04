@@ -177,6 +177,8 @@ pub struct LayoutBounds {
 #[serde(deny_unknown_fields)]
 pub struct ViewPresentation {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style_inheritance: Option<StyleInheritance>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relationship_endpoints: Option<RelationshipEndpointPresentation>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<String>,
@@ -196,6 +198,36 @@ impl ViewPresentation {
     pub fn is_empty(&self) -> bool {
         self == &Self::default()
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StyleInheritance {
+    // This reference is independent of composition. Missing/null must not be
+    // replaced by the containing View when resolving appearance.
+    #[serde(default, skip_serializing_if = "Authored::is_missing")]
+    pub source: Authored<String>,
+    // Selected properties replace local values, including an unset source value.
+    pub properties: std::collections::BTreeSet<InheritedStyleProperty>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InheritedStyleProperty {
+    Fill,
+    Stroke,
+    TextColor,
+    FontFamily,
+    FontSize,
+    FontWeight,
+    FontItalic,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SourceFieldPresence {
+    Null,
+    Value,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -239,6 +271,9 @@ pub enum PresentationResource {
 pub struct PresentationSource {
     pub format: String,
     pub type_name: String,
+    // Encoding shape only: mapped values and references live in the contract.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub field_presence: std::collections::BTreeMap<String, SourceFieldPresence>,
     // Only unmapped source fields belong here. Mapped fields are authored once
     // in this contract, never in a second copy of the original source object.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]

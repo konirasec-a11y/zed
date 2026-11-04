@@ -1,11 +1,13 @@
 pub(crate) use bellatrix_mde_protocol::projection::*;
 use bellatrix_mde_protocol::command::*;
 use bellatrix_mde_protocol::presentation::*;
-use crate::mde_api_projection_notation::{project_view, relationship_labels};
+use crate::mde_api_projection_notation::{project_render_styles, project_view, relationship_labels};
 
 pub(crate) fn decode_section(project_id: &str, name: &str, section_json: &str) -> Result<crate::ModelingSection, String> {
     let section: crate::ModelingSection = serde_json::from_str(section_json).map_err(|error| format!("invalid MDE section: {error}"))?;
-    crate::validate_model_hierarchy(&section.to_model(project_id, name))?;
+    let project = section.to_model(project_id, name);
+    crate::Graph::new(&project).validate_identifiers().map_err(|error| error.to_string())?;
+    crate::validate_model_hierarchy(&project)?;
     Ok(section)
 }
 
@@ -53,13 +55,14 @@ pub fn project_model_section(project_id: &str, name: &str, section_json: &str) -
             source_role: presentation.source_role.to_owned(), target_role: presentation.target_role.to_owned(),
             presentation: relationship_labels(&presentation), }
     }).collect();
+    let render_styles = project_render_styles(&section, project_id)?;
     let diagrams = section.diagrams.iter().map(|diagram| {
         let graph = crate::RelationshipGraph::new(&section, &diagram.id);
         let paths = diagram.all_views().filter_map(|view| graph.view_path(&view.id).map(|geometry| (view.id.clone(), geometry))).collect();
         Ok(Diagram { id: diagram.id.clone(), name: diagram.name.clone(), width: diagram.width, height: diagram.height,
             uml_di_type: diagram.uml_di_type.clone(), interaction_kind: diagram.interaction_kind.clone(), model_elements: diagram.model_elements.clone(),
             kind: crate::StructuralDiagramKind::from_diagram(diagram).map(crate::mde_api_command_conversion::diagram_kind_contract),
-            views: diagram.views.iter().map(|view| project_view(&section, diagram, view, &references, &paths)).collect::<Result<_, String>>()?, })
+            views: diagram.views.iter().map(|view| project_view(&section, diagram, view, &references, &paths, &render_styles)).collect::<Result<_, String>>()?, })
     }).collect::<Result<_, String>>()?;
     let hierarchy = section.hierarchy.iter().map(|(id, placement)| Ok((id.clone(), HierarchyPlacement {
         parent_id: placement.parent_id.clone(), occurrence: placement.occurrence.as_ref().map(convert).transpose()?,

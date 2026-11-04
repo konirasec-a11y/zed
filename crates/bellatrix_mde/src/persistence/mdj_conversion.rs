@@ -244,7 +244,7 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
             }
             diagnostics.push(Diagnostic {
                 path: paths.get(&view.id).cloned().unwrap_or_default(),
-                message: "view/subview retained with subject, text, exact representable layout/path, attachments and supported authored style; inherited or computed appearance, unsupported style, route encodings, resources and other fields remain source residue; rendering is a partial preview".into(),
+                message: "view/subview retained with subject, text, exact representable layout/path, attachments, supported authored style and style inheritance; computed appearance, unsupported style, route encodings, resources and other fields remain partial".into(),
             });
             style_projection::diagnose(
                 view,
@@ -303,6 +303,8 @@ fn read_views(value: Option<&Value>, ids: &mut BTreeSet<String>) -> Result<Vec<V
             });
             let endpoints = view_projection::take_endpoints(&mut residual);
             let style = style_projection::take_style(&mut residual);
+            let mut field_presence = BTreeMap::new();
+            let style_inheritance = style_projection::take_inheritance(&type_name, &mut residual, &mut field_presence);
             let children = read_views(object.get("subViews"), ids)?;
             Ok(View {
                 id,
@@ -314,10 +316,12 @@ fn read_views(value: Option<&Value>, ids: &mut BTreeSet<String>) -> Result<Vec<V
                 geometry,
                 children,
                 presentation: ViewPresentation {
+                    style_inheritance,
                     kind: Some(type_name.clone()),
                     source: Some(PresentationSource {
                         format: "mdj".into(),
                         type_name,
+                        field_presence,
                         residual,
                     }),
                     ..ViewPresentation::default()
@@ -474,6 +478,9 @@ fn equivalent(current: &Project, imported: &Project, residuals: &Residuals, path
 
 fn metadata_after_export(project: &Project) -> Project {
     let mut expected = project.clone();
+    for diagram in &mut expected.diagrams {
+        style_projection::update_inheritance_metadata(&mut diagram.views);
+    }
     if let Some(provenance) = &mut expected.mdj_provenance {
         // These metadata fields describe the encoding of authored values,
         // not a competing value. Only adjust them after constructing actual output;

@@ -130,6 +130,48 @@ pub struct ViewPresentation {
     pub kind: Option<String>,
     pub has_source: bool,
     pub visible: bool,
+    pub style_inheritance: Option<StyleInheritance>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StyleInheritance {
+    pub source: StyleInheritanceSource,
+    pub properties: Vec<InheritedStyleProperty>,
+    pub status: StyleInheritanceStatus,
+    pub origins: BTreeMap<InheritedStyleProperty, String>,
+    pub diagnostics: BTreeMap<InheritedStyleProperty, StyleInheritanceDiagnostic>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum StyleInheritanceSource {
+    Missing,
+    Null,
+    Reference(String),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StyleInheritanceStatus {
+    Inactive,
+    Resolved,
+    Unresolved,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum InheritedStyleProperty {
+    Fill,
+    Stroke,
+    TextColor,
+    FontFamily,
+    FontSize,
+    FontWeight,
+    FontItalic,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum StyleInheritanceDiagnostic {
+    MissingSource { source_id: String },
+    NonViewSource { source_id: String },
+    Cycle { view_id: String },
 }
 #[derive(Clone, Debug)]
 pub struct ResolvedRelationship {

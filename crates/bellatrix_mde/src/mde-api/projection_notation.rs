@@ -3,7 +3,7 @@ use bellatrix_mde_protocol::presentation::*;
 use crate::mde_api_projection as projection;
 use crate as mde;
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) fn project_view(
     section: &mde::ModelingSection,
@@ -11,12 +11,14 @@ pub(crate) fn project_view(
     view: &mde::View,
     references: &mde::uml::references::ReferenceIndex<'_>,
     paths: &BTreeMap<String, mde::Geometry>,
+    render_styles: &BTreeMap<String, ProjectedRenderStyle>,
 ) -> Result<projection::View, String> {
     let element = view.subject.as_deref().and_then(|subject| {
         section.elements.iter().find(|element| element.id == subject)
     });
     let timing = view.timing.as_ref().map(projection::convert).transpose()?;
-    let render_style = render_style(&view.style)?;
+    let projected_style = render_styles.get(&view.id)
+        .ok_or_else(|| format!("missing render style projection for view {}", view.id))?;
     let figure = figure_presentation(section, diagram, view, element, references, timing.clone())?;
     let classifier = element.map(|element| {
         let presentation = mde::classifier_presentation(
@@ -96,16 +98,17 @@ pub(crate) fn project_view(
         label: view.label.clone(),
         geometry: projection::convert(&view.geometry)?,
         children: view.children.iter().map(|child| {
-            project_view(section, diagram, child, references, paths)
+            project_view(section, diagram, child, references, paths, render_styles)
         }).collect::<Result<_, _>>()?,
         presentation: projection::ViewPresentation {
             kind: view.presentation.kind.clone(),
             has_source: view.presentation.source.is_some(),
             visible: visible_in_preview(view),
+            style_inheritance: projected_style.inheritance.clone(),
         },
         style: projection::convert(&view.style)?,
         z_index: view.z_index,
-        render_style,
+        render_style: projected_style.style.clone(),
         figure,
         classifier,
         display_label,
@@ -123,6 +126,176 @@ fn visible_in_preview(view: &mde::View) -> bool {
         None => true,
         Some(Value::Bool(visible)) => *visible,
         Some(_) => false,
+    }
+}
+
+pub(crate) struct ProjectedRenderStyle {
+    style: RenderStyle,
+    inheritance: Option<projection::StyleInheritance>,
+}
+
+#[derive(Clone)]
+enum StylePropertyResolution<'a> {
+    Origin(&'a str),
+    Unresolved(projection::StyleInheritanceDiagnostic),
+}
+
+pub(crate) fn project_render_styles(
+    section: &mde::ModelingSection,
+    project_id: &str,
+) -> Result<BTreeMap<String, ProjectedRenderStyle>, String> {
+    let views = section.diagrams.iter().flat_map(mde::Diagram::all_views)
+        .map(|view| (view.id.as_str(), view)).collect::<BTreeMap<_, _>>();
+    let non_views = section.elements.iter().map(|element| element.id.as_str())
+        .chain(section.relations.iter().map(|relation| relation.id.as_str()))
+        .chain(section.diagrams.iter().map(|diagram| diagram.id.as_str()))
+        .chain(std::iter::once(project_id))
+        .collect::<BTreeSet<_>>();
+    let mut resolved = BTreeMap::new();
+    let mut projected_styles = BTreeMap::new();
+    let fallback = mde::Style::default();
+    for view in views.values().copied() {
+        let mut projected = authored_render_style(view)?;
+        if let Some(authored) = view.presentation.style_inheritance.as_ref()
+            .filter(|inheritance| inheritance.source.value().is_some() && !inheritance.properties.is_empty())
+            && let Some(inheritance) = &mut projected.inheritance
+        {
+            if let Some(source_id) = authored.source.value()
+                .filter(|source_id| non_views.contains(source_id.as_str()))
+            {
+                for property in &authored.properties {
+                    inheritance.diagnostics.insert(inherited_property(*property),
+                        projection::StyleInheritanceDiagnostic::NonViewSource {
+                            source_id: source_id.clone(),
+                        });
+                }
+                projected_styles.insert(view.id.clone(), projected);
+                continue;
+            }
+            for property in &authored.properties {
+                let projected_property = inherited_property(*property);
+                match resolve_style_property(view, *property, &views, &non_views, &mut resolved) {
+                    StylePropertyResolution::Origin(origin_id) => {
+                        let origin = views.get(origin_id)
+                            .ok_or_else(|| format!("missing style origin view {origin_id}"))?;
+                        // None is inherited too. The child's authored value must
+                        // not override a source default or an unresolved field.
+                        copy_inherited_property(&mut projected.style, &origin.style, *property);
+                        inheritance.origins.insert(projected_property, origin_id.to_owned());
+                    }
+                    StylePropertyResolution::Unresolved(diagnostic) => {
+                        copy_inherited_property(&mut projected.style, &fallback, *property);
+                        inheritance.diagnostics.insert(projected_property, diagnostic);
+                    }
+                }
+            }
+            inheritance.status = if inheritance.diagnostics.is_empty() {
+                projection::StyleInheritanceStatus::Resolved
+            } else {
+                projection::StyleInheritanceStatus::Unresolved
+            };
+        }
+        projected_styles.insert(view.id.clone(), projected);
+    }
+    Ok(projected_styles)
+}
+
+fn resolve_style_property<'a>(
+    view: &'a mde::View,
+    property: mde::InheritedStyleProperty,
+    views: &BTreeMap<&'a str, &'a mde::View>,
+    non_views: &BTreeSet<&str>,
+    resolved: &mut BTreeMap<(&'a str, mde::InheritedStyleProperty), StylePropertyResolution<'a>>,
+) -> StylePropertyResolution<'a> {
+    let mut pending = Vec::new();
+    let mut visiting = BTreeSet::new();
+    let mut current = view;
+    let resolution = loop {
+        if let Some(resolution) = resolved.get(&(current.id.as_str(), property)) {
+            break resolution.clone();
+        }
+        if !visiting.insert(current.id.as_str()) {
+            break StylePropertyResolution::Unresolved(projection::StyleInheritanceDiagnostic::Cycle {
+                view_id: current.id.clone(),
+            });
+        }
+        pending.push(current.id.as_str());
+        let Some(source_id) = inheritance_source(current, property) else {
+            break StylePropertyResolution::Origin(current.id.as_str());
+        };
+        // A known target without presentation Style cannot provide inheritance;
+        // this view's own value remains the origin for its descendants.
+        if non_views.contains(source_id) {
+            break StylePropertyResolution::Origin(current.id.as_str());
+        }
+        let Some(source) = views.get(source_id).copied() else {
+            break StylePropertyResolution::Unresolved(
+                projection::StyleInheritanceDiagnostic::MissingSource {
+                    source_id: source_id.to_owned(),
+                });
+        };
+        current = source;
+    };
+    for view_id in pending {
+        resolved.insert((view_id, property), resolution.clone());
+    }
+    resolution
+}
+
+fn inheritance_source(view: &mde::View, property: mde::InheritedStyleProperty) -> Option<&str> {
+    let inheritance = view.presentation.style_inheritance.as_ref()?;
+    // A cycle in the reference graph is harmless when the masks do not
+    // propagate this property around it.
+    if !inheritance.properties.contains(&property) {
+        return None;
+    }
+    inheritance.source.value().map(String::as_str)
+}
+
+fn inherited_property(property: mde::InheritedStyleProperty) -> projection::InheritedStyleProperty {
+    match property {
+        mde::InheritedStyleProperty::Fill => projection::InheritedStyleProperty::Fill,
+        mde::InheritedStyleProperty::Stroke => projection::InheritedStyleProperty::Stroke,
+        mde::InheritedStyleProperty::TextColor => projection::InheritedStyleProperty::TextColor,
+        mde::InheritedStyleProperty::FontFamily => projection::InheritedStyleProperty::FontFamily,
+        mde::InheritedStyleProperty::FontSize => projection::InheritedStyleProperty::FontSize,
+        mde::InheritedStyleProperty::FontWeight => projection::InheritedStyleProperty::FontWeight,
+        mde::InheritedStyleProperty::FontItalic => projection::InheritedStyleProperty::FontItalic,
+    }
+}
+
+fn authored_render_style(view: &mde::View) -> Result<ProjectedRenderStyle, String> {
+    Ok(ProjectedRenderStyle {
+        style: render_style(&view.style)?,
+        inheritance: view.presentation.style_inheritance.as_ref().map(|inheritance| {
+            projection::StyleInheritance {
+                source: match &inheritance.source {
+                    mde::Authored::Missing => projection::StyleInheritanceSource::Missing,
+                    mde::Authored::Null => projection::StyleInheritanceSource::Null,
+                    mde::Authored::Value(source) => projection::StyleInheritanceSource::Reference(source.clone()),
+                },
+                properties: inheritance.properties.iter().copied().map(inherited_property).collect(),
+                status: projection::StyleInheritanceStatus::Inactive,
+                origins: BTreeMap::new(),
+                diagnostics: BTreeMap::new(),
+            }
+        }),
+    })
+}
+
+fn copy_inherited_property(
+    destination: &mut RenderStyle,
+    source: &mde::Style,
+    property: mde::InheritedStyleProperty,
+) {
+    match property {
+        mde::InheritedStyleProperty::Fill => destination.fill.clone_from(&source.fill),
+        mde::InheritedStyleProperty::Stroke => destination.stroke.clone_from(&source.stroke),
+        mde::InheritedStyleProperty::TextColor => destination.text_color.clone_from(&source.text_color),
+        mde::InheritedStyleProperty::FontFamily => destination.font_family.clone_from(&source.font_family),
+        mde::InheritedStyleProperty::FontSize => destination.font_size = source.font_size,
+        mde::InheritedStyleProperty::FontWeight => destination.font_weight = source.font_weight,
+        mde::InheritedStyleProperty::FontItalic => destination.font_italic = source.font_italic,
     }
 }
 

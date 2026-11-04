@@ -1,6 +1,7 @@
 use super::{failure, insert_mapped};
 use crate::{
-    Style, TextAlignment, TextVerticalAlignment, View,
+    Authored, InheritedStyleProperty, SourceFieldPresence, Style, StyleInheritance,
+    TextAlignment, TextVerticalAlignment, View,
     mdj::{Diagnostic, MdjError},
 };
 use serde_json::{Map, Value};
@@ -17,6 +18,126 @@ const STYLE_FIELDS: [&str; 9] = [
     "horizontalAlignment",
     "verticalAlignment",
 ];
+
+const PARENT_STYLE_PROPERTIES: [InheritedStyleProperty; 7] = [
+    InheritedStyleProperty::Fill,
+    InheritedStyleProperty::Stroke,
+    InheritedStyleProperty::TextColor,
+    InheritedStyleProperty::FontFamily,
+    InheritedStyleProperty::FontSize,
+    InheritedStyleProperty::FontWeight,
+    InheritedStyleProperty::FontItalic,
+];
+
+pub(super) fn take_inheritance(
+    type_name: &str,
+    residual: &mut BTreeMap<String, Value>,
+    field_presence: &mut BTreeMap<String, SourceFieldPresence>,
+) -> Option<StyleInheritance> {
+    let (enabled, presence) = match residual.get("parentStyle") {
+        None => (default_parent_style(type_name), None),
+        Some(Value::Bool(enabled)) => (*enabled, Some(SourceFieldPresence::Value)),
+        Some(Value::Null) => (false, Some(SourceFieldPresence::Null)),
+        Some(_) => return None,
+    };
+    let source = match residual.get("_parent") {
+        None => Authored::Missing,
+        Some(Value::Null) => Authored::Null,
+        Some(Value::Object(reference)) if reference.len() == 1 => {
+            Authored::Value(reference.get("$ref")?.as_str()?.to_owned())
+        }
+        Some(_) => return None,
+    };
+    residual.remove("parentStyle");
+    residual.remove("_parent");
+    if let Some(presence) = presence {
+        field_presence.insert("parentStyle".into(), presence);
+    }
+    Some(StyleInheritance {
+        source,
+        properties: if enabled { PARENT_STYLE_PROPERTIES.into_iter().collect() } else { Default::default() },
+    })
+}
+
+fn default_parent_style(type_name: &str) -> bool {
+    // Vendored constructors, not naming conventions: EdgeLabelView and
+    // NodeLabelView do not inherit LabelView's default. Omission keeps the
+    // constructor value; explicit null does not (core.js View.setup/load).
+    matches!(type_name,
+        "LabelView"
+        | "ERDColumnView" | "ERDColumnCompartmentView"
+        | "UMLCompartmentView" | "UMLNameCompartmentView" | "UMLListCompartmentView"
+        | "UMLAttributeView" | "UMLAttributeCompartmentView"
+        | "UMLOperationView" | "UMLOperationCompartmentView"
+        | "UMLReceptionView" | "UMLReceptionCompartmentView"
+        | "UMLTemplateParameterView" | "UMLTemplateParameterCompartmentView"
+        | "UMLEnumerationLiteralView" | "UMLEnumerationLiteralCompartmentView"
+        | "UMLQualifierCompartmentView" | "UMLSlotView" | "UMLSlotCompartmentView"
+        | "UMLExtensionPointView" | "UMLExtensionPointCompartmentView"
+        | "UMLInternalActivityView" | "UMLInternalActivityCompartmentView"
+        | "UMLInternalTransitionView" | "UMLInternalTransitionCompartmentView"
+        | "UMLRegionView" | "UMLDecompositionCompartmentView"
+        | "UMLInteractionOperandView" | "UMLInteractionOperandCompartmentView"
+        | "UMLTimeConstraintView"
+        | "SysMLConstraintCompartmentItemView" | "SysMLConstraintCompartmentView"
+        | "SysMLFlowPropertyCompartmentItemView" | "SysMLFlowPropertyCompartmentView"
+        | "SysMLParameterCompartmentItemView" | "SysMLParameterCompartmentView"
+        | "SysMLPartCompartmentItemView" | "SysMLPartCompartmentView"
+        | "SysMLPortCompartmentItemView" | "SysMLPortCompartmentView"
+        | "SysMLPropertyCompartmentItemView" | "SysMLPropertyCompartmentView"
+        | "SysMLPropertyValueCompartmentItemView" | "SysMLPropertyValueCompartmentView"
+        | "SysMLReferenceCompartmentItemView" | "SysMLReferenceCompartmentView"
+        | "SysMLValueCompartmentItemView" | "SysMLValueCompartmentView"
+    )
+}
+
+fn inheritance_presence(view: &View) -> Option<SourceFieldPresence> {
+    let source = view.presentation.source.as_ref()?;
+    let inheritance = view.presentation.style_inheritance.as_ref()?;
+    let enabled = !inheritance.properties.is_empty();
+    match source.field_presence.get("parentStyle").copied() {
+        Some(SourceFieldPresence::Null) if !enabled => Some(SourceFieldPresence::Null),
+        Some(_) => Some(SourceFieldPresence::Value),
+        None if enabled != default_parent_style(&source.type_name) => Some(SourceFieldPresence::Value),
+        None => None,
+    }
+}
+
+pub(super) fn update_inheritance_metadata(views: &mut [View]) {
+    for view in views {
+        if view.presentation.style_inheritance.is_some() {
+            let presence = inheritance_presence(view);
+            if let Some(source) = &mut view.presentation.source {
+                if let Some(presence) = presence {
+                    source.field_presence.insert("parentStyle".into(), presence);
+                } else {
+                    source.field_presence.remove("parentStyle");
+                }
+            }
+        }
+        update_inheritance_metadata(&mut view.children);
+    }
+}
+
+fn export_inheritance(view: &View, object: &mut Map<String, Value>) -> Result<(), MdjError> {
+    let Some(inheritance) = &view.presentation.style_inheritance else {
+        return Ok(());
+    };
+    if !inheritance.properties.is_empty() && !inheritance.properties.iter().copied().eq(PARENT_STYLE_PROPERTIES) {
+        return Err(failure(&view.id, "MDJ parentStyle requires exactly the supported color and font inheritance properties"));
+    }
+    match &inheritance.source {
+        Authored::Missing => {}
+        Authored::Null => insert_mapped(object, "_parent", Value::Null)?,
+        Authored::Value(id) => insert_mapped(object, "_parent", serde_json::json!({"$ref": id}))?,
+    }
+    match inheritance_presence(view) {
+        Some(SourceFieldPresence::Null) => insert_mapped(object, "parentStyle", Value::Null)?,
+        Some(SourceFieldPresence::Value) => insert_mapped(object, "parentStyle", Value::Bool(!inheritance.properties.is_empty()))?,
+        None => {}
+    }
+    Ok(())
+}
 
 pub(super) fn take_style(residual: &mut BTreeMap<String, Value>) -> Style {
     let mut style = Style {
@@ -124,6 +245,7 @@ fn supported_family(family: &str) -> bool {
 }
 
 pub(super) fn export_style(view: &View, object: &mut Map<String, Value>) -> Result<(), MdjError> {
+    export_inheritance(view, object)?;
     let style = &view.style;
     for (field, value) in [
         ("fillColor", &style.fill),
@@ -214,14 +336,12 @@ pub(super) fn diagnose(view: &View, path: &str, diagnostics: &mut Vec<Diagnostic
             });
         }
     }
-    if source
-        .residual
-        .get("parentStyle")
-        .is_some_and(|value| value.as_bool() != Some(false))
-    {
-        diagnostics.push(Diagnostic {
-            path: format!("{path}/parentStyle"),
-            message: "source style inheritance is preserved but not resolved; typed style describes explicit authored values, not final inherited or computed appearance".into(),
-        });
+    for field in ["parentStyle", "_parent"] {
+        if source.residual.contains_key(field) {
+            diagnostics.push(Diagnostic {
+                path: format!("{path}/{field}"),
+                message: "style inheritance encoding is unsupported and retained as source residue; no inheritance was inferred from containment".into(),
+            });
+        }
     }
 }

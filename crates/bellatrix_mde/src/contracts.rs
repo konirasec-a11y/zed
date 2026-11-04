@@ -18,7 +18,8 @@ pub use endpoint_presentation::{
 pub use presentation::{
     Authored, Diagram, Geometry, HierarchyPlacement, LabelPlacement, LayoutBounds, LineMode,
     PathSegment, Point, PresentationReference, PresentationResource, PresentationSource,
-    RelationshipRouting, Style, TextAlignment, TextVerticalAlignment, TimingMode, TimingPoint,
+    RelationshipRouting, Style, StyleInheritance, InheritedStyleProperty, SourceFieldPresence,
+    TextAlignment, TextVerticalAlignment, TimingMode, TimingPoint,
     TimingPresentation, View, ViewEndpoints, ViewOccurrence, ViewPresentation, VisualDraft,
 };
 pub use project::Project;

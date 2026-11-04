@@ -275,7 +275,7 @@ pub(crate) fn register_preview_action(
                 let bytes = raw.unwrap_or_else(|| buffer_snapshot.text().into_bytes());
                 let (document, import_diagnostics) = (importer.prepare)(bytes, is_mdj).await?;
                 let mut diagnostics = if is_mdj {
-                    vec![if editable { "Limited StarUML editing: supported top-level labels, names, properties and styles only. Save creates a new copy and never replaces the source. UML mapping, inherited/composite styles, rendering, routing and resources remain partial." } else { "Read-only StarUML preview: clean UTF-8 disk bytes matching the editor could not be verified. The source is not modified; editor text provenance does not guarantee original encoding or line endings." }.to_owned()]
+                    vec![if editable { "Limited StarUML editing: supported top-level labels, names and properties, with limited styles on views and subViews. Save creates a new copy and never replaces the source. Style inheritance is partial; final StarUML appearance is not fully reproduced. UML mapping, composite rendering, routing and resources remain partial." } else { "Read-only StarUML preview: clean UTF-8 disk bytes matching the editor could not be verified. The source is not modified; editor text provenance does not guarantee original encoding or line endings. Styles on views and subViews and style inheritance are partial; final StarUML appearance is not fully reproduced." }.to_owned()]
                 } else { Vec::new() };
                 diagnostics.extend(read_diagnostic);
                 if editable { diagnostics.push("Native MDJ validation is not enabled for this session; the validation control is unavailable.".into()); }

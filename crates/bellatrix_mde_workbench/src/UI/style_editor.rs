@@ -3,11 +3,13 @@ use crate::workbench_ui::style_drafts::{
     FIELDS, StyleEditState, StyleSubmission, field_error, style_value,
 };
 use crate::workbench_ui::{MdeWorkbenchItem, panels::MdeRightPanel};
-use bellatrix_mde_cordis::{RelationshipRouting, ViewOrder};
-use bellatrix_mde_cordis::projection::View;
+use bellatrix_mde_cordis::projection::{
+    InheritedStyleProperty, StyleInheritanceDiagnostic, StyleInheritanceSource,
+    StyleInheritanceStatus, View,
+};
 use bellatrix_mde_cordis::{
     MdeUiCommand, ModelingReorderViewRequested, ModelingSetViewRoutingRequested,
-    ModelingSetViewStyleRequested,
+    ModelingSetViewStyleRequested, RelationshipRouting, ViewOrder,
 };
 use gpui::{AnyElement, Context, Entity, IntoElement, Window, div, prelude::*, px};
 use std::collections::HashMap;
@@ -150,7 +152,7 @@ pub(crate) fn reconcile_style_inputs(
             })
             .map(|(field, _)| {
                 let input = cx.new(|cx| {
-                    let input = InputField::new(window, cx, "Inherited").label_min_width(px(0.0));
+                    let input = InputField::new(window, cx, "Not set").label_min_width(px(0.0));
                     input.set_text(&style_value(&view.style, field), window, cx);
                     input
                 });
@@ -346,6 +348,160 @@ fn edit_style_choice(
     cx.notify();
 }
 
+fn inheritance_property_label(property: InheritedStyleProperty) -> &'static str {
+    match property {
+        InheritedStyleProperty::Fill => "Fill",
+        InheritedStyleProperty::Stroke => "Stroke",
+        InheritedStyleProperty::TextColor => "Text color",
+        InheritedStyleProperty::FontFamily => "Font family",
+        InheritedStyleProperty::FontSize => "Font size",
+        InheritedStyleProperty::FontWeight => "Font weight",
+        InheritedStyleProperty::FontItalic => "Font italic",
+    }
+}
+
+fn inherited_render_value(view: &View, property: InheritedStyleProperty) -> String {
+    let style = &view.render_style;
+    match property {
+        InheritedStyleProperty::Fill => style.fill.clone(),
+        InheritedStyleProperty::Stroke => style.stroke.clone(),
+        InheritedStyleProperty::TextColor => style.text_color.clone(),
+        InheritedStyleProperty::FontFamily => style.font_family.clone(),
+        InheritedStyleProperty::FontSize => style.font_size.map(|value| value.to_string()),
+        InheritedStyleProperty::FontWeight => style.font_weight.map(|value| value.to_string()),
+        InheritedStyleProperty::FontItalic => style.font_italic.map(|value| value.to_string()),
+    }
+    .unwrap_or_else(|| "Theme / notation default".into())
+}
+
+fn field_inheritance_note(view: &View, field: &str) -> Option<(&'static str, Color)> {
+    let property = match field {
+        "fill" => InheritedStyleProperty::Fill,
+        "stroke" => InheritedStyleProperty::Stroke,
+        "text_color" => InheritedStyleProperty::TextColor,
+        "font_family" => InheritedStyleProperty::FontFamily,
+        "font_size" => InheritedStyleProperty::FontSize,
+        _ => return None,
+    };
+    let inheritance = view.presentation.style_inheritance.as_ref()?;
+    if inheritance.status == StyleInheritanceStatus::Inactive
+        || !inheritance.properties.contains(&property)
+    {
+        return None;
+    }
+    if inheritance.origins.contains_key(&property) {
+        Some(("Authored only · appearance inherited", Color::Muted))
+    } else {
+        Some(("Authored only · inheritance unresolved", Color::Warning))
+    }
+}
+
+fn render_style_inheritance(view: &View) -> Vec<AnyElement> {
+    let Some(inheritance) = &view.presentation.style_inheritance else {
+        return Vec::new();
+    };
+    let (status, color) = match inheritance.status {
+        StyleInheritanceStatus::Inactive => ("Inactive", Color::Muted),
+        StyleInheritanceStatus::Resolved => ("Resolved", Color::Muted),
+        StyleInheritanceStatus::Unresolved if inheritance.origins.is_empty() => {
+            ("Unresolved", Color::Warning)
+        }
+        StyleInheritanceStatus::Unresolved => ("Partially resolved", Color::Warning),
+    };
+    let source = match &inheritance.source {
+        StyleInheritanceSource::Missing => "Missing source · no inheritance".to_owned(),
+        StyleInheritanceSource::Null => "Null source · no inheritance".to_owned(),
+        StyleInheritanceSource::Reference(source_id) => format!("Reference {source_id}"),
+    };
+    let properties = if inheritance.properties.is_empty() {
+        "None · no inheritance".to_owned()
+    } else {
+        inheritance
+            .properties
+            .iter()
+            .map(|property| inheritance_property_label(*property))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let mut rows = vec![
+        compact_row(
+            "Style inheritance",
+            Label::new(status).size(LabelSize::Small).color(color),
+        ),
+        compact_row("Source", Label::new(source).size(LabelSize::Small)),
+        compact_row("Fields", Label::new(properties).size(LabelSize::Small)),
+        div()
+            .px_3()
+            .py_1()
+            .child(
+                Label::new("Limited inheritance: fill, stroke, text color and font family, size, weight and italic. Other fields remain local. Full StarUML appearance is not reproduced.")
+                    .size(LabelSize::XSmall)
+                    .color(Color::Muted),
+            )
+            .into_any_element(),
+    ];
+    if inheritance.status == StyleInheritanceStatus::Inactive {
+        if let Some(source_id) = inheritance.diagnostics.values().find_map(|diagnostic| {
+            match diagnostic {
+                StyleInheritanceDiagnostic::NonViewSource { source_id } => Some(source_id),
+                _ => None,
+            }
+        }) {
+            rows.push(
+                div()
+                    .px_3()
+                    .py_1()
+                    .child(
+                        Label::new(format!("Source {source_id} has no view style. Inheritance is inactive; this view's authored styles remain in use."))
+                            .size(LabelSize::XSmall)
+                            .color(Color::Warning),
+                    )
+                    .into_any_element(),
+            );
+        }
+        return rows;
+    }
+    for property in &inheritance.properties {
+        let value = inherited_render_value(view, *property);
+        let (detail, color) = if let Some(origin) = inheritance.origins.get(property) {
+            (format!("{value} · inherited from view {origin}"), Color::Muted)
+        } else {
+            let diagnostic = match inheritance.diagnostics.get(property) {
+                Some(StyleInheritanceDiagnostic::MissingSource { source_id }) => {
+                    format!("Missing source {source_id}")
+                }
+                Some(StyleInheritanceDiagnostic::NonViewSource { source_id }) => {
+                    format!("Source {source_id} is not a view")
+                }
+                Some(StyleInheritanceDiagnostic::Cycle { view_id }) => {
+                    format!("Inheritance cycle at view {view_id}")
+                }
+                None => "Inheritance unresolved".to_owned(),
+            };
+            (
+                format!("{diagnostic} · renderer / theme fallback; authored value is not used"),
+                Color::Warning,
+            )
+        };
+        rows.push(compact_row(
+            inheritance_property_label(*property),
+            Label::new(detail).size(LabelSize::Small).color(color),
+        ));
+    }
+    rows.push(
+        div()
+            .px_3()
+            .py_1()
+            .child(
+                Label::new("Values below are authored on this view. Inherited fields do not use these local values, even when their source is unresolved. Editing or clearing authored styles does not change inheritance.")
+                    .size(LabelSize::XSmall)
+                    .color(Color::Muted),
+            )
+            .into_any_element(),
+    );
+    rows
+}
+
 pub(crate) fn render_styles(
     target: Option<(&str, &View, bool)>,
     item: Entity<MdeWorkbenchItem>,
@@ -396,6 +552,7 @@ pub(crate) fn render_styles(
         );
         return rows;
     };
+    rows.extend(render_style_inheritance(view));
     if read_only {
         for (key, label) in FIELDS {
             if is_edge && *key == "fill" {
@@ -404,12 +561,18 @@ pub(crate) fn render_styles(
             let value = style_value(&view.style, key);
             rows.push(compact_row(
                 *label,
-                Label::new(if value.is_empty() {
-                    "Inherited".into()
-                } else {
-                    value
-                })
-                .size(LabelSize::Small),
+                div()
+                    .child(
+                        Label::new(if value.is_empty() {
+                            "Not set".into()
+                        } else {
+                            value
+                        })
+                        .size(LabelSize::Small),
+                    )
+                    .when_some(field_inheritance_note(view, key), |row, (note, color)| {
+                        row.child(Label::new(note).size(LabelSize::XSmall).color(color))
+                    }),
             ));
         }
         if is_edge {
@@ -457,13 +620,26 @@ pub(crate) fn render_styles(
             continue;
         };
         let (icon, description) = match field {
-            "font_family" => (IconName::Font, "Font family · blank inherits IDE theme"),
-            "font_size" => (IconName::FontSize, "Font size · blank inherits IDE theme"),
+            "font_family" => (
+                IconName::Font,
+                "Authored font family · blank leaves it unset",
+            ),
+            "font_size" => (
+                IconName::FontSize,
+                "Authored font size · blank leaves it unset",
+            ),
             "fill" => (IconName::Box, "Fill color · #RRGGBB or #RRGGBBAA"),
             "stroke" => (IconName::Pencil, "Outline color · #RRGGBB or #RRGGBBAA"),
             "text_color" => (IconName::CaseSensitive, "Text color · #RRGGBB or #RRGGBBAA"),
             "stroke_width" => (IconName::LineHeight, "Outline width"),
             _ => (IconName::Eye, "Opacity · 0 to 1"),
+        };
+        let inheritance_note = field_inheritance_note(view, field);
+        let description = match inheritance_note {
+            Some((note, _)) => {
+                format!("{description}. {note}. This input edits the authored value only.")
+            }
+            None => description.to_owned(),
         };
         let color = input.read(cx).text(cx);
         let swatch = gpui::Rgba::try_from(color.trim()).ok();
@@ -474,24 +650,33 @@ pub(crate) fn render_styles(
                 .min_w_0()
                 .max_w(px(240.0))
                 .flex()
-                .items_center()
+                .flex_col()
                 .gap_1()
                 .child(
-                    IconButton::new(format!("mde-style-{field}-hint"), icon)
-                        .aria_label(description)
-                        .tooltip(Tooltip::text(description)),
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_1()
+                        .child(
+                            IconButton::new(format!("mde-style-{field}-hint"), icon)
+                                .aria_label(description.clone())
+                                .tooltip(Tooltip::text(description)),
+                        )
+                        .when(matches!(field, "fill" | "stroke" | "text_color"), |cell| {
+                            cell.child(
+                                div()
+                                    .size(px(10.0))
+                                    .flex_none()
+                                    .border_1()
+                                    .border_color(cx.theme().colors().border)
+                                    .when_some(swatch, |swatch, color| swatch.bg(color)),
+                            )
+                        })
+                        .child(div().flex_1().min_w_0().child(input.clone())),
                 )
-                .when(matches!(field, "fill" | "stroke" | "text_color"), |cell| {
-                    cell.child(
-                        div()
-                            .size(px(10.0))
-                            .flex_none()
-                            .border_1()
-                            .border_color(cx.theme().colors().border)
-                            .when_some(swatch, |swatch, color| swatch.bg(color)),
-                    )
-                })
-                .child(div().flex_1().min_w_0().child(input.clone())),
+                .when_some(inheritance_note, |cell, (note, color)| {
+                    cell.child(Label::new(note).size(LabelSize::XSmall).color(color))
+                }),
         );
     }
     rows.push(fields.into_any_element());
@@ -961,19 +1146,27 @@ pub(crate) fn render_styles(
     }
     let theme_key = key.clone();
     let theme_item = item.clone();
+    let inheritance_active = view
+        .presentation
+        .style_inheritance
+        .as_ref()
+        .is_some_and(|inheritance| inheritance.status != StyleInheritanceStatus::Inactive);
+    let restore_description = if inheritance_active {
+        if draft.state.dirty() {
+            "Clear authored styles and discard draft; inheritance remains unchanged"
+        } else {
+            "Clear authored styles; inheritance remains unchanged"
+        }
+    } else if draft.state.dirty() {
+        "Restore IDE theme and discard draft"
+    } else {
+        "Restore IDE theme"
+    };
     controls = controls.child(
         div().flex_none().p_1().child(
             IconButton::new("mde-style-restore-theme", IconName::RefreshTitle)
-                .aria_label(if draft.state.dirty() {
-                    "Restore IDE theme and discard draft"
-                } else {
-                    "Restore IDE theme"
-                })
-                .tooltip(Tooltip::text(if draft.state.dirty() {
-                    "Restore IDE theme and discard draft"
-                } else {
-                    "Restore IDE theme"
-                }))
+                .aria_label(restore_description)
+                .tooltip(Tooltip::text(restore_description))
                 .disabled(draft.state.conflict || draft.state.pending.is_some())
                 .on_click(cx.listener(move |panel, _, _, cx| {
                     if !target_is_active(panel, &theme_item, &theme_key, cx) {
