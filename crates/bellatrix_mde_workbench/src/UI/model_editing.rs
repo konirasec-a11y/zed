@@ -463,6 +463,86 @@ impl MdeWorkbenchItem {
         sent
     }
 
+    pub(super) fn validate_explorer_move(
+        &self, project_id: &ProjectId, revision: u64,
+        target: &hierarchy::ExplorerMoveTarget, parent_id: Option<&str>,
+        parent_occurrence: Option<&bellatrix_mde::ViewOccurrence>,
+    ) -> Result<(), String> {
+        if self.source.is_read_only() || self.source.is_presentation_suspended() {
+            return Err("The active document is not editable".into());
+        }
+        if self.project_id() != project_id {
+            return Err("The item belongs to another project".into());
+        }
+        let snapshot = self.source.snapshot()?;
+        if snapshot.revision != revision {
+            return Err("The model changed; reopen the menu or drag the item again".into());
+        }
+        let command = match target {
+            hierarchy::ExplorerMoveTarget::Element(element_id) => {
+                bellatrix_mde::commands::Command::SetOwner {
+                    element_id: element_id.clone(), owner_id: parent_id.map(str::to_owned),
+                }
+            }
+            hierarchy::ExplorerMoveTarget::Diagram(diagram_id) => {
+                bellatrix_mde::commands::Command::SetExplorerParent {
+                    subject_id: diagram_id.clone(), parent_id: parent_id.map(str::to_owned),
+                    parent_occurrence: parent_occurrence.cloned(),
+                }
+            }
+        };
+        let model = snapshot.section.to_model(project_id.as_str(), &snapshot.name);
+        bellatrix_mde::commands::apply(&model, &command, revision).map(|_| ())
+    }
+
+    pub(super) fn move_explorer_item(
+        &mut self, project_id: &ProjectId, revision: u64,
+        target: &hierarchy::ExplorerMoveTarget, parent_id: Option<String>,
+        parent_occurrence: Option<bellatrix_mde::ViewOccurrence>,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if let Err(error) = self.validate_explorer_move(project_id, revision, target, parent_id.as_deref(), parent_occurrence.as_ref()) {
+            self.feedback = error;
+            cx.notify();
+            return false;
+        }
+        let command = match target {
+            hierarchy::ExplorerMoveTarget::Element(element_id) => MdeUiCommand::SetOwner(
+                bellatrix_mde_cordis::ModelingSetOwnerRequested {
+                    project_id: project_id.clone(), element_id: element_id.clone(),
+                    owner_id: parent_id, expected_revision: revision,
+                }),
+            hierarchy::ExplorerMoveTarget::Diagram(diagram_id) => MdeUiCommand::SetExplorerParent(
+                bellatrix_mde_cordis::ModelingSetExplorerParentRequested {
+                    project_id: project_id.clone(), subject_id: diagram_id.clone(),
+                    parent_id, parent_occurrence, expected_revision: revision,
+                }),
+        };
+        self.submit_explorer_command(command, project_id, revision, cx)
+    }
+
+    pub(super) fn validate_explorer_diagram_reparent(
+        &self, drag: &hierarchy::ExplorerDiagramDrag, parent_id: Option<&str>,
+        parent_occurrence: Option<&bellatrix_mde::ViewOccurrence>,
+    ) -> Result<(), String> {
+        if self.source.is_read_only() || self.source.is_presentation_suspended()
+            || self.project_id() != &drag.project_id
+            || self.source.snapshot()?.revision != drag.revision
+        {
+            return Err("The document changed or is not editable; drag the diagram again".into());
+        }
+        let parent = parent_id.map(str::to_owned);
+        if let Some((_, _, result)) = drag.parent_checks.borrow().iter()
+            .find(|(candidate, occurrence, _)| candidate == &parent && occurrence.as_ref() == parent_occurrence)
+        {
+            return result.clone();
+        }
+        let result = self.validate_explorer_move(&drag.project_id, drag.revision,
+            &hierarchy::ExplorerMoveTarget::Diagram(drag.diagram_id.clone()), parent_id, parent_occurrence);
+        drag.parent_checks.borrow_mut().push((parent, parent_occurrence.cloned(), result.clone()));
+        result
+    }
+
     pub(super) fn validate_explorer_reparent(
         &self, drag: &hierarchy::ExplorerElementDrag, owner_id: &str,
     ) -> Result<(), String> {
@@ -511,20 +591,20 @@ impl MdeWorkbenchItem {
     pub(super) fn reparent_explorer_element(
         &mut self, drag: &hierarchy::ExplorerElementDrag, owner_id: String,
         cx: &mut Context<Self>,
-    ) {
+    ) -> bool {
         if let Err(error) = self.validate_explorer_reparent(drag, &owner_id) {
             self.feedback = error;
             cx.notify();
-            return;
+            return false;
         }
         // Cordis revalidates the command and publishes with this exact revision;
         // never replace it with a newer snapshot after validating the drag.
-        self.submit(MdeUiCommand::SetOwner(bellatrix_mde_cordis::ModelingSetOwnerRequested {
+        self.submit_explorer_command(MdeUiCommand::SetOwner(bellatrix_mde_cordis::ModelingSetOwnerRequested {
             project_id: drag.project_id.clone(),
             element_id: drag.element_id.clone(),
             owner_id: Some(owner_id),
             expected_revision: drag.revision,
-        }), cx);
+        }), &drag.project_id, drag.revision, cx)
     }
 
     pub(super) fn drop_explorer_element(

@@ -47,7 +47,7 @@ use crate::commands::apply;
 pub enum Command {
     AdoptRootModel,
     SetOwner { element_id: String, owner_id: Option<String> },
-    SetExplorerParent { subject_id: String, parent_id: Option<String> },
+    SetExplorerParent { subject_id: String, parent_id: Option<String>, parent_occurrence: Option<crate::ViewOccurrence> },
     CreateDiagram {
         kind: StructuralDiagramKind,
         name: String,
@@ -65,7 +65,7 @@ pub enum Command {
         name: String,
         model_elements: Vec<String>,
         parent_id: Option<String>,
-        parent_occurrence: Option<crate::ExplorerDiagramOccurrence>,
+        parent_occurrence: Option<crate::ViewOccurrence>,
     },
     CreateModelElement {
         owner_id: Option<String>,
@@ -243,7 +243,9 @@ pub(crate) fn apply_with_diagram_operations(project: &Project, command: &Command
         crate::uml::associations::migrate(&mut section, &project.id, element_id)?;
     }
     match command {
-        Command::SetExplorerParent { subject_id, parent_id } => crate::explorer_placement::set_explorer_parent(&mut section, subject_id, parent_id.as_deref())?,
+        Command::SetExplorerParent { subject_id, parent_id, parent_occurrence } => crate::hierarchy_placement::set_diagram_parent(
+            &mut section, subject_id, parent_id.as_deref(), parent_occurrence.as_ref(),
+        )?,
         Command::SetOwner { element_id, owner_id } => crate::uml::root::reparent(&mut section, &project.id, element_id, owner_id.as_deref())?,
         Command::AdoptRootModel => { crate::uml::root::adopt_root_model(&mut section, &project.id, &project.name)?; }
         Command::CreateDiagram {
@@ -254,12 +256,9 @@ pub(crate) fn apply_with_diagram_operations(project: &Project, command: &Command
         Command::CreateExplorerDiagram { kind, name, model_elements, parent_id, parent_occurrence } => {
             diagrams::create(&mut section, project, *kind, name, model_elements, revision)?;
             let diagram_id = section.diagrams.last().ok_or("created diagram missing")?.id.clone();
-            crate::explorer_placement::set_explorer_parent(&mut section, &diagram_id, parent_id.as_deref())?;
-            if let Some(occurrence) = parent_occurrence {
-                let parent_id = parent_id.as_deref().ok_or("Explorer occurrence requires a semantic parent")?;
-                crate::explorer_placement::validate_diagram_occurrence(&section, parent_id, occurrence)?;
-                section.explorer_diagram_occurrences.insert(diagram_id, occurrence.clone());
-            }
+            crate::hierarchy_placement::set_diagram_parent(
+                &mut section, &diagram_id, parent_id.as_deref(), parent_occurrence.as_ref(),
+            )?;
         }
         Command::RenameDiagram { diagram_id, name } => {
             diagrams::rename(&mut section, diagram_id, name)?
@@ -385,7 +384,6 @@ pub(crate) fn apply_with_diagram_operations(project: &Project, command: &Command
             }
         }
     }
-    crate::explorer_placement::prune_diagram_occurrences(&mut section);
     let draft_view_edit = match command {
         Command::MoveView { view_id, .. } | Command::ResizeView { view_id, .. } => project.diagrams.iter()
             .flat_map(|diagram| &diagram.views).any(|view| view.id == *view_id && view.draft.is_some()),
@@ -401,6 +399,7 @@ pub(crate) fn apply_with_diagram_operations(project: &Project, command: &Command
     }
     let mut updated = section.to_model(&project.id, &project.name);
     updated.schema_version = project.schema_version;
+    crate::validate_model_hierarchy(&updated)?;
     // Explorer placement must not be blocked by unrelated semantic or diagram drafts.
     if matches!(command, Command::SetExplorerParent { .. }) { return Ok(updated); }
     let graph = Graph::new(&updated);
@@ -425,11 +424,10 @@ fn fresh_ids<const N: usize>(
         let ids = prefixes.map(|prefix| format!("{prefix}-{sequence}"));
         let occupied = ids.iter().any(|id| {
             id == project_id
-                || section.explorer_diagram_occurrences.contains_key(id)
-                || section.explorer_diagram_occurrences.values().any(|occurrence|
+                || section.hierarchy.values().filter_map(|placement| placement.occurrence.as_ref()).any(|occurrence|
                     &occurrence.diagram_id == id || &occurrence.view_id == id || occurrence.member_path.contains(id))
-                || section.explorer_parents.contains_key(id)
-                || section.explorer_parents.values().any(|parent| parent.as_ref() == Some(id))
+                || section.hierarchy.contains_key(id)
+                || section.hierarchy.values().any(|placement| placement.parent_id.as_ref() == Some(id))
                 || section.elements.iter().any(|element| &element.id == id)
                 || section.relations.iter().any(|relation| &relation.id == id)
                 || section.diagrams.iter().any(|diagram| {
@@ -868,9 +866,10 @@ fn remove_element(section: &mut ModelingSection, id: &str) -> Result<(), String>
     section
         .relations
         .retain(|relation| !incident.contains(&relation.id) && !deleted.contains(&relation.id));
-    section.explorer_parents.retain(|subject, parent| {
-        if parent.as_ref().is_some_and(|id| deleted.contains(id) || incident.contains(id)) {
-            *parent = None;
+    section.hierarchy.retain(|subject, placement| {
+        if placement.parent_id.as_ref().is_some_and(|id| deleted.contains(id) || incident.contains(id)) {
+            placement.parent_id = None;
+            placement.occurrence = None;
         }
         !deleted.contains(subject) && !incident.contains(subject)
     });

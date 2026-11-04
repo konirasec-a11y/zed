@@ -26,6 +26,8 @@ pub enum GraphError {
     Cycle(String),
     #[error("invalid UML root: {0}")]
     InvalidRoot(String),
+    #[error("invalid hierarchy: {0}")]
+    InvalidHierarchy(String),
     #[error("invalid geometry in view {0}")]
     Geometry(String),
 }
@@ -36,6 +38,7 @@ impl<'a> Graph<'a> {
     pub fn new(project: &'a Project) -> Self { Self { project } }
 
     pub fn validate_presentation(&self) -> Result<(), GraphError> {
+        crate::validate_model_hierarchy(self.project).map_err(GraphError::InvalidHierarchy)?;
         let mut all = HashSet::new();
         for id in std::iter::once(&self.project.id)
             .chain(self.project.elements.iter().map(|element| &element.id))

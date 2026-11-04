@@ -13,8 +13,19 @@ message Project {
   repeated Relation relations = 5;
   repeated Diagram diagrams = 6;
   optional string root_model = 7;
-  bytes explorer_parents_json = 8; // map from identity to parent identity or null (project root)
-  bytes explorer_diagram_occurrences_json = 9; // map from diagram identity to {diagram_id, view_id, member_path}
+  reserved 8, 9;
+  reserved "explorer_parents_json", "explorer_diagram_occurrences_json";
+  repeated HierarchyPlacement hierarchy = 10;
+}
+message HierarchyPlacement {
+  string subject_id = 1;
+  optional string parent_id = 2;
+  optional ViewOccurrence occurrence = 3;
+}
+message ViewOccurrence {
+  string diagram_id = 1;
+  string view_id = 2;
+  repeated string member_path = 3;
 }
 message Element {
   string id = 1;
@@ -47,6 +58,7 @@ message Diagram {
   // Presence and nonblank value are required by the model decoder.
   optional string uml_di_type = 6;
   repeated string model_elements = 7;
+  optional string interaction_kind = 8;
 }
 message View {
   string id = 1;

@@ -1,6 +1,35 @@
 pub(crate) use crate::workbench_ui::explorer::*;
 
 #[derive(Clone)]
+pub(crate) enum ExplorerMoveTarget {
+    Element(String),
+    Diagram(String),
+}
+
+#[derive(Clone)]
+pub(crate) struct ExplorerDiagramDrag {
+    pub project_id: bellatrix_project::ProjectId,
+    pub diagram_id: String,
+    pub revision: u64,
+    pub label: String,
+    pub parent_checks:
+        std::rc::Rc<std::cell::RefCell<Vec<(Option<String>, Option<bellatrix_mde::ViewOccurrence>, Result<(), String>)>>>,
+}
+
+impl gpui::Render for ExplorerDiagramDrag {
+    fn render(
+        &mut self,
+        _: &mut gpui::Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> impl gpui::IntoElement {
+        use gpui::prelude::*;
+        let palette = crate::workbench_ui::WorkbenchPalette::current(cx);
+        gpui::div().px_2().py_1().bg(palette.surface).text_color(palette.text)
+            .child(format!("Move diagram: {}", self.label))
+    }
+}
+
+#[derive(Clone)]
 pub(crate) struct ExplorerElementDrag {
     pub project_id: bellatrix_project::ProjectId,
     pub element_id: String,

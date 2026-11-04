@@ -9,7 +9,9 @@ pub(crate) fn from_document(document: &ProjectDocument) -> Result<ModelingSectio
     let state = document
         .section(MODELING_NAMESPACE)
         .ok_or("unsupported or missing MDE section: expected bellatrix.mde; beta documents in other namespaces are not supported")?;
-    serde_json::from_value(state.clone()).map_err(|error| error.to_string())
+    let section: ModelingSection = serde_json::from_value(state.clone()).map_err(|error| error.to_string())?;
+    bellatrix_mde::validate_model_hierarchy(&section.to_model(document.id().as_str(), document.name()))?;
+    Ok(section)
 }
 pub fn with_model(document: ProjectDocument, model: &Project) -> Result<ProjectDocument, String> {
     if document.id().as_str() != model.id || document.name() != model.name {
@@ -55,6 +57,7 @@ pub struct ModelingSetExplorerParentRequested {
     pub project_id: ProjectId,
     pub subject_id: String,
     pub parent_id: Option<String>,
+    pub parent_occurrence: Option<bellatrix_mde::ViewOccurrence>,
     pub expected_revision: u64,
 }
 pub struct ModelingSetExplorerParent;
@@ -277,6 +280,7 @@ impl Plugin for MdePlugin {
                             Command::SetExplorerParent {
                                 subject_id: request.subject_id,
                                 parent_id: request.parent_id,
+                                parent_occurrence: request.parent_occurrence,
                             },
                         )
                         .await;

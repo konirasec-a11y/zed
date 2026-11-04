@@ -23,12 +23,15 @@ pub enum ModelIoError {
     Magic,
     #[error("diagram uml_di_type is required and must not be blank")]
     DiagramType,
+    #[error("invalid hierarchy: {0}")]
+    Hierarchy(String),
     #[error("unsupported schema version: {0}")]
     Version(u32),
 }
 
 pub fn encode(project: &Project, format: Format) -> Result<Vec<u8>, ModelIoError> {
     ensure_version(project.schema_version)?;
+    crate::validate_model_hierarchy(&project).map_err(ModelIoError::Hierarchy)?;
     match format {
         Format::Json => Ok(serde_json::to_vec_pretty(project)?),
         Format::Protobuf => {
@@ -48,6 +51,7 @@ pub fn decode(bytes: &[u8], format: Format) -> Result<Project, ModelIoError> {
         }
     };
     ensure_version(project.schema_version)?;
+    crate::validate_model_hierarchy(&project).map_err(ModelIoError::Hierarchy)?;
     Ok(project)
 }
 

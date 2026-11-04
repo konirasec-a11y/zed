@@ -18,5 +18,5 @@ pub use diagram::{
 };
 pub use graph::{Annotation, Element, FileContent, Implementation, Relation};
 pub use io::{Format, ModelIoError, decode, encode};
-pub use project::{ExplorerDiagramOccurrence, Project};
+pub use project::{HierarchyPlacement, Project, ViewOccurrence};
 pub use section::ModelingSection;

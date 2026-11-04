@@ -171,6 +171,7 @@ async fn public_event_updates_only_requested_project_and_survives_modeling_dispo
             project_id: hierarchy_id.clone(),
             subject_id: subject.into(),
             parent_id: Some(parent.into()),
+            parent_occurrence: None,
             expected_revision,
         };
     assert!(matches!(

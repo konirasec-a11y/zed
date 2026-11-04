@@ -148,7 +148,7 @@ read-only previews.
 Relationship rows show source, authored relationship name (or relationship type),
 relationship type, semantic endpoint markers and line style, and destination. Projection does not delete elements,
 change ownership, or modify any diagram or view. Explicit diagram placements are read from
-explorer_parents; cosmetic element placements do not override semantic ownership.
+the shared hierarchy contract; semantic elements keep their domain ownership.
 
 Explorer navigation follows the StarUML interaction contract for selecting a
 right-clicked target before opening its menu, revealing selected nodes through
@@ -174,7 +174,7 @@ relationships, visual-only drafts and the project row are not ownership drop
 targets or relocation sources. A visual occurrence represents its semantic
 subject here: changing ownership affects that subject everywhere, not only the
 dragged occurrence. Explicit visual containment is not rewritten, and cosmetic
-explorer_parents are never used. This is a semantic move, not sibling reordering
+hierarchy placements never override semantic ownership. This is a semantic move, not sibling reordering
 or diagram nesting.
 
 Explorer quick search filters incrementally by displayed text, type and identity,
@@ -240,11 +240,49 @@ canvas view has a separately authored label. Projection and menu capabilities
 live in view-model/explorer.rs, while panels and hierarchy render the controls.
 
 When Add Diagram is invoked on a visual occurrence or an unpictured descendant,
-explorer_diagram_occurrences stores one canonical path: the anchor diagram/view
-and the ordered semantic member IDs below that anchor. An empty member_path
-identifies the view itself. explorer_parents keeps the semantic parent ID.
-The kernel validates every ownership step, and the Explorer resolves the exact
-selected branch without duplicating the new diagram or picking another occurrence.
-If a path changes or its anchor disappears, invalid hints are removed and the
-Explorer falls back to an unambiguous surviving parent placement, or the project
-root. JSON and protobuf encode the same canonical path object.
+`hierarchy[diagram_id]` stores `parent_id` and an optional `occurrence` referencing
+an existing View through `diagram_id`, `view_id`, and the ordered `member_path`.
+An empty path identifies the View's subject. This is a shared model contract,
+not Explorer UI state. The Explorer retains its own row keys and expansion state.
+
+This first hierarchy slice covers authored diagram containment. It does not
+replace domain ownership of semantic elements or visual containment within a
+canvas. Semantic ownership commands remain the only way to move elements.
+`Diagram.model_elements` remains notation-specific context, never an implicit
+hierarchy parent. Newly created diagrams record an explicit root placement unless
+the caller chooses another parent. Files without a placement display diagrams at
+the project root while retaining their diagram context unchanged.
+
+JSON, protobuf, binary envelopes, Project and ModelingSection preserve the same
+placement and View reference. JSON rejects duplicate hierarchy keys. Protobuf uses
+typed HierarchyPlacement and ViewOccurrence messages, not Explorer JSON blobs.
+Both import paths validate missing references and cycles; the domain adapter also
+validates semantic ownership steps. Changes that invalidate an authored occurrence
+are rejected instead of silently deleting that placement. Move the dependent
+diagram first before removing its anchor or changing its member path. Deleting a
+semantic parent moves its dependent diagrams to the project root explicitly.
+
+The retired `explorer_parents` and `explorer_diagram_occurrences` payloads are
+rejected on import and require explicit conversion. They are never silently
+ignored, migrated, or written alongside the new contract.
+
+Explorer element and diagram menus expose validated Move into destinations.
+Element movement uses SetOwner, while diagram movement uses the shared hierarchy
+placement and leaves notation context and Views unchanged. Dropping a diagram
+onto an existing View or its semantic member records that exact ViewOccurrence,
+using the same validation as Add Diagram. Menu destinations choose semantic
+parents instead; the complete semantic ancestor path is retained when needed
+to display an authored diagram placement without guessing between multiple Views. Diagram rows have a
+separate GPUI drag payload so dropping a diagram cannot create an element on the
+canvas. Element and diagram drops onto Model/Package rows use the same revision
+checks and kernel validation as menu actions; stale or invalid moves report an
+error instead of changing the document.
+
+A pictured element with an explicit semantic owner remains visible beneath that
+owner (for example, NewModel), while its existing eye-marked View occurrences
+remain beneath their diagrams. These are projections of the same subject, not
+new semantic elements or duplicated Views. Pictured root-level subjects still
+avoid redundant standalone rows unless an authored diagram needs that parent.
+Moving an occurrence onto an Explorer owner
+moves its semantic subject; it does not move its View between diagrams. Tooltips
+and menu labels distinguish those operations.

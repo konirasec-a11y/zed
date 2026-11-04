@@ -7,6 +7,7 @@ fn current_schema() -> u32 {
 
 /// Persistent bellatrix-mde-model: no GPUI, Cargo, Cordis or filesystem state.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Project {
     #[serde(default = "current_schema")]
     pub schema_version: u32,
@@ -14,12 +15,8 @@ pub struct Project {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub root_model: Option<String>,
-    /// Explicit explorer placement. Missing keys follow semantic projection;
-    /// a present null parent places the identity at the project root.
-    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
-    pub explorer_parents: std::collections::BTreeMap<String, Option<String>>,
-    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
-    pub explorer_diagram_occurrences: std::collections::BTreeMap<String, crate::ExplorerDiagramOccurrence>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty", deserialize_with = "deserialize_hierarchy")]
+    pub hierarchy: std::collections::BTreeMap<String, crate::HierarchyPlacement>,
     #[serde(default)]
     pub elements: Vec<Element>,
     #[serde(default)]
@@ -32,11 +29,97 @@ impl Project {
     pub fn element(&self, id: &str) -> Option<&Element> {
         self.elements.iter().find(|element| element.id == id)
     }
+
+    pub fn validate_hierarchy(&self) -> Result<(), String> {
+        use std::collections::{BTreeMap, HashSet};
+        let diagrams: BTreeMap<_, _> = self.diagrams.iter().map(|diagram| (diagram.id.as_str(), diagram)).collect();
+        let subjects: HashSet<_> = self.elements.iter().map(|element| element.id.as_str())
+            .chain(self.relations.iter().map(|relation| relation.id.as_str())).collect();
+        let mut containers = BTreeMap::new();
+        for (subject_id, placement) in &self.hierarchy {
+            if !diagrams.contains_key(subject_id.as_str()) {
+                return Err(format!("Hierarchy subject {subject_id} must be a diagram; semantic ownership belongs to its domain"));
+            }
+            if let Some(parent) = &placement.parent_id {
+                if !subjects.contains(parent.as_str()) && !diagrams.contains_key(parent.as_str()) {
+                    return Err(format!("Hierarchy parent {parent} does not exist"));
+                }
+                if diagrams.contains_key(parent.as_str()) {
+                    containers.insert(subject_id.as_str(), parent.as_str());
+                }
+            }
+            if let Some(occurrence) = &placement.occurrence {
+                let parent = placement.parent_id.as_deref().ok_or("View occurrence requires a parent")?;
+                let diagram = diagrams.get(occurrence.diagram_id.as_str()).ok_or("View occurrence diagram does not exist")?;
+                let view = diagram.views.iter().find(|view| view.id == occurrence.view_id)
+                    .ok_or("View occurrence does not exist in the specified diagram")?;
+                let anchor = view.subject.as_deref().ok_or("View occurrence has no semantic subject")?;
+                if !subjects.contains(anchor) {
+                    return Err("View occurrence subject does not exist".into());
+                }
+                let mut members = HashSet::from([anchor]);
+                for member in &occurrence.member_path {
+                    if !subjects.contains(member.as_str()) || !members.insert(member.as_str()) {
+                        return Err("View occurrence member path has missing or repeated subjects".into());
+                    }
+                }
+                if occurrence.member_path.last().map(String::as_str).unwrap_or(anchor) != parent {
+                    return Err("View occurrence does not identify its hierarchy parent".into());
+                }
+                containers.insert(subject_id.as_str(), occurrence.diagram_id.as_str());
+            }
+        }
+        for subject_id in self.hierarchy.keys() {
+            let mut visited = HashSet::new();
+            let mut cursor = Some(subject_id.as_str());
+            while let Some(current) = cursor {
+                if !visited.insert(current) {
+                    return Err(format!("Hierarchy contains a diagram occurrence cycle at {current}"));
+                }
+                cursor = containers.get(current).copied();
+            }
+        }
+        Ok(())
+    }
+
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ExplorerDiagramOccurrence {
+#[serde(deny_unknown_fields)]
+pub struct ViewOccurrence {
     pub diagram_id: String,
     pub view_id: String,
     pub member_path: Vec<String>,
+}
+
+/// Authored containment of a diagram, independent of its notation-specific context.
+/// Semantic elements retain their domain ownership rather than a second parent here.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HierarchyPlacement {
+    pub parent_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub occurrence: Option<ViewOccurrence>,
+}
+
+pub(super) fn deserialize_hierarchy<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<std::collections::BTreeMap<String, HierarchyPlacement>, D::Error> {
+    struct HierarchyVisitor;
+    impl<'de> serde::de::Visitor<'de> for HierarchyVisitor {
+        type Value = std::collections::BTreeMap<String, HierarchyPlacement>;
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a hierarchy map with unique subject identities")
+        }
+        fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+            let mut hierarchy = std::collections::BTreeMap::new();
+            while let Some((subject, placement)) = map.next_entry::<String, HierarchyPlacement>()? {
+                if hierarchy.insert(subject.clone(), placement).is_some() {
+                    return Err(serde::de::Error::custom(format!("duplicate hierarchy subject: {subject}")));
+                }
+            }
+            Ok(hierarchy)
+        }
+    }
+    deserializer.deserialize_map(HierarchyVisitor)
 }

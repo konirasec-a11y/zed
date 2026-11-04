@@ -22,6 +22,7 @@ pub(super) fn create(
         model_elements: model_elements.to_vec(),
         views: Vec::new(),
     });
+    section.hierarchy.insert(identifier, crate::HierarchyPlacement { parent_id: None, occurrence: None });
     Ok(())
 }
 
@@ -51,11 +52,14 @@ pub(super) fn delete(section: &mut ModelingSection, identifier: &str) -> Result<
         return Err("diagram not found".into());
     }
     section.diagrams.retain(|diagram| diagram.id != identifier);
-    section.explorer_parents.remove(identifier);
-    section.explorer_diagram_occurrences.retain(|diagram, occurrence|
-        diagram != identifier && occurrence.diagram_id != identifier);
-    for parent in section.explorer_parents.values_mut() {
-        if parent.as_deref() == Some(identifier) { *parent = None; }
+    section.hierarchy.remove(identifier);
+    for placement in section.hierarchy.values_mut() {
+        if placement.parent_id.as_deref() == Some(identifier) {
+            placement.parent_id = None;
+            placement.occurrence = None;
+        } else if placement.occurrence.as_ref().is_some_and(|occurrence| occurrence.diagram_id == identifier) {
+            return Err("Diagram contains an occurrence used by another diagram; move that diagram first".into());
+        }
     }
     Ok(())
 }

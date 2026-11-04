@@ -139,9 +139,9 @@ mod template_presentation;
 mod property_edit;
 pub use template_presentation::{template_parameter_label, template_parameter_label_with_references};
 
-#[path = "application/edits/explorer_placement.rs"]
-mod explorer_placement;
-pub use explorer_placement::{explorer_parent_map, validate_diagram_occurrence};
+#[path = "application/edits/hierarchy_placement.rs"]
+mod hierarchy_placement;
+pub use hierarchy_placement::{validate_diagram_occurrence, validate_model_hierarchy};
 
 #[path = "KERNEL/compiler/artifacts/ownership_manifest.rs"]
 mod ownership_manifest;

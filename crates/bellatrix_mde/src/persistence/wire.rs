@@ -20,10 +20,31 @@ struct WireProject {
     diagrams: Vec<WireDiagram>,
     #[prost(string, optional, tag = "7")]
     root_model: Option<String>,
-    #[prost(bytes, tag = "8")]
-    explorer_parents_json: Vec<u8>,
-    #[prost(bytes, tag = "9")]
-    explorer_diagram_occurrences_json: Vec<u8>,
+    // Retired fields are decoded only to reject their presence without losing user data.
+    #[prost(bytes, optional, tag = "8")]
+    legacy_explorer_parents_json: Option<Vec<u8>>,
+    #[prost(bytes, optional, tag = "9")]
+    legacy_explorer_diagram_occurrences_json: Option<Vec<u8>>,
+    #[prost(message, repeated, tag = "10")]
+    hierarchy: Vec<WireHierarchyPlacement>,
+}
+#[derive(Clone, PartialEq, Message)]
+struct WireHierarchyPlacement {
+    #[prost(string, tag = "1")]
+    subject_id: String,
+    #[prost(string, optional, tag = "2")]
+    parent_id: Option<String>,
+    #[prost(message, optional, tag = "3")]
+    occurrence: Option<WireViewOccurrence>,
+}
+#[derive(Clone, PartialEq, Message)]
+struct WireViewOccurrence {
+    #[prost(string, tag = "1")]
+    diagram_id: String,
+    #[prost(string, tag = "2")]
+    view_id: String,
+    #[prost(string, repeated, tag = "3")]
+    member_path: Vec<String>,
 }
 #[derive(Clone, PartialEq, Message)]
 struct WireElement {
@@ -209,8 +230,17 @@ pub(super) fn encode(project: &Project) -> Result<Vec<u8>, ModelIoError> {
     Ok(WireProject {
         version: project.schema_version,
         root_model: project.root_model.clone(),
-        explorer_parents_json: serde_json::to_vec(&project.explorer_parents)?,
-        explorer_diagram_occurrences_json: serde_json::to_vec(&project.explorer_diagram_occurrences)?,
+        legacy_explorer_parents_json: None,
+        legacy_explorer_diagram_occurrences_json: None,
+        hierarchy: project.hierarchy.iter().map(|(subject_id, placement)| WireHierarchyPlacement {
+            subject_id: subject_id.clone(),
+            parent_id: placement.parent_id.clone(),
+            occurrence: placement.occurrence.as_ref().map(|occurrence| WireViewOccurrence {
+                diagram_id: occurrence.diagram_id.clone(),
+                view_id: occurrence.view_id.clone(),
+                member_path: occurrence.member_path.clone(),
+            }),
+        }).collect(),
         id: project.id.clone(),
         name: project.name.clone(),
         elements,
@@ -222,6 +252,24 @@ pub(super) fn encode(project: &Project) -> Result<Vec<u8>, ModelIoError> {
 
 pub(super) fn decode(bytes: &[u8]) -> Result<Project, ModelIoError> {
     let data = WireProject::decode(bytes)?;
+    if data.legacy_explorer_parents_json.is_some() || data.legacy_explorer_diagram_occurrences_json.is_some() {
+        return Err(ModelIoError::Hierarchy("Legacy Explorer placement fields require explicit conversion before import".into()));
+    }
+    let mut hierarchy = std::collections::BTreeMap::new();
+    for entry in data.hierarchy {
+        let placement = crate::HierarchyPlacement {
+            parent_id: entry.parent_id,
+            occurrence: entry.occurrence.map(|occurrence| crate::ViewOccurrence {
+                diagram_id: occurrence.diagram_id,
+                view_id: occurrence.view_id,
+                member_path: occurrence.member_path,
+            }),
+        };
+        if hierarchy.insert(entry.subject_id, placement).is_some() {
+            return Err(ModelIoError::Hierarchy("Duplicate hierarchy subject".into()));
+        }
+    }
+
     let elements = data
         .elements
         .into_iter()
@@ -317,16 +365,7 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Project, ModelIoError> {
     Ok(Project {
         schema_version: data.version,
         root_model: data.root_model,
-        explorer_parents: if data.explorer_parents_json.is_empty() {
-            Default::default()
-        } else {
-            serde_json::from_slice(&data.explorer_parents_json)?
-        },
-        explorer_diagram_occurrences: if data.explorer_diagram_occurrences_json.is_empty() {
-            Default::default()
-        } else {
-            serde_json::from_slice(&data.explorer_diagram_occurrences_json)?
-        },
+        hierarchy,
         id: data.id,
         name: data.name,
         elements,

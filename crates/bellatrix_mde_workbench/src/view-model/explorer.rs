@@ -1,4 +1,4 @@
-//! Explorer projection over semantic ownership and explicit UMLDI contexts.
+//! Explorer projection over domain ownership and shared diagram hierarchy.
 use bellatrix_mde::ModelingSection;
 
 #[derive(Clone)]
@@ -131,7 +131,7 @@ fn relationship_label(section: &ModelingSection, relation: &bellatrix_mde::Relat
         marker(presentation.style.target_marker, false), endpoint(&relation.to))
 }
 
-/// Diagram occurrences replace the standalone semantic row, without changing ownership.
+/// Occurrences retain their diagram identity; explicit semantic ownership remains visible.
 pub(crate) fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrder) -> Vec<ExplorerRow> {
     use std::collections::{HashMap, HashSet};
     let semantic = bellatrix_mde::project_hierarchy(section);
@@ -145,6 +145,16 @@ pub(crate) fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrde
         ancestors.truncate(row.depth);
         owners.insert(row.element_id.clone(), ancestors.last().cloned());
         ancestors.push(row.element_id.clone());
+    }
+    // An authored semantic diagram parent needs its full semantic path, even
+    // when an ancestor is otherwise represented only by multiple diagram views.
+    let mut hierarchy_ancestors = HashSet::new();
+    for placement in section.hierarchy.values().filter(|placement| placement.occurrence.is_none()) {
+        let mut ancestor = placement.parent_id.as_ref();
+        while let Some(id) = ancestor {
+            if !hierarchy_ancestors.insert(id.clone()) { break; }
+            ancestor = owners.get(id).and_then(|owner| owner.as_ref());
+        }
     }
     // The semantic root container is not an extra project node in the Explorer.
     let root_containers = semantic.iter()
@@ -180,10 +190,14 @@ pub(crate) fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrde
             .unwrap_or_else(|| vec![(None, owner.map(|owner| semantic_key(owner)).unwrap_or_default())]);
         let mut row_placements = placements.get(&row.element_id).cloned().unwrap_or_default();
         for (diagram_context, parent) in contexts {
-            // A pictured subject has no global duplicate, but its members still
-            // belong under owner occurrences in diagrams where they have no view.
+            // Root-level pictured subjects need no extra row. Under an explicit
+            // owner, retain the semantic row so reparenting is visible even when
+            // the existing views remain in their original diagrams.
             if occurrences.get(&row.element_id).is_some_and(|views| {
-                diagram_context.as_ref().is_none_or(|diagram| views.iter().any(|(candidate, _)| candidate == diagram))
+                match diagram_context.as_ref() {
+                    Some(diagram) => views.iter().any(|(candidate, _)| candidate == diagram),
+                    None => owner.is_none() && !hierarchy_ancestors.contains(&row.element_id),
+                }
             }) { continue; }
             let key = if diagram_context.is_some() {
                 member_key(&parent, &row.element_id)
@@ -208,15 +222,9 @@ pub(crate) fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrde
         .then_with(|| left.id.cmp(&right.id)));
     for diagram in diagrams {
         let key = diagram_key(&diagram.id);
-        // UMLDI context is a reference, not ownership. Only an unambiguous
-        // external occurrence can locate this diagram without a self-cycle.
-        let parent_subject = section.explorer_parents.get(&diagram.id)
-            .map(|parent| parent.as_deref())
-            .unwrap_or_else(|| match diagram.model_elements.as_slice() {
-                [context] => Some(context.as_str()),
-                _ => None,
-            });
-        let explicit_occurrence = section.explorer_diagram_occurrences.get(&diagram.id)
+        let placement = section.hierarchy.get(&diagram.id);
+        let parent_subject = placement.and_then(|placement| placement.parent_id.as_deref());
+        let explicit_occurrence = placement.and_then(|placement| placement.occurrence.as_ref())
             .and_then(|occurrence| {
                 let subject = parent_subject?;
                 if occurrence.diagram_id == diagram.id
@@ -233,13 +241,19 @@ pub(crate) fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrde
             });
         let context_parent = if explicit_occurrence.is_some() {
             explicit_occurrence
+        } else if let Some(parent) = parent_subject.filter(|parent| section.diagrams.iter().any(|candidate| candidate.id == *parent)) {
+            Some(diagram_key(parent))
         } else if let Some(context) = parent_subject {
             let candidates = placements.get(context).into_iter().flatten()
                 .filter(|(owner_diagram, _)| owner_diagram.as_ref() != Some(&diagram.id))
-                .map(|(_, key)| key).collect::<Vec<_>>();
-            match candidates.as_slice() {
-                [parent] => Some((*parent).clone()),
-                _ => None,
+                .collect::<Vec<_>>();
+            if let Some((_, parent)) = candidates.iter().find(|(owner_diagram, _)| owner_diagram.is_none()) {
+                Some(parent.clone())
+            } else {
+                match candidates.as_slice() {
+                    [(_, parent)] => Some(parent.clone()),
+                    _ => None,
+                }
             }
         } else { None };
         parents.insert(key.clone(), context_parent);
@@ -396,9 +410,15 @@ pub(crate) fn project_diagram_kinds() -> Vec<bellatrix_mde::StructuralDiagramKin
 
 pub(crate) fn parent_occurrence(
     section: &ModelingSection, subject: Option<&str>, row_key: &str,
-) -> Option<bellatrix_mde::ExplorerDiagramOccurrence> {
-    let subject = subject?;
+) -> Option<bellatrix_mde::ViewOccurrence> {
     let rows = project_explorer(section, ExplorerSortOrder::Added);
+    parent_occurrence_from_rows(section, subject, row_key, &rows)
+}
+
+pub(crate) fn parent_occurrence_from_rows(
+    section: &ModelingSection, subject: Option<&str>, row_key: &str, rows: &[ExplorerRow],
+) -> Option<bellatrix_mde::ViewOccurrence> {
+    let subject = subject?;
     let index = rows.iter().position(|row| row.key == row_key)?;
     let row = rows.get(index)?;
     if row.diagram || row.view.as_ref().and_then(|view| view.subject_id.as_deref())
@@ -411,7 +431,7 @@ pub(crate) fn parent_occurrence(
         if candidate.diagram { return None; }
         if let Some(view) = &candidate.view {
             member_path.reverse();
-            let occurrence = bellatrix_mde::ExplorerDiagramOccurrence {
+            let occurrence = bellatrix_mde::ViewOccurrence {
                 diagram_id: view.diagram_id.clone(), view_id: view.view_id.clone(), member_path,
             };
             return bellatrix_mde::validate_diagram_occurrence(section, subject, &occurrence)
