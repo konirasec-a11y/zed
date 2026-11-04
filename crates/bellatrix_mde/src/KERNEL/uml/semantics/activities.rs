@@ -199,6 +199,51 @@ fn activity_reference_present(
         .map(|reference| reference.is_some())
 }
 
+// UML.xmi ObjectFlow-transformation_behavior and Behavior inputParameters /
+// outputParameters. This checks the formal parameter-count constraint, not the
+// additional type compatibility or absence of side effects described in prose.
+fn object_flow_transformation(
+    references: &ReferenceIndex<'_>,
+    edge: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let Some(identifier) =
+        optional_activity_reference(references, edge, "ObjectFlow", "transformation")?
+    else {
+        return Ok(true);
+    };
+    let (parameters, completeness) = operations::owned_parameter_evidence(references, &identifier)
+        .map_err(|error| QueryError::unsupported(edge.id(), error.to_string()))?;
+    let mut uncertainty = completeness
+        .err()
+        .map(|error| QueryError::unsupported(edge.id(), error.to_string()));
+    let mut inputs = 0_usize;
+    let mut outputs = 0_usize;
+    for parameter in parameters {
+        match operations::direction(parameter) {
+            Ok(direction) => {
+                if matches!(direction.as_str(), "in" | "inout") {
+                    inputs += 1;
+                }
+                if matches!(direction.as_str(), "out" | "inout" | "return") {
+                    outputs += 1;
+                }
+            }
+            Err(error) => {
+                uncertainty = Some(QueryError::unsupported(parameter.id.as_str(), error));
+            }
+        }
+    }
+    // Additional unresolved members cannot remove two known inputs or outputs.
+    // Conversely, a count of zero or one is conclusive only for a complete set.
+    if inputs > 1 || outputs > 1 {
+        return Ok(false);
+    }
+    if let Some(error) = uncertainty {
+        return Err(error);
+    }
+    Ok(inputs == 1 && outputs == 1)
+}
+
 fn object_node_selection(
     references: &ReferenceIndex<'_>,
     node: ElementRef<'_>,
@@ -635,6 +680,13 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             ));
         }
         if node.conforms_to("ObjectFlow") {
+            checks.push((
+                object_flow_transformation(references, node),
+                "UML_OBJECT_FLOW_TRANSFORMATION_BEHAVIOR",
+                "MDE_OBJECT_FLOW_TRANSFORMATION_BEHAVIOR_UNVERIFIED",
+                "ObjectFlow-transformation_behavior",
+                "an ObjectFlow transformation Behavior must have exactly one input and one output Parameter",
+            ));
             checks.push((
                 accept_any(["source", "target"].map(|role| {
                     activity_endpoint(references, node, role)
