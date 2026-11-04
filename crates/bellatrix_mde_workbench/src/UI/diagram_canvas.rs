@@ -791,6 +791,9 @@ impl Render for MdeWorkbenchItem {
         let out_owner = cx.weak_entity();
         let dragging_owner = cx.weak_entity();
         let dropping_owner = cx.weak_entity();
+        let element_drop_owner = cx.weak_entity();
+        let element_drop_filter = cx.weak_entity();
+        let element_drop_origin = canvas_origin.clone();
         let wheel_owner = cx.weak_entity();
         let pan_start_owner = cx.weak_entity();
         let pan_end_owner = cx.weak_entity();
@@ -1019,6 +1022,25 @@ impl Render for MdeWorkbenchItem {
                                 Some(canvas_model_position(position, origin, item.pan, item.zoom));
                         }) {
                             eprintln!("MDE canvas drag failed: {error}");
+                        }
+                    })
+                    .can_drop(move |drag, _, cx| {
+                        if let Some(drag) = drag.downcast_ref::<hierarchy::ExplorerElementDrag>() {
+                            return element_drop_filter.upgrade()
+                                .is_some_and(|owner| owner.read(cx).validate_explorer_drop(drag).is_ok());
+                        }
+                        drag.is::<MdeToolDrag>()
+                    })
+                    .on_drop(move |drag: &hierarchy::ExplorerElementDrag, window, cx| {
+                        let Some(origin) = element_drop_origin.get() else { return; };
+                        let position = window.mouse_position();
+                        if let Err(error) = element_drop_owner.update(cx, |item, cx| {
+                            let point = canvas_model_position(
+                                (f64::from(position.x), f64::from(position.y)), origin, item.pan, item.zoom,
+                            );
+                            item.drop_explorer_element(drag, point, window, cx);
+                        }) {
+                            eprintln!("MDE existing element drop failed: {error}");
                         }
                     })
                     .on_drop(move |drag: &MdeToolDrag, _, cx| {

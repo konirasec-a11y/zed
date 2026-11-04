@@ -13,6 +13,25 @@ pub struct ExplorerRow {
     pub view: Option<bellatrix_mde::VisualComponent>,
 }
 
+#[derive(Clone)]
+pub(crate) struct ExplorerElementDrag {
+    pub project_id: bellatrix_project::ProjectId,
+    pub element_id: String,
+    pub target_diagram_id: String,
+    pub source_view_id: Option<String>,
+    pub revision: u64,
+    pub label: String,
+}
+
+impl gpui::Render for ExplorerElementDrag {
+    fn render(&mut self, _: &mut gpui::Window, cx: &mut gpui::Context<Self>) -> impl gpui::IntoElement {
+        use gpui::prelude::*;
+        let palette = crate::workbench_ui::WorkbenchPalette::current(cx);
+        gpui::div().px_2().py_1().bg(palette.surface).text_color(palette.text)
+            .child(self.label.clone())
+    }
+}
+
 fn semantic_key(id: &str) -> String {
     format!("semantic:{id}")
 }

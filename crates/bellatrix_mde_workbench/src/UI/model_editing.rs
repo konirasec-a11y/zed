@@ -400,9 +400,69 @@ impl MdeWorkbenchItem {
         );
         self.presentation.cancel_tool();
     }
+    pub(super) fn validate_explorer_drop(&self, drag: &hierarchy::ExplorerElementDrag) -> Result<(), String> {
+        if self.source.is_read_only() || self.source.is_presentation_suspended() {
+            return Err("The active document is not editable".into());
+        }
+        if self.project_id() != &drag.project_id {
+            return Err("The dragged element belongs to another project".into());
+        }
+        if self.active_diagram() != Some(drag.target_diagram_id.as_str()) {
+            return Err("The active diagram changed during the drag; drag the element again".into());
+        }
+        let snapshot = self.source.snapshot()?;
+        if snapshot.revision != drag.revision {
+            return Err("The model changed during the drag; drag the element again".into());
+        }
+        if !snapshot.section.elements.iter().any(|element| element.id == drag.element_id) {
+            return Err("The dragged model element no longer exists".into());
+        }
+        let diagram = snapshot.section.diagrams.iter()
+            .find(|diagram| diagram.id == drag.target_diagram_id)
+            .ok_or_else(|| "The target diagram no longer exists".to_owned())?;
+        if let Some(view_id) = &drag.source_view_id
+            && !diagram.views.iter().any(|view| &view.id == view_id && view.subject.as_deref() == Some(drag.element_id.as_str()))
+        {
+            return Err("The dragged occurrence no longer matches its element".into());
+        }
+        Ok(())
+    }
+
+    pub(super) fn drop_explorer_element(
+        &mut self, drag: &hierarchy::ExplorerElementDrag, position: (f64, f64),
+        window: &mut Window, cx: &mut Context<Self>,
+    ) {
+        if let Err(error) = self.validate_explorer_drop(drag) {
+            self.feedback = error;
+            cx.notify();
+            return;
+        }
+        if !position.0.is_finite() || !position.1.is_finite() {
+            self.feedback = "The canvas drop position is unavailable".into();
+            cx.notify();
+            return;
+        }
+        self.show_element_in_active_diagram_at(
+            drag.element_id.clone(), Some(position),
+            Some(drag.revision), drag.source_view_id.clone(), window, cx,
+        );
+    }
+
     pub fn show_element_in_active_diagram(
         &mut self,
         element_id: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.show_element_in_active_diagram_at(element_id, None, None, None, window, cx);
+    }
+
+    fn show_element_in_active_diagram_at(
+        &mut self,
+        element_id: String,
+        position: Option<(f64, f64)>,
+        expected_revision: Option<u64>,
+        preferred_view_id: Option<String>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -414,6 +474,11 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
+        if expected_revision.is_some_and(|revision| revision != snapshot.revision) {
+            self.feedback = "The model changed during the drag; drag the element again".into();
+            cx.notify();
+            return;
+        }
         let Some(diagram) = self.presentation.active_diagram().and_then(|id| {
             snapshot
                 .section
@@ -425,13 +490,39 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
-        match element_view_placement(diagram, &element_id) {
+        let placement = if let Some(view_id) = preferred_view_id {
+            if !diagram.views.iter().any(|view| view.id == view_id && view.subject.as_deref() == Some(element_id.as_str())) {
+                self.feedback = "The dragged occurrence no longer matches its element".into();
+                cx.notify();
+                return;
+            }
+            ElementViewPlacement::Existing(view_id)
+        } else {
+            element_view_placement(diagram, &element_id)
+        };
+        match placement {
             ElementViewPlacement::Existing(view_id) => {
+                if let Some(position) = position
+                    && let Some(center) = diagram.views.iter().find(|view| view.id == view_id)
+                        .and_then(|view| bellatrix_mde::resolve_visual_center(&view.geometry))
+                {
+                    // Reveal the existing occurrence at the drop point without moving its geometry.
+                    let pan = (
+                        f64::from(self.pan.0) + (position.0 - center.x) * f64::from(self.zoom),
+                        f64::from(self.pan.1) + (position.1 - center.y) * f64::from(self.zoom),
+                    );
+                    if pan.0.is_finite() && pan.1.is_finite()
+                        && pan.0.abs() <= f64::from(f32::MAX) && pan.1.abs() <= f64::from(f32::MAX)
+                    {
+                        self.pan = (pan.0 as f32, pan.1 as f32);
+                    }
+                }
                 self.select_view(element_id, view_id, cx);
                 self.feedback = "Selected existing view in active diagram".into();
                 cx.notify();
             }
             ElementViewPlacement::NewAt(x, y) => {
+                let (x, y) = position.unwrap_or((x, y));
                 self.select_element(element_id.clone(), cx);
                 self.submit(
                     MdeUiCommand::PlaceElementView(
@@ -439,9 +530,9 @@ impl MdeWorkbenchItem {
                             project_id: self.project_id().clone(),
                             diagram_id: diagram.id.clone(),
                             element_id,
-                            x,
-                            y,
-                            expected_revision: snapshot.revision,
+                            x: x.max(0.0),
+                            y: y.max(0.0),
+                            expected_revision: expected_revision.unwrap_or(snapshot.revision),
                         },
                     ),
                     cx,

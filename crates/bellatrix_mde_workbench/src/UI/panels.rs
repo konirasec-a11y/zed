@@ -305,9 +305,15 @@ impl Render for MdeRightPanel {
         });
         let mut rows = Vec::new();
         let mut reveal_selected = false;
+        let mut explorer_branch_keys = Vec::new();
+        let mut can_reveal_selection = false;
         if let Some(snapshot) = &snapshot {
             let tree = project_explorer(&snapshot.section);
             let root_key = format!("project:{}", snapshot.project_id.as_str());
+            explorer_branch_keys.push(root_key.clone());
+            explorer_branch_keys.extend(tree.windows(2)
+                .filter(|rows| rows[1].depth > rows[0].depth)
+                .map(|rows| rows[0].key.clone()));
             let selected_row = selected_view.as_ref()
                 .and_then(|id| tree.iter().find(|row| row.view.as_ref().is_some_and(|view|
                     &view.view_id == id && active_diagram.as_deref() == Some(view.diagram_id.as_str()))))
@@ -320,6 +326,7 @@ impl Render for MdeRightPanel {
                         .or_else(|| tree.iter().find(|row| row.view.as_ref().is_some_and(|view| view.subject_id.as_ref() == Some(id))))
                 }))
                 .or_else(|| active_diagram.as_ref().and_then(|id| tree.iter().find(|row| row.diagram && &row.element_id == id)));
+            can_reveal_selection = selected_row.is_some();
             let reveal = selected_row.map(|row| (item.entity_id(), row.key.clone()));
             if reveal != self.last_revealed_row {
                 self.last_revealed_row = reveal;
@@ -368,6 +375,22 @@ impl Render for MdeRightPanel {
                     &row.kind,
                     snapshot.section.relations.iter().any(|relation| row.view.as_ref().and_then(|view| view.subject_id.as_deref()).unwrap_or(&row.element_id) == relation.id),
                 );
+                let drag_subject = row.view.as_ref().and_then(|view| view.subject_id.as_deref())
+                    .or_else(|| (!row.diagram && row.view.is_none()).then_some(row.element_id.as_str()));
+                let element_drag = if read_only { None } else {
+                    drag_subject.filter(|id| snapshot.section.elements.iter().any(|element| element.id == *id))
+                        .zip(active_diagram.as_ref())
+                        .map(|(element_id, target_diagram_id)| crate::workbench_ui::hierarchy::ExplorerElementDrag {
+                            project_id: snapshot.project_id.clone(),
+                            element_id: element_id.to_owned(),
+                            target_diagram_id: target_diagram_id.clone(),
+                            source_view_id: row.view.as_ref()
+                                .filter(|view| &view.diagram_id == target_diagram_id)
+                                .map(|view| view.view_id.clone()),
+                            revision: snapshot.revision,
+                            label: row.label.clone(),
+                        })
+                };
                 if let Some(view) = &row.view {
                     let diagram_id = view.diagram_id.clone();
                     let view_id = view.view_id.clone();
@@ -379,10 +402,13 @@ impl Render for MdeRightPanel {
                     let disclosure_panel = cx.weak_entity();
                     let menu_owner = item.clone();
                     let menu_subject = view.subject_id.clone();
+                    let menu_diagram = view.diagram_id.clone();
+                    let menu_view = view.view_id.clone();
                     let view_row_key = row.key.clone();
                     let view_row_label = row.label.clone();
                     let view_accessible_label = format!("{}: {}", type_label, row.label);
                     rows.push(div().id(format!("mde-explorer-view-{}", row.key))
+                        .when_some(element_drag, |row, drag| row.on_drag(drag, |drag: &crate::workbench_ui::hierarchy::ExplorerElementDrag, _, _, cx| cx.new(|_| drag.clone())))
                         .tooltip(ui::Tooltip::text(format!("Visual component · {type_label}")))
                         .pl(px((row.depth.min(15) + 2) as f32 * 14.0)).flex().items_center().gap_1()
                         .when(selected, |row| row.bg(palette.surface))
@@ -393,6 +419,7 @@ impl Render for MdeRightPanel {
                                 .aria_label(view_accessible_label)
                                 .root_item(has_children).expanded(expanded).toggle_state(selected)
                                 .on_toggle(move |_, _, cx| {
+                                    cx.stop_propagation();
                                     if let Err(error) = disclosure_panel.update(cx, |panel, cx| {
                                         if !panel.collapsed_elements.insert(disclosure_id.clone()) { panel.collapsed_elements.remove(&disclosure_id); }
                                         cx.notify();
@@ -402,6 +429,9 @@ impl Render for MdeRightPanel {
                                     owner.update(cx, |workbench, cx| workbench.select_diagram_view(diagram_id.clone(), view_id.clone(), cx));
                                 }))
                             .menu(move |window, cx| {
+                                menu_owner.update(cx, |workbench, cx| {
+                                    workbench.select_diagram_view(menu_diagram.clone(), menu_view.clone(), cx);
+                                });
                                 if let Some(subject) = &menu_subject {
                                     explorer_menu(&menu_owner, subject, window, cx)
                                 } else {
@@ -422,6 +452,8 @@ impl Render for MdeRightPanel {
                     let selection_panel = cx.weak_entity();
                     let selection_key = row.key.clone();
                     let selection_root = root_key.clone();
+                    let secondary_owner = item.clone();
+                    let secondary_diagram = id.clone();
                     if reveal_selected && selected_row.is_some_and(|selected| selected.key == row.key) {
                         self.explorer_scroll.scroll_to_item(rows.len());
                     }
@@ -447,6 +479,13 @@ impl Render for MdeRightPanel {
                                         }
                                     })
                                     .toggle_state(is_active)
+                                    .on_secondary_mouse_down(move |_, _, cx| {
+                                        secondary_owner.update(cx, |workbench, cx| {
+                                            workbench.select_diagram(secondary_diagram.clone(), cx);
+                                            let change = workbench.presentation.clear_selection();
+                                            workbench.apply_selection_change(change, cx);
+                                        });
+                                    })
                                     .on_click(move |_, _, cx| {
                                         if let Err(error) = selection_panel.update(cx, |panel, cx| {
                                             panel.collapsed_elements.remove(&selection_root);
@@ -455,7 +494,11 @@ impl Render for MdeRightPanel {
                                         }) {
                                             eprintln!("MDE diagram reveal failed: {error}");
                                         }
-                                        owner.update(cx, |workbench, cx| workbench.select_diagram(id.clone(), cx));
+                                        owner.update(cx, |workbench, cx| {
+                                            workbench.select_diagram(id.clone(), cx);
+                                            let change = workbench.presentation.clear_selection();
+                                            workbench.apply_selection_change(change, cx);
+                                        });
                                     })
                             )),
                     );
@@ -470,6 +513,7 @@ impl Render for MdeRightPanel {
                 let disclosure_panel = cx.weak_entity();
                 let menu_owner = item.clone();
                 let menu_subject = id.clone();
+                let menu_diagram_context = row.diagram_context.clone();
                 let selected = selected_row.is_some_and(|selected| selected.key == row.key);
                 if selected && reveal_selected { self.explorer_scroll.scroll_to_item(rows.len()); }
                 let tree_item = TreeViewItem::new(row.key.clone(), row.label.clone())
@@ -478,6 +522,7 @@ impl Render for MdeRightPanel {
                     .expanded(expanded)
                     .toggle_state(selected)
                     .on_toggle(move |_, _, cx| {
+                        cx.stop_propagation();
                         if let Err(error) = disclosure_panel.update(cx, |panel, cx| {
                             if !panel.collapsed_elements.insert(disclosure_id.clone()) {
                                 panel.collapsed_elements.remove(&disclosure_id);
@@ -496,6 +541,7 @@ impl Render for MdeRightPanel {
                 rows.push(
                     div()
                         .id(format!("mde-explorer-row-{}", row.key))
+                        .when_some(element_drag, |row, drag| row.on_drag(drag, |drag: &crate::workbench_ui::hierarchy::ExplorerElementDrag, _, _, cx| cx.new(|_| drag.clone())))
                         .tooltip(ui::Tooltip::text(type_label))
                         .pl(px((row.depth.min(15) + 2) as f32 * 14.0))
                         .flex()
@@ -523,6 +569,12 @@ impl Render for MdeRightPanel {
                                 ))
                                 .trigger(move |_, _, _| tree_item)
                                 .menu(move |window, cx| {
+                                    menu_owner.update(cx, |workbench, cx| {
+                                        if let Some(diagram) = &menu_diagram_context {
+                                            workbench.select_diagram(diagram.clone(), cx);
+                                        }
+                                        workbench.select_element(menu_subject.clone(), cx);
+                                    });
                                     explorer_menu(&menu_owner, &menu_subject, window, cx)
                                 }),
                             ),
@@ -618,19 +670,41 @@ impl Render for MdeRightPanel {
                                     cx.notify();
                                 }),
                             )
-                            .when(!read_only, |header| {
-                                header.action(IconButton::new("mde-save-project", IconName::Download)
-                                    .aria_label("Save project as")
-                                    .tooltip(ui::Tooltip::text("Save project as…"))
-                                    .on_click(
-                                    move |_, window, cx| {
-                                        window.dispatch_action(
-                                            Box::new(crate::workbench_ui::integration::SaveMdeProjectAs),
-                                            cx,
-                                        );
-                                    },
-                                ))
-                            }),
+                            .action(div().flex().items_center().gap_1()
+                                .child(IconButton::new("mde-explorer-reveal", IconName::Crosshair)
+                                    .aria_label("Reveal selection in Explorer")
+                                    .tooltip(ui::Tooltip::text("Reveal selection in Explorer"))
+                                    .disabled(!can_reveal_selection)
+                                    .on_click(cx.listener(|panel, _, _, cx| {
+                                        panel.explorer_open = true;
+                                        panel.last_revealed_row = None;
+                                        cx.notify();
+                                    })))
+                                .child(IconButton::new("mde-explorer-expand-all", IconName::ExpandVertical)
+                                    .aria_label("Expand all Explorer nodes")
+                                    .tooltip(ui::Tooltip::text("Expand all Explorer nodes"))
+                                    .on_click(cx.listener(|panel, _, _, cx| {
+                                        panel.explorer_open = true;
+                                        panel.collapsed_elements.clear();
+                                        cx.notify();
+                                    })))
+                                .child(IconButton::new("mde-explorer-collapse-all", IconName::ListCollapse)
+                                    .aria_label("Collapse all Explorer nodes")
+                                    .tooltip(ui::Tooltip::text("Collapse all Explorer nodes"))
+                                    .on_click(cx.listener(move |panel, _, _, cx| {
+                                        panel.collapsed_elements.extend(explorer_branch_keys.iter().cloned());
+                                        cx.notify();
+                                    })))
+                                .when(!read_only, |actions| actions.child(
+                                    IconButton::new("mde-save-project", IconName::Download)
+                                        .aria_label("Save project as")
+                                        .tooltip(ui::Tooltip::text("Save project as…"))
+                                        .on_click(move |_, window, cx| {
+                                            window.dispatch_action(
+                                                Box::new(crate::workbench_ui::integration::SaveMdeProjectAs), cx,
+                                            );
+                                        })
+                                ))),
                     )
                     .when(self.explorer_open, |pane| {
                         pane.child(

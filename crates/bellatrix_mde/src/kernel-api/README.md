@@ -226,3 +226,22 @@ or generation certification. No new normative rules are claimed by this adapter.
 Like the other boundary functions, this function has no external effects or
 retained state and returns sorted diagnostics. The original model-only and graph
 validation contracts remain unchanged. No UI or CLI migration is included.
+
+### Existing frontend consumers
+
+The legacy `validate_structural_model` and `validate_structural_diagram` functions
+now order diagnostics by the same `(code, subject_id, severity, message)` key as
+the JSON boundary. This also applies to their traced adapters and existing Cordis
+and read-only preview consumers, which delegate to those kernel functions. Input
+member ordering and diagnostic multiplicity are preserved; this changes report
+ordering only, not validation rules or severity. Early-return diagram diagnostics
+are sorted too. Consumers that display or return only the first qualifying error,
+including `application/commands/validation.rs`, may now select a different error
+message when several violations exist. Command acceptance/rejection is unchanged;
+the ordering change is observable in the selected explanation.
+
+These consumers still use the legacy typed contracts, not the function-only JSON
+boundary. Their migration remains separate. Execution trace timestamps and host
+run identifiers are observability data, not deterministic kernel results. Report
+ordering does not promise invariance under input array permutations: those arrays
+can express ordered UML members and graph first-error selection remains unchanged.

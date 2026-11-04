@@ -149,3 +149,22 @@ Relationship rows show source, authored relationship name (or relationship type)
 relationship type, semantic endpoint markers and line style, and destination. Projection does not delete elements,
 change ownership, or modify any diagram or view. Explorer drag rearrangement stays
 disabled, and legacy cosmetic placements do not override the projected hierarchy.
+
+Explorer navigation follows the StarUML interaction contract for selecting a
+right-clicked target before opening its menu, revealing selected nodes through
+collapsed ancestors, and expanding or collapsing the tree. These navigation
+controls are icon-only, have tooltips and accessible names, and remain available
+in read-only previews. Reveal can be requested again for an unchanged selection.
+Disclosure clicks change expansion without selecting the row. This is a bounded
+parity step: semantic relocation, keyboard tree navigation, inline rename and
+full diagram/project context menus are not claimed as implemented.
+
+Dragging an existing semantic element from the Explorer onto the active canvas
+reuses PlaceElementView at the canvas coordinates. An existing view in that
+diagram is selected and revealed at the drop point by panning, instead of duplicated; the source element and its owner are
+unchanged. Drags are bound to the source project, model revision and active target
+diagram, and stale/cross-project/read-only drops are rejected. View-only drafts
+and relationships are not offered for placement by this element-only command.
+Internal tree relocation remains unavailable: SetOwner does not authorize moving
+an element that already has an owner, and cosmetic explorer_parents are not a
+substitute for a semantic reparenting command.

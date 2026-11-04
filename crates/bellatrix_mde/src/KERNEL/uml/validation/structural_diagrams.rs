@@ -150,7 +150,20 @@ pub fn element_root_kind(kind: &str) -> Option<RootMetaclass> {
 /// needs one qualifying context; the other six kinds prohibit context but allow Views.
 /// Unknown future type names remain serializable, but cannot masquerade as a
 /// supported structural kind when this explicit-kind validator is called.
+/// Diagnostics are ordered by code, subject identity, severity and message,
+/// matching the function-only boundary for legacy frontend consumers as well.
+/// Input member order is not changed; only the resulting report is sorted.
 pub fn validate_structural_diagram(
+    project: &Project,
+    diagram_id: &str,
+    kind: StructuralDiagramKind,
+) -> Vec<StructuralDiagnostic> {
+    let mut issues = collect_structural_diagram_diagnostics(project, diagram_id, kind);
+    sort_diagnostics(&mut issues);
+    issues
+}
+
+fn collect_structural_diagram_diagnostics(
     project: &Project,
     diagram_id: &str,
     kind: StructuralDiagramKind,
@@ -180,7 +193,7 @@ pub fn validate_structural_diagram(
         issues.push(problem("UML_ROOT_INVALID", &project.id, error.to_string()));
         return issues;
     }
-    issues.extend(validate_structural_model(project));
+    issues.extend(collect_structural_model_diagnostics(project));
     let Some(diagram) = project
         .diagrams
         .iter()
@@ -349,7 +362,36 @@ pub fn validate_structural_diagram(
 /// Checks the represented UML relationship semantics across the whole model,
 /// independently of Views. This is not full UML conformance or graph integrity
 /// validation; callers also use Graph::validate for IDs and references.
+/// Diagnostics use the same canonical order as diagram validation. No input
+/// member ordering or diagnostic multiplicity is changed.
 pub fn validate_structural_model(project: &Project) -> Vec<StructuralDiagnostic> {
+    let mut issues = collect_structural_model_diagnostics(project);
+    sort_diagnostics(&mut issues);
+    issues
+}
+
+fn sort_diagnostics(issues: &mut [StructuralDiagnostic]) {
+    let severity_order = |severity| match severity {
+        StructuralSeverity::Error => 0,
+        StructuralSeverity::Warning => 1,
+    };
+    issues.sort_by(|left, right| {
+        (
+            left.code,
+            &left.subject_id,
+            severity_order(left.severity),
+            &left.message,
+        )
+            .cmp(&(
+                right.code,
+                &right.subject_id,
+                severity_order(right.severity),
+                &right.message,
+            ))
+    });
+}
+
+fn collect_structural_model_diagnostics(project: &Project) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     let elements = project
         .elements
