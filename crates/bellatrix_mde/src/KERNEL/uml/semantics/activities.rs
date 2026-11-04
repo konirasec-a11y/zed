@@ -273,31 +273,53 @@ fn object_flow_behavior_parameters(
     require_all(checks)
 }
 
-// UML.xmi DecisionNode-zero_input_parameters. Incoming is derived from the
-// target endpoint, not source incidence or an authored inverse collection.
-fn decision_zero_input_parameters(
+enum DecisionInputRule {
+    ZeroInputs,
+    ControlOneInput,
+    ObjectOneInput,
+    TwoInputs,
+}
+
+// UML.xmi DecisionNode input-parameter cardinality rules. ControlFlow uses
+// exists; ObjectFlow uses forAll, including its true result on an empty set.
+// Neither rule excludes decisionInputFlow from the incoming collection.
+fn decision_input_parameters(
     references: &ReferenceIndex<'_>,
     node: ElementRef<'_>,
+    rule: DecisionInputRule,
 ) -> Result<bool, QueryError> {
-    let incoming_control = accept_any(activity_edge_candidates(references).into_iter().map(|edge| {
-        let control = if edge.metaclass().is_some() {
-            Ok(edge.conforms_to("ControlFlow"))
+    let (has_decision_input_flow, require_control, expected_inputs) = match rule {
+        DecisionInputRule::ZeroInputs => (false, true, 0),
+        DecisionInputRule::ControlOneInput => (true, true, 1),
+        DecisionInputRule::ObjectOneInput => (false, false, 1),
+        DecisionInputRule::TwoInputs => (true, false, 2),
+    };
+    let incoming = activity_edge_candidates(references).into_iter().map(|edge| {
+        let family = if edge.metaclass().is_some() {
+            Ok(edge.conforms_to(if require_control { "ControlFlow" } else { "ObjectFlow" }))
         } else {
             Err(QueryError::unsupported(edge.id(), "ActivityEdge metaclass is unresolved"))
         };
-        require_all([
-            activity_endpoint(references, edge, "target")
-                .map(|target| target.id() == node.id()),
-            control,
-        ])
-    }));
+        let incident = activity_endpoint(references, edge, "target")
+            .map(|target| target.id() == node.id());
+        if require_control {
+            require_all([incident, family])
+        } else {
+            accept_any([incident.map(|incident| !incident), family])
+        }
+    });
+    let incoming_family = if require_control {
+        accept_any(incoming)
+    } else {
+        require_all(incoming)
+    };
     let guard = require_all([
         activity_reference_present(references, node, "DecisionNode", "decisionInput"),
         activity_reference_present(references, node, "DecisionNode", "decisionInputFlow")
-            .map(|present| !present),
-        incoming_control,
+            .map(|present| present == has_decision_input_flow),
+        incoming_family,
     ]);
-    let no_inputs = (|| {
+    let input_count = (|| {
         let identifier =
             optional_activity_reference(references, node, "DecisionNode", "decisionInput")?
                 .ok_or_else(|| {
@@ -309,28 +331,30 @@ fn decision_zero_input_parameters(
         let mut uncertainty = completeness
             .err()
             .map(|error| QueryError::unsupported(node.id(), error.to_string()));
-        let mut has_input = false;
+        let mut inputs = 0_usize;
         for parameter in parameters {
             match operations::direction(parameter) {
                 Ok(direction) => {
-                    has_input |= matches!(direction.as_str(), "in" | "inout");
+                    if matches!(direction.as_str(), "in" | "inout") {
+                        inputs += 1;
+                    }
                 }
                 Err(error) => {
                     uncertainty = Some(QueryError::unsupported(parameter.id.as_str(), error));
                 }
             }
         }
-        // One canonical input disproves emptiness despite unknown neighbors.
-        // No known input proves emptiness only when membership is complete.
-        if has_input {
+        // Too many canonical inputs disprove the count despite unknown neighbors.
+        // Equality or a shortfall is conclusive only for complete membership.
+        if inputs > expected_inputs {
             Ok(false)
         } else if let Some(error) = uncertainty {
             Err(error)
         } else {
-            Ok(true)
+            Ok(inputs == expected_inputs)
         }
     })();
-    accept_any([guard.map(|applies| !applies), no_inputs])
+    accept_any([guard.map(|applies| !applies), input_count])
 }
 
 fn object_node_selection(
@@ -945,11 +969,32 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
         }
         if node.conforms_to("DecisionNode") {
             checks.push((
-                decision_zero_input_parameters(references, node),
+                decision_input_parameters(references, node, DecisionInputRule::ZeroInputs),
                 "UML_DECISION_NODE_ZERO_INPUT_PARAMETERS",
                 "MDE_DECISION_NODE_ZERO_INPUT_PARAMETERS_UNVERIFIED",
                 "DecisionNode-zero_input_parameters",
                 "a DecisionNode with incoming ControlFlow and no decisionInputFlow must have no input Parameters on its decisionInput Behavior",
+            ));
+            checks.push((
+                decision_input_parameters(references, node, DecisionInputRule::ControlOneInput),
+                "UML_DECISION_NODE_INCOMING_CONTROL_ONE_INPUT_PARAMETER",
+                "MDE_DECISION_NODE_INCOMING_CONTROL_ONE_INPUT_PARAMETER_UNVERIFIED",
+                "DecisionNode-incoming_control_one_input_parameter",
+                "a DecisionNode with incoming ControlFlow and decisionInputFlow must have one input Parameter on its decisionInput Behavior",
+            ));
+            checks.push((
+                decision_input_parameters(references, node, DecisionInputRule::ObjectOneInput),
+                "UML_DECISION_NODE_INCOMING_OBJECT_ONE_INPUT_PARAMETER",
+                "MDE_DECISION_NODE_INCOMING_OBJECT_ONE_INPUT_PARAMETER_UNVERIFIED",
+                "DecisionNode-incoming_object_one_input_parameter",
+                "a DecisionNode whose incoming edges are all ObjectFlows and which has no decisionInputFlow must have one input Parameter on its decisionInput Behavior",
+            ));
+            checks.push((
+                decision_input_parameters(references, node, DecisionInputRule::TwoInputs),
+                "UML_DECISION_NODE_TWO_INPUT_PARAMETERS",
+                "MDE_DECISION_NODE_TWO_INPUT_PARAMETERS_UNVERIFIED",
+                "DecisionNode-two_input_parameters",
+                "a DecisionNode whose incoming edges are all ObjectFlows and which has decisionInputFlow must have two input Parameters on its decisionInput Behavior",
             ));
             checks.push((
                 uniform_activity_edges_excluding(references, node, optional_activity_reference(references, node, "DecisionNode", "decisionInputFlow")),
