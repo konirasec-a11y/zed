@@ -51,6 +51,27 @@ pub enum LiteralValue {
     Null,
 }
 
+#[derive(Clone, Debug)]
+pub enum ResolvedValue {
+    Literal(LiteralValue),
+    InstanceSpecification(String),
+}
+
+/// Resolve literals or a symbolic InstanceSpecification reference. This does
+/// not instantiate runtime entities: repeated InstanceValue evaluations must
+/// not be equated merely because they share this model specification handle.
+pub fn resolve_value(
+    references: &ReferenceIndex<'_>,
+    id: &str,
+) -> Result<ResolvedValue, EvaluationError> {
+    let element = resolve(references, id)?;
+    if element.conforms_to("InstanceValue") {
+        return referenced_instance(references, id)
+            .map(|instance| ResolvedValue::InstanceSpecification(instance.id().to_owned()));
+    }
+    evaluate(references, id).map(ResolvedValue::Literal)
+}
+
 impl LiteralValue {
     pub fn primitive_type(&self) -> Option<StandardPrimitiveType> {
         match self {
@@ -109,9 +130,9 @@ pub fn evaluate(
     })
 }
 
-/// Resolve the represented instance identity without evaluating its Slots or
-/// specification recursively. InstanceValue denotes that instance, not a copy
-/// of its fields and not a primitive value guessed from its name.
+/// Resolve the canonical InstanceSpecification referenced by an InstanceValue.
+/// This does not instantiate its runtime result or recursively evaluate the
+/// referenced specification's Slots and values.
 pub fn referenced_instance<'a>(
     references: &ReferenceIndex<'a>,
     id: &str,

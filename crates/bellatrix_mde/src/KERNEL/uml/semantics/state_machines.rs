@@ -156,6 +156,60 @@ fn state_submachine_empty(references: &ReferenceIndex<'_>, state: ElementRef<'_>
     require_all(checks)
 }
 
+fn behavior_specification_empty(references: &ReferenceIndex<'_>, state: ElementRef<'_>) -> Result<bool, QueryError> {
+    let descriptor = schema::uml_property("Behavior", "specification")
+        .map_err(|error| QueryError::unsupported(state.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(state.id(), "missing specification contract"))?;
+    let opposite = schema::uml_property("BehavioralFeature", "method")
+        .map_err(|error| QueryError::unsupported(state.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(state.id(), "missing method contract"))?;
+    let direct = state.properties().get("specification");
+    let value = direct.unwrap_or(&serde_json::Value::Null);
+    let mut checks = vec![match property_contracts::check_value(references, state, descriptor, value) {
+        PropertyOutcome::Satisfied => Ok(true),
+        PropertyOutcome::Violation(message) => Err(QueryError::invalid(state.id(), message)),
+        PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(state.id(), message)),
+    }, Ok(value.is_null())];
+    let mut witnesses = HashSet::new();
+    // BehavioralFeature::method is authored opposite evidence. Do not infer a
+    // specification from containment or silently discard these explicit links.
+    for machine in references.model().elements().filter(|element| element.conforms_to("BehavioralFeature")) {
+        let Some(inverse) = machine.properties().get("method") else { continue; };
+        let checked = property_contracts::check_value(references, machine, opposite, inverse);
+        // Local identities decide membership independently of an unrelated
+        // member's unresolved metaclass. Its property warning remains reported
+        // by property-contract validation, without obscuring known exclusion.
+        let identities_complete = inverse.as_array().is_some_and(|values| values.iter()
+            .all(|value| matches!(reference_id(value), Ok(Some(_)))));
+        checks.push(match checked {
+            PropertyOutcome::Satisfied => Ok(true),
+            PropertyOutcome::Violation(message) => Err(QueryError::invalid(machine.id(), message)),
+            PropertyOutcome::Unverified(_) if identities_complete => Ok(true),
+            PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(machine.id(), message)),
+        });
+        let contains = inverse.as_array().is_some_and(|values| values.iter().any(|value|
+            matches!(reference_id(value), Ok(Some(id)) if id == state.id())));
+        if contains {
+            witnesses.insert(machine.id());
+            checks.push(Ok(false));
+            if let Some(direct) = direct
+                && let Ok(target) = reference_id(direct)
+                && target != Some(machine.id())
+            {
+                checks.push(Err(QueryError::invalid(state.id(), "specification contradicts authored BehavioralFeature::method")));
+            }
+        } else if identities_complete && matches!(reference_id(value), Ok(Some(id)) if id == machine.id()) {
+            checks.push(Err(QueryError::invalid(state.id(), "specification is excluded by its authored method opposite")));
+        }
+    }
+    if witnesses.len() > 1 {
+        checks.push(Err(QueryError::invalid(state.id(), "method opposites identify more than one specification")));
+    }
+    // A well-formed external reference still proves nonempty specification. Type
+    // uncertainty cannot turn that known cardinality violation into a warning.
+    require_all(checks)
+}
+
 fn region_owned(references: &ReferenceIndex<'_>, region: ElementRef<'_>) -> Result<bool, QueryError> {
     let mut checks = Vec::new();
     let owner = references.model().owner(region)
@@ -616,14 +670,14 @@ fn region_pseudostate_limit(references: &ReferenceIndex<'_>, region: ElementRef<
 }
 
 fn state_connections_empty(
-    references: &ReferenceIndex<'_>, state: ElementRef<'_>, role: &str, point_type: &str,
+    references: &ReferenceIndex<'_>, state: ElementRef<'_>, role: &str, point_type: &str, opposite_role: &str,
 ) -> Result<bool, QueryError> {
-    let opposite = schema::uml_property(point_type, "state")
+    let opposite = schema::uml_property(point_type, opposite_role)
         .map_err(|error| QueryError::unsupported(state.id(), error.to_string()))?
-        .ok_or_else(|| QueryError::unsupported(state.id(), format!("missing {point_type}::state contract")))?;
+        .ok_or_else(|| QueryError::unsupported(state.id(), format!("missing {point_type}::{opposite_role} contract")))?;
     let mut checks = vec![composite_role_empty(references, state, role, point_type)];
     for point in references.model().elements().filter(|element| element.conforms_to(point_type)) {
-        let Some(value) = point.properties().get("state") else { continue; };
+        let Some(value) = point.properties().get(opposite_role) else { continue; };
         let owner = references.model().owner(point)
             .map_err(|error| QueryError::invalid(point.id(), error))?;
         let canonical_member = owner.is_some_and(|owner| owner.id() == state.id());
@@ -632,12 +686,12 @@ fn state_connections_empty(
                 references.element(point.id()).map_err(|error| QueryError::invalid(point.id(), error))?;
                 checks.push(Ok(false));
                 if !canonical_member {
-                    checks.push(Err(QueryError::invalid(point.id(), "authored state contradicts canonical connection ownership")));
+                    checks.push(Err(QueryError::invalid(point.id(), format!("authored {opposite_role} contradicts canonical connection ownership"))));
                 }
             }
             Ok(_) => {
                 if canonical_member {
-                    checks.push(Err(QueryError::invalid(point.id(), "authored state excludes its canonical connection owner")));
+                    checks.push(Err(QueryError::invalid(point.id(), format!("authored {opposite_role} excludes its canonical connection owner"))));
                 }
                 continue;
             }
@@ -654,7 +708,7 @@ fn state_connections_empty(
 }
 
 fn state_composite_states(references: &ReferenceIndex<'_>, state: ElementRef<'_>) -> Result<bool, QueryError> {
-    implies(state_connections_empty(references, state, "connectionPoint", "Pseudostate").map(|empty| !empty),
+    implies(state_connections_empty(references, state, "connectionPoint", "Pseudostate", "state").map(|empty| !empty),
         state_regions_empty(references, state).map(|empty| !empty))
 }
 
@@ -663,7 +717,7 @@ fn state_submachine_states(references: &ReferenceIndex<'_>, state: ElementRef<'_
     // connection->notEmpty(). Its accompanying prose suggests the converse;
     // do not silently substitute that different implication here.
     implies(state_submachine_empty(references, state).map(|empty| !empty),
-        state_connections_empty(references, state, "connection", "ConnectionPointReference").map(|empty| !empty))
+        state_connections_empty(references, state, "connection", "ConnectionPointReference", "state").map(|empty| !empty))
 }
 
 fn connection_reference_kinds(
@@ -691,11 +745,19 @@ fn connection_reference_kinds(
     require_all(checks)
 }
 
+fn state_machine_method(references: &ReferenceIndex<'_>, machine: ElementRef<'_>) -> Result<bool, QueryError> {
+    implies(behavior_specification_empty(references, machine).map(|empty| !empty),
+        state_connections_empty(references, machine, "connectionPoint", "Pseudostate", "stateMachine"))
+}
+
 pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     for element in references.model().elements() {
         let mut constraints = Vec::new();
         if element.conforms_to("StateMachine") {
+            constraints.push((state_machine_method(references, element),
+                "UML_STATE_MACHINE_METHOD", "MDE_STATE_MACHINE_METHOD_UNVERIFIED",
+                "StateMachine-method", "a StateMachine specifying a BehavioralFeature cannot have connection points"));
             constraints.push((connection_points(references, element),
                 "UML_STATE_MACHINE_CONNECTION_POINTS", "MDE_STATE_MACHINE_CONNECTION_POINTS_UNVERIFIED",
                 "StateMachine-connection_points", "connection points must have kind entryPoint or exitPoint"));

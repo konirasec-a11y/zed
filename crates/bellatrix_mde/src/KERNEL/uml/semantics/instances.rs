@@ -11,7 +11,7 @@ use super::{
     references::{ReferenceIndex, reference_id},
     root::{Element, ElementRef, Model},
     schema,
-    value_specifications::{self, EvaluationError, LiteralValue},
+    value_specifications::{self, ResolvedValue, EvaluationError, LiteralValue},
 };
 use crate::{StructuralDiagnostic, StructuralSeverity};
 use serde_json::Value;
@@ -57,6 +57,13 @@ impl<'a> InstanceSpecificationRef<'a> {
             &ReferenceIndex::new(model), self.0, "InstanceSpecification", "specification",
             "InstanceSpecification-specification",
         )?.into_iter().next())
+    }
+
+    pub fn specification_value(self, model: Model<'a>) -> Result<Option<ResolvedValue>, QueryError> {
+        Ok(evaluated_owned_values(
+            &ReferenceIndex::new(model), self.0, "InstanceSpecification", "specification",
+            "InstanceSpecification-specification",
+        )?.into_iter().map(|(_, value)| value).next())
     }
 
     /// The adapter stores classifier identities, never classifier names or DTO copies.
@@ -111,6 +118,12 @@ impl<'a> SlotRef<'a> {
         evaluate_owned_values(
             &ReferenceIndex::new(model), self.0, "Slot", "value", "Slot-value",
         )
+    }
+
+    pub fn resolved_values(self, model: Model<'a>) -> Result<Vec<ResolvedValue>, QueryError> {
+        Ok(evaluated_owned_values(
+            &ReferenceIndex::new(model), self.0, "Slot", "value", "Slot-value",
+        )?.into_iter().map(|(_, value)| value).collect())
     }
 
     pub fn owning_instance(self, model: Model<'a>) -> Result<InstanceSpecificationRef<'a>, String> {
@@ -174,13 +187,17 @@ fn evaluate_owned_values(
     property: &str,
     role: &'static str,
 ) -> Result<Vec<LiteralValue>, QueryError> {
-    Ok(evaluated_owned_values(references, owner, metaclass, property, role)?
-        .into_iter().map(|(_, value)| value).collect())
+    evaluated_owned_values(references, owner, metaclass, property, role)?
+        .into_iter().map(|(specification, value)| match value {
+            ResolvedValue::Literal(value) => Ok(value),
+            ResolvedValue::InstanceSpecification(_) => Err(QueryError::unsupported(specification.id(),
+                "InstanceSpecification reference has no scalar literal projection; use resolved_values or specification_value")),
+        }).collect()
 }
 
 struct OwnedValueEvidence<'a> {
     specifications: Vec<ElementRef<'a>>,
-    values: Vec<(ElementRef<'a>, LiteralValue)>,
+    values: Vec<(ElementRef<'a>, ResolvedValue)>,
     unknown: Option<QueryError>,
 }
 
@@ -190,7 +207,7 @@ fn evaluated_owned_values<'a>(
     metaclass: &str,
     property: &str,
     role: &'static str,
-) -> Result<Vec<(ElementRef<'a>, LiteralValue)>, QueryError> {
+) -> Result<Vec<(ElementRef<'a>, ResolvedValue)>, QueryError> {
     let evidence = owned_value_evidence(references, owner, metaclass, property, role)?;
     match evidence.unknown {
         Some(error) => Err(error),
@@ -281,7 +298,7 @@ fn owned_value_evidence<'a>(
     }
     let mut evaluated = Vec::new();
     for value in values {
-        match value_specifications::evaluate(references, value.id()) {
+        match value_specifications::resolve_value(references, value.id()) {
             Ok(literal) => evaluated.push((value, literal)),
             Err(EvaluationError::Invalid { subject_id, message }) => return Err(QueryError::invalid(&subject_id, message)),
             Err(EvaluationError::Unsupported { subject_id, message }) => {
@@ -334,13 +351,25 @@ fn slot_values_conform(
             let values = evidence.values;
             // LiteralNull denotes absence, whereas a LiteralString without its
             // scalar value leaves both cardinality and equality unresolved.
-            let present = values.iter().filter(|(_, value)| !matches!(value, LiteralValue::Null))
+            let present = values.iter().filter(|(_, value)| !matches!(value, ResolvedValue::Literal(LiteralValue::Null)))
                 .collect::<Vec<_>>();
-            let unspecified = present.iter().any(|(_, value)| matches!(value, LiteralValue::String(None)));
+            let mut unspecified = false;
+            let mut known_count = 0usize;
+            for (_, value) in &present {
+                match value {
+                    ResolvedValue::Literal(LiteralValue::String(None)) => unspecified = true,
+                    ResolvedValue::Literal(_) => known_count += 1,
+                    ResolvedValue::InstanceSpecification(instance_id) => {
+                        match instance_has_no_specification(references, instance_id) {
+                            Ok(true) => known_count += 1,
+                            Ok(false) => unspecified = true,
+                            Err(error) => { unspecified = true; checks.push(Err(error)); }
+                        }
+                    }
+                }
+            }
             if let Ok(multiplicity) = multiplicity {
-                let known_count = present.iter()
-                    .filter(|(_, value)| !matches!(value, LiteralValue::String(None)))
-                    .count().to_string().parse::<super::types::Integer>()
+                let known_count = known_count.to_string().parse::<super::types::Integer>()
                     .map_err(|error| QueryError::invalid(slot.id(), error.to_string()))?;
                 checks.push(if multiplicity.upper_bound().finite_value().is_some_and(|upper| &known_count > upper) {
                     // Unknown expressions can add values, never remove these
@@ -353,12 +382,15 @@ fn slot_values_conform(
                 });
             }
             for (specification, value) in &present {
-                checks.push(literal_type_conformance(references, *specification, value, feature));
+                checks.push(match value {
+                    ResolvedValue::Literal(value) => literal_type_conformance(references, *specification, value, feature),
+                    ResolvedValue::InstanceSpecification(instance_id) => instance_value_type_conformance(references, *specification, instance_id, feature),
+                });
             }
             if matches!(unique, Ok(true)) {
                 for (position, (_, value)) in present.iter().enumerate() {
                     for (_, other) in present.iter().skip(position + 1) {
-                        checks.push(literal_values_distinct(slot.id(), value, other));
+                        checks.push(resolved_values_distinct(slot.id(), value, other));
                     }
                 }
             }
@@ -415,6 +447,100 @@ fn literal_type_conformance(
     require_all(checks)
 }
 
+fn instance_has_no_specification(
+    references: &ReferenceIndex<'_>,
+    instance_id: &str,
+) -> Result<bool, QueryError> {
+    use super::feature_compatibility::accept_any;
+    let instance = references.element(instance_id)
+        .map_err(|error| QueryError::invalid(instance_id, error))?;
+    let mut presence = Vec::new();
+    if let Some(value) = instance.properties().get("specification") {
+        instance_reference_evidence(references, instance, "InstanceSpecification", "specification", value)?;
+        presence.push(Ok(!value.is_null()));
+    }
+    let mut owned_specifications = 0usize;
+    for child in references.explicit_owned_elements(instance_id)
+        .map_err(|error| QueryError::invalid(instance_id, error))?
+    {
+        let membership = classifiers::contributes_to_owned_union(instance, child, "InstanceSpecification-specification");
+        if matches!(membership, Ok(true)) { owned_specifications += 1; }
+        presence.push(membership);
+    }
+    if owned_specifications > 1 {
+        presence.push(Err(QueryError::invalid(instance_id, "specification permits at most one owned ValueSpecification")));
+    }
+    // A referenced specification can determine the result of InstanceValue;
+    // only its proven absence permits treating the descriptor as one allocation.
+    accept_any(presence).map(|present| !present)
+}
+
+fn instance_value_type_conformance(
+    references: &ReferenceIndex<'_>,
+    specification: ElementRef<'_>,
+    instance_id: &str,
+    feature: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    use super::feature_compatibility::{self, require_all};
+    let instance = references.element(instance_id)
+        .map_err(|error| QueryError::invalid(specification.id(), error))?;
+    let no_specification = instance_has_no_specification(references, instance_id);
+    let empty = Value::Array(Vec::new());
+    let mut checks = vec![instance_reference_evidence(
+        references, instance, "InstanceSpecification", "classifier",
+        instance.properties().get("classifier").unwrap_or(&empty),
+    ).map(|_| true)];
+    let classifier_witness = |required| match &no_specification {
+        Ok(true) => instance_type_witness(references, instance, required),
+        Ok(false) => Err(QueryError::unsupported(instance_id,
+            "represented value Type depends on InstanceSpecification.specification")),
+        Err(error) => Err(error.clone()),
+    };
+    checks.push(feature_compatibility::resolve_feature_type(references, feature).and_then(|required| classifier_witness(required)));
+    if specification.properties().get("type").is_some_and(|value| !value.is_null()) {
+        checks.push(feature_compatibility::compare_type_conformance(references, specification, feature));
+        checks.push(feature_compatibility::resolve_feature_type(references, specification).and_then(|required| classifier_witness(required)));
+    }
+    require_all(checks)
+}
+
+fn instance_type_witness<'a>(
+    references: &ReferenceIndex<'a>,
+    instance: ElementRef<'a>,
+    required: ElementRef<'a>,
+) -> Result<bool, QueryError> {
+    use super::feature_compatibility::{self, accept_any};
+    let empty = Value::Array(Vec::new());
+    let (classifiers, _) = instance_reference_evidence(
+        references, instance, "InstanceSpecification", "classifier",
+        instance.properties().get("classifier").unwrap_or(&empty),
+    )?;
+    let mut candidates = Vec::new();
+    for classifier in classifiers {
+        candidates.push(feature_compatibility::compare_resolved_types(references, classifier, required));
+    }
+    // Classifier declarations can prove membership. Failure to find a witness
+    // does not prove exclusion from a type in a partial InstanceSpecification.
+    match accept_any(candidates)? {
+        true => Ok(true),
+        false => Err(QueryError::unsupported(instance.id(), "no classifier witness establishes represented instance Type conformance")),
+    }
+}
+
+fn resolved_values_distinct(
+    slot_id: &str,
+    value: &ResolvedValue,
+    other: &ResolvedValue,
+) -> Result<bool, QueryError> {
+    match (value, other) {
+        (ResolvedValue::Literal(value), ResolvedValue::Literal(other)) => literal_values_distinct(slot_id, value, other),
+        // These IDs denote specifications, not allocated runtime instances.
+        // Even repeated references to one specification do not prove equality
+        // of the values produced by separate InstanceValue evaluations.
+        _ => Err(QueryError::unsupported(slot_id, "runtime equality of InstanceValue results is unresolved")),
+    }
+}
+
 fn literal_values_distinct(
     slot_id: &str,
     value: &LiteralValue,
@@ -441,7 +567,7 @@ fn validate_instance<'a>(
     )?;
     // Value errors are independent of whether every classifier identity is
     // resolved. A missing local target remains Invalid, an external one Unknown.
-    evaluate_owned_values(
+    evaluated_owned_values(
         references, instance.0, "InstanceSpecification", "specification",
         "InstanceSpecification-specification",
     )?;
@@ -494,7 +620,7 @@ fn validate_assignment_with<'a>(
         references, owner.0, "InstanceSpecification", "classifier",
         owner.0.properties().get("classifier").unwrap_or(&empty),
     )?;
-    checks.push(evaluate_owned_values(
+    checks.push(evaluated_owned_values(
         references, owner.0, "InstanceSpecification", "specification",
         "InstanceSpecification-specification",
     ).map(|_| true));
