@@ -622,9 +622,11 @@ impl Render for MdeLeftPanel {
                             .when(!read_only, |header| {
                                 header.action(ui::DropdownMenu::new(
                                     "mde-new-diagram",
-                                    "New",
+                                    "",
                                     create_menu,
-                                ))
+                                ).trigger_icon(IconName::Plus)
+                                    .aria_label("New diagram")
+                                    .trigger_tooltip(ui::Tooltip::text("New diagram")))
                             }),
                     )
                     .when(self.diagrams_open, |pane| {
@@ -713,6 +715,7 @@ impl Render for MdeLeftPanel {
                         .when(!read_only, |header| {
                             let draft_owner = item.clone();
                             header.action(div().flex().items_center().gap_1().child(ui::IconButton::new("mde-visual-draft-mode", IconName::Pencil)
+                                .aria_label("Visual draft mode")
                                 .toggle_state(visual_draft_mode)
                                 .tooltip(ui::Tooltip::text("Visual draft mode: place freely without semantic validation"))
                                 .on_click(move |_, _, cx| { draft_owner.update(cx, |workbench, cx| {
@@ -723,6 +726,8 @@ impl Render for MdeLeftPanel {
                                 }); }))
                             .child(
                                 ui::IconButton::new("mde-search-tools", IconName::MagnifyingGlass)
+                                    .aria_label("Search all symbols")
+                                    .aria_expanded(self.search_open && self.toolbox_open)
                                     .toggle_state(self.search_open)
                                     .tooltip(ui::Tooltip::text("Search all symbols"))
                                     .on_click(cx.listener(|panel, _, window, cx| {
@@ -759,26 +764,31 @@ impl Render for MdeLeftPanel {
                         )
                         .when_some(chosen, |pane, tool| {
                             let owner = item.clone();
+                            let instruction = match tool {
+                                ModelingTool::Relation(kind) => format!(
+                                    "{}: {}", kind.label(), kind.endpoint_instruction()
+                                ),
+                                _ => format!("{}: drag to canvas or click empty space", tool.label()),
+                            };
                             pane.child(
                                 div()
                                     .flex_none()
+                                    .flex()
+                                    .items_center()
+                                    .gap_1()
                                     .border_t_1()
                                     .border_color(palette.border)
                                     .p_2()
+                                    .child(div().flex_1().min_w_0().overflow_hidden().child(Label::new(tool.label())))
                                     .child(
-                                        div()
-                                            .text_xs()
-                                            .text_color(palette.muted)
-                                            .whitespace_normal()
-                                            .child(match tool {
-                                                ModelingTool::Relation(kind) => format!(
-                                                    "{}: {}", kind.label(), kind.endpoint_instruction()
-                                                ),
-                                                _ => format!("{}: drag to canvas or click empty space", tool.label()),
-                                            }),
+                                        ui::IconButton::new("mde-tool-instructions", IconName::Info)
+                                            .aria_label(instruction.clone())
+                                            .tooltip(ui::Tooltip::text(instruction)),
                                     )
                                     .child(
-                                        Button::new("mde-cancel-toolbox-tool", "Selection tool")
+                                        ui::IconButton::new("mde-cancel-toolbox-tool", IconName::Close)
+                                            .aria_label("Cancel tool and return to selection")
+                                            .tooltip(ui::Tooltip::text("Cancel tool and return to selection"))
                                             .on_click(move |_, _, cx| {
                                                 owner.update(cx, |workbench, cx| workbench.cancel_tool(cx));
                                             }),
@@ -787,10 +797,12 @@ impl Render for MdeLeftPanel {
                         })
                         .child(
                             div().flex_none().px_2().py_1().child(
-                                    Button::new(
+                                    ui::IconButton::new(
                                         "bellatrix-open-symbol-library",
-                                        "Browse symbol library",
+                                        IconName::Book,
                                     )
+                                    .aria_label("Browse symbol library")
+                                    .tooltip(ui::Tooltip::text("Browse symbol library"))
                                     .on_click(
                                         move |_, window, cx| {
                                             window.dispatch_action(Box::new(OpenMdeSymbols), cx);

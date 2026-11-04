@@ -24,6 +24,8 @@ mod property_editor;
 mod quick_edit_view;
 #[path = "relationship_creation.rs"]
 mod relationship_creation;
+#[path = "../view-model/selection.rs"]
+mod selection;
 #[path = "../view-model/snapshot.rs"]
 mod snapshot;
 #[path = "source.rs"]

@@ -25,7 +25,7 @@ use std::collections::{HashMap, HashSet};
 pub use toolbox_panel::MdeLeftPanel;
 #[cfg(test)]
 use toolbox_panel::tool_matches_query;
-use ui::{Button, IconName, Label, TreeViewItem, prelude::*};
+use ui::{IconButton, IconName, Label, TreeViewItem, prelude::*};
 use ui_input::{ErasedEditorEvent, InputField};
 use workspace::{
     Workspace,
@@ -308,6 +308,10 @@ impl Render for MdeRightPanel {
                 let has_children = tree
                     .get(index + 1)
                     .is_some_and(|next| next.depth > row.depth);
+                let type_label = crate::workbench_ui::hierarchy::explorer_type_label(
+                    &row.kind,
+                    snapshot.section.relations.iter().any(|relation| relation.id == row.element_id),
+                );
                 if let Some(view) = &row.view {
                     let diagram_id = view.diagram_id.clone();
                     let view_id = view.view_id.clone();
@@ -319,11 +323,13 @@ impl Render for MdeRightPanel {
                     let disclosure_id = row.element_id.clone();
                     let disclosure_panel = cx.weak_entity();
                     rows.push(div().id(format!("mde-explorer-view-{}", row.element_id))
+                        .tooltip(ui::Tooltip::text(format!("Visual component · {type_label}")))
                         .pl(px((row.depth.min(15) + 2) as f32 * 14.0)).flex().items_center().gap_1()
                         .when(selected, |row| row.bg(palette.surface))
                         .child(crate::workbench_ui::hierarchy::explorer_view_icon(&row.element_id, &row.kind, selected, &palette))
                         .child(div().flex_1().min_w_0().overflow_hidden().child(
                             TreeViewItem::new(row.element_id.clone(), row.label.clone())
+                                .aria_label(format!("{}: {}", type_label, row.label))
                                 .root_item(has_children).expanded(expanded).toggle_state(selected)
                                 .on_toggle(move |_, _, cx| {
                                     if let Err(error) = disclosure_panel.update(cx, |panel, cx| {
@@ -334,8 +340,7 @@ impl Render for MdeRightPanel {
                                 .on_click(move |_, _, cx| {
                                     owner.update(cx, |workbench, cx| workbench.select_diagram_view(diagram_id.clone(), view_id.clone(), cx));
                                 })
-                        ))
-                        .child(Label::new(crate::workbench_ui::hierarchy::explorer_type_label(&row.kind, view.subject_id.as_deref().is_some_and(|id| snapshot.section.relations.iter().any(|relation| relation.id == id)))).size(LabelSize::XSmall).color(Color::Muted)));
+                        )));
                     if has_children && !expanded { hidden_by_depth = Some(row.depth); }
                     continue;
                 }
@@ -349,12 +354,14 @@ impl Render for MdeRightPanel {
                     rows.push(
                         div()
                             .id(format!("mde-explorer-diagram-{id}"))
+                            .tooltip(ui::Tooltip::text("Diagram"))
                             .pl(px((row.depth.min(15) + 2) as f32 * 14.0))
                             .flex().items_center().gap_1()
                             .when(is_active, |row| row.bg(palette.surface))
                             .child(svg().data(glyph(ShapeKind::Document)).size(px(14.0)).flex_none().text_color(if is_active { palette.selection } else { palette.muted }))
                             .child(div().flex_1().min_w_0().overflow_hidden().child(
                                 TreeViewItem::new(id.clone(), row.label.clone())
+                                    .aria_label(format!("Diagram: {}", row.label))
                                     .root_item(has_children).expanded(expanded)
                                     .on_toggle(move |_, _, cx| {
                                         let _ = disclosure_panel.update(cx, |panel, cx| {
@@ -366,8 +373,7 @@ impl Render for MdeRightPanel {
                                     .on_click(move |_, _, cx| {
                                         owner.update(cx, |workbench, cx| workbench.select_diagram(id.clone(), cx));
                                     })
-                            ))
-                            .child(Label::new("Diagram").size(LabelSize::XSmall).color(Color::Muted)),
+                            )),
                     );
                     if has_children && !expanded { hidden_by_depth = Some(row.depth); }
                     continue;
@@ -394,6 +400,7 @@ impl Render for MdeRightPanel {
                 let selected = selected_row.is_some_and(|selected| selected.element_id == row.element_id);
                 if selected && reveal_selected { self.explorer_scroll.scroll_to_item(rows.len() + 1); }
                 let tree_item = TreeViewItem::new(id.clone(), row.label.clone())
+                    .aria_label(format!("{}: {}", type_label, row.label))
                     .root_item(has_children)
                     .expanded(expanded)
                     .toggle_state(selected)
@@ -413,6 +420,7 @@ impl Render for MdeRightPanel {
                 rows.push(
                     div()
                         .id(format!("mde-explorer-row-{}", row.element_id))
+                        .tooltip(ui::Tooltip::text(type_label))
                         .pl(px((row.depth.min(15) + 2) as f32 * 14.0))
                         .flex()
                         .items_center()
@@ -501,20 +509,6 @@ impl Render for MdeRightPanel {
                                     })
                                 }),
                             ),
-                        )
-                        .child(
-                            div()
-                                .flex_none()
-                                .px_1()
-                                .rounded_sm()
-                                .bg(palette.surface)
-                                .child(
-                                    Label::new(
-                                        crate::workbench_ui::hierarchy::explorer_type_label(&row.kind, snapshot.section.relations.iter().any(|relation| relation.id == row.element_id)),
-                                    )
-                                    .size(LabelSize::XSmall)
-                                    .color(Color::Muted),
-                                ),
                         ),
                 );
                 if has_children && !expanded {
@@ -612,7 +606,10 @@ impl Render for MdeRightPanel {
                                 }),
                             )
                             .when(!read_only, |header| {
-                                header.action(Button::new("mde-save-project", "Save As…").on_click(
+                                header.action(IconButton::new("mde-save-project", IconName::Download)
+                                    .aria_label("Save project as")
+                                    .tooltip(ui::Tooltip::text("Save project as…"))
+                                    .on_click(
                                     move |_, window, cx| {
                                         window.dispatch_action(
                                             Box::new(crate::workbench_ui::integration::SaveMdeProjectAs),
@@ -720,10 +717,9 @@ impl Render for MdeRightPanel {
                                             .border_t_1()
                                             .border_color(panel_border)
                                             .child(
-                                                Button::new(
-                                                    "mde-delete-element",
-                                                    "Delete from model",
-                                                )
+                                                IconButton::new("mde-delete-element", IconName::Trash)
+                                                .aria_label("Delete from model")
+                                                .tooltip(ui::Tooltip::text("Delete from model"))
                                                 .on_click(move |_, _, cx| {
                                                     delete_item.update(cx, |workbench, cx| {
                                                         workbench.delete_selected_from_model(cx)
@@ -816,22 +812,28 @@ impl Render for MdeBottomPanel {
         let active = self.active;
         let handle = cx.weak_entity();
         let mut tabs = Vec::new();
-        for (index, (kind, label)) in [
-            (BottomTab::Diagnostics, "Diagnostics"),
-            (BottomTab::Relationships, "Relationships"),
-            (BottomTab::Documentation, "Markdown"),
-            (BottomTab::Thumbnails, "Thumbnails"),
+        for (index, (kind, label, icon)) in [
+            (BottomTab::Diagnostics, "Diagnostics", IconName::Warning),
+            (BottomTab::Relationships, "Relationships", IconName::Link),
+            (BottomTab::Documentation, "Markdown", IconName::FileMarkdown),
+            (BottomTab::Thumbnails, "Thumbnails", IconName::Image),
         ]
         .into_iter()
         .enumerate()
         {
             let owner = handle.clone();
             tabs.push(
-                Button::new(format!("mde-bottom-tab-{index}"), label).on_click(move |_, _, cx| {
-                    let _ = owner.update(cx, |panel, cx| {
+                IconButton::new(format!("mde-bottom-tab-{index}"), icon)
+                    .aria_label(label)
+                    .tooltip(ui::Tooltip::text(label))
+                    .toggle_state(active == kind)
+                    .on_click(move |_, _, cx| {
+                    if let Err(error) = owner.update(cx, |panel, cx| {
                         panel.active = kind;
                         cx.notify();
-                    });
+                    }) {
+                        eprintln!("MDE details tab selection failed: {error}");
+                    }
                 }),
             );
         }

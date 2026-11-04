@@ -192,22 +192,42 @@ impl MdeWorkbenchItem {
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
         self.gesture = None;
         if let Ok(snapshot) = self.source.snapshot() {
-            if self.selected_view.is_some()
-                && !snapshot.section.diagrams.iter().any(|diagram| {
-                    Some(diagram.id.as_str()) == self.active_diagram.as_deref()
-                        && diagram
-                            .views
-                            .iter()
-                            .any(|view| Some(view.id.as_str()) == self.selected_view.as_deref())
-                })
-            {
-                self.selected_view = None;
-                self.inline_editor = None;
-                self.inline_draft = None;
-                self.editing_subject = None;
-            }
+            self.reconcile_selection(&snapshot.section);
         }
         cx.notify();
+    }
+
+    pub(super) fn reconcile_selection(&mut self, section: &bellatrix_mde::ModelingSection) {
+        let selection = selection::reconcile_selection(
+            section,
+            self.active_diagram.as_deref(),
+            self.selected_view.as_deref(),
+            self.selected_element.as_deref(),
+            self.editing_subject.as_deref(),
+        );
+        let diagram_changed = selection.active_diagram != self.active_diagram;
+        let selection_changed = selection.selected_view != self.selected_view
+            || selection.selected_element != self.selected_element;
+        if diagram_changed || selection_changed {
+            self.gesture = None;
+            self.pending_relation_source = None;
+        }
+        if diagram_changed {
+            self.selected_tool = None;
+            self.drop_point = None;
+            self.pan_origin = None;
+            self.validation_status = "Not yet validated for this diagram".into();
+        }
+        if !selection.preserve_editor {
+            self.inline_editor = None;
+            self.inline_draft = None;
+            self.editing_subject = None;
+            self.draft_label_revision = None;
+            self.draft_label_pending = false;
+        }
+        self.active_diagram = selection.active_diagram;
+        self.selected_view = selection.selected_view;
+        self.selected_element = selection.selected_element;
     }
     pub(super) fn submit(&mut self, command: MdeUiCommand, cx: &mut Context<Self>) {
         self.feedback = match self.source.submit(command) {

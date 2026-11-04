@@ -7,7 +7,7 @@ use gpui::{
     relative,
 };
 use std::{sync::Arc, time::Duration};
-use ui::{Button, IconName, Label, prelude::*};
+use ui::{IconButton, IconName, Label, prelude::*};
 use ui_input::{ErasedEditorEvent, InputField};
 use workspace::dock::{DockPosition, Panel, PanelEvent};
 
@@ -240,20 +240,32 @@ impl Render for MdeExecutionDashboard {
             .child(div().h(px(36.0)).flex_none().px_2().flex().items_center().gap_2().border_b_1().border_color(palette.border)
                 .child(Label::new("Execution logs"))
                 .child(div().flex_1().min_w_0().overflow_hidden().text_xs().text_color(palette.muted).child(self.project_label.clone().unwrap_or_else(|| "No active MDE document".to_owned())))
-                .child(Button::new("mde-execution-pause", if self.paused { "Resume" } else { "Pause" })
+                .child(IconButton::new("mde-execution-pause", if self.paused { IconName::PlayFilled } else { IconName::DebugPause })
+                    .aria_label(if self.paused { "Resume logs" } else { "Pause logs" })
+                    .tooltip(ui::Tooltip::text(if self.paused { "Resume logs" } else { "Pause logs" }))
+                    .toggle_state(self.paused)
                     .on_click(move |_, _, cx| { if let Err(error) = pause_owner.update(cx, |panel, cx| { panel.paused = !panel.paused; cx.notify(); }) { eprintln!("MDE execution pause failed: {error}"); } }))
-                .child(Button::new("mde-execution-filter", if self.errors_only { "Show all" } else { "Errors only" })
+                .child(IconButton::new("mde-execution-filter", IconName::Filter)
+                    .aria_label(if self.errors_only { "Show all events" } else { "Show errors only" })
+                    .tooltip(ui::Tooltip::text(if self.errors_only { "Show all events" } else { "Show errors only" }))
+                    .toggle_state(self.errors_only)
                     .on_click(move |_, _, cx| { if let Err(error) = filter_owner.update(cx, |panel, cx| { panel.errors_only = !panel.errors_only; cx.notify(); }) { eprintln!("MDE execution filter failed: {error}"); } }))
-                .child(Button::new("mde-execution-clear", "Clear")
+                .child(IconButton::new("mde-execution-clear", IconName::Trash)
+                    .aria_label("Clear logs")
+                    .tooltip(ui::Tooltip::text("Clear logs"))
                     .on_click(move |_, _, cx| { if let Err(error) = clear_owner.update(cx, |panel, cx| { if let Some(journal) = &panel.journal { journal.clear(); panel.snapshot = journal.snapshot(); } cx.notify(); }) { eprintln!("MDE execution clear failed: {error}"); } }))
-                .child(Button::new("mde-execution-close", "Hide")
+                .child(IconButton::new("mde-execution-close", IconName::Close)
+                    .aria_label("Hide logs")
                     .tooltip(ui::Tooltip::text("Hide logs; events continue to be recorded"))
                     .on_click(cx.listener(|_, _, _, cx| cx.emit(PanelEvent::Close)))))
             .child(div().flex_none().px_2().py_1().child(self.search.clone()))
             .child(div().flex_none().px_2().flex().items_center().gap_2()
                 .child(div().flex_1().text_xs().text_color(palette.muted).child(format!("{} retained · {} evicted · {} dropped", self.snapshot.events.len(), self.snapshot.evicted_events, self.snapshot.producer_dropped_events)))
-                .child(Button::new("mde-execution-details", "Trace details")
-                    .start_icon(ui::Icon::new(if self.details_open { IconName::ChevronDown } else { IconName::ChevronRight }))
+                .child(IconButton::new("mde-execution-details", IconName::Info)
+                    .aria_label("Trace details")
+                    .aria_expanded(self.details_open)
+                    .tooltip(ui::Tooltip::text("Trace details"))
+                    .toggle_state(self.details_open)
                     .on_click(cx.listener(|panel, _, _, cx| { panel.details_open = !panel.details_open; cx.notify(); }))))
             .child(div().id("mde-execution-rows").flex_1().min_h_0().overflow_y_scroll().p_2()
                 .children(producer_loss.into_iter().map(|line| div().pb_1().child(line)))

@@ -9,6 +9,7 @@ pub struct TreeViewItem {
     id: ElementId,
     group_name: Option<SharedString>,
     label: SharedString,
+    aria_label: Option<SharedString>,
     expanded: bool,
     selected: bool,
     disabled: bool,
@@ -30,6 +31,7 @@ impl TreeViewItem {
             id: id.into(),
             group_name: None,
             label: label.into(),
+            aria_label: None,
             expanded: false,
             selected: false,
             disabled: false,
@@ -44,6 +46,11 @@ impl TreeViewItem {
             tab_index: None,
             focus_handle: None,
         }
+    }
+
+    pub fn aria_label(mut self, label: impl Into<SharedString>) -> Self {
+        self.aria_label = Some(label.into());
+        self
     }
 
     pub fn group_name(mut self, group_name: impl Into<SharedString>) -> Self {
@@ -151,7 +158,7 @@ impl RenderOnce for TreeViewItem {
                     .bg(cx.theme().colors().border.opacity(0.5)),
             );
 
-        let aria_label = self.label.clone();
+        let aria_label = self.aria_label.unwrap_or_else(|| self.label.clone());
         let root_item = self.root_item;
         let expanded = self.expanded;
         let selected = self.selected;

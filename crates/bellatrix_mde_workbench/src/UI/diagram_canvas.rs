@@ -2,6 +2,10 @@ use super::*;
 
 impl Render for MdeWorkbenchItem {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let snapshot = self.source.snapshot();
+        if let Ok(snapshot) = &snapshot {
+            self.reconcile_selection(&snapshot.section);
+        }
         let palette = WorkbenchPalette::current(cx);
         let background = palette.canvas;
         let border = palette.border;
@@ -21,7 +25,7 @@ impl Render for MdeWorkbenchItem {
         let mut title = format!("MDE · {}", self.project_id().as_str());
         let details: String;
         let mut cards = Vec::new();
-        match self.source.snapshot() {
+        match snapshot {
             Ok(snapshot) => {
                 let references = bellatrix_mde::uml::references::ReferenceIndex::new(
                     bellatrix_mde::uml::root::Model::from_section(&snapshot.section),
@@ -35,8 +39,7 @@ impl Render for MdeWorkbenchItem {
                             .diagrams
                             .iter()
                             .find(|diagram| diagram.id == id)
-                    })
-                    .or_else(|| snapshot.section.diagrams.first());
+                    });
                 details = format!(
                     "{} elements · {} relations · rev {}",
                     snapshot.section.elements.len(),
