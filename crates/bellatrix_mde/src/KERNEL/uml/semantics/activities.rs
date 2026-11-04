@@ -551,6 +551,76 @@ fn required_action_element<'a>(
         .map_err(|error| QueryError::unsupported(action.id(), error))
 }
 
+// UML.xmi ReclassifyObjectAction-classifier_not_abstract:
+// not newClassifier->exists(isAbstract). This is a non-composite reference set.
+fn reclassify_new_classifiers_not_abstract(
+    references: &ReferenceIndex<'_>,
+    action: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let Some(value) = action.properties().get("newClassifier") else {
+        // Normative 0..*: omission is the empty set, not an unresolved owner role.
+        return Ok(true);
+    };
+    let values = value.as_array().ok_or_else(|| {
+        QueryError::unsupported(action.id(), "newClassifier must be a collection")
+    })?;
+    let descriptor = schema::uml_property("ReclassifyObjectAction", "newClassifier")
+        .map_err(|error| QueryError::unsupported(action.id(), error.to_string()))?
+        .ok_or_else(|| {
+            QueryError::unsupported(action.id(), "newClassifier contract is unavailable")
+        })?;
+    let mut checks = Vec::new();
+    // Whole-collection contracts (including uniqueness) remain distinct from
+    // the predicate. A validated abstract member still proves exists=true.
+    match property_contracts::check_value(references, action, descriptor, value) {
+        PropertyOutcome::Satisfied => {}
+        PropertyOutcome::Violation(message) | PropertyOutcome::Unverified(message) => {
+            checks.push(Err(QueryError::unsupported(action.id(), message)));
+        }
+    }
+    let member_descriptor = schema::PropertyDescriptor {
+        lower: "1",
+        upper: "1",
+        ..*descriptor
+    };
+    for member in values {
+        checks.push((|| {
+            match property_contracts::check_value(references, action, &member_descriptor, member) {
+                PropertyOutcome::Satisfied => {}
+                PropertyOutcome::Violation(message) | PropertyOutcome::Unverified(message) => {
+                    return Err(QueryError::unsupported(action.id(), message));
+                }
+            }
+            let classifier = references
+                .validate(&member_descriptor, member)
+                .map_err(|error| QueryError::unsupported(action.id(), error))?
+                .ok_or_else(|| {
+                    QueryError::unsupported(action.id(), "newClassifier member is unresolved")
+                })?;
+            schema::read_effective_boolean(classifier, "isAbstract")
+                .map(|is_abstract| !is_abstract)
+                .map_err(|error| QueryError::unsupported(classifier.id(), error))
+        })());
+    }
+    require_all(checks)
+}
+
+// UML.xmi StructuralFeatureAction-not_static: not structuralFeature.isStatic.
+fn action_structural_feature_not_static(
+    references: &ReferenceIndex<'_>,
+    action: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let feature = required_action_element(
+        references,
+        action,
+        "StructuralFeatureAction",
+        "structuralFeature",
+    )?;
+    schema::read_effective_boolean(feature, "isStatic")
+        .map(|is_static| !is_static)
+        .map_err(|error| QueryError::unsupported(feature.id(), error))
+}
+
 // Both OCL rules compare the result type to the normative PrimitiveTypes::Boolean
 // identity. User-model names are not an alias for that external library identity.
 fn action_result_is_boolean(
@@ -1587,6 +1657,24 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                     "the result OutputPin type must be the normative Boolean type",
                 ));
             }
+        }
+        if node.conforms_to("ReclassifyObjectAction") {
+            checks.push((
+                reclassify_new_classifiers_not_abstract(references, node),
+                "UML_RECLASSIFY_OBJECT_ACTION_CLASSIFIER_NOT_ABSTRACT",
+                "MDE_RECLASSIFY_OBJECT_ACTION_CLASSIFIER_NOT_ABSTRACT_UNVERIFIED",
+                "ReclassifyObjectAction-classifier_not_abstract",
+                "no newClassifier of a ReclassifyObjectAction may be abstract",
+            ));
+        }
+        if node.conforms_to("StructuralFeatureAction") {
+            checks.push((
+                action_structural_feature_not_static(references, node),
+                "UML_STRUCTURAL_FEATURE_ACTION_NOT_STATIC",
+                "MDE_STRUCTURAL_FEATURE_ACTION_NOT_STATIC_UNVERIFIED",
+                "StructuralFeatureAction-not_static",
+                "the structuralFeature referenced by a StructuralFeatureAction must not be static",
+            ));
         }
         if node.conforms_to("UnmarshallAction") {
             checks.push((
