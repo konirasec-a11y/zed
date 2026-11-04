@@ -119,3 +119,15 @@ Feature: ControlFlow object-node endpoint semantics across the authored Activity
     And a known false proves the conjunction false in either operand order
     Then every state is saved and reopened as JSON and BLX with identical diagnostics
     And restoring the original document restores the baseline result
+
+  Scenario: Preserve ObjectFlow selection source semantics through repair
+    Given an imported ObjectFlow and a selection Behavior
+    When selection is authored with an ObjectNode subclass source
+    Then the selection source constraint is satisfied
+    When the source is an Action then the selection source constraint is violated
+    And absent or null selection does not constrain the source
+    And an external selection reference proves presence without resolving its definition
+    And an unresolved source remains unverified unless selection is absent
+    And malformed selection retains its separate property-contract error
+    Then canonical relation and object record edits survive JSON and BLX reopening
+    And restoring the original document restores the baseline result

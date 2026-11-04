@@ -112,3 +112,13 @@ into the document. Malformed flags retain property-value errors; the rule stays
 unverified unless a known false independently disproves the conjunction. The
 lifecycle covers both canonical relations and object records, all Boolean
 combinations, either unknown operand, JSON/BLX reopen and baseline repair.
+
+ObjectFlow-selection_behavior checks that a present selection Behavior has an
+ObjectNode source, including Pin subclasses. Absent/null optional selection
+makes the implication vacuous. A well-formed external selection reference proves presence without requiring
+the external Behavior definition; its type remains separately unverified.
+Malformed references stay unknown, while an independently proved ObjectNode
+source satisfies the consequent.
+Property-contract errors remain separate. Parameter-count/type and side-effect
+rules of the selected Behavior are outside this slice. Both edge representations
+are exercised through JSON/BLX save, reopen and repair.

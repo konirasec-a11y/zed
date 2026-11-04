@@ -1045,3 +1045,171 @@ fn object_flow_distribution_flags_preserve_defaults_unknowns_and_repairs() -> Fl
     }
     Ok(())
 }
+
+#[test]
+fn object_flow_selection_requires_object_source_through_persistence_and_repair() -> FlowResult<()> {
+    assert!(
+        include_str!("features/activity_edge_lifecycle.feature")
+            .contains("Scenario: Preserve ObjectFlow selection source semantics through repair")
+    );
+    for object_record in [false, true] {
+        let mut original = imported_activity()?;
+        original["model"]["elements"].as_array_mut().ok_or("missing elements")?
+            .push(json!({"id":"select-order","kind":"uml.opaque_behavior","name":"selectOrder","properties":{}}));
+        original["model"]["relations"]
+            .as_array_mut()
+            .ok_or("missing relations")?
+            .push(
+                json!({"id":"owns-select-order","kind":"owns","from":"root","to":"select-order"}),
+            );
+        if object_record {
+            let edge = relation(&mut original, "order-data")?.clone();
+            original["model"]["relations"]
+                .as_array_mut()
+                .ok_or("missing relations")?
+                .retain(|relation| relation["id"] != "order-data");
+            let mut properties = edge["properties"].clone();
+            properties["source"] = json!({"$ref":"order-output"});
+            properties["target"] = json!({"$ref":"order-input"});
+            original["model"]["elements"].as_array_mut().ok_or("missing elements")?
+                .push(json!({"id":"order-data","kind":"uml.object_flow","name":"order-data","properties":properties}));
+        }
+        let baseline = validate(&original)?;
+        assert_eq!(baseline["has_errors"], false, "{baseline}");
+        reopen(
+            &format!("selection-baseline-{object_record}"),
+            &original,
+            &baseline,
+        )?;
+        for (name, source, selection, severity, contract) in [
+            (
+                "pin",
+                "order-output",
+                json!({"$ref":"select-order"}),
+                None,
+                false,
+            ),
+            (
+                "action",
+                "receive",
+                json!({"$ref":"select-order"}),
+                Some("error"),
+                false,
+            ),
+            ("null", "receive", Value::Null, None, false),
+            (
+                "href",
+                "receive",
+                json!({"href":"external.uml#selection"}),
+                Some("error"),
+                false,
+            ),
+            (
+                "href-pin",
+                "order-output",
+                json!({"href":"external.uml#selection"}),
+                None,
+                false,
+            ),
+            (
+                "wrong-type",
+                "receive",
+                json!({"$ref":"receive"}),
+                Some("warning"),
+                true,
+            ),
+            ("malformed", "receive", json!(42), Some("warning"), true),
+            ("malformed-pin", "order-output", json!(42), None, true),
+        ] {
+            println!("When authoring ObjectFlow selection {name}, object-record={object_record}");
+            let mut edited = original.clone();
+            let edge = if object_record {
+                element(&mut edited, "order-data")?
+            } else {
+                relation(&mut edited, "order-data")?
+            };
+            if object_record {
+                edge["properties"]["source"] = json!({"$ref":source});
+            } else {
+                edge["from"] = json!(source);
+                edge["properties"]["source"] = json!({"$ref":source});
+            }
+            edge["properties"]["selection"] = selection;
+            let response = validate(&edited)?;
+            selection_rule(&response, severity)?;
+            if contract {
+                assert!(
+                    response["diagnostics"]
+                        .as_array()
+                        .ok_or("missing diagnostics")?
+                        .iter()
+                        .any(|d| d["subject_id"] == "order-data"
+                            && d["code"] == "UML_PROPERTY_CONTRACT"
+                            && d["severity"] == "error"),
+                    "{response}"
+                );
+            }
+            assert_eq!(
+                response["has_errors"],
+                contract || severity == Some("error"),
+                "{response}"
+            );
+            reopen(
+                &format!("selection-{name}-{object_record}"),
+                &edited,
+                &response,
+            )?;
+        }
+        let mut ambiguous = original.clone();
+        let edge = if object_record {
+            element(&mut ambiguous, "order-data")?
+        } else {
+            relation(&mut ambiguous, "order-data")?
+        };
+        edge["properties"]["selection"] = json!({"$ref":"select-order"});
+        edge["properties"]["source"] = if object_record {
+            json!({"href":"external.uml#source"})
+        } else {
+            json!({"$ref":"receive"})
+        };
+        let response = validate(&ambiguous)?;
+        selection_rule(&response, Some("warning"))?;
+        reopen(
+            &format!("selection-ambiguous-source-{object_record}"),
+            &ambiguous,
+            &response,
+        )?;
+        assert_eq!(validate(&original)?, baseline);
+        reopen(
+            &format!("selection-repaired-{object_record}"),
+            &original,
+            &baseline,
+        )?;
+    }
+    Ok(())
+}
+
+fn selection_rule(response: &Value, severity: Option<&str>) -> FlowResult<()> {
+    let matching: Vec<_> = response["diagnostics"]
+        .as_array()
+        .ok_or("missing diagnostics")?
+        .iter()
+        .filter(|d| {
+            d["subject_id"] == "order-data"
+                && matches!(
+                    d["code"].as_str(),
+                    Some(
+                        "UML_OBJECT_FLOW_SELECTION_BEHAVIOR"
+                            | "MDE_OBJECT_FLOW_SELECTION_BEHAVIOR_UNVERIFIED"
+                    )
+                )
+        })
+        .collect();
+    if let Some(severity) = severity {
+        assert_eq!(matching.len(), 1, "{response}");
+        assert_eq!(matching[0]["severity"], severity, "{response}");
+    } else {
+        assert!(matching.is_empty(), "{response}");
+    }
+    Ok(())
+}

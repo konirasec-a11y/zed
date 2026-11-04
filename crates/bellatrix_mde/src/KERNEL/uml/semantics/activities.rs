@@ -2,7 +2,7 @@ use super::{
     classifiers::QueryError,
     feature_compatibility::{accept_any, require_all},
     property_contracts::{self, PropertyOutcome},
-    references::{ReferenceIndex, reference_id},
+    references::{ReferenceIndex, external_reference_href, reference_id},
     root::ElementRef,
     schema,
 };
@@ -186,21 +186,26 @@ fn uniform_activity_edges(
     uniform_activity_edges_excluding(references, node, Ok(None))
 }
 
-fn decision_input_flow(
+fn optional_activity_reference(
     references: &ReferenceIndex<'_>,
     node: ElementRef<'_>,
+    metaclass: &str,
+    property: &str,
 ) -> Result<Option<String>, QueryError> {
     let Some(value) = node
         .properties()
-        .get("decisionInputFlow")
+        .get(property)
         .filter(|value| !value.is_null())
     else {
         return Ok(None);
     };
-    let descriptor = schema::uml_property("DecisionNode", "decisionInputFlow")
+    let descriptor = schema::uml_property(metaclass, property)
         .map_err(|error| QueryError::unsupported(node.id(), error.to_string()))?
         .ok_or_else(|| {
-            QueryError::unsupported(node.id(), "decisionInputFlow contract is unavailable")
+            QueryError::unsupported(
+                node.id(),
+                format!("{metaclass}::{property} contract is unavailable"),
+            )
         })?;
     match property_contracts::check_value(references, node, descriptor, value) {
         PropertyOutcome::Satisfied => {}
@@ -211,7 +216,10 @@ fn decision_input_flow(
     let identifier = reference_id(value)
         .map_err(|message| QueryError::unsupported(node.id(), message))?
         .ok_or_else(|| {
-            QueryError::unsupported(node.id(), "decisionInputFlow identity is unresolved")
+            QueryError::unsupported(
+                node.id(),
+                format!("{metaclass}::{property} identity is unresolved"),
+            )
         })?;
     references
         .element(identifier)
@@ -331,6 +339,29 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
     for node in references.model().elements() {
         let mut checks = Vec::new();
         if node.conforms_to("ObjectFlow") {
+            checks.push((
+                accept_any([
+                    // A well-formed external reference proves presence without
+                    // needing the external Behavior definition. Its unresolved
+                    // type still has a separate property-contract diagnostic.
+                    if node
+                        .properties()
+                        .get("selection")
+                        .is_some_and(|value| matches!(external_reference_href(value), Ok(Some(_))))
+                    {
+                        Ok(false)
+                    } else {
+                        optional_activity_reference(references, node, "ObjectFlow", "selection")
+                            .map(|selection| selection.is_none())
+                    },
+                    activity_endpoint(references, node, "source")
+                        .map(|source| source.conforms_to("ObjectNode")),
+                ]),
+                "UML_OBJECT_FLOW_SELECTION_BEHAVIOR",
+                "MDE_OBJECT_FLOW_SELECTION_BEHAVIOR_UNVERIFIED",
+                "ObjectFlow-selection_behavior",
+                "an ObjectFlow with a selection Behavior must have an ObjectNode source",
+            ));
             // Defaults come from the normative property descriptors. Malformed
             // scalars have their own property diagnostics, not a fabricated
             // violation of this conjunction. A known false still disproves it.
@@ -433,7 +464,7 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
         }
         if node.conforms_to("DecisionNode") {
             checks.push((
-                uniform_activity_edges_excluding(references, node, decision_input_flow(references, node)),
+                uniform_activity_edges_excluding(references, node, optional_activity_reference(references, node, "DecisionNode", "decisionInputFlow")),
                 "UML_DECISION_NODE_EDGES",
                 "MDE_DECISION_NODE_EDGES_UNVERIFIED",
                 "DecisionNode-edges",
