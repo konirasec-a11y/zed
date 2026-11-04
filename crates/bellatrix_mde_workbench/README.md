@@ -195,3 +195,14 @@ diagram identity and revision and pass through Cordis CAS; stale, read-only or
 suspended operations are rejected. Switching documents clears pending drafts and
 restores focus. Project rename/delete and nested-diagram creation are not offered
 without a supported semantic command.
+
+Element context menus offer contextual diagrams only when domain metaclass
+conformance accepts the exact semantic subject: Activity, StateMachine,
+Interaction diagram variants, and CompositeStructure for a verified
+StructuredClassifier. InstanceSpecification composite contexts remain unavailable
+in this menu until its eligibility check consumes the domain classifier evidence. The captured
+subject ID becomes the single UMLDI model context; no semantic owner, visual
+occurrence parent or cosmetic placement is changed. The same revision guard and
+Cordis CreateDiagram command are used. The existing projection nests the diagram
+under an unambiguous external placement of its context; multiple placements remain
+at the project level rather than inventing ownership or duplicating the diagram.

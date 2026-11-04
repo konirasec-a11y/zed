@@ -92,7 +92,11 @@ fn explorer_menu(
 ) -> Entity<ui::ContextMenu> {
     let read_only = owner.read(cx).source().is_read_only();
     let mut occurrences = Vec::new();
-    if let Ok(snapshot) = owner.read(cx).source().snapshot() {
+    let snapshot = owner.read(cx).source().snapshot().ok();
+    let contextual_kinds = snapshot.as_ref().filter(|_| !read_only).map(|snapshot|
+        crate::workbench_ui::hierarchy::contextual_diagram_kinds(&snapshot.section, subject)
+    ).unwrap_or_default();
+    if let Some(snapshot) = &snapshot {
         for diagram in &snapshot.section.diagrams {
             for (index, view) in diagram.views.iter().enumerate() {
                 if view.subject.as_deref() == Some(subject) {
@@ -113,6 +117,29 @@ fn explorer_menu(
             });
         }
         if read_only { return menu.header("Read-only preview"); }
+        if !contextual_kinds.is_empty() {
+            menu = menu.header("Create diagram for this element");
+            if let Some(snapshot) = &snapshot {
+                for kind in contextual_kinds {
+                    let create_owner = owner.clone();
+                    let context_id = subject.clone();
+                    let project_id = snapshot.project_id.clone();
+                    let revision = snapshot.revision;
+                    let label = crate::workbench_ui::diagram_kind_label(kind).to_owned();
+                    let name = format!("{} diagram {}", label, snapshot.section.diagrams.len().saturating_add(1));
+                    menu = menu.entry(label, None, move |_, cx| {
+                        create_owner.update(cx, |workbench, cx| {
+                            workbench.submit_explorer_diagram_command(
+                                bellatrix_mde_cordis::MdeUiCommand::CreateDiagram(bellatrix_mde_cordis::ModelingCreateDiagramRequested {
+                                    project_id: project_id.clone(), kind, name: name.clone(),
+                                    model_elements: vec![context_id.clone()], expected_revision: revision,
+                                }), &project_id, revision, cx);
+                        });
+                    });
+                }
+            }
+            menu = menu.header("Model element");
+        }
         let show_owner = owner.clone();
         let show_subject = subject.clone();
         menu.entry("Show in active diagram", None, move |window, cx| {

@@ -303,3 +303,28 @@ explicit composite role can still establish membership independently. Relevant
 stored roles are all inspected before accepting that proof or returning unknown,
 so a malformed/duplicate reference remains an error even alongside unresolved
 legacy or external evidence; unknown evidence is not treated as false membership.
+
+## Composite structure instance contexts
+
+Diagram validation now evaluates the InstanceSpecification branch of
+`UMLCompositeStructureDiagram-modelElement_type` from the pinned UMLDI.xmi.
+At least one resolved classifier must conform to StructuredClassifier. A known
+witness establishes this existential condition even alongside unresolved external
+or extension classifiers. Property-contract checks inspect the entire classifier
+collection first: malformed, duplicate, missing local or known wrong-type
+references remain errors even when a valid witness is present.
+
+With no witness, a fully resolved empty/non-structured classifier collection
+produces `UMLDI_CONTEXT_TYPE`; unresolved evidence retains the
+`UMLDI_INSTANCE_CONTEXT_UNSUPPORTED` warning. The classifier property still emits
+its independent model diagnostics. This replaces the previous blanket unsupported
+warning for instance contexts; it adds no I/O, resolver, stored result or public
+Rust type, and is reached through `validate_uml_diagram` as well as legacy callers.
+
+Verification limit: the existing unit case
+`composite_structure_requires_one_resolved_context` still expects the former
+blanket unsupported warning for an instance without classifiers. Its expectation
+is now outdated: an absent classifier property represents an empty collection,
+so the implemented existential check reports `UMLDI_CONTEXT_TYPE`. Unit tests
+were neither changed nor run in this slice; a successful kernel `cargo check`
+is compilation evidence only, not a green test-suite claim.

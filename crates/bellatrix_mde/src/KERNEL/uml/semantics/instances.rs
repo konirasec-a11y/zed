@@ -66,6 +66,25 @@ impl<'a> InstanceSpecificationRef<'a> {
         )?.into_iter().map(|(_, value)| value).next())
     }
 
+    pub(crate) fn has_structured_classifier(self, model: Model<'a>) -> Result<bool, QueryError> {
+        let references = ReferenceIndex::new(model);
+        let empty = Value::Array(Vec::new());
+        let (classifiers, unknown) = instance_reference_evidence(
+            &references, self.0, "InstanceSpecification", "classifier",
+            self.0.properties().get("classifier").unwrap_or(&empty),
+        )?;
+        // UMLDI's context constraint is existential. A known witness suffices,
+        // but malformed neighbors must be rejected before examining witnesses.
+        if classifiers.iter().any(|classifier| classifier.conforms_to("StructuredClassifier")) {
+            Ok(true)
+        } else if unknown {
+            Err(QueryError::unsupported(self.0.id(),
+                "unresolved classifier may establish StructuredClassifier context"))
+        } else {
+            Ok(false)
+        }
+    }
+
     /// The adapter stores classifier identities, never classifier names or DTO copies.
     pub fn classifiers(self, model: Model<'a>) -> Result<Vec<ElementRef<'a>>, String> {
         self.classifiers_with(&ReferenceIndex::new(model))

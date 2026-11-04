@@ -272,11 +272,24 @@ fn collect_structural_diagram_diagnostics(
                     "The diagram context does not identify a model Element",
                 )),
                 Some(context) if context.kind == "uml.instance_specification" => {
-                    // The active domain has no established instance-classifier
-                    // adapter; do not infer conformance from unvalidated properties.
-                    issues.push(StructuralDiagnostic { severity: StructuralSeverity::Warning,
-                        code: "UMLDI_INSTANCE_CONTEXT_UNSUPPORTED", subject_id: context_id.clone(),
-                        message: "InstanceSpecification context classifier conformance cannot yet be verified".into() });
+                    use crate::uml::{classifiers::QueryError, root::{ElementRef, Model}};
+                    let conformance = ElementRef::Object(context).instance_specification()
+                        .ok_or_else(|| QueryError::unsupported(context_id,
+                            "InstanceSpecification context adapter is unavailable"))
+                        .and_then(|instance| instance.has_structured_classifier(Model::from_project(project)));
+                    match conformance {
+                        Ok(true) => {}
+                        Ok(false) => issues.push(problem("UMLDI_CONTEXT_TYPE", context_id,
+                            "Composite structure InstanceSpecification context requires at least one StructuredClassifier classifier")),
+                        Err(QueryError::Invalid { message, .. }) =>
+                            issues.push(problem("UMLDI_CONTEXT_TYPE", context_id, message)),
+                        Err(QueryError::Unsupported { message, .. }) => issues.push(StructuralDiagnostic {
+                            severity: StructuralSeverity::Warning,
+                            code: "UMLDI_INSTANCE_CONTEXT_UNSUPPORTED",
+                            subject_id: context_id.clone(),
+                            message,
+                        }),
+                    }
                 }
                 Some(context)
                     if !UmlType::from_kind(&context.kind)

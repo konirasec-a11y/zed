@@ -33,6 +33,27 @@ impl gpui::Render for ExplorerElementDrag {
     }
 }
 
+pub(crate) fn contextual_diagram_kinds(
+    section: &ModelingSection, subject: &str,
+) -> Vec<bellatrix_mde::StructuralDiagramKind> {
+    let Some(element) = section.elements.iter().find(|element| element.id == subject) else {
+        return Vec::new();
+    };
+    let metaclass = bellatrix_mde::uml::root::object_metaclass(&element.kind);
+    bellatrix_mde::StructuralDiagramKind::ALL_DIAGRAMS.into_iter().filter(|kind| {
+        if let Some(expected) = kind.context_metaclass() {
+            metaclass.is_some_and(|actual| bellatrix_mde::uml::metamodel::conforms_to(actual, expected))
+        } else if *kind == bellatrix_mde::StructuralDiagramKind::CompositeStructure {
+            // Instance classifier evidence is not exposed by this menu projection yet.
+            // Do not infer it from raw properties or offer an unverified context.
+            bellatrix_mde::UmlType::from_kind(&element.kind)
+                .is_some_and(bellatrix_mde::UmlType::is_structured_classifier)
+        } else {
+            false
+        }
+    }).collect()
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ExplorerSortOrder {
     Added,
