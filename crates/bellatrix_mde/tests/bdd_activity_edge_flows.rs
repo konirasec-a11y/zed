@@ -2425,3 +2425,157 @@ fn pin_uniqueness_rule(response: &Value, pin: &str, severity: Option<&str>) -> F
     }
     Ok(())
 }
+
+#[test]
+fn activity_parameter_ownership_membership_survives_projection_conflicts_and_repair()
+-> FlowResult<()> {
+    assert!(
+        include_str!("features/activity_edge_lifecycle.feature")
+            .contains("Scenario: Preserve Activity Parameter membership through repair")
+    );
+    let mut original = imported_activity()?;
+    original["model"]["elements"].as_array_mut().ok_or("missing elements")?.extend([
+        json!({"id":"membership-parameter","kind":"uml.parameter","name":"localParam","properties":{"type":{"$ref":"order"}}}),
+        json!({"id":"membership-node","kind":"uml.activity_parameter_node","name":"localNode","properties":{"parameter":{"$ref":"membership-parameter"},"type":{"$ref":"order"}}}),
+        json!({"id":"other-activity","kind":"uml.activity","name":"OtherActivity","properties":{}}),
+        json!({"id":"other-parameter","kind":"uml.parameter","name":"otherParam","properties":{"type":{"$ref":"order"}}}),
+        json!({"id":"parameter-operation","kind":"uml.operation","name":"otherOperation","properties":{}}),
+        json!({"id":"operation-parameter","kind":"uml.parameter","name":"operationParam","properties":{"type":{"$ref":"order"}}}),
+    ]);
+    original["model"]["relations"].as_array_mut().ok_or("missing relations")?.extend([
+        json!({"id":"owns-membership-parameter","kind":"owns","from":"fulfillment","to":"membership-parameter"}),
+        json!({"id":"owns-membership-node","kind":"owns","from":"fulfillment","to":"membership-node"}),
+        json!({"id":"owns-other-activity","kind":"owns","from":"root","to":"other-activity"}),
+        json!({"id":"owns-other-parameter","kind":"owns","from":"other-activity","to":"other-parameter"}),
+        json!({"id":"owns-parameter-operation","kind":"owns","from":"order","to":"parameter-operation"}),
+        json!({"id":"owns-operation-parameter","kind":"owns","from":"parameter-operation","to":"operation-parameter"}),
+    ]);
+    let baseline = validate(&original)?;
+    parameter_membership_rule(&baseline, None)?;
+    assert_eq!(baseline["has_errors"], false, "{baseline}");
+    reopen("parameter-membership-baseline", &original, &baseline)?;
+    for other in ["other-parameter", "operation-parameter"] {
+        let mut edited = original.clone();
+        element(&mut edited, "membership-node")?["properties"]["parameter"] = json!({"$ref":other});
+        let response = validate(&edited)?;
+        parameter_membership_rule(&response, Some("error"))?;
+        reopen(&format!("parameter-membership-{other}"), &edited, &response)?;
+    }
+    for (name, activity) in [
+        ("matching", json!({"$ref":"fulfillment"})),
+        ("contradictory", json!({"$ref":"other-activity"})),
+        ("external", json!({"href":"external.uml#Activity"})),
+        ("null", Value::Null),
+    ] {
+        let mut edited = original.clone();
+        element(&mut edited, "membership-node")?["properties"]["activity"] = activity;
+        let response = validate(&edited)?;
+        parameter_membership_rule(
+            &response,
+            if name == "matching" {
+                None
+            } else {
+                Some("warning")
+            },
+        )?;
+        reopen(
+            &format!("parameter-membership-activity-{name}"),
+            &edited,
+            &response,
+        )?;
+    }
+    for (name, parameters, severity) in [
+        ("exact", json!([{"$ref":"membership-parameter"}]), None),
+        (
+            "external-neighbor",
+            json!([{"$ref":"membership-parameter"},{"href":"external.uml#Parameter"}]),
+            None,
+        ),
+        ("excluded", json!([]), Some("warning")),
+        (
+            "foreign",
+            json!([{"$ref":"other-parameter"}]),
+            Some("warning"),
+        ),
+        ("malformed", json!(42), Some("warning")),
+    ] {
+        let mut edited = original.clone();
+        element(&mut edited, "fulfillment")?["properties"]["ownedParameter"] = parameters;
+        let response = validate(&edited)?;
+        parameter_membership_rule(&response, severity)?;
+        if name == "malformed" {
+            assert!(
+                response["diagnostics"]
+                    .as_array()
+                    .ok_or("missing diagnostics")?
+                    .iter()
+                    .any(|d| d["subject_id"] == "fulfillment"
+                        && d["code"] == "UML_PROPERTY_CONTRACT"
+                        && d["severity"] == "error"),
+                "{response}"
+            );
+        }
+        reopen(
+            &format!("parameter-membership-projection-{name}"),
+            &edited,
+            &response,
+        )?;
+    }
+    let mut unowned = original.clone();
+    unowned["model"]["relations"]
+        .as_array_mut()
+        .ok_or("missing relations")?
+        .retain(|relation| relation["id"] != "owns-membership-parameter");
+    let incomplete = validate(&unowned)?;
+    parameter_membership_rule(&incomplete, Some("warning"))?;
+    reopen("parameter-membership-unowned", &unowned, &incomplete)?;
+    let mut unknown = original.clone();
+    element(&mut unknown, "membership-node")?["properties"]["parameter"] =
+        json!({"href":"external.uml#Parameter"});
+    let external = validate(&unknown)?;
+    parameter_membership_rule(&external, Some("warning"))?;
+    reopen("parameter-membership-external", &unknown, &external)?;
+    element(&mut unknown, "membership-node")?["properties"]["parameter"] = Value::Null;
+    let missing = validate(&unknown)?;
+    parameter_membership_rule(&missing, Some("warning"))?;
+    reopen("parameter-membership-missing", &unknown, &missing)?;
+    let mut ordered = original.clone();
+    relation(&mut ordered, "owns-other-parameter")?["from"] = json!("fulfillment");
+    element(&mut ordered, "fulfillment")?["properties"]["ownedParameter"] =
+        json!([{"$ref":"other-parameter"},{"$ref":"membership-parameter"}]);
+    let contradictory_order = validate(&ordered)?;
+    parameter_membership_rule(&contradictory_order, Some("warning"))?;
+    reopen(
+        "parameter-membership-contradictory-order",
+        &ordered,
+        &contradictory_order,
+    )?;
+    assert_eq!(validate(&original)?, baseline);
+    reopen("parameter-membership-repaired", &original, &baseline)?;
+    Ok(())
+}
+
+fn parameter_membership_rule(response: &Value, severity: Option<&str>) -> FlowResult<()> {
+    let matching: Vec<_> = response["diagnostics"]
+        .as_array()
+        .ok_or("missing diagnostics")?
+        .iter()
+        .filter(|d| {
+            d["subject_id"] == "membership-node"
+                && matches!(
+                    d["code"].as_str(),
+                    Some(
+                        "UML_ACTIVITY_PARAMETER_NODE_HAS_PARAMETERS"
+                            | "MDE_ACTIVITY_PARAMETER_NODE_HAS_PARAMETERS_UNVERIFIED"
+                    )
+                )
+        })
+        .collect();
+    if let Some(severity) = severity {
+        assert_eq!(matching.len(), 1, "{response}");
+        assert_eq!(matching[0]["severity"], severity, "{response}");
+    } else {
+        assert!(matching.is_empty(), "{response}");
+    }
+    Ok(())
+}

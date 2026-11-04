@@ -205,3 +205,13 @@ Feature: ControlFlow object-node endpoint semantics across the authored Activity
     And null or malformed values preserve scalar errors and leave the rule unverified
     Then every edited state survives JSON and BLX reopening
     And authoring false explicitly restores the original valid baseline
+
+  Scenario: Preserve Activity Parameter membership through repair
+    Given an ActivityParameterNode and a Parameter owned by its direct Activity
+    When its Parameter belongs to another Activity or Operation then has_parameters is violated
+    And authored activity must agree with canonical direct containment
+    And explicit ownedParameter projection must preserve canonical membership and order
+    And a known local membership witness survives an unrelated external neighbor
+    And malformed projections, unresolved references or incomplete ownership stay unverified
+    Then each edited state survives JSON and BLX reopening
+    And restoring the original document restores the baseline result

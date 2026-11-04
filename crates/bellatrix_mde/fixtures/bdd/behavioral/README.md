@@ -179,3 +179,12 @@ not the metamodel default or expected error manifests. The lifecycle removes
 that property to prove absence still violates the rule without data mutation,
 then checks true/false, null/malformed values, JSON/BLX reopening and explicit
 repair. Invalid scalars retain PROPERTY_VALUE and do not fabricate rule errors.
+
+ActivityParameterNode-has_parameters checks direct canonical Activity containment
+and Behavior::ownedParameter membership. It reuses ordered parameter evidence;
+a known local witness survives unrelated external entries, while contradictory
+projections or incomplete ownership remain unverified. A Parameter known to
+belong to another Activity or Operation proves exclusion when the Activity's
+parameter collection is complete. No ancestor containingActivity or visual tree
+is substituted for ActivityNode::activity. The lifecycle includes references,
+projection membership/order conflicts, JSON/BLX reopening and repair.

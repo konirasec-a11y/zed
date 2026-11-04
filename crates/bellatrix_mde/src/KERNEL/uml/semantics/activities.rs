@@ -1,6 +1,7 @@
 use super::{
-    classifiers::QueryError,
+    classifiers::{self, QueryError},
     feature_compatibility::{accept_any, require_all},
+    operations,
     property_contracts::{self, PropertyOutcome},
     references::{ReferenceIndex, external_reference_href, reference_id},
     root::ElementRef,
@@ -278,6 +279,103 @@ fn activity_parameter_one_direction(
         activity_edge_exists(references, node, "source"),
     ])
     .map(|both| !both)
+}
+
+fn activity_parameter_membership(
+    references: &ReferenceIndex<'_>,
+    node: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let activity = references
+        .model()
+        .owner(node)
+        .map_err(|error| QueryError::unsupported(node.id(), error))?
+        .filter(|owner| owner.conforms_to("Activity"))
+        .ok_or_else(|| {
+            QueryError::unsupported(
+                node.id(),
+                "direct canonical Activity containment is unresolved",
+            )
+        })?;
+    if !classifiers::contributes_to_owned_union(activity, node, "Activity-node")
+        .map_err(|error| QueryError::unsupported(node.id(), error.to_string()))?
+    {
+        return Err(QueryError::unsupported(
+            node.id(),
+            "canonical Activity node role is unresolved",
+        ));
+    }
+    if node.properties().contains_key("activity")
+        && optional_activity_reference(references, node, "ActivityNode", "activity")?.as_deref()
+            != Some(activity.id())
+    {
+        return Err(QueryError::unsupported(
+            node.id(),
+            "authored activity contradicts canonical containment",
+        ));
+    }
+    if node
+        .properties()
+        .get("inStructuredNode")
+        .is_some_and(|value| !value.is_null())
+    {
+        return Err(QueryError::unsupported(
+            node.id(),
+            "structured-node containment is not resolved to the direct Activity",
+        ));
+    }
+    let identifier =
+        optional_activity_reference(references, node, "ActivityParameterNode", "parameter")?
+            .ok_or_else(|| {
+                QueryError::unsupported(
+                    node.id(),
+                    "ActivityParameterNode parameter is not represented",
+                )
+            })?;
+    let parameter = references
+        .element(&identifier)
+        .map_err(|error| QueryError::unsupported(node.id(), error))?;
+    let owner = references
+        .model()
+        .owner(parameter)
+        .map_err(|error| QueryError::unsupported(parameter.id(), error))?
+        .filter(|owner| owner.conforms_to("Behavior") || owner.conforms_to("BehavioralFeature"))
+        .ok_or_else(|| {
+            QueryError::unsupported(
+                parameter.id(),
+                "canonical parameter containment is unresolved",
+            )
+        })?;
+    let evidence = |owner_id| {
+        operations::owned_parameter_evidence(references, owner_id)
+            .map_err(|error| QueryError::unsupported(node.id(), error.to_string()))
+    };
+    let (parameters, completeness) = evidence(activity.id())?;
+    // A known membership witness survives unrelated incomplete entries, but
+    // the shared query rejects contradictory local membership/order first.
+    if parameters
+        .iter()
+        .any(|candidate| candidate.id == parameter.id())
+    {
+        return Ok(true);
+    }
+    if owner.id() == activity.id() {
+        return Err(QueryError::unsupported(
+            parameter.id(),
+            "canonical ownedParameter role is unresolved",
+        ));
+    }
+    completeness.map_err(|error| QueryError::unsupported(node.id(), error.to_string()))?;
+    let (other_parameters, _) = evidence(owner.id())?;
+    if !other_parameters
+        .iter()
+        .any(|candidate| candidate.id == parameter.id())
+    {
+        return Err(QueryError::unsupported(
+            parameter.id(),
+            "other owner's parameter membership is unresolved",
+        ));
+    }
+    Ok(false)
 }
 
 fn activity_parameter_same_type(
@@ -577,6 +675,13 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             ));
         }
         if node.conforms_to("ActivityParameterNode") {
+            checks.push((
+                activity_parameter_membership(references, node),
+                "UML_ACTIVITY_PARAMETER_NODE_HAS_PARAMETERS",
+                "MDE_ACTIVITY_PARAMETER_NODE_HAS_PARAMETERS_UNVERIFIED",
+                "ActivityParameterNode-has_parameters",
+                "an ActivityParameterNode must reference a Parameter owned by its Activity",
+            ));
             checks.push((
                 activity_parameter_same_type(references, node),
                 "UML_ACTIVITY_PARAMETER_NODE_SAME_TYPE",
