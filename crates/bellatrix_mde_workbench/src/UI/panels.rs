@@ -6,7 +6,7 @@ mod view_inspector;
 pub(crate) use crate::workbench_ui::hierarchy::element_glyph;
 use crate::workbench_ui::{
     MdeToolDrag, MdeWorkbenchItem, WorkbenchPalette,
-    hierarchy::{project_explorer, ExplorerDrag},
+    hierarchy::project_explorer,
     integration::{OpenMdeSymbols, OpenMdeWorkbench},
     property_editor::render_inspector,
 };
@@ -151,7 +151,7 @@ pub struct MdeRightPanel {
     pub(crate) inspector_styles_open: bool,
     pub(crate) timing_drafts: HashMap<(String, String, String), crate::workbench_ui::timing_editor::TimingDraft>,
     collapsed_elements: HashSet<String>,
-    last_revealed_view: Option<(gpui::EntityId, String)>,
+    last_revealed_row: Option<(gpui::EntityId, String)>,
     explorer_scroll: gpui::ScrollHandle,
     collapsed_by_document: HashMap<gpui::EntityId, HashSet<String>>,
     explorer_open: bool,
@@ -182,7 +182,7 @@ impl MdeRightPanel {
             inspector_styles_open: true,
             timing_drafts: HashMap::new(),
             collapsed_elements: HashSet::new(),
-            last_revealed_view: None,
+            last_revealed_row: None,
             explorer_scroll: gpui::ScrollHandle::new(),
             collapsed_by_document: HashMap::new(),
             explorer_open: true,
@@ -265,11 +265,14 @@ impl Render for MdeRightPanel {
         if let Some(snapshot) = &snapshot {
             let tree = project_explorer(&snapshot.section);
             let root_key = format!("project:{}", snapshot.project_id.as_str());
-            let reveal = selected_view.as_ref().map(|view| (item.entity_id(), view.clone()));
-            if reveal != self.last_revealed_view {
-                self.last_revealed_view = reveal;
-                reveal_selected = selected_view.is_some();
-                if let Some(index) = selected_view.as_ref().and_then(|id| tree.iter().position(|row| row.view.as_ref().is_some_and(|view| &view.view_id == id))) {
+            let selected_row = selected_view.as_ref()
+                .and_then(|id| tree.iter().find(|row| row.view.as_ref().is_some_and(|view| &view.view_id == id)))
+                .or_else(|| selected_id.as_ref().and_then(|id| tree.iter().find(|row| row.view.is_none() && !row.diagram && &row.element_id == id)));
+            let reveal = selected_row.map(|row| (item.entity_id(), row.element_id.clone()));
+            if reveal != self.last_revealed_row {
+                self.last_revealed_row = reveal;
+                reveal_selected = selected_row.is_some();
+                if let Some(index) = selected_row.and_then(|selected| tree.iter().position(|row| row.element_id == selected.element_id)) {
                     self.collapsed_elements.remove(&root_key);
                     let mut depth = tree[index].depth;
                     for ancestor in tree[..index].iter().rev() {
@@ -283,11 +286,7 @@ impl Render for MdeRightPanel {
             }
             let root_expanded = !self.collapsed_elements.contains(&root_key);
             let root_panel = cx.weak_entity();
-            let root_drop_owner = item.clone();
             rows.push(div().id("mde-explorer-project").flex().items_center().gap_1()
-                .when(!read_only, |row| row.on_drop(move |drag: &ExplorerDrag, _, cx| {
-                    crate::workbench_ui::hierarchy::submit_explorer_placement(&root_drop_owner, drag, None, cx);
-                }))
                 .child(svg().data(glyph(ShapeKind::Package)).size(px(14.0)).flex_none().text_color(palette.muted))
                 .child(TreeViewItem::new(root_key.clone(), snapshot.name.clone())
                     .root_item(!tree.is_empty()).expanded(root_expanded)
@@ -347,17 +346,9 @@ impl Render for MdeRightPanel {
                     let expanded = !self.collapsed_elements.contains(&id);
                     let disclosure_id = id.clone();
                     let disclosure_panel = cx.weak_entity();
-                    let drop_target = id.clone();
-                    let drop_owner = item.clone();
-                    let drag = ExplorerDrag { project_id: snapshot.project_id.clone(), element_id: id.clone(), label: row.label.clone(), revision: snapshot.revision };
                     rows.push(
                         div()
                             .id(format!("mde-explorer-diagram-{id}"))
-                            .when(!read_only, |row| row
-                                .on_drag(drag, |drag: &ExplorerDrag, _, _, cx| cx.new(|_| drag.clone()))
-                                .on_drop(move |drag: &ExplorerDrag, _, cx| {
-                                    crate::workbench_ui::hierarchy::submit_explorer_placement(&drop_owner, drag, Some(&drop_target), cx);
-                                }))
                             .pl(px((row.depth.min(15) + 2) as f32 * 14.0))
                             .flex().items_center().gap_1()
                             .when(is_active, |row| row.bg(palette.surface))
@@ -388,16 +379,24 @@ impl Render for MdeRightPanel {
                 let disclosure_panel = cx.weak_entity();
                 let menu_owner = item.clone();
                 let menu_subject = id.clone();
-                let label = if snapshot.section.explorer_parents.contains_key(&row.element_id) {
-                    format!("{} · organized", row.label)
-                } else { row.label.clone() };
-                let drag = ExplorerDrag { project_id: snapshot.project_id.clone(), element_id: id.clone(), label: label.clone(), revision: snapshot.revision };
-                let drop_owner = item.clone();
-                let drop_target = id.clone();
-                let tree_item = TreeViewItem::new(id.clone(), label)
+                let mut menu_occurrences = Vec::new();
+                for diagram in &snapshot.section.diagrams {
+                    for (index, view) in diagram.views.iter().enumerate() {
+                        if view.subject.as_deref() == Some(id.as_str()) {
+                            menu_occurrences.push((
+                                diagram.id.clone(),
+                                view.id.clone(),
+                                format!("Select in {} · view {}", diagram.name, index + 1),
+                            ));
+                        }
+                    }
+                }
+                let selected = selected_row.is_some_and(|selected| selected.element_id == row.element_id);
+                if selected && reveal_selected { self.explorer_scroll.scroll_to_item(rows.len() + 1); }
+                let tree_item = TreeViewItem::new(id.clone(), row.label.clone())
                     .root_item(has_children)
                     .expanded(expanded)
-                    .toggle_state(selected_view.is_none() && selected_id.as_deref() == Some(id.as_str()))
+                    .toggle_state(selected)
                     .on_toggle(move |_, _, cx| {
                         if let Err(error) = disclosure_panel.update(cx, |panel, cx| {
                             if !panel.collapsed_elements.insert(disclosure_id.clone()) {
@@ -414,26 +413,18 @@ impl Render for MdeRightPanel {
                 rows.push(
                     div()
                         .id(format!("mde-explorer-row-{}", row.element_id))
-                        .when(!read_only, |row| row
-                            .on_drag(drag, |drag: &ExplorerDrag, _, _, cx| cx.new(|_| drag.clone()))
-                            .on_drop(move |drag: &ExplorerDrag, _, cx| {
-                                crate::workbench_ui::hierarchy::submit_explorer_placement(&drop_owner, drag, Some(&drop_target), cx);
-                            }))
                         .pl(px((row.depth.min(15) + 2) as f32 * 14.0))
                         .flex()
                         .items_center()
                         .gap_1()
-                        .when(
-                            selected_view.is_none() && selected_id.as_deref() == Some(row.element_id.as_str()),
-                            |row| row.bg(palette.surface),
-                        )
+                        .when(selected, |row| row.bg(palette.surface))
                         .child(
                             svg()
                                 .data(glyph(element_glyph(&row.kind)))
                                 .size(px(14.0))
                                 .flex_none()
                                 .text_color(
-                                    if selected_view.is_none() && selected_id.as_deref() == Some(row.element_id.as_str()) {
+                                    if selected {
                                         palette.selection
                                     } else {
                                         palette.muted
@@ -453,7 +444,20 @@ impl Render for MdeRightPanel {
                                     let delete_owner = menu_owner.clone();
                                     let delete_subject = menu_subject.clone();
                                     let read_only = menu_owner.read(cx).source().is_read_only();
-                                    ui::ContextMenu::build(window, cx, move |menu, _, _| {
+                                    let occurrences = menu_occurrences.clone();
+                                    let occurrence_owner = menu_owner.clone();
+                                    ui::ContextMenu::build(window, cx, move |mut menu, _, _| {
+                                        if !occurrences.is_empty() {
+                                            menu = menu.header("Diagram occurrences");
+                                        }
+                                        for (diagram_id, view_id, label) in occurrences {
+                                            let owner = occurrence_owner.clone();
+                                            menu = menu.entry(label, None, move |_, cx| {
+                                                owner.update(cx, |workbench, cx| {
+                                                    workbench.select_diagram_view(diagram_id.clone(), view_id.clone(), cx);
+                                                });
+                                            });
+                                        }
                                         if read_only {
                                             return menu.header("Read-only preview");
                                         }

@@ -327,7 +327,9 @@ impl Render for MdeWorkbenchItem {
                                 && self.inline_editor.is_some()
                         });
                         let (quick_actions, left_actions, visibility_picker) =
-                            if let Some(selected) = editing {
+                            if let Some(selected) = selected_target.filter(|_| {
+                                !self.source.is_read_only() && self.selected_tool.is_none()
+                            }) {
                                 quick_edit_for_element(
                                     selected,
                                     cx.entity(),
@@ -575,14 +577,34 @@ impl Render for MdeWorkbenchItem {
                                     MouseButton::Left,
                                     move |event: &MouseDownEvent, window, cx| {
                                         let _ = drag_owner.update(cx, |item, cx| {
-                                            item.start_move(
-                                                drag_id.clone(),
-                                                element_id.clone(),
-                                                revision,
-                                                event.position,
-                                                cx,
-                                            );
-                                            cx.focus_self(window);
+                                            if is_selected && item.selected_tool.is_none() {
+                                                if let Some(field) = &item.inline_editor {
+                                                    field
+                                                        .read(cx)
+                                                        .focus_handle(cx)
+                                                        .focus(window, cx);
+                                                    item.gesture = None;
+                                                    return;
+                                                }
+                                            }
+                                            if event.click_count >= 2
+                                                && item.selected_tool.is_none()
+                                            {
+                                                item.begin_inline_edit(
+                                                    element_id.clone(),
+                                                    window,
+                                                    cx,
+                                                );
+                                            } else {
+                                                item.start_move(
+                                                    drag_id.clone(),
+                                                    element_id.clone(),
+                                                    revision,
+                                                    event.position,
+                                                    cx,
+                                                );
+                                                cx.focus_self(window);
+                                            }
                                         });
                                         cx.stop_propagation();
                                     },
@@ -774,15 +796,29 @@ impl Render for MdeWorkbenchItem {
                 }),
             )
             .on_key_down(move |event: &KeyDownEvent, window, cx| {
-                if event.keystroke.key.eq_ignore_ascii_case("f2") {
-                    let _ = f2_owner.update(cx, |item, cx| {
+                let plain_enter = event.keystroke.key.eq_ignore_ascii_case("enter")
+                    && !event.keystroke.modifiers.modified();
+                if event.keystroke.key.eq_ignore_ascii_case("f2") || plain_enter {
+                    if let Err(error) = f2_owner.update(cx, |item, cx| {
+                        if !item.focus_handle.is_focused(window) || item.selected_tool.is_some() {
+                            return;
+                        }
+                        if let Some(field) = &item.inline_editor {
+                            field.read(cx).focus_handle(cx).focus(window, cx);
+                            cx.stop_propagation();
+                            return;
+                        }
                         if let Some(id) = item.selected_element.clone() {
                             item.begin_inline_edit(id, window, cx);
                         } else if let Some(id) = item.selected_view.clone() {
                             item.begin_draft_label_edit(id, window, cx);
+                        } else {
+                            return;
                         }
-                    });
-                    cx.stop_propagation();
+                        cx.stop_propagation();
+                    }) {
+                        eprintln!("MDE quick edit failed: {error}");
+                    }
                 } else if event.keystroke.key.eq_ignore_ascii_case("enter")
                     && event.keystroke.modifiers.control
                 {

@@ -15,6 +15,18 @@ pub struct ExplorerRow {
 /// resolved context, and leave context-free or ambiguous diagrams at the root.
 pub fn project_explorer(section: &ModelingSection) -> Vec<ExplorerRow> {
     let semantic = bellatrix_mde::project_hierarchy(section);
+    // Ownership comes from the semantic projection, never legacy presentation placements.
+    let mut parents = std::collections::HashMap::new();
+    let mut ancestors = Vec::new();
+    for row in &semantic {
+        ancestors.truncate(row.depth);
+        parents.insert(row.element_id.clone(), ancestors.last().cloned());
+        ancestors.push(row.element_id.clone());
+    }
+    let semantic_ids = parents
+        .keys()
+        .cloned()
+        .collect::<std::collections::HashSet<_>>();
     let mut nodes = semantic
         .into_iter()
         .map(|row| ExplorerRow {
@@ -33,6 +45,18 @@ pub fn project_explorer(section: &ModelingSection) -> Vec<ExplorerRow> {
             .cmp(&b.name.to_lowercase())
             .then_with(|| a.id.cmp(&b.id))
     });
+    for diagram in &diagrams {
+        let parent = if diagram.model_elements.len() == 1 {
+            diagram
+                .model_elements
+                .first()
+                .filter(|id| semantic_ids.contains(*id))
+                .cloned()
+        } else {
+            None
+        };
+        parents.insert(diagram.id.clone(), parent);
+    }
     nodes.extend(diagrams.into_iter().map(|diagram| ExplorerRow {
         element_id: diagram.id.clone(),
         label: diagram.name.clone(),
@@ -49,12 +73,7 @@ pub fn project_explorer(section: &ModelingSection) -> Vec<ExplorerRow> {
             } else {
                 String::new()
             };
-            let organized = if section.explorer_parents.contains_key(&diagram.id) {
-                " · organized"
-            } else {
-                ""
-            };
-            format!("{}{context}{organized}", diagram.uml_di_type)
+            format!("{}{context}", diagram.uml_di_type)
         },
         depth: 0,
         diagram: true,
@@ -63,6 +82,10 @@ pub fn project_explorer(section: &ModelingSection) -> Vec<ExplorerRow> {
     nodes.extend(
         bellatrix_mde::visual_components(section)
             .into_iter()
+            // Bound views are occurrences of an existing semantic row, not extra model nodes.
+            .filter(|view| {
+                !view.subject_id.as_ref().is_some_and(|id| semantic_ids.contains(id))
+            })
             .map(|view| ExplorerRow {
                 element_id: view.view_id.clone(),
                 label: view.label.clone(),
@@ -72,14 +95,13 @@ pub fn project_explorer(section: &ModelingSection) -> Vec<ExplorerRow> {
                 view: Some(view),
             }),
     );
-    let parents = bellatrix_mde::explorer_parent_map(section);
     let ids = nodes
         .iter()
         .map(|row| row.element_id.clone())
         .collect::<std::collections::HashSet<_>>();
     let mut children: std::collections::HashMap<Option<String>, Vec<usize>> =
         std::collections::HashMap::new();
-    for (index, row) in nodes.iter_mut().enumerate() {
+    for (index, row) in nodes.iter().enumerate() {
         let parent = if let Some(view) = &row.view {
             let valid_parent = section
                 .diagrams
@@ -89,26 +111,26 @@ pub fn project_explorer(section: &ModelingSection) -> Vec<ExplorerRow> {
                     let mut seen = std::collections::HashSet::new();
                     seen.insert(view.view_id.as_str());
                     let mut cursor = view.parent_view_id.as_deref();
+                    let mut visible_parent = None;
                     while let Some(id) = cursor {
                         if !seen.insert(id) {
                             return None;
                         }
                         let parent = diagram.views.iter().find(|candidate| candidate.id == id)?;
+                        if visible_parent.is_none() && ids.contains(id) {
+                            visible_parent = Some(id.to_owned());
+                        }
                         cursor = parent
                             .draft
                             .as_ref()
                             .and_then(|draft| draft.parent_view_id.as_deref());
                     }
-                    view.parent_view_id.clone()
+                    visible_parent
                 });
             Some(valid_parent.unwrap_or_else(|| view.diagram_id.clone()))
         } else {
             parents.get(&row.element_id).cloned().flatten()
         };
-        // Retain unresolved stored references, but never hide their subjects.
-        if parent.as_ref().is_some_and(|id| !ids.contains(id)) {
-            row.label.push_str(" · missing organization parent");
-        }
         let visible_parent = parent.filter(|id| ids.contains(id));
         children.entry(visible_parent).or_default().push(index);
     }
@@ -144,31 +166,6 @@ pub fn project_explorer(section: &ModelingSection) -> Vec<ExplorerRow> {
         visit(index, 0, &nodes, &children, &mut seen, &mut rows);
     }
     rows
-}
-
-/// A drag carries identity and revision, not a detached copy of the model.
-#[derive(Clone)]
-pub struct ExplorerDrag {
-    pub project_id: bellatrix_project::ProjectId,
-    pub element_id: String,
-    pub label: String,
-    pub revision: u64,
-}
-impl gpui::Render for ExplorerDrag {
-    fn render(
-        &mut self,
-        _: &mut gpui::Window,
-        cx: &mut gpui::Context<Self>,
-    ) -> impl gpui::IntoElement {
-        use gpui::prelude::*;
-        let palette = crate::workbench_ui::WorkbenchPalette::current(cx);
-        gpui::div()
-            .px_2()
-            .py_1()
-            .bg(palette.surface)
-            .text_color(palette.text)
-            .child(self.label.clone())
-    }
 }
 
 pub(crate) fn explorer_type_label(kind: &str, relationship: bool) -> String {
@@ -214,31 +211,4 @@ pub(crate) fn element_glyph(kind: &str) -> bellatrix_ui_symbols::ShapeKind {
         .find(|symbol| symbol.label.eq_ignore_ascii_case(label))
         .map(|symbol| symbol.kind)
         .unwrap_or(ShapeKind::Topic)
-}
-
-pub fn submit_explorer_placement(
-    owner: &gpui::Entity<crate::workbench_ui::MdeWorkbenchItem>,
-    drag: &ExplorerDrag,
-    parent: Option<&str>,
-    cx: &mut gpui::App,
-) {
-    owner.update(cx, |workbench, cx| {
-        if workbench.source().is_read_only()
-            || &drag.project_id != workbench.project_id()
-            || parent == Some(drag.element_id.as_str())
-        {
-            return;
-        }
-        workbench.submit(
-            bellatrix_mde_cordis::MdeUiCommand::SetExplorerParent(
-                bellatrix_mde_cordis::ModelingSetExplorerParentRequested {
-                    project_id: drag.project_id.clone(),
-                    subject_id: drag.element_id.clone(),
-                    parent_id: parent.map(str::to_owned),
-                    expected_revision: drag.revision,
-                },
-            ),
-            cx,
-        );
-    });
 }

@@ -21,6 +21,7 @@ pub struct MdeExecutionDashboard {
     snapshot: ExecutionJournalSnapshot,
     paused: bool,
     errors_only: bool,
+    details_open: bool,
     _search_listener: Subscription,
     _receive_task: Task<()>,
 }
@@ -71,6 +72,7 @@ impl MdeExecutionDashboard {
             snapshot,
             paused: false,
             errors_only: false,
+            details_open: false,
             _search_listener: search_listener,
             _receive_task: receive_task,
         }
@@ -127,7 +129,7 @@ impl Panel for MdeExecutionDashboard {
     }
     fn set_position(&mut self, _: DockPosition, _: &mut Window, _: &mut Context<Self>) {}
     fn default_size(&self, _: &Window, _: &App) -> Pixels {
-        px(300.0)
+        px(190.0)
     }
     fn icon(&self, _: &Window, _: &App) -> Option<IconName> {
         Some(IconName::ListTree)
@@ -235,21 +237,33 @@ impl Render for MdeExecutionDashboard {
             .collect::<Vec<_>>();
         div().id("mde-execution-dashboard").track_focus(&self.focus).size_full().flex().flex_col()
             .bg(palette.panel).text_color(palette.text)
-            .child(div().h(px(36.0)).flex().items_center().gap_2()
-                .child(Label::new("LIVE LOGS · ENGINE"))
-                .child(Label::new(self.project_label.clone().unwrap_or_else(|| "No active MDE document".to_owned())))
+            .child(div().h(px(36.0)).flex_none().px_2().flex().items_center().gap_2().border_b_1().border_color(palette.border)
+                .child(Label::new("Execution logs"))
+                .child(div().flex_1().min_w_0().overflow_hidden().text_xs().text_color(palette.muted).child(self.project_label.clone().unwrap_or_else(|| "No active MDE document".to_owned())))
                 .child(Button::new("mde-execution-pause", if self.paused { "Resume" } else { "Pause" })
                     .on_click(move |_, _, cx| { if let Err(error) = pause_owner.update(cx, |panel, cx| { panel.paused = !panel.paused; cx.notify(); }) { eprintln!("MDE execution pause failed: {error}"); } }))
                 .child(Button::new("mde-execution-filter", if self.errors_only { "Show all" } else { "Errors only" })
                     .on_click(move |_, _, cx| { if let Err(error) = filter_owner.update(cx, |panel, cx| { panel.errors_only = !panel.errors_only; cx.notify(); }) { eprintln!("MDE execution filter failed: {error}"); } }))
                 .child(Button::new("mde-execution-clear", "Clear")
-                    .on_click(move |_, _, cx| { if let Err(error) = clear_owner.update(cx, |panel, cx| { if let Some(journal) = &panel.journal { journal.clear(); panel.snapshot = journal.snapshot(); } cx.notify(); }) { eprintln!("MDE execution clear failed: {error}"); } })))
-            .child(div().px_2().child(self.search.clone()))
-            .child(div().px_2().child(format!("Received order; sequence and elapsed-time plots (latest 300 matches, relative scale per run) · {} retained · {} evicted · {} producer events dropped", self.snapshot.events.len(), self.snapshot.evicted_events, self.snapshot.producer_dropped_events)))
-            .child(div().px_2().child("The in-memory MDE journal retains events while this panel is closed and resets when the app exits. Mutation and diagram validation boundaries are observed outside the kernel. Rust generation and HTML export have task boundaries only. Kernel calculations have no internal tracing."))
-            .children(producer_loss.into_iter().map(|line| div().px_2().child(line)))
+                    .on_click(move |_, _, cx| { if let Err(error) = clear_owner.update(cx, |panel, cx| { if let Some(journal) = &panel.journal { journal.clear(); panel.snapshot = journal.snapshot(); } cx.notify(); }) { eprintln!("MDE execution clear failed: {error}"); } }))
+                .child(Button::new("mde-execution-close", "Hide")
+                    .tooltip(ui::Tooltip::text("Hide logs; events continue to be recorded"))
+                    .on_click(cx.listener(|_, _, _, cx| cx.emit(PanelEvent::Close)))))
+            .child(div().flex_none().px_2().py_1().child(self.search.clone()))
+            .child(div().flex_none().px_2().flex().items_center().gap_2()
+                .child(div().flex_1().text_xs().text_color(palette.muted).child(format!("{} retained · {} evicted · {} dropped", self.snapshot.events.len(), self.snapshot.evicted_events, self.snapshot.producer_dropped_events)))
+                .child(Button::new("mde-execution-details", "Trace details")
+                    .start_icon(ui::Icon::new(if self.details_open { IconName::ChevronDown } else { IconName::ChevronRight }))
+                    .on_click(cx.listener(|panel, _, _, cx| { panel.details_open = !panel.details_open; cx.notify(); }))))
             .child(div().id("mde-execution-rows").flex_1().min_h_0().overflow_y_scroll().p_2()
-                .when(rows.is_empty(), |view| view.child("No matching execution events. Select an MDE document and run an instrumented operation."))
+                .children(producer_loss.into_iter().map(|line| div().pb_1().child(line)))
+                .when(self.details_open, |view| view.child(div().pb_2().text_xs().text_color(palette.muted).whitespace_normal()
+                    .child("Received order; sequence and elapsed-time plots show the latest 300 matches, with relative scale per run. The in-memory journal retains events while this panel is closed and resets when the app exits. Mutation and diagram validation boundaries are observed outside the kernel. Rust generation and HTML export have task boundaries only. Kernel calculations have no internal tracing.")))
+                .when(rows.is_empty(), |view| view.child(div().text_xs().text_color(palette.muted).child(if self.snapshot.events.is_empty() {
+                    "No execution events yet. Run an instrumented MDE operation to see its trace."
+                } else {
+                    "No matching events. Adjust the search or turn off Errors only."
+                })))
                 .children(rows))
     }
 }

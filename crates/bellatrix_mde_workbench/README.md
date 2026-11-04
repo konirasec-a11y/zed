@@ -133,11 +133,15 @@ Documentation uses the native multiline editor; semantic properties still use
 the existing Inspector command boundary. These controls require the native
 acceptance scenarios above, independently of headless command tests.
 
-The Model Explorer shows the project tree and diagram contexts. Dragging an item
-or diagram onto another row changes its saved explorer organization; dragging it
-onto the project row places it at the root. An “organized” marker identifies a
-manual placement. This is presentation metadata: it does not change UML ownership,
-diagram `model_elements`, or which views a diagram contains. Without an override,
-the tree follows semantic ownership and the diagram's explicit context. Missing or
-ambiguous contexts and missing organization parents remain visible rather than being
-silently assigned a different owner.
+The Model Explorer shows each semantic element once, under its UML owner, and
+places diagrams under their single resolved context. Diagram occurrences of those
+elements are selected on the canvas or from the semantic row's context menu,
+which lists each diagram occurrence, rather than repeated as extra model nodes.
+Occurrence selection keeps its diagram and view identity for the presentation
+Inspector and is also available in read-only previews.
+Visual components without a resolved semantic subject remain visible under their
+diagram. Selecting a bound canvas view reveals its semantic row in the Explorer.
+Explorer rows cannot be rearranged by dragging: legacy presentation-only placements
+are ignored so they cannot contradict semantic ownership. Missing or ambiguous
+diagram contexts remain visible at the root. No semantic ownership, diagram context,
+or saved view is changed by this projection.

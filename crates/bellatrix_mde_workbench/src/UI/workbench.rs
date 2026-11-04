@@ -517,7 +517,11 @@ impl MdeWorkbenchItem {
             return;
         };
         if self.editing_subject.as_deref() == Some(id.as_str()) {
-            return;
+            if let Some(field) = &self.inline_editor {
+                field.read(cx).focus_handle(cx).focus(window, cx);
+                self.gesture = None;
+                return;
+            }
         }
         let classifier = UmlType::from_kind(&target.kind).is_some_and(UmlType::is_classifier);
         let comment = UmlType::from_kind(&target.kind) == Some(UmlType::Note);

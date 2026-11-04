@@ -129,6 +129,7 @@ pub struct MdeLeftPanel {
     diagrams_open: bool,
     toolbox_open: bool,
     search_open: bool,
+    library_open: bool,
     pub(super) search_input: Entity<InputField>,
     expanded_tool_groups: HashSet<usize>,
     _search_listener: Subscription,
@@ -162,6 +163,7 @@ impl MdeLeftPanel {
             diagrams_open: true,
             toolbox_open: true,
             search_open: false,
+            library_open: false,
             search_input,
             expanded_tool_groups: HashSet::new(),
             _search_listener: search_listener,
@@ -478,20 +480,34 @@ impl Render for MdeLeftPanel {
         }
         tool_buttons.push(
             div()
-                .px_2()
-                .pt_3()
-                .pb_1()
-                .text_xs()
-                .text_color(palette.muted)
-                .child(if searching {
-                    "RESULTS"
-                } else {
-                    "SYMBOL LIBRARY"
-                })
+                .pt_2()
+                .child(
+                    Button::new(
+                        "mde-toggle-symbol-library",
+                        if searching {
+                            "Search results"
+                        } else {
+                            "Symbol library"
+                        },
+                    )
+                    .disabled(searching)
+                    .start_icon(ui::Icon::new(if self.library_open || searching {
+                        IconName::ChevronDown
+                    } else {
+                        IconName::ChevronRight
+                    }))
+                    .on_click(cx.listener(|panel, _, _, cx| {
+                        panel.library_open = !panel.library_open;
+                        cx.notify();
+                    })),
+                )
                 .into_any_element(),
         );
         let mut matching_groups = 0;
         for (group_index, (group_name, tools)) in tool_groups.into_iter().enumerate() {
+            if !self.library_open && !searching {
+                break;
+            }
             let tools: Vec<_> = tools
                 .into_iter()
                 .filter(|tool| tool_matches_query(tool.label(), &query))
@@ -541,7 +557,7 @@ impl Render for MdeLeftPanel {
                 }
             }
         }
-        if matching_groups == 0 {
+        if searching && matching_groups == 0 {
             tool_buttons.push(
                 div()
                     .p_2()
@@ -696,7 +712,7 @@ impl Render for MdeLeftPanel {
                         )
                         .when(!read_only, |header| {
                             let draft_owner = item.clone();
-                            header.action(ui::IconButton::new("mde-visual-draft-mode", IconName::Pencil)
+                            header.action(div().flex().items_center().gap_1().child(ui::IconButton::new("mde-visual-draft-mode", IconName::Pencil)
                                 .toggle_state(visual_draft_mode)
                                 .tooltip(ui::Tooltip::text("Visual draft mode: place freely without semantic validation"))
                                 .on_click(move |_, _, cx| { draft_owner.update(cx, |workbench, cx| {
@@ -705,9 +721,10 @@ impl Render for MdeLeftPanel {
                                     workbench.feedback = if workbench.visual_draft_mode { "Visual drafts: no semantic validation or code generation" } else { "Semantic modeling mode" }.into();
                                     cx.notify();
                                 }); }))
-                            .action(
+                            .child(
                                 ui::IconButton::new("mde-search-tools", IconName::MagnifyingGlass)
                                     .toggle_state(self.search_open)
+                                    .tooltip(ui::Tooltip::text("Search all symbols"))
                                     .on_click(cx.listener(|panel, _, window, cx| {
                                         panel.search_open = !panel.search_open;
                                         panel.toolbox_open = true;
@@ -721,7 +738,7 @@ impl Render for MdeLeftPanel {
                                         }
                                         cx.notify();
                                     })),
-                            )
+                            ))
                         }),
                     )
                     .when(self.toolbox_open && !read_only, |pane| {
@@ -738,36 +755,38 @@ impl Render for MdeLeftPanel {
                                 .pb_2()
                                 .flex()
                                 .flex_col()
-                                .children(tool_buttons)
-                                .when_some(chosen, |toolbox, tool| {
-                                    toolbox.child(
+                                .children(tool_buttons),
+                        )
+                        .when_some(chosen, |pane, tool| {
+                            let owner = item.clone();
+                            pane.child(
+                                div()
+                                    .flex_none()
+                                    .border_t_1()
+                                    .border_color(palette.border)
+                                    .p_2()
+                                    .child(
                                         div()
-                                            .p_2()
                                             .text_xs()
                                             .text_color(palette.muted)
                                             .whitespace_normal()
                                             .child(match tool {
                                                 ModelingTool::Relation(kind) => format!(
-                                                    "{}: {}",
-                                                    kind.label(),
-                                                    kind.endpoint_instruction()
+                                                    "{}: {}", kind.label(), kind.endpoint_instruction()
                                                 ),
                                                 _ => format!("{}: drag to canvas or click empty space", tool.label()),
                                             }),
                                     )
-                                })
-                                .when(chosen.is_some(), |toolbox| {
-                                    let owner = item.clone();
-                                    toolbox.child(
+                                    .child(
                                         Button::new("mde-cancel-toolbox-tool", "Selection tool")
                                             .on_click(move |_, _, cx| {
-                                                owner.update(cx, |workbench, cx| {
-                                                    workbench.cancel_tool(cx)
-                                                });
+                                                owner.update(cx, |workbench, cx| workbench.cancel_tool(cx));
                                             }),
-                                    )
-                                })
-                                .child(
+                                    ),
+                            )
+                        })
+                        .child(
+                            div().flex_none().px_2().py_1().child(
                                     Button::new(
                                         "bellatrix-open-symbol-library",
                                         "Browse symbol library",
