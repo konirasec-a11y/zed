@@ -526,6 +526,26 @@ fn partition_represents_property_and_is_contained(
     accept_any([guard.map(|value| !value), consequence])
 }
 
+// UML.xmi CreateObjectAction-classifier_not_abstract: not classifier.isAbstract.
+fn create_object_classifier_not_abstract(
+    references: &ReferenceIndex<'_>,
+    action: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let classifier_id =
+        optional_activity_reference(references, action, "CreateObjectAction", "classifier")?
+            .ok_or_else(|| {
+                QueryError::unsupported(action.id(), "required classifier is unresolved")
+            })?;
+    let classifier = references
+        .element(&classifier_id)
+        .map_err(|error| QueryError::unsupported(action.id(), error))?;
+    // This is the model Classifier's isAbstract property, not whether its UML
+    // metaclass is abstract. Missing references cannot inherit a Boolean default.
+    schema::read_effective_boolean(classifier, "isAbstract")
+        .map(|is_abstract| !is_abstract)
+        .map_err(|error| QueryError::unsupported(classifier.id(), error))
+}
+
 // UML.xmi OpaqueAction-language_body_size: nonempty language implies equal sizes.
 fn opaque_action_language_body_size(
     references: &ReferenceIndex<'_>,
@@ -1152,6 +1172,15 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "MDE_ACTIVITY_PARTITION_DIMENSION_NOT_CONTAINED_UNVERIFIED",
                 "ActivityPartition-dimension_not_contained",
                 "an ActivityPartition with isDimension=true must not be contained by another ActivityPartition",
+            ));
+        }
+        if node.conforms_to("CreateObjectAction") {
+            checks.push((
+                create_object_classifier_not_abstract(references, node),
+                "UML_CREATE_OBJECT_ACTION_CLASSIFIER_NOT_ABSTRACT",
+                "MDE_CREATE_OBJECT_ACTION_CLASSIFIER_NOT_ABSTRACT_UNVERIFIED",
+                "CreateObjectAction-classifier_not_abstract",
+                "the Classifier instantiated by a CreateObjectAction must not be abstract",
             ));
         }
         if node.conforms_to("OpaqueAction") {
