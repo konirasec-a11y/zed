@@ -16,6 +16,7 @@ pub enum PropertyEditor {
     Number,
     Choice(&'static [&'static str]),
     Reference,
+    Stereotype,
     ReadOnly,
 }
 
@@ -76,6 +77,22 @@ fn reference_choices_for_property(
     id: &str,
     key: &str,
 ) -> Vec<InspectorReferenceChoice> {
+    if key == "stereotype" {
+        // These are identity suggestions, not UML applicability decisions.
+        let mut choices = references.model().elements().map(|target| {
+            let name = match target {
+                crate::uml::root::ElementRef::Object(element) => element.name.as_str(),
+                crate::uml::root::ElementRef::Relationship(relation) => relation.properties
+                    .get("name").and_then(Value::as_str).unwrap_or(&relation.id),
+            };
+            InspectorReferenceChoice {
+                id: target.id().into(),
+                label: format!("{name} [{}]", target.id()),
+            }
+        }).collect::<Vec<_>>();
+        choices.sort_by(|left, right| left.label.cmp(&right.label));
+        return choices;
+    }
     let mut choices = references.element(id).ok()
         .and_then(|element| element.metaclass())
         .and_then(|metaclass| crate::uml::schema::uml_property(metaclass, key).ok().flatten())
@@ -100,7 +117,7 @@ fn reference_choices_by_path(
 ) -> BTreeMap<String, Vec<InspectorReferenceChoice>> {
     properties.iter().filter_map(|property| {
         let key = property.path.strip_prefix("properties.")?;
-        (property.editor == PropertyEditor::Reference || key == "type").then(|| {
+        (matches!(property.editor, PropertyEditor::Reference | PropertyEditor::Stereotype) || key == "type").then(|| {
             (property.path.clone(), reference_choices_for_property(references, id, key))
         })
     }).collect()
@@ -155,6 +172,7 @@ fn editor_for_value_type(value_type: PropertyValueType, multiline: bool) -> Prop
         PropertyValueType::Number => PropertyEditor::Number,
         PropertyValueType::Choice(options) => PropertyEditor::Choice(options),
         PropertyValueType::Reference => PropertyEditor::Reference,
+        PropertyValueType::Stereotype => PropertyEditor::Stereotype,
         PropertyValueType::ReadOnly => PropertyEditor::ReadOnly,
     }
 }
@@ -162,18 +180,13 @@ fn editor_for_value_type(value_type: PropertyValueType, multiline: bool) -> Prop
 fn apply_normative_contracts(element: crate::uml::root::ElementRef<'_>, properties: &mut [InspectorProperty]) {
     for field in properties {
         let Some(key) = field.path.strip_prefix("properties.") else { continue; };
-        if key == "stereotype" && !field.value.is_string() {
-            // The scalar editor would replace a reference or null with its JSON text.
-            field.editor = PropertyEditor::ReadOnly;
-            field.editable = false;
-            continue;
-        }
         let fallback = match field.editor {
             PropertyEditor::Text | PropertyEditor::Multiline => PropertyValueType::String,
             PropertyEditor::Boolean => PropertyValueType::Boolean,
             PropertyEditor::Number => PropertyValueType::Number,
             PropertyEditor::Choice(options) => PropertyValueType::Choice(options),
             PropertyEditor::Reference => PropertyValueType::Reference,
+            PropertyEditor::Stereotype => PropertyValueType::Stereotype,
             PropertyEditor::ReadOnly => PropertyValueType::ReadOnly,
         };
         let contract = crate::property_edit::normalize_property_contract(element, key, fallback, field.value.clone());

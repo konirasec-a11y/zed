@@ -9,6 +9,7 @@ pub(crate) enum PropertyValueType {
     Number,
     Choice(&'static [&'static str]),
     Reference,
+    Stereotype,
     ReadOnly,
 }
 
@@ -31,7 +32,7 @@ fn false_value() -> Value { json!(false) }
 fn one_value() -> Value { json!("1") }
 
 const COMMON_CLASSIFIER: &[DeclaredProperty] = &[
-    DeclaredProperty { key:"stereotype", value_type:PropertyValueType::String, default:empty },
+    DeclaredProperty { key:"stereotype", value_type:PropertyValueType::Stereotype, default:empty },
     DeclaredProperty { key:"visibility", value_type:PropertyValueType::Choice(VISIBILITY), default:public },
     DeclaredProperty { key:"isAbstract", value_type:PropertyValueType::Boolean, default:false_value },
     DeclaredProperty { key:"isLeaf", value_type:PropertyValueType::Boolean, default:false_value },
@@ -103,7 +104,7 @@ pub(crate) fn relationship_fields(element: ElementRef<'_>) -> impl Iterator<Item
         DeclaredProperty { key: "sourceRole", value_type: PropertyValueType::String, default: empty },
         DeclaredProperty { key: "targetRole", value_type: PropertyValueType::String, default: empty },
         DeclaredProperty { key: "navigable", value_type: PropertyValueType::Boolean, default: false_value },
-        DeclaredProperty { key: "stereotype", value_type: PropertyValueType::String, default: empty },
+        DeclaredProperty { key: "stereotype", value_type: PropertyValueType::Stereotype, default: empty },
     ];
     fn no_aggregation() -> Value { json!("none") }
     const ENDS: &[DeclaredProperty] = &[
@@ -122,6 +123,14 @@ pub(crate) fn normalize_property_contract(
     use crate::uml::schema::{self, ScalarKind};
     use crate::uml::types::StandardPrimitiveType;
     let mut contract = PropertyContract { value_type, value };
+    if key == "stereotype" {
+        contract.value_type = match crate::StereotypeValue::read(Some(&contract.value)) {
+            crate::StereotypeValue::Null | crate::StereotypeValue::Text(_)
+                | crate::StereotypeValue::Reference(_) => PropertyValueType::Stereotype,
+            _ => PropertyValueType::ReadOnly,
+        };
+        return contract;
+    }
     let Some(metaclass) = element.metaclass() else { return contract; };
     let Ok(Some(descriptor)) = schema::uml_property(metaclass, key) else { return contract; };
     if (key == "ownedParameter" && element.conforms_to("Operation"))

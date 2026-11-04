@@ -34,6 +34,13 @@ fn set_inspected_property_inner(
         PropertyValueType::Boolean if !value.is_boolean() => return Err("expected boolean".into()),
         PropertyValueType::Number if !value.is_number() => return Err("expected number".into()),
         PropertyValueType::Choice(_) if !value.is_string() => return Err("expected string".into()),
+        PropertyValueType::Stereotype => {
+            if !matches!(crate::StereotypeValue::read(Some(&value)),
+                crate::StereotypeValue::Null | crate::StereotypeValue::Text(_)
+                    | crate::StereotypeValue::Reference(_)) {
+                return Err("expected stereotype text, null, or a reference object".into());
+            }
+        },
         PropertyValueType::Reference => {
             crate::uml::references::reference_id(&value)?;
         },

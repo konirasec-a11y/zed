@@ -24,11 +24,19 @@ fn display(value: &Value) -> String {
         .map_or_else(|| value.to_string(), str::to_owned)
 }
 
+fn draft_value_text(path: &str, value: &Value) -> String {
+    if path == "properties.stereotype" {
+        value.to_string()
+    } else {
+        display(value)
+    }
+}
+
 fn property_text(property: &InspectorProperty) -> String {
     if matches!(property.path.as_str(), "name" | "properties.name") && property.value.is_null() {
         String::new()
     } else {
-        display(&property.value)
+        draft_value_text(&property.path, &property.value)
     }
 }
 
@@ -63,7 +71,7 @@ fn reference_options(
 fn property_label(property: &InspectorProperty, choices: &[InspectorReferenceChoice]) -> String {
     if property.path == "properties.type" {
         reference_label(&property.value, choices)
-    } else if property.editor == PropertyEditor::Reference {
+    } else if matches!(property.editor, PropertyEditor::Reference | PropertyEditor::Stereotype) {
         reference_label_with_kind(&property.value, choices, "reference")
     } else {
         property_text(property)
@@ -74,12 +82,12 @@ fn same_value(editor: PropertyEditor, left: &str, right: &str) -> bool {
     if left == right {
         return true;
     }
-    if !matches!(editor, PropertyEditor::Number | PropertyEditor::Reference) {
+    if !matches!(editor, PropertyEditor::Number | PropertyEditor::Reference | PropertyEditor::Stereotype) {
         return false;
     }
     matches!((serde_json::from_str::<Value>(left), serde_json::from_str::<Value>(right)),
         (Ok(left), Ok(right)) if left == right
-            && (editor == PropertyEditor::Reference || (left.is_number() && right.is_number())))
+            && (matches!(editor, PropertyEditor::Reference | PropertyEditor::Stereotype) || (left.is_number() && right.is_number())))
 }
 
 fn display_kind(kind: &str) -> &str {
@@ -182,7 +190,7 @@ pub(crate) fn reconcile_inputs(
         let draft = drafts.entry(key.clone()).or_insert_with(|| {
             let input = matches!(
                 property.editor,
-                PropertyEditor::Text | PropertyEditor::Multiline | PropertyEditor::Number | PropertyEditor::Reference
+                PropertyEditor::Text | PropertyEditor::Multiline | PropertyEditor::Number | PropertyEditor::Reference | PropertyEditor::Stereotype
             )
             .then(|| {
                 cx.new(|cx| {
@@ -319,7 +327,7 @@ fn queue_discrete_property(
         return;
     }
     if let Some(draft) = panel.property_drafts.get_mut(key) {
-        draft.admitted_text = Some(display(&value));
+        draft.admitted_text = Some(draft_value_text(&key.path, &value));
         draft.discrete = Some(value);
         draft.state.edited();
     }
@@ -418,11 +426,13 @@ pub(crate) fn flush_property_edits(
         draft.state.revision = snapshot.revision;
         let value = if let Some(value) = &draft.discrete {
             value.clone()
-        } else if property.editor == PropertyEditor::Reference {
+        } else if matches!(property.editor, PropertyEditor::Reference | PropertyEditor::Stereotype) {
             match serde_json::from_str::<Value>(&text) {
                 Ok(value) => value,
                 Err(_) => {
-                    draft.state.error = Some("Enter a JSON reference object or null".into());
+                    draft.state.error = Some(if property.editor == PropertyEditor::Stereotype {
+                        "Enter a JSON string, reference object, or null"
+                    } else { "Enter a JSON reference object or null" }.into());
                     continue;
                 }
             }
@@ -674,13 +684,16 @@ fn property_row(
                 .full_width(true)
                 .into_any_element()
         }
-        PropertyEditor::Reference if property.editable => {
-            let reference_kind = if property.path == "properties.type" { "type" } else { "reference" };
+        PropertyEditor::Reference | PropertyEditor::Stereotype if property.editable => {
+            let stereotype = property.editor == PropertyEditor::Stereotype;
+            let text_value = property.value.as_str().unwrap_or_default().to_owned();
+            let reference_kind = if stereotype { "stereotype" } else if property.path == "properties.type" { "type" } else { "reference" };
             let target = item.clone();
             let panel = cx.weak_entity();
             let choice_key = key.clone();
             let menu = ContextMenu::build(window, cx, move |menu, _, _| {
-                reference_options(reference_choices).fold(menu, |menu, (label, value)| {
+                stereotype.then(|| ("Text".into(), Value::String(text_value.clone()))).into_iter()
+                    .chain(reference_options(reference_choices)).fold(menu, |menu, (label, value)| {
                     let label = if value.is_null() { format!("No {reference_kind}") } else { label };
                     let target = target.clone();
                     let key = choice_key.clone();
@@ -688,7 +701,7 @@ fn property_row(
                     menu.entry(label, None, move |window, cx| {
                         if let Err(error) = panel.update(cx, |panel, cx| {
                             if let Some(draft) = panel.property_drafts.get_mut(&key) {
-                                let text = display(&value);
+                                let text = draft_value_text(&key.path, &value);
                                 draft.last_observed = text.clone();
                                 if let Some(input) = &draft.input {
                                     input.update(cx, |input, cx| input.set_text(&text, window, cx));
@@ -710,11 +723,16 @@ fn property_row(
                 reference_label_with_kind(value, reference_choices, reference_kind),
                 menu,
             ).full_width(true);
-            div().flex().flex_col().gap_1().w_full()
+            div().id(format!("mde-inspector-reference-control-{path}"))
+                .flex().flex_col().gap_1().w_full()
+                .when(stereotype, |control| control.tooltip(Tooltip::text(
+                    "Choose an identity, Text, or no stereotype. Enter JSON text in quotes, a {$ref} object, or null. References remain unverified."
+                )))
                 .child(suggestions)
                 .children(drafts.get(&key).and_then(|draft| draft.input.clone()))
-                .child(Label::new("Choose a suggestion or enter a JSON reference ($ref) / null")
-                    .size(LabelSize::XSmall).color(Color::Muted))
+                .when(!stereotype, |control| control.child(
+                    Label::new("Choose a suggestion or enter a JSON reference ($ref) / null")
+                        .size(LabelSize::XSmall).color(Color::Muted)))
                 .into_any_element()
         }
         _ => Label::new(property_label(property, reference_choices))
@@ -723,7 +741,7 @@ fn property_row(
     };
     if matches!(
         property.editor,
-        PropertyEditor::Boolean | PropertyEditor::Choice(_) | PropertyEditor::Reference
+        PropertyEditor::Boolean | PropertyEditor::Choice(_) | PropertyEditor::Reference | PropertyEditor::Stereotype
     ) {
         let key = DraftKey {
             project: project.as_str().into(),
