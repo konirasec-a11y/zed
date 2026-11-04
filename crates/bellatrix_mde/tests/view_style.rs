@@ -13,7 +13,7 @@ fn fixture() -> Result<Project, Box<dyn std::error::Error>> {
     }))?;
     Ok(apply(
         &project,
-        &Command::CreateRelation {
+        &Command::CreateRelation { owner_id: None,
             diagram_id: "d".into(),
             kind: ModelingRelationKind::Association,
             from: "a".into(),
@@ -237,10 +237,13 @@ fn presentation_alignment_and_stack_are_view_local_and_ignore_unrelated_semantic
     let style = Style {
         text_align: Some(TextAlignment::Right),
         text_vertical_align: Some(TextVerticalAlignment::Bottom),
-        stereotype_display: Some(StereotypeDisplay::Hidden),
-        suppress_attributes: Some(true),
-        suppress_operations: Some(true),
-        suppress_receptions: Some(true),
+        uml: UmlStyle {
+            stereotype_display: Some(StereotypeDisplay::Hidden),
+            suppress_attributes: Some(true),
+            suppress_operations: Some(true),
+            suppress_receptions: Some(true),
+            ..UmlStyle::default()
+        },
         fill: Some("#112233".into()),
         ..Style::default()
     };

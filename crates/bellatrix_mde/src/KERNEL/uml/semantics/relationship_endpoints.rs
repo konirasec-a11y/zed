@@ -278,9 +278,182 @@ pub fn related_elements<'a>(references: &ReferenceIndex<'a>, id: &str)
     read(references, subject, property, &references_value(&values))
 }
 
+fn containment_owner<'a>(
+    references: &ReferenceIndex<'a>,
+    subject: ElementRef<'a>,
+) -> Result<ElementRef<'a>, ElementGraphError> {
+    references.model().owner(subject)
+        .map_err(|error| unsupported(subject.id(), error))?
+        .ok_or_else(|| unsupported(subject.id(), "canonical containment is incomplete"))
+}
+
+fn containment_role(
+    references: &ReferenceIndex<'_>,
+    subject: ElementRef<'_>,
+    owner: ElementRef<'_>,
+    role: &str,
+    composite: &'static str,
+    alternatives: &[&str],
+) -> Result<(), ElementGraphError> {
+    references.element(subject.id()).map_err(|error| unsupported(subject.id(), error))?;
+    references.element(owner.id()).map_err(|error| unsupported(subject.id(), error))?;
+    for name in alternatives {
+        if let Some(value) = subject.properties().get(*name) {
+            let expected = if *name == role { Some(owner.id()) } else { None };
+            if super::references::reference_id(value).ok() != Some(expected) {
+                return Err(unsupported(subject.id(), format!(
+                    "authored {name} does not resolve to canonical containment",
+                )));
+            }
+        }
+    }
+    match classifiers::contributes_to_owned_union(owner, subject, composite) {
+        Ok(true) => Ok(()),
+        Ok(false) => Err(unsupported(subject.id(), format!("canonical {composite} membership is unresolved"))),
+        Err(error) => Err(unsupported(subject.id(), error.to_string())),
+    }
+}
+
+fn containing_context<'a>(
+    references: &ReferenceIndex<'a>,
+    subject: ElementRef<'a>,
+    activity: bool,
+) -> Result<ElementRef<'a>, ElementGraphError> {
+    let mut current = subject;
+    let mut visited = HashSet::new();
+    loop {
+        if !visited.insert(current.id()) {
+            return Err(unsupported(subject.id(), "containment query encountered a cycle"));
+        }
+        let owner = containment_owner(references, current)?;
+        let (role, composite, alternatives): (&str, &'static str, &[&str]) = if activity {
+            if !current.conforms_to("ActivityNode") {
+                return Err(unsupported(current.id(), "containingActivity requires a resolved ActivityNode"));
+            }
+            if owner.conforms_to("StructuredActivityNode") {
+                ("inStructuredNode", "StructuredActivityNode-node", &["activity", "inStructuredNode"])
+            } else if owner.conforms_to("Activity") {
+                ("activity", "Activity-node", &["activity", "inStructuredNode"])
+            } else {
+                return Err(unsupported(current.id(), "containingActivity has no supported containment path"));
+            }
+        } else if current.conforms_to("Region") {
+            if owner.conforms_to("StateMachine") {
+                ("stateMachine", "StateMachine-region", &["state", "stateMachine"])
+            } else if owner.conforms_to("State") {
+                ("state", "State-region", &["state", "stateMachine"])
+            } else {
+                return Err(unsupported(current.id(), "Region containingStateMachine is unresolved"));
+            }
+        } else if current.conforms_to("Transition") && owner.conforms_to("Region") {
+            ("container", "Region-transition", &["container"])
+        } else if current.conforms_to("Vertex") && owner.conforms_to("Region") {
+            ("container", "Region-subvertex", &["container"])
+        } else if current.conforms_to("ConnectionPointReference") && owner.conforms_to("State") {
+            ("state", "State-connection", &["container", "state"])
+        } else if current.conforms_to("Pseudostate") && owner.conforms_to("StateMachine") {
+            let kind = schema::read_effective_scalar(current, "kind")
+                .map_err(|error| unsupported(current.id(), error))?;
+            if !matches!(kind.as_str(), Some("entryPoint" | "exitPoint")) {
+                return Err(unsupported(current.id(), "Vertex containingStateMachine has no supported connection-point path"));
+            }
+            ("stateMachine", "StateMachine-connectionPoint", &["container", "state", "stateMachine"])
+        } else {
+            return Err(unsupported(current.id(), "containingStateMachine has no supported containment path"));
+        };
+        containment_role(references, current, owner, role, composite, alternatives)?;
+        if owner.conforms_to(if activity { "Activity" } else { "StateMachine" }) {
+            return Ok(owner);
+        }
+        current = owner;
+    }
+}
+
+fn contained_endpoint<'a>(
+    references: &ReferenceIndex<'a>,
+    subject: ElementRef<'a>,
+    role: &str,
+) -> Result<ElementRef<'a>, ElementGraphError> {
+    let metaclass = subject.metaclass().ok_or_else(|| unsupported(subject.id(), "relationship metaclass is unresolved"))?;
+    let property = descriptor(subject.id(), metaclass, role)?;
+    let canonical = match subject {
+        ElementRef::Relationship(relation) => Some(json!({"$ref": if role == "source" { &relation.from } else { &relation.to }})),
+        ElementRef::Object(_) => None,
+    };
+    let authored = subject.properties().get(role);
+    if let (Some(canonical), Some(authored)) = (&canonical, authored)
+        && canonical != authored
+    {
+        return Err(unsupported(subject.id(), format!("{role} differs from its binary projection")));
+    }
+    let value = canonical.as_ref().or(authored)
+        .ok_or_else(|| unsupported(subject.id(), format!("{role} is not materialized")))?;
+    let values = read(references, subject, property, value)?;
+    match values.as_slice() {
+        [endpoint] => Ok(*endpoint),
+        _ => Err(unsupported(subject.id(), format!("{role} does not resolve to one endpoint"))),
+    }
+}
+
+fn endpoint_containment(
+    references: &ReferenceIndex<'_>,
+    subject: ElementRef<'_>,
+    activity: bool,
+) -> Result<(), ElementGraphError> {
+    let context = if activity {
+        let owner = containment_owner(references, subject)?;
+        if owner.conforms_to("StructuredActivityNode") {
+            containment_role(references, subject, owner, "inStructuredNode", "StructuredActivityNode-edge", &["activity", "inStructuredNode"])?;
+            return Ok(());
+        }
+        if !owner.conforms_to("Activity") {
+            return Err(unsupported(subject.id(), "ActivityEdge::activity is unresolved"));
+        }
+        containment_role(references, subject, owner, "activity", "Activity-edge", &["activity", "inStructuredNode"])?;
+        owner
+    } else {
+        containing_context(references, subject, false)?
+    };
+    let mut unresolved = None;
+    for role in ["source", "target"] {
+        let result = contained_endpoint(references, subject, role)
+            .and_then(|endpoint| containing_context(references, endpoint, activity));
+        match result {
+            Ok(actual) if actual.id() != context.id() => return Err(invalid(subject.id(), format!(
+                "{role} belongs to {}, but the relationship belongs to {}", actual.id(), context.id(),
+            ))),
+            Ok(_) => {}
+            Err(error @ ElementGraphError::Invalid { .. }) => return Err(error),
+            Err(error) => unresolved = Some(error),
+        }
+    }
+    unresolved.map_or(Ok(()), Err)
+}
+
 pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
-    for subject in references.model().elements().filter(|element| element.conforms_to("Relationship")) {
+    for subject in references.model().elements().filter(|element| {
+        element.conforms_to("Relationship") || element.conforms_to("ActivityEdge") || element.conforms_to("Transition")
+    }) {
+        let containment_rule = if subject.conforms_to("ActivityEdge") {
+            Some((true, "ActivityEdge-source_and_target", "UML_ACTIVITY_EDGE_SOURCE_AND_TARGET", "MDE_ACTIVITY_EDGE_SOURCE_AND_TARGET_UNVERIFIED"))
+        } else if subject.conforms_to("Transition") {
+            Some((false, "Transition-transition_vertices", "UML_TRANSITION_TRANSITION_VERTICES", "MDE_TRANSITION_TRANSITION_VERTICES_UNVERIFIED"))
+        } else {
+            None
+        };
+        if let Some((activity, rule, code, unknown)) = containment_rule
+            && let Err(error) = endpoint_containment(references, subject, activity)
+        {
+            let (severity, code) = match &error {
+                ElementGraphError::Invalid { .. } => (StructuralSeverity::Error, code),
+                ElementGraphError::Unsupported { .. } => (StructuralSeverity::Warning, unknown),
+            };
+            issues.push(StructuralDiagnostic {
+                severity, code, subject_id: subject.id().into(), message: format!("{rule}: {error}"),
+            });
+        }
+        if !subject.conforms_to("Relationship") { continue; }
         let result = related_elements(references, subject.id()).and_then(|_| {
             if subject.conforms_to("DirectedRelationship") && let ElementRef::Relationship(relation) = subject {
                 for (name, endpoint, values) in [

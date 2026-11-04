@@ -16,6 +16,7 @@ message Project {
   reserved 8, 9;
   reserved "explorer_parents_json", "explorer_diagram_occurrences_json";
   repeated HierarchyPlacement hierarchy = 10;
+  optional bytes mdj_provenance_json = 11;
 }
 message HierarchyPlacement {
   string subject_id = 1;
@@ -70,4 +71,8 @@ message View {
   bytes draft_json = 7;
   optional bytes timing_json = 8;
   optional bytes endpoints_json = 9;
+  // Ordered authored containment; no redundant parent identifier.
+  repeated View children = 10;
+  // ViewPresentation from the presentation contract, including residual fields.
+  optional bytes presentation_json = 11;
 }

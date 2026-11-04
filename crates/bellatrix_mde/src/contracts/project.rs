@@ -15,6 +15,8 @@ pub struct Project {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub root_model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mdj_provenance: Option<super::MdjProvenance>,
     #[serde(
         default,
         skip_serializing_if = "std::collections::BTreeMap::is_empty",
@@ -41,63 +43,28 @@ impl Project {
             .iter()
             .map(|diagram| (diagram.id.as_str(), diagram))
             .collect();
-        let subjects: HashSet<_> = self
-            .elements
-            .iter()
-            .map(|element| element.id.as_str())
-            .chain(self.relations.iter().map(|relation| relation.id.as_str()))
-            .collect();
         let mut containers = BTreeMap::new();
         for (subject_id, placement) in &self.hierarchy {
-            if !diagrams.contains_key(subject_id.as_str()) {
-                return Err(format!(
-                    "Hierarchy subject {subject_id} must be a diagram; semantic ownership belongs to its domain"
-                ));
+            if subject_id.trim().is_empty() {
+                return Err("Hierarchy subject identity must not be empty".into());
             }
             if let Some(parent) = &placement.parent_id {
-                if !subjects.contains(parent.as_str()) && !diagrams.contains_key(parent.as_str()) {
-                    return Err(format!("Hierarchy parent {parent} does not exist"));
-                }
-                if diagrams.contains_key(parent.as_str()) {
+                if diagrams.contains_key(parent.as_str()) || self.hierarchy.contains_key(parent) {
                     containers.insert(subject_id.as_str(), parent.as_str());
                 }
             }
             if let Some(occurrence) = &placement.occurrence {
-                let parent = placement
-                    .parent_id
-                    .as_deref()
-                    .ok_or("View occurrence requires a parent")?;
-                let diagram = diagrams
-                    .get(occurrence.diagram_id.as_str())
-                    .ok_or("View occurrence diagram does not exist")?;
-                let view = diagram
-                    .views
-                    .iter()
-                    .find(|view| view.id == occurrence.view_id)
-                    .ok_or("View occurrence does not exist in the specified diagram")?;
-                let anchor = view
-                    .subject
-                    .as_deref()
-                    .ok_or("View occurrence has no semantic subject")?;
-                if !subjects.contains(anchor) {
-                    return Err("View occurrence subject does not exist".into());
-                }
-                let mut members = HashSet::from([anchor]);
+                // Pending semantic references are persisted for later kernel diagnostics.
+                // Only the occurrence graph itself must remain safe to traverse here.
+                let anchor = diagrams.get(occurrence.diagram_id.as_str())
+                    .and_then(|diagram| diagram.all_views().find(|view| view.id == occurrence.view_id))
+                    .and_then(|view| view.subject.as_deref());
+                let mut members = HashSet::new();
+                if let Some(anchor) = anchor { members.insert(anchor); }
                 for member in &occurrence.member_path {
-                    if !subjects.contains(member.as_str()) || !members.insert(member.as_str()) {
-                        return Err(
-                            "View occurrence member path has missing or repeated subjects".into(),
-                        );
+                    if !members.insert(member.as_str()) {
+                        return Err("View occurrence member path contains a cycle".into());
                     }
-                }
-                if occurrence
-                    .member_path
-                    .last()
-                    .map(String::as_str)
-                    .unwrap_or(anchor)
-                    != parent
-                {
-                    return Err("View occurrence does not identify its hierarchy parent".into());
                 }
                 containers.insert(subject_id.as_str(), occurrence.diagram_id.as_str());
             }

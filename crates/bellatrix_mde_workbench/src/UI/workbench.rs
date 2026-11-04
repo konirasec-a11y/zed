@@ -8,6 +8,8 @@ use workbench_state::switch_diagram_selection;
 
 #[path = "diagram_canvas.rs"]
 mod diagram_canvas;
+#[path = "../view-model/imported_preview.rs"]
+mod imported_preview;
 #[path = "execution_dashboard.rs"]
 mod execution_dashboard;
 #[path = "../view-model/explorer.rs"]

@@ -1,7 +1,8 @@
-use crate::{Diagram, Geometry, PathSegment, Point};
+use crate::{Diagram, Geometry, PathSegment, Point, View};
 
 pub fn resolve_visual_center(geometry: &Geometry) -> Option<Point> {
     match geometry {
+        Geometry::Layout { .. } => None,
         Geometry::Rect {
             x,
             y,
@@ -53,11 +54,11 @@ pub fn resolve_visual_center(geometry: &Geometry) -> Option<Point> {
 /// Refresh stored endpoint positions without changing intermediate route segments.
 pub fn reroute_visual_drafts(diagram: &mut Diagram) {
     let mut endpoints: std::collections::HashMap<String, crate::relationships::Endpoint> = diagram
-        .views
-        .iter()
+        .all_views()
         .filter_map(|view| {
             let center = resolve_visual_center(&view.geometry)?;
             let (width, height) = match &view.geometry {
+                Geometry::Layout { .. } => return None,
                 Geometry::Rect { width, height, .. } => (*width, *height),
                 Geometry::Ellipse { rx, ry, .. } => (rx * 2.0, ry * 2.0),
                 Geometry::Polygon { points } => {
@@ -92,8 +93,8 @@ pub fn reroute_visual_drafts(diagram: &mut Diagram) {
         })
         .collect();
     let order = resolve_routing_order(diagram);
-    for index in order {
-        let view = &mut diagram.views[index];
+    for identifier in order {
+        let Some(view) = find_view_mut(&mut diagram.views, &identifier) else { continue };
         let Some(draft) = &mut view.draft else { continue };
         let Some(attachments) = &view.endpoints else { continue };
         let source = match &attachments.source_view_id {
@@ -216,27 +217,36 @@ pub fn reroute_visual_drafts(diagram: &mut Diagram) {
     }
 }
 
-fn resolve_routing_order(diagram: &Diagram) -> Vec<usize> {
+fn find_view_mut<'a>(views: &'a mut [View], identifier: &str) -> Option<&'a mut View> {
+    let mut pending: Vec<_> = views.iter_mut().rev().collect();
+    while let Some(view) = pending.pop() {
+        if view.id == identifier {
+            return Some(view);
+        }
+        pending.extend(view.children.iter_mut().rev());
+    }
+    None
+}
+
+fn resolve_routing_order(diagram: &Diagram) -> Vec<String> {
     let lookup: std::collections::HashMap<_, _> = diagram
-        .views
-        .iter()
-        .enumerate()
-        .map(|(index, view)| (view.id.as_str(), index))
+        .all_views()
+        .map(|view| (view.id.as_str(), view))
         .collect();
     let mut order = Vec::new();
     let mut visited = std::collections::HashSet::new();
-    for index in 0..diagram.views.len() {
-        let mut stack = vec![(index, false)];
-        while let Some((index, complete)) = stack.pop() {
+    for view in diagram.all_views() {
+        let mut stack = vec![(view, false)];
+        while let Some((view, complete)) = stack.pop() {
             if complete {
-                order.push(index);
+                order.push(view.id.clone());
                 continue;
             }
-            if !visited.insert(index) {
+            if !visited.insert(view.id.as_str()) {
                 continue;
             }
-            stack.push((index, true));
-            if let Some(endpoints) = &diagram.views[index].endpoints {
+            stack.push((view, true));
+            if let Some(endpoints) = &view.endpoints {
                 for id in [&endpoints.source_view_id, &endpoints.target_view_id]
                     .into_iter()
                     .flatten()
@@ -268,14 +278,13 @@ fn resolve_authored_anchor(
 /// Moving a visual message changes its drawn event heights, not semantic occurrences.
 pub(crate) fn translate_message_anchors(diagram: &mut Diagram, view_id: &str, dy: f64) {
     let heights: std::collections::HashMap<_, _> = diagram
-        .views
-        .iter()
+        .all_views()
         .filter_map(|view| match view.geometry {
             Geometry::Rect { height, .. } if height > 0.0 => Some((view.id.clone(), height)),
             _ => None,
         })
         .collect();
-    let Some(view) = diagram.views.iter_mut().find(|view| view.id == view_id) else { return };
+    let Some(view) = find_view_mut(&mut diagram.views, view_id) else { return };
     let Some(draft) = view.draft.as_mut().filter(|draft| draft.notation_kind == "uml.message") else { return };
     let Some(endpoints) = &view.endpoints else { return };
     for (key, endpoint) in [

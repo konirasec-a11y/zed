@@ -15,8 +15,9 @@ artifacts and emission; it is not limited to passive validation.
 - `contracts/`: the single persisted document contract consumed by the kernel,
   application, persistence, projections and adapters. `semantic.rs` owns generic
   elements and relations; `presentation.rs` owns diagrams, Views, geometry,
-  style and diagram hierarchy placements. `project.rs` and `section.rs` compose
-  these records, without defining a second semantic or presentation model.
+  base style and diagram hierarchy placements. `uml_presentation.rs` defines
+  UML-specific style preferences under `Style.uml`. `project.rs` and `section.rs`
+  compose these records, without a second semantic or presentation model.
 - `persistence/`: JSON/Protobuf encoding, decoding and wire representation.
 - `application/commands/`: transactional command execution, authoring workflows,
   revision-sensitive identifiers and command validation. `application/commands.rs`
@@ -81,11 +82,13 @@ This change separates contract definitions, not the aggregate JSON fields or
 all existing kernel/presentation behavior. It does not claim complete UMLDI
 interchange or a separately enforced Cargo dependency boundary. Consumers still
 depend on `bellatrix_mde`; this is not yet a standalone, UML-independent contract
-crate. `Style` still contains UML notation preferences (stereotype labels,
-compartment suppression and member visibility/type/property display) alongside
-generic colors, fonts and line styling. Those are presentation settings, not
-semantic UML ownership, but extracting a notation-specific extension remains a
-separate change across the style editor, renderers and serialized format.
+crate. `Style` holds generic colors, fonts and line styling; its explicit `uml`
+namespace references `UmlStyle` for stereotype labels, compartment suppression
+and member visibility/type/property display. These notation settings are not
+semantic UML ownership. The extension is strongly typed and still part of the
+same crate; it is not a dynamically extensible notation registry. Other UMLDI
+fields on `Diagram` and the timing presentation contract remain to be separated
+if fully notation-independent document contracts are required.
 
 Views use one current JSON shape: endpoint identities belong to `endpoints`,
 not `draft`. Unknown View, endpoint and draft fields are rejected with a decoding
@@ -143,3 +146,9 @@ in `KERNEL/I_O/` document their actual effects and partial-failure limitations.
 [`kernel-api/`](src/kernel-api/README.md) with a versioned JSON contract and no
 external effects. It exposes no new internal types or public modules. Legacy
 exports remain during migration; complete API isolation is not yet achieved.
+
+UML style settings are serialized only under `style.uml`. Both `Style` and
+`UmlStyle` reject unknown fields. Documents that put those settings directly
+under `style` are rejected, rather than migrated or loaded with missing data.
+An absent UML extension means default notation preferences; an empty extension
+is omitted when saving. JSON and Protobuf use the same style decoding contract.

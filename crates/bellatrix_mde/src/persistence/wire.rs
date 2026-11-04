@@ -27,6 +27,8 @@ struct WireProject {
     legacy_explorer_diagram_occurrences_json: Option<Vec<u8>>,
     #[prost(message, repeated, tag = "10")]
     hierarchy: Vec<WireHierarchyPlacement>,
+    #[prost(bytes, optional, tag = "11")]
+    mdj_provenance_json: Option<Vec<u8>>,
 }
 #[derive(Clone, PartialEq, Message)]
 struct WireHierarchyPlacement {
@@ -140,6 +142,79 @@ struct WireView {
     timing_json: Option<Vec<u8>>,
     #[prost(bytes, optional, tag = "9")]
     endpoints_json: Option<Vec<u8>>,
+    #[prost(message, repeated, tag = "10")]
+    children: Vec<WireView>,
+    #[prost(bytes, optional, tag = "11")]
+    presentation_json: Option<Vec<u8>>,
+}
+
+fn encode_view(view: &crate::View) -> Result<WireView, ModelIoError> {
+    Ok(WireView {
+        id: view.id.clone(),
+        subject: view.subject.clone(),
+        label: view.label.clone(),
+        geometry_json: serde_json::to_vec(&view.geometry)?,
+        style_json: serde_json::to_vec(&view.style)?,
+        z_index: view.z_index,
+        draft_json: serde_json::to_vec(&view.draft)?,
+        timing_json: view.timing.as_ref().map(serde_json::to_vec).transpose()?,
+        endpoints_json: view
+            .endpoints
+            .as_ref()
+            .map(serde_json::to_vec)
+            .transpose()?,
+        children: view
+            .children
+            .iter()
+            .map(encode_view)
+            .collect::<Result<_, _>>()?,
+        presentation_json: if view.presentation.is_empty() {
+            None
+        } else {
+            Some(serde_json::to_vec(&view.presentation)?)
+        },
+    })
+}
+
+fn decode_view(view: WireView) -> Result<crate::View, ModelIoError> {
+    Ok(crate::View {
+        id: view.id,
+        subject: view.subject,
+        label: view.label,
+        geometry: if view.geometry_json.is_empty() {
+            Default::default()
+        } else {
+            serde_json::from_slice(&view.geometry_json)?
+        },
+        style: serde_json::from_slice(&view.style_json)?,
+        z_index: view.z_index,
+        draft: if view.draft_json.is_empty() {
+            None
+        } else {
+            serde_json::from_slice(&view.draft_json)?
+        },
+        timing: view
+            .timing_json
+            .as_deref()
+            .map(serde_json::from_slice)
+            .transpose()?,
+        endpoints: view
+            .endpoints_json
+            .as_deref()
+            .map(serde_json::from_slice)
+            .transpose()?,
+        children: view
+            .children
+            .into_iter()
+            .map(decode_view)
+            .collect::<Result<_, _>>()?,
+        presentation: view
+            .presentation_json
+            .as_deref()
+            .map(serde_json::from_slice)
+            .transpose()?
+            .unwrap_or_default(),
+    })
 }
 
 pub(super) fn encode(project: &Project) -> Result<Vec<u8>, ModelIoError> {
@@ -210,19 +285,7 @@ pub(super) fn encode(project: &Project) -> Result<Vec<u8>, ModelIoError> {
                 views: d
                     .views
                     .iter()
-                    .map(|v| {
-                        Ok::<_, ModelIoError>(WireView {
-                            id: v.id.clone(),
-                            subject: v.subject.clone(),
-                            label: v.label.clone(),
-                            geometry_json: serde_json::to_vec(&v.geometry)?,
-                            style_json: serde_json::to_vec(&v.style)?,
-                            z_index: v.z_index,
-                            draft_json: serde_json::to_vec(&v.draft)?,
-                            timing_json: v.timing.as_ref().map(serde_json::to_vec).transpose()?,
-                            endpoints_json: v.endpoints.as_ref().map(serde_json::to_vec).transpose()?,
-                        })
-                    })
+                    .map(encode_view)
                     .collect::<Result<Vec<_>, _>>()?,
             })
         })
@@ -230,17 +293,29 @@ pub(super) fn encode(project: &Project) -> Result<Vec<u8>, ModelIoError> {
     Ok(WireProject {
         version: project.schema_version,
         root_model: project.root_model.clone(),
+        mdj_provenance_json: project
+            .mdj_provenance
+            .as_ref()
+            .map(serde_json::to_vec)
+            .transpose()?,
         legacy_explorer_parents_json: None,
         legacy_explorer_diagram_occurrences_json: None,
-        hierarchy: project.hierarchy.iter().map(|(subject_id, placement)| WireHierarchyPlacement {
-            subject_id: subject_id.clone(),
-            parent_id: placement.parent_id.clone(),
-            occurrence: placement.occurrence.as_ref().map(|occurrence| WireViewOccurrence {
-                diagram_id: occurrence.diagram_id.clone(),
-                view_id: occurrence.view_id.clone(),
-                member_path: occurrence.member_path.clone(),
-            }),
-        }).collect(),
+        hierarchy: project
+            .hierarchy
+            .iter()
+            .map(|(subject_id, placement)| WireHierarchyPlacement {
+                subject_id: subject_id.clone(),
+                parent_id: placement.parent_id.clone(),
+                occurrence: placement
+                    .occurrence
+                    .as_ref()
+                    .map(|occurrence| WireViewOccurrence {
+                        diagram_id: occurrence.diagram_id.clone(),
+                        view_id: occurrence.view_id.clone(),
+                        member_path: occurrence.member_path.clone(),
+                    }),
+            })
+            .collect(),
         id: project.id.clone(),
         name: project.name.clone(),
         elements,
@@ -252,8 +327,12 @@ pub(super) fn encode(project: &Project) -> Result<Vec<u8>, ModelIoError> {
 
 pub(super) fn decode(bytes: &[u8]) -> Result<Project, ModelIoError> {
     let data = WireProject::decode(bytes)?;
-    if data.legacy_explorer_parents_json.is_some() || data.legacy_explorer_diagram_occurrences_json.is_some() {
-        return Err(ModelIoError::Hierarchy("Legacy Explorer placement fields require explicit conversion before import".into()));
+    if data.legacy_explorer_parents_json.is_some()
+        || data.legacy_explorer_diagram_occurrences_json.is_some()
+    {
+        return Err(ModelIoError::Hierarchy(
+            "Legacy Explorer placement fields require explicit conversion before import".into(),
+        ));
     }
     let mut hierarchy = std::collections::BTreeMap::new();
     for entry in data.hierarchy {
@@ -266,7 +345,9 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Project, ModelIoError> {
             }),
         };
         if hierarchy.insert(entry.subject_id, placement).is_some() {
-            return Err(ModelIoError::Hierarchy("Duplicate hierarchy subject".into()));
+            return Err(ModelIoError::Hierarchy(
+                "Duplicate hierarchy subject".into(),
+            ));
         }
     }
 
@@ -342,22 +423,7 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Project, ModelIoError> {
                 views: d
                     .views
                     .into_iter()
-                    .map(|v| {
-                        let json_value = |bytes: &[u8]| -> Result<serde_json::Value, serde_json::Error> {
-                            if bytes.is_empty() { Ok(serde_json::Value::Null) } else { serde_json::from_slice(bytes) }
-                        };
-                        Ok::<_, ModelIoError>(serde_json::from_value(serde_json::json!({
-                            "id": v.id,
-                            "subject": v.subject,
-                            "label": v.label,
-                            "geometry": json_value(&v.geometry_json)?,
-                            "style": json_value(&v.style_json)?,
-                            "z_index": v.z_index,
-                            "draft": json_value(&v.draft_json)?,
-                            "timing": v.timing_json.as_deref().map(json_value).transpose()?,
-                            "endpoints": v.endpoints_json.as_deref().map(json_value).transpose()?,
-                        }))?)
-                    })
+                    .map(decode_view)
                     .collect::<Result<Vec<_>, _>>()?,
             })
         })
@@ -365,6 +431,11 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Project, ModelIoError> {
     Ok(Project {
         schema_version: data.version,
         root_model: data.root_model,
+        mdj_provenance: data
+            .mdj_provenance_json
+            .as_deref()
+            .map(serde_json::from_slice)
+            .transpose()?,
         hierarchy,
         id: data.id,
         name: data.name,

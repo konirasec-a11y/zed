@@ -18,7 +18,7 @@ pub fn with_model(document: ProjectDocument, model: &Project) -> Result<ProjectD
         return Err("MDE and platform project identities differ".into());
     }
     Graph::new(model)
-        .validate()
+        .validate_presentation()
         .map_err(|error| error.to_string())?;
     let state = serde_json::to_value(ModelingSection::from_model(model))
         .map_err(|error| error.to_string())?;

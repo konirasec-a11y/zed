@@ -136,7 +136,17 @@ pub(crate) fn normalize_property_contract(
         return contract;
     }
     if schema::uses_legacy_text_adapter(descriptor, &contract.value) { return contract; }
-    let Ok(kind) = schema::scalar_kind(descriptor) else { return contract; };
+    let kind = match schema::scalar_kind(descriptor) {
+        Ok(kind) => kind,
+        Err(schema::UnsupportedContract::Reference)
+            if (contract.value.is_null() || contract.value.is_object())
+                && matches!(descriptor.upper, "0" | "1") => {
+                // Clearing or replacing a reference must not lock subsequent edits.
+                contract.value_type = PropertyValueType::Reference;
+                return contract;
+            },
+        Err(_) => return contract,
+    };
     contract.value_type = match kind {
         ScalarKind::Enumeration(literals) => PropertyValueType::Choice(literals),
         ScalarKind::Primitive(StandardPrimitiveType::Boolean) => PropertyValueType::Boolean,

@@ -114,7 +114,7 @@ async fn styles_and_routes_use_revision_boundary_and_rollback()
         context
             .query::<ModelingCreateRelation>(
                 Routing::Unscoped,
-                ModelingCreateRelationRequested {
+                ModelingCreateRelationRequested { owner_id: None,
                     project_id: id.clone(),
                     diagram_id: diagram.id.clone(),
                     kind: ModelingRelationKind::Association,

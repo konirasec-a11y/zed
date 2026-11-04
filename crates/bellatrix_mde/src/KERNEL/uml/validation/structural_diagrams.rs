@@ -831,6 +831,8 @@ mod tests {
             properties: Default::default(),
         });
         project.diagrams[0].views.push(View {
+            children: Vec::new(),
+            presentation: Default::default(),
             endpoints: None,
             timing: None,
             draft: None,
@@ -1086,6 +1088,8 @@ mod tests {
             let mut project = context_project(kind, "uml.class", &[])?;
             for diagram in &mut project.diagrams {
                 diagram.views.push(View {
+            children: Vec::new(),
+            presentation: Default::default(),
                     endpoints: None,
                     timing: None,
                     draft: None,

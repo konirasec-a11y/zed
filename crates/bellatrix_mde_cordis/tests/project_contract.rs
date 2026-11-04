@@ -227,7 +227,7 @@ async fn public_event_updates_only_requested_project_and_survives_modeling_dispo
             owner_id: None, x: 80.0, y: 90.0, expected_revision: 0,
         }).await.unwrap(), QueryOutcome::Answer(Ok(1))));
     assert!(matches!(ctx.query::<bellatrix_mde_cordis::ModelingCreateRelationOrVisualDraft>(Routing::Unscoped,
-        bellatrix_mde_cordis::ModelingCreateRelationRequested {
+        bellatrix_mde_cordis::ModelingCreateRelationRequested { owner_id: None,
             project_id: quick_id.clone(), diagram_id: "diagram-tasks".into(),
             kind: bellatrix_mde::ModelingRelationKind::Association, from: "type-list".into(),
             to: "type-task".into(), expected_revision: 1,
@@ -244,7 +244,7 @@ async fn public_event_updates_only_requested_project_and_survives_modeling_dispo
     assert!(inventory.iter().any(|component| component.view_id == new_edge.id));
 
     let exact_request = |source: &str, target: &str, from: Option<&str>, to: Option<&str>, revision| {
-        bellatrix_mde_cordis::ModelingCreateRelationAtViewsRequested {
+        bellatrix_mde_cordis::ModelingCreateRelationAtViewsRequested { owner_id: None,
             project_id: quick_id.clone(), diagram_id: "diagram-tasks".into(),
             kind: bellatrix_mde::ModelingRelationKind::Association,
             source_view_id: source.into(), target_view_id: target.into(),

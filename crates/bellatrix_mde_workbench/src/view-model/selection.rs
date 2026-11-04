@@ -104,11 +104,11 @@ fn has_inline_representation(section: &ModelingSection, diagram: &Diagram, targe
         section.elements.iter().any(|element| {
             element.id == target
                 && match element.kind.as_str() {
-                    "rust.field" | "uml.attribute" => view.style.suppress_attributes != Some(true),
+                    "rust.field" | "uml.attribute" => view.style.uml.suppress_attributes != Some(true),
                     "rust.function" | "uml.operation" => {
-                        view.style.suppress_operations != Some(true)
+                        view.style.uml.suppress_operations != Some(true)
                     }
-                    "uml.reception" => view.style.suppress_receptions != Some(true),
+                    "uml.reception" => view.style.uml.suppress_receptions != Some(true),
                     _ => false,
                 }
         })

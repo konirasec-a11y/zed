@@ -192,15 +192,21 @@ fn scalar_identity(kind: ScalarKind, value: &Value) -> String {
     }
 }
 
-// These roles already have a canonical binary storage adapter in root.rs.
+// Binary relationship endpoints supply canonical roles without creating stored copies.
 // The returned values are borrowed-state projections, never persisted copies.
 fn endpoint_value(element: ElementRef<'_>, property: &PropertyDescriptor) -> Option<Value> {
     let ElementRef::Relationship(relation) = element else { return None; };
     let target = match property.id.fragment {
         "Generalization-specific" | "ElementImport-importingNamespace"
-        | "PackageImport-importingNamespace" | "InterfaceRealization-implementingClassifier" => &relation.from,
+        | "PackageImport-importingNamespace" | "InterfaceRealization-implementingClassifier"
+        | "Include-includingCase" | "Extend-extension" | "PackageMerge-receivingPackage"
+        | "ActivityEdge-source" | "Transition-source" | "Deployment-location"
+        | "TemplateBinding-boundElement" => &relation.from,
         "Generalization-general" | "ElementImport-importedElement"
-        | "PackageImport-importedPackage" | "InterfaceRealization-contract" => &relation.to,
+        | "PackageImport-importedPackage" | "InterfaceRealization-contract"
+        | "Include-addition" | "Extend-extendedCase" | "PackageMerge-mergedPackage"
+        | "ActivityEdge-target" | "Transition-target" | "Deployment-deployedArtifact"
+        | "Manifestation-utilizedElement" | "TemplateBinding-signature" => &relation.to,
         _ => return None,
     };
     Some(if matches!(property.upper, "0" | "1") { json!({"$ref": target}) }
@@ -275,6 +281,21 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             }
             continue;
         };
+        if let ElementRef::Relationship(relation) = element
+            && element.conforms_to("Manifestation")
+        {
+            // Artifact is the non-owned opposite of Artifact::manifestation, so it
+            // is not visited with Manifestation's inherited owned properties below.
+            let role = "A_manifestation_artifact-artifact";
+            match schema::property_by_id(schema::XmiId::new(schema::Document::Uml, role)) {
+                Some(property) => issues.extend(
+                    check_value(references, element, property, &json!({"$ref": relation.from}))
+                        .diagnostic(element, role, "UML_PROPERTY_CONTRACT"),
+                ),
+                None => issues.extend(Unverified("missing normative artifact role".into())
+                    .diagnostic(element, role, "UML_PROPERTY_CONTRACT")),
+            }
+        }
         let Some(classifier) = schema::uml_classifier(metaclass) else {
             issues.extend(Unverified("missing normative classifier".into())
                 .diagnostic(element, metaclass, "UML_METACLASS"));
@@ -320,9 +341,19 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 continue;
             }
             let code = if name == "type" { "UML_TYPED_ELEMENT_TYPE" } else { "UML_PROPERTY_CONTRACT" };
-            if endpoint_value(element, property).is_some_and(|canonical| canonical != *value) {
-                issues.extend(Unverified("stored role differs from the canonical binary endpoint; a matching endpoint adapter is required".into())
+            if let Some(canonical) = endpoint_value(element, property)
+                && canonical != *value
+            {
+                issues.extend(check_value(references, element, property, &canonical)
                     .diagnostic(element, property.id.fragment, code));
+                let includes_endpoint = match (canonical.as_array(), value.as_array()) {
+                    (Some(endpoints), Some(values)) => endpoints.iter().all(|endpoint| values.contains(endpoint)),
+                    _ => false,
+                };
+                if !includes_endpoint {
+                    issues.extend(Unverified("stored role differs from the canonical binary endpoint; a matching endpoint adapter is required".into())
+                        .diagnostic(element, property.id.fragment, code));
+                }
             }
             issues.extend(check_value(references, element, property, value)
                 .diagnostic(element, property.id.fragment, code));

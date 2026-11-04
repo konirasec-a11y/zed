@@ -26,6 +26,7 @@ impl Render for MdeWorkbenchItem {
         let details: String;
         let mut cards = Vec::new();
         let mut relationship_controls = Vec::new();
+        let mut incomplete_preview = false;
         match snapshot {
             Ok(snapshot) => {
                 let references = bellatrix_mde::uml::references::ReferenceIndex::new(
@@ -47,10 +48,24 @@ impl Render for MdeWorkbenchItem {
                 );
                 if let Some(diagram) = diagram {
                     title = format!("{} / {}", snapshot.name, diagram.name);
+                    incomplete_preview = diagram.all_views().any(|view| {
+                        !view.children.is_empty()
+                            || matches!(&view.geometry, Geometry::Layout { .. })
+                    });
                     let graph = RelationshipGraph::new(&snapshot.section, &diagram.id);
-                    let mut views = diagram.views.iter().collect::<Vec<_>>();
-                    views.sort_by_key(|view| view.z_index);
+                    let views = imported_preview::ordered_views(&diagram.views);
                     for view in views {
+                        if matches!(&view.geometry, Geometry::Layout { .. }) {
+                            if let Some(card) = self.render_imported_preview(view, cx) {
+                                cards.push(card);
+                            }
+                            continue;
+                        }
+                        // Native nested editing still assumes top-level view identity.
+                        if !diagram.views.iter().any(|root| std::ptr::eq(root, view)) {
+                            incomplete_preview = true;
+                            continue;
+                        }
                         if view.subject.is_none() && view.draft.is_some() {
                             if let Some(card) = self.render_visual_draft(
                                 view,
@@ -956,6 +971,23 @@ impl Render for MdeWorkbenchItem {
                             )),
                     ),
             )
+            .when(incomplete_preview, |workbench| {
+                workbench.child(
+                    div()
+                        .id("mde-incomplete-canvas-preview")
+                        .flex_none()
+                        .px_3()
+                        .py_2()
+                        .border_b_1()
+                        .border_color(border)
+                        .child(
+                            Label::new(
+                                "Partial, read-only imported preview: only supported rectangles and labels with complete bounds are drawn. Unresolved bounds or visibility, other view types, styles, routing and resources are not rendered. Their data is preserved.",
+                            )
+                            .color(ui::Color::Warning),
+                        ),
+                )
+            })
             .child(
                 div()
                     .id("mde-canvas")
@@ -1090,5 +1122,55 @@ impl Render for MdeWorkbenchItem {
                     )
                     .child(Label::new(details).truncate()),
             )
+    }
+}
+
+impl MdeWorkbenchItem {
+    fn render_imported_preview(
+        &self,
+        view: &bellatrix_mde::View,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        if view.id.trim().is_empty() {
+            return None;
+        }
+        let shape = imported_preview::imported_shape(view)?;
+        let bounds = imported_preview::resolve_layout_bounds(&view.geometry, self.zoom, self.pan)?;
+        let palette = WorkbenchPalette::current(cx);
+        let mut card = div()
+            .id(format!("mde-imported-view-{}", view.id))
+            .absolute()
+            .left(px(bounds.x))
+            .top(px(bounds.y))
+            .w(px(bounds.width))
+            .h(px(bounds.height))
+            .overflow_hidden()
+            .text_color(palette.text);
+        match shape {
+            imported_preview::ImportedShape::Rectangle => {
+                card = card.border_1().border_color(palette.border);
+            }
+            imported_preview::ImportedShape::Label => {
+                card = card.text_size(px(12.0 * self.zoom));
+            }
+        }
+        if let Some(label) = &view.label {
+            card = card.child(label.clone());
+        }
+        let owner = cx.weak_entity();
+        let identifier = view.id.clone();
+        let kind = view.presentation.kind.clone()?;
+        Some(
+            card.on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                if let Err(error) = owner.update(cx, |item, cx| {
+                    item.feedback = format!("Imported {kind} · {identifier} · read-only partial preview");
+                    cx.notify();
+                }) {
+                    eprintln!("MDE imported preview inspection failed: {error}");
+                }
+                cx.stop_propagation();
+            })
+            .into_any_element(),
+        )
     }
 }

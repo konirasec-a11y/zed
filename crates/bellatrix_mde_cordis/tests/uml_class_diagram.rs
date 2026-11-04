@@ -101,7 +101,7 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
     let rejected = cx
         .query::<ModelingCreateRelation>(
             Routing::Unscoped,
-            ModelingCreateRelationRequested {
+            ModelingCreateRelationRequested { owner_id: None,
                 project_id: id.clone(),
                 diagram_id: diagram_id.clone(),
                 kind: ModelingRelationKind::Generalization,
@@ -136,7 +136,7 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
         };
         revision += 1;
         assert!(matches!(
-            cx.query::<ModelingCreateRelation>(Routing::Unscoped,ModelingCreateRelationRequested{
+            cx.query::<ModelingCreateRelation>(Routing::Unscoped,ModelingCreateRelationRequested{ owner_id: None,
                 project_id:id.clone(),diagram_id:diagram_id.clone(),kind,
                 from,to,expected_revision:revision-1,
             }).await.unwrap(),QueryOutcome::Answer(Ok(n)) if n==revision
@@ -429,7 +429,7 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
     let target_view = diagram.views.iter().find(|view| view.subject.as_deref() == Some(interface.as_str())).unwrap();
     let exact_endpoints = bellatrix_mde::ViewEndpoints { source_view_id: Some(source_view.id.clone()), target_view_id: Some(target_view.id.clone()) };
     assert!(matches!(cx.query::<bellatrix_mde_cordis::ModelingCreateRelationAtViewsOrVisualDraft>(Routing::Unscoped,
-        bellatrix_mde_cordis::ModelingCreateRelationAtViewsRequested {
+        bellatrix_mde_cordis::ModelingCreateRelationAtViewsRequested { owner_id: None,
             project_id: id.clone(), diagram_id: diagram_id.clone(), kind: ModelingRelationKind::AssociationClassAttachment,
             source_view_id: source_view.id.clone(), target_view_id: target_view.id.clone(),
             from: Some(class.clone()), to: Some(interface.clone()), expected_revision: revision,

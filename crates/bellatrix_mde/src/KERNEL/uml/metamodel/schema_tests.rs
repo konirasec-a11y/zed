@@ -429,13 +429,13 @@ fn generated_contracts_drive_canonical_inspection_commands_validation_and_roundt
     );
     assert!(
         inspected
-            .reference_choices
+            .reference_choices_for("properties.type")
             .iter()
             .any(|choice| choice.id == type_id && choice.label.contains("Root::String"))
     );
     assert!(
         !inspected
-            .reference_choices
+            .reference_choices_for("properties.type")
             .iter()
             .any(|choice| choice.id == "root")
     );

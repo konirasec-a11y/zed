@@ -4,7 +4,7 @@ use crate::{
         associations,
         references::ReferenceIndex,
         root::{ElementRef, Model},
-        schema::{self, Aggregation},
+        schema::Aggregation,
     },
 };
 use serde_json::json;
@@ -32,8 +32,7 @@ pub enum RemovedAssociationEnd {
     DeleteAssociationOwned,
 }
 
-/// One ordered transaction permits temporary incomplete membership but never
-/// publishes it. Removal always states what happens to the Property identity.
+/// Removal always states what happens to the Property identity.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AssociationEndEdit {
     Insert {
@@ -72,13 +71,7 @@ fn owner_id(
         AssociationEndOwner::Association => Ok(association_id.into()),
         AssociationEndOwner::Classifier(id) => {
             let references = ReferenceIndex::new(Model::from_section(section));
-            let owner = references.element(id)?;
-            if !owner.conforms_to("Classifier") {
-                return Err("Association end owner must be a Classifier".into());
-            }
-            if owner.conforms_to("Association") {
-                return Err("Use Association ownership for this Association; specialized or different Association ownership is unsupported".into());
-            }
+            references.element(id)?;
             Ok(id.clone())
         }
     }
@@ -102,20 +95,9 @@ fn insertion_position(member_end_ids: &[String], position: usize) -> Result<(), 
 
 fn retype(section: &mut ModelingSection, property_id: &str, type_id: &str) -> Result<(), String> {
     let references = ReferenceIndex::new(Model::from_section(section));
-    let property = references.element(property_id)?;
-    if !property.conforms_to("Property") {
-        return Err("Association member end must be a Property".into());
-    }
-    let descriptor = schema::uml_property(
-        property
-            .metaclass()
-            .ok_or("Property metaclass is missing")?,
-        "type",
-    )
-    .map_err(|error| error.to_string())?
-    .ok_or("Property::type contract is missing")?;
+    references.element(property_id)?;
+    references.element(type_id)?;
     let value = json!({"$ref": type_id});
-    references.validate(descriptor, &value)?;
     let property = section
         .elements
         .iter_mut()
@@ -166,9 +148,6 @@ pub(super) fn apply(
     let association = Model::from_section(section)
         .element(association_id)
         .ok_or("Association not found")?;
-    if association.metaclass() != Some("Association") {
-        return Err("Unsupported specialized Association constraints: atomic end editing currently supports Association itself".into());
-    }
     if !association.properties().contains_key("memberEnd")
         && matches!(association, ElementRef::Relationship(_))
     {
@@ -239,12 +218,7 @@ pub(super) fn apply(
             } => {
                 insertion_position(&member_end_ids, *position)?;
                 let references = ReferenceIndex::new(Model::from_section(section));
-                if !references.element(property_id)?.conforms_to("Property") {
-                    return Err("Association member end must be a Property".into());
-                }
-                if member_end_ids.contains(property_id) {
-                    return Err("Association::memberEnd requires unique Property identities".into());
-                }
+                references.element(property_id)?;
                 if associations::association_of(&references, property_id)?
                     .is_some_and(|association| association.id() != association_id)
                 {
@@ -270,7 +244,7 @@ pub(super) fn apply(
                     .ok_or("Association member Property has no owner")?;
                 match disposition {
                     RemovedAssociationEnd::KeepClassifierOwned => {
-                        if !owner.conforms_to("Classifier") || owner.conforms_to("Association") {
+                        if owner.id() == association_id {
                             return Err("An Association-owned end needs explicit deletion or reparenting when removed; its Property cannot be silently orphaned".into());
                         }
                     }

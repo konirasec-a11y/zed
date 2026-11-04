@@ -62,6 +62,7 @@ pub(super) fn place(
         .find(|view| view.subject.as_deref() == Some(element_id));
     let (geometry, style, label) = if let Some(view) = source {
         let (left, top) = match &view.geometry {
+            Geometry::Layout { .. } => return Err("placing a View with unresolved layout is not supported".into()),
             Geometry::Rect { x, y, .. } => (*x, *y),
             Geometry::Ellipse { cx, cy, rx, ry } => (cx - rx, cy - ry),
             Geometry::Polygon { points } => {
@@ -99,6 +100,8 @@ pub(super) fn place(
         .ok_or("diagram not found")?
         .views
         .push(View {
+            children: Vec::new(),
+            presentation: Default::default(),
             endpoints: None,
             timing: None,
             draft: None,
@@ -236,6 +239,8 @@ pub(super) fn create_draft(
         .find(|diagram| diagram.id == diagram_id)
         .ok_or("diagram not found")?;
     diagram.views.push(View {
+            children: Vec::new(),
+            presentation: Default::default(),
         endpoints: (source_view_id.is_some() || target_view_id.is_some()).then(|| crate::ViewEndpoints {
             source_view_id: source_view_id.clone(),
             target_view_id: target_view_id.clone(),

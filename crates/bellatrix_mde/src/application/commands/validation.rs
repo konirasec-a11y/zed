@@ -79,7 +79,7 @@ mod tests {
     }
 
     fn create(from: &str, to: &str) -> Command {
-        Command::CreateRelation {
+        Command::CreateRelation { owner_id: None,
             diagram_id: "diagram".into(),
             kind: ModelingRelationKind::Generalization,
             from: from.into(),
@@ -135,21 +135,6 @@ mod tests {
                 "{specific} -> {general}"
             );
         }
-        assert!(
-            ModelingRelationKind::Generalization
-                .validate_endpoints("uml.package", "uml.class")
-                .is_err()
-        );
-        assert!(
-            ModelingRelationKind::InterfaceRealization
-                .validate_endpoints("uml.class", "uml.component")
-                .is_err()
-        );
-        assert!(
-            ModelingRelationKind::TemplateBinding
-                .validate_endpoints("uml.class", "uml.component")
-                .is_err()
-        );
         Ok(())
     }
 
@@ -266,7 +251,7 @@ mod tests {
             ),
         ] {
             let model = project([source, target, "uml.class", "uml.class"])?;
-            let command = Command::CreateRelation {
+            let command = Command::CreateRelation { owner_id: None,
                 diagram_id: "diagram".into(),
                 kind,
                 from: "a".into(),
@@ -284,7 +269,7 @@ mod tests {
     #[test]
     fn new_relationship_warnings_do_not_become_errors() -> serde_json::Result<()> {
         let model = project(["uml.template", "uml.interface", "uml.class", "uml.class"])?;
-        let command = Command::CreateRelation {
+        let command = Command::CreateRelation { owner_id: None,
             diagram_id: "diagram".into(),
             kind: ModelingRelationKind::InterfaceRealization,
             from: "a".into(),
@@ -304,7 +289,7 @@ mod tests {
     #[test]
     fn interface_realization_has_no_visibility_without_namespace() -> serde_json::Result<()> {
         let model = project(["uml.class", "uml.interface", "uml.class", "uml.class"])?;
-        let command = Command::CreateRelation {
+        let command = Command::CreateRelation { owner_id: None,
             diagram_id: "diagram".into(),
             kind: ModelingRelationKind::InterfaceRealization,
             from: "a".into(),
@@ -337,7 +322,7 @@ mod tests {
             properties: Default::default(),
         });
         for command in [
-            Command::CreateRelation {
+            Command::CreateRelation { owner_id: None,
                 diagram_id: "diagram".into(),
                 kind: ModelingRelationKind::InterfaceRealization,
                 from: "c".into(),

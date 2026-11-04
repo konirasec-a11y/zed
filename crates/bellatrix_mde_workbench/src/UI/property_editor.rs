@@ -33,8 +33,12 @@ fn property_text(property: &InspectorProperty) -> String {
 }
 
 fn reference_label(value: &Value, choices: &[InspectorReferenceChoice]) -> String {
+    reference_label_with_kind(value, choices, "type")
+}
+
+fn reference_label_with_kind(value: &Value, choices: &[InspectorReferenceChoice], kind: &str) -> String {
     if value.is_null() {
-        return "No type".into();
+        return format!("No {kind}");
     }
     let Some(id) = value.get("$ref").and_then(Value::as_str) else {
         return display(value);
@@ -43,7 +47,7 @@ fn reference_label(value: &Value, choices: &[InspectorReferenceChoice]) -> Strin
         .iter()
         .find(|choice| choice.id == id)
         .map(|choice| choice.label.clone())
-        .unwrap_or_else(|| format!("Unavailable type · {id}"))
+        .unwrap_or_else(|| format!("Unavailable {kind} · {id}"))
 }
 
 fn reference_options(
@@ -57,8 +61,10 @@ fn reference_options(
 }
 
 fn property_label(property: &InspectorProperty, choices: &[InspectorReferenceChoice]) -> String {
-    if property.editor == PropertyEditor::Reference || property.path == "properties.type" {
+    if property.path == "properties.type" {
         reference_label(&property.value, choices)
+    } else if property.editor == PropertyEditor::Reference {
+        reference_label_with_kind(&property.value, choices, "reference")
     } else {
         property_text(property)
     }
@@ -68,11 +74,12 @@ fn same_value(editor: PropertyEditor, left: &str, right: &str) -> bool {
     if left == right {
         return true;
     }
-    if editor != PropertyEditor::Number {
+    if !matches!(editor, PropertyEditor::Number | PropertyEditor::Reference) {
         return false;
     }
     matches!((serde_json::from_str::<Value>(left), serde_json::from_str::<Value>(right)),
-        (Ok(left), Ok(right)) if left.is_number() && right.is_number() && left == right)
+        (Ok(left), Ok(right)) if left == right
+            && (editor == PropertyEditor::Reference || (left.is_number() && right.is_number())))
 }
 
 fn display_kind(kind: &str) -> &str {
@@ -175,7 +182,7 @@ pub(crate) fn reconcile_inputs(
         let draft = drafts.entry(key.clone()).or_insert_with(|| {
             let input = matches!(
                 property.editor,
-                PropertyEditor::Text | PropertyEditor::Multiline | PropertyEditor::Number
+                PropertyEditor::Text | PropertyEditor::Multiline | PropertyEditor::Number | PropertyEditor::Reference
             )
             .then(|| {
                 cx.new(|cx| {
@@ -204,12 +211,14 @@ pub(crate) fn reconcile_inputs(
                                     let admitted =
                                         property_admission_allowed(panel, &item, &key, cx);
                                     if let Some(draft) = panel.property_drafts.get_mut(&key) {
-                                        let text = draft.text(cx);
+                                        let text = draft.input.as_ref().map(|input| input.read(cx).text(cx))
+                                            .unwrap_or_else(|| draft.text(cx));
                                         // Editor notifications are deferred, so a transient suppression flag cannot distinguish projection from typing.
                                         if text == draft.last_observed {
                                             return;
                                         }
                                         draft.last_observed = text.clone();
+                                        draft.discrete = None;
                                         if !admitted {
                                             draft.state.error = Some(
                                                 "Edit not synced: the active selection changed"
@@ -264,7 +273,7 @@ pub(crate) fn reconcile_inputs(
         }
         if draft.pending.is_none() {
             let text = draft.text(cx);
-            // Numeric formatting is presentation state; acknowledging 1e2 as 100.0 must not move the caret.
+            // Equivalent numeric or reference JSON formatting must not move the caret after acknowledgement.
             let reconciled = if revision >= draft.state.revision
                 && same_value(property.editor, &text, &canonical)
             {
@@ -409,6 +418,14 @@ pub(crate) fn flush_property_edits(
         draft.state.revision = snapshot.revision;
         let value = if let Some(value) = &draft.discrete {
             value.clone()
+        } else if property.editor == PropertyEditor::Reference {
+            match serde_json::from_str::<Value>(&text) {
+                Ok(value) => value,
+                Err(_) => {
+                    draft.state.error = Some("Enter a JSON reference object or null".into());
+                    continue;
+                }
+            }
         } else if property.editor == PropertyEditor::Number {
             match serde_json::from_str::<Value>(&text) {
                 Ok(value) if value.is_number() => value,
@@ -586,6 +603,7 @@ fn property_row(
                                 let canonical = property_text(property);
                                 draft.state.reload(&canonical, snapshot.revision);
                                 draft.state.queued = false;
+                                draft.admitted_text = None;
                                 draft.last_observed = canonical.clone();
                                 if let Some(input) = &draft.input {
                                     input.update(cx, |input, cx| {
@@ -657,16 +675,25 @@ fn property_row(
                 .into_any_element()
         }
         PropertyEditor::Reference if property.editable => {
+            let reference_kind = if property.path == "properties.type" { "type" } else { "reference" };
             let target = item.clone();
             let panel = cx.weak_entity();
             let choice_key = key.clone();
             let menu = ContextMenu::build(window, cx, move |menu, _, _| {
                 reference_options(reference_choices).fold(menu, |menu, (label, value)| {
+                    let label = if value.is_null() { format!("No {reference_kind}") } else { label };
                     let target = target.clone();
                     let key = choice_key.clone();
                     let panel = panel.clone();
-                    menu.entry(label, None, move |_, cx| {
+                    menu.entry(label, None, move |window, cx| {
                         if let Err(error) = panel.update(cx, |panel, cx| {
+                            if let Some(draft) = panel.property_drafts.get_mut(&key) {
+                                let text = display(&value);
+                                draft.last_observed = text.clone();
+                                if let Some(input) = &draft.input {
+                                    input.update(cx, |input, cx| input.set_text(&text, window, cx));
+                                }
+                            }
                             queue_discrete_property(panel, &target, &key, value.clone(), cx)
                         }) {
                             eprintln!("MDE property reference update failed: {error}");
@@ -678,13 +705,17 @@ fn property_row(
                 .get(&key)
                 .and_then(|draft| draft.discrete.as_ref())
                 .unwrap_or(&property.value);
-            DropdownMenu::new(
+            let suggestions = DropdownMenu::new(
                 format!("mde-inspector-reference-{path}"),
-                reference_label(value, reference_choices),
+                reference_label_with_kind(value, reference_choices, reference_kind),
                 menu,
-            )
-            .full_width(true)
-            .into_any_element()
+            ).full_width(true);
+            div().flex().flex_col().gap_1().w_full()
+                .child(suggestions)
+                .children(drafts.get(&key).and_then(|draft| draft.input.clone()))
+                .child(Label::new("Choose a suggestion or enter a JSON reference ($ref) / null")
+                    .size(LabelSize::XSmall).color(Color::Muted))
+                .into_any_element()
         }
         _ => Label::new(property_label(property, reference_choices))
             .size(LabelSize::Small)
@@ -734,7 +765,7 @@ fn property_row(
                             format!("mde-inspector-reload-{}", key.path),
                             "Reload model value",
                         )
-                        .on_click(cx.listener(move |panel, _, _, cx| {
+                        .on_click(cx.listener(move |panel, _, window, cx| {
                             let Ok(snapshot) = reload_item.read(cx).source().snapshot() else {
                                 return;
                             };
@@ -759,11 +790,17 @@ fn property_row(
                             if draft.pending.is_some() {
                                 return;
                             }
-                            draft
-                                .state
-                                .reload(&property_text(property), snapshot.revision);
+                            let canonical = property_text(property);
+                            draft.state.reload(&canonical, snapshot.revision);
                             draft.state.queued = false;
+                            draft.admitted_text = None;
                             draft.discrete = None;
+                            draft.last_observed = canonical.clone();
+                            if let Some(input) = &draft.input {
+                                input.update(cx, |input, cx| {
+                                    input.set_text(&canonical, window, cx)
+                                });
+                            }
                             cx.notify();
                         })),
                     )
@@ -954,7 +991,7 @@ pub(crate) fn render_inspector(
     {
         children.push(property_row(
             property,
-            &inspector.reference_choices,
+            inspector.reference_choices_for(&property.path),
             &item,
             drafts,
             &project,
@@ -1038,7 +1075,7 @@ pub(crate) fn render_inspector(
             {
                 children.push(property_row(
                     property,
-                    &inspector.reference_choices,
+                    inspector.reference_choices_for(&property.path),
                     &item,
                     drafts,
                     &project,
@@ -1092,7 +1129,7 @@ pub(crate) fn render_inspector(
                 }
                 children.push(property_row(
                     property,
-                    &inspector.reference_choices,
+                    inspector.reference_choices_for(&property.path),
                     &item,
                     drafts,
                     &project,

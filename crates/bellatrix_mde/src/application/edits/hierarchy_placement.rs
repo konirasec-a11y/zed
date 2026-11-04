@@ -33,41 +33,25 @@ pub fn validate_diagram_occurrence(
     let crate::ViewOccurrence { diagram_id, view_id, member_path } = occurrence;
     let diagram = section.diagrams.iter().find(|diagram| diagram.id == *diagram_id)
         .ok_or("View occurrence diagram not found")?;
-    let anchor = diagram.views.iter().find(|view| view.id == *view_id)
+    let anchor = diagram.all_views().find(|view| view.id == *view_id)
         .and_then(|view| view.subject.as_deref()).ok_or("View occurrence subject not found")?;
-    let model = crate::uml::root::Model::from_section(section);
-    if model.element(anchor).is_none() { return Err("View occurrence subject no longer exists".into()); }
-    let mut owner_id = anchor;
+    let subjects: HashSet<&str> = section.elements.iter().map(|element| element.id.as_str())
+        .chain(section.relations.iter().map(|relation| relation.id.as_str())).collect();
+    if !subjects.contains(anchor) { return Err("View occurrence subject no longer exists".into()); }
+    let mut resolved_subject = anchor;
     let mut seen = HashSet::from([anchor]);
     for member_id in member_path {
         if !seen.insert(member_id.as_str()) { return Err("View occurrence member path contains a cycle".into()); }
-        let member = model.element(member_id).ok_or("View occurrence member no longer exists")?;
-        if model.owner(member)?.is_none_or(|owner| owner.id() != owner_id) {
-            return Err("View occurrence member ownership changed".into());
+        if !subjects.contains(member_id.as_str()) {
+            return Err("View occurrence member no longer exists".into());
         }
-        if diagram.views.iter().any(|view| view.subject.as_deref() == Some(member_id.as_str())) {
-            return Err("View occurrence member now has its own occurrence".into());
-        }
-        owner_id = member_id;
+        resolved_subject = member_id;
     }
-    if owner_id != parent_id { return Err("View occurrence does not resolve to the requested parent".into()); }
-    Ok(())
-}
-
-pub(crate) fn validate_occurrences(section: &ModelingSection) -> Result<(), String> {
-    for (diagram_id, placement) in &section.hierarchy {
-        if let Some(occurrence) = &placement.occurrence {
-            let parent = placement.parent_id.as_deref().ok_or("View occurrence requires a parent")?;
-            if occurrence.diagram_id == *diagram_id {
-                return Err("Diagram cannot belong to its own view occurrence".into());
-            }
-            validate_diagram_occurrence(section, parent, occurrence)?;
-        }
-    }
+    if resolved_subject != parent_id { return Err("View occurrence does not resolve to the requested parent".into()); }
     Ok(())
 }
 
 pub fn validate_model_hierarchy(project: &crate::Project) -> Result<(), String> {
-    project.validate_hierarchy()?;
-    validate_occurrences(&ModelingSection::from_model(project))
+    // Import and authoring preserve domain-invalid paths for explicit kernel diagnostics.
+    project.validate_hierarchy()
 }

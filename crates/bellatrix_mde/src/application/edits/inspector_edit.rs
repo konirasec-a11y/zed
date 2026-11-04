@@ -9,7 +9,6 @@ pub fn set_inspected_property(
     let mut updated = section.clone();
     set_inspected_property_inner(&mut updated, id, path, value)?;
     crate::uml::associations::synchronize_changes(section, &mut updated)?;
-    crate::uml::associations::validate_changes(section, &updated)?;
     *section = updated;
     Ok(())
 }
@@ -17,32 +16,26 @@ pub fn set_inspected_property(
 fn set_inspected_property_inner(
     section: &mut ModelingSection, id: &str, path: &str, value: Value
 ) -> Result<(), String> {
-    let references = crate::uml::references::ReferenceIndex::new(
-        crate::uml::root::Model::from_section(section),
-    );
     let field = property_contract(section, id, path)?;
     if field.value_type == PropertyValueType::ReadOnly { return Err("property is read-only".into()); }
-    let optional_null = value.is_null() && path.strip_prefix("properties.").is_some_and(|key| {
-        references.element(id).ok().is_some_and(|element| {
-            element.metaclass()
-                .and_then(|metaclass| crate::uml::schema::uml_property(metaclass, key).ok().flatten())
-                .is_some_and(|descriptor| matches!(
-                    crate::uml::property_contracts::check_value(&references, element, descriptor, &value),
-                    crate::uml::property_contracts::PropertyOutcome::Satisfied,
-                ))
-        })
+    // Absence is an authored draft state; UML requiredness belongs to Model::validate.
+    let property_null = value.is_null() && path.strip_prefix("properties.").is_some_and(|key| {
+        crate::uml::root::Model::from_section(section).element(id)
+            .and_then(|element| element.metaclass())
+            .and_then(|metaclass| crate::uml::schema::uml_property(metaclass, key).ok().flatten())
+            .is_some_and(|descriptor| matches!(descriptor.upper, "0" | "1"))
     });
     match field.value_type {
-        _ if optional_null => {},
+        _ if property_null => {},
         PropertyValueType::ReadOnly => return Err("property is read-only".into()),
         PropertyValueType::String => {
             value.as_str().ok_or("expected string")?;
         },
         PropertyValueType::Boolean if !value.is_boolean() => return Err("expected boolean".into()),
         PropertyValueType::Number if !value.is_number() => return Err("expected number".into()),
-        PropertyValueType::Choice(options) if !value.as_str()
-            .is_some_and(|candidate| options.contains(&candidate)) => {
-            return Err("invalid option".into());
+        PropertyValueType::Choice(_) if !value.is_string() => return Err("expected string".into()),
+        PropertyValueType::Reference => {
+            crate::uml::references::reference_id(&value)?;
         },
         _ => {},
     }
@@ -50,13 +43,11 @@ fn set_inspected_property_inner(
     if let Some(key) = path.strip_prefix("properties.")
         && let Some(element) = crate::uml::root::Model::from_section(section).element(id)
         && let Some(metaclass) = element.metaclass() {
-        crate::uml::schema::validate_edit(metaclass, key, &value)?;
         if key == "type"
-            && let Some(descriptor) = crate::uml::schema::uml_property(metaclass, key)
-                .map_err(|error| error.to_string())? {
+            && crate::uml::schema::uml_property(metaclass, key)
+                .map_err(|error| error.to_string())?.is_some() {
 
             canonical_type = true;
-            references.validate(descriptor, &value)?;
             if let Some(text) = element.properties().get("type").filter(|value| value.is_string())
                 && let Some(preserved) = element.properties().get("typeText")
                 && preserved != text {

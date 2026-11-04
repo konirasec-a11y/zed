@@ -6,6 +6,8 @@ pub mod contracts;
 pub use contracts::*;
 #[path = "persistence/mdj.rs"]
 pub mod mdj;
+#[path = "persistence/mdj_conversion.rs"]
+pub mod mdj_conversion;
 #[path = "persistence/io.rs"]
 mod io;
 #[path = "persistence/wire.rs"]

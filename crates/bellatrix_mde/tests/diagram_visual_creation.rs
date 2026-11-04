@@ -33,7 +33,7 @@ fn connect(
 ) -> Result<Project, String> {
     apply(
         project,
-        &Command::CreateRelation {
+        &Command::CreateRelation { owner_id: None,
             diagram_id: "diagram-tasks".into(),
             kind,
             from: from.into(),
@@ -404,7 +404,7 @@ fn exercise_visual_drafts() -> Result<(), Box<dyn std::error::Error>> {
         .and_then(|diagram| diagram.views.last()).ok_or("quick class View missing")?;
     assert!(bellatrix_mde::visual_components(&bellatrix_mde::ModelingSection::from_model(&class))
         .iter().any(|component| component.diagram_id == "diagram-tasks" && component.view_id == quick_view.id));
-    let association = apply(&class, &Command::CreateRelationOrVisualDraft {
+    let association = apply(&class, &Command::CreateRelationOrVisualDraft { owner_id: None,
         diagram_id: "diagram-tasks".into(), kind: bellatrix_mde::ModelingRelationKind::Association,
         from: "type-list".into(), to: "type-task".into(),
     }, 31)?;
@@ -492,7 +492,7 @@ fn exercise_visual_drafts() -> Result<(), Box<dyn std::error::Error>> {
     // The clicked View identities, not the first View of each subject, drive attachments.
     let repeated_id = duplicate.diagrams.iter().find(|diagram| diagram.id == "diagram-tasks")
         .and_then(|diagram| diagram.views.last()).ok_or("repeated View missing")?.id.clone();
-    let make_link = |source: &str, target: &str, from: Option<&str>, to: Option<&str>| Command::CreateRelationAtViewsOrVisualDraft {
+    let make_link = |source: &str, target: &str, from: Option<&str>, to: Option<&str>| Command::CreateRelationAtViewsOrVisualDraft { owner_id: None,
         diagram_id: "diagram-tasks".into(), kind: bellatrix_mde::ModelingRelationKind::Association,
         source_view_id: source.into(), target_view_id: target.into(), from: from.map(str::to_owned), to: to.map(str::to_owned),
     };

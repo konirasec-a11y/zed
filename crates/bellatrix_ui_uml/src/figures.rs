@@ -312,7 +312,7 @@ impl RenderOnce for UmlFigure {
         let alignment = appearance.clone();
         let applied_stereotype = self
             .applied_stereotype
-            .filter(|_| alignment.0.should_show_stereotype());
+            .filter(|_| alignment.0.uml.should_show_stereotype());
         let font_family = appearance.0.font_family.clone();
         let border = appearance.stroke(palette, selected);
         let title: gpui::AnyElement = if let Some((field, confirm, cancel)) = self.editor {

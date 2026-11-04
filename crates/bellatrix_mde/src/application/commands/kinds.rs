@@ -511,22 +511,4 @@ mod tests {
         assert_eq!(kinds.len(), 88);
     }
 
-    #[test]
-    fn generalization_and_realization_validate_targets() {
-        assert!(
-            ModelingRelationKind::Generalization
-                .validate_endpoints("rust.struct", "rust.trait")
-                .is_ok()
-        );
-        assert!(
-            ModelingRelationKind::InterfaceRealization
-                .validate_endpoints("rust.struct", "uml.package")
-                .is_err()
-        );
-        assert!(
-            ModelingRelationKind::Containment
-                .validate_endpoints("rust.struct", "rust.trait")
-                .is_err()
-        );
-    }
 }

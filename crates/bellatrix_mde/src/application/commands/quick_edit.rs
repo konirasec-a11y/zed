@@ -38,11 +38,7 @@ pub(super) fn apply(
         .find(|element| element.id == element_id)
         .ok_or("Quick Edit subject not found")?;
     let kind = element.kind.clone();
-    let subject_type =
-        UmlType::from_kind(&kind).ok_or("Quick Edit subject is not a supported UML type")?;
-    if !action.accepts(&kind) {
-        return Err(format!("{kind} does not support {action:?}"));
-    }
+    let subject_type = UmlType::from_kind(&kind);
     if matches!(
         action,
         UmlQuickCreate::TemplateParameter | UmlQuickCreate::Port | UmlQuickCreate::Part
@@ -94,7 +90,7 @@ pub(super) fn apply(
             (134.0, 76.0),
         ),
         UmlQuickCreate::Subtype | UmlQuickCreate::Supertype => {
-            let interface = subject_type == UmlType::Interface;
+            let interface = subject_type == Some(UmlType::Interface);
             let size = if interface {
                 (120.0, 76.0)
             } else {
@@ -107,9 +103,7 @@ pub(super) fn apply(
             };
             (
                 kind.as_str(),
-                subject_type
-                    .metaclass()
-                    .ok_or("Quick Edit subject has no UML metaclass")?,
+                subject_type.and_then(UmlType::metaclass).unwrap_or("Element"),
                 offset,
                 size,
             )
@@ -202,6 +196,8 @@ pub(super) fn apply(
         .ok_or("diagram not found")?
         .views
         .push(View {
+            children: Vec::new(),
+            presentation: Default::default(),
             endpoints: None,
             timing: None,
             draft: None,
@@ -245,6 +241,8 @@ pub(super) fn apply(
         .ok_or("diagram not found")?
         .views
         .push(View {
+            children: Vec::new(),
+            presentation: Default::default(),
             endpoints: None,
             timing: None,
             draft: None,

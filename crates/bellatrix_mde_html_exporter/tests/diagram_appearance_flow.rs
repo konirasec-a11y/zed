@@ -1,5 +1,5 @@
 use bellatrix_mde::{
-    Format, Geometry, LineMode, Project, Style, TextAlignment, TextVerticalAlignment,
+    Format, Geometry, LineMode, Project, Style, TextAlignment, TextVerticalAlignment, UmlStyle,
     commands::{Command, apply},
     decode, encode,
 };
@@ -54,9 +54,12 @@ fn styled_diagram_survives_save_reload_and_html_export() -> Result<(), Box<dyn s
                 line_mode: Some(LineMode::Dotted),
                 show_shadow: Some(true),
                 word_wrap: Some(true),
-                show_visibility: Some(false),
-                show_type: Some(false),
-                show_property: Some(false),
+                uml: UmlStyle {
+                    show_visibility: Some(false),
+                    show_type: Some(false),
+                    show_property: Some(false),
+                    ..view.style.uml.clone()
+                },
                 ..view.style.clone()
             },
         },

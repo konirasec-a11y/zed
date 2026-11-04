@@ -13,7 +13,7 @@ pub fn format_instance_heading(
     let Some(instance) = ElementRef::Object(element).instance_specification() else {
         return element.name.clone();
     };
-    if !style.should_show_type() {
+    if !style.uml.should_show_type() {
         return element.name.clone();
     }
     let classifiers = instance.classifiers(references.model()).unwrap_or_default();

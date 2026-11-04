@@ -1,3 +1,4 @@
+use super::uml_presentation::UmlStyle;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -53,11 +54,161 @@ pub struct View {
     pub timing: Option<TimingPresentation>,
     #[serde(default)]
     pub label: Option<String>,
+    #[serde(default)]
     pub geometry: Geometry,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub children: Vec<View>,
+    #[serde(default, skip_serializing_if = "ViewPresentation::is_empty")]
+    pub presentation: ViewPresentation,
     #[serde(default)]
     pub style: Style,
     #[serde(default)]
     pub z_index: i32,
+}
+
+// Missing and explicit null carry different authored intent; layout must not
+// replace either with measured coordinates when saving a document.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum Authored<T> {
+    #[default]
+    Missing,
+    Null,
+    Value(T),
+}
+
+impl<T> Authored<T> {
+    pub fn is_missing(&self) -> bool {
+        matches!(self, Self::Missing)
+    }
+    pub fn value(&self) -> Option<&T> {
+        match self {
+            Self::Value(value) => Some(value),
+            _ => None,
+        }
+    }
+}
+
+impl<T: Serialize> Serialize for Authored<T> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::Value(value) => {
+                let value = serde_json::to_value(value).map_err(serde::ser::Error::custom)?;
+                if value.is_null() {
+                    return Err(serde::ser::Error::custom(
+                        "authored values must not encode as null; use Authored::Null explicitly",
+                    ));
+                }
+                value.serialize(serializer)
+            }
+            Self::Null => serializer.serialize_none(),
+            Self::Missing => Err(serde::ser::Error::custom(
+                "missing authored fields must be omitted",
+            )),
+        }
+    }
+}
+
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for Authored<T> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(match Option::<T>::deserialize(deserializer)? {
+            Some(value) => Self::Value(value),
+            None => Self::Null,
+        })
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LayoutBounds {
+    #[serde(default, skip_serializing_if = "Authored::is_missing")]
+    pub x: Authored<f64>,
+    #[serde(default, skip_serializing_if = "Authored::is_missing")]
+    pub y: Authored<f64>,
+    #[serde(default, skip_serializing_if = "Authored::is_missing")]
+    pub width: Authored<f64>,
+    #[serde(default, skip_serializing_if = "Authored::is_missing")]
+    pub height: Authored<f64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ViewPresentation {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub properties: std::collections::BTreeMap<String, serde_json::Value>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub references: std::collections::BTreeMap<String, Authored<PresentationReference>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label_placement: Option<LabelPlacement>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub resources: std::collections::BTreeMap<String, PresentationResource>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<PresentationSource>,
+}
+
+impl ViewPresentation {
+    pub fn is_empty(&self) -> bool {
+        self == &Self::default()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "target",
+    content = "id",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
+pub enum PresentationReference {
+    View(String),
+    Model(String),
+    Resource(String),
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LabelPlacement {
+    #[serde(default, skip_serializing_if = "Authored::is_missing")]
+    pub anchor: Authored<String>,
+    #[serde(default, skip_serializing_if = "Authored::is_missing")]
+    pub angle: Authored<f64>,
+    #[serde(default, skip_serializing_if = "Authored::is_missing")]
+    pub distance: Authored<f64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum PresentationResource {
+    Uri {
+        uri: String,
+    },
+    Embedded {
+        media_type: String,
+        data_base64: String,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PresentationSource {
+    pub format: String,
+    pub type_name: String,
+    // Only unmapped source fields belong here. Mapped fields are authored once
+    // in this contract, never in a second copy of the original source object.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub residual: std::collections::BTreeMap<String, serde_json::Value>,
+}
+
+impl Diagram {
+    pub fn all_views(&self) -> impl Iterator<Item = &View> {
+        let mut pending: Vec<_> = self.views.iter().rev().collect();
+        std::iter::from_fn(move || {
+            let view = pending.pop()?;
+            pending.extend(view.children.iter().rev());
+            Some(view)
+        })
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -138,8 +289,12 @@ pub struct VisualDraft {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Geometry {
+    Layout {
+        #[serde(default)]
+        bounds: LayoutBounds,
+    },
     Rect {
         x: f64,
         y: f64,
@@ -159,6 +314,14 @@ pub enum Geometry {
         start: Point,
         segments: Vec<PathSegment>,
     },
+}
+
+impl Default for Geometry {
+    fn default() -> Self {
+        Self::Layout {
+            bounds: LayoutBounds::default(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -212,15 +375,8 @@ pub enum TextVerticalAlignment {
     Bottom,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum StereotypeDisplay {
-    #[serde(rename = "none")]
-    Hidden,
-    Label,
-}
-
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Style {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub routing: Option<RelationshipRouting>,
@@ -234,6 +390,12 @@ pub struct Style {
     pub font_family: Option<String>,
     #[serde(default)]
     pub font_size: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_weight: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_italic: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_underline: Option<bool>,
     #[serde(default)]
     pub opacity: Option<f64>,
     #[serde(default)]
@@ -252,36 +414,11 @@ pub struct Style {
     pub word_wrap: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub show_shadow: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stereotype_display: Option<StereotypeDisplay>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub suppress_attributes: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub suppress_operations: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub suppress_receptions: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub show_visibility: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub show_type: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub show_property: Option<bool>,
+    #[serde(default, skip_serializing_if = "UmlStyle::is_empty")]
+    pub uml: UmlStyle,
 }
 
 impl Style {
-    pub fn should_show_visibility(&self) -> bool {
-        self.show_visibility != Some(false)
-    }
-    pub fn should_show_type(&self) -> bool {
-        self.show_type != Some(false)
-    }
-    pub fn should_show_property(&self) -> bool {
-        self.show_property != Some(false)
-    }
-    pub fn should_show_stereotype(&self) -> bool {
-        self.stereotype_display != Some(StereotypeDisplay::Hidden)
-    }
-
     pub fn resolve_stroke_pattern(&self, notation_mode: LineMode) -> &[f64] {
         match self.line_mode {
             Some(LineMode::Solid) => return &[],
@@ -314,6 +451,14 @@ impl Geometry {
             point.y += dy;
         };
         match self {
+            Self::Layout { bounds } => {
+                if let Authored::Value(x) = &mut bounds.x {
+                    *x += dx;
+                }
+                if let Authored::Value(y) = &mut bounds.y {
+                    *y += dy;
+                }
+            }
             Self::Rect { x, y, .. } => {
                 *x += dx;
                 *y += dy;

@@ -25,13 +25,22 @@ pub enum ModelIoError {
     DiagramType,
     #[error("invalid hierarchy: {0}")]
     Hierarchy(String),
+    #[error("invalid presentation structure: {0}")]
+    Presentation(String),
+    #[error("invalid MDJ provenance: {0}")]
+    Provenance(String),
     #[error("unsupported schema version: {0}")]
     Version(u32),
 }
 
 pub fn encode(project: &Project, format: Format) -> Result<Vec<u8>, ModelIoError> {
     ensure_version(project.schema_version)?;
-    crate::validate_model_hierarchy(&project).map_err(ModelIoError::Hierarchy)?;
+    if let Some(provenance) = &project.mdj_provenance {
+        provenance
+            .validate_residual_ownership(&project)
+            .map_err(ModelIoError::Provenance)?;
+    }
+    crate::Graph::new(&project).validate_identifiers().map_err(|error| ModelIoError::Presentation(error.to_string()))?;
     match format {
         Format::Json => Ok(serde_json::to_vec_pretty(project)?),
         Format::Protobuf => {
@@ -51,7 +60,12 @@ pub fn decode(bytes: &[u8], format: Format) -> Result<Project, ModelIoError> {
         }
     };
     ensure_version(project.schema_version)?;
-    crate::validate_model_hierarchy(&project).map_err(ModelIoError::Hierarchy)?;
+    if let Some(provenance) = &project.mdj_provenance {
+        provenance
+            .validate_residual_ownership(&project)
+            .map_err(ModelIoError::Provenance)?;
+    }
+    crate::Graph::new(&project).validate_identifiers().map_err(|error| ModelIoError::Presentation(error.to_string()))?;
     Ok(project)
 }
 

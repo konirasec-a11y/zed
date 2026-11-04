@@ -147,7 +147,7 @@ fn display_label(
         return crate::format_instance_heading(element, references, style);
     }
     if element.kind == "uml.collaboration_use" {
-        return if style.should_show_type() {
+        return if style.uml.should_show_type() {
             type_label(element, references).map_or_else(|| element.name.clone(), |value_type| format!("{} : {value_type}", element.name))
         } else { element.name.clone() };
     }
@@ -158,7 +158,7 @@ fn display_label(
             Ok(direction) => format!("{direction} {}", element.name),
             Err(_) => format!("[invalid direction] {}", element.name),
         };
-        if style.should_show_type()
+        if style.uml.should_show_type()
             && let Some(value_type) = type_label(element, references)
         {
             label.push_str(": ");
@@ -183,7 +183,7 @@ fn display_label(
         return element.name.clone();
     }
     let prefix = match text(element.properties.get("visibility"))
-        .filter(|_| style.should_show_visibility())
+        .filter(|_| style.uml.should_show_visibility())
     {
         Some("public") => "+",
         Some("private") => "-",
@@ -206,7 +206,7 @@ fn display_label(
     // in their labeled inspector fields, never in the canonical semantic label.
     let type_label = type_label(element, references);
     let value_type = type_label.as_deref();
-    if style.should_show_type()
+    if style.uml.should_show_type()
         && let Some(value_type) = value_type
     {
         label.push_str(": ");
@@ -232,7 +232,7 @@ fn display_label(
             label.push_str(" = ");
             label.push_str(default);
         }
-        if style.should_show_property() && is_true("isReadOnly") {
+        if style.uml.should_show_property() && is_true("isReadOnly") {
             label.push_str(" {readOnly}");
         }
     }
@@ -280,7 +280,7 @@ fn operation_label(
     style: &Style,
 ) -> String {
     let prefix = match text(operation.properties.get("visibility"))
-        .filter(|_| style.should_show_visibility())
+        .filter(|_| style.uml.should_show_visibility())
     {
         Some("public") => "+",
         Some("private") => "-",
@@ -313,16 +313,16 @@ fn operation_label(
         }
     }
     label.push(')');
-    if style.should_show_type()
+    if style.uml.should_show_type()
         && let Some(result_type) = &result_type
     {
         label.push_str(": ");
         label.push_str(result_type);
     }
-    if style.should_show_property()
+    if style.uml.should_show_property()
         && operation.properties.get("isQuery").and_then(Value::as_bool) == Some(true)
     {
-        if style.should_show_type() && result_type.is_none() {
+        if style.uml.should_show_type() && result_type.is_none() {
             label.push(':');
         }
         label.push_str(" {query}");

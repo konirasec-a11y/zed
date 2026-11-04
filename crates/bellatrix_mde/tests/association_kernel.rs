@@ -41,7 +41,7 @@ fn project() -> Project {
 fn create(project: &Project, to: &str) -> Project {
     apply(
         project,
-        &Command::CreateRelation {
+        &Command::CreateRelation { owner_id: None,
             diagram_id: "diagram".into(),
             kind: ModelingRelationKind::Association,
             from: "a".into(),

@@ -6,7 +6,7 @@
 use crate::{Element, ModelingSection};
 use serde_json::{Value, json};
 use crate::uml::root::NamedElement;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PropertyEditor {
@@ -54,7 +54,7 @@ pub struct ElementInspector {
     pub name: String,
     pub display_label: String,
     pub properties: Vec<InspectorProperty>,
-    pub reference_choices: Vec<InspectorReferenceChoice>,
+    pub reference_choices_by_path: BTreeMap<String, Vec<InspectorReferenceChoice>>,
     /// Owned attributes/operations are model Elements, not strings in a form.
     pub attributes: Vec<InspectorMember>,
     pub operations: Vec<InspectorMember>,
@@ -63,6 +63,47 @@ pub struct ElementInspector {
     pub template_parameters: Vec<InspectorMember>,
     pub ports: Vec<InspectorMember>,
     pub parts: Vec<InspectorMember>,
+}
+
+impl ElementInspector {
+    pub fn reference_choices_for(&self, path: &str) -> &[InspectorReferenceChoice] {
+        self.reference_choices_by_path.get(path).map(Vec::as_slice).unwrap_or(&[])
+    }
+}
+
+fn reference_choices_for_property(
+    references: &crate::uml::references::ReferenceIndex<'_>,
+    id: &str,
+    key: &str,
+) -> Vec<InspectorReferenceChoice> {
+    let mut choices = references.element(id).ok()
+        .and_then(|element| element.metaclass())
+        .and_then(|metaclass| crate::uml::schema::uml_property(metaclass, key).ok().flatten())
+        .map(|property| references.candidates(property).into_iter().map(|target| {
+            let name = target.named()
+                .and_then(|named| crate::uml::root::Model::qualified_name_with_index(named, references).ok().flatten())
+                .unwrap_or_else(|| target.named().and_then(|named| named.name())
+                    .unwrap_or("(unnamed)").into());
+            InspectorReferenceChoice {
+                id: target.id().into(),
+                label: format!("{name} · {} [{}]", target.metaclass().unwrap_or(target.kind()), target.id()),
+            }
+        }).collect::<Vec<_>>()).unwrap_or_default();
+    choices.sort_by(|left, right| left.label.cmp(&right.label));
+    choices
+}
+
+fn reference_choices_by_path(
+    references: &crate::uml::references::ReferenceIndex<'_>,
+    id: &str,
+    properties: &[InspectorProperty],
+) -> BTreeMap<String, Vec<InspectorReferenceChoice>> {
+    properties.iter().filter_map(|property| {
+        let key = property.path.strip_prefix("properties.")?;
+        (property.editor == PropertyEditor::Reference || key == "type").then(|| {
+            (property.path.clone(), reference_choices_for_property(references, id, key))
+        })
+    }).collect()
 }
 
 use crate::property_edit::{fields_for, PropertyValueType};
@@ -266,20 +307,6 @@ pub(crate) fn inspect_element_with_references(
     id: &str,
     references: &crate::uml::references::ReferenceIndex<'_>,
 ) -> Option<ElementInspector> {
-    let mut reference_choices = references.element(id).ok()
-        .and_then(|element| element.metaclass())
-        .and_then(|metaclass| crate::uml::schema::uml_property(metaclass, "type").ok().flatten())
-        .map(|property| references.candidates(property).into_iter().map(|target| {
-            let name = target.named()
-                .and_then(|named| crate::uml::root::Model::qualified_name_with_index(named, references).ok().flatten())
-                .unwrap_or_else(|| target.named().and_then(|named| named.name())
-                    .unwrap_or("(unnamed)").into());
-            InspectorReferenceChoice {
-                id: target.id().into(),
-                label: format!("{name} · {} [{}]", target.metaclass().unwrap_or(target.kind()), target.id()),
-            }
-        }).collect::<Vec<_>>()).unwrap_or_default();
-    reference_choices.sort_by(|left, right| left.label.cmp(&right.label));
     // Relationship records share Element identity without acquiring unrelated Class properties.
     if let Some(relation) = section.relations.iter().find(|relation| relation.id == id
         && (crate::uml::root::relationship_metaclass(&relation.kind).is_some() || relation.kind.starts_with("uml.") || section.diagrams.iter().any(|diagram|
@@ -346,11 +373,12 @@ pub(crate) fn inspect_element_with_references(
             });
         }
         apply_normative_contracts(crate::uml::root::ElementRef::Relationship(relation), &mut properties);
+        let reference_choices_by_path = reference_choices_by_path(references, id, &properties);
         return Some(ElementInspector {
             element_id:relation.id.clone(),kind:relation.kind.clone(),presentation_kind:presentation.notation,
             name:format!("{source} → {target}"),
             display_label:format!("{source} → {target}"),
-            reference_choices,properties,attributes:Vec::new(),operations:Vec::new(),parameters:Vec::new(),receptions:Vec::new(),
+            reference_choices_by_path,properties,attributes:Vec::new(),operations:Vec::new(),parameters:Vec::new(),receptions:Vec::new(),
             template_parameters:Vec::new(),ports:Vec::new(),parts:Vec::new(),
         });
     }
@@ -520,8 +548,9 @@ pub(crate) fn inspect_element_with_references(
         }
     }
 
+    let reference_choices_by_path = reference_choices_by_path(references, id, &properties);
     Some(ElementInspector {element_id:element.id.clone(),kind:element.kind.clone(),presentation_kind:element.kind.clone(),
-        name:semantic_name.into(),display_label,reference_choices,properties,attributes,operations,parameters,receptions,
+        name:semantic_name.into(),display_label,reference_choices_by_path,properties,attributes,operations,parameters,receptions,
         template_parameters,ports,parts})
 }
 

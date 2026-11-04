@@ -2,10 +2,10 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum ProjectError {
-    #[error("invalid bellatrix-project id")]
+    #[error(
+        "invalid bellatrix-project id: expected 1–128 ASCII bytes using letters, digits, or - _ . + / =; IDs are preserved without normalization"
+    )]
     InvalidId,
-    #[error("bellatrix-project name must not be empty")]
-    EmptyName,
     #[error("invalid engine namespace")]
     InvalidNamespace,
     #[error("unsupported bellatrix-project schema {0}")]

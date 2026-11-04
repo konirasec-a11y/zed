@@ -218,8 +218,8 @@ fn insert_template_parameter(
         .iter()
         .find(|element| element.id == owner_id)
         .ok_or("template owner missing")?;
-    let owner_type = crate::UmlType::from_kind(&owner.kind).ok_or("unsupported template owner")?;
-    let signature_kind = if owner_type.is_classifier() {
+    let owner_type = crate::UmlType::from_kind(&owner.kind);
+    let signature_kind = if owner_type.is_some_and(crate::UmlType::is_classifier) {
         "uml.redefinable_template_signature"
     } else {
         "uml.template_signature"
@@ -238,39 +238,12 @@ fn insert_template_parameter(
         .collect::<Vec<_>>();
     if signatures.len() > 1 {
         return Err(
-            "template owner has multiple signatures; repair the model before adding parameters"
+            "parameter insertion requires an unambiguous target signature; this owner has multiple signatures"
                 .into(),
         );
     }
-    if signatures
-        .first()
-        .is_some_and(|signature| signature.kind != signature_kind)
-    {
-        return Err("existing template signature has an incompatible UML metaclass".into());
-    }
-    // Extending inherited signatures needs parameter substitution and ordering, not a local copy.
-    let model = section.to_model(project_id, "Template validation");
-    let graph = crate::GraphIndex::new(&model);
-    for parent in section
-        .elements
-        .iter()
-        .filter(|candidate| candidate.id != owner_id)
-    {
-        if graph
-            .shortest_path(owner_id, &parent.id, Some("uml.generalization"))
-            .map_err(|error| error.to_string())?
-            .is_some()
-            && section.relations.iter().any(|relation| {
-                relation.kind == "owns"
-                    && relation.from == parent.id
-                    && section.elements.iter().any(|element| {
-                        element.id == relation.to && crate::templates::is_signature(&element.kind)
-                    })
-            })
-        {
-            return Err("inherited template signature extension is not implemented; refusing an incomplete signature".into());
-        }
-    }
+    // Preserve an existing signature and leave inherited signature links for the
+    // author to resolve; adding a local parameter must not invent substitutions.
     let existing_signature = signatures.first().map(|signature| signature.id.clone());
     let owner_name = owner.name.clone();
     let signature_id = existing_signature
@@ -353,7 +326,7 @@ fn insert_template_parameter(
             properties: Default::default(),
         });
     }
-    super::members::grow_classifier_views(section, owner_id);
+    super::members::grow_classifier_views(section, owner_id)?;
     Ok(())
 }
 
@@ -365,14 +338,11 @@ pub(super) fn insert_feature(
     revision: u64,
     project_id: &str,
 ) -> Result<(), String> {
-    let owner = section
+    section
         .elements
         .iter()
         .find(|element| element.id == owner_id)
         .ok_or("feature owner missing")?;
-    if !action.accepts(&owner.kind) {
-        return Err("element type cannot own this feature kind".into());
-    }
     if action == UmlQuickCreate::TemplateParameter {
         if !section
             .diagrams
@@ -480,6 +450,8 @@ pub(super) fn insert_feature(
             .ok_or("diagram missing")?
             .views
             .push(View {
+            children: Vec::new(),
+            presentation: Default::default(),
                 endpoints: None,
                 timing: None,
             draft: None,

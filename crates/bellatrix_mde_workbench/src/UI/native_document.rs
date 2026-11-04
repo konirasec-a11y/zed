@@ -2,7 +2,7 @@ use crate::workbench_ui::native_document_guard::{
     NativeBufferState, NativeDocumentConflict, NativeDocumentGuard,
 };
 use crate::workbench_ui::{MdeUiSource, MdeWorkbenchItem, from_document};
-use bellatrix_project::ProjectDocument;
+use bellatrix_project::{ProjectDocument, ProjectId};
 use gpui::{
     App, AppContext, Context, Entity, EntityId, EventEmitter, FocusHandle, Focusable,
     PathPromptOptions, Subscription, Window, actions,
@@ -146,7 +146,7 @@ pub(crate) fn register_preview_action(
                 files: true,
                 directories: false,
                 multiple: false,
-                prompt: Some("Open MDE project preview (read-only)".into()),
+                prompt: Some("Open Bellatrix or StarUML (.mdj) preview (read-only)".into()),
             },
             DirectoryLister::Local(
                 workspace.project().clone(),
@@ -167,6 +167,10 @@ pub(crate) fn register_preview_action(
                 else {
                     return Ok(());
                 };
+                let is_mdj = path
+                    .extension()
+                    .and_then(|extension| extension.to_str())
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("mdj"));
                 let worktree_task = workspace
                     .update(cx, |workspace, cx| {
                         workspace.project().update(cx, |project, cx| {
@@ -213,27 +217,59 @@ pub(crate) fn register_preview_action(
                 let state = workspace
                     .update(cx, |_, cx| buffer_state(&buffer, cx))
                     .map_err(|error| error.to_string())?;
-                let text = state.version.0.text();
+                let buffer_snapshot = state.version.0.clone();
                 let baseline =
                     NativeDocumentGuard::new(state).map_err(|error| error.message().to_owned())?;
-                let document: ProjectDocument = serde_json::from_str(&text)
-                    .map_err(|error| format!("Invalid Bellatrix project document: {error}"))?;
-                let snapshot = from_document(&document)?;
-                bellatrix_mde::Graph::new(
-                    &snapshot
-                        .section
-                        .to_model(document.id().as_str(), document.name()),
-                )
-                .validate()
-                .map_err(|error| error.to_string())?;
+                let (document, diagnostics) = cx.background_spawn(async move {
+                    let text = buffer_snapshot.text();
+                    let (document, diagnostics) = if is_mdj {
+                        let imported = bellatrix_mde::mdj_conversion::import(text.as_bytes())
+                            .map_err(|error| format!("Invalid StarUML MDJ document: {error}"))?;
+                        let id = ProjectId::new(imported.project.id.clone())
+                            .map_err(|error| error.to_string())?;
+                        let document = ProjectDocument::new(id, imported.project.name.clone())
+                            .map_err(|error| error.to_string())?;
+                        let document = bellatrix_mde_cordis::with_model(document, &imported.project)?;
+                        let mut diagnostics = vec![
+                            "StarUML import is a conservative, read-only projection. UML semantics, associations and ends are preserved as MDJ data, not mapped to native UML. Rendering is partial; styles, routing and resources may not appear. The source file is not modified. Provenance retains the current editor text; original file encoding and line endings are not an export guarantee.".to_owned(),
+                        ];
+                        diagnostics.extend(imported.diagnostics.into_iter().map(|diagnostic| {
+                            let path = if diagnostic.path.is_empty() {
+                                "/"
+                            } else {
+                                &diagnostic.path
+                            };
+                            format!("{path}: {}", diagnostic.message)
+                        }));
+                        (document, diagnostics)
+                    } else {
+                        let document: ProjectDocument = serde_json::from_str(&text)
+                            .map_err(|error| format!("Invalid Bellatrix project document: {error}"))?;
+                        (document, Vec::new())
+                    };
+                    let snapshot = from_document(&document)?;
+                    bellatrix_mde::Graph::new(
+                        &snapshot
+                            .section
+                            .to_model(document.id().as_str(), document.name()),
+                    )
+                    .validate_presentation()
+                    .map_err(|error| error.to_string())?;
+                    Ok::<_, String>((document, diagnostics))
+                }).await?;
+                workspace
+                    .update(cx, |_, cx| baseline.check(&buffer_state(&buffer, cx)))
+                    .map_err(|error| error.to_string())?
+                    .map_err(|error| error.message().to_owned())?;
                 let lease = (importer.0)(document, baseline.is_saved()).await?;
                 workspace
                     .update_in(cx, |workspace, window, cx| {
                         baseline
                             .check(&buffer_state(&buffer, cx))
                             .map_err(|error| error.message().to_owned())?;
-                        let item =
-                            cx.new(|cx| NativeMdePreviewItem::new(buffer, baseline, lease, cx));
+                        let item = cx.new(|cx| {
+                            NativeMdePreviewItem::new(buffer, baseline, lease, diagnostics, cx)
+                        });
                         prepare_preview_panels(workspace, &presentation_source, &item, window, cx);
                         workspace.add_item_to_active_pane(Box::new(item), None, true, window, cx);
                         Ok::<(), String>(())
@@ -259,6 +295,8 @@ struct NativeMdePreviewItem {
     baseline: NativeDocumentGuard<NativeVersion, NativeIdentity>,
     workbench: Entity<MdeWorkbenchItem>,
     lease: NativeDocumentLease,
+    diagnostics: Vec<String>,
+    diagnostic_page: usize,
     _subscription: Subscription,
     _workbench_subscription: Subscription,
     _revision_task: gpui::Task<()>,
@@ -270,7 +308,13 @@ impl NativeMdePreviewItem {
         self.lease
             .source
             .snapshot()
-            .map(|snapshot| format!("{} ({id})", snapshot.name))
+            .map(|snapshot| {
+                if snapshot.name.trim().is_empty() {
+                    format!("Unnamed project ({id})")
+                } else {
+                    format!("{} ({id})", snapshot.name)
+                }
+            })
             .unwrap_or_else(|_| id.to_owned())
     }
 
@@ -278,6 +322,7 @@ impl NativeMdePreviewItem {
         buffer: Entity<Buffer>,
         baseline: NativeDocumentGuard<NativeVersion, NativeIdentity>,
         lease: NativeDocumentLease,
+        diagnostics: Vec<String>,
         cx: &mut Context<Self>,
     ) -> Self {
         let workbench = cx.new(|cx| MdeWorkbenchItem::new(lease.source.clone(), cx));
@@ -309,6 +354,8 @@ impl NativeMdePreviewItem {
             baseline,
             workbench,
             lease,
+            diagnostics,
+            diagnostic_page: 0,
             _subscription: subscription,
             _workbench_subscription: workbench_subscription,
             _revision_task: revision_task,
@@ -389,6 +436,49 @@ impl Render for NativeMdePreviewItem {
                     ),
             )
             .child(Label::new(message))
+            .when(!self.diagnostics.is_empty(), |preview| {
+                let page_size = 50;
+                let page_count = self.diagnostics.len().div_ceil(page_size);
+                let start = self.diagnostic_page * page_size;
+                preview.child(
+                    v_flex()
+                        .flex_shrink_0()
+                        .child(
+                            h_flex()
+                                .gap_2()
+                                .child(Label::new(format!(
+                                    "Import diagnostics ({}) · Page {} of {}",
+                                    self.diagnostics.len(), self.diagnostic_page + 1, page_count
+                                )))
+                                .child(
+                                    Button::new("mde-diagnostics-previous", "Previous")
+                                        .disabled(self.diagnostic_page == 0)
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.diagnostic_page = this.diagnostic_page.saturating_sub(1);
+                                            cx.notify();
+                                        })),
+                                )
+                                .child(
+                                    Button::new("mde-diagnostics-next", "Next")
+                                        .disabled(self.diagnostic_page + 1 >= page_count)
+                                        .on_click(cx.listener(move |this, _, _, cx| {
+                                            this.diagnostic_page = (this.diagnostic_page + 1).min(page_count - 1);
+                                            cx.notify();
+                                        })),
+                                ),
+                        )
+                        .child(
+                            v_flex()
+                                .id(("mde-import-diagnostics", self.diagnostic_page))
+                                .max_h(px(160.0))
+                                .overflow_y_scroll()
+                                .children(
+                                    self.diagnostics.iter().skip(start).take(page_size)
+                                        .map(|message| Label::new(message.clone())),
+                                ),
+                        ),
+                )
+            })
             .child(div().flex_1().min_h_0().child(self.workbench.clone()))
     }
 }

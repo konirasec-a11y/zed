@@ -84,6 +84,11 @@ fn render_view(
         })
         .unwrap_or_default();
     let shape = match &view.geometry {
+        Geometry::Layout { .. } => format!(
+            "<g data-view-id=\"{}\" data-layout-status=\"unresolved\"><desc>View {} has unresolved layout. Authored bounds are preserved; no replacement shape is drawn.</desc></g>",
+            esc(&view.id),
+            esc(&view.id),
+        ),
         Geometry::Rect {
             x,
             y,
@@ -194,10 +199,19 @@ pub fn draw(project: &Project, diagram: &Diagram) -> String {
     );
     result.push_str("<defs><filter id=\"view-shadow\" x=\"-20%\" y=\"-20%\" width=\"150%\" height=\"150%\"><feDropShadow dx=\"2\" dy=\"3\" stdDeviation=\"2\" flood-opacity=\"0.25\"/></filter></defs>");
     result.push_str("<rect width=\"100%\" height=\"100%\" fill=\"#24282e\"/>");
-    let mut views = diagram.views.iter().collect::<Vec<_>>();
+    let mut views = diagram.all_views().collect::<Vec<_>>();
+    let unresolved_layouts = views
+        .iter()
+        .filter(|view| matches!(view.geometry, Geometry::Layout { .. }))
+        .count();
     views.sort_by_key(|view| view.z_index);
     for view in views {
         result.push_str(&render_view(project, view, &references));
+    }
+    if unresolved_layouts > 0 {
+        result.push_str(&format!(
+            "<g role=\"note\" data-export-warning=\"unresolved-layout\"><title>Incomplete diagram rendering</title><text x=\"12\" y=\"24\" font-family=\"system-ui\" font-size=\"14\" fill=\"#ffd166\">Warning: {unresolved_layouts} view(s) have unresolved layout and are not drawn. Resolved subviews are included.</text></g>"
+        ));
     }
     result.push_str("</svg>");
     result

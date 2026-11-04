@@ -8,7 +8,8 @@ fn schema_version() -> u32 {
 }
 
 /// Project identity outlives its path, its window and any engine generation.
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+/// Imported identities are opaque, including `/`; never use them as filesystem paths or URLs.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize)]
 #[serde(transparent)]
 pub struct ProjectId(String);
 
@@ -17,9 +18,10 @@ impl ProjectId {
         let id = id.into();
         if id.is_empty()
             || id.len() > 128
-            || !id
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+            || !id.bytes().all(|byte| {
+                byte.is_ascii_alphanumeric()
+                    || matches!(byte, b'-' | b'_' | b'.' | b'+' | b'/' | b'=')
+            })
         {
             return Err(ProjectError::InvalidId);
         }
@@ -31,6 +33,13 @@ impl ProjectId {
     }
 }
 
+impl<'de> Deserialize<'de> for ProjectId {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let id = String::deserialize(deserializer)?;
+        Self::new(id).map_err(serde::de::Error::custom)
+    }
+}
+
 /// Persistent platform envelope. Engine sections are opaque to the platform.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -38,6 +47,7 @@ pub struct ProjectDocument {
     #[serde(default = "schema_version")]
     schema_version: u32,
     id: ProjectId,
+    // Imported documents may have no name; a display fallback must not alter their persisted data.
     name: String,
     #[serde(default)]
     revision: u64,
@@ -90,9 +100,6 @@ impl ProjectDocument {
         ProjectId::new(self.id.as_str())?;
         if self.schema_version != schema_version() {
             return Err(ProjectError::Schema(self.schema_version));
-        }
-        if self.name.trim().is_empty() {
-            return Err(ProjectError::EmptyName);
         }
         for namespace in self.sections.keys() {
             validate_namespace(namespace)?;

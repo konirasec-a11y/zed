@@ -131,11 +131,22 @@ impl MdeWorkbenchItem {
             else {
                 return;
             };
+            let owner_id = match kind {
+                ModelingRelationKind::Generalization | ModelingRelationKind::InterfaceRealization
+                | ModelingRelationKind::TemplateBinding | ModelingRelationKind::Include
+                | ModelingRelationKind::Extend | ModelingRelationKind::ElementImport
+                | ModelingRelationKind::PackageImport | ModelingRelationKind::PackageMerge
+                | ModelingRelationKind::Manifestation | ModelingRelationKind::Deployment => source.subject_id.clone(),
+                // Diagram context and project root are not a choice of semantic owner.
+                // Other relationship tools remain incomplete until an owner is selected.
+                _ => None,
+            };
             self.submit(
                 MdeUiCommand::CreateRelationAtViewsOrVisualDraft(
                     bellatrix_mde_cordis::ModelingCreateRelationAtViewsRequested {
                         project_id: self.project_id().clone(),
                         diagram_id: diagram.id.clone(),
+                        owner_id,
                         kind,
                         source_view_id,
                         target_view_id,

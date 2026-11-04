@@ -256,11 +256,13 @@ the project root while retaining their diagram context unchanged.
 JSON, protobuf, binary envelopes, Project and ModelingSection preserve the same
 placement and View reference. JSON rejects duplicate hierarchy keys. Protobuf uses
 typed HierarchyPlacement and ViewOccurrence messages, not Explorer JSON blobs.
-Both import paths validate missing references and cycles; the domain adapter also
-validates semantic ownership steps. Changes that invalidate an authored occurrence
-are rejected instead of silently deleting that placement. Move the dependent
-diagram first before removing its anchor or changing its member path. Deleting a
-semantic parent moves its dependent diagrams to the project root explicitly.
+Opening and saving preserve pending parent and member references, even when UML
+ownership is incomplete or inconsistent. Neither path rewrites those references
+or consults UML conformance rules. New placement operations require an identifiable
+destination; the occurrence graph remains cycle-checked for safe navigation.
+Semantic and unresolved-reference diagnostics belong to explicit kernel validation.
+Deleting a semantic parent moves its dependent diagrams to the project root.
+
 
 The retired `explorer_parents` and `explorer_diagram_occurrences` payloads are
 rejected on import and require explicit conversion. They are never silently
@@ -286,3 +288,15 @@ avoid redundant standalone rows unless an authored diagram needs that parent.
 Moving an occurrence onto an Explorer owner
 moves its semantic subject; it does not move its View between diagrams. Tooltips
 and menu labels distinguish those operations.
+
+Relationship creation requests carry an explicit optional `owner_id` through
+Cordis and the command layer, including the visual-draft fallback. The executor
+never infers ownership from UMLDI context, adopts a root Model, or requires matching
+Activity/Region containers before recording a relation. It stores a requested
+owner without testing UML conformance; the kernel diagnoses incomplete or invalid
+ownership. Source-encoded ownership is not duplicated as an `owns` edge.
+
+The canvas supplies the source identity only for source-owned relationship tools,
+including Deployment's location. Other tools currently submit no owner because
+the canvas has no explicit owner picker. The relation remains editable and
+incomplete; completing that owner-selection interaction is still pending.

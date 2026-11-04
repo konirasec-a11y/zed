@@ -622,7 +622,7 @@ impl RenderOnce for UmlClassifier {
         };
         let edit_title = self.edit_title.clone();
         let mut header = self.header;
-        if !appearance.0.should_show_stereotype() {
+        if !appearance.0.uml.should_show_stereotype() {
             header.applied_stereotype = None;
         }
         let header_height = header.classifier_header_height();
@@ -703,7 +703,7 @@ impl RenderOnce for UmlClassifier {
                     ),
             )
             .when(
-                appearance.0.suppress_attributes != Some(true) && !self.attributes.is_empty(),
+                appearance.0.uml.suppress_attributes != Some(true) && !self.attributes.is_empty(),
                 |element| {
                     element.child(compartment(
                         self.attributes,
@@ -715,7 +715,7 @@ impl RenderOnce for UmlClassifier {
                 },
             )
             .when(
-                appearance.0.suppress_operations != Some(true) && !self.operations.is_empty(),
+                appearance.0.uml.suppress_operations != Some(true) && !self.operations.is_empty(),
                 |element| {
                     element.child(compartment(
                         self.operations,
@@ -727,7 +727,7 @@ impl RenderOnce for UmlClassifier {
                 },
             )
             .when(
-                appearance.0.suppress_receptions != Some(true) && !self.receptions.is_empty(),
+                appearance.0.uml.suppress_receptions != Some(true) && !self.receptions.is_empty(),
                 |element| {
                     element.child(compartment(
                         self.receptions,

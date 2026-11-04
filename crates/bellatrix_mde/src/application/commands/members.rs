@@ -1,5 +1,5 @@
 use crate::{
-    Element, Geometry, ModelingSection, Relation, UmlCapability, UmlType, classifier_contents,
+    Element, Geometry, ModelingSection, Relation, UmlType, classifier_contents,
     reroute_relationships,
 };
 
@@ -11,14 +11,14 @@ pub enum ModelingMemberKind {
     Reception,
 }
 
-pub(super) fn grow_classifier_views(section: &mut ModelingSection, owner_id: &str) {
+pub(super) fn grow_classifier_views(section: &mut ModelingSection, owner_id: &str) -> Result<(), String> {
     let Some(kind) = section
         .elements
         .iter()
         .find(|element| element.id == owner_id)
         .and_then(|element| UmlType::from_kind(&element.kind))
     else {
-        return;
+        return Ok(());
     };
     let contents = classifier_contents(section, owner_id);
     let minimum = if kind == UmlType::Interface {
@@ -26,6 +26,22 @@ pub(super) fn grow_classifier_views(section: &mut ModelingSection, owner_id: &st
     } else {
         44.0 + contents.compartments_height()
     };
+    // Resizing can also reroute other Views in the same diagram. Preflight
+    // before mutating any geometry until that projection understands children.
+    for diagram in &section.diagrams {
+        let needs_growth = diagram.views.iter().any(|view| {
+            view.subject.as_deref() == Some(owner_id)
+                && matches!(view.geometry, Geometry::Rect { height, .. } if height < minimum)
+        });
+        if needs_growth && diagram.all_views().any(|view| {
+            !view.children.is_empty() || matches!(view.geometry, Geometry::Layout { .. })
+        }) {
+            return Err(format!(
+                "adding this member requires resizing classifier {} in diagram {}, which needs hierarchy-aware layout; the command was not applied",
+                owner_id, diagram.id
+            ));
+        }
+    }
     let mut diagrams = Vec::new();
     for diagram in &mut section.diagrams {
         let mut changed = false;
@@ -48,6 +64,7 @@ pub(super) fn grow_classifier_views(section: &mut ModelingSection, owner_id: &st
     for diagram_id in diagrams {
         reroute_relationships(section, &diagram_id);
     }
+    Ok(())
 }
 
 pub(super) fn append_member(
@@ -62,17 +79,6 @@ pub(super) fn append_member(
         .iter()
         .find(|element| element.id == owner_id)
         .ok_or("member owner not found")?;
-    let owner_type =
-        UmlType::from_kind(&owner.kind).ok_or("member owner is not a supported UML type")?;
-    let capability = match kind {
-        ModelingMemberKind::Attribute => UmlCapability::Attribute,
-        ModelingMemberKind::Operation => UmlCapability::Operation,
-        ModelingMemberKind::Reception => UmlCapability::Reception,
-        ModelingMemberKind::Parameter => UmlCapability::Parameter,
-    };
-    if !owner_type.supports(capability) {
-        return Err("element type cannot own this member kind".into());
-    }
     let rust_classifier = matches!(owner.kind.as_str(), "rust.struct" | "rust.trait");
     let (model_kind, prefix, base) = match kind {
         ModelingMemberKind::Attribute => (
@@ -158,11 +164,11 @@ pub(super) fn append_member(
         .iter()
         .find(|relation| relation.kind == "owns" && relation.to == owner_id)
         .map(|relation| relation.from.clone());
-    grow_classifier_views(section, owner_id);
+    grow_classifier_views(section, owner_id)?;
     if kind == ModelingMemberKind::Parameter
         && let Some(classifier_id) = classifier_id
     {
-        grow_classifier_views(section, &classifier_id);
+        grow_classifier_views(section, &classifier_id)?;
     }
     Ok(member_id)
 }

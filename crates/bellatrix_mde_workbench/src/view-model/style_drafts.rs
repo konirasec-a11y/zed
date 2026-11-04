@@ -28,19 +28,19 @@ pub(crate) const FIELDS: &[(&str, &str)] = &[
 
 pub(crate) fn style_value(style: &Style, key: &str) -> String {
     match key {
-        "show_visibility" => style.show_visibility.map(|value| value.to_string()),
-        "show_type" => style.show_type.map(|value| value.to_string()),
-        "show_property" => style.show_property.map(|value| value.to_string()),
-        "stereotype_display" => style.stereotype_display.map(|value| {
+        "show_visibility" => style.uml.show_visibility.map(|value| value.to_string()),
+        "show_type" => style.uml.show_type.map(|value| value.to_string()),
+        "show_property" => style.uml.show_property.map(|value| value.to_string()),
+        "stereotype_display" => style.uml.stereotype_display.map(|value| {
             match value {
                 StereotypeDisplay::Hidden => "none",
                 StereotypeDisplay::Label => "label",
             }
             .into()
         }),
-        "suppress_attributes" => style.suppress_attributes.map(|value| value.to_string()),
-        "suppress_operations" => style.suppress_operations.map(|value| value.to_string()),
-        "suppress_receptions" => style.suppress_receptions.map(|value| value.to_string()),
+        "suppress_attributes" => style.uml.suppress_attributes.map(|value| value.to_string()),
+        "suppress_operations" => style.uml.suppress_operations.map(|value| value.to_string()),
+        "suppress_receptions" => style.uml.suppress_receptions.map(|value| value.to_string()),
         "word_wrap" => style.word_wrap.map(|value| value.to_string()),
         "show_shadow" => style.show_shadow.map(|value| value.to_string()),
         "line_mode" => style.line_mode.map(|value| {
@@ -310,19 +310,19 @@ impl StyleEditState {
                 }
                 let value = (!text.is_empty()).then(|| text.to_owned());
                 match *key {
-                    "show_visibility" => style.show_visibility = text.parse().ok(),
-                    "show_type" => style.show_type = text.parse().ok(),
-                    "show_property" => style.show_property = text.parse().ok(),
+                    "show_visibility" => style.uml.show_visibility = text.parse().ok(),
+                    "show_type" => style.uml.show_type = text.parse().ok(),
+                    "show_property" => style.uml.show_property = text.parse().ok(),
                     "stereotype_display" => {
-                        style.stereotype_display = match text {
+                        style.uml.stereotype_display = match text {
                             "none" => Some(StereotypeDisplay::Hidden),
                             "label" => Some(StereotypeDisplay::Label),
                             _ => None,
                         }
                     }
-                    "suppress_attributes" => style.suppress_attributes = text.parse().ok(),
-                    "suppress_operations" => style.suppress_operations = text.parse().ok(),
-                    "suppress_receptions" => style.suppress_receptions = text.parse().ok(),
+                    "suppress_attributes" => style.uml.suppress_attributes = text.parse().ok(),
+                    "suppress_operations" => style.uml.suppress_operations = text.parse().ok(),
+                    "suppress_receptions" => style.uml.suppress_receptions = text.parse().ok(),
                     "word_wrap" => style.word_wrap = text.parse().ok(),
                     "show_shadow" => style.show_shadow = text.parse().ok(),
                     "line_mode" => {

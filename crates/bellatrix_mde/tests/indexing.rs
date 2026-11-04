@@ -170,7 +170,7 @@ fn uml_root_namespace_edit_and_reopen_flow_preserves_canonical_identity() {
     let other_id = project.elements.last().expect("second class").id.clone();
     project = apply(
         &project,
-        Command::CreateRelation {
+        Command::CreateRelation { owner_id: None,
             diagram_id: "diagram".into(),
             kind: ModelingRelationKind::Association,
             from: class_id.clone(),
@@ -186,7 +186,7 @@ fn uml_root_namespace_edit_and_reopen_flow_preserves_canonical_identity() {
         .clone();
     project = apply(
         &project,
-        Command::CreateRelation {
+        Command::CreateRelation { owner_id: None,
             diagram_id: "diagram".into(),
             kind: ModelingRelationKind::Dependency,
             from: class_id.clone(),

@@ -136,7 +136,7 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
     let inspection = inspect_element(&section, &attribute.id).expect("Property inspector");
     assert!(
         inspection
-            .reference_choices
+            .reference_choices_for("properties.type")
             .iter()
             .any(|choice| choice.id == type_id)
     );
