@@ -526,6 +526,32 @@ fn partition_represents_property_and_is_contained(
     accept_any([guard.map(|value| !value), consequence])
 }
 
+// UML.xmi CreateObjectAction-multiplicity: result.is(1,1).
+fn create_object_result_multiplicity(
+    references: &ReferenceIndex<'_>,
+    action: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let result_id =
+        optional_activity_reference(references, action, "CreateObjectAction", "result")?
+            .ok_or_else(|| {
+                QueryError::unsupported(action.id(), "required result OutputPin is unresolved")
+            })?;
+    let result = references
+        .element(&result_id)
+        .map_err(|error| QueryError::unsupported(action.id(), error))?;
+    // MultiplicityElement::is compares bound queries, not interval validity.
+    // A known mismatch survives an opaque opposite bound; contracts and value
+    // evaluation errors keep their own diagnostics rather than becoming false.
+    require_all([
+        value_specifications::lower_bound(references, result)
+            .map(|lower| lower == 1.into())
+            .map_err(|error| QueryError::unsupported(result.id(), error.to_string())),
+        value_specifications::upper_bound(references, result)
+            .map(|upper| upper == 1.into())
+            .map_err(|error| QueryError::unsupported(result.id(), error.to_string())),
+    ])
+}
+
 // UML.xmi CreateObjectAction-same_type: result.type = classifier.
 fn create_object_same_type(
     references: &ReferenceIndex<'_>,
@@ -1199,6 +1225,13 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             ));
         }
         if node.conforms_to("CreateObjectAction") {
+            checks.push((
+                create_object_result_multiplicity(references, node),
+                "UML_CREATE_OBJECT_ACTION_MULTIPLICITY",
+                "MDE_CREATE_OBJECT_ACTION_MULTIPLICITY_UNVERIFIED",
+                "CreateObjectAction-multiplicity",
+                "the result OutputPin of a CreateObjectAction must have multiplicity 1..1",
+            ));
             checks.push((
                 create_object_same_type(references, node),
                 "UML_CREATE_OBJECT_ACTION_SAME_TYPE",
