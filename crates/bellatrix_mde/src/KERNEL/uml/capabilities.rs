@@ -192,12 +192,10 @@ pub fn quick_create_capability(action: UmlQuickCreate) -> UmlCapability {
         UmlQuickCreate::TemplateParameter => UmlCapability::TemplateParameter,
         UmlQuickCreate::ProvidedInterface | UmlQuickCreate::RequiredInterface => {
             UmlCapability::ClassInterfaces
-        },
+        }
         UmlQuickCreate::AssociatedClass
         | UmlQuickCreate::AggregatedClass
-        | UmlQuickCreate::CompositedClass => {
-            UmlCapability::ClassAssociation
-        }
+        | UmlQuickCreate::CompositedClass => UmlCapability::ClassAssociation,
         UmlQuickCreate::Port => UmlCapability::Port,
         UmlQuickCreate::Part => UmlCapability::Part,
     }

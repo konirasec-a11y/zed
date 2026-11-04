@@ -13,9 +13,9 @@ pub(crate) fn decode_section(
     let section: crate::ModelingSection = serde_json::from_str(section_json)
         .map_err(|error| format!("invalid MDE section: {error}"))?;
     let project = section.to_model(project_id, name);
-    crate::uml::associations::validate_aggregation_storage(
-        crate::uml::root::Model::from_project(&project),
-    )?;
+    crate::uml::associations::validate_aggregation_storage(crate::uml::root::Model::from_project(
+        &project,
+    ))?;
     crate::Graph::new(&project)
         .validate_identifiers()
         .map_err(|error| error.to_string())?;
@@ -72,9 +72,7 @@ pub fn project_model_section(
                     UmlQuickCreate::Part,
                 ]
                 .into_iter()
-                .filter(|action| {
-                    crate::uml_types::quick_create_accepts(*action, &element.kind)
-                })
+                .filter(|action| crate::uml_types::quick_create_accepts(*action, &element.kind))
                 .collect(),
                 is_classifier: crate::UmlType::from_kind(&element.kind)
                     .is_some_and(crate::UmlType::is_classifier),

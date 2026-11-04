@@ -116,9 +116,7 @@ fn relationship_endpoint(
             .ok_or_else(|| format!("endpoint {subject} has no View in this diagram"))?
     };
     if subject.is_some() && view.subject.as_deref() != subject {
-        return Err(
-            "relationship endpoint View no longer represents its semantic endpoint".into(),
-        );
+        return Err("relationship endpoint View no longer represents its semantic endpoint".into());
     }
     let (left, top, width, height) = match &view.geometry {
         Geometry::Rect {
@@ -130,17 +128,27 @@ fn relationship_endpoint(
         _ => return Err("relationship endpoint has no valid node View".to_owned()),
     };
     let element = view.subject.as_deref().and_then(|subject| {
-        section.elements.iter().find(|element| element.id == subject)
+        section
+            .elements
+            .iter()
+            .find(|element| element.id == subject)
     });
-    let kind = view.presentation.notation_kind.as_deref()
+    let kind = view
+        .presentation
+        .notation_kind
+        .as_deref()
         .or_else(|| element.map(|element| element.kind.as_str()))
         .and_then(UmlType::from_kind);
-    let contents = view.subject.as_deref()
+    let contents = view
+        .subject
+        .as_deref()
         .map(|subject| classifier_contents(section, subject))
         .unwrap_or_default();
     if kind == Some(UmlType::Interface)
-        && !matches!(view.style.uml.stereotype_display,
-            Some(crate::StereotypeDisplay::Hidden | crate::StereotypeDisplay::Label))
+        && !matches!(
+            view.style.uml.stereotype_display,
+            Some(crate::StereotypeDisplay::Hidden | crate::StereotypeDisplay::Label)
+        )
     {
         let mut layout = crate::interface_view_layout(view, contents)
             .ok_or("interface View has no native icon layout")?;
@@ -154,13 +162,17 @@ fn relationship_endpoint(
         });
     }
     let authored_layout = view.presentation.internal
-        || view.children.iter().any(|child| child.presentation.internal);
+        || view
+            .children
+            .iter()
+            .any(|child| child.presentation.internal);
     let height = if kind == Some(UmlType::Interface) && !authored_layout {
         height.max(contents.minimum_interface_height())
     } else {
         height
     };
-    let height = element.filter(|_| !authored_layout)
+    let height = element
+        .filter(|_| !authored_layout)
         .map(|element| {
             let notation = crate::uml_notation(&element.kind);
             let header = crate::uml_header(
@@ -197,10 +209,18 @@ fn route_with_lane(
     let source_view_id = endpoints.and_then(|endpoints| endpoints.source_view_id.as_deref());
     let target_view_id = endpoints.and_then(|endpoints| endpoints.target_view_id.as_deref());
     let source = relationship_endpoint(
-        section, diagram_id, Some(from), source_view_id, endpoints.is_some(),
+        section,
+        diagram_id,
+        Some(from),
+        source_view_id,
+        endpoints.is_some(),
     )?;
     let target = relationship_endpoint(
-        section, diagram_id, Some(to), target_view_id, endpoints.is_some(),
+        section,
+        diagram_id,
+        Some(to),
+        target_view_id,
+        endpoints.is_some(),
     )?;
     if endpoints.map_or(from == to, |_| source_view_id == target_view_id) {
         let start = source.anchor_toward(Point {
@@ -521,7 +541,8 @@ pub(crate) fn reanchor_manual_paths(
     let changed: std::collections::BTreeSet<_> = current_diagram
         .all_views()
         .filter(|view| {
-            previous_diagram.all_views()
+            previous_diagram
+                .all_views()
                 .find(|previous| previous.id == view.id)
                 .is_some_and(|previous| previous.geometry != view.geometry)
         })
@@ -541,7 +562,9 @@ pub(crate) fn reanchor_manual_paths(
             },
         };
         if !result.x.is_finite() || !result.y.is_finite() {
-            return Err("manual relationship endpoint cannot be reanchored to finite coordinates".into());
+            return Err(
+                "manual relationship endpoint cannot be reanchored to finite coordinates".into(),
+            );
         }
         Ok(result)
     };
@@ -550,7 +573,9 @@ pub(crate) fn reanchor_manual_paths(
         if view.draft.is_some() {
             continue;
         }
-        let relation = current.relations.iter()
+        let relation = current
+            .relations
+            .iter()
             .find(|relation| Some(relation.id.as_str()) == view.subject.as_deref());
         // Attached presentation paths do not need a recognized semantic Relation.
         // Their authored points remain authoritative, just like a manual relation.
@@ -565,13 +590,24 @@ pub(crate) fn reanchor_manual_paths(
         let Some(PathSegment::Line { to } | PathSegment::Cubic { to, .. }) = segments.last() else {
             continue;
         };
-        let previous_view = previous_diagram.all_views()
+        let previous_view = previous_diagram
+            .all_views()
             .find(|previous| previous.id == view.id)
             .ok_or("previous manual relationship View not found")?;
-        let Geometry::Path { start: previous_start, segments: previous_segments } = &previous_view.geometry else {
+        let Geometry::Path {
+            start: previous_start,
+            segments: previous_segments,
+        } = &previous_view.geometry
+        else {
             return Err("previous manual relationship did not have Path geometry".into());
         };
-        let Some(PathSegment::Line { to: previous_end } | PathSegment::Cubic { to: previous_end, .. }) = previous_segments.last() else {
+        let Some(
+            PathSegment::Line { to: previous_end }
+            | PathSegment::Cubic {
+                to: previous_end, ..
+            },
+        ) = previous_segments.last()
+        else {
             return Err("previous manual relationship had no endpoint".into());
         };
         let endpoint_id = |source: bool| {
@@ -599,8 +635,16 @@ pub(crate) fn reanchor_manual_paths(
         }
         // A containing View can move the route and its endpoint nodes together.
         // Transform the old anchors once, while keeping the route's transformed bends.
-        let mut start = if source_id.is_some() { *previous_start } else { *start };
-        let mut end = if target_id.is_some() { *previous_end } else { *to };
+        let mut start = if source_id.is_some() {
+            *previous_start
+        } else {
+            *start
+        };
+        let mut end = if target_id.is_some() {
+            *previous_end
+        } else {
+            *to
+        };
         if let Some(identifier) = source {
             let subject = relation.map(|relation| relation.from.as_str());
             start = transform(
@@ -625,7 +669,9 @@ pub(crate) fn reanchor_manual_paths(
         .find(|diagram| diagram.id == diagram_id)
         .ok_or("diagram not found")?;
     for (identifier, new_start, new_end) in updates {
-        let view = diagram.view_mut(&identifier).ok_or("manual relationship View disappeared")?;
+        let view = diagram
+            .view_mut(&identifier)
+            .ok_or("manual relationship View disappeared")?;
         let Geometry::Path { start, segments } = &mut view.geometry else {
             return Err("manual relationship no longer has Path geometry".into());
         };

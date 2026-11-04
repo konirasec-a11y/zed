@@ -68,13 +68,7 @@ fn apply(project: &Document, command: &Command, revision: u64) -> Result<Documen
 }
 fn apply_candidate(project: &Document, command: &Command, revision: u64) -> FlowResult<Document> {
     let (id, name, section) = parts(&project.model)?;
-    let updated = apply_model_command(
-        &id,
-        &name,
-        &section.to_string(),
-        revision,
-        command.clone(),
-    )?;
+    let updated = apply_model_command(&id, &name, &section.to_string(), revision, command.clone())?;
     decode(
         &encode_model_section(&id, &name, &updated.to_string(), "json")?,
         "json",

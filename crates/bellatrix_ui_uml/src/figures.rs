@@ -406,9 +406,8 @@ impl RenderOnce for UmlFigure {
                                     false,
                                 );
                                 match outline.build() {
-                                    Ok(path) => {
-                                        window.paint_path(path, appearance.stroke(palette, selected))
-                                    }
+                                    Ok(path) => window
+                                        .paint_path(path, appearance.stroke(palette, selected)),
                                     Err(error) => log::error!("UML compartment divider: {error}"),
                                 }
                             },

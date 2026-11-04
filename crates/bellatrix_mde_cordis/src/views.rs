@@ -1,5 +1,8 @@
-pub use bellatrix_mde_contracts::events::{ModelingCreateVisualDraftRequested, ModelingCreateVisualDraft, ModelingRemoveViewRequested, ModelingRemoveView, ModelingPlaceElementViewRequested, ModelingPlaceElementView};
 use crate::Command;
+pub use bellatrix_mde_contracts::events::{
+    ModelingCreateVisualDraft, ModelingCreateVisualDraftRequested, ModelingPlaceElementView,
+    ModelingPlaceElementViewRequested, ModelingRemoveView, ModelingRemoveViewRequested,
+};
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::event::responder;
 use cordis::{Context, Event};

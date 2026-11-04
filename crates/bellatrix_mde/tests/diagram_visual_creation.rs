@@ -62,13 +62,7 @@ fn encode(project: &Document, format: &str) -> FlowResult<Vec<u8>> {
 }
 fn apply(project: &Document, command: &Command, revision: u64) -> FlowResult<Document> {
     let (id, name, section) = parts(&project.model)?;
-    let updated = apply_model_command(
-        &id,
-        &name,
-        &section.to_string(),
-        revision,
-        command.clone(),
-    )?;
+    let updated = apply_model_command(&id, &name, &section.to_string(), revision, command.clone())?;
     decode(
         &encode_model_section(&id, &name, &updated.to_string(), "json")?,
         "json",
@@ -1074,13 +1068,18 @@ fn exercise_visual_drafts() -> Result<(), Box<dyn std::error::Error>> {
         .and_then(|diagram| diagram.views.last())
         .ok_or("expected conflicting relation view")?;
     assert!(conflict.draft.is_none());
-    let conflict_id = conflict.subject.as_deref().ok_or("relation subject missing")?;
+    let conflict_id = conflict
+        .subject
+        .as_deref()
+        .ok_or("relation subject missing")?;
     assert!(
         diagnostics(&conflicting, "diagram-tasks")?
             .iter()
-            .any(|issue| issue.code == "UML_NAMESPACE_MEMBERS_DISTINGUISHABLE"
-                && issue.subject_id == conflict_id
-                && issue.severity == DiagnosticSeverity::Error)
+            .any(
+                |issue| issue.code == "UML_NAMESPACE_MEMBERS_DISTINGUISHABLE"
+                    && issue.subject_id == conflict_id
+                    && issue.severity == DiagnosticSeverity::Error
+            )
     );
     assert_eq!(
         conflicting
@@ -1123,8 +1122,10 @@ fn exercise_visual_drafts() -> Result<(), Box<dyn std::error::Error>> {
     assert!(
         !diagnostics(&canonical_reverse, "diagram-tasks")?
             .iter()
-            .any(|issue| issue.code == "UML_NAMESPACE_MEMBERS_DISTINGUISHABLE"
-                && (issue.subject_id == reverse_id || issue.subject_id == relation_id))
+            .any(
+                |issue| issue.code == "UML_NAMESPACE_MEMBERS_DISTINGUISHABLE"
+                    && (issue.subject_id == reverse_id || issue.subject_id == relation_id)
+            )
     );
     assert_eq!(
         reverse_view.endpoints.as_ref(),

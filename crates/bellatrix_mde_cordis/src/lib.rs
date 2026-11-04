@@ -1,5 +1,8 @@
 //! Cordis transport and project-revision integration for the single MDE domain.
-pub use bellatrix_mde_contracts::events::{ModelingOperation, ModelingCommand, ModelingRequested, ModelingCompletion, ModelingCompleted, ModelingChannels};
+pub use bellatrix_mde_contracts::events::{
+    ModelingChannels, ModelingCommand, ModelingCompleted, ModelingCompletion, ModelingOperation,
+    ModelingRequested,
+};
 use bellatrix_mde_contracts::protocol::trace as trace_contract;
 pub use trace_contract::{
     DiagnosticSeverity, ExecutionEvent, ModelingDiagnostic, TraceOutcome, TracePhase,

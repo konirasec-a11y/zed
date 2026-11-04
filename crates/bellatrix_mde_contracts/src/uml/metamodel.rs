@@ -499,7 +499,12 @@ pub const DECLARED_PROPERTIES: &[(&str, &[&str])] = &[
     ("WriteVariableAction", &["value"]),
 ];
 
-use super::schema::{Aggregation, AmbiguousDefinition, ClassifierDescriptor, ClassifierKind, ConstraintDescriptor, DefaultValue, Document, DocumentationDescriptor, OperationDescriptor, ParameterDescriptor, ParameterDirection, PropertyDescriptor, SpecificationDescriptor, ReferenceResolution, SourceDescriptor, UnresolvedReference, XmiId, XmiReference};
+use super::schema::{
+    Aggregation, AmbiguousDefinition, ClassifierDescriptor, ClassifierKind, ConstraintDescriptor,
+    DefaultValue, Document, DocumentationDescriptor, OperationDescriptor, ParameterDescriptor,
+    ParameterDirection, PropertyDescriptor, ReferenceResolution, SourceDescriptor,
+    SpecificationDescriptor, UnresolvedReference, XmiId, XmiReference,
+};
 
 #[rustfmt::skip]
 pub const SOURCES: &[SourceDescriptor] = &[
@@ -11147,7 +11152,9 @@ pub fn conforms_to(specific: &str, general: &str) -> bool {
     let (Some(specific), Some(general)) = (
         super::schema::uml_classifier(specific),
         super::schema::uml_classifier(general),
-    ) else { return false; };
+    ) else {
+        return false;
+    };
     super::schema::conforms_to(specific.id, general.id) == Ok(true)
 }
 

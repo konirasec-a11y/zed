@@ -1,6 +1,8 @@
-pub use bellatrix_mde_contracts::events::{ModelingEditAssociationEndsRequested, ModelingEditAssociationEnds};
 use crate::AssociationEndEdit;
 use crate::Command;
+pub use bellatrix_mde_contracts::events::{
+    ModelingEditAssociationEnds, ModelingEditAssociationEndsRequested,
+};
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::{Context, Event};
 

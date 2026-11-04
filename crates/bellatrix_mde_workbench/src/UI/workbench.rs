@@ -4,6 +4,8 @@
 mod workbench_state;
 use workbench_state::{PendingRelationEndpoint, SelectionChange, WorkbenchState};
 
+#[path = "../view-model/canvas_presentation.rs"]
+mod canvas_presentation;
 #[path = "diagram_canvas.rs"]
 mod diagram_canvas;
 #[path = "execution_dashboard.rs"]
@@ -12,8 +14,6 @@ mod execution_dashboard;
 mod explorer;
 #[path = "hierarchy.rs"]
 mod hierarchy;
-#[path = "../view-model/canvas_presentation.rs"]
-mod canvas_presentation;
 #[path = "../view-model/inspector_drafts.rs"]
 mod inspector_drafts;
 #[path = "integration.rs"]
@@ -471,9 +471,7 @@ impl MdeWorkbenchItem {
                 .diagrams
                 .iter()
                 .find(|diagram| Some(diagram.id.as_str()) == self.presentation.active_diagram())
-                .is_none_or(|diagram| {
-                    !selection::supports_view_editing(diagram, view_id)
-                })
+                .is_none_or(|diagram| !selection::supports_view_editing(diagram, view_id))
         })
     }
 
@@ -1115,9 +1113,7 @@ impl MdeWorkbenchItem {
         let expected_revision = match &gesture {
             CanvasGesture::Move { revision, .. }
             | CanvasGesture::Resize { revision, .. }
-            | CanvasGesture::EditPath { revision, .. } => {
-                *revision
-            }
+            | CanvasGesture::EditPath { revision, .. } => *revision,
         };
         if self
             .source
@@ -1129,9 +1125,7 @@ impl MdeWorkbenchItem {
             let view_id = match &gesture {
                 CanvasGesture::Move { view_id, .. }
                 | CanvasGesture::Resize { view_id, .. }
-                | CanvasGesture::EditPath { view_id, .. } => {
-                    view_id
-                }
+                | CanvasGesture::EditPath { view_id, .. } => view_id,
             };
             self.source.record_interaction(
                 "canvas.gesture.stale_revision",
@@ -1180,11 +1174,20 @@ impl MdeWorkbenchItem {
                     cx.notify();
                     return;
                 }
-                let minimum = self.source.snapshot().ok().and_then(|snapshot| {
-                    snapshot.section.diagrams.iter().flat_map(|diagram| diagram.all_views())
-                        .find(|view| view.id == view_id)
-                        .map(|view| canvas_presentation::minimum_size(&snapshot.section, view))
-                }).unwrap_or((80.0, 48.0));
+                let minimum = self
+                    .source
+                    .snapshot()
+                    .ok()
+                    .and_then(|snapshot| {
+                        snapshot
+                            .section
+                            .diagrams
+                            .iter()
+                            .flat_map(|diagram| diagram.all_views())
+                            .find(|view| view.id == view_id)
+                            .map(|view| canvas_presentation::minimum_size(&snapshot.section, view))
+                    })
+                    .unwrap_or((80.0, 48.0));
                 MdeUiCommand::ResizeView(ModelingResizeViewRequested {
                     project_id: self.project_id().clone(),
                     view_id,

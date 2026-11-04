@@ -54,14 +54,22 @@ impl Render for MdeWorkbenchItem {
                 );
                 if let Some(diagram) = diagram {
                     title = format!("{} / {}", snapshot.name, diagram.name);
-                    unresolved_presentation = diagram.all_views().any(|view| matches!(&view.geometry, Geometry::Layout { .. }));
+                    unresolved_presentation = diagram
+                        .all_views()
+                        .any(|view| matches!(&view.geometry, Geometry::Layout { .. }));
                     let views = canvas_presentation::ordered_views(&diagram.views);
                     for view in views {
-                        if matches!(view.geometry, Geometry::Rect { .. } | Geometry::Layout { .. })
-                            && canvas_presentation::resolve_bounds(&view.geometry, zoom, pan).is_none()
+                        if matches!(
+                            view.geometry,
+                            Geometry::Rect { .. } | Geometry::Layout { .. }
+                        ) && canvas_presentation::resolve_bounds(&view.geometry, zoom, pan)
+                            .is_none()
                         {
                             unresolved_presentation = true;
-                            marker_diagnostics.push(format!("View {} has unresolved or non-renderable bounds", view.id));
+                            marker_diagnostics.push(format!(
+                                "View {} has unresolved or non-renderable bounds",
+                                view.id
+                            ));
                             continue;
                         }
                         if let Some(entity) = &view.entity_box {
@@ -81,18 +89,35 @@ impl Render for MdeWorkbenchItem {
                             marker_diagnostics
                                 .extend(view.rendered_label.diagnostics.iter().cloned());
                         }
-                        if view.figure.notation == UmlNotation::Unsupported && !matches!(view.geometry, Geometry::Path { .. }) {
-                            unresolved_presentation = true;
-                            marker_diagnostics.push(format!("View {} has an unsupported native figure; its data is preserved", view.id));
-                        }
-                        if matches!(view.figure.notation, UmlNotation::Label | UmlNotation::Compartment | UmlNotation::Rectangle)
-                            || view.subject.is_none() && view.draft.is_none() && matches!(view.geometry, Geometry::Rect { .. })
+                        if view.figure.notation == UmlNotation::Unsupported
+                            && !matches!(view.geometry, Geometry::Path { .. })
                         {
-                            if let Some(card) = self.render_presentation_view(&snapshot.section, diagram, view, snapshot.revision, &mut node_bounds.borrow_mut(), cx) {
+                            unresolved_presentation = true;
+                            marker_diagnostics.push(format!(
+                                "View {} has an unsupported native figure; its data is preserved",
+                                view.id
+                            ));
+                        }
+                        if matches!(
+                            view.figure.notation,
+                            UmlNotation::Label | UmlNotation::Compartment | UmlNotation::Rectangle
+                        ) || view.subject.is_none()
+                            && view.draft.is_none()
+                            && matches!(view.geometry, Geometry::Rect { .. })
+                        {
+                            if let Some(card) = self.render_presentation_view(
+                                &snapshot.section,
+                                diagram,
+                                view,
+                                snapshot.revision,
+                                &mut node_bounds.borrow_mut(),
+                                cx,
+                            ) {
                                 cards.push(card);
                             } else {
                                 unresolved_presentation = true;
-                                marker_diagnostics.push(format!("View {} has unresolved native bounds", view.id));
+                                marker_diagnostics
+                                    .push(format!("View {} has unresolved native bounds", view.id));
                             }
                             continue;
                         }
@@ -399,20 +424,29 @@ impl Render for MdeWorkbenchItem {
                         }
                         let Some((preview_x, preview_y, preview_width, preview_height)) =
                             self.preview_rectangle(&snapshot.section, diagram, view)
-                        else { continue; };
+                        else {
+                            continue;
+                        };
                         let local_x = preview_x as f32;
                         let local_y = preview_y as f32;
                         let local_width = preview_width as f32;
                         let mut local_height = preview_height as f32;
                         let notation = view.figure.notation;
-                        let authored_contents = view.children.iter().any(|child| child.presentation.internal);
-                        if !authored_contents && matches!(
-                            notation,
-                            UmlNotation::ClassifierRectangle | UmlNotation::PackageTab
-                        ) {
+                        let authored_contents = view
+                            .children
+                            .iter()
+                            .any(|child| child.presentation.internal);
+                        if !authored_contents
+                            && matches!(
+                                notation,
+                                UmlNotation::ClassifierRectangle | UmlNotation::PackageTab
+                            )
+                        {
                             local_height = local_height.max(element.minimum_header_height as f32);
                         }
-                        if !authored_contents && let Some(minimum_height) = element.minimum_interface_height {
+                        if !authored_contents
+                            && let Some(minimum_height) = element.minimum_interface_height
+                        {
                             local_height = local_height.max(minimum_height as f32);
                         }
                         let template_parameters = element
@@ -508,7 +542,10 @@ impl Render for MdeWorkbenchItem {
                             other.id != view.id && matches!(other.geometry, Geometry::Rect { x: child_x, y: child_y, width: child_width, height: child_height }
                                 if child_x >= x && child_y >= y + 20.0 && child_x + child_width <= x + width && child_y + child_height <= y + height)
                         });
-                        let render_style = canvas_presentation::render_style(view, bellatrix_design_system::Palette::current(cx));
+                        let render_style = canvas_presentation::render_style(
+                            view,
+                            bellatrix_design_system::Palette::current(cx),
+                        );
                         let mut classifier = UmlClassifier::new(element.name.clone())
                             .authored_contents(authored_contents)
                             .show_internal_structure(
@@ -623,68 +660,69 @@ impl Render for MdeWorkbenchItem {
                                 );
                             }
                         }
-                        let figure: gpui::AnyElement = if UmlFigure::supports(&view.figure) || view.interface_icon.is_some() {
-                            let edit_owner = cx.weak_entity();
-                            let edit_id = element.id.clone();
-                            let edit_diagram = diagram.id.clone();
-                            let edit_view = view.id.clone();
-                            let mut figure =
-                                UmlFigure::new(view.figure.clone(), view.display_label.clone())
-                                    .interface_icon(view.interface_icon.clone())
-                                    .authored_contents(authored_contents)
-                                    .nested_views(has_nested_views)
-                                    .with_template_parameters_from(&classifier)
-                                    .view_style(&render_style)
-                                    .selected(is_selected)
-                                    .view_size(
-                                        f64::from(local_width),
-                                        f64::from(local_height),
-                                        zoom,
-                                    )
-                                    .on_title_edit(move |window, cx| {
-                                        let id = edit_id.clone();
-                                        let _ = edit_owner.update(cx, |item, cx| {
-                                            item.select_diagram_view(
-                                                edit_diagram.clone(),
-                                                edit_view.clone(),
-                                                cx,
-                                            );
-                                            item.begin_inline_edit(id, window, cx)
+                        let figure: gpui::AnyElement =
+                            if UmlFigure::supports(&view.figure) || view.interface_icon.is_some() {
+                                let edit_owner = cx.weak_entity();
+                                let edit_id = element.id.clone();
+                                let edit_diagram = diagram.id.clone();
+                                let edit_view = view.id.clone();
+                                let mut figure =
+                                    UmlFigure::new(view.figure.clone(), view.display_label.clone())
+                                        .interface_icon(view.interface_icon.clone())
+                                        .authored_contents(authored_contents)
+                                        .nested_views(has_nested_views)
+                                        .with_template_parameters_from(&classifier)
+                                        .view_style(&render_style)
+                                        .selected(is_selected)
+                                        .view_size(
+                                            f64::from(local_width),
+                                            f64::from(local_height),
+                                            zoom,
+                                        )
+                                        .on_title_edit(move |window, cx| {
+                                            let id = edit_id.clone();
+                                            let _ = edit_owner.update(cx, |item, cx| {
+                                                item.select_diagram_view(
+                                                    edit_diagram.clone(),
+                                                    edit_view.clone(),
+                                                    cx,
+                                                );
+                                                item.begin_inline_edit(id, window, cx)
+                                            });
                                         });
-                                    });
-                            if editing.is_some_and(|target| target.id == element.id) {
-                                if let Some(field) = self.inline_editor.clone() {
-                                    let confirm = cx.weak_entity();
-                                    let cancel = cx.weak_entity();
-                                    figure = figure.inline_edit(
-                                        field,
-                                        move |window, cx| {
-                                            let _ = confirm.update(cx, |item, cx| {
-                                                item.commit_inline_edit(window, cx)
-                                            });
-                                        },
-                                        move |window, cx| {
-                                            let _ = cancel.update(cx, |item, cx| {
-                                                item.cancel_inline_edit(window, cx)
-                                            });
-                                        },
-                                    );
+                                if editing.is_some_and(|target| target.id == element.id) {
+                                    if let Some(field) = self.inline_editor.clone() {
+                                        let confirm = cx.weak_entity();
+                                        let cancel = cx.weak_entity();
+                                        figure = figure.inline_edit(
+                                            field,
+                                            move |window, cx| {
+                                                let _ = confirm.update(cx, |item, cx| {
+                                                    item.commit_inline_edit(window, cx)
+                                                });
+                                            },
+                                            move |window, cx| {
+                                                let _ = cancel.update(cx, |item, cx| {
+                                                    item.cancel_inline_edit(window, cx)
+                                                });
+                                            },
+                                        );
+                                    }
                                 }
-                            }
-                            figure.into_any_element()
-                        } else if matches!(notation, UmlNotation::ClassifierRectangle) {
-                            classifier.into_any_element()
-                        } else {
-                            div()
-                                .size_full()
-                                .border_1()
-                                .border_color(border)
-                                .child(Label::new(format!(
-                                    "Unsupported notation: {}",
-                                    element.kind
-                                )))
-                                .into_any_element()
-                        };
+                                figure.into_any_element()
+                            } else if matches!(notation, UmlNotation::ClassifierRectangle) {
+                                classifier.into_any_element()
+                            } else {
+                                div()
+                                    .size_full()
+                                    .border_1()
+                                    .border_color(border)
+                                    .child(Label::new(format!(
+                                        "Unsupported notation: {}",
+                                        element.kind
+                                    )))
+                                    .into_any_element()
+                            };
                         let menu_owner = cx.entity();
                         let menu_diagram = diagram.id.clone();
                         let menu_view = view.id.clone();
@@ -1254,24 +1292,48 @@ impl MdeWorkbenchItem {
         diagram: &bellatrix_mde_cordis::projection::Diagram,
         view: &bellatrix_mde_cordis::projection::View,
     ) -> Option<(f64, f64, f64, f64)> {
-        let Geometry::Rect { mut x, mut y, mut width, mut height } = view.geometry else { return None; };
+        let Geometry::Rect {
+            mut x,
+            mut y,
+            mut width,
+            mut height,
+        } = view.geometry
+        else {
+            return None;
+        };
         match &self.gesture {
-            Some(CanvasGesture::Move { view_id, dx, dy, .. }) => {
-                if view_id == &view.id || diagram.all_views().find(|candidate| &candidate.id == view_id)
-                    .is_some_and(|ancestor| contains_view(&ancestor.children, &view.id))
+            Some(CanvasGesture::Move {
+                view_id, dx, dy, ..
+            }) => {
+                if view_id == &view.id
+                    || diagram
+                        .all_views()
+                        .find(|candidate| &candidate.id == view_id)
+                        .is_some_and(|ancestor| contains_view(&ancestor.children, &view.id))
                 {
                     x += dx;
                     y += dy;
                 }
             }
-            Some(CanvasGesture::Resize { view_id, dx, dy, .. }) => {
-                if let Some(ancestor) = diagram.all_views().find(|candidate| &candidate.id == view_id) {
+            Some(CanvasGesture::Resize {
+                view_id, dx, dy, ..
+            }) => {
+                if let Some(ancestor) = diagram
+                    .all_views()
+                    .find(|candidate| &candidate.id == view_id)
+                {
                     let minimum = canvas_presentation::minimum_size(section, ancestor);
                     if view_id == &view.id {
                         width = (width + dx).max(minimum.0);
                         height = (height + dy).max(minimum.1);
                     } else if contains_view(&ancestor.children, &view.id) {
-                        if let Geometry::Rect { x: left, y: top, width: parent_width, height: parent_height } = ancestor.geometry {
+                        if let Geometry::Rect {
+                            x: left,
+                            y: top,
+                            width: parent_width,
+                            height: parent_height,
+                        } = ancestor.geometry
+                        {
                             if parent_width > 0.0 && parent_height > 0.0 {
                                 let horizontal = (parent_width + dx).max(minimum.0) / parent_width;
                                 let vertical = (parent_height + dy).max(minimum.1) / parent_height;
@@ -1284,9 +1346,18 @@ impl MdeWorkbenchItem {
                     }
                 }
             }
-            _ => {},
+            _ => {}
         }
-        canvas_presentation::resolve_bounds(&Geometry::Rect { x, y, width, height }, self.zoom, self.pan)?;
+        canvas_presentation::resolve_bounds(
+            &Geometry::Rect {
+                x,
+                y,
+                width,
+                height,
+            },
+            self.zoom,
+            self.pan,
+        )?;
         Some((x, y, width, height))
     }
 
@@ -1300,20 +1371,33 @@ impl MdeWorkbenchItem {
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
         let (x, y, width, height) = self.preview_rectangle(section, diagram, view)?;
-        let owner_view = diagram.all_views().find(|owner| owner.presentation.name_label.as_deref() == Some(view.id.as_str()));
-        let subject = owner_view.and_then(|owner| owner.subject.clone()).or_else(|| view.subject.clone());
+        let owner_view = diagram
+            .all_views()
+            .find(|owner| owner.presentation.name_label.as_deref() == Some(view.id.as_str()));
+        let subject = owner_view
+            .and_then(|owner| owner.subject.clone())
+            .or_else(|| view.subject.clone());
         let interaction_owner = owner_view.or_else(|| {
-            view.presentation.internal.then(|| diagram.all_views().find(|ancestor|
-                contains_view(&ancestor.children, &view.id)
-            )).flatten()
+            view.presentation
+                .internal
+                .then(|| {
+                    diagram
+                        .all_views()
+                        .find(|ancestor| contains_view(&ancestor.children, &view.id))
+                })
+                .flatten()
         });
         let target_view = interaction_owner.unwrap_or(view);
         let selected = self.presentation.selected_canvas_view() == Some(view.id.as_str());
-        let style = canvas_presentation::render_style(view, bellatrix_design_system::Palette::current(cx));
+        let style =
+            canvas_presentation::render_style(view, bellatrix_design_system::Palette::current(cx));
         let label = if view.figure.notation == UmlNotation::Unsupported {
             format!("Unsupported figure · {}", view.id)
         } else {
-            view.rendered_label.text.clone().unwrap_or_else(|| view.display_label.clone())
+            view.rendered_label
+                .text
+                .clone()
+                .unwrap_or_else(|| view.display_label.clone())
         };
         let title_owner = cx.weak_entity();
         let title_subject = subject.clone();
@@ -1321,7 +1405,11 @@ impl MdeWorkbenchItem {
         let title_view = target_view.id.clone();
         let mut figure = UmlFigure::new(view.figure.clone(), label)
             .interface_icon(view.interface_icon.clone())
-            .authored_contents(view.children.iter().any(|child| child.presentation.internal))
+            .authored_contents(
+                view.children
+                    .iter()
+                    .any(|child| child.presentation.internal),
+            )
             .divider(view.presentation.divider)
             .view_style(&style)
             .view_size(width, height, self.zoom)
@@ -1334,21 +1422,31 @@ impl MdeWorkbenchItem {
                     } else {
                         item.begin_view_label_edit(title_view.clone(), window, cx);
                     }
-                }) { eprintln!("MDE label edit failed: {error}"); }
+                }) {
+                    eprintln!("MDE label edit failed: {error}");
+                }
             });
         if subject.is_some() && subject.as_deref() == self.presentation.editing_element() {
             if let Some(field) = self.inline_editor.clone() {
                 let confirm = cx.weak_entity();
                 let cancel = cx.weak_entity();
-                figure = figure.inline_edit(field, move |window, cx| {
-                    if let Err(error) = confirm.update(cx, |item, cx| item.commit_inline_edit(window, cx)) {
-                        eprintln!("MDE label commit failed: {error}");
-                    }
-                }, move |window, cx| {
-                    if let Err(error) = cancel.update(cx, |item, cx| item.cancel_inline_edit(window, cx)) {
-                        eprintln!("MDE label cancel failed: {error}");
-                    }
-                });
+                figure = figure.inline_edit(
+                    field,
+                    move |window, cx| {
+                        if let Err(error) =
+                            confirm.update(cx, |item, cx| item.commit_inline_edit(window, cx))
+                        {
+                            eprintln!("MDE label commit failed: {error}");
+                        }
+                    },
+                    move |window, cx| {
+                        if let Err(error) =
+                            cancel.update(cx, |item, cx| item.cancel_inline_edit(window, cx))
+                        {
+                            eprintln!("MDE label cancel failed: {error}");
+                        }
+                    },
+                );
             }
         }
         if subject.is_none() && self.presentation.editing_view() == Some(view.id.as_str()) {
@@ -1357,15 +1455,23 @@ impl MdeWorkbenchItem {
                 let edited_view = view.id.clone();
                 let confirm = cx.weak_entity();
                 let cancel = cx.weak_entity();
-                figure = figure.inline_edit(field, move |window, cx| {
-                    if let Err(error) = confirm.update(cx, |item, cx| item.commit_view_label(&edited_view, editor_id, window, cx)) {
-                        eprintln!("MDE view label commit failed: {error}");
-                    }
-                }, move |window, cx| {
-                    if let Err(error) = cancel.update(cx, |item, cx| item.cancel_inline_edit(window, cx)) {
-                        eprintln!("MDE view label cancel failed: {error}");
-                    }
-                });
+                figure = figure.inline_edit(
+                    field,
+                    move |window, cx| {
+                        if let Err(error) = confirm.update(cx, |item, cx| {
+                            item.commit_view_label(&edited_view, editor_id, window, cx)
+                        }) {
+                            eprintln!("MDE view label commit failed: {error}");
+                        }
+                    },
+                    move |window, cx| {
+                        if let Err(error) =
+                            cancel.update(cx, |item, cx| item.cancel_inline_edit(window, cx))
+                        {
+                            eprintln!("MDE view label cancel failed: {error}");
+                        }
+                    },
+                );
             }
         }
         let owner = cx.weak_entity();
@@ -1377,48 +1483,90 @@ impl MdeWorkbenchItem {
         let resize_owner = cx.weak_entity();
         let resize_id = view.id.clone();
         let can_resize = selected && !internal && !self.source.is_read_only();
-        if !matches!(view.figure.notation, UmlNotation::Label | UmlNotation::Compartment) {
-            node_bounds.push([x as f32 * self.zoom + self.pan.0, y as f32 * self.zoom + self.pan.1,
-                width as f32 * self.zoom, height as f32 * self.zoom]);
+        if !matches!(
+            view.figure.notation,
+            UmlNotation::Label | UmlNotation::Compartment
+        ) {
+            node_bounds.push([
+                x as f32 * self.zoom + self.pan.0,
+                y as f32 * self.zoom + self.pan.1,
+                width as f32 * self.zoom,
+                height as f32 * self.zoom,
+            ]);
         }
-        Some(div().id(format!("mde-view-{}", view.id)).absolute()
-            .left(px(x as f32 * self.zoom + self.pan.0))
-            .top(px(y as f32 * self.zoom + self.pan.1))
-            .w(px(width as f32 * self.zoom)).h(px(height as f32 * self.zoom))
-            .on_mouse_down(MouseButton::Left, move |event, window, cx| {
-                if let Err(error) = owner.update(cx, |item, cx| {
-                    item.select_diagram_view(diagram_id.clone(), view_id.clone(), cx);
-                    if event.click_count >= 2 && editable_label {
-                        if let Some(subject) = &subject {
-                            item.begin_inline_edit(subject.clone(), window, cx);
-                        } else if !internal {
-                            item.begin_view_label_edit(view_id.clone(), window, cx);
+        Some(
+            div()
+                .id(format!("mde-view-{}", view.id))
+                .absolute()
+                .left(px(x as f32 * self.zoom + self.pan.0))
+                .top(px(y as f32 * self.zoom + self.pan.1))
+                .w(px(width as f32 * self.zoom))
+                .h(px(height as f32 * self.zoom))
+                .on_mouse_down(MouseButton::Left, move |event, window, cx| {
+                    if let Err(error) = owner.update(cx, |item, cx| {
+                        item.select_diagram_view(diagram_id.clone(), view_id.clone(), cx);
+                        if event.click_count >= 2 && editable_label {
+                            if let Some(subject) = &subject {
+                                item.begin_inline_edit(subject.clone(), window, cx);
+                            } else if !internal {
+                                item.begin_view_label_edit(view_id.clone(), window, cx);
+                            }
+                        } else if let Some(subject) = &move_subject {
+                            item.start_move(
+                                view_id.clone(),
+                                subject.clone(),
+                                revision,
+                                event.position,
+                                cx,
+                            );
+                        } else if !internal && !item.source.is_read_only() {
+                            item.gesture = Some(CanvasGesture::Move {
+                                view_id: view_id.clone(),
+                                start: event.position,
+                                dx: 0.0,
+                                dy: 0.0,
+                                revision,
+                                began: false,
+                            });
                         }
-                    } else if let Some(subject) = &move_subject {
-                        item.start_move(view_id.clone(), subject.clone(), revision, event.position, cx);
-                    } else if !internal && !item.source.is_read_only() {
-                        item.gesture = Some(CanvasGesture::Move {
-                            view_id: view_id.clone(), start: event.position,
-                            dx: 0.0, dy: 0.0, revision, began: false,
-                        });
+                        cx.focus_self(window);
+                    }) {
+                        eprintln!("MDE presentation selection failed: {error}");
                     }
-                    cx.focus_self(window);
-                }) { eprintln!("MDE presentation selection failed: {error}"); }
-                cx.stop_propagation();
-            }).child(figure)
-            .when(can_resize, |card| card.child(
-                div().id(format!("mde-presentation-resize-{}", view.id))
-                    .absolute().right(px(-4.0)).bottom(px(-4.0)).w(px(9.0)).h(px(9.0))
-                    .bg(WorkbenchPalette::current(cx).selection).cursor_crosshair()
-                    .on_mouse_down(MouseButton::Left, move |event, _, cx| {
-                        if let Err(error) = resize_owner.update(cx, |item, cx| {
-                            item.start_resize(resize_id.clone(), width, height, revision, event.position, cx);
-                        }) { eprintln!("MDE presentation resize failed: {error}"); }
-                        cx.stop_propagation();
-                    })
-            )).into_any_element())
+                    cx.stop_propagation();
+                })
+                .child(figure)
+                .when(can_resize, |card| {
+                    card.child(
+                        div()
+                            .id(format!("mde-presentation-resize-{}", view.id))
+                            .absolute()
+                            .right(px(-4.0))
+                            .bottom(px(-4.0))
+                            .w(px(9.0))
+                            .h(px(9.0))
+                            .bg(WorkbenchPalette::current(cx).selection)
+                            .cursor_crosshair()
+                            .on_mouse_down(MouseButton::Left, move |event, _, cx| {
+                                if let Err(error) = resize_owner.update(cx, |item, cx| {
+                                    item.start_resize(
+                                        resize_id.clone(),
+                                        width,
+                                        height,
+                                        revision,
+                                        event.position,
+                                        cx,
+                                    );
+                                }) {
+                                    eprintln!("MDE presentation resize failed: {error}");
+                                }
+                                cx.stop_propagation();
+                            }),
+                    )
+                })
+                .into_any_element(),
+        )
     }
-
 }
 
 impl MdeWorkbenchItem {
@@ -1438,7 +1586,10 @@ impl MdeWorkbenchItem {
         {
             return edited_path_geometry(geometry, *handle, *dx, *dy);
         }
-        view.routed_geometry.as_ref().unwrap_or(&view.geometry).clone()
+        view.routed_geometry
+            .as_ref()
+            .unwrap_or(&view.geometry)
+            .clone()
     }
 
     fn path_is_editable(&self, view: &bellatrix_mde_cordis::projection::View) -> bool {
@@ -1471,7 +1622,10 @@ impl MdeWorkbenchItem {
         {
             return;
         }
-        let Some(view) = snapshot.section.diagrams.iter()
+        let Some(view) = snapshot
+            .section
+            .diagrams
+            .iter()
             .find(|diagram| diagram.id == diagram_id)
             .and_then(|diagram| diagram.all_views().find(|view| view.id == view_id))
         else {
@@ -1480,8 +1634,14 @@ impl MdeWorkbenchItem {
         if !self.path_is_editable(view) {
             return;
         }
-        let geometry = view.routed_geometry.as_ref().unwrap_or(&view.geometry).clone();
-        let change = self.presentation.select_view(view.subject.clone(), view_id.clone());
+        let geometry = view
+            .routed_geometry
+            .as_ref()
+            .unwrap_or(&view.geometry)
+            .clone();
+        let change = self
+            .presentation
+            .select_view(view.subject.clone(), view_id.clone());
         self.apply_selection_change(change, cx);
         self.gesture = Some(CanvasGesture::EditPath {
             diagram_id,
@@ -1514,44 +1674,64 @@ impl MdeWorkbenchItem {
         }
         let palette = WorkbenchPalette::current(cx);
         let geometry = self.path_preview_geometry(view);
-        path_handle_positions(&geometry).into_iter().enumerate().filter_map(|(index, (handle, point))| {
-            let x = point.x as f32 * self.zoom + self.pan.0;
-            let y = point.y as f32 * self.zoom + self.pan.1;
-            if !x.is_finite() || !y.is_finite() {
-                return None;
-            }
-            let owner = cx.weak_entity();
-            let diagram_id = diagram_id.to_owned();
-            let view_id = view.id.clone();
-            let segment = matches!(handle, PathHandle::Segment(_));
-            let control = matches!(handle, PathHandle::Control1(_) | PathHandle::Control2(_));
-            let size = if segment { 7.0 } else { 9.0 };
-            Some(div()
-                .id(format!("mde-path-handle-{}-{index}", view.id))
-                .absolute()
-                .left(px(x - size / 2.0))
-                .top(px(y - size / 2.0))
-                .size(px(size))
-                .border_1()
-                .border_color(palette.selection)
-                .bg(if segment { palette.surface } else { palette.selection })
-                .when(segment || control, |handle| handle.rounded_full())
-                .cursor_move()
-                .tooltip(ui::Tooltip::text(
-                    if segment { "Drag segment; endpoints stay attached" }
-                    else if control { "Drag curve control" }
-                    else { "Drag route point" }))
-                .on_mouse_down(MouseButton::Left, move |event, window, cx| {
-                    if let Err(error) = owner.update(cx, |item, cx| {
-                        item.start_path_edit(diagram_id.clone(), view_id.clone(), revision, handle, event.position, cx);
-                        cx.focus_self(window);
-                    }) {
-                        eprintln!("MDE route edit failed: {error}");
-                    }
-                    cx.stop_propagation();
-                })
-                .into_any_element())
-        }).collect()
+        path_handle_positions(&geometry)
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, (handle, point))| {
+                let x = point.x as f32 * self.zoom + self.pan.0;
+                let y = point.y as f32 * self.zoom + self.pan.1;
+                if !x.is_finite() || !y.is_finite() {
+                    return None;
+                }
+                let owner = cx.weak_entity();
+                let diagram_id = diagram_id.to_owned();
+                let view_id = view.id.clone();
+                let segment = matches!(handle, PathHandle::Segment(_));
+                let control = matches!(handle, PathHandle::Control1(_) | PathHandle::Control2(_));
+                let size = if segment { 7.0 } else { 9.0 };
+                Some(
+                    div()
+                        .id(format!("mde-path-handle-{}-{index}", view.id))
+                        .absolute()
+                        .left(px(x - size / 2.0))
+                        .top(px(y - size / 2.0))
+                        .size(px(size))
+                        .border_1()
+                        .border_color(palette.selection)
+                        .bg(if segment {
+                            palette.surface
+                        } else {
+                            palette.selection
+                        })
+                        .when(segment || control, |handle| handle.rounded_full())
+                        .cursor_move()
+                        .tooltip(ui::Tooltip::text(if segment {
+                            "Drag segment; endpoints stay attached"
+                        } else if control {
+                            "Drag curve control"
+                        } else {
+                            "Drag route point"
+                        }))
+                        .on_mouse_down(MouseButton::Left, move |event, window, cx| {
+                            if let Err(error) = owner.update(cx, |item, cx| {
+                                item.start_path_edit(
+                                    diagram_id.clone(),
+                                    view_id.clone(),
+                                    revision,
+                                    handle,
+                                    event.position,
+                                    cx,
+                                );
+                                cx.focus_self(window);
+                            }) {
+                                eprintln!("MDE route edit failed: {error}");
+                            }
+                            cx.stop_propagation();
+                        })
+                        .into_any_element(),
+                )
+            })
+            .collect()
     }
 }
 
@@ -1571,8 +1751,18 @@ pub(super) fn path_segment_at_position(
                 relationship_segment_distance(position, previous, *to) <= tolerance,
                 *to,
             ),
-            PathSegment::Cubic { control1, control2, to } => (
-                relationship_cubic_hit(position, [previous, *control1, *control2, *to], tolerance, 0.25 / f64::from(zoom), 0),
+            PathSegment::Cubic {
+                control1,
+                control2,
+                to,
+            } => (
+                relationship_cubic_hit(
+                    position,
+                    [previous, *control1, *control2, *to],
+                    tolerance,
+                    0.25 / f64::from(zoom),
+                    0,
+                ),
                 *to,
             ),
         };
@@ -1594,20 +1784,36 @@ fn path_handle_positions(geometry: &Geometry) -> Vec<(PathHandle, bellatrix_mde_
         let end = match segment {
             PathSegment::Line { to } => {
                 if (to.x - previous.x).hypot(to.y - previous.y) > f64::EPSILON {
-                    handles.push((PathHandle::Segment(index), bellatrix_mde_cordis::Point {
-                        x: previous.x / 2.0 + to.x / 2.0,
-                        y: previous.y / 2.0 + to.y / 2.0,
-                    }));
+                    handles.push((
+                        PathHandle::Segment(index),
+                        bellatrix_mde_cordis::Point {
+                            x: previous.x / 2.0 + to.x / 2.0,
+                            y: previous.y / 2.0 + to.y / 2.0,
+                        },
+                    ));
                 }
                 *to
             }
-            PathSegment::Cubic { control1, control2, to } => {
+            PathSegment::Cubic {
+                control1,
+                control2,
+                to,
+            } => {
                 handles.push((PathHandle::Control1(index), *control1));
                 handles.push((PathHandle::Control2(index), *control2));
-                handles.push((PathHandle::Segment(index), bellatrix_mde_cordis::Point {
-                    x: previous.x * 0.125 + control1.x * 0.375 + control2.x * 0.375 + to.x * 0.125,
-                    y: previous.y * 0.125 + control1.y * 0.375 + control2.y * 0.375 + to.y * 0.125,
-                }));
+                handles.push((
+                    PathHandle::Segment(index),
+                    bellatrix_mde_cordis::Point {
+                        x: previous.x * 0.125
+                            + control1.x * 0.375
+                            + control2.x * 0.375
+                            + to.x * 0.125,
+                        y: previous.y * 0.125
+                            + control1.y * 0.375
+                            + control2.y * 0.375
+                            + to.y * 0.125,
+                    },
+                ));
                 *to
             }
         };
@@ -1651,7 +1857,9 @@ pub(super) fn edited_path_geometry(
             }
         }
         PathHandle::Segment(index) => {
-            let previous = if index == 0 { *start } else {
+            let previous = if index == 0 {
+                *start
+            } else {
                 match segments.get(index - 1) {
                     Some(PathSegment::Line { to } | PathSegment::Cubic { to, .. }) => *to,
                     None => return geometry.clone(),
@@ -1659,7 +1867,10 @@ pub(super) fn edited_path_geometry(
             };
             match segments.get(index) {
                 Some(PathSegment::Cubic { .. }) => {
-                    if let Some(PathSegment::Cubic { control1, control2, .. }) = segments.get_mut(index) {
+                    if let Some(PathSegment::Cubic {
+                        control1, control2, ..
+                    }) = segments.get_mut(index)
+                    {
                         translate(control1);
                         translate(control2);
                     }
@@ -1670,25 +1881,32 @@ pub(super) fn edited_path_geometry(
                         (dx, 0.0)
                     } else if (previous.y - end.y).abs() < 0.000001 {
                         (0.0, dy)
-                    } else { (dx, dy) };
+                    } else {
+                        (dx, dy)
+                    };
                     if dx == 0.0 && dy == 0.0 {
                         return geometry.clone();
                     }
-                    let shifted = |point: bellatrix_mde_cordis::Point| bellatrix_mde_cordis::Point {
-                        x: point.x + dx,
-                        y: point.y + dy,
-                    };
+                    let shifted =
+                        |point: bellatrix_mde_cordis::Point| bellatrix_mde_cordis::Point {
+                            x: point.x + dx,
+                            y: point.y + dy,
+                        };
                     let mut replacement = Vec::new();
                     if index == 0 {
                         // Add a bend instead of detaching the first endpoint.
-                        replacement.push(PathSegment::Line { to: shifted(previous) });
+                        replacement.push(PathSegment::Line {
+                            to: shifted(previous),
+                        });
                     } else {
                         translate_path_vertex(segments, index - 1, dx, dy);
                     }
                     replacement.push(PathSegment::Line { to: shifted(end) });
                     if index + 1 == segments.len() {
                         replacement.push(PathSegment::Line { to: end });
-                    } else if let Some(PathSegment::Cubic { control1, .. }) = segments.get_mut(index + 1) {
+                    } else if let Some(PathSegment::Cubic { control1, .. }) =
+                        segments.get_mut(index + 1)
+                    {
                         control1.x += dx;
                         control1.y += dy;
                     }
@@ -1870,5 +2088,7 @@ fn relationship_cubic_hit(
 }
 
 fn contains_view(views: &[bellatrix_mde_cordis::projection::View], id: &str) -> bool {
-    views.iter().any(|view| view.id == id || contains_view(&view.children, id))
+    views
+        .iter()
+        .any(|view| view.id == id || contains_view(&view.children, id))
 }

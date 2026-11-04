@@ -1,4 +1,6 @@
-pub use bellatrix_mde_contracts::events::{ModelingSnapshot, ModelingReadProjectionRequested, ModelingReadProjection};
+pub use bellatrix_mde_contracts::events::{
+    ModelingReadProjection, ModelingReadProjectionRequested, ModelingSnapshot,
+};
 pub use bellatrix_mde_contracts::protocol::projection::*;
 use bellatrix_project::{ProjectDocument, ProjectId, ProjectService};
 use cordis::event::responder;

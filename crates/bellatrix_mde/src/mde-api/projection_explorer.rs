@@ -260,9 +260,7 @@ fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrder) -> Vec<E
             component.parent_view_id.is_some()
                 && presentations
                     .get(component.view_id.as_str())
-                    .is_some_and(|view| {
-                        view.presentation.internal
-                    })
+                    .is_some_and(|view| view.presentation.internal)
         })
         .map(|component| {
             (
@@ -316,7 +314,10 @@ fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrder) -> Vec<E
                 view.subject_id
                     .as_deref()
                     .and_then(|subject| {
-                        section.elements.iter().find(|element| element.id == subject)
+                        section
+                            .elements
+                            .iter()
+                            .find(|element| element.id == subject)
                     })
                     .and_then(|element| imported_element_label(section, element))
                     .unwrap_or_else(|| explorer_type_label(&kind, false))

@@ -263,7 +263,8 @@ impl MdeWorkbenchItem {
                                     cx,
                                 );
                             } else {
-                                let selected = item.presentation.selected_canvas_view() == Some(id.as_str());
+                                let selected =
+                                    item.presentation.selected_canvas_view() == Some(id.as_str());
                                 let change = item.presentation.select_view(None, id.clone());
                                 item.apply_selection_change(change, cx);
                                 item.feedback =
@@ -271,11 +272,29 @@ impl MdeWorkbenchItem {
                                 if let Some(geometry) = &hit_geometry {
                                     if selected && let Some(origin) = click_origin.get() {
                                         let (x, y) = canvas_model_position(
-                                            (f64::from(event.position.x), f64::from(event.position.y)),
-                                            origin, hit_pan, zoom,
+                                            (
+                                                f64::from(event.position.x),
+                                                f64::from(event.position.y),
+                                            ),
+                                            origin,
+                                            hit_pan,
+                                            zoom,
                                         );
-                                        if let Some(handle) = super::diagram_canvas::path_segment_at_position(geometry, bellatrix_mde_cordis::Point { x, y }, zoom) {
-                                            item.start_path_edit(diagram_id.clone(), id.clone(), revision, handle, event.position, cx);
+                                        if let Some(handle) =
+                                            super::diagram_canvas::path_segment_at_position(
+                                                geometry,
+                                                bellatrix_mde_cordis::Point { x, y },
+                                                zoom,
+                                            )
+                                        {
+                                            item.start_path_edit(
+                                                diagram_id.clone(),
+                                                id.clone(),
+                                                revision,
+                                                handle,
+                                                event.position,
+                                                cx,
+                                            );
                                         }
                                     }
                                 } else if !item.source.is_read_only() {

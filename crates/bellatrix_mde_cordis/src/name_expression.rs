@@ -1,5 +1,7 @@
-pub use bellatrix_mde_contracts::events::{ModelingSetNameExpressionRequested, ModelingSetNameExpression};
 use crate::Command;
+pub use bellatrix_mde_contracts::events::{
+    ModelingSetNameExpression, ModelingSetNameExpressionRequested,
+};
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::{Context, Event};
 

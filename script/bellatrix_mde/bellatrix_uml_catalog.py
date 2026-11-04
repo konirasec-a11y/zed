@@ -36,7 +36,9 @@ pub fn conforms_to(specific: &str, general: &str) -> bool {
     let (Some(specific), Some(general)) = (
         super::schema::uml_classifier(specific),
         super::schema::uml_classifier(general),
-    ) else { return false; };
+    ) else {
+        return false;
+    };
     super::schema::conforms_to(specific.id, general.id) == Ok(true)
 }
 
@@ -372,7 +374,14 @@ class Contracts:
 
     def generate(self):
         self.audit_references()
-        lines = ["\nuse super::schema::{Aggregation, AmbiguousDefinition, ClassifierDescriptor, ClassifierKind, ConstraintDescriptor, DefaultValue, Document, DocumentationDescriptor, OperationDescriptor, ParameterDescriptor, ParameterDirection, PropertyDescriptor, SpecificationDescriptor, ReferenceResolution, SourceDescriptor, UnresolvedReference, XmiId, XmiReference};\n"]
+        lines = ['''
+use super::schema::{
+    Aggregation, AmbiguousDefinition, ClassifierDescriptor, ClassifierKind, ConstraintDescriptor,
+    DefaultValue, Document, DocumentationDescriptor, OperationDescriptor, ParameterDescriptor,
+    ParameterDirection, PropertyDescriptor, ReferenceResolution, SourceDescriptor,
+    SpecificationDescriptor, UnresolvedReference, XmiId, XmiReference,
+};
+''']
         def table(name, typename, rows):
             lines.extend(["#[rustfmt::skip]", f"pub const {name}: &[{typename}] = &[", *rows, "];\n"])
         rows = []

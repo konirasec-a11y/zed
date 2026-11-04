@@ -1,7 +1,10 @@
-pub use bellatrix_mde_contracts::events::{ModelingRenameRequested, ModelingRename, ModelingSetOwnerRequested, ModelingSetOwner, ModelingSetExplorerParentRequested, ModelingSetExplorerParent};
 use crate::Command;
 use crate::MODELING_NAMESPACE;
 use crate::view_edits::{ModelingMoveView, move_view};
+pub use bellatrix_mde_contracts::events::{
+    ModelingRename, ModelingRenameRequested, ModelingSetExplorerParent,
+    ModelingSetExplorerParentRequested, ModelingSetOwner, ModelingSetOwnerRequested,
+};
 use bellatrix_project::{ProjectDocument, ProjectId, ProjectService};
 use cordis::event::responder;
 use cordis::{Context, Event, InjectSpec, Plugin, Service};

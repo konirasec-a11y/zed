@@ -24,13 +24,7 @@ fn section(project: &Value) -> FlowResult<(String, String, Value)> {
 }
 fn apply(project: &Value, command: &Command, revision: u64) -> FlowResult<Value> {
     let (id, name, section) = section(project)?;
-    let updated = apply_model_command(
-        &id,
-        &name,
-        &section.to_string(),
-        revision,
-        command.clone(),
-    )?;
+    let updated = apply_model_command(&id, &name, &section.to_string(), revision, command.clone())?;
     Ok(serde_json::from_slice(&encode_model_section(
         &id,
         &name,

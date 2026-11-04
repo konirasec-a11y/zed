@@ -11,7 +11,7 @@ use serde_json::json;
 use std::collections::{BTreeMap, HashSet};
 
 pub use bellatrix_mde_contracts::protocol::command::{
-    AssociationEndOwner, AssociationEndDraft, RemovedAssociationEnd, AssociationEndEdit,
+    AssociationEndDraft, AssociationEndEdit, AssociationEndOwner, RemovedAssociationEnd,
 };
 
 fn owner_id(

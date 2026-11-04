@@ -203,10 +203,20 @@ pub(super) fn bind_markers(
             if matches!(view.geometry, Geometry::Path { .. }) {
                 view.style.routing = Some(RelationshipRouting::Manual);
             }
-            bind(&mut view.children, index, canonical_associations, diagnostics);
+            bind(
+                &mut view.children,
+                index,
+                canonical_associations,
+                diagnostics,
+            );
         }
     }
     for diagram in &mut project.diagrams {
-        bind(&mut diagram.views, index, &canonical_associations, diagnostics);
+        bind(
+            &mut diagram.views,
+            index,
+            &canonical_associations,
+            diagnostics,
+        );
     }
 }

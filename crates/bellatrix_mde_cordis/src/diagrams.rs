@@ -1,8 +1,16 @@
 //! Diagram lifecycle requests share the same revision-checked mutation boundary as element edits.
-pub use bellatrix_mde_contracts::events::{ModelingCreateDiagramRequested, ModelingCreateDiagram, ModelingCreateExplorerDiagramRequested, ModelingCreateExplorerDiagram, ModelingRenameDiagramRequested, ModelingRenameDiagram, ModelingDeleteDiagramRequested, ModelingDeleteDiagram, ModelingValidateDiagramRequested, DiagramValidationResult, ModelingValidateDiagram, ModelingValidateSnapshotRequested, ModelingValidateSnapshot, ModelingExecutionTrace, ModelingExecutionTraceEvent, ModelingValidateDiagramTracedRequested, TracedDiagramValidationResult, ModelingValidateDiagramTraced};
 use crate::Command;
 use crate::{ExecutionEvent, ModelingDiagnostic, StructuralDiagramKind, TraceOutcome, TracePhase};
 use bellatrix_mde::MdeExecutionTrace as ExecutionTrace;
+pub use bellatrix_mde_contracts::events::{
+    DiagramValidationResult, ModelingCreateDiagram, ModelingCreateDiagramRequested,
+    ModelingCreateExplorerDiagram, ModelingCreateExplorerDiagramRequested, ModelingDeleteDiagram,
+    ModelingDeleteDiagramRequested, ModelingExecutionTrace, ModelingExecutionTraceEvent,
+    ModelingRenameDiagram, ModelingRenameDiagramRequested, ModelingValidateDiagram,
+    ModelingValidateDiagramRequested, ModelingValidateDiagramTraced,
+    ModelingValidateDiagramTracedRequested, ModelingValidateSnapshot,
+    ModelingValidateSnapshotRequested, TracedDiagramValidationResult,
+};
 use bellatrix_project::{ProjectDocument, ProjectId, ProjectService};
 use cordis::event::responder;
 use cordis::{Context, Event};

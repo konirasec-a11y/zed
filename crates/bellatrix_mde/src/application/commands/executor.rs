@@ -31,8 +31,8 @@ pub use name_expression::format as name_expression_text;
 
 use crate::{
     Element, Geometry, Graph, ModelingRelationKind, ModelingSection, Project, Relation,
-    RelationshipGraph, Style, UmlType, View,
-    classifier_contents, relation_kind_for_creation, reroute_relationships,
+    RelationshipGraph, Style, UmlType, View, classifier_contents, relation_kind_for_creation,
+    reroute_relationships,
 };
 use serde_json::Value;
 use std::collections::HashSet;
@@ -104,12 +104,7 @@ pub(crate) fn apply_with_diagram_operations(
                     owner_id.as_deref(),
                     Some(&reason),
                 );
-                apply_with_diagram_operations(
-                    project,
-                    &draft,
-                    revision,
-                    diagram_operations,
-                )
+                apply_with_diagram_operations(project, &draft, revision, diagram_operations)
             }
         };
     }
@@ -624,8 +619,7 @@ fn update_composition_placement(
         Command::SetOwner {
             element_id,
             owner_id,
-        } if current.composition.contains_key(element_id) =>
-        {
+        } if current.composition.contains_key(element_id) => {
             let parent = if owner_id.is_some() {
                 let ownership = current
                     .relations
@@ -646,28 +640,36 @@ fn update_composition_placement(
             subject_id,
             parent_id,
             ..
-        } if current.composition.contains_key(subject_id) => {
-            (
-                subject_id,
-                crate::CompositionParent::Object {
-                    id: parent_id.as_deref().unwrap_or(project_id).into(),
-                },
-            )
-        }
+        } if current.composition.contains_key(subject_id) => (
+            subject_id,
+            crate::CompositionParent::Object {
+                id: parent_id.as_deref().unwrap_or(project_id).into(),
+            },
+        ),
         Command::DeleteElement { .. } | Command::DeleteDiagram { .. } => {
             let identities: HashSet<_> = current
                 .elements
                 .iter()
                 .map(|element| element.id.as_str())
-                .chain(current.relations.iter().map(|relation| relation.id.as_str()))
+                .chain(
+                    current
+                        .relations
+                        .iter()
+                        .map(|relation| relation.id.as_str()),
+                )
                 .chain(current.diagrams.iter().map(|diagram| diagram.id.as_str()))
                 .collect();
-            current.composition.retain(|id, _| identities.contains(id.as_str()));
+            current
+                .composition
+                .retain(|id, _| identities.contains(id.as_str()));
             for (id, placement) in &current.composition {
-                let parent = placement.parent_id(id, &current.relations)
-                    .ok_or_else(|| format!("Cannot delete the ownership edge of surviving composition object {id}"))?;
+                let parent = placement.parent_id(id, &current.relations).ok_or_else(|| {
+                    format!("Cannot delete the ownership edge of surviving composition object {id}")
+                })?;
                 if parent != project_id && !identities.contains(parent) {
-                    return Err(format!("Cannot delete container {parent} while composition object {id} remains; move or delete that object first"));
+                    return Err(format!(
+                        "Cannot delete container {parent} while composition object {id} remains; move or delete that object first"
+                    ));
                 }
             }
             return Ok(());
@@ -684,7 +686,9 @@ fn update_composition_placement(
         .parent_id(subject, &current.relations)
         .ok_or("composition ownership reference is unresolved")?;
     if parent_id != project_id && !current.composition.contains_key(parent_id) {
-        return Err(format!("Composition destination {parent_id} has no authored placement; no parent or order was inferred"));
+        return Err(format!(
+            "Composition destination {parent_id} has no authored placement; no parent or order was inferred"
+        ));
     }
     let previous_parent = previous
         .composition
@@ -696,7 +700,8 @@ fn update_composition_placement(
             .composition
             .iter()
             .filter(|(id, sibling)| {
-                *id != subject && sibling.slot == placement.slot
+                *id != subject
+                    && sibling.slot == placement.slot
                     && sibling.parent_id(id, &current.relations) == Some(parent_id)
             })
             .filter_map(|(_, sibling)| sibling.order)
@@ -1215,9 +1220,18 @@ fn resize_view(
             (
                 view.draft.is_some(),
                 view.presentation.internal
-                    || view.children.iter().any(|child| child.presentation.internal)
-                    || matches!(view.presentation.notation_kind.as_deref(),
-                        Some("presentation.label" | "presentation.compartment" | "presentation.rectangle")),
+                    || view
+                        .children
+                        .iter()
+                        .any(|child| child.presentation.internal)
+                    || matches!(
+                        view.presentation.notation_kind.as_deref(),
+                        Some(
+                            "presentation.label"
+                                | "presentation.compartment"
+                                | "presentation.rectangle"
+                        )
+                    ),
             )
         })
         .ok_or("view not found")?;
@@ -1294,7 +1308,12 @@ fn resize_view(
             } else {
                 height.max(minimum_height).max(minimum_part_height)
             };
-            (*x, *y, *current_width / previous_width, *current_height / previous_height)
+            (
+                *x,
+                *y,
+                *current_width / previous_width,
+                *current_height / previous_height,
+            )
         }
         _ => return Err("only node Views can be resized with this command".into()),
     };
@@ -1331,7 +1350,12 @@ fn scale_child_geometry(
         point.y = origin_y + (point.y - origin_y) * scale_y;
     };
     match geometry {
-        Geometry::Rect { x, y, width, height } => {
+        Geometry::Rect {
+            x,
+            y,
+            width,
+            height,
+        } => {
             *x = origin_x + (*x - origin_x) * scale_x;
             *y = origin_y + (*y - origin_y) * scale_y;
             *width *= scale_x;
@@ -1353,7 +1377,11 @@ fn scale_child_geometry(
             for segment in segments {
                 match segment {
                     crate::PathSegment::Line { to } => scale_point(to),
-                    crate::PathSegment::Cubic { control1, control2, to } => {
+                    crate::PathSegment::Cubic {
+                        control1,
+                        control2,
+                        to,
+                    } => {
                         scale_point(control1);
                         scale_point(control2);
                         scale_point(to);

@@ -137,11 +137,21 @@ pub fn interface_layout(width: f64, height: f64, contents: ClassifierContents) -
     }
 }
 
-pub fn interface_view_layout(view: &crate::View, contents: ClassifierContents) -> Option<InterfaceLayout> {
-    let crate::Geometry::Rect { x, y, width, height } = view.geometry else {
+pub fn interface_view_layout(
+    view: &crate::View,
+    contents: ClassifierContents,
+) -> Option<InterfaceLayout> {
+    let crate::Geometry::Rect {
+        x,
+        y,
+        width,
+        height,
+    } = view.geometry
+    else {
         return None;
     };
-    if ![x, y, width, height].iter().all(|value| value.is_finite()) || width <= 0.0 || height <= 0.0 {
+    if ![x, y, width, height].iter().all(|value| value.is_finite()) || width <= 0.0 || height <= 0.0
+    {
         return None;
     }
     if let Some(binding) = &view.presentation.interface_icon {
@@ -151,7 +161,10 @@ pub fn interface_view_layout(view: &crate::View, contents: ClassifierContents) -
             let diameter = label_top - y;
             if diameter > 0.0 && diameter <= width && diameter <= height {
                 return Some(InterfaceLayout {
-                    center: Point { x: width / 2.0, y: diameter / 2.0 },
+                    center: Point {
+                        x: width / 2.0,
+                        y: diameter / 2.0,
+                    },
                     radius: diameter / 2.0,
                     label_top: diameter,
                     members_top: diameter,

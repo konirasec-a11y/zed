@@ -1,5 +1,5 @@
-pub use bellatrix_mde_contracts::events::{ModelingDeleteElementRequested, ModelingDeleteElement};
 use crate::Command;
+pub use bellatrix_mde_contracts::events::{ModelingDeleteElement, ModelingDeleteElementRequested};
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::{Context, Event};
 

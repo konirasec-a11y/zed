@@ -443,11 +443,9 @@ fn render_style_inheritance(view: &View) -> Vec<AnyElement> {
             .into_any_element(),
     ];
     if inheritance.status == StyleInheritanceStatus::Inactive {
-        if inheritance
-            .diagnostics
-            .values()
-            .any(|diagnostic| matches!(diagnostic, StyleInheritanceDiagnostic::NonViewSource { .. }))
-        {
+        if inheritance.diagnostics.values().any(|diagnostic| {
+            matches!(diagnostic, StyleInheritanceDiagnostic::NonViewSource { .. })
+        }) {
             rows.push(
                 div()
                     .px_3()
@@ -477,9 +475,7 @@ fn render_style_inheritance(view: &View) -> Vec<AnyElement> {
                 Some(StyleInheritanceDiagnostic::NonViewSource { .. }) => {
                     "The inheritance source is not a view"
                 }
-                Some(StyleInheritanceDiagnostic::Cycle { .. }) => {
-                    "Inheritance cycle between views"
-                }
+                Some(StyleInheritanceDiagnostic::Cycle { .. }) => "Inheritance cycle between views",
                 None => "Inheritance unresolved",
             };
             (
@@ -1256,9 +1252,7 @@ impl MdeWorkbenchItem {
                     && super::selection::supports_view_layout_editing(diagram, &key.2)
             })
         {
-            return Err(
-                "Routing and stacking changes require a supported editable view".into(),
-            );
+            return Err("Routing and stacking changes require a supported editable view".into());
         }
         let command = if let Some(order) = submission.order {
             MdeUiCommand::ReorderViewTracked {

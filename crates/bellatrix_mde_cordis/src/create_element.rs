@@ -1,6 +1,9 @@
-pub use bellatrix_mde_contracts::events::{ModelingCreateElementRequested, ModelingCreateElement, ModelingCreateElementOrVisualDraft, ModelingCreateModelElementRequested, ModelingCreateModelElement};
 use crate::Command;
 use crate::ModelingElementKind;
+pub use bellatrix_mde_contracts::events::{
+    ModelingCreateElement, ModelingCreateElementOrVisualDraft, ModelingCreateElementRequested,
+    ModelingCreateModelElement, ModelingCreateModelElementRequested,
+};
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::{Context, Event};
 

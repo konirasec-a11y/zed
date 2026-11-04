@@ -812,8 +812,19 @@ fn export_view(view: &View, original: Option<&mdj::Object<'_>>) -> Result<Value,
     if view_projection::export_path(view, original, &mut object)? {
         return Ok(Value::Object(object));
     }
-    if let Geometry::Rect { x, y, width, height } = &view.geometry {
-        for (key, value) in [("left", x), ("top", y), ("width", width), ("height", height)] {
+    if let Geometry::Rect {
+        x,
+        y,
+        width,
+        height,
+    } = &view.geometry
+    {
+        for (key, value) in [
+            ("left", x),
+            ("top", y),
+            ("width", width),
+            ("height", height),
+        ] {
             if !value.is_finite() || matches!(key, "width" | "height") && *value < 0.0 {
                 return Err(failure(&view.id, "invalid rectangular MDJ geometry"));
             }

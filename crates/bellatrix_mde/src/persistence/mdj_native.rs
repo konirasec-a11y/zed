@@ -51,22 +51,42 @@ fn normalize_views(
             });
         }
         view.presentation.internal = nested
-            && matches!(notation, Some("presentation.label" | "presentation.compartment"));
-        view.presentation.divider = matches!(source_kind.as_str(),
-            "UMLAttributeCompartmentView" | "UMLOperationCompartmentView"
-            | "UMLReceptionCompartmentView" | "UMLEnumerationLiteralCompartmentView"
-            | "UMLSlotCompartmentView");
+            && matches!(
+                notation,
+                Some("presentation.label" | "presentation.compartment")
+            );
+        view.presentation.divider = matches!(
+            source_kind.as_str(),
+            "UMLAttributeCompartmentView"
+                | "UMLOperationCompartmentView"
+                | "UMLReceptionCompartmentView"
+                | "UMLEnumerationLiteralCompartmentView"
+                | "UMLSlotCompartmentView"
+        );
         if let Geometry::Layout { bounds } = &view.geometry {
-            let rectangle = bounds.x.value().copied()
+            let rectangle = bounds
+                .x
+                .value()
+                .copied()
                 .zip(bounds.y.value().copied())
                 .zip(bounds.width.value().and_then(crate::LayoutExtent::resolved))
-                .zip(bounds.height.value().and_then(crate::LayoutExtent::resolved));
+                .zip(
+                    bounds
+                        .height
+                        .value()
+                        .and_then(crate::LayoutExtent::resolved),
+                );
             if let Some((((x, y), width), height)) = rectangle {
                 if [x, y, width, height].iter().all(|value| value.is_finite())
                     && width >= 0.0
                     && height >= 0.0
                 {
-                    view.geometry = Geometry::Rect { x, y, width, height };
+                    view.geometry = Geometry::Rect {
+                        x,
+                        y,
+                        width,
+                        height,
+                    };
                 }
             } else {
                 diagnostics.push(Diagnostic {
@@ -90,19 +110,46 @@ fn normalize_views(
                 });
             }
         }
-        let name_compartment = source.residual.get("nameCompartment")
+        let name_compartment = source
+            .residual
+            .get("nameCompartment")
             .and_then(reference)
             .map(str::to_owned)
-            .or_else(|| view.presentation.interface_icon.as_ref()
-                .and_then(|binding| binding.label_compartment.value()).cloned());
-        let direct_name = source.residual.get("nameLabel").and_then(reference).map(str::to_owned);
-        let entity_name_label = view.presentation.entity_box.as_ref()
-            .and_then(|binding| binding.name_label.value()).cloned();
-        let name_label = direct_name.or_else(|| {
-            let compartment = view.children.iter().find(|child| Some(&child.id) == name_compartment.as_ref())?;
-            reference(compartment.presentation.source.as_ref()?.residual.get("nameLabel")?)
+            .or_else(|| {
+                view.presentation
+                    .interface_icon
+                    .as_ref()
+                    .and_then(|binding| binding.label_compartment.value())
+                    .cloned()
+            });
+        let direct_name = source
+            .residual
+            .get("nameLabel")
+            .and_then(reference)
+            .map(str::to_owned);
+        let entity_name_label = view
+            .presentation
+            .entity_box
+            .as_ref()
+            .and_then(|binding| binding.name_label.value())
+            .cloned();
+        let name_label = direct_name
+            .or_else(|| {
+                let compartment = view
+                    .children
+                    .iter()
+                    .find(|child| Some(&child.id) == name_compartment.as_ref())?;
+                reference(
+                    compartment
+                        .presentation
+                        .source
+                        .as_ref()?
+                        .residual
+                        .get("nameLabel")?,
+                )
                 .map(str::to_owned)
-        }).or_else(|| entity_name_label.clone());
+            })
+            .or_else(|| entity_name_label.clone());
         if semantic_kind.is_some() {
             if let Some(name_label) = name_label {
                 if let Some(label) = find_view(&mut view.children, &name_label) {
@@ -139,19 +186,34 @@ fn find_view<'a>(views: &'a mut [View], id: &str) -> Option<&'a mut View> {
 }
 
 fn reference(value: &Value) -> Option<&str> {
-    value.as_object().filter(|object| object.len() == 1)?.get("$ref")?.as_str()
+    value
+        .as_object()
+        .filter(|object| object.len() == 1)?
+        .get("$ref")?
+        .as_str()
 }
 
 fn notation_kind(source: &str) -> Option<&'static str> {
     Some(match source {
         "RectangleView" => "presentation.rectangle",
-        "LabelView" | "NodeLabelView" | "EdgeLabelView" | "UMLAttributeView"
-        | "UMLOperationView" | "UMLReceptionView" | "UMLTemplateParameterView"
-        | "UMLEnumerationLiteralView" | "UMLSlotView" => "presentation.label",
-        "UMLCompartmentView" | "UMLNameCompartmentView" | "UMLAttributeCompartmentView"
-        | "UMLOperationCompartmentView" | "UMLReceptionCompartmentView"
-        | "UMLTemplateParameterCompartmentView" | "UMLEnumerationLiteralCompartmentView"
-        | "UMLQualifierCompartmentView" | "UMLSlotCompartmentView" => "presentation.compartment",
+        "LabelView"
+        | "NodeLabelView"
+        | "EdgeLabelView"
+        | "UMLAttributeView"
+        | "UMLOperationView"
+        | "UMLReceptionView"
+        | "UMLTemplateParameterView"
+        | "UMLEnumerationLiteralView"
+        | "UMLSlotView" => "presentation.label",
+        "UMLCompartmentView"
+        | "UMLNameCompartmentView"
+        | "UMLAttributeCompartmentView"
+        | "UMLOperationCompartmentView"
+        | "UMLReceptionCompartmentView"
+        | "UMLTemplateParameterCompartmentView"
+        | "UMLEnumerationLiteralCompartmentView"
+        | "UMLQualifierCompartmentView"
+        | "UMLSlotCompartmentView" => "presentation.compartment",
         "UMLClassView" | "UMLMetaClassView" => "uml.class",
         "UMLInterfaceView" => "uml.interface",
         "UMLStereotypeView" => "uml.stereotype",

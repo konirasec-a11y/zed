@@ -1,5 +1,8 @@
-pub use bellatrix_mde_contracts::events::{ModelingRenderHtmlRequested, ModelingRenderHtml, ModelingPublishHtmlRequested, ModelingPublishHtml};
 use crate::artifact_publication::{self, PreparedArtifacts};
+pub use bellatrix_mde_contracts::events::{
+    ModelingPublishHtml, ModelingPublishHtmlRequested, ModelingRenderHtml,
+    ModelingRenderHtmlRequested,
+};
 use cordis::event::{ListenerRegistrationError, responder};
 use cordis::{Context, Event};
 use std::{convert::Infallible, path::PathBuf};

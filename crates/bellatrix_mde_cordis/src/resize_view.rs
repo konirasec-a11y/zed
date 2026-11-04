@@ -1,5 +1,5 @@
-pub use bellatrix_mde_contracts::events::{ModelingResizeViewRequested, ModelingResizeView};
 use crate::Command;
+pub use bellatrix_mde_contracts::events::{ModelingResizeView, ModelingResizeViewRequested};
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::{Context, Event};
 

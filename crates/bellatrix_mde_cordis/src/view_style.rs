@@ -1,6 +1,11 @@
-pub use bellatrix_mde_contracts::events::{ModelingSetViewLabelRequested, ModelingSetViewLabel, ModelingSetViewTimingRequested, ModelingSetViewTiming, ModelingSetViewStyleRequested, ModelingSetViewStyle, ModelingSetViewPathRequested, ModelingSetViewPath, ModelingSetViewRoutingRequested, ModelingSetViewRouting, ModelingReorderViewRequested, ModelingReorderView};
 use crate::{Command, Geometry};
 use crate::{RelationshipRouting, Style, TimingPresentation, ViewOrder};
+pub use bellatrix_mde_contracts::events::{
+    ModelingReorderView, ModelingReorderViewRequested, ModelingSetViewLabel,
+    ModelingSetViewLabelRequested, ModelingSetViewPath, ModelingSetViewPathRequested,
+    ModelingSetViewRouting, ModelingSetViewRoutingRequested, ModelingSetViewStyle,
+    ModelingSetViewStyleRequested, ModelingSetViewTiming, ModelingSetViewTimingRequested,
+};
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::{Context, Event, event::responder};
 use std::{convert::Infallible, io, sync::Arc};

@@ -20,7 +20,8 @@ pub(super) fn project(
         text: view.label.clone(),
         diagnostics: Vec::new(),
     };
-    let name_owners = diagram.all_views()
+    let name_owners = diagram
+        .all_views()
         .filter(|owner| owner.presentation.name_label.as_deref() == Some(view.id.as_str()))
         .collect::<Vec<_>>();
     if !name_owners.is_empty() {
@@ -28,16 +29,23 @@ pub(super) fn project(
         match name_owners.as_slice() {
             [owner] => {
                 if let Some(element) = owner.subject.as_deref().and_then(|subject| {
-                    section.elements.iter().find(|element| element.id == subject)
+                    section
+                        .elements
+                        .iter()
+                        .find(|element| element.id == subject)
                 }) {
                     rendered.text = Some(element.name.clone());
                     style.font_weight = Some(700);
                     style.text_align.get_or_insert(TextAlignment::Center);
                 } else {
-                    rendered.diagnostics.push(format!("View {}: name subject is unresolved", view.id));
+                    rendered
+                        .diagnostics
+                        .push(format!("View {}: name subject is unresolved", view.id));
                 }
             }
-            _ => rendered.diagnostics.push(format!("View {}: name label has multiple owners", view.id)),
+            _ => rendered
+                .diagnostics
+                .push(format!("View {}: name label has multiple owners", view.id)),
         }
         return rendered;
     }

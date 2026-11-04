@@ -1,5 +1,5 @@
-pub use bellatrix_mde_contracts::events::{ModelingPreviewMoveRequested, ModelingPreviewMove};
 use crate::command_contract::ViewOccurrence;
+pub use bellatrix_mde_contracts::events::{ModelingPreviewMove, ModelingPreviewMoveRequested};
 use bellatrix_project::{ProjectDocument, ProjectService};
 use cordis::event::{QueryOutcome, responder};
 use cordis::{Context, Event, Routing};

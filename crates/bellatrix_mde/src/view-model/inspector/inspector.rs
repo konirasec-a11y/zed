@@ -713,7 +713,8 @@ pub(crate) fn inspect_element_with_references(
                 "end2Aggregation" => "Target diamond",
                 _ => "Property",
             };
-            let (value, editor, editable) = if matches!(key, "end1Aggregation" | "end2Aggregation") {
+            let (value, editor, editable) = if matches!(key, "end1Aggregation" | "end2Aggregation")
+            {
                 match crate::property_edit::property_contract(
                     section,
                     id,
@@ -750,19 +751,17 @@ pub(crate) fn inspect_element_with_references(
             if known.contains(key.as_str()) {
                 continue;
             }
-            let (editor, editable) = if matches!(
-                key.as_str(),
-                "end1Aggregation" | "end2Aggregation"
-            ) {
-                (PropertyEditor::ReadOnly, false)
-            } else {
-                match value {
-                    Value::String(_) => (PropertyEditor::Text, true),
-                    Value::Bool(_) => (PropertyEditor::Boolean, true),
-                    Value::Number(_) => (PropertyEditor::Number, true),
-                    _ => (PropertyEditor::ReadOnly, false),
-                }
-            };
+            let (editor, editable) =
+                if matches!(key.as_str(), "end1Aggregation" | "end2Aggregation") {
+                    (PropertyEditor::ReadOnly, false)
+                } else {
+                    match value {
+                        Value::String(_) => (PropertyEditor::Text, true),
+                        Value::Bool(_) => (PropertyEditor::Boolean, true),
+                        Value::Number(_) => (PropertyEditor::Number, true),
+                        _ => (PropertyEditor::ReadOnly, false),
+                    }
+                };
             properties.push(InspectorProperty {
                 path: format!("properties.{key}"),
                 label: key.clone(),

@@ -1,4 +1,6 @@
-pub use bellatrix_mde_contracts::events::{ModelingConvertDocumentRequested, ModelingConvertDocument};
+pub use bellatrix_mde_contracts::events::{
+    ModelingConvertDocument, ModelingConvertDocumentRequested,
+};
 use cordis::event::{ListenerRegistrationError, responder};
 use cordis::{Context, Event};
 use std::convert::Infallible;

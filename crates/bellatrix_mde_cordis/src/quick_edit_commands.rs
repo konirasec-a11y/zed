@@ -1,6 +1,6 @@
-pub use bellatrix_mde_contracts::events::{ModelingQuickEditRequested, ModelingQuickEdit};
 use crate::Command;
 use crate::UmlQuickCreate;
+pub use bellatrix_mde_contracts::events::{ModelingQuickEdit, ModelingQuickEditRequested};
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::{Context, Event};
 

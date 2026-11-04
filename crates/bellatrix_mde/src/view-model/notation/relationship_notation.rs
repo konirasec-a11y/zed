@@ -1,8 +1,8 @@
+use crate::uml::types::{RelationEnd, RelationEndMultiplicity};
+use crate::{LineMode, ModelingSection, Relation};
 pub use bellatrix_mde_contracts::protocol::presentation::{
     RelationshipEndpointLabels, RelationshipMarker, RelationshipStyle,
 };
-use crate::uml::types::{RelationEnd, RelationEndMultiplicity};
-use crate::{LineMode, ModelingSection, Relation};
 
 pub fn relationship_style_for_notation(kind: &str) -> RelationshipStyle {
     use RelationshipMarker::*;
@@ -81,9 +81,8 @@ pub(crate) fn association_diamonds<'a>(
     section: &'a ModelingSection,
     relation: &Relation,
 ) -> Result<[&'a str; 2], String> {
-    let references = crate::uml::references::ReferenceIndex::new(
-        crate::uml::root::Model::from_section(section),
-    );
+    let references =
+        crate::uml::references::ReferenceIndex::new(crate::uml::root::Model::from_section(section));
     let ends = crate::uml::associations::member_ends(&references, &relation.id)?;
     let [source, target] = ends.as_slice() else {
         return Err("Association diamond projection requires two Property ends".into());

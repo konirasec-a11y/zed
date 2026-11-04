@@ -694,69 +694,73 @@ impl RenderOnce for UmlClassifier {
             })
             .bg(appearance.fill(palette.panel))
             .overflow_hidden()
-            .when(!self.authored_contents, |element| element.child(
-                div()
-                    .id("uml-classifier-title")
-                    .min_h(px(header_height as f32 * scale))
-                    .w_full()
-                    .flex_none()
-                    .px_1()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .map(|element| appearance.align_row(element))
-                    .bg(appearance.fill(palette.panel_alt))
-                    .border_b(px(appearance.width(1.0, scale, false)))
-                    .border_color(line)
-                    .text_size(px(appearance.font_size(12.0, scale)))
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(appearance.text(palette.text))
-                    .on_mouse_down(MouseButton::Left, move |event, window, cx| {
-                        if event.click_count >= 2 {
-                            if let Some(handler) = &edit_title {
-                                handler(window, cx);
+            .when(!self.authored_contents, |element| {
+                element.child(
+                    div()
+                        .id("uml-classifier-title")
+                        .min_h(px(header_height as f32 * scale))
+                        .w_full()
+                        .flex_none()
+                        .px_1()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .map(|element| appearance.align_row(element))
+                        .bg(appearance.fill(palette.panel_alt))
+                        .border_b(px(appearance.width(1.0, scale, false)))
+                        .border_color(line)
+                        .text_size(px(appearance.font_size(12.0, scale)))
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(appearance.text(palette.text))
+                        .on_mouse_down(MouseButton::Left, move |event, window, cx| {
+                            if event.click_count >= 2 {
+                                if let Some(handler) = &edit_title {
+                                    handler(window, cx);
+                                }
+                                cx.stop_propagation();
                             }
-                            cx.stop_propagation();
-                        }
-                    })
-                    .child(
-                        div()
-                            .w_full()
-                            .min_w_0()
-                            .flex()
-                            .flex_col()
-                            .items_center()
-                            .justify_center()
-                            .map(|element| appearance.align_column(element))
-                            .whitespace_normal()
-                            .map(|element| appearance.apply_text_wrap(element))
-                            .when_some(keyword, |header, value| {
-                                header.child(
-                                    div()
-                                        .w_full()
-                                        .text_center()
-                                        .map(|element| appearance.align_text(element))
-                                        .text_size(px(appearance.font_size(10.0, scale)))
-                                        .text_color(appearance.text(palette.muted))
-                                        .child(value),
-                                )
-                            })
-                            .when_some(applied_stereotype, |header, value| {
-                                header.child(
-                                    div()
-                                        .w_full()
-                                        .text_center()
-                                        .map(|element| appearance.align_text(element))
-                                        .text_size(px(appearance.font_size(10.0, scale)))
-                                        .text_color(appearance.text(palette.muted))
-                                        .child(value),
-                                )
-                            })
-                            .child(title),
-                    ),
-            ))
+                        })
+                        .child(
+                            div()
+                                .w_full()
+                                .min_w_0()
+                                .flex()
+                                .flex_col()
+                                .items_center()
+                                .justify_center()
+                                .map(|element| appearance.align_column(element))
+                                .whitespace_normal()
+                                .map(|element| appearance.apply_text_wrap(element))
+                                .when_some(keyword, |header, value| {
+                                    header.child(
+                                        div()
+                                            .w_full()
+                                            .text_center()
+                                            .map(|element| appearance.align_text(element))
+                                            .text_size(px(appearance.font_size(10.0, scale)))
+                                            .text_color(appearance.text(palette.muted))
+                                            .child(value),
+                                    )
+                                })
+                                .when_some(applied_stereotype, |header, value| {
+                                    header.child(
+                                        div()
+                                            .w_full()
+                                            .text_center()
+                                            .map(|element| appearance.align_text(element))
+                                            .text_size(px(appearance.font_size(10.0, scale)))
+                                            .text_color(appearance.text(palette.muted))
+                                            .child(value),
+                                    )
+                                })
+                                .child(title),
+                        ),
+                )
+            })
             .when(
-                !self.authored_contents && appearance.0.show_attributes && !self.attributes.is_empty(),
+                !self.authored_contents
+                    && appearance.0.show_attributes
+                    && !self.attributes.is_empty(),
                 |element| {
                     element.child(compartment(
                         self.attributes,
@@ -768,7 +772,9 @@ impl RenderOnce for UmlClassifier {
                 },
             )
             .when(
-                !self.authored_contents && appearance.0.show_operations && !self.operations.is_empty(),
+                !self.authored_contents
+                    && appearance.0.show_operations
+                    && !self.operations.is_empty(),
                 |element| {
                     element.child(compartment(
                         self.operations,
@@ -780,7 +786,9 @@ impl RenderOnce for UmlClassifier {
                 },
             )
             .when(
-                !self.authored_contents && appearance.0.show_receptions && !self.receptions.is_empty(),
+                !self.authored_contents
+                    && appearance.0.show_receptions
+                    && !self.receptions.is_empty(),
                 |element| {
                     element.child(compartment(
                         self.receptions,
@@ -791,20 +799,23 @@ impl RenderOnce for UmlClassifier {
                     ))
                 },
             )
-            .when(self.show_internal_structure && !self.authored_contents, |element| {
-                element.child(
-                    div()
-                        .flex_1()
-                        .min_h(px(60.0 * scale))
-                        .border_t(px(appearance.width(1.0, scale, false)))
-                        .border_color(line)
-                        .pt(px(3.0 * scale))
-                        .px(px(6.0 * scale))
-                        .text_size(px(appearance.font_size(10.0, scale)))
-                        .text_color(appearance.text(palette.muted))
-                        .child("internal structure"),
-                )
-            })
+            .when(
+                self.show_internal_structure && !self.authored_contents,
+                |element| {
+                    element.child(
+                        div()
+                            .flex_1()
+                            .min_h(px(60.0 * scale))
+                            .border_t(px(appearance.width(1.0, scale, false)))
+                            .border_color(line)
+                            .pt(px(3.0 * scale))
+                            .px(px(6.0 * scale))
+                            .text_size(px(appearance.font_size(10.0, scale)))
+                            .text_color(appearance.text(palette.muted))
+                            .child("internal structure"),
+                    )
+                },
+            )
             .into_any_element();
         div()
             .size_full()

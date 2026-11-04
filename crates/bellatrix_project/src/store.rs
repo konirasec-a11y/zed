@@ -256,7 +256,10 @@ impl ProjectService {
             }
         }
         let cleanup_warning = crate::file::publish_new(ticket.path(), ticket.bytes())?;
-        Ok(ProjectPublishedFile::from_published(ticket, cleanup_warning))
+        Ok(ProjectPublishedFile::from_published(
+            ticket,
+            cleanup_warning,
+        ))
     }
 
     pub(crate) fn replace(

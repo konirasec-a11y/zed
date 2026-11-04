@@ -250,13 +250,20 @@ fn view_relationship_presentation(
         return None;
     }
     let notation = view.presentation.notation_kind.as_deref()?;
-    if !matches!(notation, "uml.extension" | "uml.generalization" | "uml.dependency"
-        | "uml.realization" | "uml.interface_realization") {
+    if !matches!(
+        notation,
+        "uml.extension"
+            | "uml.generalization"
+            | "uml.dependency"
+            | "uml.realization"
+            | "uml.interface_realization"
+    ) {
         return None;
     }
-    let object = section.elements.iter().find(|element| {
-        view.subject.as_deref() == Some(element.id.as_str())
-    })?;
+    let object = section
+        .elements
+        .iter()
+        .find(|element| view.subject.as_deref() == Some(element.id.as_str()))?;
     let mut style = relationship_style_for_notation(notation);
     if view
         .presentation

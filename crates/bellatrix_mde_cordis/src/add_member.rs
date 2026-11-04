@@ -1,5 +1,8 @@
-pub use bellatrix_mde_contracts::events::{ModelingAddMemberRequested, ModelingAddMember, ModelingMoveParameterRequested, ModelingMoveParameter};
 use crate::Command;
+pub use bellatrix_mde_contracts::events::{
+    ModelingAddMember, ModelingAddMemberRequested, ModelingMoveParameter,
+    ModelingMoveParameterRequested,
+};
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::{Context, Event};
 

@@ -166,10 +166,7 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
         .await
         .unwrap()
         .section;
-    for (name, kind) in [
-        ("Attribute", "rust.field"),
-        ("Operation", "rust.function"),
-    ] {
+    for (name, kind) in [("Attribute", "rust.field"), ("Operation", "rust.function")] {
         let element = section
             .elements
             .iter()

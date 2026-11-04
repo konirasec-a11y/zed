@@ -1,5 +1,7 @@
-pub use bellatrix_mde_contracts::protocol::presentation::{ClassifierPresentation, MemberPresentation};
 use crate::{Element, ModelingRelationKind, Style, UmlType};
+pub use bellatrix_mde_contracts::protocol::presentation::{
+    ClassifierPresentation, MemberPresentation,
+};
 use serde_json::Value;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

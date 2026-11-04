@@ -16,10 +16,17 @@ pub(super) fn resolve_bounds(
     pan: (f32, f32),
 ) -> Option<CanvasBounds> {
     let (x, y, width, height) = match geometry {
-        Geometry::Rect { x, y, width, height } => (*x, *y, *width, *height),
+        Geometry::Rect {
+            x,
+            y,
+            width,
+            height,
+        } => (*x, *y, *width, *height),
         Geometry::Layout { bounds } => (
-            *bounds.x.value()?, *bounds.y.value()?,
-            bounds.width.value()?.resolved()?, bounds.height.value()?.resolved()?,
+            *bounds.x.value()?,
+            *bounds.y.value()?,
+            bounds.width.value()?.resolved()?,
+            bounds.height.value()?.resolved()?,
         ),
         _ => return None,
     };
@@ -112,23 +119,37 @@ fn visible_on_canvas(view: &View) -> bool {
     view.presentation.visible
 }
 
-
 pub(super) fn minimum_size(
     section: &bellatrix_mde_cordis::projection::ModelingProjection,
     view: &View,
 ) -> (f64, f64) {
-    if view.draft.is_some() || view.presentation.internal
-        || view.children.iter().any(|child| child.presentation.internal)
-        || matches!(view.presentation.kind.as_deref(),
-            Some("presentation.label" | "presentation.compartment" | "presentation.rectangle"))
+    if view.draft.is_some()
+        || view.presentation.internal
+        || view
+            .children
+            .iter()
+            .any(|child| child.presentation.internal)
+        || matches!(
+            view.presentation.kind.as_deref(),
+            Some("presentation.label" | "presentation.compartment" | "presentation.rectangle")
+        )
     {
         return (1.0, 1.0);
     }
-    section.elements.iter().find(|element| Some(element.id.as_str()) == view.subject.as_deref())
-        .map(|element| (
-            element.minimum_size.0.max(80.0),
-            element.minimum_size.1.max(48.0).max(element.minimum_header_height)
-                .max(element.minimum_interface_height.unwrap_or(0.0)),
-        ))
+    section
+        .elements
+        .iter()
+        .find(|element| Some(element.id.as_str()) == view.subject.as_deref())
+        .map(|element| {
+            (
+                element.minimum_size.0.max(80.0),
+                element
+                    .minimum_size
+                    .1
+                    .max(48.0)
+                    .max(element.minimum_header_height)
+                    .max(element.minimum_interface_height.unwrap_or(0.0)),
+            )
+        })
         .unwrap_or((80.0, 48.0))
 }

@@ -34,7 +34,8 @@ impl MdeExecutionTrace {
         dependencies: &[String],
         outcome: Option<TraceOutcome>,
     ) {
-        self.0.emit(component, action, phase, identity, dependencies, outcome);
+        self.0
+            .emit(component, action, phase, identity, dependencies, outcome);
     }
 }
 

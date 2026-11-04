@@ -97,7 +97,9 @@ pub(super) fn apply(
                 match subject_type {
                     Some(UmlType::Class) => ModelingElementKind::Class.default_name(),
                     Some(UmlType::Interface) => ModelingElementKind::Interface.default_name(),
-                    _ => subject_type.and_then(UmlType::metaclass).unwrap_or("Element"),
+                    _ => subject_type
+                        .and_then(UmlType::metaclass)
+                        .unwrap_or("Element"),
                 },
                 offset,
                 size,
@@ -123,14 +125,12 @@ pub(super) fn apply(
         ),
         UmlQuickCreate::AssociatedClass
         | UmlQuickCreate::AggregatedClass
-        | UmlQuickCreate::CompositedClass => {
-            (
-                "rust.struct",
-                ModelingElementKind::Class.default_name(),
-                (width + 80.0, 0.0),
-                (185.0, 112.0),
-            )
-        }
+        | UmlQuickCreate::CompositedClass => (
+            "rust.struct",
+            ModelingElementKind::Class.default_name(),
+            (width + 80.0, 0.0),
+            (185.0, 112.0),
+        ),
         UmlQuickCreate::TemplateParameter | UmlQuickCreate::Port | UmlQuickCreate::Part => {
             return Err("contained features must use Class specialization".into());
         }

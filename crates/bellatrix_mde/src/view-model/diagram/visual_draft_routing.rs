@@ -82,19 +82,26 @@ pub fn reroute_visual_drafts(diagram: &mut Diagram) {
                 }
                 Geometry::Path { .. } => (0.0, 0.0),
             };
-            let notation = view.presentation.notation_kind.as_deref()
-                .or_else(|| view.draft.as_ref().map(|draft| draft.notation_kind.as_str()));
-            let circle = if notation.and_then(crate::UmlType::from_kind) == Some(crate::UmlType::Interface)
-                && !matches!(view.style.uml.stereotype_display,
-                    Some(crate::StereotypeDisplay::Hidden | crate::StereotypeDisplay::Label))
-            {
-                crate::interface_view_layout(view, crate::ClassifierContents::default()).map(|mut layout| {
-                    if let Geometry::Rect { x, y, .. } = &view.geometry {
-                        layout.center.x += *x;
-                        layout.center.y += *y;
-                    }
-                    layout
-                })
+            let notation = view.presentation.notation_kind.as_deref().or_else(|| {
+                view.draft
+                    .as_ref()
+                    .map(|draft| draft.notation_kind.as_str())
+            });
+            let circle = if notation.and_then(crate::UmlType::from_kind)
+                == Some(crate::UmlType::Interface)
+                && !matches!(
+                    view.style.uml.stereotype_display,
+                    Some(crate::StereotypeDisplay::Hidden | crate::StereotypeDisplay::Label)
+                ) {
+                crate::interface_view_layout(view, crate::ClassifierContents::default()).map(
+                    |mut layout| {
+                        if let Geometry::Rect { x, y, .. } = &view.geometry {
+                            layout.center.x += *x;
+                            layout.center.y += *y;
+                        }
+                        layout
+                    },
+                )
             } else {
                 None
             };

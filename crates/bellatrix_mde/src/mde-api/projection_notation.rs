@@ -136,10 +136,13 @@ pub(crate) fn project_view(
     let routed_geometry = if view.style.routing == Some(mde::RelationshipRouting::Manual) {
         None
     } else {
-        paths.get(&view.id).map(|geometry| {
-            geometry.validate()?;
-            Ok::<_, String>(geometry.clone())
-        }).transpose()?
+        paths
+            .get(&view.id)
+            .map(|geometry| {
+                geometry.validate()?;
+                Ok::<_, String>(geometry.clone())
+            })
+            .transpose()?
     };
     Ok(projection::View {
         id: view.id.clone(),
@@ -168,11 +171,18 @@ pub(crate) fn project_view(
             internal: view.presentation.internal,
             // Expose every title through one canvas role while retaining the
             // existing ERD binding as its sole persisted source of truth.
-            name_label: view.presentation.name_label.as_ref().or_else(|| {
-                view.presentation.entity_box.as_ref()
-                    .and_then(|binding| binding.name_label.value())
-                    .filter(|id| view.children.iter().any(|child| &child.id == *id))
-            }).cloned(),
+            name_label: view
+                .presentation
+                .name_label
+                .as_ref()
+                .or_else(|| {
+                    view.presentation
+                        .entity_box
+                        .as_ref()
+                        .and_then(|binding| binding.name_label.value())
+                        .filter(|id| view.children.iter().any(|child| &child.id == *id))
+                })
+                .cloned(),
             divider: view.presentation.divider,
             has_source: view.presentation.source.is_some(),
             visible,
@@ -457,7 +467,11 @@ fn figure_presentation(
     } else {
         ("", &empty)
     };
-    let kind = view.presentation.notation_kind.as_deref().unwrap_or(semantic_kind);
+    let kind = view
+        .presentation
+        .notation_kind
+        .as_deref()
+        .unwrap_or(semantic_kind);
     let pseudostate_kind = properties
         .get("kind")
         .and_then(Value::as_str)

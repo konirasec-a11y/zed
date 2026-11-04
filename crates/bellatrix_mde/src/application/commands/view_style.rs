@@ -98,7 +98,9 @@ pub(super) fn set_path(
     let Geometry::Path { start, segments } = geometry else {
         return Err("path editing requires Path geometry".into());
     };
-    let final_segment = segments.last().ok_or("path requires at least one segment")?;
+    let final_segment = segments
+        .last()
+        .ok_or("path requires at least one segment")?;
     let finite = |point: &Point| point.x.is_finite() && point.y.is_finite();
     if !finite(start)
         || segments.iter().any(|segment| match segment {
@@ -123,7 +125,9 @@ pub(super) fn set_path(
     else {
         return Err("view has no editable projected path".into());
     };
-    let current_final = current_segments.last().ok_or("current path has no segments")?;
+    let current_final = current_segments
+        .last()
+        .ok_or("current path has no segments")?;
     let endpoint = |segment: &PathSegment| match segment {
         PathSegment::Line { to } | PathSegment::Cubic { to, .. } => *to,
     };

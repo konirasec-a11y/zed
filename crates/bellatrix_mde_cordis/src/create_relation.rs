@@ -1,6 +1,10 @@
-pub use bellatrix_mde_contracts::events::{ModelingCreateRelationRequested, ModelingCreateRelationAtViewsRequested, ModelingCreateRelationAtViewsOrVisualDraft, ModelingCreateRelation, ModelingCreateRelationOrVisualDraft};
 use crate::Command;
 use crate::ModelingRelationKind;
+pub use bellatrix_mde_contracts::events::{
+    ModelingCreateRelation, ModelingCreateRelationAtViewsOrVisualDraft,
+    ModelingCreateRelationAtViewsRequested, ModelingCreateRelationOrVisualDraft,
+    ModelingCreateRelationRequested,
+};
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::{Context, Event};
 

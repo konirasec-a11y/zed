@@ -243,9 +243,7 @@ impl MdeRightPanel {
             presentation_rows.append(&mut inspector_rows);
             inspector_rows = presentation_rows;
         }
-        if !read_only
-            && let Some((diagram_id, view, _)) = style_target
-        {
+        if !read_only && let Some((diagram_id, view, _)) = style_target {
             let is_timing_lifeline = snapshot.as_ref().is_some_and(|snapshot| {
                 let timing_diagram = snapshot
                     .section
@@ -306,7 +304,11 @@ fn view_label(view: &bellatrix_mde_cordis::projection::View) -> &str {
         .as_deref()
         .filter(|label| !label.trim().is_empty())
         .or_else(|| (!view.display_label.trim().is_empty()).then_some(view.display_label.as_str()))
-        .or_else(|| view.label.as_deref().filter(|label| !label.trim().is_empty()))
+        .or_else(|| {
+            view.label
+                .as_deref()
+                .filter(|label| !label.trim().is_empty())
+        })
         .unwrap_or("Unnamed view")
 }
 
