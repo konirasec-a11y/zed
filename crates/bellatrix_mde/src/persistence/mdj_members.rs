@@ -1,6 +1,9 @@
 use super::*;
 
 const NAMED_FIELDS: &[&str] = &["visibility", "stereotype"];
+const INTERFACE_FIELDS: &[&str] = &[
+    "visibility", "stereotype", "isAbstract", "isLeaf", "isFinalSpecialization",
+];
 const CLASS_FIELDS: &[&str] = &[
     "visibility", "stereotype", "isAbstract", "isActive", "isLeaf", "isFinalSpecialization",
 ];
@@ -18,6 +21,7 @@ const PARAMETER_FIELDS: &[&str] = &[
 pub(super) fn fields(kind: &str) -> &'static [&'static str] {
     match kind {
         "UMLClass" => CLASS_FIELDS,
+        "UMLInterface" => INTERFACE_FIELDS,
         "UMLAttribute" => ATTRIBUTE_FIELDS,
         "UMLOperation" => OPERATION_FIELDS,
         "UMLParameter" => PARAMETER_FIELDS,
@@ -48,7 +52,7 @@ pub(super) fn supported_property(kind: &str, field: &str, value: &Value) -> bool
 
 fn collections(kind: &str) -> &'static [(&'static str, &'static str)] {
     match kind {
-        "UMLClass" => &[("attributes", "UMLAttribute"), ("operations", "UMLOperation")],
+        "UMLClass" | "UMLInterface" => &[("attributes", "UMLAttribute"), ("operations", "UMLOperation")],
         "UMLOperation" => &[("parameters", "UMLParameter")],
         _ => &[],
     }
@@ -65,7 +69,7 @@ pub(super) fn supported_field(kind: &str, field: &str, value: &Value) -> bool {
         (_, "documentation") => value.is_string(),
         // An empty source-only specification does not assert a UML expression.
         ("UMLOperation", "specification") => value.as_str() == Some(""),
-        ("UMLClass", "receptions" | "behaviors")
+        ("UMLClass" | "UMLInterface", "receptions" | "behaviors")
         | ("UMLOperation", "raisedExceptions" | "preconditions" | "postconditions" | "bodyConditions") =>
             value.as_array().is_some_and(Vec::is_empty),
         _ => false,
@@ -73,6 +77,11 @@ pub(super) fn supported_field(kind: &str, field: &str, value: &Value) -> bool {
 }
 
 fn supported_object(object: &mdj::Object<'_>, index: &mdj::Index<'_>) -> bool {
+    if object.type_name == "UMLAssociation" {
+        // Check the contained association without climbing back to its owner.
+        // The enclosing classifier's ancestry is checked by the caller.
+        return associations::supported_structure(object, index);
+    }
     canonical_kind(object.type_name).is_some()
         && !in_view_composition(&object.path)
         && object.properties.get("name").is_none_or(Value::is_string)
@@ -81,16 +90,21 @@ fn supported_object(object: &mdj::Object<'_>, index: &mdj::Index<'_>) -> bool {
 }
 
 pub(super) fn supported_structure(object: &mdj::Object<'_>, index: &mdj::Index<'_>) -> bool {
-    if let Some((owner_type, slot)) = match object.type_name {
-        "UMLAttribute" => Some(("UMLClass", "attributes")),
-        "UMLOperation" => Some(("UMLClass", "operations")),
-        "UMLParameter" => Some(("UMLOperation", "parameters")),
+    if let Some(slot) = match object.type_name {
+        "UMLAttribute" => Some("attributes"),
+        "UMLOperation" => Some("operations"),
+        "UMLParameter" => Some("parameters"),
         _ => None,
     } {
         let Some(owner) = object.properties.get("_parent").and_then(reference).and_then(|id| index.object(id)) else {
             return false;
         };
-        if owner.type_name != owner_type || !contained_in_slot(owner, slot, object) {
+        let supported_owner = if object.type_name == "UMLParameter" {
+            owner.type_name == "UMLOperation"
+        } else {
+            matches!(owner.type_name, "UMLClass" | "UMLInterface")
+        };
+        if !supported_owner || !contained_in_slot(owner, slot, object) {
             return false;
         }
     }
@@ -110,7 +124,7 @@ pub(super) fn supported_structure(object: &mdj::Object<'_>, index: &mdj::Index<'
             }
         }
     }
-    if matches!(object.type_name, "UMLClass" | "UMLAttribute" | "UMLOperation" | "UMLParameter")
+    if matches!(object.type_name, "UMLClass" | "UMLInterface" | "UMLAttribute" | "UMLOperation" | "UMLParameter")
         && let Some(children) = object.properties.get("ownedElements").and_then(Value::as_array)
     {
         for child in children {
@@ -120,12 +134,12 @@ pub(super) fn supported_structure(object: &mdj::Object<'_>, index: &mdj::Index<'
             if !contained_in_slot(object, "ownedElements", child) {
                 return false;
             }
-            // A class must not become an apparently complete UML classifier by
+            // A classifier must not become apparently complete by
             // hiding opaque owned members. Embedded diagrams are presentation.
             if is_diagram(child.type_name) {
                 continue;
             }
-            if object.type_name != "UMLClass"
+            if !matches!(object.type_name, "UMLClass" | "UMLInterface")
                 || child.properties.get("_parent").and_then(reference) != Some(object.id)
                 || !supported_object(child, index)
             {
@@ -133,7 +147,7 @@ pub(super) fn supported_structure(object: &mdj::Object<'_>, index: &mdj::Index<'
             }
         }
     }
-    if matches!(object.type_name, "UMLClass" | "UMLAttribute" | "UMLOperation" | "UMLParameter") {
+    if matches!(object.type_name, "UMLClass" | "UMLInterface" | "UMLAttribute" | "UMLOperation" | "UMLParameter") {
         // An explicit owner can disagree with physical containment. Such a
         // child must not disappear from the completeness decision merely
         // because it was stored elsewhere in the MDJ tree.
@@ -148,7 +162,7 @@ pub(super) fn supported_structure(object: &mdj::Object<'_>, index: &mdj::Index<'
             let in_members = collections(object.type_name).iter().any(|(slot, expected_type)| {
                 child.type_name == *expected_type && contained_in_slot(object, slot, child)
             });
-            let in_owned_elements = object.type_name == "UMLClass"
+            let in_owned_elements = matches!(object.type_name, "UMLClass" | "UMLInterface")
                 && contained_in_slot(object, "ownedElements", child);
             if !(in_members || in_owned_elements) {
                 return false;

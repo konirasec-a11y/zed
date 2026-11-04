@@ -26,7 +26,7 @@ pub struct Import {
 }
 
 /// A conservative interchange projection, not a StarUML renderer.
-/// Models, packages, classes and a restricted binary association encoding map to UML.
+/// Models, packages, classes, interfaces and a restricted binary association encoding map to UML.
 pub fn import(bytes: &[u8]) -> Result<Import, MdjError> {
     let document = mdj::decode(bytes)?;
     let (mut imported, residuals, paths) = project_document(&document)?;
@@ -216,7 +216,7 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
             diagnostics.push(Diagnostic {
                 path: object.path.clone(),
                 message: if mapped_kind.is_some() {
-                    format!("{} mapped by identity, name, documentation, explicit ownership and representable properties; class members and operation parameters preserve source order, textual types and default values remain unresolved declarations, and source-only encoding stays in residue", object.type_name)
+                    format!("{} mapped by identity, name, documentation, explicit ownership and representable properties; classifier members and operation parameters preserve source order, textual types and default values remain unresolved declarations, and source-only encoding stays in residue", object.type_name)
                 } else if canonical_kind(object.type_name).is_some() {
                     let fields = object.properties.iter()
                         .filter(|(field, value)| !supported_semantic_field(object.type_name, field, value))
@@ -502,11 +502,15 @@ fn metadata_after_export(project: &Project) -> Project {
                 if !element.name.is_empty() {
                     metadata.mapped_fields.insert("name".into());
                 }
-                if let Some(kind) = mdj_kind(&element.kind) {
-                    metadata.type_name = kind.into();
-                }
-                if metadata.mapped_fields.contains("_type") {
-                    members::update_metadata(element, metadata);
+                // Association ends share the UML Property kind with attributes,
+                // but retain their distinct source role and metadata updater.
+                if !associations::is_end(metadata) {
+                    if let Some(kind) = mdj_kind(&element.kind) {
+                        metadata.type_name = kind.into();
+                    }
+                    if metadata.mapped_fields.contains("_type") {
+                        members::update_metadata(element, metadata);
+                    }
                 }
             }
         }
@@ -608,7 +612,7 @@ fn export_document(project: &Project, original: &mdj::Index<'_>) -> Result<Value
                     parent.id == ownership.from
                         && matches!(
                             parent.kind.as_str(),
-                            "uml.model" | "uml.package" | "uml.class" | "uml.operation"
+                            "uml.model" | "uml.package" | "uml.class" | "uml.interface" | "uml.operation"
                         )
                 })
             {
@@ -799,6 +803,7 @@ fn canonical_kind(kind: &str) -> Option<&'static str> {
         "UMLModel" => Some("uml.model"),
         "UMLPackage" => Some("uml.package"),
         "UMLClass" => Some("uml.class"),
+        "UMLInterface" => Some("uml.interface"),
         "UMLAttribute" => Some("uml.attribute"),
         "UMLOperation" => Some("uml.operation"),
         "UMLParameter" => Some("uml.parameter"),
@@ -862,6 +867,7 @@ fn mdj_kind(kind: &str) -> Option<&str> {
         "uml.model" => Some("UMLModel"),
         "uml.package" => Some("UMLPackage"),
         "uml.class" => Some("UMLClass"),
+        "uml.interface" => Some("UMLInterface"),
         "uml.attribute" => Some("UMLAttribute"),
         "uml.operation" => Some("UMLOperation"),
         "uml.parameter" => Some("UMLParameter"),

@@ -55,8 +55,8 @@ fn ends<'a, 'document>(
 
 // This is an encoding boundary, not UML validation: dangling type references and
 // invalid multiplicity strings stay available to the kernel unchanged.
-fn representable(object: &mdj::Object<'_>, index: &mdj::Index<'_>) -> bool {
-    if in_view_composition(&object.path)
+pub(super) fn supported_structure(object: &mdj::Object<'_>, index: &mdj::Index<'_>) -> bool {
+    if object.type_name != "UMLAssociation" || in_view_composition(&object.path)
         || object
             .properties
             .iter()
@@ -64,19 +64,18 @@ fn representable(object: &mdj::Object<'_>, index: &mdj::Index<'_>) -> bool {
     {
         return false;
     }
-    if let Some(parent) = object.properties.get("_parent") {
-        let Some(parent) = reference(Some(parent)).and_then(|id| index.object(id)) else {
-            return false;
-        };
-        if !(parent.path.is_empty() && parent.type_name == "Project")
-            && canonical_kind_for_object(parent, index).is_none()
-        {
-            return false;
-        }
-    }
     let Some(ends) = ends(object, index) else {
         return false;
     };
+    // End ownership must not hide a semantic child located outside the two
+    // source slots. Their authored type references are not ownership edges.
+    if index.objects().any(|child| {
+        let owner = reference(child.properties.get("_parent"));
+        (owner == Some(object.id) && !ends.iter().any(|end| end.id == child.id))
+            || ends.iter().any(|end| owner == Some(end.id))
+    }) {
+        return false;
+    }
     ends.iter().zip(["end1", "end2"]).all(|(end, slot)| {
         end.type_name == "UMLAssociationEnd"
             && end.path == format!("{}/{slot}", object.path)
@@ -97,6 +96,23 @@ fn representable(object: &mdj::Object<'_>, index: &mdj::Index<'_>) -> bool {
                 .iter()
                 .all(|(field, value)| supported(field, value, true))
     })
+}
+
+fn representable(object: &mdj::Object<'_>, index: &mdj::Index<'_>) -> bool {
+    if !supported_structure(object, index) {
+        return false;
+    }
+    if let Some(parent) = object.properties.get("_parent") {
+        let Some(parent) = reference(Some(parent)).and_then(|id| index.object(id)) else {
+            return false;
+        };
+        if !(parent.path.is_empty() && parent.type_name == "Project")
+            && canonical_kind_for_object(parent, index).is_none()
+        {
+            return false;
+        }
+    }
+    true
 }
 
 pub(super) fn import_associations(
@@ -230,6 +246,11 @@ pub(super) fn import_associations(
                     mapped_fields.insert(field.into());
                 }
             }
+            // A relationship end inherits public visibility in the source,
+            // while UML Property inherits no NamedElement visibility default.
+            properties
+                .entry("visibility".into())
+                .or_insert_with(|| Value::String("public".into()));
             // StarUML UMLRelationshipEnd initializes missing multiplicity to an
             // empty string. Omitting it canonically would assert UML's 1..1 default.
             properties
@@ -315,6 +336,7 @@ pub(super) fn is_end(metadata: &MdjObjectResidual) -> bool {
 fn preserves_omitted_default(field: &str, value: Option<&Value>) -> bool {
     match field {
         "isUnique" => value == Some(&Value::Bool(false)),
+        "visibility" => value.and_then(Value::as_str) == Some("public"),
         "multiplicity" => value.and_then(Value::as_str) == Some(""),
         _ => false,
     }

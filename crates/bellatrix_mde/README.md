@@ -257,6 +257,28 @@ under `style` are rejected, rather than migrated or loaded with missing data.
 An absent UML extension means default notation preferences; an empty extension
 is omitted when saving. JSON and Protobuf use the same style decoding contract.
 
+## Imported classifier ownership
+
+The MDJ adapter promotes Classes and Interfaces with their supported Attributes,
+Operations and Parameters into the existing UML contract. Associations stored in
+`ownedElements` are checked locally before their owner's ancestry, avoiding a
+circular completeness dependency. Explicit `_parent` references, physical source
+slots, member identities and order must agree; an unsupported or misplaced child
+keeps the affected classifier and association opaque instead of hiding it.
+
+Supported binary Associations keep both Property ends and their canonical
+ownership. Omitted navigation remains unverified, not `notNavigable`. Empty
+multiplicity, false uniqueness and public end visibility are source defaults in
+the canonical state; original field absence is only encoding metadata. Reference
+targets and multiplicity strings remain kernel inputs, not parser UML verdicts.
+
+This covers the class-owned self-association and interface-owned association in
+the supplied MDJ sample. Receptions, behaviors, qualifiers, `ownerAttribute`,
+aggregation diamonds and other unmapped semantics remain outside this semantic
+promotion. Their source data is retained. Interface ball/socket drawing and
+classifier relayout are separate presentation work; canonical import does not
+claim that those visual forms are implemented. No new export mode is introduced.
+
 ## Bound member labels
 
 `ViewPresentation.label_binding` distinguishes a subject-derived Attribute or
