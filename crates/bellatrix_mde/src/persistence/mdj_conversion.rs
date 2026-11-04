@@ -1,3 +1,6 @@
+#[path = "mdj_associations.rs"]
+mod associations;
+
 use super::mdj::{self, Diagnostic, MdjError};
 use crate::{
     Authored, Diagram, Element, Geometry, LayoutBounds, MdjObjectResidual, MdjProvenance,
@@ -17,7 +20,7 @@ pub struct Import {
 }
 
 /// A conservative interchange projection, not a StarUML renderer.
-/// Only models, packages and classes have a canonical UML mapping.
+/// Models, packages, classes and a restricted binary association encoding map to UML.
 pub fn import(bytes: &[u8]) -> Result<Import, MdjError> {
     let document = mdj::decode(bytes)?;
     let (mut imported, residuals, paths) = project_document(&document)?;
@@ -122,7 +125,17 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
             diagnostics.push(Diagnostic { path: object.path.clone(), message: "diagram imported conservatively; canvas equivalence and UML context mapping are not implemented".into() });
         }
     }
+    let association_ids = associations::import_associations(
+        &index,
+        &mut project,
+        &mut residuals,
+        &paths,
+        &mut diagnostics,
+    );
     for object in objects {
+        if association_ids.contains(object.id) {
+            continue;
+        }
         if view_ids.contains(object.id)
             || (is_diagram(object.type_name) && !in_view_composition(&object.path))
         {
@@ -196,7 +209,7 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
                         .map(|(field, _)| field.clone()).collect::<Vec<_>>().join(", ");
                     format!("{} kept opaque, not promoted to UML: unmapped or unrepresentable fields [{}], a non-string name, presentation containment or an unmappable explicit ownership chain; source semantics must not be replaced with UML defaults", object.type_name, fields)
                 } else {
-                    format!("{} preserved as an MDJ object; canonical UML mapping (including associations and ends) is not implemented", object.type_name)
+                    format!("{} preserved as an MDJ object; this object has no supported canonical UML mapping", object.type_name)
                 },
             });
         }
@@ -471,6 +484,7 @@ fn metadata_after_export(project: &Project) -> Project {
                 }
             }
         }
+        associations::update_metadata(project, provenance);
         for diagram in &project.diagrams {
             if !diagram.name.is_empty() {
                 if let Some(metadata) = provenance.object_residuals.get_mut(&diagram.id) {
@@ -512,6 +526,9 @@ fn export_document(project: &Project) -> Result<Value, MdjError> {
                     "new semantic objects are not supported by the MDJ adapter",
                 )
             })?;
+        if associations::is_end(metadata) {
+            continue;
+        }
         let kind = mdj_kind(&element.kind)
             .ok_or_else(|| failure("", "this canonical UML kind has no MDJ export mapping"))?;
         let canonical = metadata.mapped_fields.contains("_type");
@@ -588,6 +605,7 @@ fn export_document(project: &Project) -> Result<Value, MdjError> {
             )?,
         );
     }
+    associations::export_associations(project, &mut objects)?;
     for diagram in &project.diagrams {
         let metadata = provenance
             .object_residuals
