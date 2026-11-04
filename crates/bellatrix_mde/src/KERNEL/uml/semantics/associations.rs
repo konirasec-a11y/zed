@@ -50,6 +50,14 @@ pub fn owned_ends<'a>(
     association_id: &str,
 ) -> Result<Vec<&'a Element>, String> {
     let association = references.element(association_id)?;
+    if association.conforms_to("AssociationClass") {
+        match association_class_disjoint_attributes_ends(references, association) {
+            Ok(true) => {}
+            Ok(false) => return Err("AssociationClass-disjoint_attributes_ends: ownedAttribute and ownedEnd must be disjoint".into()),
+            Err(classifiers::QueryError::Invalid { message, .. }) => return Err(format!("AssociationClass-disjoint_attributes_ends: {message}")),
+            Err(error) => return Err(format!("Unsupported AssociationClass-disjoint_attributes_ends: {error}")),
+        }
+    }
     let members = member_ends(references, association_id)?;
     let children = references.explicit_owned_elements(association_id)?;
     let explicit = association
@@ -94,12 +102,8 @@ pub fn owned_ends<'a>(
         let is_owned_end =
             classifiers::contributes_to_owned_union(association, child, "Association-ownedEnd")
                 .map_err(|error| error.to_string())?;
-        if is_end
-            && (!is_owned_end
-                || classifiers::is_owned_attribute(association, child)
-                    .map_err(|error| error.to_string())?)
-        {
-            return Err("Association-owned memberEnd has a conflicting composite role; AssociationClass::disjoint_attributes_ends forbids an end also being an ownedAttribute".into());
+        if is_end && !is_owned_end {
+            return Err("Association-owned memberEnd has a conflicting composite role".into());
         }
         if is_owned_end {
             let ElementRef::Object(property) = child else {
@@ -951,6 +955,65 @@ fn validate_specialization(
     unsupported.map_or(Ok(()), Err)
 }
 
+// UML.xmi AssociationClass-disjoint_attributes_ends intersects owned roles,
+// not the complete memberEnd collection. Unknown neighbors cannot erase a
+// Property whose canonical owner and both local roles are already established.
+fn association_class_disjoint_attributes_ends(
+    references: &ReferenceIndex<'_>,
+    association: ElementRef<'_>,
+) -> Result<bool, classifiers::QueryError> {
+    use super::property_contracts::{PropertyOutcome, check_value};
+    use classifiers::QueryError;
+    let mut checks = Vec::new();
+    for property in classifiers::properties(association)? {
+        if property.aggregation != schema::Aggregation::Composite || property.is_derived {
+            continue;
+        }
+        let attribute = classifiers::contributes(property, "Classifier-attribute")
+            .map_err(|error| QueryError::unsupported(association.id(), error))?;
+        let end = classifiers::contributes(property, "Association-ownedEnd")
+            .map_err(|error| QueryError::unsupported(association.id(), error))?;
+        if !attribute && !end {
+            continue;
+        }
+        if let Some(value) = association.properties().get(property.name) {
+            match check_value(references, association, property, value) {
+                PropertyOutcome::Satisfied => {}
+                PropertyOutcome::Violation(message) => {
+                    checks.push(Err(QueryError::invalid(association.id(), message)))
+                }
+                PropertyOutcome::Unverified(message) => {
+                    checks.push(Err(QueryError::unsupported(association.id(), message)))
+                }
+            }
+        }
+    }
+    for child in references
+        .explicit_owned_elements(association.id())
+        .map_err(|error| QueryError::invalid(association.id(), error))?
+    {
+        if child.metaclass().is_none() {
+            checks.push(Err(QueryError::unsupported(
+                child.id(),
+                "owned member metaclass is unresolved",
+            )));
+        } else if child.conforms_to("Property") {
+            checks.push(
+                super::feature_compatibility::require_all([
+                    classifiers::is_owned_attribute(association, child),
+                    classifiers::contributes_to_owned_union(
+                        association,
+                        child,
+                        "Association-ownedEnd",
+                    ),
+                ])
+                .map(|intersection| !intersection),
+            );
+        }
+    }
+    super::feature_compatibility::require_all(checks)
+}
+
 // UML.xmi AssociationClass-cannot_be_defined. Evaluate known ends even when
 // another member is unresolved; this is a quantified rule, not a partial query
 // pretending to return the complete endType collection.
@@ -1135,6 +1198,33 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
         .filter(|element| element.conforms_to("Association"))
     {
         if association.conforms_to("AssociationClass") {
+            let outcome = match association_class_disjoint_attributes_ends(references, association)
+            {
+                Ok(true) => None,
+                Ok(false) => Some((
+                    StructuralSeverity::Error,
+                    "UML_ASSOCIATION_CLASS_DISJOINT_ATTRIBUTES_ENDS",
+                    "ownedAttribute and ownedEnd must be disjoint".to_owned(),
+                )),
+                Err(classifiers::QueryError::Invalid { message, .. }) => Some((
+                    StructuralSeverity::Error,
+                    "UML_ASSOCIATION_CLASS_DISJOINT_ATTRIBUTES_ENDS",
+                    message,
+                )),
+                Err(classifiers::QueryError::Unsupported { message, .. }) => Some((
+                    StructuralSeverity::Warning,
+                    "MDE_ASSOCIATION_CLASS_DISJOINT_ATTRIBUTES_ENDS_UNVERIFIED",
+                    message,
+                )),
+            };
+            if let Some((severity, code, message)) = outcome {
+                issues.push(StructuralDiagnostic {
+                    severity,
+                    code,
+                    subject_id: association.id().into(),
+                    message: format!("AssociationClass-disjoint_attributes_ends: {message}"),
+                });
+            }
             let outcome = match association_class_cannot_be_defined(references, association) {
                 Ok(true) => None,
                 Ok(false) => Some((
@@ -1211,6 +1301,7 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
         for result in [structure, validate_specialization(references, association)] {
             if let Err(message) = result
                 && !message.contains("AssociationClass-cannot_be_defined:")
+                && !message.contains("AssociationClass-disjoint_attributes_ends:")
                 && !message.contains("CommunicationPath-association_ends:")
             {
                 let diagnostic = if message.starts_with("Unsupported ") {

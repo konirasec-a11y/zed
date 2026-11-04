@@ -161,6 +161,15 @@ or roles without a counterexample produce
 `MDE_ASSOCIATION_NARY_END_OWNERSHIP_UNVERIFIED`. Binary associations have no
 additional ownership restriction from this particular invariant.
 
+`AssociationClass-disjoint_attributes_ends` checks the intersection of owned
+attribute/end roles without first demanding complete `memberEnd` resolution.
+A known Property in both roles produces
+`UML_ASSOCIATION_CLASS_DISJOINT_ATTRIBUTES_ENDS`; unresolved role/ownership
+evidence without a local collision produces
+`MDE_ASSOCIATION_CLASS_DISJOINT_ATTRIBUTES_ENDS_UNVERIFIED`. Type resolution is
+not needed for this identity-based rule. The complete `owned_ends` query reuses
+the same predicate, and the model report emits the rule once.
+
 Without a decisive local counterexample, unresolved evidence produces
 `MDE_ASSOCIATION_END_TYPES_UNVERIFIED` or
 `MDE_ASSOCIATION_AGGREGATION_UNVERIFIED`. Malformed collections and local values
