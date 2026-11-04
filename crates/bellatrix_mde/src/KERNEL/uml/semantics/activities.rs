@@ -526,6 +526,47 @@ fn partition_represents_property_and_is_contained(
     accept_any([guard.map(|value| !value), consequence])
 }
 
+// UML.xmi OpaqueAction-language_body_size: nonempty language implies equal sizes.
+fn opaque_action_language_body_size(
+    references: &ReferenceIndex<'_>,
+    action: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let collection_size = |property| -> Result<usize, QueryError> {
+        let Some(value) = action.properties().get(property) else {
+            // Both normative properties are optional collections (0..*).
+            return Ok(0);
+        };
+        let descriptor = schema::uml_property("OpaqueAction", property)
+            .map_err(|error| QueryError::unsupported(action.id(), error.to_string()))?
+            .ok_or_else(|| {
+                QueryError::unsupported(
+                    action.id(),
+                    "OpaqueAction collection contract is unavailable",
+                )
+            })?;
+        match property_contracts::check_value(references, action, descriptor, value) {
+            PropertyOutcome::Satisfied => {}
+            PropertyOutcome::Violation(message) | PropertyOutcome::Unverified(message) => {
+                return Err(QueryError::unsupported(action.id(), message));
+            }
+        }
+        value.as_array().map(Vec::len).ok_or_else(|| {
+            QueryError::unsupported(
+                action.id(),
+                "OpaqueAction collection representation is unresolved",
+            )
+        })
+    };
+    let languages = collection_size("language")?;
+    if languages == 0 {
+        // No language is required, regardless of the body collection's size.
+        // Any malformed body still has its independent property diagnostic.
+        return Ok(true);
+    }
+    // Count original entries: body is nonunique and neither list is reordered.
+    Ok(languages == collection_size("body")?)
+}
+
 // Canonical Action input/output evidence shared by ActionInputPin constraints.
 // The returned incompleteness cannot erase a known counterexample.
 fn action_input_pin_members<'a>(
@@ -1111,6 +1152,15 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "MDE_ACTIVITY_PARTITION_DIMENSION_NOT_CONTAINED_UNVERIFIED",
                 "ActivityPartition-dimension_not_contained",
                 "an ActivityPartition with isDimension=true must not be contained by another ActivityPartition",
+            ));
+        }
+        if node.conforms_to("OpaqueAction") {
+            checks.push((
+                opaque_action_language_body_size(references, node),
+                "UML_OPAQUE_ACTION_LANGUAGE_BODY_SIZE",
+                "MDE_OPAQUE_ACTION_LANGUAGE_BODY_SIZE_UNVERIFIED",
+                "OpaqueAction-language_body_size",
+                "nonempty OpaqueAction language and body collections must have equal size",
             ));
         }
         if node.conforms_to("ActionInputPin") {
