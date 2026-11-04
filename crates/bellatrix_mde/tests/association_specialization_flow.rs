@@ -142,6 +142,7 @@ fn element_mut<'a>(content: &'a mut Value, id: &str) -> &'a mut Value {
 fn has_rule_error(project: &Value, subject: &str, rule: &str) -> bool {
     model_diagnostics(project).iter().any(|diagnostic| {
         diagnostic["severity"] == "error"
+            && diagnostic["code"] == "UML_ASSOCIATION_ENDS"
             && diagnostic["subject_id"] == subject
             && diagnostic["message"]
                 .as_str()
@@ -150,7 +151,7 @@ fn has_rule_error(project: &Value, subject: &str, rule: &str) -> bool {
 }
 
 #[test]
-fn specialization_flow_preserves_ordered_type_conformance_and_rejects_parent_arity_changes() {
+fn specialization_flow_preserves_ordered_type_conformance_and_diagnoses_parent_arity_changes() {
     let mut project = document();
     assert!(model_diagnostics(&project).is_empty());
     project = apply(
@@ -164,39 +165,67 @@ fn specialization_flow_preserves_ordered_type_conformance_and_rejects_parent_ari
     )
     .expect("replace a transitive subtype with a direct subtype");
     let snapshot = encode(&project, "json").expect("snapshot");
-    for command in [
-        Command::SetProperty {
-            element_id: "end-left".into(),
-            path: "properties.type".into(),
-            value: json!({"$ref":"right"}),
-        },
-        Command::SetAssociationMemberEnds {
+    let mut authored_drafts = Vec::new();
+    for (command, rule) in [
+        (
+            Command::SetProperty {
+                element_id: "end-left".into(),
+                path: "properties.type".into(),
+                value: json!({"$ref":"right"}),
+            },
+            "specialized_end_types",
+        ),
+        (
+            Command::SetProperty {
+                element_id: "general-left".into(),
+                path: "properties.type".into(),
+                value: json!({"$ref":"right"}),
+            },
+            "specialized_end_types",
+        ),
+        (
+            Command::EditAssociationEnds {
+                association_id: "general".into(),
+                edits: vec![AssociationEndEdit::Insert {
+                    position: 2,
+                    end: AssociationEndDraft {
+                        name: "extra".into(),
+                        type_id: "left".into(),
+                        owner: AssociationEndOwner::Association,
+                        aggregation: Aggregation::None,
+                        multiplicity: None,
+                    },
+                }],
+            },
+            "specialized_end_number",
+        ),
+    ] {
+        let candidate =
+            apply(&project, &command, 2).expect("retain an authored specialization draft");
+        assert!(
+            has_rule_error(&candidate, "specific", rule),
+            "{:?}",
+            model_diagnostics(&candidate)
+        );
+        assert_ne!(encode(&candidate, "json").expect("candidate"), snapshot);
+        assert_eq!(encode(&project, "json").expect("source unchanged"), snapshot);
+        authored_drafts.push(candidate);
+    }
+    // The explicit membership transaction still enforces its Association contract.
+    let error = apply(
+        &project,
+        &Command::SetAssociationMemberEnds {
             association_id: "specific".into(),
             member_end_ids: vec!["end-right".into(), "end-left".into()],
         },
-        Command::SetProperty {
-            element_id: "general-left".into(),
-            path: "properties.type".into(),
-            value: json!({"$ref":"right"}),
-        },
-        Command::EditAssociationEnds {
-            association_id: "general".into(),
-            edits: vec![AssociationEndEdit::Insert {
-                position: 2,
-                end: AssociationEndDraft {
-                    name: "extra".into(),
-                    type_id: "left".into(),
-                    owner: AssociationEndOwner::Association,
-                    aggregation: Aggregation::None,
-                    multiplicity: None,
-                },
-            }],
-        },
-    ] {
-        let error = apply(&project, &command, 2).expect_err("reject inconsistent specialization");
-        assert!(error.contains("specialized_end_"), "{error}");
-        assert_eq!(encode(&project, "json").expect("after rejection"), snapshot);
-    }
+        2,
+    )
+    .expect_err("reject an incompatible explicit membership transaction");
+    assert!(error.contains("specialized_end_types"), "{error}");
+    assert_eq!(
+        encode(&project, "json").expect("transaction rollback"),
+        snapshot
+    );
     let mismatched = external_edit(&project, |content| {
         element_mut(content, "general")["properties"]["memberEnd"] =
             json!([{"$ref":"general-left"},{"$ref":"general-right"},{"$ref":"third"}]);
@@ -267,9 +296,9 @@ fn specialization_flow_preserves_ordered_type_conformance_and_rejects_parent_ari
             .any(|diagnostic| diagnostic["subject_id"] == "specific"
                 && diagnostic["severity"] == "warning"
                 && diagnostic["code"] == "MDE_ASSOCIATION_UNSUPPORTED"
-                && diagnostic["message"]
-                    .as_str()
-                    .is_some_and(|message| message.contains("no materialized memberEnd")))
+                && diagnostic["message"].as_str().is_some_and(|message| {
+                    message.contains("memberEnd identities are not materialized")
+                }))
     );
     project = apply(
         &project,
@@ -279,7 +308,7 @@ fn specialization_flow_preserves_ordered_type_conformance_and_rejects_parent_ari
         },
         3,
     )
-    .expect("continue authoring after rejected edits");
+    .expect("continue authoring independently of the invalid candidates");
     for format in ["json", "protobuf"] {
         for original in [
             &project,
@@ -287,7 +316,10 @@ fn specialization_flow_preserves_ordered_type_conformance_and_rejects_parent_ari
             &swapped,
             &multiple_parents,
             &unresolved_parent,
-        ] {
+        ]
+        .into_iter()
+        .chain(authored_drafts.iter())
+        {
             let reopened =
                 decode(&encode(original, format).expect("save"), format).expect("reopen");
             assert_eq!(&reopened, original);
@@ -365,16 +397,23 @@ fn navigation_flow_uses_canonical_roles_and_checks_inherited_association_contrac
         owner_id: Some("specific-right".into()),
     };
     let snapshot = encode(&navigable, "json").expect("snapshot");
+    let invalid_navigation =
+        apply(&navigable, &reparent, 4).expect("retain an inconsistent navigation draft");
     assert!(
-        apply(&navigable, &reparent, 4)
-            .expect_err("navigation must remain a subset of ownedEnd")
-            .contains("navigableOwnedEnd")
+        has_rule_error(&invalid_navigation, "specific", "navigableOwnedEnd"),
+        "{:?}",
+        model_diagnostics(&invalid_navigation)
     );
-    assert_eq!(encode(&navigable, "json").expect("rollback"), snapshot);
+    assert_ne!(
+        encode(&invalid_navigation, "json").expect("candidate"),
+        snapshot
+    );
+    assert_eq!(encode(&navigable, "json").expect("source unchanged"), snapshot);
     let cleared = external_edit(&navigable, |content| {
         element_mut(content, "specific")["properties"]["navigableOwnedEnd"] = json!([]);
     });
     let reparented = apply(&cleared, &reparent, 5).expect("make the end classifier-owned");
+    assert!(model_diagnostics(&reparented).is_empty());
     assert!(inspected_property(&reparented, "end-left", "uml.isNavigable") == json!(true));
     assert!(inspected_property(&reparented, "end-left", "uml.owningAssociation").is_null());
 
@@ -435,10 +474,24 @@ fn navigation_flow_uses_canonical_roles_and_checks_inherited_association_contrac
         },
         6,
     )
-    .expect_err("unimplemented specialized contracts must not be approved");
+    .expect("retain a subtype draft with an unverified specialized contract");
+    let diagnostics = model_diagnostics(&unchecked);
     assert!(
-        unchecked.contains("MDE_ASSOCIATION_UNSUPPORTED"),
-        "{unchecked}"
+        diagnostics.iter().any(|diagnostic| {
+            diagnostic["subject_id"] == "specific"
+                && diagnostic["severity"] == "warning"
+                && diagnostic["code"] == "MDE_ASSOCIATION_UNSUPPORTED"
+                && diagnostic["message"].as_str().is_some_and(|message| {
+                    message.contains("inherited Association rules were checked")
+                })
+        }),
+        "{diagnostics:?}"
+    );
+    assert!(
+        diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic["severity"] != "error"),
+        "{diagnostics:?}"
     );
     let invalid = apply(
         &subclass,
@@ -449,10 +502,14 @@ fn navigation_flow_uses_canonical_roles_and_checks_inherited_association_contrac
         },
         6,
     )
-    .expect_err("check inherited rules before specialized contracts");
-    assert!(invalid.contains("specialized_end_types"), "{invalid}");
+    .expect("retain the subtype candidate and validate inherited rules");
+    assert!(
+        has_rule_error(&invalid, "specific", "specialized_end_types"),
+        "{:?}",
+        model_diagnostics(&invalid)
+    );
     assert_eq!(
-        encode(&subclass, "json").expect("subclass rollback"),
+        encode(&subclass, "json").expect("subclass source unchanged"),
         snapshot
     );
     let invalid_subclass = external_edit(&subclass, |content| {
@@ -481,7 +538,15 @@ fn navigation_flow_uses_canonical_roles_and_checks_inherited_association_contrac
         "canonically owned member ends"
     ));
     for format in ["json", "protobuf"] {
-        for original in [&directed, &reparented, &subclass, &invalid_subclass] {
+        for original in [
+            &directed,
+            &invalid_navigation,
+            &reparented,
+            &subclass,
+            &unchecked,
+            &invalid,
+            &invalid_subclass,
+        ] {
             let reopened =
                 decode(&encode(original, format).expect("save"), format).expect("reopen");
             assert_eq!(&reopened, original);
