@@ -144,6 +144,22 @@ backward compatibility with earlier APIs or document formats.
 
 ## Graph queries
 
+Association validation evaluates `Association-ends_must_be_typed` and
+`Association-binary_associations` from UML 2.5.1 §11.8.1.8 even when some
+`memberEnd` references are unresolved. A known untyped Property produces
+`UML_ASSOCIATION_ENDS_MUST_BE_TYPED`. Two distinct known aggregated ends, or
+aggregation among at least three known ends, produce
+`UML_ASSOCIATION_BINARY_ASSOCIATIONS`. External references never become invented
+local Properties or distinct local identities.
+
+Without a decisive local counterexample, unresolved evidence produces
+`MDE_ASSOCIATION_END_TYPES_UNVERIFIED` or
+`MDE_ASSOCIATION_AGGREGATION_UNVERIFIED`. Malformed collections and local values
+remain errors. The editing gate uses the same predicates; validation does not
+materialize or repair incomplete ends. Ownership and navigation checks remain
+independent of resolved end Types. These diagnostics describe the implemented
+rules, not complete UML conformance or a complete `memberEnd` query.
+
 UML type compatibility uses one shared, iterative Generalization traversal for
 complete ancestry and existential reachability. UML 2.5.1
 `Classifier-conformsTo-spec` is identity or a path to the requested Classifier,

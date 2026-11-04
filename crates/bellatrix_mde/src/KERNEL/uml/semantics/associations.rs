@@ -469,9 +469,189 @@ pub fn multiplicity(
     value_specifications::multiplicity(references, ElementRef::Object(property))
 }
 
+struct MemberEndEvidence<'a> {
+    known: Vec<&'a Element>,
+    unresolved: Option<classifiers::QueryError>,
+}
+
+fn member_end_evidence<'a>(
+    references: &ReferenceIndex<'a>,
+    association: ElementRef<'a>,
+) -> Result<MemberEndEvidence<'a>, classifiers::QueryError> {
+    use super::property_contracts::{PropertyOutcome, check_value};
+    use classifiers::QueryError;
+    let property = schema::uml_property("Association", "memberEnd")
+        .map_err(|error| QueryError::unsupported(association.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(association.id(), "missing memberEnd contract"))?;
+    let value = association.properties().get("memberEnd").ok_or_else(|| {
+        QueryError::unsupported(
+            association.id(),
+            "memberEnd identities are not materialized",
+        )
+    })?;
+    let mut unresolved = match check_value(references, association, property, value) {
+        PropertyOutcome::Satisfied => None,
+        PropertyOutcome::Violation(message) => {
+            return Err(QueryError::invalid(association.id(), message));
+        }
+        PropertyOutcome::Unverified(message) => {
+            Some(QueryError::unsupported(association.id(), message))
+        }
+    };
+    let values = value
+        .as_array()
+        .ok_or_else(|| QueryError::invalid(association.id(), "memberEnd must be a collection"))?;
+    let member = schema::PropertyDescriptor {
+        lower: "1",
+        upper: "1",
+        ..*property
+    };
+    let mut known = Vec::new();
+    for value in values {
+        match check_value(references, association, &member, value) {
+            PropertyOutcome::Satisfied => {}
+            PropertyOutcome::Violation(message) => {
+                return Err(QueryError::invalid(association.id(), message));
+            }
+            PropertyOutcome::Unverified(message) => {
+                unresolved
+                    .get_or_insert_with(|| QueryError::unsupported(association.id(), message));
+                continue;
+            }
+        }
+        match references
+            .validate(&member, value)
+            .map_err(|error| QueryError::invalid(association.id(), error))?
+        {
+            Some(ElementRef::Object(property)) => known.push(property),
+            _ => {
+                return Err(QueryError::invalid(
+                    association.id(),
+                    "memberEnd requires a Property object identity",
+                ));
+            }
+        }
+    }
+    Ok(MemberEndEvidence { known, unresolved })
+}
+
+// UML.xmi Association-ends_must_be_typed and Association-binary_associations.
+// A quantified violation needs only a local witness, not a complete end query.
+fn association_end_constraints(
+    references: &ReferenceIndex<'_>,
+    association: ElementRef<'_>,
+) -> Vec<StructuralDiagnostic> {
+    use classifiers::QueryError;
+    let evidence = match member_end_evidence(references, association) {
+        Ok(evidence) => evidence,
+        Err(error) => {
+            let (severity, code) = match &error {
+                QueryError::Invalid { .. } => (StructuralSeverity::Error, "UML_ASSOCIATION_ENDS"),
+                QueryError::Unsupported { .. } => {
+                    (StructuralSeverity::Warning, "MDE_ASSOCIATION_UNSUPPORTED")
+                }
+            };
+            return vec![StructuralDiagnostic {
+                severity,
+                code,
+                subject_id: association.id().into(),
+                message: error.to_string(),
+            }];
+        }
+    };
+    let typed = super::feature_compatibility::require_all(
+        evidence
+            .unresolved
+            .clone()
+            .map(Err)
+            .into_iter()
+            .chain(evidence.known.iter().map(|end| {
+                if end.properties.get("type").is_none_or(Value::is_null) {
+                    Ok(false)
+                } else {
+                    super::feature_compatibility::resolve_feature_type(
+                        references,
+                        ElementRef::Object(end),
+                    )
+                    .map(|_| true)
+                }
+            })),
+    );
+    let binary = (|| {
+        let aggregations = evidence
+            .known
+            .iter()
+            .map(|end| aggregation(end).map_err(|error| QueryError::invalid(&end.id, error)))
+            .collect::<Result<Vec<_>, _>>()?;
+        let aggregate_count = aggregations.iter().filter(|kind| **kind != "none").count();
+        // Two distinct local aggregates can never satisfy the binary rule.
+        // Three known ends also disprove size = 2. External identities are not
+        // counted as distinct local ends without a resolver.
+        if aggregate_count > 1 || (aggregate_count > 0 && evidence.known.len() > 2) {
+            return Ok(false);
+        }
+        if let Some(error) = &evidence.unresolved {
+            return Err(error.clone());
+        }
+        Ok(aggregate_count == 0 || evidence.known.len() == 2)
+    })();
+    [
+        (
+            "Association::ends_must_be_typed",
+            "UML_ASSOCIATION_ENDS_MUST_BE_TYPED",
+            "MDE_ASSOCIATION_END_TYPES_UNVERIFIED",
+            "every member end must have a Type",
+            typed,
+        ),
+        (
+            "Association::binary_associations",
+            "UML_ASSOCIATION_BINARY_ASSOCIATIONS",
+            "MDE_ASSOCIATION_AGGREGATION_UNVERIFIED",
+            "aggregation is permitted only on one end of a binary Association",
+            binary,
+        ),
+    ]
+    .into_iter()
+    .filter_map(|(rule, code, unknown, violation, outcome)| {
+        let (severity, code, message) = match outcome {
+            Ok(true) => return None,
+            Ok(false) => (StructuralSeverity::Error, code, violation.to_owned()),
+            Err(QueryError::Invalid { message, .. }) => (StructuralSeverity::Error, code, message),
+            Err(QueryError::Unsupported { message, .. }) => {
+                (StructuralSeverity::Warning, unknown, message)
+            }
+        };
+        Some(StructuralDiagnostic {
+            severity,
+            code,
+            subject_id: association.id().into(),
+            message: format!("{rule}: {message}"),
+        })
+    })
+    .collect()
+}
+
 fn validate_association(
     references: &ReferenceIndex<'_>,
     association: ElementRef<'_>,
+) -> Result<(), String> {
+    if let Some(issue) = association_end_constraints(references, association)
+        .into_iter()
+        .min_by_key(|issue| issue.severity != StructuralSeverity::Error)
+    {
+        return Err(if issue.severity == StructuralSeverity::Error {
+            issue.message
+        } else {
+            format!("Unsupported {}", issue.message)
+        });
+    }
+    validate_association_structure(references, association, true)
+}
+
+fn validate_association_structure(
+    references: &ReferenceIndex<'_>,
+    association: ElementRef<'_>,
+    evaluate_member_constraints: bool,
 ) -> Result<(), String> {
     if association.properties().contains_key("endType") {
         return Err(
@@ -487,19 +667,12 @@ fn validate_association(
                 .into(),
         );
     }
-    let aggregation_count = ends
-        .iter()
-        .map(|end| aggregation(end))
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter()
-        .filter(|kind| *kind != "none")
-        .count();
-    if aggregation_count > 0 && (ends.len() != 2 || aggregation_count != 1) {
-        return Err("Association::binary_associations permits aggregation only on one end of a binary Association".into());
+    // Ownership/navigation do not depend on resolved end Types. Preserve their
+    // independent diagnostics before suspending the remaining member queries.
+    if !evaluate_member_constraints {
+        return Ok(());
     }
     for (index, end) in ends.iter().enumerate() {
-        property_type(references, end)?
-            .ok_or("Association::ends_must_be_typed requires every member end to have a Type")?;
         let owner = references
             .model()
             .owner(ElementRef::Object(end))?
@@ -935,7 +1108,10 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
         }
         // This specific rule already has its own diagnostic above. The command
         // gate uses the same rule, but global output reports it only once.
-        if let Err(message) = validate_association(references, association)
+        let end_issues = association_end_constraints(references, association);
+        if member_ends(references, association.id()).is_ok()
+            && let Err(message) =
+                validate_association_structure(references, association, end_issues.is_empty())
             && !message.contains("AssociationClass-cannot_be_defined:")
             && !message.contains("CommunicationPath-association_ends:")
         {
@@ -950,6 +1126,7 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
                 issues.push(issue("UML_ASSOCIATION_ENDS", association.id(), message));
             }
         }
+        issues.extend(end_issues);
         if let Ok(ends) = member_ends(references, association.id()) {
             for end in ends {
                 if membership.insert(&end.id, association.id()).is_some() {
