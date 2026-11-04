@@ -543,6 +543,21 @@ fn pin_unit_multiplicity(
     ])
 }
 
+// UML.xmi ReadSelfAction-multiplicity: result.is(1,1).
+fn read_self_result_multiplicity(
+    references: &ReferenceIndex<'_>,
+    action: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let result_id = optional_activity_reference(references, action, "ReadSelfAction", "result")?
+        .ok_or_else(|| {
+            QueryError::unsupported(action.id(), "required result OutputPin is unresolved")
+        })?;
+    let result = references
+        .element(&result_id)
+        .map_err(|error| QueryError::unsupported(action.id(), error))?;
+    pin_unit_multiplicity(references, result)
+}
+
 // UML.xmi DestroyObjectAction-multiplicity: target.is(1,1).
 fn destroy_object_target_multiplicity(
     references: &ReferenceIndex<'_>,
@@ -1281,6 +1296,15 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "MDE_ACTIVITY_PARTITION_DIMENSION_NOT_CONTAINED_UNVERIFIED",
                 "ActivityPartition-dimension_not_contained",
                 "an ActivityPartition with isDimension=true must not be contained by another ActivityPartition",
+            ));
+        }
+        if node.conforms_to("ReadSelfAction") {
+            checks.push((
+                read_self_result_multiplicity(references, node),
+                "UML_READ_SELF_ACTION_MULTIPLICITY",
+                "MDE_READ_SELF_ACTION_MULTIPLICITY_UNVERIFIED",
+                "ReadSelfAction-multiplicity",
+                "the result OutputPin of a ReadSelfAction must have multiplicity 1..1",
             ));
         }
         if node.conforms_to("DestroyObjectAction") {
