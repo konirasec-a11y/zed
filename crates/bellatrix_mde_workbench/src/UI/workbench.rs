@@ -495,6 +495,11 @@ impl MdeWorkbenchItem {
         element.name_expression.clone()
     }
     pub(crate) fn run_quick_action(&mut self, action: UmlQuickCreate, cx: &mut Context<Self>) {
+        if !self.source.allows_creation() {
+            self.feedback = "Quick creation is not available for this document".into();
+            cx.notify();
+            return;
+        }
         let Some(element_id) = self.presentation.selected_element().map(str::to_owned) else {
             self.feedback = "Select a UML element first".into();
             cx.notify();
@@ -531,6 +536,11 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
+        if !snapshot.section.tools.allows_new_views(&diagram_id) {
+            self.feedback = "Quick creation is not available for this diagram's domain".into();
+            cx.notify();
+            return;
+        }
         self.submit(
             MdeUiCommand::QuickEdit(ModelingQuickEditRequested {
                 project_id: self.project_id().clone(),
@@ -698,7 +708,9 @@ impl MdeWorkbenchItem {
         kind: bellatrix_mde_cordis::StructuralDiagramKind,
         cx: &mut Context<Self>,
     ) {
-        if self.source.is_read_only() {
+        if !self.source.allows_creation() {
+            self.feedback = "Diagram creation is not available for this document".into();
+            cx.notify();
             return;
         }
         let Ok(snapshot) = self.source.snapshot() else {
@@ -748,10 +760,16 @@ impl MdeWorkbenchItem {
     pub fn cancel_tool(&mut self, cx: &mut Context<Self>) {
         self.source.record_interaction("tool.cancel", None, bellatrix_mde_cordis::TraceOutcome::Success);
         self.presentation.cancel_tool();
-        self.feedback = "No relationship tool selected".into();
+        self.feedback = "Selection tool active".into();
         cx.notify();
     }
     pub(super) fn allows_modeling_tool(&mut self, tool: ModelingTool, cx: &mut Context<Self>) -> bool {
+        if !self.source.allows_creation() {
+            self.presentation.cancel_tool();
+            self.feedback = "Creation tools are not available for this document".into();
+            cx.notify();
+            return false;
+        }
         let Ok(snapshot) = self.source.snapshot() else {
             self.feedback = "Project snapshot unavailable".into();
             cx.notify();

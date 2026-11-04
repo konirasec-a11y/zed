@@ -90,6 +90,16 @@ pub(crate) fn project_view(
     } else {
         None
     };
+    if view.presentation.relationship_notation == Some(mde::RelationshipNotation::EntityRelationship)
+        && let Some(resolved) = &relationship
+    {
+        render_style.stroke_pattern = Some(match resolved.style.line_mode {
+            LineMode::Solid => Vec::new(),
+            LineMode::Dotted => vec![3.0],
+            LineMode::Dashed => vec![6.0, 5.0],
+        });
+    }
+    let visible = rendered_label.visible.unwrap_or_else(|| visible_in_preview(view));
     let routed_geometry = if view.style.routing == Some(mde::RelationshipRouting::Manual) {
         None
     } else {
@@ -115,7 +125,7 @@ pub(crate) fn project_view(
         presentation: projection::ViewPresentation {
             kind: view.presentation.kind.clone(),
             has_source: view.presentation.source.is_some(),
-            visible: visible_in_preview(view),
+            visible,
             style_inheritance: projected_style.inheritance.clone(),
         },
         style: projection::convert(&view.style)?,
@@ -165,7 +175,7 @@ pub(crate) fn project_render_styles(
         .collect::<BTreeSet<_>>();
     let mut resolved = BTreeMap::new();
     let mut projected_styles = BTreeMap::new();
-    let fallback = mde::Style::default();
+    let fallback = RenderStyle::default();
     for view in views.values().copied() {
         let mut projected = authored_render_style(view)?;
         if let Some(authored) = view.presentation.style_inheritance.as_ref()
@@ -192,7 +202,8 @@ pub(crate) fn project_render_styles(
                             .ok_or_else(|| format!("missing style origin view {origin_id}"))?;
                         // None is inherited too. The child's authored value must
                         // not override a source default or an unresolved field.
-                        copy_inherited_property(&mut projected.style, &origin.style, *property);
+                        let origin_style = authored_render_style(origin)?.style;
+                        copy_inherited_property(&mut projected.style, &origin_style, *property);
                         inheritance.origins.insert(projected_property, origin_id.to_owned());
                     }
                     StylePropertyResolution::Unresolved(diagnostic) => {
@@ -277,8 +288,18 @@ fn inherited_property(property: mde::InheritedStyleProperty) -> projection::Inhe
 }
 
 fn authored_render_style(view: &mde::View) -> Result<ProjectedRenderStyle, String> {
+    let mut style = render_style(&view.style)?;
+    if let Some(defaults) = &view.presentation.default_style {
+        style.fill = style.fill.or_else(|| defaults.fill.clone());
+        style.stroke = style.stroke.or_else(|| defaults.stroke.clone());
+        style.text_color = style.text_color.or_else(|| defaults.text_color.clone());
+        style.stroke_width = style.stroke_width.or(defaults.stroke_width);
+        style.text_align = style.text_align.or(defaults.text_align.as_ref().map(projection::convert).transpose()?);
+        style.text_vertical_align = style.text_vertical_align.or(defaults.text_vertical_align.as_ref().map(projection::convert).transpose()?);
+        style.show_shadow = style.show_shadow.or(defaults.show_shadow);
+    }
     Ok(ProjectedRenderStyle {
-        style: render_style(&view.style)?,
+        style,
         inheritance: view.presentation.style_inheritance.as_ref().map(|inheritance| {
             projection::StyleInheritance {
                 source: match &inheritance.source {
@@ -297,7 +318,7 @@ fn authored_render_style(view: &mde::View) -> Result<ProjectedRenderStyle, Strin
 
 fn copy_inherited_property(
     destination: &mut RenderStyle,
-    source: &mde::Style,
+    source: &RenderStyle,
     property: mde::InheritedStyleProperty,
 ) {
     match property {
@@ -332,6 +353,7 @@ fn render_style(style: &mde::Style) -> Result<RenderStyle, String> {
             .then(|| style.resolve_stroke_pattern(mde::LineMode::Solid).to_vec()),
         word_wrap: style.word_wrap,
         show_shadow: style.show_shadow,
+        shadow: None,
         show_stereotype: style.uml.should_show_stereotype(),
         show_attributes: style.uml.suppress_attributes != Some(true),
         show_operations: style.uml.suppress_operations != Some(true),

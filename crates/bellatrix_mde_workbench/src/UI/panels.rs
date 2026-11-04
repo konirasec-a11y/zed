@@ -116,7 +116,7 @@ fn explorer_menu(
     }
     let owner = owner.clone();
     let subject = subject.to_owned();
-    ui::ContextMenu::build(window, cx, move |mut menu, _, _| {
+    ui::ContextMenu::build(window, cx, move |mut menu, _, cx| {
         if !occurrences.is_empty() { menu = menu.header("Diagram occurrences"); }
         for (diagram, view, label) in occurrences {
             let owner = owner.clone();
@@ -126,7 +126,7 @@ fn explorer_menu(
         }
         if read_only { return menu.header("Read-only preview"); }
         if let Some(snapshot) = &snapshot {
-            menu = explorer_creation_menus(menu, &owner, snapshot, Some(&subject), panel.clone(), &row_key);
+            menu = explorer_creation_menus(menu, &owner, snapshot, Some(&subject), panel.clone(), &row_key, cx);
             menu = explorer_move_menu(menu, &owner, snapshot,
                 crate::workbench_ui::hierarchy::ExplorerMoveTarget::Element(subject.clone()), panel.clone());
         }
@@ -197,8 +197,12 @@ fn explorer_creation_menus(
     subject: Option<&str>,
     panel: gpui::WeakEntity<MdeRightPanel>,
     row_key: &str,
+    cx: &App,
 ) -> ui::ContextMenu {
     use crate::workbench_ui::explorer;
+    if !owner.read(cx).source().allows_creation() {
+        return menu.header("Creation is not available for this document");
+    }
     let diagram_kinds = subject.map(|id| explorer::contextual_diagram_kinds(&snapshot.section, id))
         .unwrap_or_else(|| explorer::project_diagram_kinds(&snapshot.section));
     if !diagram_kinds.is_empty() {
@@ -313,10 +317,10 @@ fn explorer_project_menu(
         && !owner.read(cx).source().is_presentation_suspended();
     let owner = owner.clone();
     let row_key = row_key.to_owned();
-    ui::ContextMenu::build(window, cx, move |menu, _, _| {
+    ui::ContextMenu::build(window, cx, move |menu, _, cx| {
         if !editable { return menu.header("Read-only preview"); }
         let Ok(snapshot) = snapshot else { return menu.header("Project snapshot unavailable"); };
-        explorer_creation_menus(menu, &owner, &snapshot, None, panel, &row_key)
+        explorer_creation_menus(menu, &owner, &snapshot, None, panel, &row_key, cx)
     })
 }
 

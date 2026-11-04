@@ -312,6 +312,26 @@ options retain cached text with a visible diagnostic, not a claimed live label.
 Stored geometry is not recalculated after edits, so compartment relayout,
 automatic sizing, qualifier bindings and full StarUML rendering remain pending.
 
+## Authored layout extents
+
+`Geometry::Layout` preserves authored coordinates separately from usable rendered
+bounds. Width and height retain missing/null intent or a typed `LayoutExtent`.
+Resolved extents serialize as nonnegative finite JSON numbers. An unresolved
+negative extent serializes as `{"original":-9.0,"reason":"negative_extent"}`;
+its negative finite value remains explicit model data, not adapter residue or a
+clamped zero. The same geometry JSON is carried by protobuf's `geometry_json`.
+Bare negative resolved extents, invalid reason/value combinations and nonfinite
+values are rejected. Native Rect/Ellipse geometry retains its size invariants.
+
+StarUML compartment arrangement can assign child width as compartment width
+minus padding. A saved negative result is not treated as a special `-9` sentinel.
+The MDJ adapter imports it as an unresolved extent and exports the original value;
+no-edit export still returns the original source bytes. Unresolved bounds do not
+become renderer coordinates: the imported preview and interface icon projection
+require resolved extents, and the inspector reports the retained original value.
+This allows importing the complete project without claiming font measurement or
+compartment relayout parity. Resolving those pending bounds remains future work.
+
 ## Imported interface icons
 
 `ViewPresentation.interface_icon` binds an interface icon to its label-compartment
@@ -343,3 +363,37 @@ and endpoints. Shadow placement, endpoint rerouting, dynamic label visibility,
 canonical/decoration Interface silhouettes and full pixel parity remain pending.
 Changing icon modes preserves the stored compartment layout. Unknown connection
 targets or directions do not become fabricated socket orientations.
+
+## Imported entity-relationship presentation
+
+ERD models remain opaque source objects, not UML Classes or Associations. Typed
+`entity_box`, `relationship_notation`, `relationship_endpoints` and
+`relationship_labels` bindings express their drawing roles. Names and cardinality
+remain in their identified model objects; projections never persist a second copy.
+The entity name label uses the bound entity name and bold font. Relationship and
+end labels use their current bound names, with name-label visibility derived from
+whether the relationship name is empty. Existing bounds and label text are retained
+for inverse export and unresolved fallbacks, not rewritten by rendering.
+
+The supported empty-column entity presentation is a rectangle without dividers.
+Populated column compartments report an unsupported-preview diagnostic rather than
+inventing measured column widths. Crowfoot markers cover `1`, `1..*`, `0..1` and
+`0..*`, using the reference's bar/diagonal/circle geometry. Omitted cardinality
+uses the notation's documented `1` default; unknown values produce diagnostics,
+not guessed UML multiplicity. `identifying` controls solid versus `[3]` dotted
+strokes, with the documented omission default `true`. Stored paths stay manual.
+
+`ViewPresentation.default_style` is a typed fallback layer, separate from authored
+`View.style`. The adapter maps proved missing-field defaults for colors, label
+alignment and supported shadow behavior; null or unsupported source encodings do
+not acquire a fallback. Inheritance includes the source View's defaults. These
+values do not cause absent fields to be written to MDJ, and the global export
+reimport/equivalence check rejects presentation changes without an inverse.
+Cordis sends resolved paint values, including a neutral shadow description, to UI.
+The renderer does not inspect source format/type strings to select ERD notation.
+
+Empty-column ERD entities use the source's 7-pixel, 20%-opaque light-gray shadow.
+Imported labels use a line height equal to the projected font size, avoiding the
+GUI framework's larger default line height within stored single-line bounds.
+Font availability, dynamic relayout, column rendering and pixel parity still need
+runtime verification; this implementation is not a claim of complete ERD editing.

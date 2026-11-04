@@ -15,6 +15,7 @@ pub struct DiagramToolProfile {
     pub label: String,
     pub available_tools: Vec<ModelingTool>,
     pub unavailable_tools: Vec<UnavailableToolMetadata>,
+    pub allows_new_views: bool,
 }
 #[derive(Clone, Debug)]
 pub struct UnavailableToolMetadata {
@@ -60,6 +61,9 @@ pub struct InterfaceToolMetadata {
     pub presentation: String,
 }
 impl ToolCatalog {
+    pub fn allows_new_views(&self, diagram_id: &str) -> bool {
+        self.profiles.get(diagram_id).is_none_or(|profile| profile.allows_new_views)
+    }
     pub fn allows_tool(&self, diagram_id: Option<&str>, tool: ModelingTool) -> bool {
         self.label(tool).is_some()
             && diagram_id.and_then(|id| self.profiles.get(id))

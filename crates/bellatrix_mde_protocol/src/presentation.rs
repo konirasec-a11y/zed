@@ -20,10 +20,19 @@ pub struct RenderStyle {
     pub stroke_pattern: Option<Vec<f64>>,
     pub word_wrap: Option<bool>,
     pub show_shadow: Option<bool>,
+    pub shadow: Option<RenderShadow>,
     pub show_stereotype: bool,
     pub show_attributes: bool,
     pub show_operations: bool,
     pub show_receptions: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RenderShadow {
+    pub offset_x: f64,
+    pub offset_y: f64,
+    pub blur_radius: f64,
+    pub color: String,
 }
 
 impl Default for RenderStyle {
@@ -45,6 +54,7 @@ impl Default for RenderStyle {
             stroke_pattern: None,
             word_wrap: None,
             show_shadow: None,
+            shadow: None,
             show_stereotype: true,
             show_attributes: true,
             show_operations: true,

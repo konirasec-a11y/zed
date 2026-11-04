@@ -3,7 +3,10 @@ use bellatrix_mde::{
     import_mdj_document, prepare_model_document, project_model_section, validate_uml_model,
 };
 use bellatrix_mde_protocol::{ModelDocumentParts, command::Command};
-use bellatrix_mde_protocol::{Style, TextAlignment, TextVerticalAlignment, projection::View};
+use bellatrix_mde_protocol::{
+    Style, TextAlignment, TextVerticalAlignment,
+    projection::{InheritedStyleProperty, StyleInheritanceSource, StyleInheritanceStatus, View},
+};
 use serde_json::{Value, json};
 use std::{error::Error, fs, path::PathBuf};
 
@@ -243,10 +246,47 @@ fn authored_style_survives_command_save_reopen_and_mdj_export() -> FlowResult<()
     );
     assert_eq!(label.style.font_underline, Some(true));
     assert_eq!(label.style.word_wrap, Some(false));
-    assert!(imported.diagnostics.iter().any(|diagnostic| {
-        diagnostic.path.ends_with("/subViews/0/parentStyle")
-            && diagnostic.message.contains("not resolved")
-    }));
+    let assert_inherited_label =
+        |project: &Value, fill: &str, size: f64, weight: u16, italic: bool| -> FlowResult<()> {
+            let label = view(project, "name-label")?;
+            let inheritance = label.presentation.style_inheritance.as_ref()
+                .ok_or("missing projected style inheritance")?;
+            assert_eq!(inheritance.status, StyleInheritanceStatus::Resolved);
+            assert_eq!(
+                inheritance.source,
+                StyleInheritanceSource::Reference("class-view".into())
+            );
+            assert!(inheritance.diagnostics.is_empty());
+            for property in [
+                InheritedStyleProperty::Fill,
+                InheritedStyleProperty::Stroke,
+                InheritedStyleProperty::TextColor,
+                InheritedStyleProperty::FontFamily,
+                InheritedStyleProperty::FontSize,
+                InheritedStyleProperty::FontWeight,
+                InheritedStyleProperty::FontItalic,
+            ] {
+                assert_eq!(
+                    inheritance.origins.get(&property).map(String::as_str),
+                    Some("class-view"),
+                    "unexpected inheritance origin for {property:?}"
+                );
+            }
+            assert_eq!(label.render_style.fill.as_deref(), Some(fill));
+            assert_eq!(label.render_style.stroke.as_deref(), Some("#654321"));
+            assert_eq!(label.render_style.text_color.as_deref(), Some("#112233FF"));
+            assert_eq!(label.render_style.font_family.as_deref(), Some("Inter"));
+            assert_eq!(label.render_style.font_size, Some(size));
+            assert_eq!(label.render_style.font_weight, Some(weight));
+            assert_eq!(label.render_style.font_italic, Some(italic));
+            assert_eq!(label.style.font_family.as_deref(), Some("Inter"));
+            assert_eq!(label.style.font_size, Some(11.0));
+            assert_eq!(label.style.font_weight, Some(400));
+            assert_eq!(label.style.font_italic, Some(false));
+            assert_eq!(label.style.text_color.as_deref(), Some("#ABCDEF"));
+            Ok(())
+        };
+    assert_inherited_label(&original, "#123456", 13.5, 700, true)?;
     let saved = SavedFlow::new("authored")?;
     let source_path = saved.0.join("source.mdj");
     fs::write(&source_path, SOURCE)?;
@@ -254,6 +294,7 @@ fn authored_style_survives_command_save_reopen_and_mdj_export() -> FlowResult<()
         println!("When I save and reopen the unchanged {name} contract");
         let reopened = saved.reopen(&original, &format!("original-{name}"), format)?;
         assert_eq!(export_mdj(&reopened)?, SOURCE);
+        assert_inherited_label(&reopened, "#123456", 13.5, 700, true)?;
         println!("When I edit one occurrence through SetViewStyle and reopen the exported MDJ");
         let mut style = view(&reopened, "class-view")?.style.clone();
         style.fill = Some("#FEDCBA".into());
@@ -262,6 +303,7 @@ fn authored_style_survives_command_save_reopen_and_mdj_export() -> FlowResult<()
         style.font_italic = Some(false);
         style.show_shadow = Some(true);
         let edited = restyle(&reopened, "class-view", style)?;
+        assert_inherited_label(&edited, "#FEDCBA", 18.25, 400, false)?;
         assert_eq!(edited.get("elements"), original.get("elements"));
         assert_eq!(edited.get("relations"), original.get("relations"));
         assert_eq!(edited.get("composition"), original.get("composition"));
@@ -277,6 +319,7 @@ fn authored_style_survives_command_save_reopen_and_mdj_export() -> FlowResult<()
         assert_eq!(findings(&edited)?, baseline);
         let edited = saved.reopen(&edited, &format!("edited-{name}"), format)?;
         let reopened = saved.export_reopen(&edited, &format!("edited-{name}"))?;
+        assert_inherited_label(&reopened, "#FEDCBA", 18.25, 400, false)?;
         let document: Value = serde_json::from_slice(&export_mdj(&reopened)?)?;
         let original_document: Value = serde_json::from_slice(SOURCE)?;
         assert_eq!(
@@ -294,28 +337,16 @@ fn authored_style_survives_command_save_reopen_and_mdj_export() -> FlowResult<()
         println!("When I edit an edge color and nested label presentation without changing UML");
         let mut edge_style = view(&reopened, "edge-view")?.style.clone();
         edge_style.stroke = Some("#102030".into());
-        let mut nested = restyle(&reopened, "edge-view", edge_style)?;
-        // Nested-view style commands are not yet supported by the authoring API.
-        // Exercise the persisted contract without claiming that UI capability.
-        let label = nested["diagrams"]
-            .as_array_mut()
-            .ok_or("missing diagrams")?
-            .iter_mut()
-            .flat_map(|diagram| diagram["views"].as_array_mut().into_iter().flatten())
-            .find(|view| view["id"] == "class-view")
-            .ok_or("missing parent View")?["children"]
-            .as_array_mut()
-            .ok_or("missing children")?
-            .iter_mut()
-            .find(|view| view["id"] == "name-label")
-            .ok_or("missing label")?;
-        label["style"]["text_align"] = serde_json::to_value(TextAlignment::Right)?;
-        label["style"]["text_vertical_align"] =
-            serde_json::to_value(TextVerticalAlignment::Bottom)?;
-        label["style"]["font_underline"] = json!(false);
-        label["style"]["word_wrap"] = json!(true);
+        let nested = restyle(&reopened, "edge-view", edge_style)?;
+        let mut label_style = view(&nested, "name-label")?.style;
+        label_style.text_align = Some(TextAlignment::Right);
+        label_style.text_vertical_align = Some(TextVerticalAlignment::Bottom);
+        label_style.font_underline = Some(false);
+        label_style.word_wrap = Some(true);
+        let nested = restyle(&nested, "name-label", label_style)?;
         let nested = saved.reopen(&nested, &format!("nested-{name}"), format)?;
         let nested = saved.export_reopen(&nested, &format!("nested-{name}"))?;
+        assert_inherited_label(&nested, "#FEDCBA", 18.25, 400, false)?;
         assert_eq!(findings(&nested)?, baseline);
         assert_eq!(
             view(&nested, "edge-view")?.style.stroke.as_deref(),

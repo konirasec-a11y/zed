@@ -148,6 +148,13 @@ impl ViewAppearance {
         }
     }
     pub fn apply_surface<T: gpui::Styled>(&self, element: T, scale: f32) -> T {
+        if self.0.show_shadow == Some(true) && let Some(shadow) = &self.0.shadow {
+            return element.shadow(vec![gpui::BoxShadow::new(
+                px(shadow.offset_x as f32 * scale),
+                px(shadow.offset_y as f32 * scale),
+                self.color(Some(&shadow.color), 0).into(),
+            ).blur_radius(px(shadow.blur_radius as f32 * scale))]);
+        }
         match self.0.show_shadow {
             Some(true) => element.shadow(vec![
                 gpui::BoxShadow::new(

@@ -67,6 +67,7 @@ impl<'a> Graph<'a> {
             validate_presentation_references(diagram, &nodes, &relations, false)?;
             for view in diagram.all_views() {
                 if !valid_geometry(&view.geometry) || !valid_style(&view.style)
+                    || view.presentation.default_style.as_ref().is_some_and(|defaults| !defaults.is_valid())
                     || view.timing.as_ref().is_some_and(|timing| timing.validate().is_err())
                 {
                     return Err(GraphError::Geometry(view.id.clone()));
@@ -137,6 +138,7 @@ impl<'a> Graph<'a> {
                     return Err(GraphError::MissingView { view: view.id.clone(), subject: subject.clone() });
                 }
                 if check_presentation && (!valid_geometry(&view.geometry) || !valid_style(&view.style)
+                    || view.presentation.default_style.as_ref().is_some_and(|defaults| !defaults.is_valid())
                     || view.timing.as_ref().is_some_and(|timing| timing.validate().is_err()))
                 {
                     return Err(GraphError::Geometry(view.id.clone()));

@@ -141,6 +141,7 @@ pub struct ViewPresentation {
 #[derive(Clone, Debug, Default)]
 pub struct RenderedLabel {
     pub bound: bool,
+    pub visible: Option<bool>,
     pub text: Option<String>,
     pub diagnostics: Vec<String>,
 }

@@ -237,9 +237,13 @@ pub struct LayoutBounds {
 #[serde(deny_unknown_fields)]
 pub struct ViewPresentation {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_style: Option<ViewStyleDefaults>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub entity_box: Option<EntityBoxBinding>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relationship_notation: Option<RelationshipNotation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relationship_labels: Option<RelationshipLabelBindings>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub interface_icon: Option<InterfaceIconBinding>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -264,6 +268,38 @@ pub struct ViewPresentation {
     pub source: Option<PresentationSource>,
 }
 
+// These are notation defaults, not authored overrides. Keeping them separate
+// lets a source omission survive serialization and inherited styling.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ViewStyleDefaults {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_width: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_align: Option<TextAlignment>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_vertical_align: Option<TextVerticalAlignment>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show_shadow: Option<bool>,
+}
+
+impl ViewStyleDefaults {
+    pub(crate) fn is_valid(&self) -> bool {
+        self.stroke_width.is_none_or(|width| width.is_finite() && (0.0..=100.0).contains(&width))
+            && [&self.fill, &self.stroke, &self.text_color].into_iter().flatten().all(|color| {
+                color.strip_prefix('#').is_some_and(|digits| {
+                    matches!(digits.len(), 6 | 8) && digits.bytes().all(|byte| byte.is_ascii_hexdigit())
+                })
+            })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EntityBoxBinding {
@@ -271,6 +307,17 @@ pub struct EntityBoxBinding {
     pub name_label: Authored<String>,
     #[serde(default, skip_serializing_if = "Authored::is_missing")]
     pub column_compartment: Authored<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RelationshipLabelBindings {
+    #[serde(default, skip_serializing_if = "Authored::is_missing")]
+    pub name: Authored<String>,
+    #[serde(default, skip_serializing_if = "Authored::is_missing")]
+    pub source_name: Authored<String>,
+    #[serde(default, skip_serializing_if = "Authored::is_missing")]
+    pub target_name: Authored<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

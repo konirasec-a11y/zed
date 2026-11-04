@@ -238,7 +238,8 @@ impl Render for MdeLeftPanel {
         };
         let catalog = snapshot.as_ref().map(|snapshot| snapshot.section.tools.clone()).unwrap_or_default();
         let profile = active.as_deref().and_then(|id| catalog.profiles.get(id)).cloned();
-        let native_tools = profile.as_ref().is_none_or(|profile| !profile.available_tools.is_empty());
+        let creation_available = item.read(cx).source().allows_creation();
+        let native_tools = creation_available && profile.as_ref().is_none_or(|profile| !profile.available_tools.is_empty());
         let chosen = chosen.filter(|tool| catalog.allows_tool(active.as_deref(), *tool));
         let mut diagrams = Vec::new();
         if let Some(snapshot) = &snapshot {
@@ -303,6 +304,13 @@ impl Render for MdeLeftPanel {
         let query = self.search_input.read(cx).text(cx).trim().to_lowercase();
         let searching = !query.is_empty();
         let mut tool_buttons: Vec<gpui::AnyElement> = Vec::new();
+        let selection_owner = item.clone();
+        tool_buttons.push(div().p_2().child(
+            Button::new("mde-domain-select", "Select")
+                .toggle_state(chosen.is_none())
+                .tooltip(ui::Tooltip::text("Select and inspect existing objects"))
+                .on_click(move |_, _, cx| selection_owner.update(cx, |workbench, cx| workbench.cancel_tool(cx)))
+        ).into_any_element());
         if native_tools {
         if !searching {
             tool_buttons.push(
@@ -429,11 +437,6 @@ impl Render for MdeLeftPanel {
         }
         }
         if let Some(profile) = &profile {
-            let owner = item.clone();
-            tool_buttons.push(div().p_2().child(
-                Button::new("mde-domain-select", "Select")
-                    .on_click(move |_, _, cx| owner.update(cx, |workbench, cx| workbench.cancel_tool(cx)))
-            ).into_any_element());
             tool_buttons.push(div().px_2().py_1().text_xs().text_color(palette.muted)
                 .child(profile.label.clone()).into_any_element());
             for (index, tool) in profile.unavailable_tools.iter().enumerate() {
@@ -448,6 +451,11 @@ impl Render for MdeLeftPanel {
                     .child("Imported diagram: selection and inspection are available. Creation tools for this domain are not implemented yet.")
                     .into_any_element());
             }
+        }
+        if profile.is_none() && !creation_available {
+            tool_buttons.push(div().p_2().text_xs().text_color(palette.muted)
+                .child("Selection and inspection are available. Creation commands are not enabled for this document.")
+                .into_any_element());
         }
         let project_name = snapshot.as_ref().map_or_else(
             || "Project unavailable".to_owned(),
@@ -501,7 +509,7 @@ impl Render for MdeLeftPanel {
                                     cx.notify();
                                 }),
                             )
-                            .when(!read_only && profile.is_none(), |header| {
+                            .when(creation_available && profile.is_none(), |header| {
                                 header.action(ui::DropdownMenu::new(
                                     "mde-new-diagram",
                                     "",

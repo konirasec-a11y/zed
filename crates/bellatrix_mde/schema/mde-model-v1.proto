@@ -72,6 +72,9 @@ message View {
   string id = 1;
   optional string subject = 2;
   optional string label = 3;
+  // Layout extents retain missing/null, resolved nonnegative numbers, or a
+  // typed {original, reason:"negative_extent"} unresolved value. Unresolved
+  // extents are authored data, never negative rendered sizes.
   bytes geometry_json = 4;
   bytes style_json = 5;
   sint32 z_index = 6;

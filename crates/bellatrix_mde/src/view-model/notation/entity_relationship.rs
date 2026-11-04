@@ -9,30 +9,44 @@ use serde_json::Value;
 
 pub(super) fn resolve(section: &ModelingSection, view: &View) -> ResolvedRelationshipView {
     let mut diagnostics = Vec::new();
-    let object = view.subject.as_deref()
+    let object = view
+        .subject
+        .as_deref()
         .and_then(|id| section.elements.iter().find(|element| element.id == id));
     let line_mode = match object.map(|object| object.properties.get("identifying")) {
         Some(None | Some(Value::Bool(true))) => LineMode::Solid,
         Some(Some(Value::Bool(false))) => LineMode::Dotted,
         _ => {
-            diagnostics.push(format!("View {}: entity relationship identifying declaration is unresolved", view.id));
+            diagnostics.push(format!(
+                "View {}: entity relationship identifying declaration is unresolved",
+                view.id
+            ));
             LineMode::Solid
         }
     };
-    let markers = view.presentation.relationship_endpoints.as_ref().map(|endpoints| {
-        let mut resolve = |side: &str, binding: &EndpointMarkerBinding| {
-            match marker(section, binding) {
-                Ok(marker) => marker,
-                Err(error) => {
-                    diagnostics.push(format!("View {} {side}: {error}", view.id));
-                    EndpointMarkerComposition::default()
-                }
-            }
-        };
-        (resolve("source", &endpoints.source), resolve("target", &endpoints.target))
-    });
+    let markers = view
+        .presentation
+        .relationship_endpoints
+        .as_ref()
+        .map(|endpoints| {
+            let mut resolve =
+                |side: &str, binding: &EndpointMarkerBinding| match marker(section, binding) {
+                    Ok(marker) => marker,
+                    Err(error) => {
+                        diagnostics.push(format!("View {} {side}: {error}", view.id));
+                        EndpointMarkerComposition::default()
+                    }
+                };
+            (
+                resolve("source", &endpoints.source),
+                resolve("target", &endpoints.target),
+            )
+        });
     if markers.is_none() {
-        diagnostics.push(format!("View {}: entity relationship end identities are unresolved", view.id));
+        diagnostics.push(format!(
+            "View {}: entity relationship end identities are unresolved",
+            view.id
+        ));
     }
     ResolvedRelationshipView {
         kind: "view.entity_relationship".into(),
@@ -57,7 +71,10 @@ pub(super) fn resolve(section: &ModelingSection, view: &View) -> ResolvedRelatio
     }
 }
 
-fn marker(section: &ModelingSection, binding: &EndpointMarkerBinding) -> Result<EndpointMarkerComposition, String> {
+fn marker(
+    section: &ModelingSection,
+    binding: &EndpointMarkerBinding,
+) -> Result<EndpointMarkerComposition, String> {
     if let EndpointMarkerSource::Authored { composition } = &binding.marker {
         return Ok(composition.clone());
     }
@@ -71,11 +88,24 @@ fn marker(section: &ModelingSection, binding: &EndpointMarkerBinding) -> Result<
             "1..*" => EndpointMarkerGlyph::CrowfootMany,
             "0..1" => EndpointMarkerGlyph::CrowfootZeroOne,
             "0..*" => EndpointMarkerGlyph::CrowfootZeroMany,
-            _ => return Err(format!("endpoint {} has unsupported cardinality notation", end.id)),
+            _ => {
+                return Err(format!(
+                    "endpoint {} has unsupported cardinality notation",
+                    end.id
+                ));
+            }
         },
-        _ => return Err(format!("endpoint {} has malformed cardinality notation", end.id)),
+        _ => {
+            return Err(format!(
+                "endpoint {} has malformed cardinality notation",
+                end.id
+            ));
+        }
     };
     Ok(EndpointMarkerComposition {
-        glyphs: vec![EndpointMarkerPart { glyph, placement: EndpointMarkerPlacement::Endpoint }],
+        glyphs: vec![EndpointMarkerPart {
+            glyph,
+            placement: EndpointMarkerPlacement::Endpoint,
+        }],
     })
 }

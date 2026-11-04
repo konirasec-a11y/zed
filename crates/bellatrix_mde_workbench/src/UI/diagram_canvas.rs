@@ -1174,7 +1174,7 @@ impl MdeWorkbenchItem {
                 );
             }
             imported_preview::ImportedShape::Label => {
-                card = card.overflow_hidden();
+                card = card.overflow_hidden().line_height(px(view.render_style.font_size.unwrap_or(12.0) as f32 * self.zoom));
                 if selected {
                     card = card.border_1().border_color(gpui::rgb(palette.selection));
                 }

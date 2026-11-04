@@ -20,7 +20,7 @@ pub use presentation::{
     PathSegment, Point, PresentationReference, PresentationResource, PresentationSource,
     RelationshipRouting, Style, StyleInheritance, InheritedStyleProperty, SourceFieldPresence,
     SubjectLabelBinding, SubjectLabelRole, TextAlignment, TextVerticalAlignment, TimingMode, TimingPoint,
-    InterfaceIconBinding, InterfaceConnection, InterfaceConnectionRole, EntityBoxBinding, RelationshipNotation,
+    InterfaceIconBinding, InterfaceConnection, InterfaceConnectionRole, EntityBoxBinding, RelationshipNotation, RelationshipLabelBindings, ViewStyleDefaults,
     TimingPresentation, View, ViewEndpoints, ViewOccurrence, ViewPresentation, VisualDraft,
 };
 pub use project::Project;

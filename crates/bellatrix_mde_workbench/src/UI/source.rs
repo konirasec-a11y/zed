@@ -128,6 +128,12 @@ impl MdeUiSource {
         self.mdj_session.is_some()
     }
 
+    pub fn allows_creation(&self) -> bool {
+        // The Cordis MDJ bridge currently accepts edits to existing objects only.
+        // A writable document is not evidence that creation commands are supported.
+        !self.is_mdj() && !self.is_read_only()
+    }
+
     pub fn snapshot_is_current(&self) -> bool {
         if let Some(session) = &self.mdj_session {
             return session.snapshot().is_ok_and(|expected| {

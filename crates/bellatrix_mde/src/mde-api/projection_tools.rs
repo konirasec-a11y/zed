@@ -294,6 +294,7 @@ pub(crate) fn project(diagrams: &[crate::Diagram]) -> ToolCatalog {
             } else { Vec::new() };
             (diagram.id.clone(), DiagramToolProfile {
                 label: diagram_type_label(diagram), available_tools: Vec::new(), unavailable_tools,
+                allows_new_views: false,
             })
         }).collect();
     ToolCatalog { elements, relations, diagrams: diagram_metadata, interface_forms, groups, profiles }

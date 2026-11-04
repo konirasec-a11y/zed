@@ -2,7 +2,9 @@ use super::*;
 
 impl MdeWorkbenchItem {
     pub fn add_member_to_selected(&mut self, kind: ModelingMemberKind, cx: &mut Context<Self>) {
-        if self.source.is_read_only() {
+        if !self.source.allows_creation() {
+            self.feedback = "Member creation is not available for this document".into();
+            cx.notify();
             return;
         }
         let Some(owner_id) = self.presentation.selected_element().map(str::to_owned) else {
@@ -67,6 +69,11 @@ impl MdeWorkbenchItem {
             .any(|(_, available)| *available == action)
         {
             self.feedback = "This element does not support the parameter action".into();
+            cx.notify();
+            return;
+        }
+        if matches!(action, ParameterAction::Add) && !self.source.allows_creation() {
+            self.feedback = "Parameter creation is not available for this document".into();
             cx.notify();
             return;
         }
@@ -323,7 +330,9 @@ impl MdeWorkbenchItem {
         y: f64,
         cx: &mut Context<Self>,
     ) {
-        if self.source.is_read_only() {
+        if !self.source.allows_creation() {
+            self.feedback = "Element creation is not available for this document".into();
+            cx.notify();
             return;
         }
         let Ok(snapshot) = self.source.snapshot() else {
@@ -346,6 +355,11 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
+        if !snapshot.section.tools.allows_tool(Some(&diagram_id), ModelingTool::Element(kind)) {
+            self.feedback = "This tool is not available for the target diagram's domain".into();
+            cx.notify();
+            return;
+        }
         let Some(metadata) = snapshot.section.tools.element(kind) else {
             self.feedback = "Element tool metadata unavailable".into(); cx.notify(); return;
         };
@@ -591,7 +605,13 @@ impl MdeWorkbenchItem {
             }
             let diagram = snapshot.section.diagrams.iter().find(|diagram| diagram.id == diagram_id)
                 .ok_or_else(|| "The target diagram no longer exists".to_owned())?;
-            Ok(element_view_placement(diagram, &drag.element_id))
+            let placement = element_view_placement(diagram, &drag.element_id);
+            if matches!(placement, ElementViewPlacement::NewAt(..))
+                && (!self.source.allows_creation() || !snapshot.section.tools.allows_new_views(diagram_id))
+            {
+                return Err("This diagram supports selecting existing views, but not creating a new occurrence yet".into());
+            }
+            Ok(placement)
         })();
         match placement {
             Err(error) => {
@@ -711,6 +731,11 @@ impl MdeWorkbenchItem {
                 cx.notify();
             }
             ElementViewPlacement::NewAt(x, y) => {
+                if !self.source.allows_creation() || !snapshot.section.tools.allows_new_views(&diagram.id) {
+                    self.feedback = "No existing view in this diagram; creating a new occurrence is not available yet".into();
+                    cx.notify();
+                    return;
+                }
                 let (x, y) = position.unwrap_or((x, y));
                 self.select_element(element_id.clone(), cx);
                 self.submit(

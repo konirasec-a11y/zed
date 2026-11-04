@@ -357,3 +357,14 @@ at their stored positions. Icon/icon-label style controls preserve that layout;
 the preview and Inspector report missing geometry and the absence of font/edge
 relayout. The generic native interface figure remains separate from this imported
 snapshot renderer, which does not add the native figure's fixed stem.
+
+## Imported ERD canvas
+
+The canvas consumes typed entity-box and crowfoot projections through Cordis.
+It draws empty-column entities without dividers, current bound names, preserved
+paths and endpoint markers. Paint defaults and the ERD shadow are resolved before
+reaching UI; imported labels have an explicit font-sized line height. Unknown
+cardinality, unresolved bindings or populated column layouts remain explicit
+preview limitations. ERD objects are not silently converted into UML elements.
+Canvas background/grid preferences and full font/layout parity are separate from
+these persisted drawing roles and have not been established by this slice.

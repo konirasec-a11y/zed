@@ -16,6 +16,7 @@ pub(super) fn project(
 ) -> RenderedLabel {
     let mut rendered = RenderedLabel {
         bound: view.presentation.label_binding.is_some(),
+        visible: None,
         text: view.label.clone(),
         diagnostics: Vec::new(),
     };

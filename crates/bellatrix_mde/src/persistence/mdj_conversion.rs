@@ -326,6 +326,7 @@ fn read_views(value: Option<&Value>, ids: &mut BTreeSet<String>) -> Result<Vec<V
             });
             let endpoints = view_projection::take_endpoints(&mut residual);
             let style = style_projection::take_style(&mut residual);
+            let default_style = Some(style_projection::default_style(&type_name, &residual));
             let mut field_presence = BTreeMap::new();
             let style_inheritance = style_projection::take_inheritance(&type_name, &mut residual, &mut field_presence);
             let children = read_views(object.get("subViews"), ids)?;
@@ -339,6 +340,7 @@ fn read_views(value: Option<&Value>, ids: &mut BTreeSet<String>) -> Result<Vec<V
                 geometry,
                 children,
                 presentation: ViewPresentation {
+                    default_style,
                     style_inheritance,
                     kind: Some(type_name.clone()),
                     source: Some(PresentationSource {

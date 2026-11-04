@@ -145,6 +145,22 @@ fn export_inheritance(view: &View, object: &mut Map<String, Value>) -> Result<()
     Ok(())
 }
 
+pub(super) fn default_style(type_name: &str, residual: &BTreeMap<String, Value>) -> crate::ViewStyleDefaults {
+    // Element.load applies metamodel defaults only to missing fields. Mapped
+    // fields are absent here too, but authored Style takes precedence. A null
+    // or unsupported value remains residual and must not acquire a fallback.
+    let label = matches!(type_name, "LabelView" | "NodeLabelView" | "EdgeLabelView");
+    crate::ViewStyleDefaults {
+        fill: (!residual.contains_key("fillColor")).then(|| "#ffffff".into()),
+        stroke: (!residual.contains_key("lineColor")).then(|| "#000000".into()),
+        text_color: (!residual.contains_key("fontColor")).then(|| "#000000".into()),
+        stroke_width: Some(1.0),
+        text_align: (label && !residual.contains_key("horizontalAlignment")).then_some(TextAlignment::Center),
+        text_vertical_align: (label && !residual.contains_key("verticalAlignment")).then_some(TextVerticalAlignment::Center),
+        show_shadow: (type_name == "ERDEntityView" && !residual.contains_key("showShadow")).then_some(true),
+    }
+}
+
 pub(super) fn take_style(residual: &mut BTreeMap<String, Value>) -> Style {
     let mut style = Style {
         fill: take_color(residual, "fillColor"),
