@@ -174,6 +174,36 @@ fn evaluate_owned_values(
     property: &str,
     role: &'static str,
 ) -> Result<Vec<LiteralValue>, QueryError> {
+    Ok(evaluated_owned_values(references, owner, metaclass, property, role)?
+        .into_iter().map(|(_, value)| value).collect())
+}
+
+struct OwnedValueEvidence<'a> {
+    values: Vec<(ElementRef<'a>, LiteralValue)>,
+    unknown: Option<QueryError>,
+}
+
+fn evaluated_owned_values<'a>(
+    references: &ReferenceIndex<'a>,
+    owner: ElementRef<'_>,
+    metaclass: &str,
+    property: &str,
+    role: &'static str,
+) -> Result<Vec<(ElementRef<'a>, LiteralValue)>, QueryError> {
+    let evidence = owned_value_evidence(references, owner, metaclass, property, role)?;
+    match evidence.unknown {
+        Some(error) => Err(error),
+        None => Ok(evidence.values),
+    }
+}
+
+fn owned_value_evidence<'a>(
+    references: &ReferenceIndex<'a>,
+    owner: ElementRef<'_>,
+    metaclass: &str,
+    property: &str,
+    role: &'static str,
+) -> Result<OwnedValueEvidence<'a>, QueryError> {
     use super::property_contracts::{self, PropertyOutcome};
     let descriptor = schema::uml_property(metaclass, property)
         .map_err(|error| QueryError::unsupported(owner.id(), error.to_string()))?
@@ -247,17 +277,99 @@ fn evaluate_owned_values(
     let mut evaluated = Vec::new();
     for value in values {
         match value_specifications::evaluate(references, value.id()) {
-            Ok(value) => evaluated.push(value),
+            Ok(literal) => evaluated.push((value, literal)),
             Err(EvaluationError::Invalid { subject_id, message }) => return Err(QueryError::invalid(&subject_id, message)),
             Err(EvaluationError::Unsupported { subject_id, message }) => {
                 unknown = Some(QueryError::unsupported(&subject_id, message));
             }
         }
     }
-    match unknown {
-        Some(error) => Err(error),
-        None => Ok(evaluated),
+    Ok(OwnedValueEvidence { values: evaluated, unknown })
+}
+
+fn slot_values_conform(
+    references: &ReferenceIndex<'_>,
+    slot: ElementRef<'_>,
+    feature: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    use super::feature_compatibility::{self, require_all};
+    let values = owned_value_evidence(references, slot, "Slot", "value", "Slot-value");
+    let multiplicity = feature_compatibility::resolve_feature_multiplicity(references, feature);
+    let unique = schema::read_effective_boolean(feature, "isUnique")
+        .map_err(|error| QueryError::invalid(feature.id(), error));
+    // A malformed feature contract stays Invalid even if a Slot expression is
+    // opaque. Do not short-circuit on evaluation's Unsupported result.
+    let mut checks = vec![
+        multiplicity.as_ref().map(|_| true).map_err(Clone::clone),
+        unique.as_ref().map(|_| true).map_err(Clone::clone),
+    ];
+    match feature_compatibility::resolve_feature_type(references, feature) {
+        Err(error @ QueryError::Invalid { .. }) => checks.push(Err(error)),
+        // An empty value set requires no type witness. Nonempty values below
+        // still require conformance, including resolution of the feature Type.
+        Ok(_) | Err(QueryError::Unsupported { .. }) => {}
     }
+    match values {
+        Err(error) => checks.push(Err(error)),
+        Ok(evidence) => {
+            let complete = evidence.unknown.is_none();
+            if let Some(error) = evidence.unknown {
+                checks.push(Err(error));
+            }
+            let values = evidence.values;
+            // LiteralNull denotes absence, whereas a LiteralString without its
+            // scalar value leaves both cardinality and equality unresolved.
+            let present = values.iter().filter(|(_, value)| !matches!(value, LiteralValue::Null))
+                .collect::<Vec<_>>();
+            let unspecified = present.iter().any(|(_, value)| matches!(value, LiteralValue::String(None)));
+            if let Ok(multiplicity) = multiplicity {
+                let known_count = present.iter()
+                    .filter(|(_, value)| !matches!(value, LiteralValue::String(None)))
+                    .count().to_string().parse::<super::types::Integer>()
+                    .map_err(|error| QueryError::invalid(slot.id(), error.to_string()))?;
+                checks.push(if multiplicity.upper_bound().finite_value().is_some_and(|upper| &known_count > upper) {
+                    // Unknown expressions can add values, never remove these
+                    // already established members exceeding the upper bound.
+                    Ok(false)
+                } else if !complete || unspecified {
+                    Err(QueryError::unsupported(slot.id(), "Slot cardinality includes unresolved values"))
+                } else {
+                    Ok(multiplicity.includes_cardinality(&known_count))
+                });
+            }
+            for (specification, _) in &present {
+                checks.push(feature_compatibility::compare_type_conformance(references, *specification, feature));
+                // A user-authored Type reference cannot redefine a literal's
+                // intrinsic primitive domain. Until that normative identity is
+                // resolved, matching declared Types is necessary, not sufficient.
+                checks.push(Err(QueryError::unsupported(specification.id(),
+                    "literal primitive Type identity is not resolved; declared Type alone cannot establish value conformance")));
+            }
+            if matches!(unique, Ok(true)) {
+                for (position, (_, value)) in present.iter().enumerate() {
+                    for (_, other) in present.iter().skip(position + 1) {
+                        checks.push(literal_values_distinct(slot.id(), value, other));
+                    }
+                }
+            }
+        }
+    }
+    require_all(checks)
+}
+
+fn literal_values_distinct(
+    slot_id: &str,
+    value: &LiteralValue,
+    other: &LiteralValue,
+) -> Result<bool, QueryError> {
+    let numeric = |value: &LiteralValue| matches!(value,
+        LiteralValue::Integer(_) | LiteralValue::UnlimitedNatural(_) | LiteralValue::Real(_));
+    if matches!(value, LiteralValue::String(None)) || matches!(other, LiteralValue::String(None))
+        || numeric(value) && numeric(other) && std::mem::discriminant(value) != std::mem::discriminant(other)
+    {
+        return Err(QueryError::unsupported(slot_id, "Slot value equality requires unavailable cross-type or unspecified-value semantics"));
+    }
+    Ok(value != other)
 }
 
 fn validate_instance<'a>(
@@ -305,14 +417,19 @@ fn validate_assignment_with<'a>(
     }
     let feature = slot.defining_feature_with(references)?;
     let classifiers = validate_instance(owner, references);
-    let values = evaluate_owned_values(references, slot.0, "Slot", "value", "Slot-value")
-        .map_err(AssignmentError::from);
+    let values = slot_values_conform(references, slot.0, feature)
+        .map_err(AssignmentError::from)
+        .and_then(|conforms| if conforms { Ok(()) } else {
+            Err(AssignmentError::Invalid(
+                "Slot values must conform to the definingFeature type, multiplicity and uniqueness".into(),
+            ))
+        });
     // Inspect both owned value sets before selecting Unsupported: an opaque
     // specification must not hide a malformed Slot literal, or vice versa.
-    let (classifiers, values) = match (classifiers, values) {
+    let classifiers = match (classifiers, values) {
         (Err(error @ AssignmentError::Invalid(_)), _) | (_, Err(error @ AssignmentError::Invalid(_))) => return Err(error),
         (Err(error), _) | (_, Err(error)) => return Err(error),
-        (Ok(classifiers), Ok(values)) => (classifiers, values),
+        (Ok(classifiers), Ok(())) => classifiers,
     };
     if classifiers.is_empty() {
         return Err(AssignmentError::Invalid(
@@ -346,13 +463,6 @@ fn validate_assignment_with<'a>(
                     .iter()
                     .any(|candidate| candidate.id() == feature.id()) =>
             {
-                // Computing literals alone does not establish conformance to
-                // the definingFeature's type, multiplicity or uniqueness.
-                if !values.is_empty() {
-                    return Err(AssignmentError::Unsupported(
-                        "Slot literals are evaluated, but definingFeature value conformance is not yet verified".into(),
-                    ));
-                }
                 return Ok(());
             }
             Ok(_) => {}
