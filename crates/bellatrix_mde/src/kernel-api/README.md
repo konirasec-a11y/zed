@@ -10,6 +10,12 @@ Implementation lives in this literal `kernel-api/` directory. Its Rust module,
 request/response types and helpers are private. Only the function is reexported;
 no new public structs, enums, modules, handles or registries are introduced.
 
+Application/document operations are located separately in
+[`mde-api/`](../mde-api/README.md). In particular, document decoding and semantic
+reparenting are MDE facades, not kernel entry points. Both boundaries use the
+private `src/api_contract.rs` envelope/codec helper without depending on each
+other. This directory's `contract.rs` owns only the semantic UML input projection.
+
 ## Input contract
 
 A JSON object with exactly these fields:
@@ -161,8 +167,9 @@ vertices. Request array order is preserved; output node IDs are sorted explicitl
 Neither function exposes internal graph objects or relation structs. The same
 no-effects and A-B-A determinism contract applies. Legacy exports still remain.
 
-Private `contract.rs` shares envelope version/error formatting and document
-codec checks with validation; it is not an additional public interface.
+Private `src/api_contract.rs` shares envelope version/error formatting and full
+document codec checks between the two API directories; it is not an additional
+public interface.
 
 Graph-query integrity deliberately excludes numeric presentation constraints
 (diagram dimensions, geometry, style and timing), so a visual defect cannot block
@@ -177,19 +184,11 @@ Request/document decoding errors use boundary-owned messages instead of exposing
 Serde's internal Rust type names. Request errors include JSON line/column;
 document errors identify unsupported versions or an invalid document schema.
 
-## Document decoding and legacy graph validation
+## Legacy graph validation
 
-`decode_model_document(document: &[u8], format: &str) -> Result<String, String>`
-accepts original bytes and an explicit `json` or `protobuf` format (case-sensitive).
-Protobuf uses the existing BLX1 header. It returns the version-1 JSON envelope
-`{"api_version":1,"model":...}`, directly accepted by the validation functions.
-No base64, filesystem access or public Rust model type is required. Existing
-codec defaults and normalization are preserved; this is not lossless preservation
-of source JSON formatting or unknown fields. Decoding does not validate semantics.
-Errors are `UNSUPPORTED_FORMAT`, `INVALID_MODEL`, or
-`RESPONSE_SERIALIZATION_FAILED`, with the existing versioned error envelope.
-The output version identifies the current contract and permits explicit rejection
-of unsupported versions. It does not promise support for earlier beta contracts.
+Document decoding is documented in the
+[MDE API](../mde-api/README.md#document-decoding). Its versioned model envelope is
+accepted by the kernel validation functions without changing their contracts.
 
 `validate_graph_model(input_json: &str) -> Result<String, String>` accepts the
 same envelope as `validate_uml_model`. It returns the same diagnostic shape with
@@ -199,15 +198,10 @@ CLI migration. It does not run structural UML rules. Invalid decoded graphs retu
 `Ok` with `has_errors:true` and the first `GRAPH_INTEGRITY` diagnostic, so consumers
 must check that flag before proceeding. Contract errors remain `Err`.
 
-Both functions are pure in-memory transformations with no I/O, clock, callback,
-sink or retained state. The CLI has not been changed by this slice, and legacy
-exports are still exposed. Topology queries retain their narrower presentation-
-independent integrity check; that is intentionally not the CLI compatibility gate.
-
-Protobuf can encode non-finite diagram dimensions; JSON cannot. The decoder
-returns `RESPONSE_SERIALIZATION_FAILED` for that case instead of silently replacing
-numbers with null. This representation limitation must be handled explicitly by
-future CLI migration; the legacy protobuf decoder itself is unchanged.
+Graph validation is a pure in-memory operation with no I/O, clock, callback,
+sink or retained state. Existing typed exports remain exposed. Topology queries
+retain their narrower presentation-independent integrity check; that is
+intentionally not the full document/presentation validation gate.
 
 ## Generation dependency analysis
 
@@ -301,41 +295,13 @@ run identifiers are observability data, not deterministic kernel results. Report
 ordering does not promise invariance under input array permutations: those arrays
 can express ordered UML members and graph first-error selection remains unchanged.
 
-## Semantic reparenting candidate
+## Semantic reparenting
 
-`reparent_uml_element(input_json: &str) -> Result<String, String>` accepts exactly
-`api_version:1`, `model`, `element_id` and `owner_id`. The IDs are required strings;
-null/omitted owners are rejected rather than silently detaching an element. The
-result is `{api_version:1, model:...}`, suitable for subsequent validation.
-
-This pure function reuses the existing transactional `SetOwner` command, not an
-Explorer placement override. It first requires graph/presentation integrity,
-then applies the supported UML composite ownership rules, root/derived-owner
-restrictions, cycle checks and the command's semantic change-validation policy.
-A rejected candidate returns no partial model and never changes the input.
-Existing ownership relation identity is retained when reparenting; a new ownership
-relation receives the existing deterministic, collision-checked model-derived ID.
-Other normalization performed by the command, including association projection
-synchronization, remains in force; this is not a raw single-edge rewrite.
-
-Errors use the standard envelope: `INVALID_REQUEST`, `UNSUPPORTED_API_VERSION`,
-`INVALID_MODEL`, `GRAPH_INTEGRITY`, `OWNERSHIP_REPARENT_REJECTED`, or
-`RESPONSE_SERIALIZATION_FAILED`. The rejection message carries the existing
-command reason. Existing semantic errors may remain under the command's delta
-policy: success is not full UML conformance certification. Full validation remains
-a separate operation and should inform the caller's publication policy.
-
-There is no I/O, clock, callback, retained state, file move or publication. The
-returned document is a candidate only. The application must compare the source
-revision and publish atomically with compare-and-swap; this function does not
-invent or advance a revision. Existing Cordis `ModelingSetOwnerRequested` and
-`MdeUiCommand::SetOwner` already use the snapshot/revision/ProjectReplace path.
-No UI integration is changed by this boundary.
-
-Existing Explorer overrides are preserved, so an old presentation override can
-still visually mask the new semantic owner. Reconciliation of those placements
-requires an explicit application policy; semantic reparenting does not silently
-delete presentation information or reinterpret diagram placement as UML ownership.
+`reparent_uml_element` is implemented and documented in the
+[MDE API](../mde-api/README.md#semantic-reparenting-candidate) because it invokes
+an application command and computes a new complete document. Normative ownership
+rules remain in the UML kernel. The application retains responsibility for atomic
+publication and revision checks.
 
 ## Ownership checks in rootless drafts
 

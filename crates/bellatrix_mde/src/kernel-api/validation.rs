@@ -6,9 +6,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashSet;
 
-use crate::kernel_api_contract::{
-    API_VERSION, decode_model, decode_uml_model, error_response, invalid_request,
-};
+use crate::api_contract::{API_VERSION, decode_model, error_response, invalid_request};
+use crate::kernel_api_contract::decode_uml_model;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

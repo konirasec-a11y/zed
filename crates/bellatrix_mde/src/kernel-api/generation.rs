@@ -1,5 +1,5 @@
 use crate::{GenerationGraphError, Graph, analyze_generation_graph};
-use crate::kernel_api_contract::{API_VERSION, decode_model, error_response, invalid_request};
+use crate::api_contract::{API_VERSION, decode_model, error_response, invalid_request};
 use serde::Deserialize;
 use serde_json::json;
 use std::collections::HashSet;

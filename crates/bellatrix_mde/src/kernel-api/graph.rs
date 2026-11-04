@@ -1,5 +1,5 @@
 use crate::{Graph, GraphIndex};
-use crate::kernel_api_contract::{API_VERSION, decode_model, error_response, invalid_request};
+use crate::api_contract::{API_VERSION, decode_model, error_response, invalid_request};
 use serde::Deserialize;
 
 #[derive(Deserialize)]

@@ -6,6 +6,12 @@ copies of the model. KERNEL includes UML specification semantics, graph
 formalism and the mini-compiler implementation from model analysis to project
 artifacts and emission; it is not limited to passive validation.
 
+- `kernel-api/`: private function implementations for the public kernel boundary:
+  validation, graph queries and generation analysis.
+- `mde-api/`: private function implementations for the public MDE document and
+  application boundary, currently decoding and semantic reparenting candidates.
+  Both boundaries share the private `api_contract.rs` envelope/codec helper;
+  neither depends on the other.
 - `KERNEL/graph/`: graph integrity, indexing and graph-scope queries.
 - `KERNEL/uml/metamodel/`: normative catalog, schema descriptors, primitive types
   and their tests/inventory.
@@ -217,12 +223,19 @@ Likewise, the Python source emitted by the compiler contains filesystem calls,
 but composing that source does not execute them. Public publication functions
 in `KERNEL/I_O/` document their actual effects and partial-failure limitations.
 
-## Functional entry point
+## Functional entry points
 
 `validate_uml_model(&str) -> Result<String, String>` is implemented in
 [`kernel-api/`](src/kernel-api/README.md) with a versioned JSON contract and no
 external effects. It exposes no new internal types or public modules. Legacy
 exports remain during migration; complete API isolation is not yet achieved.
+
+`decode_model_document` and `reparent_uml_element` are implemented separately in
+[`mde-api/`](src/mde-api/README.md). They use the same document contract and shared
+versioned envelope without routing application operations through the kernel API.
+The existing `uml`, `contracts`, `commands`, `mdj` and `mdj_conversion` public
+modules and typed reexports remain available for consumers that have not migrated;
+this first separation does not close those modules or claim full encapsulation.
 
 UML style settings are serialized only under `style.uml`. Both `Style` and
 `UmlStyle` reject unknown fields. Documents that put those settings directly

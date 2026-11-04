@@ -1,5 +1,5 @@
 use crate::{Format, decode};
-use crate::kernel_api_contract::{API_VERSION, error_response, invalid_model};
+use crate::api_contract::{API_VERSION, error_response, invalid_model};
 /// Decode an in-memory JSON or BLX1 protobuf document into a versioned model envelope.
 ///
 /// Input is the original document byte slice and an explicit `json` or `protobuf`

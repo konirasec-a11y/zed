@@ -156,6 +156,8 @@ pub use hierarchy_placement::{validate_diagram_occurrence, validate_model_hierar
 #[path = "KERNEL/compiler/artifacts/ownership_manifest.rs"]
 mod ownership_manifest;
 
+mod api_contract;
+
 #[path = "kernel-api/validation.rs"]
 mod kernel_api_validation;
 pub use kernel_api_validation::{validate_graph_model, validate_uml_diagram, validate_uml_model};
@@ -166,14 +168,14 @@ mod kernel_api_contract;
 mod kernel_api_graph;
 pub use kernel_api_graph::{reachable_graph_nodes, shortest_graph_path};
 
-#[path = "kernel-api/document.rs"]
-mod kernel_api_document;
-pub use kernel_api_document::decode_model_document;
-
 #[path = "kernel-api/generation.rs"]
 mod kernel_api_generation;
 pub use kernel_api_generation::analyze_generation_dependencies;
 
-#[path = "kernel-api/ownership.rs"]
-mod kernel_api_ownership;
-pub use kernel_api_ownership::reparent_uml_element;
+#[path = "mde-api/document.rs"]
+mod mde_api_document;
+pub use mde_api_document::decode_model_document;
+
+#[path = "mde-api/commands.rs"]
+mod mde_api_commands;
+pub use mde_api_commands::reparent_uml_element;
