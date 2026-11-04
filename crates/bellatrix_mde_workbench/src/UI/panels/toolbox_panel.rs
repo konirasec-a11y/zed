@@ -289,9 +289,7 @@ impl Render for MdeLeftPanel {
                                         owner.update(cx, |workbench, cx| {
                                             workbench.select_diagram(diagram_id.clone(), cx)
                                         });
-                                        if !owner.read(cx).source().is_read_only() {
-                                            window.dispatch_action(Box::new(OpenMdeWorkbench), cx);
-                                        }
+                                        window.focus(&owner.read(cx).focus_handle(cx), cx);
                                     }),
                             ),
                         ),
