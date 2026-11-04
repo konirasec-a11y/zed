@@ -246,26 +246,26 @@ fn final_state_regions(references: &ReferenceIndex<'_>, state: ElementRef<'_>) -
     require_all(checks)
 }
 
-fn outgoing_at_most(references: &ReferenceIndex<'_>, vertex: ElementRef<'_>, maximum: usize) -> Result<bool, QueryError> {
-    let descriptor = schema::uml_property("Transition", "source")
+fn transition_count(references: &ReferenceIndex<'_>, vertex: ElementRef<'_>, role: &str, minimum: usize, maximum: usize) -> Result<bool, QueryError> {
+    let descriptor = schema::uml_property("Transition", role)
         .map_err(|error| QueryError::unsupported(vertex.id(), error.to_string()))?
-        .ok_or_else(|| QueryError::unsupported(vertex.id(), "missing Transition::source contract"))?;
+        .ok_or_else(|| QueryError::unsupported(vertex.id(), format!("missing Transition::{role} contract")))?;
     let mut checks = Vec::new();
     let mut known = 0_usize;
     let mut possible = 0_usize;
     let mut unresolved = None;
-    // Vertex::outgoing is derived from Transition::source. The persisted
-    // outgoing cache is never evidence for either presence or absence.
+    // Vertex incoming/outgoing derive from Transition target/source. Persisted
+    // caches never establish presence or absence.
     for transition in references.model().elements().filter(|element| element.conforms_to("Transition")) {
         references.element(transition.id()).map_err(|error| QueryError::invalid(transition.id(), error))?;
         let canonical = match transition {
-            ElementRef::Relationship(relation) => Some(serde_json::json!({"$ref":relation.from})),
+            ElementRef::Relationship(relation) => Some(serde_json::json!({"$ref":if role == "source" { &relation.from } else { &relation.to }})),
             ElementRef::Object(_) => None,
         };
-        let authored = transition.properties().get("source");
+        let authored = transition.properties().get(role);
         let Some(source) = canonical.as_ref().or(authored) else {
             possible += 1;
-            unresolved.get_or_insert_with(|| QueryError::unsupported(transition.id(), "Transition source is not materialized"));
+            unresolved.get_or_insert_with(|| QueryError::unsupported(transition.id(), format!("Transition {role} is not materialized")));
             continue;
         };
         let identity = reference_id(source).ok().flatten();
@@ -287,7 +287,7 @@ fn outgoing_at_most(references: &ReferenceIndex<'_>, vertex: ElementRef<'_>, max
             && let (Ok(expected), Ok(actual)) = (reference_id(canonical), reference_id(authored))
             && expected != actual
         {
-            checks.push(Err(QueryError::invalid(transition.id(), "authored source contradicts canonical relation.from")));
+            checks.push(Err(QueryError::invalid(transition.id(), format!("authored {role} contradicts canonical relation.{}", if role == "source" { "from" } else { "to" }))));
         }
         if let Some(source) = identity {
             if source == vertex.id() { known += 1; }
@@ -295,13 +295,28 @@ fn outgoing_at_most(references: &ReferenceIndex<'_>, vertex: ElementRef<'_>, max
             possible += 1;
         }
     }
-    // Every unresolved source contributes at most one additional Transition.
-    // A known bound violation dominates uncertainty, while an upper bound
-    // already within the limit does not need those source identities resolved.
-    checks.push(if known > maximum { Ok(false) }
-        else if known.saturating_add(possible) <= maximum { Ok(true) }
-        else { Err(unresolved.unwrap_or_else(|| QueryError::unsupported(vertex.id(), "outgoing source membership is unresolved"))) });
+    // Each unresolved identity adds at most one candidate. Evaluate the whole
+    // cardinality interval: known counterexamples dominate uncertainty, while
+    // a range entirely inside the bounds needs no further identity resolution.
+    let upper = known.saturating_add(possible);
+    checks.push(if known > maximum || upper < minimum { Ok(false) }
+        else if known >= minimum && upper <= maximum { Ok(true) }
+        else { Err(unresolved.unwrap_or_else(|| QueryError::unsupported(vertex.id(), format!("{role} membership is unresolved")))) });
     require_all(checks)
+}
+
+fn outgoing_at_most(references: &ReferenceIndex<'_>, vertex: ElementRef<'_>, maximum: usize) -> Result<bool, QueryError> {
+    transition_count(references, vertex, "source", 0, maximum)
+}
+
+fn junction_vertex(references: &ReferenceIndex<'_>, vertex: ElementRef<'_>) -> Result<bool, QueryError> {
+    let kind = schema::read_effective_scalar(vertex, "kind")
+        .map_err(|error| QueryError::invalid(vertex.id(), error))?;
+    if kind.as_str() != Some("junction") { return Ok(true); }
+    require_all([
+        transition_count(references, vertex, "source", 1, usize::MAX),
+        transition_count(references, vertex, "target", 1, usize::MAX),
+    ])
 }
 
 fn pseudostate_single_outgoing(references: &ReferenceIndex<'_>, vertex: ElementRef<'_>, kinds: &[&str]) -> Result<bool, QueryError> {
@@ -325,6 +340,9 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "State-entry_or_exit", "connection points must have kind entryPoint or exitPoint"));
         }
         if element.conforms_to("Pseudostate") {
+            constraints.push((junction_vertex(references, element),
+                "UML_PSEUDOSTATE_JUNCTION_VERTEX", "MDE_PSEUDOSTATE_JUNCTION_VERTEX_UNVERIFIED",
+                "Pseudostate-junction_vertex", "a junction Pseudostate requires at least one incoming and one outgoing Transition"));
             constraints.push((pseudostate_single_outgoing(references, element, &["initial"]),
                 "UML_PSEUDOSTATE_INITIAL_VERTEX", "MDE_PSEUDOSTATE_INITIAL_VERTEX_UNVERIFIED",
                 "Pseudostate-initial_vertex", "an initial Pseudostate can have at most one outgoing Transition"));

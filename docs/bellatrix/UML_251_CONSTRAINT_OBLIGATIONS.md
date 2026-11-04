@@ -124,6 +124,11 @@ Pseudostate::initial_vertex tem recorte publicado em
 gate completo **917/917, zero falhas e ignorados**. A obrigação é adicional
 aos 127 IDs iniciais; o recorte verifica o limite de uma transição de saída,
 não os demais contratos de um vértice inicial.
+Pseudostate::history_vertices tem recorte publicado em
+`39df7fbcefd76b585e5b22859bd3119d3101245e` (E77), com sete testes novos e
+gate completo **924/924, zero falhas e ignorados**. O limite de uma saída
+para deepHistory/shallowHistory é uma obrigação adicional aos 127 IDs iniciais,
+não uma implementação da execução de histórico de estados.
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -239,7 +244,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E76 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E77 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -1267,6 +1272,50 @@ de execução nova. E12–E76 possuem os gates delimitados nas seções seguinte
   continuam Invalid, inclusive quando a contagem superior seria pequena.
   Diagnósticos: `UML_PSEUDOSTATE_INITIAL_VERTEX` e
   `MDE_PSEUDOSTATE_INITIAL_VERTEX_UNVERIFIED`.
+
+- **E77**: `semantics/state_machines.rs`, `pseudostate_single_outgoing`,
+  `outgoing_at_most` e `validate`; `pseudostate_history_vertices.rs`, sete testes.
+  Aplica o limite de uma saída a deepHistory e shallowHistory. O helper
+  generaliza o predicado inicial de E76, sem mudar seu limite; kind omitido
+  continua initial e não ativa history_vertices. Outros kinds válidos não
+  ativam esta implicação; kind malformado permanece Invalid.
+  Conta Transition/ProtocolTransition por source, em objetos e relações,
+  mantendo relation.from canônico. Cache outgoing não cria nem apaga membros.
+  Mais de uma saída conhecida viola; conhecidas mais possíveis até um prova
+  o limite; se só o limite superior excede um, source ausente/externo preserva
+  Unknown. Identidade local diferente exclui membership mesmo com metaclasse
+  desconhecida, sem dispensar o contrato de propriedade independente.
+  Malformados e contradições preservam Invalid mesmo com contagem pequena.
+  Diagnósticos: `UML_PSEUDOSTATE_HISTORY_VERTICES` e
+  `MDE_PSEUDOSTATE_HISTORY_VERTICES_UNVERIFIED`.
+
+### Evidência publicada do limite de saída dos vértices de histórico
+
+Commit inspecionado: `39df7fbcefd76b585e5b22859bd3119d3101245e`.
+Fonte normativa: `docs/bellatrix/standards/uml/20161101/UML.xmi`, ID
+`Pseudostate-history_vertices`, sob o hash fixado acima. OCL publicado, com
+espaços normalizados:
+`((kind = PseudostateKind::deepHistory) or (kind = PseudostateKind::shallowHistory)) implies (outgoing->size() <= 1)`.
+
+O log `/tmp/pseudostate-history-kernel-gate.log` registra **924/924 aprovados,
+zero falhas e zero ignorados** no gate completo de `-p bellatrix_mde`,
+incluindo **7/7** no novo alvo pseudostate_history_vertices. Casos cobrem os
+dois kinds de histórico, zero/uma/múltiplas saídas, objetos/relações,
+ProtocolTransition, source ausente/externo e limites de contagem, outros kinds
+e default initial, kind/source malformados, identidades locais diferentes,
+cache outgoing, roundtrip JSON/Protobuf e API pública. Alterar choice para
+qualquer um dos dois kinds de histórico com duas saídas é rejeitado
+atomicamente; excluir uma transição repara a importação inválida.
+
+Gate anterior à publicação, sem rerun no SHA publicado nem execução nova por
+esta matriz. O total foi conferido pela soma dos resultados dos alvos no log,
+não é percentual de cobertura. O recorte não implementa armazenamento ou
+restauração de configuração histórica, nem certifica todos os contratos de
+Pseudostate/Transition, unicidade de histórico por Region, autoria geral de
+transições, execução comportamental, UI, geração, interchange XMI/UMLDI ou
+conformidade UML completa. Provar o limite com source incompleto não prova
+esse contrato de propriedade; Unknown continua explícito quando a contagem
+não pode ser decidida.
 
 ### Evidência publicada do limite de saída de Pseudostate inicial
 
@@ -2971,7 +3020,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 ## Obrigações adicionais ao inventário estrutural inicial
 
-Estas sete linhas de StateMachines têm evidência própria. Não alteram a
+Estas oito linhas de StateMachines têm evidência própria. Não alteram a
 extração histórica das 127 invariantes diretas dos sete pacotes selecionados
 nem constituem inventário completo de StateMachines.
 
@@ -3023,6 +3072,15 @@ nem constituem inventário completo de StateMachines.
   outgoing. Mais de uma saída conhecida viola; conhecidas mais possíveis até
   um satisfaz o limite; demais casos incompletos permanecem Unknown. Não prova
   outros contratos do vértice inicial nem a validade de cada source.
+
+### `Pseudostate-history_vertices`
+
+- Metaclass: `Pseudostate`. Estado: **P**. Evidência: E77; commit `39df7fbcefd76b585e5b22859bd3119d3101245e`.
+- OCL publicado: `((kind = PseudostateKind::deepHistory) or (kind = PseudostateKind::shallowHistory)) implies (outgoing->size() <= 1)`.
+- deepHistory/shallowHistory permitem até uma saída derivada de source.
+  Contagem conhecida acima de um viola; conhecida mais possível até um prova
+  o limite; intervalo inconclusivo permanece Unknown. kind omitido é initial,
+  sujeito à regra independente E76. Não implementa execução de histórico.
 
 ## Plano executável e dependências
 
