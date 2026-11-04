@@ -281,6 +281,7 @@ pub fn validate_structural_diagram(
         .iter()
         .map(|relation| (relation.id.as_str(), relation))
         .collect::<HashMap<_, _>>();
+    let views = diagram.views.iter().map(|view| (view.id.as_str(), view)).collect::<HashMap<_, _>>();
     let subjects = diagram
         .views
         .iter()
@@ -291,6 +292,27 @@ pub fn validate_structural_diagram(
             continue;
         };
         if let Some(relation) = relations.get(subject) {
+            // Attachment identities belong to the editor projection, not UML semantics.
+            // Legacy views without explicit attachments still resolve by subject.
+            if view.draft.is_none() && let Some(endpoints) = &view.endpoints {
+                for (side, identifier, expected) in [
+                    ("source", endpoints.source_view_id.as_deref(), relation.from.as_str()),
+                    ("target", endpoints.target_view_id.as_deref(), relation.to.as_str()),
+                ] {
+                    match identifier {
+                        None => issues.push(problem("UMLDI_ENDPOINT_UNATTACHED", &view.id,
+                            format!("The current editor requires an explicit {side} View attachment when relationship endpoints are stored"))),
+                        Some(identifier) => {
+                            if let Some(endpoint) = views.get(identifier)
+                                && endpoint.subject.as_deref() != Some(expected)
+                            {
+                                issues.push(problem("UMLDI_ENDPOINT_SUBJECT_MISMATCH", &view.id,
+                                    format!("The current editor requires {side} View {identifier} to represent relationship endpoint {expected}")));
+                            }
+                        }
+                    }
+                }
+            }
             match &view.geometry {
                 Geometry::Path { segments, .. } if !segments.is_empty() => {}
                 _ => issues.push(problem("UMLDI_EXPECTED_EDGE", &view.id,

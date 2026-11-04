@@ -10,6 +10,8 @@ pub enum GraphError {
     MissingEndpoint { relation: String, endpoint: String },
     #[error("view {view} references unknown subject {subject}")]
     MissingView { view: String, subject: String },
+    #[error("view {view} references endpoint view {endpoint} outside diagram {diagram}")]
+    MissingViewEndpoint { view: String, endpoint: String, diagram: String },
     #[error("invalid physical parent relation {0} (expected directory -> directory/file/package)")]
     InvalidPhysicalParent(String),
     #[error("node {0} has two physical parents")]
@@ -51,6 +53,7 @@ impl<'a> Graph<'a> {
             if !(diagram.width.is_finite() && diagram.height.is_finite() && diagram.width > 0.0 && diagram.height > 0.0) {
                 return Err(GraphError::Geometry(diagram.id.clone()));
             }
+            validate_view_endpoints(diagram)?;
             for view in &diagram.views {
                 if let Some(subject) = &view.subject
                     && !nodes.contains(subject.as_str()) && !relations.contains(subject.as_str())
@@ -127,6 +130,9 @@ impl<'a> Graph<'a> {
             if check_presentation && !(diagram.width.is_finite() && diagram.height.is_finite() && diagram.width > 0.0 && diagram.height > 0.0) {
                 return Err(GraphError::Geometry(diagram.id.clone()));
             }
+            if check_presentation {
+                validate_view_endpoints(diagram)?;
+            }
             for view in &diagram.views {
                 if let Some(subject) = &view.subject
                     && !nodes.contains(subject.as_str()) && !relations.contains(subject.as_str())
@@ -146,6 +152,29 @@ impl<'a> Graph<'a> {
         }
         Ok(())
     }
+}
+
+fn validate_view_endpoints(diagram: &crate::Diagram) -> Result<(), GraphError> {
+    let view_ids: HashSet<&str> = diagram.views.iter().map(|view| view.id.as_str()).collect();
+    for view in &diagram.views {
+        // Drafts intentionally retain orphaned attachments for repair; their validator
+        // reports warnings without treating the drawing as a semantic relationship.
+        if view.draft.is_some() {
+            continue;
+        }
+        if let Some(endpoints) = &view.endpoints {
+            for endpoint in endpoints.source_view_id.iter().chain(endpoints.target_view_id.iter()) {
+                if !view_ids.contains(endpoint.as_str()) {
+                    return Err(GraphError::MissingViewEndpoint {
+                        view: view.id.clone(),
+                        endpoint: endpoint.clone(),
+                        diagram: diagram.id.clone(),
+                    });
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 fn valid_geometry(geometry: &crate::Geometry) -> bool {
