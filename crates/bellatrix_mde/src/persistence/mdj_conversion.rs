@@ -21,7 +21,7 @@ use crate::{
 use serde_json::{Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
-const PROJECTION_VERSION: u32 = 2;
+const PROJECTION_VERSION: u32 = 3;
 
 #[derive(Debug)]
 pub struct Import {

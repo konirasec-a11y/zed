@@ -145,7 +145,18 @@ pub(super) fn bind_markers(
     project: &mut Project,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    fn bind(views: &mut [View], index: &mdj::Index<'_>, diagnostics: &mut Vec<Diagnostic>) {
+    let canonical_associations = project
+        .relations
+        .iter()
+        .filter(|relation| relation.kind == "uml.association")
+        .map(|relation| relation.id.clone())
+        .collect::<BTreeSet<_>>();
+    fn bind(
+        views: &mut [View],
+        index: &mdj::Index<'_>,
+        canonical_associations: &BTreeSet<String>,
+        diagnostics: &mut Vec<Diagnostic>,
+    ) {
         for view in views {
             if view.presentation.kind.as_deref() == Some("UMLAssociationView") {
                 if let Some(object) = view
@@ -172,7 +183,11 @@ pub(super) fn bind_markers(
                                 target: binding(target),
                             });
                         view.style.uml.association_end_convention =
-                            Some(AssociationEndConvention::StarUml);
+                            Some(if canonical_associations.contains(object.id) {
+                                AssociationEndConvention::Uml
+                            } else {
+                                AssociationEndConvention::StarUml
+                            });
                     } else {
                         diagnostics.push(Diagnostic { path: view.id.clone(), message: "association view preserved without end markers: source end identities are unavailable".into() });
                     }
@@ -188,10 +203,10 @@ pub(super) fn bind_markers(
             if matches!(view.geometry, Geometry::Path { .. }) {
                 view.style.routing = Some(RelationshipRouting::Manual);
             }
-            bind(&mut view.children, index, diagnostics);
+            bind(&mut view.children, index, canonical_associations, diagnostics);
         }
     }
     for diagram in &mut project.diagrams {
-        bind(&mut diagram.views, index, diagnostics);
+        bind(&mut diagram.views, index, &canonical_associations, diagnostics);
     }
 }

@@ -1,9 +1,8 @@
 use super::*;
 
-const END_FIELDS: [&str; 9] = [
+const END_FIELDS: [&str; 8] = [
     "visibility",
     "multiplicity",
-    "aggregation",
     "isReadOnly",
     "isOrdered",
     "isUnique",
@@ -37,7 +36,7 @@ fn supported(field: &str, value: &Value, end: bool) -> bool {
             value.as_str(),
             Some("navigable" | "notNavigable" | "unspecified")
         ),
-        "aggregation" if end => value.as_str() == Some("none"),
+        "aggregation" if end => matches!(value.as_str(), Some("none" | "shared" | "composite")),
         "multiplicity" if end => value.is_string(),
         "isReadOnly" | "isOrdered" | "isUnique" | "isID" if end => value.is_boolean(),
         _ => false,
@@ -151,7 +150,7 @@ pub(super) fn import_associations(
                     }
                 }
             }
-            diagnostics.push(Diagnostic { path: object.path.clone(), message: format!("association and ends remain opaque: unmapped or absent fields [{}], or unrepresentable end/ownership structure. The supported encoding requires two association-owned ends, navigable/notNavigable/unspecified declarations or the omitted unspecified default, multiplicity strings or the omitted empty-string default, and aggregation absent/none; aggregation diamonds, ownerAttribute and qualifiers are not translated", unsupported.join(", ")) });
+            diagnostics.push(Diagnostic { path: object.path.clone(), message: format!("association and ends remain opaque: unmapped or absent fields [{}], or unrepresentable end/ownership structure. The supported encoding requires two association-owned ends, navigable/notNavigable/unspecified declarations or the omitted unspecified default, multiplicity strings or the omitted empty-string default, and aggregation absent/none/shared/composite; ownerAttribute and qualifiers are not translated", unsupported.join(", ")) });
             continue;
         }
         let Some(ends) = ends(object, index) else {
@@ -228,7 +227,7 @@ pub(super) fn import_associations(
             to: String::new(),
             properties,
         };
-        for (position, end) in ends.into_iter().enumerate() {
+        for (position, (end, opposite)) in ends.iter().zip(ends.iter().rev()).enumerate() {
             let mut residual = extract_residue(end.properties);
             let mut mapped_fields =
                 BTreeSet::from(["_type".into(), "_parent".into(), "reference".into()]);
@@ -246,6 +245,16 @@ pub(super) fn import_associations(
                     properties.insert(field.into(), value);
                     mapped_fields.insert(field.into());
                 }
+            }
+            // StarUML stores aggregation at the diamond, while UML Property
+            // aggregation belongs to the opposite typed end. Keep identities,
+            // roles and multiplicities fixed, and translate only aggregation.
+            // Presence metadata continues to describe the original source end.
+            if residual.remove("aggregation").is_some() {
+                mapped_fields.insert("aggregation".into());
+            }
+            if let Some(value) = opposite.properties.get("aggregation") {
+                properties.insert("aggregation".into(), value.clone());
             }
             // A relationship end inherits public visibility in the source,
             // while UML Property inherits no NamedElement visibility default.
@@ -302,7 +311,7 @@ pub(super) fn import_associations(
             },
         );
         mapped.insert(object.id.into());
-        diagnostics.push(Diagnostic { path: object.path.clone(), message: "binary association and Property ends mapped with original identities; relation endpoints, roles and multiplicities are derived projections, not independent editable semantics".into() });
+        diagnostics.push(Diagnostic { path: object.path.clone(), message: "binary association and Property ends mapped with original identities; StarUML aggregation is translated to the opposite UML Property, preserving diamond placement; relation endpoints, roles, multiplicities and diamonds are derived projections, not independent editable semantics".into() });
     }
     mapped
 }
@@ -311,12 +320,12 @@ fn project_endpoint(relation: &mut Relation, end: &Element, position: usize) {
     let target = reference(end.properties.get("type"))
         .unwrap_or_default()
         .to_owned();
-    let (role, multiplicity) = if position == 0 {
+    let (role, multiplicity, diamond) = if position == 0 {
         relation.from = target;
-        ("sourceRole", "sourceMultiplicity")
+        ("sourceRole", "sourceMultiplicity", "end2Aggregation")
     } else {
         relation.to = target;
-        ("targetRole", "targetMultiplicity")
+        ("targetRole", "targetMultiplicity", "end1Aggregation")
     };
     if !end.name.is_empty() {
         relation
@@ -327,6 +336,11 @@ fn project_endpoint(relation: &mut Relation, end: &Element, position: usize) {
         relation
             .properties
             .insert(multiplicity.into(), value.clone());
+    }
+    if let Some(value) = end.properties.get("aggregation")
+        && matches!(value.as_str(), Some("shared" | "composite"))
+    {
+        relation.properties.insert(diamond.into(), value.clone());
     }
 }
 
@@ -381,8 +395,22 @@ pub(super) fn update_metadata(project: &Project, provenance: &mut MdjProvenance)
             .properties
             .get("memberEnd")
             .and_then(Value::as_array)
+            .filter(|members| members.len() == 2)
         {
-            for id in members.iter().filter_map(|member| reference(Some(member))) {
+            for (member, opposite) in members.iter().zip(members.iter().rev()) {
+                let Some(id) = reference(Some(member)) else {
+                    continue;
+                };
+                let aggregation = reference(Some(opposite))
+                    .and_then(|id| project.elements.iter().find(|end| end.id == id))
+                    .and_then(|end| end.properties.get("aggregation"));
+                if let Some(metadata) = provenance.object_residuals.get_mut(id) {
+                    if aggregation.is_some() {
+                        metadata.mapped_fields.insert("aggregation".into());
+                    } else {
+                        metadata.mapped_fields.remove("aggregation");
+                    }
+                }
                 let unverified = project
                     .authoring_knowledge
                     .associations
@@ -491,13 +519,12 @@ pub(super) fn export_associations(
             for (field, value) in &end.properties {
                 if field == "type" {
                     insert_mapped(&mut end_object, "reference", value.clone())?;
-                } else if END_FIELDS.contains(&field.as_str()) {
-                    if field == "aggregation" && value.as_str() != Some("none") {
-                        return Err(failure(
-                            &expected_path,
-                            "aggregation shared/composite cannot yet be exported with equivalent StarUML end notation; the edit must not be discarded or move the diamond silently",
-                        ));
+                } else if field == "aggregation" {
+                    if !supported(field, value, true) {
+                        return Err(failure(&expected_path, "unsupported Property aggregation"));
                     }
+                    // This value is emitted on the opposite source end below.
+                } else if END_FIELDS.contains(&field.as_str()) {
                     if !end_metadata.mapped_fields.contains(field)
                         && preserves_omitted_default(field, Some(value))
                     {
@@ -510,6 +537,16 @@ pub(super) fn export_associations(
                         "Property field has no lossless association-end mapping",
                     ));
                 }
+            }
+            let opposite = members
+                .iter()
+                .rev()
+                .nth(position)
+                .and_then(|member| reference(Some(member)))
+                .and_then(|id| project.elements.iter().find(|end| end.id == id))
+                .ok_or_else(|| failure(&expected_path, "missing opposite Property end"))?;
+            if let Some(aggregation) = opposite.properties.get("aggregation") {
+                insert_mapped(&mut end_object, "aggregation", aggregation.clone())?;
             }
             let is_navigable = navigable
                 .iter()

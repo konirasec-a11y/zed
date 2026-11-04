@@ -184,6 +184,30 @@ integration harness covers file save/reopen, refused edits, stale sessions,
 cancelled reservations and exact receipts. This native copy integration has only
 been reviewed statically; it does not establish native GPUI interaction parity.
 
+### Binary association aggregation
+
+The MDJ adapter imports binary association ends with `none`, `shared` or
+`composite` aggregation into the existing UML Association and Property contracts.
+StarUML stores aggregation on the end beside the diamond; UML stores it on the
+opposite typed Property. The adapter translates only this field between ends,
+keeping IDs, roles, type references, multiplicities and navigation on their
+original ends. Source field presence remains in provenance, including the
+absence of aggregation versus an explicit `none`.
+
+Canonical association Views use the existing UML endpoint convention, so the
+same canvas draws the diamond on its original side. Opaque associations keep
+the source convention. Experimental export applies the inverse translation and
+reimports the actual bytes before accepting them. Derived relation diamond fields
+follow the same convention as native authoring, rather than retaining a second
+editable aggregation value.
+
+This does not translate `ownerAttribute`, qualifiers or unknown association/end
+fields. Those objects and any classifier whose completeness depends on them
+remain opaque. UML validation still reports unresolved types, multiplicity and
+other semantic problems independently of import. Projection version 3 applies
+on a fresh MDJ import; previously saved native documents are not silently
+reinterpreted or migrated. Keep edited native files before reimporting source.
+
 ## Geometry boundary and remaining coupling
 
 For `SetViewRouting`, the view-model receives an immutable document snapshot and
