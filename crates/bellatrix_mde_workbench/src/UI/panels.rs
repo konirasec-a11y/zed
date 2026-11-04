@@ -6,7 +6,7 @@ mod view_inspector;
 pub(crate) use crate::workbench_ui::hierarchy::element_glyph;
 use crate::workbench_ui::{
     MdeToolDrag, MdeWorkbenchItem, WorkbenchPalette,
-    hierarchy::project_explorer,
+    hierarchy::{project_explorer, filter_explorer, ExplorerSortOrder},
     integration::{OpenMdeSymbols, OpenMdeWorkbench},
     property_editor::render_inspector,
 };
@@ -198,6 +198,10 @@ pub struct MdeRightPanel {
     explorer_scroll: gpui::ScrollHandle,
     collapsed_by_document: HashMap<gpui::EntityId, HashSet<String>>,
     explorer_open: bool,
+    explorer_search_open: bool,
+    explorer_search: Entity<InputField>,
+    explorer_sort: ExplorerSortOrder,
+    _explorer_search_listener: Subscription,
     inspector_open: bool,
     pub(crate) inspector_documentation_open: bool,
     pub(crate) inspector_advanced_open: bool,
@@ -213,9 +217,21 @@ impl MdeRightPanel {
 
     pub fn new(
         item: Entity<MdeWorkbenchItem>,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        let explorer_search = cx.new(|cx| InputField::new(window, cx, "Search model elements…")
+            .start_icon(IconName::MagnifyingGlass).label_min_width(px(0.0)));
+        let owner = cx.weak_entity();
+        let editor = explorer_search.read(cx).editor().clone();
+        let explorer_search_listener = editor.subscribe(Box::new(move |event, _, cx| {
+            if event == ErasedEditorEvent::BufferEdited {
+                if let Err(error) = owner.update(cx, |panel, cx| {
+                    panel.explorer_scroll.scroll_to_item(0);
+                    cx.notify();
+                }) { eprintln!("MDE Explorer search failed: {error}"); }
+            }
+        }), window, cx);
         Self {
             state: PanelState::new(item, DockPosition::Right, 230.0, cx),
             editing_id: None,
@@ -229,6 +245,10 @@ impl MdeRightPanel {
             explorer_scroll: gpui::ScrollHandle::new(),
             collapsed_by_document: HashMap::new(),
             explorer_open: true,
+            explorer_search_open: false,
+            explorer_search,
+            explorer_sort: ExplorerSortOrder::Added,
+            _explorer_search_listener: explorer_search_listener,
             inspector_open: true,
             inspector_documentation_open: true,
             inspector_advanced_open: false,
@@ -303,12 +323,17 @@ impl Render for MdeRightPanel {
                 .as_deref()
                 .and_then(|id| inspect_element(&snapshot.section, id))
         });
+        let explorer_query = self.explorer_search.read(cx).text(cx).trim().to_lowercase();
+        let searching = !explorer_query.is_empty();
+        let mut explorer_has_rows = false;
         let mut rows = Vec::new();
         let mut reveal_selected = false;
         let mut explorer_branch_keys = Vec::new();
         let mut can_reveal_selection = false;
         if let Some(snapshot) = &snapshot {
-            let tree = project_explorer(&snapshot.section);
+            let full_tree = project_explorer(&snapshot.section, self.explorer_sort);
+            let tree = filter_explorer(full_tree, &explorer_query);
+            explorer_has_rows = !tree.is_empty();
             let root_key = format!("project:{}", snapshot.project_id.as_str());
             explorer_branch_keys.push(root_key.clone());
             explorer_branch_keys.extend(tree.windows(2)
@@ -326,9 +351,9 @@ impl Render for MdeRightPanel {
                         .or_else(|| tree.iter().find(|row| row.view.as_ref().is_some_and(|view| view.subject_id.as_ref() == Some(id))))
                 }))
                 .or_else(|| active_diagram.as_ref().and_then(|id| tree.iter().find(|row| row.diagram && &row.element_id == id)));
-            can_reveal_selection = selected_row.is_some();
+            can_reveal_selection = selected_id.is_some() || active_diagram.is_some();
             let reveal = selected_row.map(|row| (item.entity_id(), row.key.clone()));
-            if reveal != self.last_revealed_row {
+            if !searching && reveal != self.last_revealed_row {
                 self.last_revealed_row = reveal;
                 reveal_selected = selected_row.is_some();
                 if let Some(index) = selected_row.and_then(|selected| tree.iter().position(|row| row.key == selected.key)) {
@@ -346,7 +371,7 @@ impl Render for MdeRightPanel {
                     }
                 }
             }
-            let root_expanded = !self.collapsed_elements.contains(&root_key);
+            let root_expanded = searching || !self.collapsed_elements.contains(&root_key);
             let root_panel = cx.weak_entity();
             let root_disclosure_key = root_key.clone();
             rows.push(div().id("mde-explorer-project").flex().items_center().gap_1()
@@ -354,6 +379,7 @@ impl Render for MdeRightPanel {
                 .child(TreeViewItem::new(root_key.clone(), snapshot.name.clone())
                     .root_item(!tree.is_empty()).expanded(root_expanded)
                     .on_toggle(move |_, _, cx| {
+                        if searching { cx.stop_propagation(); return; }
                         let _ = root_panel.update(cx, |panel, cx| {
                             if !panel.collapsed_elements.insert(root_disclosure_key.clone()) { panel.collapsed_elements.remove(&root_disclosure_key); }
                             cx.notify();
@@ -397,7 +423,7 @@ impl Render for MdeRightPanel {
                     let owner = item.clone();
                     let selected = selected_row.is_some_and(|selected| selected.key == row.key);
                     if selected && reveal_selected { self.explorer_scroll.scroll_to_item(rows.len()); }
-                    let expanded = !self.collapsed_elements.contains(&row.key);
+                    let expanded = searching || !self.collapsed_elements.contains(&row.key);
                     let disclosure_id = row.key.clone();
                     let disclosure_panel = cx.weak_entity();
                     let menu_owner = item.clone();
@@ -419,6 +445,7 @@ impl Render for MdeRightPanel {
                                 .aria_label(view_accessible_label)
                                 .root_item(has_children).expanded(expanded).toggle_state(selected)
                                 .on_toggle(move |_, _, cx| {
+                                    if searching { cx.stop_propagation(); return; }
                                     cx.stop_propagation();
                                     if let Err(error) = disclosure_panel.update(cx, |panel, cx| {
                                         if !panel.collapsed_elements.insert(disclosure_id.clone()) { panel.collapsed_elements.remove(&disclosure_id); }
@@ -446,7 +473,7 @@ impl Render for MdeRightPanel {
                     let id = row.element_id.clone();
                     let owner = item.clone();
                     let is_active = active_diagram.as_deref() == Some(id.as_str());
-                    let expanded = !self.collapsed_elements.contains(&row.key);
+                    let expanded = searching || !self.collapsed_elements.contains(&row.key);
                     let disclosure_id = row.key.clone();
                     let disclosure_panel = cx.weak_entity();
                     let selection_panel = cx.weak_entity();
@@ -470,6 +497,7 @@ impl Render for MdeRightPanel {
                                     .aria_label(format!("Diagram: {}", row.label))
                                     .root_item(has_children).expanded(expanded)
                                     .on_toggle(move |_, _, cx| {
+                                        if searching { cx.stop_propagation(); return; }
                                         cx.stop_propagation();
                                         if let Err(error) = disclosure_panel.update(cx, |panel, cx| {
                                             if !panel.collapsed_elements.insert(disclosure_id.clone()) { panel.collapsed_elements.remove(&disclosure_id); }
@@ -505,7 +533,7 @@ impl Render for MdeRightPanel {
                     if has_children && !expanded { hidden_by_depth = Some(row.depth); }
                     continue;
                 }
-                let expanded = !self.collapsed_elements.contains(&row.key);
+                let expanded = searching || !self.collapsed_elements.contains(&row.key);
                 let id = row.element_id.clone();
                 let owner = item.clone();
                 let diagram_context = row.diagram_context.clone();
@@ -522,6 +550,7 @@ impl Render for MdeRightPanel {
                     .expanded(expanded)
                     .toggle_state(selected)
                     .on_toggle(move |_, _, cx| {
+                        if searching { cx.stop_propagation(); return; }
                         cx.stop_propagation();
                         if let Err(error) = disclosure_panel.update(cx, |panel, cx| {
                             if !panel.collapsed_elements.insert(disclosure_id.clone()) {
@@ -671,17 +700,46 @@ impl Render for MdeRightPanel {
                                 }),
                             )
                             .action(div().flex().items_center().gap_1()
+                                .child(IconButton::new("mde-explorer-search", IconName::MagnifyingGlass)
+                                    .aria_label("Search Explorer")
+                                    .aria_expanded(self.explorer_search_open && self.explorer_open)
+                                    .toggle_state(self.explorer_search_open)
+                                    .tooltip(ui::Tooltip::text("Search Explorer"))
+                                    .on_click(cx.listener(|panel, _, window, cx| {
+                                        panel.explorer_search_open = !panel.explorer_search_open;
+                                        panel.explorer_open = true;
+                                        if panel.explorer_search_open {
+                                            window.focus(&panel.explorer_search.focus_handle(cx), cx);
+                                        } else {
+                                            let editor = panel.explorer_search.read(cx).editor().clone();
+                                            editor.clear(window, cx);
+                                            window.focus(&panel.state.focus, cx);
+                                        }
+                                        cx.notify();
+                                    })))
+                                .child(IconButton::new("mde-explorer-sort", IconName::ArrowDown10)
+                                    .aria_label(if self.explorer_sort == ExplorerSortOrder::Added { "Sort Explorer by name" } else { "Sort Explorer by added order" })
+                                    .tooltip(ui::Tooltip::text(if self.explorer_sort == ExplorerSortOrder::Added { "Sort by name (currently added order)" } else { "Sort by added order (currently name)" }))
+                                    .toggle_state(self.explorer_sort == ExplorerSortOrder::Name)
+                                    .on_click(cx.listener(|panel, _, _, cx| {
+                                        panel.explorer_sort = if panel.explorer_sort == ExplorerSortOrder::Added { ExplorerSortOrder::Name } else { ExplorerSortOrder::Added };
+                                        panel.explorer_scroll.scroll_to_item(0);
+                                        cx.notify();
+                                    })))
                                 .child(IconButton::new("mde-explorer-reveal", IconName::Crosshair)
                                     .aria_label("Reveal selection in Explorer")
                                     .tooltip(ui::Tooltip::text("Reveal selection in Explorer"))
                                     .disabled(!can_reveal_selection)
-                                    .on_click(cx.listener(|panel, _, _, cx| {
+                                    .on_click(cx.listener(|panel, _, window, cx| {
+                                        let editor = panel.explorer_search.read(cx).editor().clone();
+                                        editor.clear(window, cx);
                                         panel.explorer_open = true;
                                         panel.last_revealed_row = None;
                                         cx.notify();
                                     })))
                                 .child(IconButton::new("mde-explorer-expand-all", IconName::ExpandVertical)
                                     .aria_label("Expand all Explorer nodes")
+                                    .disabled(searching)
                                     .tooltip(ui::Tooltip::text("Expand all Explorer nodes"))
                                     .on_click(cx.listener(|panel, _, _, cx| {
                                         panel.explorer_open = true;
@@ -690,6 +748,7 @@ impl Render for MdeRightPanel {
                                     })))
                                 .child(IconButton::new("mde-explorer-collapse-all", IconName::ListCollapse)
                                     .aria_label("Collapse all Explorer nodes")
+                                    .disabled(searching)
                                     .tooltip(ui::Tooltip::text("Collapse all Explorer nodes"))
                                     .on_click(cx.listener(move |panel, _, _, cx| {
                                         panel.collapsed_elements.extend(explorer_branch_keys.iter().cloned());
@@ -706,6 +765,20 @@ impl Render for MdeRightPanel {
                                         })
                                 ))),
                     )
+                    .when(self.explorer_open && self.explorer_search_open, |pane| {
+                        pane.child(div().p_2().flex().items_center().gap_1()
+                            .child(div().flex_1().min_w_0().child(self.explorer_search.clone()))
+                            .child(IconButton::new("mde-explorer-clear-search", IconName::Close)
+                                .aria_label("Clear Explorer search")
+                                .tooltip(ui::Tooltip::text("Clear Explorer search"))
+                                .disabled(!searching)
+                                .on_click(cx.listener(|panel, _, window, cx| {
+                                    let editor = panel.explorer_search.read(cx).editor().clone();
+                                    editor.clear(window, cx);
+                                    window.focus(&panel.explorer_search.focus_handle(cx), cx);
+                                    cx.notify();
+                                }))))
+                    })
                     .when(self.explorer_open, |pane| {
                         pane.child(
                             div()
@@ -716,16 +789,14 @@ impl Render for MdeRightPanel {
                                 .track_scroll(&self.explorer_scroll)
                                 .children(rows)
                                 .when(
-                                    snapshot.as_ref().is_some_and(|snapshot| {
-                                        project_explorer(&snapshot.section).is_empty()
-                                    }),
+                                    snapshot.is_some() && !explorer_has_rows,
                                     |pane| {
                                         pane.child(
                                             div()
                                                 .p_3()
                                                 .text_xs()
                                                 .text_color(palette.muted)
-                                                .child("No model elements yet."),
+                                                .child(if searching { "No matching model elements." } else { "No model elements yet." }),
                                         )
                                     },
                                 ),

@@ -32,6 +32,34 @@ impl gpui::Render for ExplorerElementDrag {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ExplorerSortOrder {
+    Added,
+    Name,
+}
+
+pub(crate) fn filter_explorer(rows: Vec<ExplorerRow>, query: &str) -> Vec<ExplorerRow> {
+    let query = query.trim().to_lowercase();
+    if query.is_empty() { return rows; }
+    let words = query.split_whitespace().collect::<Vec<_>>();
+    let mut retained = std::collections::HashSet::new();
+    let mut ancestors = Vec::new();
+    let mut matching_depth = None;
+    for (index, row) in rows.iter().enumerate() {
+        ancestors.truncate(row.depth);
+        if matching_depth.is_some_and(|depth| row.depth <= depth) { matching_depth = None; }
+        let text = format!("{} {} {} {}", row.label, row.kind, row.element_id,
+            row.view.as_ref().and_then(|view| view.subject_id.as_deref()).unwrap_or("")).to_lowercase();
+        if matching_depth.is_some() || words.iter().all(|word| text.contains(*word)) {
+            retained.extend(ancestors.iter().copied());
+            retained.insert(index);
+            if matching_depth.is_none() { matching_depth = Some(row.depth); }
+        }
+        ancestors.push(index);
+    }
+    rows.into_iter().enumerate().filter_map(|(index, row)| retained.contains(&index).then_some(row)).collect()
+}
+
 fn semantic_key(id: &str) -> String {
     format!("semantic:{id}")
 }
@@ -83,9 +111,11 @@ fn relationship_label(section: &ModelingSection, relation: &bellatrix_mde::Relat
 }
 
 /// Diagram occurrences replace the standalone semantic row, without changing ownership.
-pub fn project_explorer(section: &ModelingSection) -> Vec<ExplorerRow> {
+pub(crate) fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrder) -> Vec<ExplorerRow> {
     use std::collections::{HashMap, HashSet};
     let semantic = bellatrix_mde::project_hierarchy(section);
+    let semantic_order = semantic.iter().enumerate()
+        .map(|(index, row)| (row.element_id.clone(), index)).collect::<HashMap<_, _>>();
     let mut owners = HashMap::new();
     let mut ancestors = Vec::new();
     for row in &semantic {
@@ -218,6 +248,50 @@ pub fn project_explorer(section: &ModelingSection) -> Vec<ExplorerRow> {
             cursor = parents.get(id).and_then(|parent| parent.as_deref());
         }
         children.entry(parent.filter(|id| ids.contains(id))).or_default().push(index);
+    }
+    let element_order = section.elements.iter().enumerate()
+        .map(|(index, element)| (element.id.as_str(), index))
+        .chain(section.relations.iter().enumerate()
+            .map(|(index, relation)| (relation.id.as_str(), section.elements.len() + index)))
+        .collect::<HashMap<_, _>>();
+    let diagram_order = section.diagrams.iter().enumerate()
+        .map(|(index, diagram)| (diagram.id.as_str(), index)).collect::<HashMap<_, _>>();
+    let view_order = section.diagrams.iter().flat_map(|diagram| diagram.views.iter().enumerate()
+        .map(move |(index, view)| ((diagram.id.as_str(), view.id.as_str()), index)))
+        .collect::<HashMap<_, _>>();
+    let sort_keys = nodes.iter().map(|row| {
+        let added = if let Some(view) = &row.view {
+            (2, view_order.get(&(view.diagram_id.as_str(), view.view_id.as_str())).copied().unwrap_or(usize::MAX))
+        } else if row.diagram {
+            (1, diagram_order.get(row.element_id.as_str()).copied().unwrap_or(usize::MAX))
+        } else {
+            (0, element_order.get(row.element_id.as_str()).copied().unwrap_or(usize::MAX))
+        };
+        let subject = row.view.as_ref().and_then(|view| view.subject_id.as_deref()).unwrap_or(&row.element_id);
+        (
+            bellatrix_mde::semantic_identity(&row.kind).type_label == "Parameter",
+            semantic_order.get(subject).copied().unwrap_or(usize::MAX),
+            added,
+            row.label.to_lowercase(),
+        )
+    }).collect::<Vec<_>>();
+    for siblings in children.values_mut() {
+        siblings.sort_by(|left, right| {
+            let left_key = &sort_keys[*left];
+            let right_key = &sort_keys[*right];
+            // Parameter order is part of an operation signature, not cosmetic sorting.
+            let ordering = if left_key.0 != right_key.0 {
+                right_key.0.cmp(&left_key.0)
+            } else if left_key.0 {
+                left_key.1.cmp(&right_key.1)
+            } else {
+                match sort {
+                    ExplorerSortOrder::Added => left_key.2.cmp(&right_key.2),
+                    ExplorerSortOrder::Name => left_key.3.cmp(&right_key.3),
+                }
+            };
+            ordering.then_with(|| nodes[*left].key.cmp(&nodes[*right].key))
+        });
     }
     fn visit(index: usize, depth: usize, nodes: &[ExplorerRow],
         children: &HashMap<Option<String>, Vec<usize>>, seen: &mut HashSet<usize>,

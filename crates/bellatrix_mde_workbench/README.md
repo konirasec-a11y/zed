@@ -165,6 +165,15 @@ diagram is selected and revealed at the drop point by panning, instead of duplic
 unchanged. Drags are bound to the source project, model revision and active target
 diagram, and stale/cross-project/read-only drops are rejected. View-only drafts
 and relationships are not offered for placement by this element-only command.
-Internal tree relocation remains unavailable: SetOwner does not authorize moving
-an element that already has an owner, and cosmetic explorer_parents are not a
-substitute for a semantic reparenting command.
+Internal tree relocation remains unavailable in this UI. It must use the validated
+SetOwner/reparent command boundary; cosmetic explorer_parents are not a substitute
+for semantic ownership.
+
+Explorer quick search filters incrementally by displayed text, type and identity,
+retaining ancestors and the contents of matching containers. Search expansion is
+temporary and does not overwrite the unfiltered collapse state; clear or close
+search to restore it. Reveal Selection clears the filter and opens the selected
+item's path. Added/Name ordering only sorts siblings, never changes ownership or
+IDs, and keeps operation parameters in their semantic order. Added uses persisted
+collection order rather than inventing creation timestamps for imported models.
+Search and ordering are local panel state and remain usable in read-only previews.
