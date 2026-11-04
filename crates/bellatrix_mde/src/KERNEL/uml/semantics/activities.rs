@@ -526,6 +526,30 @@ fn partition_represents_property_and_is_contained(
     accept_any([guard.map(|value| !value), consequence])
 }
 
+// UML.xmi CreateObjectAction-same_type: result.type = classifier.
+fn create_object_same_type(
+    references: &ReferenceIndex<'_>,
+    action: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let classifier =
+        optional_activity_reference(references, action, "CreateObjectAction", "classifier")?
+            .ok_or_else(|| {
+                QueryError::unsupported(action.id(), "required classifier is unresolved")
+            })?;
+    let result_id =
+        optional_activity_reference(references, action, "CreateObjectAction", "result")?
+            .ok_or_else(|| {
+                QueryError::unsupported(action.id(), "required result OutputPin is unresolved")
+            })?;
+    let result = references
+        .element(&result_id)
+        .map_err(|error| QueryError::unsupported(action.id(), error))?;
+    let result_type = optional_activity_reference(references, result, "TypedElement", "type")?;
+    // A missing optional type differs from a resolved required Classifier.
+    // External/malformed types never reach this comparison as fabricated None.
+    Ok(result_type.as_deref() == Some(classifier.as_str()))
+}
+
 // UML.xmi CreateObjectAction-classifier_not_abstract: not classifier.isAbstract.
 fn create_object_classifier_not_abstract(
     references: &ReferenceIndex<'_>,
@@ -1175,6 +1199,13 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             ));
         }
         if node.conforms_to("CreateObjectAction") {
+            checks.push((
+                create_object_same_type(references, node),
+                "UML_CREATE_OBJECT_ACTION_SAME_TYPE",
+                "MDE_CREATE_OBJECT_ACTION_SAME_TYPE_UNVERIFIED",
+                "CreateObjectAction-same_type",
+                "the result OutputPin type must be identical to the instantiated Classifier",
+            ));
             checks.push((
                 create_object_classifier_not_abstract(references, node),
                 "UML_CREATE_OBJECT_ACTION_CLASSIFIER_NOT_ABSTRACT",
