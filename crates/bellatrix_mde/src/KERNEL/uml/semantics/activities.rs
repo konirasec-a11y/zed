@@ -179,30 +179,76 @@ fn activity_edge_candidates<'a>(references: &ReferenceIndex<'a>) -> Vec<ElementR
     candidates
 }
 
+fn activity_edge_exists(
+    references: &ReferenceIndex<'_>,
+    node: ElementRef<'_>,
+    role: &str,
+) -> Result<bool, QueryError> {
+    accept_any(
+        activity_edge_candidates(references)
+            .into_iter()
+            .map(|edge| {
+                require_all([
+                    activity_endpoint(references, edge, role)
+                        .map(|endpoint| endpoint.id() == node.id()),
+                    if edge.conforms_to("ActivityEdge") {
+                        Ok(true)
+                    } else {
+                        Err(QueryError::unsupported(
+                            edge.id(),
+                            "ActivityEdge membership is unresolved",
+                        ))
+                    },
+                ])
+            }),
+    )
+}
+
 fn activity_parameter_one_direction(
     references: &ReferenceIndex<'_>,
     node: ElementRef<'_>,
 ) -> Result<bool, QueryError> {
-    let candidates = activity_edge_candidates(references);
-    let exists = |role| {
-        accept_any(candidates.iter().map(|edge| {
-            require_all([
-                activity_endpoint(references, *edge, role)
-                    .map(|endpoint| endpoint.id() == node.id()),
-                if edge.conforms_to("ActivityEdge") {
-                    Ok(true)
-                } else {
-                    Err(QueryError::unsupported(
-                        edge.id(),
-                        "ActivityEdge membership is unresolved",
-                    ))
-                },
-            ])
-        }))
-    };
     // One known edge in each direction (including a self-loop) proves failure.
     // Unresolved endpoints cannot erase witnesses or invent an absent direction.
-    require_all([exists("target"), exists("source")]).map(|both| !both)
+    require_all([
+        activity_edge_exists(references, node, "target"),
+        activity_edge_exists(references, node, "source"),
+    ])
+    .map(|both| !both)
+}
+
+fn activity_parameter_direction(
+    references: &ReferenceIndex<'_>,
+    node: ElementRef<'_>,
+    flowing_role: &str,
+    empty_role: &str,
+    allowed: &[&str],
+) -> Result<bool, QueryError> {
+    let guard = require_all([
+        activity_edge_exists(references, node, flowing_role),
+        activity_edge_exists(references, node, empty_role).map(|exists| !exists),
+    ]);
+    let direction = (|| {
+        let identifier =
+            optional_activity_reference(references, node, "ActivityParameterNode", "parameter")?
+                .ok_or_else(|| {
+                    QueryError::unsupported(
+                        node.id(),
+                        "ActivityParameterNode parameter is not represented",
+                    )
+                })?;
+        let parameter = references
+            .element(&identifier)
+            .map_err(|error| QueryError::unsupported(node.id(), error))?;
+        let value = schema::read_effective_scalar(parameter, "direction")
+            .map_err(|error| QueryError::unsupported(parameter.id(), error))?;
+        Ok(value
+            .as_str()
+            .is_some_and(|direction| allowed.contains(&direction)))
+    })();
+    // Do not gate on an unrelated invalid parameter when the guard is false.
+    // Likewise an allowed direction proves the implication with unknown incidence.
+    accept_any([guard.map(|applies| !applies), direction])
 }
 
 fn uniform_activity_edges(
@@ -416,6 +462,20 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             ));
         }
         if node.conforms_to("ActivityParameterNode") {
+            checks.push((
+                activity_parameter_direction(references, node, "source", "target", &["in", "inout"]),
+                "UML_ACTIVITY_PARAMETER_NODE_NO_INCOMING_EDGES",
+                "MDE_ACTIVITY_PARAMETER_NODE_NO_INCOMING_EDGES_UNVERIFIED",
+                "ActivityParameterNode-no_incoming_edges",
+                "an ActivityParameterNode with only outgoing edges requires an in or inout Parameter",
+            ));
+            checks.push((
+                activity_parameter_direction(references, node, "target", "source", &["out", "inout", "return"]),
+                "UML_ACTIVITY_PARAMETER_NODE_NO_OUTGOING_EDGES",
+                "MDE_ACTIVITY_PARAMETER_NODE_NO_OUTGOING_EDGES_UNVERIFIED",
+                "ActivityParameterNode-no_outgoing_edges",
+                "an ActivityParameterNode with only incoming edges requires an out, inout or return Parameter",
+            ));
             checks.push((
                 activity_parameter_one_direction(references, node),
                 "UML_ACTIVITY_PARAMETER_NODE_NO_EDGES",

@@ -1395,3 +1395,200 @@ fn parameter_direction_rule(response: &Value, severity: Option<&str>) -> FlowRes
     }
     Ok(())
 }
+
+#[test]
+fn activity_parameter_enum_direction_tracks_flow_orientation_and_repair() -> FlowResult<()> {
+    assert!(
+        include_str!("features/activity_edge_lifecycle.feature")
+            .contains("Scenario: Preserve Activity Parameter enum directions through repair")
+    );
+    let mut original = imported_activity()?;
+    original["model"]["elements"].as_array_mut().ok_or("missing elements")?.extend([
+        json!({"id":"direction-parameter","kind":"uml.parameter","name":"orderParam","properties":{"type":{"$ref":"order"}}}),
+        json!({"id":"direction-node","kind":"uml.activity_parameter_node","name":"parameterNode","properties":{"parameter":{"$ref":"direction-parameter"},"type":{"$ref":"order"}}}),
+    ]);
+    original["model"]["relations"].as_array_mut().ok_or("missing relations")?.extend([
+        json!({"id":"owns-direction-parameter","kind":"owns","from":"fulfillment","to":"direction-parameter"}),
+        json!({"id":"owns-direction-node","kind":"owns","from":"fulfillment","to":"direction-node"}),
+    ]);
+    let baseline = validate(&original)?;
+    parameter_enum_rule(&baseline, "INCOMING", None)?;
+    parameter_enum_rule(&baseline, "OUTGOING", None)?;
+    reopen("parameter-enum-empty", &original, &baseline)?;
+    for outgoing in [false, true] {
+        let relevant = if outgoing { "INCOMING" } else { "OUTGOING" };
+        let irrelevant = if outgoing { "OUTGOING" } else { "INCOMING" };
+        let mut connected = original.clone();
+        add_activity_edge_object(
+            &mut connected,
+            "direction-edge",
+            "uml.object_flow",
+            json!({"$ref":if outgoing {"direction-node"} else {"order-output"}}),
+            json!({"$ref":if outgoing {"order-input"} else {"direction-node"}}),
+        )?;
+        let defaulted = validate(&connected)?;
+        parameter_enum_rule(
+            &defaulted,
+            relevant,
+            if outgoing { None } else { Some("error") },
+        )?;
+        reopen(
+            &format!("parameter-enum-default-{outgoing}"),
+            &connected,
+            &defaulted,
+        )?;
+        for direction in ["in", "out", "inout", "return"] {
+            let mut edited = connected.clone();
+            element(&mut edited, "direction-parameter")?["properties"]["direction"] =
+                json!(direction);
+            let response = validate(&edited)?;
+            let allowed = if outgoing {
+                matches!(direction, "in" | "inout")
+            } else {
+                matches!(direction, "out" | "inout" | "return")
+            };
+            parameter_enum_rule(
+                &response,
+                relevant,
+                if allowed { None } else { Some("error") },
+            )?;
+            parameter_enum_rule(&response, irrelevant, None)?;
+            reopen(
+                &format!("parameter-enum-{direction}-{outgoing}"),
+                &edited,
+                &response,
+            )?;
+        }
+        let mut invalid = connected.clone();
+        element(&mut invalid, "direction-parameter")?["properties"]["direction"] =
+            json!("sideways");
+        let malformed = validate(&invalid)?;
+        parameter_enum_rule(&malformed, relevant, Some("warning"))?;
+        assert!(
+            malformed["diagnostics"]
+                .as_array()
+                .ok_or("missing diagnostics")?
+                .iter()
+                .any(|d| d["subject_id"] == "direction-parameter"
+                    && d["code"] == "UML_PROPERTY_VALUE"
+                    && d["severity"] == "error")
+        );
+        reopen(
+            &format!("parameter-enum-malformed-{outgoing}"),
+            &invalid,
+            &malformed,
+        )?;
+        element(&mut invalid, "direction-node")?["properties"]["parameter"] =
+            json!({"href":"external.uml#parameter"});
+        let external = validate(&invalid)?;
+        parameter_enum_rule(&external, relevant, Some("warning"))?;
+        reopen(
+            &format!("parameter-enum-external-{outgoing}"),
+            &invalid,
+            &external,
+        )?;
+        for absent in [false, true] {
+            let mut missing = connected.clone();
+            let properties = element(&mut missing, "direction-node")?["properties"]
+                .as_object_mut()
+                .ok_or("missing properties")?;
+            if absent {
+                properties.remove("parameter");
+            } else {
+                properties.insert("parameter".into(), Value::Null);
+            }
+            let response = validate(&missing)?;
+            parameter_enum_rule(&response, relevant, Some("warning"))?;
+            reopen(
+                &format!("parameter-enum-missing-{absent}-{outgoing}"),
+                &missing,
+                &response,
+            )?;
+        }
+        let mut null_direction = connected.clone();
+        element(&mut null_direction, "direction-parameter")?["properties"]["direction"] =
+            Value::Null;
+        let response = validate(&null_direction)?;
+        parameter_enum_rule(&response, relevant, Some("warning"))?;
+        assert!(
+            response["diagnostics"]
+                .as_array()
+                .ok_or("missing diagnostics")?
+                .iter()
+                .any(|d| d["subject_id"] == "direction-parameter"
+                    && d["code"] == "UML_PROPERTY_VALUE"
+                    && d["severity"] == "error")
+        );
+        reopen(
+            &format!("parameter-enum-null-direction-{outgoing}"),
+            &null_direction,
+            &response,
+        )?;
+        let mut uncertain = connected.clone();
+        element(&mut uncertain, "direction-parameter")?["properties"]["direction"] =
+            json!(if outgoing { "out" } else { "in" });
+        add_activity_edge_object(
+            &mut uncertain,
+            "uncertain-opposite",
+            "uml.object_flow",
+            if outgoing {
+                json!({"$ref":"order-output"})
+            } else {
+                json!({"href":"external.uml#source"})
+            },
+            if outgoing {
+                json!({"href":"external.uml#target"})
+            } else {
+                json!({"$ref":"order-input"})
+            },
+        )?;
+        let unknown_guard = validate(&uncertain)?;
+        parameter_enum_rule(&unknown_guard, relevant, Some("warning"))?;
+        reopen(
+            &format!("parameter-enum-unknown-guard-{outgoing}"),
+            &uncertain,
+            &unknown_guard,
+        )?;
+        element(&mut uncertain, "direction-parameter")?["properties"]["direction"] = json!("inout");
+        let valid_consequent = validate(&uncertain)?;
+        parameter_enum_rule(&valid_consequent, relevant, None)?;
+        reopen(
+            &format!("parameter-enum-valid-consequent-{outgoing}"),
+            &uncertain,
+            &valid_consequent,
+        )?;
+        element(&mut invalid, "direction-edge")?["properties"]
+            [if outgoing { "target" } else { "source" }] = json!({"$ref":"direction-node"});
+        let both = validate(&invalid)?;
+        parameter_enum_rule(&both, "INCOMING", None)?;
+        parameter_enum_rule(&both, "OUTGOING", None)?;
+        reopen(
+            &format!("parameter-enum-both-directions-{outgoing}"),
+            &invalid,
+            &both,
+        )?;
+    }
+    assert_eq!(validate(&original)?, baseline);
+    reopen("parameter-enum-repaired", &original, &baseline)?;
+    Ok(())
+}
+
+fn parameter_enum_rule(response: &Value, role: &str, severity: Option<&str>) -> FlowResult<()> {
+    let error = format!("UML_ACTIVITY_PARAMETER_NODE_NO_{role}_EDGES");
+    let warning = format!("MDE_ACTIVITY_PARAMETER_NODE_NO_{role}_EDGES_UNVERIFIED");
+    let matching: Vec<_> = response["diagnostics"]
+        .as_array()
+        .ok_or("missing diagnostics")?
+        .iter()
+        .filter(|d| {
+            d["subject_id"] == "direction-node" && (d["code"] == error || d["code"] == warning)
+        })
+        .collect();
+    if let Some(severity) = severity {
+        assert_eq!(matching.len(), 1, "{response}");
+        assert_eq!(matching[0]["severity"], severity, "{response}");
+    } else {
+        assert!(matching.is_empty(), "{response}");
+    }
+    Ok(())
+}

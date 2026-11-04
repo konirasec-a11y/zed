@@ -129,3 +129,12 @@ both directions proving a violation even alongside unknown edges. Unresolved
 incidence or family remains unverified; a self-loop proves both directions.
 Parameter type and direction constraints are separate rules outside this slice.
 The lifecycle covers relation/object edges, JSON/BLX reopen and baseline repair.
+
+ActivityParameterNode-no_incoming_edges and no_outgoing_edges enforce the
+Parameter direction only when edges exist exclusively in the corresponding
+opposite direction. Direction uses the normative enum/default, without writing
+it into data. Invalid scalars and unresolved Parameter references remain separate
+from rule violations. Empty/bidirectional guards are false, and an allowed
+direction proves the implication despite uncertain incidence. The lifecycle
+covers every enum value, default in, malformed/external values, uncertain guards,
+JSON/BLX persistence and repair. Ownership and type equality remain separate.

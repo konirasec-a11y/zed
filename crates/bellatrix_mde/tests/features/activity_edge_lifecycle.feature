@@ -142,3 +142,14 @@ Feature: ControlFlow object-node endpoint semantics across the authored Activity
     And a self-loop proves both directions without double-counting identity
     Then all edited states survive JSON and BLX reopening with identical findings
     And restoring the original document restores the baseline result
+
+  Scenario: Preserve Activity Parameter enum directions through repair
+    Given an imported Activity ParameterNode whose Parameter has default direction in
+    When the node has only outgoing edges then direction must be in or inout
+    When the node has only incoming edges then direction must be out, inout or return
+    And invalid directions retain separate scalar errors and leave the rule unverified
+    And external Parameters remain unverified when their direction is required
+    And uncertain incidence leaves a forbidden direction unverified
+    And an allowed direction proves the implication despite uncertain incidence
+    And empty or bidirectional nodes make these implications vacuous
+    Then every edited state survives JSON and BLX reopening and baseline repair
