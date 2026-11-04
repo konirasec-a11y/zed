@@ -163,3 +163,15 @@ Feature: ControlFlow object-node endpoint semantics across the authored Activity
     And malformed references retain separate property-contract errors
     And a missing or external Parameter reference cannot establish type equality
     Then every edited state survives JSON and BLX reopening and baseline repair
+
+  Scenario: Preserve ObjectNode incident edge families through repair
+    Given an ObjectNode subclass with the normative false isControlType default
+    Then an empty union or only ObjectFlows satisfies object_flow_edges
+    When an incoming or outgoing ControlFlow is known then the rule is violated
+    And isControlType true makes the implication vacuous
+    And a malformed flag retains its scalar error and an unverified antecedent
+    And an independently valid consequent satisfies the implication
+    And possible ControlFlows or unknown edge families remain unverified
+    And possible ObjectFlows do not invalidate the universal
+    And a known endpoint or self-loop establishes incidence despite another unknown endpoint
+    Then relation and object records survive JSON and BLX reopening and baseline repair

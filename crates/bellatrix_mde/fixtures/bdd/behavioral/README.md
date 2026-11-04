@@ -146,3 +146,12 @@ unverified with their separate contract findings. A missing required Parameter
 cannot establish equality even when the node is untyped. The lifecycle includes
 generalization-backed subtype mismatches, nullable/unknown types and JSON/BLX
 reopen and repair. It does not infer ownership or resolve external definitions.
+
+ObjectNode-object_flow_edges requires every incident edge to be an ObjectFlow
+when effective isControlType is false. The union uses endpoint identity and
+includes subclasses, with self-loops once. Known non-ObjectFlow incidence proves
+a violation; unknown families/endpoints remain unverified and possible known
+ObjectFlows cannot invalidate the universal. Malformed flags have separate
+scalar errors, and a proven consequent satisfies the implication independently.
+The lifecycle covers CentralBufferNode, both edge representations, default and
+malformed flags, incoming/outgoing witnesses, JSON/BLX reopen and repair.

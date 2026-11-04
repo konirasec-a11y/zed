@@ -138,8 +138,22 @@ fn authored_control_flow_checks_both_pin_endpoints_and_repairs_without_materiali
             .ok_or("missing diagnostics")?
             .iter()
             .filter(|diagnostic| diagnostic["severity"] == "error")
-            .count(),
-        1,
+            .map(|diagnostic| (
+                diagnostic["code"].as_str(),
+                diagnostic["subject_id"].as_str()
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (Some("UML_CONTROL_FLOW_OBJECT_NODES"), Some("order-data")),
+            (
+                Some("UML_OBJECT_NODE_OBJECT_FLOW_EDGES"),
+                Some("order-input")
+            ),
+            (
+                Some("UML_OBJECT_NODE_OBJECT_FLOW_EDGES"),
+                Some("order-output")
+            ),
+        ],
         "{implicit_false}"
     );
     assert!(
@@ -1780,6 +1794,211 @@ fn parameter_type_rule(response: &Value, severity: Option<&str>) -> FlowResult<(
                     Some(
                         "UML_ACTIVITY_PARAMETER_NODE_SAME_TYPE"
                             | "MDE_ACTIVITY_PARAMETER_NODE_SAME_TYPE_UNVERIFIED"
+                    )
+                )
+        })
+        .collect();
+    if let Some(severity) = severity {
+        assert_eq!(matching.len(), 1, "{response}");
+        assert_eq!(matching[0]["severity"], severity, "{response}");
+    } else {
+        assert!(matching.is_empty(), "{response}");
+    }
+    Ok(())
+}
+
+#[test]
+fn object_node_incident_families_survive_defaults_unknowns_and_repair() -> FlowResult<()> {
+    assert!(
+        include_str!("features/activity_edge_lifecycle.feature")
+            .contains("Scenario: Preserve ObjectNode incident edge families through repair")
+    );
+    let mut original = imported_activity()?;
+    original["model"]["elements"].as_array_mut().ok_or("missing elements")?.push(
+        json!({"id":"buffer-node","kind":"uml.central_buffer_node","name":"OrderBuffer","properties":{"type":{"$ref":"order"}}}));
+    original["model"]["relations"]
+        .as_array_mut()
+        .ok_or("missing relations")?
+        .push(
+            json!({"id":"owns-buffer-node","kind":"owns","from":"fulfillment","to":"buffer-node"}),
+        );
+    let baseline = validate(&original)?;
+    object_node_family_rule(&baseline, None)?;
+    reopen("object-node-vacuous", &original, &baseline)?;
+    for object_record in [false, true] {
+        let mut edited = original.clone();
+        if object_record {
+            add_activity_edge_object(
+                &mut edited,
+                "buffer-edge",
+                "uml.object_flow",
+                json!({"$ref":"buffer-node"}),
+                json!({"$ref":"receive"}),
+            )?;
+        } else {
+            edited["model"]["relations"].as_array_mut().ok_or("missing relations")?.extend([
+                json!({"id":"buffer-edge","kind":"uml.object_flow","from":"buffer-node","to":"receive","properties":{"activity":{"$ref":"fulfillment"}}}),
+                json!({"id":"owns-buffer-edge","kind":"owns","from":"fulfillment","to":"buffer-edge"}),
+            ]);
+        }
+        let objects = validate(&edited)?;
+        object_node_family_rule(&objects, None)?;
+        reopen(
+            &format!("object-node-object-edge-{object_record}"),
+            &edited,
+            &objects,
+        )?;
+        let edge = if object_record {
+            element(&mut edited, "buffer-edge")?
+        } else {
+            relation(&mut edited, "buffer-edge")?
+        };
+        edge["kind"] = json!("uml.control_flow");
+        // The canonical binary Relation adapter maps concrete CF/OF only;
+        // an abstract ActivityEdge is represented as an object record here.
+        if object_record {
+            let mut base_edge = edited.clone();
+            element(&mut base_edge, "buffer-edge")?["kind"] = json!("uml.activity_edge");
+            let non_object = validate(&base_edge)?;
+            object_node_family_rule(&non_object, Some("error"))?;
+            reopen("object-node-base-activity-edge", &base_edge, &non_object)?;
+        }
+        let control = validate(&edited)?;
+        object_node_family_rule(&control, Some("error"))?;
+        reopen(
+            &format!("object-node-control-edge-{object_record}"),
+            &edited,
+            &control,
+        )?;
+        element(&mut edited, "buffer-node")?["properties"]["isControlType"] = json!(true);
+        let enabled = validate(&edited)?;
+        object_node_family_rule(&enabled, None)?;
+        reopen(
+            &format!("object-node-control-type-{object_record}"),
+            &edited,
+            &enabled,
+        )?;
+        element(&mut edited, "buffer-node")?["properties"]["isControlType"] = json!("false");
+        let malformed = validate(&edited)?;
+        object_node_family_rule(&malformed, Some("warning"))?;
+        assert!(
+            malformed["diagnostics"]
+                .as_array()
+                .ok_or("missing diagnostics")?
+                .iter()
+                .any(|d| d["subject_id"] == "buffer-node"
+                    && d["code"] == "UML_PROPERTY_VALUE"
+                    && d["severity"] == "error")
+        );
+        reopen(
+            &format!("object-node-malformed-control-{object_record}"),
+            &edited,
+            &malformed,
+        )?;
+        let edge = if object_record {
+            element(&mut edited, "buffer-edge")?
+        } else {
+            relation(&mut edited, "buffer-edge")?
+        };
+        edge["kind"] = json!("uml.object_flow");
+        let sufficient = validate(&edited)?;
+        object_node_family_rule(&sufficient, None)?;
+        reopen(
+            &format!("object-node-valid-consequent-{object_record}"),
+            &edited,
+            &sufficient,
+        )?;
+        element(&mut edited, "buffer-node")?["properties"]["isControlType"] = json!(false);
+        add_activity_edge_object(
+            &mut edited,
+            "possible-buffer-edge",
+            "uml.control_flow",
+            json!({"href":"external.uml#source"}),
+            json!({"$ref":"receive"}),
+        )?;
+        let unknown = validate(&edited)?;
+        object_node_family_rule(&unknown, Some("warning"))?;
+        reopen(
+            &format!("object-node-possible-control-{object_record}"),
+            &edited,
+            &unknown,
+        )?;
+        element(&mut edited, "possible-buffer-edge")?["kind"] = json!("uml.object_flow");
+        let possible_object = validate(&edited)?;
+        object_node_family_rule(&possible_object, None)?;
+        reopen(
+            &format!("object-node-possible-object-{object_record}"),
+            &edited,
+            &possible_object,
+        )?;
+        element(&mut edited, "possible-buffer-edge")?["kind"] = json!("uml.future_edge");
+        element(&mut edited, "possible-buffer-edge")?["properties"]["target"] =
+            json!({"$ref":"buffer-node"});
+        let unknown_family = validate(&edited)?;
+        object_node_family_rule(&unknown_family, Some("warning"))?;
+        reopen(
+            &format!("object-node-unknown-family-{object_record}"),
+            &edited,
+            &unknown_family,
+        )?;
+        let mut decisive = edited.clone();
+        let edge = if object_record {
+            element(&mut decisive, "buffer-edge")?
+        } else {
+            relation(&mut decisive, "buffer-edge")?
+        };
+        edge["kind"] = json!("uml.control_flow");
+        let known_with_unknown = validate(&decisive)?;
+        object_node_family_rule(&known_with_unknown, Some("error"))?;
+        reopen(
+            &format!("object-node-known-with-unknown-{object_record}"),
+            &decisive,
+            &known_with_unknown,
+        )?;
+        element(&mut edited, "buffer-node")?["properties"]["isControlType"] = json!(true);
+        let unconstrained = validate(&edited)?;
+        object_node_family_rule(&unconstrained, None)?;
+        reopen(
+            &format!("object-node-control-unknown-family-{object_record}"),
+            &edited,
+            &unconstrained,
+        )?;
+        element(&mut edited, "buffer-node")?["properties"]["isControlType"] = json!(false);
+        element(&mut edited, "possible-buffer-edge")?["kind"] = json!("uml.control_flow");
+        let incoming_witness = validate(&edited)?;
+        object_node_family_rule(&incoming_witness, Some("error"))?;
+        reopen(
+            &format!("object-node-known-incoming-{object_record}"),
+            &edited,
+            &incoming_witness,
+        )?;
+        element(&mut edited, "possible-buffer-edge")?["properties"]["source"] =
+            json!({"$ref":"buffer-node"});
+        let self_loop = validate(&edited)?;
+        object_node_family_rule(&self_loop, Some("error"))?;
+        reopen(
+            &format!("object-node-self-loop-{object_record}"),
+            &edited,
+            &self_loop,
+        )?;
+    }
+    assert_eq!(validate(&original)?, baseline);
+    reopen("object-node-repaired", &original, &baseline)?;
+    Ok(())
+}
+
+fn object_node_family_rule(response: &Value, severity: Option<&str>) -> FlowResult<()> {
+    let matching: Vec<_> = response["diagnostics"]
+        .as_array()
+        .ok_or("missing diagnostics")?
+        .iter()
+        .filter(|d| {
+            d["subject_id"] == "buffer-node"
+                && matches!(
+                    d["code"].as_str(),
+                    Some(
+                        "UML_OBJECT_NODE_OBJECT_FLOW_EDGES"
+                            | "MDE_OBJECT_NODE_OBJECT_FLOW_EDGES_UNVERIFIED"
                     )
                 )
         })

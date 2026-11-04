@@ -179,6 +179,38 @@ fn activity_edge_candidates<'a>(references: &ReferenceIndex<'a>) -> Vec<ElementR
     candidates
 }
 
+fn object_node_edges(
+    references: &ReferenceIndex<'_>,
+    node: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let control = schema::read_effective_boolean(node, "isControlType")
+        .map_err(|error| QueryError::unsupported(node.id(), error));
+    let all_objects = require_all(
+        activity_edge_candidates(references)
+            .into_iter()
+            .map(|edge| {
+                let incident = accept_any([
+                    activity_endpoint(references, edge, "source")
+                        .map(|endpoint| endpoint.id() == node.id()),
+                    activity_endpoint(references, edge, "target")
+                        .map(|endpoint| endpoint.id() == node.id()),
+                ]);
+                let object_flow = if edge.metaclass().is_some() {
+                    Ok(edge.conforms_to("ObjectFlow"))
+                } else {
+                    Err(QueryError::unsupported(
+                        edge.id(),
+                        "ActivityEdge metaclass is unresolved",
+                    ))
+                };
+                // A possible ObjectFlow cannot invalidate this universal. A known
+                // incident non-ObjectFlow can, independently of uncertain neighbors.
+                accept_any([incident.map(|incident| !incident), object_flow])
+            }),
+    );
+    accept_any([control, all_objects])
+}
+
 fn activity_edge_exists(
     references: &ReferenceIndex<'_>,
     node: ElementRef<'_>,
@@ -433,6 +465,15 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
     let mut issues = Vec::new();
     for node in references.model().elements() {
         let mut checks = Vec::new();
+        if node.conforms_to("ObjectNode") {
+            checks.push((
+                object_node_edges(references, node),
+                "UML_OBJECT_NODE_OBJECT_FLOW_EDGES",
+                "MDE_OBJECT_NODE_OBJECT_FLOW_EDGES_UNVERIFIED",
+                "ObjectNode-object_flow_edges",
+                "an ObjectNode with isControlType=false must have only ObjectFlow incident edges",
+            ));
+        }
         if node.conforms_to("ObjectFlow") {
             checks.push((
                 accept_any([
