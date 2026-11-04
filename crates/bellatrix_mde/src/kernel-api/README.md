@@ -152,6 +152,15 @@ aggregation among at least three known ends, produce
 `UML_ASSOCIATION_BINARY_ASSOCIATIONS`. External references never become invented
 local Properties or distinct local identities.
 
+`Association-association_ends` also uses the shared evidence: for a represented
+n-ary collection, a known member that is not an Association-owned end produces
+`UML_ASSOCIATION_NARY_END_OWNERSHIP`, even beside external members. Canonical
+ownership and the actual composite role are both checked, including the
+`ownedEnd`/`ownedAttribute` distinction on AssociationClass. Unresolved members
+or roles without a counterexample produce
+`MDE_ASSOCIATION_NARY_END_OWNERSHIP_UNVERIFIED`. Binary associations have no
+additional ownership restriction from this particular invariant.
+
 Without a decisive local counterexample, unresolved evidence produces
 `MDE_ASSOCIATION_END_TYPES_UNVERIFIED` or
 `MDE_ASSOCIATION_AGGREGATION_UNVERIFIED`. Malformed collections and local values

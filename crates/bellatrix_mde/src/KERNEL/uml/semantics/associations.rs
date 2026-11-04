@@ -540,7 +540,8 @@ fn member_end_evidence<'a>(
     })
 }
 
-// UML.xmi Association-ends_must_be_typed and Association-binary_associations.
+// UML.xmi Association-ends_must_be_typed, Association-binary_associations and
+// Association-association_ends.
 // A quantified violation needs only a local witness, not a complete end query.
 fn association_end_constraints(
     references: &ReferenceIndex<'_>,
@@ -600,6 +601,34 @@ fn association_end_constraints(
         }
         Ok(aggregate_count == 0 || evidence.known.len() == 2)
     })();
+    let nary_ownership = if evidence.cardinality <= 2 {
+        Ok(true)
+    } else {
+        super::feature_compatibility::require_all(
+            evidence
+                .unresolved
+                .clone()
+                .map(Err)
+                .into_iter()
+                .chain(evidence.known.iter().map(|(_, end)| {
+                    let end = ElementRef::Object(end);
+                    let owner = references
+                        .model()
+                        .owner(end)
+                        .map_err(|error| QueryError::invalid(end.id(), error))?;
+                    if owner.is_none_or(|owner| owner.id() != association.id()) {
+                        return Ok(false);
+                    }
+                    // Identity alone is insufficient for AssociationClass:
+                    // ownedAttribute and ownedEnd are disjoint composite roles.
+                    classifiers::contributes_to_owned_union(
+                        association,
+                        end,
+                        "Association-ownedEnd",
+                    )
+                })),
+        )
+    };
     [
         (
             "Association::ends_must_be_typed",
@@ -614,6 +643,13 @@ fn association_end_constraints(
             "MDE_ASSOCIATION_AGGREGATION_UNVERIFIED",
             "aggregation is permitted only on one end of a binary Association",
             binary,
+        ),
+        (
+            "Association::association_ends",
+            "UML_ASSOCIATION_NARY_END_OWNERSHIP",
+            "MDE_ASSOCIATION_NARY_END_OWNERSHIP_UNVERIFIED",
+            "all n-ary member ends must be Association-owned ends",
+            nary_ownership,
         ),
     ]
     .into_iter()
@@ -678,14 +714,8 @@ fn validate_association_structure(
         );
     }
     let ends = member_ends(references, association.id())?;
-    let owned = owned_ends(references, association.id())?;
+    owned_ends(references, association.id())?;
     validate_navigation_declarations(references, association.id())?;
-    if ends.len() > 2 && owned.len() != ends.len() {
-        return Err(
-            "Association::association_ends requires all n-ary member ends to be Association-owned"
-                .into(),
-        );
-    }
     let mut unresolved = None;
     for (index, end) in ends.iter().enumerate() {
         let owner = references
