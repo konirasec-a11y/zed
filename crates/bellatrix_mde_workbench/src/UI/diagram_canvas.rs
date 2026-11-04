@@ -14,8 +14,8 @@ impl Render for MdeWorkbenchItem {
         let zoom = self.zoom;
         let pan = self.pan;
         let canvas_origin = std::rc::Rc::new(std::cell::Cell::new(None::<(f64, f64)>));
-        let relation_hint = match self.selected_tool {
-            Some(ModelingTool::Relation(kind)) => Some(if self.pending_relation_source.is_some() {
+        let relation_hint = match self.presentation.selected_tool {
+            Some(ModelingTool::Relation(kind)) => Some(if self.presentation.pending_relation_source.is_some() {
                 format!("{}: click second element (target)", kind.label())
             } else {
                 format!("{}: {}", kind.label(), kind.endpoint_instruction())
@@ -30,8 +30,7 @@ impl Render for MdeWorkbenchItem {
                 let references = bellatrix_mde::uml::references::ReferenceIndex::new(
                     bellatrix_mde::uml::root::Model::from_section(&snapshot.section),
                 );
-                let diagram = self
-                    .active_diagram
+                let diagram = self.presentation.active_diagram
                     .as_deref()
                     .and_then(|id| {
                         snapshot
@@ -157,7 +156,7 @@ impl Render for MdeWorkbenchItem {
                                 .diagram_presentation(diagram, &relation.kind)
                                 .labels(presentation)
                                 .view_scale(zoom)
-                                .selected(self.selected_element.as_deref() == Some(subject));
+                                .selected(self.presentation.selected_element.as_deref() == Some(subject));
                                 let edge_owner = cx.weak_entity();
                                 let edge_id = relation.id.clone();
                                 let edge_view_id = view.id.clone();
@@ -299,7 +298,7 @@ impl Render for MdeWorkbenchItem {
                         let signature_top = signature_top as f32 * zoom;
                         let signature_right = signature_right as f32 * zoom;
                         let signature_bottom = signature_bottom as f32 * zoom;
-                        let selected_target = self.selected_element.as_deref().and_then(|id| {
+                        let selected_target = self.presentation.selected_element.as_deref().and_then(|id| {
                             if id == subject {
                                 Some(element)
                             } else if template_parameters
@@ -326,12 +325,12 @@ impl Render for MdeWorkbenchItem {
                         });
                         let is_selected = selected_target.is_some();
                         let editing = selected_target.filter(|selected| {
-                            self.editing_subject.as_deref() == Some(selected.id.as_str())
+                            self.presentation.editing_element() == Some(selected.id.as_str())
                                 && self.inline_editor.is_some()
                         });
                         let (quick_actions, left_actions, visibility_picker) =
                             if let Some(selected) = selected_target.filter(|_| {
-                                !self.source.is_read_only() && self.selected_tool.is_none()
+                                !self.source.is_read_only() && self.presentation.selected_tool.is_none()
                             }) {
                                 quick_edit_for_element(
                                     selected,
@@ -443,7 +442,7 @@ impl Render for MdeWorkbenchItem {
                         }
                         if editing.is_some() {
                             if let (Some(id), Some(field)) =
-                                (self.editing_subject.clone(), self.inline_editor.clone())
+                                (self.presentation.editing_element().map(str::to_owned), self.inline_editor.clone())
                             {
                                 let accept = cx.weak_entity();
                                 let cancel = cx.weak_entity();
@@ -560,7 +559,7 @@ impl Render for MdeWorkbenchItem {
                         let drag_owner = cx.weak_entity();
                         let drag_id = view.id.clone();
                         let connection_mode =
-                            matches!(self.selected_tool, Some(ModelingTool::Relation(_)));
+                            matches!(self.presentation.selected_tool, Some(ModelingTool::Relation(_)));
                         let connect_owner = cx.weak_entity();
                         let connect_view = view.id.clone();
                         let connection_origin = canvas_origin.clone();
@@ -580,7 +579,7 @@ impl Render for MdeWorkbenchItem {
                                     MouseButton::Left,
                                     move |event: &MouseDownEvent, window, cx| {
                                         let _ = drag_owner.update(cx, |item, cx| {
-                                            if is_selected && item.selected_tool.is_none() {
+                                            if is_selected && item.presentation.selected_tool.is_none() {
                                                 if let Some(field) = &item.inline_editor {
                                                     field
                                                         .read(cx)
@@ -591,7 +590,7 @@ impl Render for MdeWorkbenchItem {
                                                 }
                                             }
                                             if event.click_count >= 2
-                                                && item.selected_tool.is_none()
+                                                && item.presentation.selected_tool.is_none()
                                             {
                                                 item.begin_inline_edit(
                                                     element_id.clone(),
@@ -778,7 +777,7 @@ impl Render for MdeWorkbenchItem {
                 cx.listener(|item, _: &integration::RemoveFromDiagram, window, cx| {
                     if canvas_delete_action_allowed(
                         item.focus_handle.is_focused(window),
-                        item.editing_subject.is_some(),
+                        item.presentation.is_editing(),
                     ) {
                         item.remove_selected_view(cx);
                     } else {
@@ -790,7 +789,7 @@ impl Render for MdeWorkbenchItem {
                 cx.listener(|item, _: &integration::DeleteFromModel, window, cx| {
                     if canvas_delete_action_allowed(
                         item.focus_handle.is_focused(window),
-                        item.editing_subject.is_some(),
+                        item.presentation.is_editing(),
                     ) {
                         item.delete_selected_from_model(cx);
                     } else {
@@ -803,7 +802,7 @@ impl Render for MdeWorkbenchItem {
                     && !event.keystroke.modifiers.modified();
                 if event.keystroke.key.eq_ignore_ascii_case("f2") || plain_enter {
                     if let Err(error) = f2_owner.update(cx, |item, cx| {
-                        if !item.focus_handle.is_focused(window) || item.selected_tool.is_some() {
+                        if !item.focus_handle.is_focused(window) || item.presentation.selected_tool.is_some() {
                             return;
                         }
                         if let Some(field) = &item.inline_editor {
@@ -811,9 +810,9 @@ impl Render for MdeWorkbenchItem {
                             cx.stop_propagation();
                             return;
                         }
-                        if let Some(id) = item.selected_element.clone() {
+                        if let Some(id) = item.presentation.selected_element.clone() {
                             item.begin_inline_edit(id, window, cx);
-                        } else if let Some(id) = item.selected_view.clone() {
+                        } else if let Some(id) = item.presentation.selected_view.clone() {
                             item.begin_draft_label_edit(id, window, cx);
                         } else {
                             return;
@@ -835,7 +834,7 @@ impl Render for MdeWorkbenchItem {
                     cx.stop_propagation();
                 } else if event.keystroke.key.eq_ignore_ascii_case("escape") {
                     let _ = escape_relation_owner.update(cx, |item, cx| {
-                        if item.editing_subject.is_none() && item.selected_tool.is_some() {
+                        if !item.presentation.is_editing() && item.presentation.selected_tool.is_some() {
                             item.cancel_tool(cx);
                         }
                     });
@@ -942,7 +941,7 @@ impl Render for MdeWorkbenchItem {
                             return;
                         };
                         if let Err(error) = owner.update(cx, |item, cx| {
-                            if let Some(tool) = item.selected_tool {
+                            if let Some(tool) = item.presentation.selected_tool {
                                 let position =
                                     (f64::from(event.position.x), f64::from(event.position.y));
                                 let (x, y) =

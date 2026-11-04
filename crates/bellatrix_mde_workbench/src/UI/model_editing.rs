@@ -5,7 +5,7 @@ impl MdeWorkbenchItem {
         if self.source.is_read_only() {
             return;
         }
-        let Some(owner_id) = self.selected_element.clone() else {
+        let Some(owner_id) = self.presentation.selected_element.clone() else {
             self.feedback = "Select a classifier first".into();
             cx.notify();
             return;
@@ -138,7 +138,7 @@ impl MdeWorkbenchItem {
         if self.source.is_read_only() {
             return;
         }
-        let Some(element_id) = self.selected_element.clone() else {
+        let Some(element_id) = self.presentation.selected_element.clone() else {
             self.feedback = "Select a model element first".into();
             cx.notify();
             return;
@@ -163,7 +163,7 @@ impl MdeWorkbenchItem {
         if self.source.is_read_only() {
             return;
         }
-        let Some(element_id) = self.selected_element.clone() else {
+        let Some(element_id) = self.presentation.selected_element.clone() else {
             self.feedback = "Select an element to delete".into();
             cx.notify();
             return;
@@ -181,11 +181,11 @@ impl MdeWorkbenchItem {
             }),
             cx,
         );
-        self.selected_element = None;
-        self.selected_view = None;
+        self.presentation.selected_element = None;
+        self.presentation.selected_view = None;
         self.inline_editor = None;
         self.inline_draft = None;
-        self.editing_subject = None;
+        self.presentation.clear_edit();
         self.gesture = None;
         cx.notify();
     }
@@ -200,35 +200,26 @@ impl MdeWorkbenchItem {
     pub(super) fn reconcile_selection(&mut self, section: &bellatrix_mde::ModelingSection) {
         let selection = selection::reconcile_selection(
             section,
-            self.active_diagram.as_deref(),
-            self.selected_view.as_deref(),
-            self.selected_element.as_deref(),
-            self.editing_subject.as_deref(),
+            self.presentation.active_diagram.as_deref(),
+            self.presentation.selected_view.as_deref(),
+            self.presentation.selected_element.as_deref(),
+            self.presentation.editing_id(),
         );
-        let diagram_changed = selection.active_diagram != self.active_diagram;
-        let selection_changed = selection.selected_view != self.selected_view
-            || selection.selected_element != self.selected_element;
-        if diagram_changed || selection_changed {
+        let change = self.presentation.reconcile(selection);
+        if change.diagram_changed || change.selection_changed {
             self.gesture = None;
-            self.pending_relation_source = None;
         }
-        if diagram_changed {
-            self.selected_tool = None;
+        if change.diagram_changed {
             self.drop_point = None;
             self.pan_origin = None;
             self.validation_status = "Not yet validated for this diagram".into();
         }
-        if !selection.preserve_editor {
+        if !change.preserve_editor {
             self.inline_editor = None;
             self.inline_draft = None;
-            self.editing_subject = None;
-            self.draft_label_revision = None;
-            self.draft_label_pending = false;
         }
-        self.active_diagram = selection.active_diagram;
-        self.selected_view = selection.selected_view;
-        self.selected_element = selection.selected_element;
     }
+
     pub(super) fn submit(&mut self, command: MdeUiCommand, cx: &mut Context<Self>) {
         self.feedback = match self.source.submit(command) {
             Ok(()) => "Command sent to Cordis".into(),
@@ -289,7 +280,7 @@ impl MdeWorkbenchItem {
             .section
             .diagrams
             .iter()
-            .find(|diagram| Some(diagram.id.as_str()) == self.active_diagram.as_deref())
+            .find(|diagram| Some(diagram.id.as_str()) == self.presentation.active_diagram.as_deref())
         else {
             self.feedback = "Select a diagram to place the Interface presentation".into();
             cx.notify();
@@ -320,7 +311,7 @@ impl MdeWorkbenchItem {
             ),
             cx,
         );
-        self.selected_tool = None;
+        self.presentation.cancel_tool();
         cx.notify();
     }
 
@@ -339,8 +330,7 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
-        let diagram_id = self
-            .active_diagram
+        let diagram_id = self.presentation.active_diagram
             .as_deref()
             .and_then(|id| {
                 snapshot
@@ -356,8 +346,8 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
-        let owner_id = creation_owner(kind, self.selected_element.as_deref());
-        if self.visual_draft_mode {
+        let owner_id = creation_owner(kind, self.presentation.selected_element.as_deref());
+        if self.presentation.visual_draft_mode {
             let (width, height) = snapshot
                 .section
                 .diagrams
@@ -396,7 +386,7 @@ impl MdeWorkbenchItem {
                 ),
                 cx,
             );
-            self.selected_tool = None;
+            self.presentation.cancel_tool();
             return;
         }
         self.submit(
@@ -412,7 +402,7 @@ impl MdeWorkbenchItem {
             }),
             cx,
         );
-        self.selected_tool = None;
+        self.presentation.cancel_tool();
     }
     pub fn show_element_in_active_diagram(
         &mut self,
@@ -428,7 +418,7 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
-        let Some(diagram) = self.active_diagram.as_deref().and_then(|id| {
+        let Some(diagram) = self.presentation.active_diagram.as_deref().and_then(|id| {
             snapshot
                 .section
                 .diagrams

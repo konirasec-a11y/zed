@@ -253,7 +253,7 @@ impl Render for MdeRightPanel {
         let panel_border = palette.border;
         let selected_id = item.read(cx).selected_element().map(str::to_owned);
         let active_diagram = item.read(cx).active_diagram().map(str::to_owned);
-        let selected_view = item.read(cx).selected_view.clone();
+        let selected_view = item.read(cx).presentation.selected_view.clone();
         let snapshot = item.read(cx).source().snapshot().ok();
         let inspection = snapshot.as_ref().and_then(|snapshot| {
             selected_id

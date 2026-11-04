@@ -233,7 +233,7 @@ impl Render for MdeLeftPanel {
                 state.active_diagram().map(str::to_owned),
                 state.selected_tool(),
                 state.source().snapshot().ok(),
-                state.visual_draft_mode,
+                state.presentation.visual_draft_mode,
             )
         };
         let mut diagrams = Vec::new();
@@ -719,9 +719,8 @@ impl Render for MdeLeftPanel {
                                 .toggle_state(visual_draft_mode)
                                 .tooltip(ui::Tooltip::text("Visual draft mode: place freely without semantic validation"))
                                 .on_click(move |_, _, cx| { draft_owner.update(cx, |workbench, cx| {
-                                    workbench.visual_draft_mode = !workbench.visual_draft_mode;
-                                    workbench.pending_relation_source = None;
-                                    workbench.feedback = if workbench.visual_draft_mode { "Visual drafts: no semantic validation or code generation" } else { "Semantic modeling mode" }.into();
+                                    workbench.presentation.toggle_visual_draft_mode();
+                                    workbench.feedback = if workbench.presentation.visual_draft_mode { "Visual drafts: no semantic validation or code generation" } else { "Semantic modeling mode" }.into();
                                     cx.notify();
                                 }); }))
                             .child(

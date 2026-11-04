@@ -109,7 +109,7 @@ impl MdeWorkbenchItem {
                     .snapshot()
                     .ok()
                     .is_some_and(|snapshot| snapshot.revision == error.revision)
-                    && self.active_diagram.as_deref() == Some(error.diagram_id.as_str())
+                    && self.presentation.active_diagram.as_deref() == Some(error.diagram_id.as_str())
                 {
                     self.validation_status = format!(
                         "Validation failed for revision {}: {}",
@@ -124,7 +124,7 @@ impl MdeWorkbenchItem {
             return;
         };
         if result.revision != snapshot.revision
-            || self.active_diagram.as_deref() != Some(result.diagram_id.as_str())
+            || self.presentation.active_diagram.as_deref() != Some(result.diagram_id.as_str())
         {
             return;
         }
@@ -163,8 +163,7 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
-        let diagram = self
-            .active_diagram
+        let diagram = self.presentation.active_diagram
             .as_deref()
             .and_then(|id| {
                 snapshot

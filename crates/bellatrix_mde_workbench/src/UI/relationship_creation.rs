@@ -1,15 +1,5 @@
 use super::*;
 
-#[derive(Clone)]
-pub(super) struct PendingRelationEndpoint {
-    project_id: ProjectId,
-    diagram_id: String,
-    view_id: Option<String>,
-    subject_id: Option<String>,
-    revision: u64,
-    point: Option<bellatrix_mde::Point>,
-}
-
 impl MdeWorkbenchItem {
     pub(super) fn connect_relation_view(
         &mut self,
@@ -54,7 +44,7 @@ impl MdeWorkbenchItem {
             .section
             .diagrams
             .iter()
-            .find(|diagram| Some(diagram.id.as_str()) == self.active_diagram.as_deref())
+            .find(|diagram| Some(diagram.id.as_str()) == self.presentation.active_diagram.as_deref())
         else {
             self.feedback = "Select a diagram before connecting Views".into();
             cx.notify();
@@ -70,7 +60,7 @@ impl MdeWorkbenchItem {
         }
         let target_subject = target_view.and_then(|view| view.subject.clone());
         let message_kind = kind.resolve_message_kind();
-        if self.pending_relation_source.is_none() {
+        if self.presentation.pending_relation_source.is_none() {
             let valid_start = if message_kind == Some("found") {
                 target.is_none()
             } else {
@@ -81,7 +71,7 @@ impl MdeWorkbenchItem {
                 cx.notify();
                 return;
             }
-            self.pending_relation_source = Some(PendingRelationEndpoint {
+            self.presentation.pending_relation_source = Some(PendingRelationEndpoint {
                 project_id: self.project_id().clone(),
                 diagram_id: diagram.id.clone(),
                 view_id: target.clone(),
@@ -89,8 +79,8 @@ impl MdeWorkbenchItem {
                 revision: snapshot.revision,
                 point,
             });
-            self.selected_element = target_subject.clone();
-            self.selected_view = target;
+            self.presentation.selected_element = target_subject.clone();
+            self.presentation.selected_view = target;
             self.feedback = format!(
                 "{}: source selected. {}",
                 kind.label(),
@@ -99,14 +89,14 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         }
-        let Some(source) = self.pending_relation_source.clone() else {
+        let Some(source) = self.presentation.pending_relation_source.clone() else {
             return;
         };
         if source.project_id != *self.project_id()
             || source.diagram_id != diagram.id
             || source.revision != snapshot.revision
         {
-            self.pending_relation_source = None;
+            self.presentation.pending_relation_source = None;
             self.feedback =
                 "The diagram changed after the source click. Select the source View again".into();
             cx.notify();
@@ -120,7 +110,7 @@ impl MdeWorkbenchItem {
             && source_view.is_none_or(|view| view.subject != source.subject_id)
         {
             self.feedback = "The original source View changed; select the source again".into();
-            self.pending_relation_source = None;
+            self.presentation.pending_relation_source = None;
             cx.notify();
             return;
         }
@@ -135,9 +125,9 @@ impl MdeWorkbenchItem {
             return;
         }
         let from = source.view_id.clone();
-        self.selected_element = target_subject.clone();
-        self.selected_view = target.clone();
-        if !self.visual_draft_mode && !kind.is_visual_only() {
+        self.presentation.selected_element = target_subject.clone();
+        self.presentation.selected_view = target.clone();
+        if !self.presentation.visual_draft_mode && !kind.is_visual_only() {
             let (Some(source_view_id), Some(target_view_id)) = (from.clone(), target.clone())
             else {
                 return;
@@ -157,8 +147,8 @@ impl MdeWorkbenchItem {
                 ),
                 cx,
             );
-            self.pending_relation_source = None;
-            self.selected_tool = None;
+            self.presentation.pending_relation_source = None;
+            self.presentation.cancel_tool();
             cx.notify();
             return;
         }
@@ -230,8 +220,8 @@ impl MdeWorkbenchItem {
             ),
             cx,
         );
-        self.pending_relation_source = None;
-        self.selected_tool = None;
+        self.presentation.pending_relation_source = None;
+        self.presentation.cancel_tool();
         cx.notify();
     }
 }

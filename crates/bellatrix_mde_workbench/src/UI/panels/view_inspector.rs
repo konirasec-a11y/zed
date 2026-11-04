@@ -12,7 +12,7 @@ impl MdeRightPanel {
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
         let inspector_project = item.read(cx).project_id().clone();
-        let selected_view = item.read(cx).selected_view.clone();
+        let selected_view = item.read(cx).presentation.selected_view.clone();
         let style_target = snapshot.as_ref().and_then(|snapshot| {
             let diagram = snapshot
                 .section

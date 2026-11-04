@@ -20,7 +20,7 @@ impl MdeWorkbenchItem {
         view_id: String,
         cx: &mut Context<Self>,
     ) {
-        if let Some(ModelingTool::Relation(kind)) = self.selected_tool {
+        if let Some(ModelingTool::Relation(kind)) = self.presentation.selected_tool {
             self.connect_relation_view(kind, view_id, None, cx);
         } else {
             self.select_view(subject, view_id, cx);
@@ -37,7 +37,7 @@ impl MdeWorkbenchItem {
     ) -> Option<gpui::AnyElement> {
         let draft = view.draft.as_ref()?;
         let zoom = self.zoom;
-        let selected = self.selected_view.as_deref() == Some(view.id.as_str());
+        let selected = self.presentation.selected_view.as_deref() == Some(view.id.as_str());
         let label = view.label.clone().unwrap_or_default();
         let (mut x, mut y, mut width, mut height, figure) = match &view.geometry {
             Geometry::Rect {
@@ -198,7 +198,7 @@ impl MdeWorkbenchItem {
         let draft_editor = self
             .inline_editor
             .clone()
-            .filter(|_| self.editing_subject.as_deref() == Some(view.id.as_str()))
+            .filter(|_| self.presentation.editing_view() == Some(view.id.as_str()))
             .map(|field| {
                 let confirm = cx.weak_entity();
                 let cancel = cx.weak_entity();
@@ -216,7 +216,7 @@ impl MdeWorkbenchItem {
                     },
                     move |window, cx| {
                         if let Err(error) = cancel.update(cx, |item, cx| {
-                            if item.editing_subject.as_deref() == Some(cancel_target.as_str())
+                            if item.presentation.editing_view() == Some(cancel_target.as_str())
                                 && item
                                     .inline_editor
                                     .as_ref()
@@ -245,9 +245,9 @@ impl MdeWorkbenchItem {
                     MouseButton::Left,
                     move |event: &MouseDownEvent, window, cx| {
                         if let Err(error) = owner.update(cx, |item, cx| {
-                            if event.click_count >= 2 && item.selected_tool.is_none() {
+                            if event.click_count >= 2 && item.presentation.selected_tool.is_none() {
                                 item.begin_draft_label_edit(id.clone(), window, cx);
-                            } else if matches!(item.selected_tool, Some(ModelingTool::Relation(_)))
+                            } else if matches!(item.presentation.selected_tool, Some(ModelingTool::Relation(_)))
                             {
                                 item.connect_view_at_pointer(
                                     id.clone(),
@@ -256,8 +256,8 @@ impl MdeWorkbenchItem {
                                     cx,
                                 );
                             } else {
-                                item.selected_element = None;
-                                item.selected_view = Some(id.clone());
+                                item.presentation.selected_element = None;
+                                item.presentation.selected_view = Some(id.clone());
                                 item.feedback =
                                     "Visual draft · not yet a semantic UML element".into();
                                 if !item.source.is_read_only() {
@@ -383,19 +383,17 @@ impl MdeWorkbenchItem {
         else {
             return;
         };
-        if self.editing_subject.as_deref() == Some(view_id.as_str()) && self.inline_editor.is_some()
+        if self.presentation.editing_view() == Some(view_id.as_str()) && self.inline_editor.is_some()
         {
             return;
         }
-        self.draft_label_revision = Some(snapshot.revision);
-        self.draft_label_pending = false;
         let field = cx.new(|cx| InputField::new(window, cx, "Label").label_min_width(px(96.0)));
         field.update(cx, |field, cx| {
             field.set_text(view.label.as_deref().unwrap_or(""), window, cx)
         });
-        self.selected_element = None;
-        self.selected_view = Some(view_id.clone());
-        self.editing_subject = Some(view_id);
+        self.presentation.selected_element = None;
+        self.presentation.selected_view = Some(view_id.clone());
+        self.presentation.begin_view_edit(view_id, snapshot.revision);
         self.inline_editor = Some(field.clone());
         self.inline_draft = None;
         self.gesture = None;
@@ -411,8 +409,8 @@ impl MdeWorkbenchItem {
         cx: &mut Context<Self>,
     ) {
         if self.source.is_read_only()
-            || self.draft_label_pending
-            || self.editing_subject.as_deref() != Some(target)
+            || self.presentation.draft_label_pending
+            || self.presentation.editing_view() != Some(target)
             || !self
                 .inline_editor
                 .as_ref()
@@ -421,9 +419,9 @@ impl MdeWorkbenchItem {
             return;
         }
         let (Some(view_id), Some(field), Some(expected_revision)) = (
-            self.editing_subject.clone(),
+            self.presentation.editing_view().map(str::to_owned),
             self.inline_editor.clone(),
-            self.draft_label_revision,
+            self.presentation.draft_label_revision,
         ) else {
             return;
         };
@@ -444,7 +442,7 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         }
-        self.draft_label_pending = true;
+        self.presentation.draft_label_pending = true;
         self.feedback = "Saving view label…".into();
         cx.spawn(async move |owner, cx| {
             let waiting = receipt.borrow().is_none();
@@ -457,7 +455,7 @@ impl MdeWorkbenchItem {
                 .unwrap_or_else(|| Err("Label receipt unavailable; draft preserved".into()));
             if let Err(error) = owner.update(cx, |item, cx| {
                 let same_editor = item.project_id() == &project_id
-                    && item.editing_subject.as_deref() == Some(view_id.as_str())
+                    && item.presentation.editing_view() == Some(view_id.as_str())
                     && item
                         .inline_editor
                         .as_ref()
@@ -465,14 +463,13 @@ impl MdeWorkbenchItem {
                 if !same_editor {
                     return;
                 }
-                item.draft_label_pending = false;
+                item.presentation.draft_label_pending = false;
                 match result {
                     Ok(revision) => {
-                        item.draft_label_revision = Some(revision);
+                        item.presentation.draft_label_revision = Some(revision);
                         if field.read(cx).text(cx).as_str() == label.as_str() {
-                            item.editing_subject = None;
+                            item.presentation.clear_edit();
                             item.inline_editor = None;
-                            item.draft_label_revision = None;
                         }
                         item.feedback = "View label saved".into();
                     }
@@ -480,7 +477,7 @@ impl MdeWorkbenchItem {
                         if let Ok(latest) = item.source.snapshot()
                             && latest.section.diagrams.iter().flat_map(|diagram| &diagram.views).any(|view| view.id == view_id && view.draft.is_some())
                         {
-                            item.draft_label_revision = Some(latest.revision);
+                            item.presentation.draft_label_revision = Some(latest.revision);
                             item.feedback = format!("Label not saved; text preserved: {error}. Press Enter to replace the current label at revision {}", latest.revision);
                         } else {
                             item.feedback = format!("Label not saved; text preserved: {error}");
@@ -505,7 +502,7 @@ impl MdeWorkbenchItem {
         origin: Option<(f64, f64)>,
         cx: &mut Context<Self>,
     ) {
-        let Some(ModelingTool::Relation(kind)) = self.selected_tool else {
+        let Some(ModelingTool::Relation(kind)) = self.presentation.selected_tool else {
             return;
         };
         let point = origin.map(|origin| {
