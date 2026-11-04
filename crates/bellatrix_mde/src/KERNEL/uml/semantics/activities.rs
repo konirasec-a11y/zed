@@ -526,6 +526,24 @@ fn partition_represents_property_and_is_contained(
     accept_any([guard.map(|value| !value), consequence])
 }
 
+// UML.xmi DestroyObjectAction-no_type: target.type = null.
+fn destroy_object_target_no_type(
+    references: &ReferenceIndex<'_>,
+    action: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let target_id =
+        optional_activity_reference(references, action, "DestroyObjectAction", "target")?
+            .ok_or_else(|| {
+                QueryError::unsupported(action.id(), "required target InputPin is unresolved")
+            })?;
+    let target = references
+        .element(&target_id)
+        .map_err(|error| QueryError::unsupported(action.id(), error))?;
+    // Presence does not require external Type resolution. A well-formed href
+    // still cannot be null; its unresolved Type contract is diagnosed separately.
+    activity_reference_present(references, target, "TypedElement", "type").map(|present| !present)
+}
+
 // UML.xmi CreateObjectAction-multiplicity: result.is(1,1).
 fn create_object_result_multiplicity(
     references: &ReferenceIndex<'_>,
@@ -1240,6 +1258,15 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "MDE_ACTIVITY_PARTITION_DIMENSION_NOT_CONTAINED_UNVERIFIED",
                 "ActivityPartition-dimension_not_contained",
                 "an ActivityPartition with isDimension=true must not be contained by another ActivityPartition",
+            ));
+        }
+        if node.conforms_to("DestroyObjectAction") {
+            checks.push((
+                destroy_object_target_no_type(references, node),
+                "UML_DESTROY_OBJECT_ACTION_NO_TYPE",
+                "MDE_DESTROY_OBJECT_ACTION_NO_TYPE_UNVERIFIED",
+                "DestroyObjectAction-no_type",
+                "the target InputPin of a DestroyObjectAction must have no type",
             ));
         }
         if node.conforms_to("CreateObjectAction") {
