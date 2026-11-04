@@ -1,6 +1,6 @@
 //! Tasks consume a committed project revision; generated artifacts are emissions.
-use crate::project_integration::from_document;
-use bellatrix_mde::{ExecutionTrace, TraceOutcome, TracePhase, Scope, publish_new, publish_replace};
+use bellatrix_mde::MdeExecutionTrace as ExecutionTrace;
+use crate::{TraceOutcome, TracePhase};
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::event::responder;
 use cordis::{Context, Event, Routing};
@@ -10,7 +10,8 @@ static NEXT_TASK_RUN: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Debug)]
 pub enum ModelingTaskKind {
-    GenerateRust { scope: Scope, skeleton: bool },
+    /// None selects the project; Some([]) must not widen an empty selection.
+    GenerateRust { element_ids: Option<Vec<String>>, skeleton: bool },
     ExportHtml,
 }
 #[derive(Clone, Debug)]
@@ -101,27 +102,23 @@ async fn execute(
             document.revision()
         ));
     }
-    let section = from_document(&document)?;
-    let model = section.to_model(document.id().as_str(), document.name());
     let revision = document.revision();
     tokio::task::spawn_blocking(move || {
-        let plan = match request.task {
-            ModelingTaskKind::GenerateRust { scope, skeleton } => {
-                bellatrix_mde_rust_generator::plan_with_options(
-                    &model,
-                    &scope,
-                    bellatrix_mde_rust_generator::GenerationOptions { skeleton },
-                ).map_err(|error| error.to_string())
+        let section = document.section(crate::MODELING_NAMESPACE)
+            .ok_or("modeling section unavailable")?;
+        let bytes = bellatrix_mde::encode_model_section(
+            document.id().as_str(), document.name(), &section.to_string(), "json",
+        )?;
+        let model = bellatrix_mde::decode_model_document(&bytes, "json")?;
+        let prepared = match request.task {
+            ModelingTaskKind::GenerateRust { element_ids, skeleton } => {
+                crate::rust_generation::prepare(&model, element_ids, skeleton)
             }
-            ModelingTaskKind::ExportHtml => crate::html_export::plan(&model),
+            ModelingTaskKind::ExportHtml => crate::html_export::prepare(&model),
         }?;
-        let count = plan.count();
+        let count = prepared.artifact_count;
         let destination = request.destination;
-        if request.replace_generated {
-            publish_replace(&plan, &destination).map_err(|error| error.to_string())?;
-        } else {
-            publish_new(&plan, &destination).map_err(|error| error.to_string())?;
-        }
+        prepared.publish(&destination, request.replace_generated)?;
         Ok(ModelingTaskSummary {
             project_id: request.project_id,
             correlation_id: request.correlation_id,

@@ -1,6 +1,6 @@
 use crate::class::ViewAppearance;
 use bellatrix_design_system::Palette;
-use bellatrix_mde::{TimingMode, TimingPoint, TimingPresentation};
+use bellatrix_mde_cordis::{LineMode, TimingMode, TimingPoint, TimingPresentation};
 use gpui::{AnyElement, IntoElement, PathBuilder, canvas, div, point, prelude::*, px, relative};
 
 pub(crate) struct TimingLifeline {
@@ -78,7 +78,7 @@ impl TimingLifeline {
                         let horizontal_scale = f32::from(bounds.size.width) / width;
                         let vertical_scale = f32::from(bounds.size.height) / height;
                         let dashes = stroke_appearance
-                            .resolve_stroke_pattern(bellatrix_mde::LineMode::Solid, scale);
+                            .resolve_stroke_pattern(LineMode::Solid, scale);
                         let mut path =
                             PathBuilder::stroke(px(stroke_appearance.width(1.0, scale, selected)));
                         if !dashes.is_empty() {

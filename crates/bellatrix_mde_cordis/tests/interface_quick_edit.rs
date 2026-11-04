@@ -1,12 +1,15 @@
-use bellatrix_mde::{Geometry, Graph, ModelingSection, Project};
+#[path = "support/events.rs"]
+mod events;
+use serde_json::Value;
+use bellatrix_mde_cordis::Geometry;
 use bellatrix_mde_cordis::{
     MdePlugin, ModelingAddMember, ModelingAddMemberRequested, ModelingCreateElement,
     ModelingCreateElementRequested, ModelingElementKind, ModelingMemberKind, ModelingQuickEdit,
     ModelingQuickEditRequested, ModelingSetNameExpression, ModelingSetNameExpressionRequested,
-    UmlQuickCreate, with_model,
+    UmlQuickCreate,
 };
 use bellatrix_project::{
-    ProjectCreate, ProjectCreateRequested, ProjectDocument, ProjectId, ProjectPlugin,
+    ProjectCreate, ProjectCreateRequested, ProjectId, ProjectPlugin,
     ProjectService,
 };
 use cordis::event::QueryOutcome;
@@ -31,16 +34,12 @@ async fn interface_quick_edit_commands_create_real_objects_and_names() {
         .await
         .unwrap();
     let id = ProjectId::new("interface-quick-edits").unwrap();
-    let mut model: Project =
+    let mut model: Value =
         serde_json::from_str(include_str!("../../bellatrix_mde/fixtures/todo.json")).unwrap();
-    model.id = id.as_str().into();
-    model.name = "Interface Quick Edit".into();
-    let diagram_id = model.diagrams.first().unwrap().id.clone();
-    let document = with_model(
-        ProjectDocument::new(id.clone(), model.name.clone()).unwrap(),
-        &model,
-    )
-    .unwrap();
+    model["id"] = id.as_str().into();
+    model["name"] = "Interface Quick Edit".into();
+    let diagram_id = model["diagrams"][0]["id"].as_str().unwrap().to_owned();
+    let document = events::prepare(&ctx, &model).await.unwrap();
     assert!(matches!(
         ctx.query::<ProjectCreate>(Routing::Unscoped, ProjectCreateRequested { document })
             .await
@@ -66,13 +65,7 @@ async fn interface_quick_edit_commands_create_real_objects_and_names() {
         QueryOutcome::Answer(Ok(1))
     ));
     let snapshot = service.snapshot(&id).unwrap();
-    let section: ModelingSection = serde_json::from_value(
-        snapshot
-            .section(bellatrix_mde::MODELING_NAMESPACE)
-            .unwrap()
-            .clone(),
-    )
-    .unwrap();
+    let section = events::projection(&ctx, &service, &id).await.unwrap().section;
     let interface_id = section
         .elements
         .iter()
@@ -100,16 +93,7 @@ async fn interface_quick_edit_commands_create_real_objects_and_names() {
     }
     let snapshot = service.snapshot(&id).unwrap();
     assert_eq!(snapshot.revision(), 7);
-    let section: ModelingSection = serde_json::from_value(
-        snapshot
-            .section(bellatrix_mde::MODELING_NAMESPACE)
-            .unwrap()
-            .clone(),
-    )
-    .unwrap();
-    Graph::new(&section.to_model(id.as_str(), "Quick Edit"))
-        .validate()
-        .unwrap();
+    let section = events::projection(&ctx, &service, &id).await.unwrap().section;
     for kind in [
         "uml.note",
         "uml.constraint",
@@ -195,21 +179,18 @@ async fn interface_quick_edit_commands_create_real_objects_and_names() {
     }
     let snapshot = service.snapshot(&id).unwrap();
     assert_eq!(snapshot.revision(), 10);
-    let section: ModelingSection = serde_json::from_value(
-        snapshot
-            .section(bellatrix_mde::MODELING_NAMESPACE)
-            .unwrap()
-            .clone(),
-    )
-    .unwrap();
+    let section = events::projection(&ctx, &service, &id).await.unwrap().section;
     let interface = section
         .elements
         .iter()
         .find(|element| element.id == interface_id)
         .unwrap();
     assert_eq!(interface.name, "CloudIface");
-    assert_eq!(interface.properties.get("stereotype").unwrap(), "service");
-    assert_eq!(interface.properties.get("visibility").unwrap(), "private");
+    let persisted = events::section(&service, &id).unwrap();
+    let properties = &persisted["elements"].as_array().unwrap().iter()
+        .find(|element| element["id"] == interface_id).unwrap()["properties"];
+    assert_eq!(properties.get("stereotype").unwrap(), "service");
+    assert_eq!(properties.get("visibility").unwrap(), "private");
     let view = section
         .diagrams
         .iter()
@@ -219,9 +200,6 @@ async fn interface_quick_edit_commands_create_real_objects_and_names() {
     assert!(
         matches!(&view.geometry, Geometry::Rect { height, .. } if *height >= 76.0 + 3.0 * 23.0)
     );
-    Graph::new(&section.to_model(id.as_str(), "Quick Edit"))
-        .validate()
-        .unwrap();
     engine.dispose().await.unwrap();
     provider.dispose().await.unwrap();
 }

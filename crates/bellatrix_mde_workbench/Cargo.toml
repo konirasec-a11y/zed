@@ -9,7 +9,6 @@ rust-version = "1.98.1"
 anyhow.workspace = true
 db.workspace = true
 bellatrix_project = { path = "../bellatrix_project" }
-bellatrix_mde = { path = "../bellatrix_mde" }
 bellatrix_mde_cordis = { path = "../bellatrix_mde_cordis" }
 tokio.workspace = true
 ui_input.workspace = true

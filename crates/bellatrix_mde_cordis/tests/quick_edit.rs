@@ -4,15 +4,16 @@
 // 8ef13af2c68ae1994c8fa4f5b3e231dee7e6715d, inside the existing public editing flow.
 // Provenance and license: docs/bellatrix/references/uml4net/.
 
-use bellatrix_mde::{
-    ModelingSection, Project, element_display_label, element_display_label_with_references,
-    inspect_element, member_presentation,
-};
+#[path = "support/events.rs"]
+mod events;
 use bellatrix_mde_cordis::{
-    MdePlugin, ModelingAddMember, ModelingAddMemberRequested, ModelingDeleteElement,
-    ModelingDeleteElementRequested, ModelingMemberKind, ModelingMoveParameter,
-    ModelingMoveParameterRequested, ModelingQuickEdit, ModelingQuickEditRequested,
-    ModelingSetProperty, ModelingSetPropertyRequested, UmlQuickCreate, with_model,
+    MODELING_NAMESPACE, MdePlugin, ModelingAddMember, ModelingAddMemberRequested,
+    ModelingConvertDocument, ModelingConvertDocumentRequested, ModelingDeleteElement,
+    ModelingDeleteElementRequested, ModelingDocumentFormat, ModelingMemberKind,
+    ModelingMoveParameter, ModelingMoveParameterRequested, ModelingPrepareDocument,
+    ModelingPrepareDocumentRequested, ModelingQuickEdit, ModelingQuickEditRequested,
+    ModelingSetProperty, ModelingSetPropertyRequested, ModelingValidateDiagram,
+    ModelingValidateDiagramRequested, PropertyEditor, UmlQuickCreate,
 };
 use bellatrix_project::{
     ProjectCreate, ProjectCreateRequested, ProjectDocument, ProjectId, ProjectPlugin,
@@ -32,16 +33,81 @@ where
         .await
         .unwrap()
 }
-fn model_document(id: &str) -> ProjectDocument {
-    let mut model: Project =
+async fn model_document(context: &Context, id: &str) -> ProjectDocument {
+    let mut model: serde_json::Value =
         serde_json::from_str(include_str!("../../bellatrix_mde/fixtures/todo.json")).unwrap();
-    model.id = id.into();
-    model.name = id.into();
-    with_model(
-        ProjectDocument::new(ProjectId::new(id).unwrap(), id).unwrap(),
-        &model,
-    )
-    .unwrap()
+    model["id"] = id.into();
+    model["name"] = id.into();
+    events::prepare(context, &model).await.unwrap()
+}
+
+fn raw_element<'a>(section: &'a serde_json::Value, id: &str) -> &'a serde_json::Value {
+    section["elements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|element| element["id"] == id)
+        .expect("persisted element")
+}
+
+async fn validate(
+    context: &Context,
+    project_id: ProjectId,
+    diagram_id: String,
+    revision: u64,
+) -> Vec<bellatrix_mde_cordis::ModelingDiagnostic> {
+    match context
+        .query::<ModelingValidateDiagram>(
+            Routing::Unscoped,
+            ModelingValidateDiagramRequested {
+                project_id,
+                diagram_id,
+                expected_revision: revision,
+            },
+        )
+        .await
+        .unwrap()
+    {
+        QueryOutcome::Answer(Ok(result)) => result.diagnostics,
+        other => panic!("diagram validation unavailable: {other:?}"),
+    }
+}
+
+async fn roundtrip(context: &Context, document: &ProjectDocument, format: &str) -> ProjectDocument {
+    let model = events::model_document(document).unwrap();
+    let converted = match context
+        .query::<ModelingConvertDocument>(
+            Routing::Unscoped,
+            ModelingConvertDocumentRequested {
+                bytes: serde_json::to_vec(&model).unwrap(),
+                source_format: "json".into(),
+                destination_format: format.into(),
+            },
+        )
+        .await
+        .unwrap()
+    {
+        QueryOutcome::Answer(Ok(bytes)) => bytes,
+        other => panic!("conversion unavailable: {other:?}"),
+    };
+    match context
+        .query::<ModelingPrepareDocument>(
+            Routing::Unscoped,
+            ModelingPrepareDocumentRequested {
+                bytes: converted,
+                format: if format == "json" {
+                    ModelingDocumentFormat::ModelJson
+                } else {
+                    ModelingDocumentFormat::ModelProtobuf
+                },
+            },
+        )
+        .await
+        .unwrap()
+    {
+        QueryOutcome::Answer(Ok(prepared)) => prepared.document,
+        other => panic!("reopen unavailable: {other:?}"),
+    }
 }
 
 #[tokio::test]
@@ -55,7 +121,7 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
             ctx.query::<ProjectCreate>(
                 Routing::Unscoped,
                 ProjectCreateRequested {
-                    document: model_document(id)
+                    document: model_document(&ctx, id).await
                 }
             )
             .await
@@ -96,13 +162,10 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
     let snapshot = projects.snapshot(&a).unwrap();
     assert_eq!(snapshot.revision(), 2);
     assert_eq!(projects.snapshot(&b).unwrap().revision(), 0);
-    let section: ModelingSection = serde_json::from_value(
-        snapshot
-            .section(bellatrix_mde::MODELING_NAMESPACE)
-            .unwrap()
-            .clone(),
-    )
-    .unwrap();
+    let section = events::projection(&ctx, &projects, &a)
+        .await
+        .unwrap()
+        .section;
     for (name, kind) in [
         ("Attribute1", "rust.field"),
         ("Operation1", "rust.function"),
@@ -130,10 +193,12 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
         .iter()
         .find(|element| element.name == "Operation1")
         .expect("created operation");
-    assert_eq!(element_display_label(attribute), "+Attribute1");
-    assert_eq!(element_display_label(operation), "+Operation1()");
+    assert_eq!(attribute.display_label, "+Attribute1");
+    assert_eq!(operation.display_label, "+Operation1()");
     let type_id = "type-task".to_owned();
-    let inspection = inspect_element(&section, &attribute.id).expect("Property inspector");
+    let inspection = section
+        .inspect_element(&attribute.id)
+        .expect("Property inspector");
     assert!(
         inspection
             .reference_choices_for("properties.type")
@@ -226,17 +291,10 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
     let reopened: ProjectDocument =
         serde_json::from_slice(&serde_json::to_vec(edited.as_ref()).expect("serialize project"))
             .expect("reopen project");
-    let projected: ModelingSection = serde_json::from_value(
-        reopened
-            .section(bellatrix_mde::MODELING_NAMESPACE)
-            .expect("modeling section")
-            .clone(),
-    )
-    .expect("reopened model");
-    let references = bellatrix_mde::uml::references::ReferenceIndex::new(
-        bellatrix_mde::uml::root::Model::from_section(&projected),
-    );
-    let owner = inspect_element(&projected, "type-list").expect("classifier compartments");
+    let projected = events::project_document(reopened).await.unwrap().section;
+    let owner = projected
+        .inspect_element("type-list")
+        .expect("classifier compartments");
     for (member_id, expected, rows) in [
         (
             &attribute.id,
@@ -251,11 +309,8 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
             .find(|element| &element.id == member_id)
             .expect("persisted member");
         assert_eq!(
-            element_display_label_with_references(member, &references),
-            expected
-        );
-        assert_eq!(
-            bellatrix_mde::project_hierarchy(&projected)
+            projected
+                .hierarchy_rows
                 .iter()
                 .find(|row| &row.element_id == member_id)
                 .expect("tree row")
@@ -263,7 +318,8 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
             expected
         );
         assert_eq!(
-            inspect_element(&projected, member_id)
+            projected
+                .inspect_element(member_id)
                 .expect("member inspector")
                 .display_label,
             expected
@@ -275,7 +331,7 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
                 .display_label,
             expected
         );
-        assert!(member_presentation(member).underlined);
+        assert!(member.member.underlined);
     }
     assert_eq!(projects.snapshot(&b).expect("other project").revision(), 0);
     for (element_id, path, value) in [
@@ -323,36 +379,30 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
         revision += 1;
         assert!(matches!(result, QueryOutcome::Answer(Ok(value)) if value == revision));
     }
-    let reset = projects.snapshot(&a).expect("reset project");
-    let reset: ModelingSection = serde_json::from_value(
-        reset
-            .section(bellatrix_mde::MODELING_NAMESPACE)
-            .expect("reset section")
-            .clone(),
-    )
-    .expect("reset model");
+    let reset = events::projection(&ctx, &projects, &a)
+        .await
+        .unwrap()
+        .section;
     for (member_id, expected) in [(&attribute.id, "-limit"), (&operation.id, "+findAgain()")] {
         let member = reset
             .elements
             .iter()
             .find(|element| &element.id == member_id)
             .expect("reset member");
-        assert_eq!(element_display_label(member), expected);
-        assert!(!member_presentation(member).underlined);
+        assert_eq!(member.display_label, expected);
+        assert!(!member.member.underlined);
     }
     // Continue the same public editing flow into Operation Parameters and persistence.
-    let read_section = || -> ModelingSection {
-        serde_json::from_value(
-            projects
-                .snapshot(&a)
-                .expect("project")
-                .section(bellatrix_mde::MODELING_NAMESPACE)
-                .expect("section")
-                .clone(),
-        )
-        .expect("model")
+    let read_section = || async {
+        events::projection(&ctx, &projects, &a)
+            .await
+            .unwrap()
+            .section
     };
-    let no_return = inspect_element(&read_section(), &operation.id).expect("no return yet");
+    let no_return = read_section()
+        .await
+        .inspect_element(&operation.id)
+        .expect("no return yet");
     for (key, expected) in [
         ("isOrdered", serde_json::json!(false)),
         ("isUnique", serde_json::json!(true)),
@@ -368,7 +418,10 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
                     && !field.editable)
         );
     }
-    let raw_signature = operation.properties.get("signature").cloned();
+    let raw_signature =
+        raw_element(&events::section(&projects, &a).unwrap(), &operation.id)["properties"]
+            .get("signature")
+            .cloned();
     let mut parameter_ids = Vec::new();
     for number in 1..=3 {
         let request = ModelingAddMemberRequested {
@@ -382,15 +435,18 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
             QueryOutcome::Answer(Ok(value)) if value == revision + 1)
         );
         revision += 1;
-        let section = read_section();
-        let inspector = inspect_element(&section, &operation.id).expect("Operation inspector");
+        let section = read_section().await;
+        let inspector = section
+            .inspect_element(&operation.id)
+            .expect("Operation inspector");
         let parameter = inspector
             .parameters
             .iter()
             .find(|parameter| parameter.name == format!("Parameter{number}"))
             .expect("new Parameter identity");
-        let parameter_inspector =
-            inspect_element(&section, &parameter.id).expect("Parameter inspector");
+        let parameter_inspector = section
+            .inspect_element(&parameter.id)
+            .expect("Parameter inspector");
         let direction = parameter_inspector
             .properties
             .iter()
@@ -399,14 +455,14 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
         assert_eq!(direction.value, serde_json::json!("in"));
         assert_eq!(
             direction.editor,
-            bellatrix_mde::PropertyEditor::Choice(&["in", "inout", "out", "return"])
+            PropertyEditor::Choice(["in", "inout", "out", "return"].map(str::to_owned).to_vec())
         );
         assert!(
             parameter_inspector
                 .properties
                 .iter()
                 .any(|property| property.path == "properties.type"
-                    && property.editor == bellatrix_mde::PropertyEditor::Reference
+                    && property.editor == PropertyEditor::Reference
                     && property.editable)
         );
         parameter_ids.push(parameter.id.clone());
@@ -459,8 +515,10 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
         }).await.expect("authored multiplicity"), QueryOutcome::Answer(Ok(value)) if value == revision + 1)
         );
         revision += 1;
-        let current = read_section();
-        let inspector = inspect_element(&current, &operation.id).expect("return derivation");
+        let current = read_section().await;
+        let inspector = current
+            .inspect_element(&operation.id)
+            .expect("return derivation");
         if value == "0..capacity" {
             assert!(inspector.properties.iter().any(|field| {
                 field.path == "properties.lower"
@@ -470,8 +528,8 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
                         .is_some_and(|text| text.contains("not evaluated"))
             }));
             assert!(
-                bellatrix_mde::uml::root::Model::from_section(&current)
-                    .validate()
+                validate(&ctx, a.clone(), current.diagrams[0].id.clone(), revision)
+                    .await
                     .iter()
                     .any(|issue| issue.code == "MDE_PARAMETER_MULTIPLICITY_UNSUPPORTED")
             );
@@ -529,8 +587,10 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
             serde_json::to_value(before_invalid.as_ref()).expect("before")
         );
     }
-    let section = read_section();
-    let inspector = inspect_element(&section, &operation.id).expect("derived return");
+    let section = read_section().await;
+    let inspector = section
+        .inspect_element(&operation.id)
+        .expect("derived return");
     assert_eq!(
         inspector.display_label,
         "+findAgain(key: Integer, inout context: TaskList): Integer"
@@ -558,33 +618,43 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
                     && !field.editable)
         );
     }
-    let mut with_body = section.to_model(a.as_str(), a.as_str());
-    with_body.elements.push(serde_json::from_value(serde_json::json!({"id":"return-body", "kind":"uml.constraint", "name":"Result constraint"})).expect("Constraint"));
-    with_body.relations.push(serde_json::from_value(serde_json::json!({"id":"owns-return-body", "kind":"owns", "from":operation.id, "to":"return-body"})).expect("Constraint owner"));
-    let imported_operation = with_body
-        .elements
+    let mut with_body = events::model_document(&projects.snapshot(&a).unwrap()).unwrap();
+    with_body["id"] = "quick-edit-body".into();
+    with_body["elements"].as_array_mut().unwrap().push(serde_json::json!({"id":"return-body", "kind":"uml.constraint", "name":"Result constraint"}));
+    with_body["relations"].as_array_mut().unwrap().push(serde_json::json!({"id":"owns-return-body", "kind":"owns", "from":operation.id, "to":"return-body"}));
+    let imported_operation = with_body["elements"]
+        .as_array_mut()
+        .unwrap()
         .iter_mut()
-        .find(|element| element.id == operation.id)
-        .expect("Operation");
-    imported_operation.properties.insert(
-        "bodyCondition".into(),
-        serde_json::json!({"$ref":"return-body"}),
-    );
-    imported_operation
-        .properties
-        .insert("isQuery".into(), serde_json::json!(true));
-    imported_operation
-        .properties
-        .insert("isOrdered".into(), serde_json::json!(false));
+        .find(|element| element["id"] == operation.id)
+        .unwrap();
+    imported_operation["properties"]["bodyCondition"] = serde_json::json!({"$ref":"return-body"});
+    imported_operation["properties"]["isQuery"] = true.into();
+    imported_operation["properties"]["isOrdered"] = false.into();
+    let body_document = events::prepare(&ctx, &with_body).await.unwrap();
+    let body_id = body_document.id().clone();
+    assert!(matches!(
+        ctx.query::<ProjectCreate>(
+            Routing::Unscoped,
+            ProjectCreateRequested {
+                document: body_document
+            }
+        )
+        .await
+        .unwrap(),
+        QueryOutcome::Answer(Ok(_))
+    ));
     assert!(
-        bellatrix_mde::uml::root::Model::from_project(&with_body)
-            .validate()
+        validate(&ctx, body_id.clone(), section.diagrams[0].id.clone(), 0)
+            .await
             .iter()
             .any(|issue| issue.code == "MDE_OPERATION_CONDITION_UNSUPPORTED")
     );
-    let imported_inspector =
-        inspect_element(&ModelingSection::from_model(&with_body), &operation.id)
-            .expect("imported return cache");
+    let body_projection = events::projection(&ctx, &projects, &body_id).await.unwrap();
+    let imported_inspector = body_projection
+        .section
+        .inspect_element(&operation.id)
+        .expect("imported return cache");
     assert!(imported_inspector.properties.iter().any(
         |field| field.path == "properties.isOrdered" && field.value == serde_json::json!(true)
     ));
@@ -595,37 +665,57 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
             .any(|field| field.path == "legacy.operation.isOrdered"
                 && field.value == serde_json::json!(false))
     );
-    let before_body_edit = with_body.clone();
-    let rejected = bellatrix_mde::commands::apply(
-        &with_body,
-        &bellatrix_mde::commands::Command::SetProperty {
-            element_id: operation.id.clone(),
-            path: "properties.isQuery".into(),
-            value: serde_json::json!(false),
-        },
-        revision,
-    )
-    .expect_err("bodyCondition requires query Operation");
-    assert!(rejected.contains("only_body_for_query"));
-    assert_eq!(with_body, before_body_edit);
-    let mut invalid_loaded = section.to_model(a.as_str(), a.as_str());
-    invalid_loaded.root_model = None;
-    invalid_loaded
-        .elements
-        .iter_mut()
-        .find(|element| element.id == *context)
-        .expect("second return candidate")
-        .properties
-        .insert("direction".into(), serde_json::json!("return"));
+    let before_body_edit = projects.snapshot(&body_id).unwrap();
+    let rejected = ctx
+        .query::<ModelingSetProperty>(
+            Routing::Unscoped,
+            ModelingSetPropertyRequested {
+                project_id: body_id.clone(),
+                element_id: operation.id.clone(),
+                path: "properties.isQuery".into(),
+                value: false.into(),
+                expected_revision: 0,
+            },
+        )
+        .await
+        .unwrap();
     assert!(
-        bellatrix_mde::validate_structural_model(&invalid_loaded)
+        matches!(rejected, QueryOutcome::Answer(Err(error)) if error.contains("only_body_for_query"))
+    );
+    assert_eq!(*projects.snapshot(&body_id).unwrap(), *before_body_edit);
+    let mut invalid_loaded = events::model_document(&projects.snapshot(&a).unwrap()).unwrap();
+    invalid_loaded["id"] = "quick-edit-invalid".into();
+    invalid_loaded["root_model"] = serde_json::Value::Null;
+    invalid_loaded["elements"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|element| element["id"] == *context)
+        .unwrap()["properties"]["direction"] = "return".into();
+    let invalid_document = events::prepare(&ctx, &invalid_loaded).await.unwrap();
+    let invalid_id = invalid_document.id().clone();
+    assert!(matches!(
+        ctx.query::<ProjectCreate>(
+            Routing::Unscoped,
+            ProjectCreateRequested {
+                document: invalid_document
+            }
+        )
+        .await
+        .unwrap(),
+        QueryOutcome::Answer(Ok(_))
+    ));
+    assert!(
+        validate(&ctx, invalid_id, section.diagrams[0].id.clone(), 0)
+            .await
             .iter()
             .any(|issue| issue.code == "UML_OPERATION_PARAMETERS")
     );
-    let unrelated_edges = section
-        .relations
+    let unrelated_edges = events::section(&projects, &a).unwrap()["relations"]
+        .as_array()
+        .unwrap()
         .iter()
-        .filter(|relation| !(relation.kind == "owns" && relation.from == operation.id))
+        .filter(|relation| !(relation["kind"] == "owns" && relation["from"] == operation.id))
         .cloned()
         .collect::<Vec<_>>();
     let move_request = ModelingMoveParameterRequested {
@@ -645,30 +735,31 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
             .expect("stale reorder"),
         QueryOutcome::Answer(Err(_))
     ));
-    let section = read_section();
     assert_eq!(
-        section
-            .relations
+        events::section(&projects, &a).unwrap()["relations"]
+            .as_array()
+            .unwrap()
             .iter()
-            .filter(|relation| !(relation.kind == "owns" && relation.from == operation.id))
+            .filter(|relation| !(relation["kind"] == "owns" && relation["from"] == operation.id))
             .cloned()
             .collect::<Vec<_>>(),
         unrelated_edges
     );
-    let project = section.to_model(a.as_str(), a.as_str());
-    for format in [bellatrix_mde::Format::Json, bellatrix_mde::Format::Protobuf] {
-        let reopened = bellatrix_mde::decode(
-            &bellatrix_mde::encode(&project, format).expect("encode"),
-            format,
-        )
-        .expect("reopen");
-        let reopened = ModelingSection::from_model(&reopened);
-        let references = bellatrix_mde::uml::references::ReferenceIndex::new(
-            bellatrix_mde::uml::root::Model::from_section(&reopened),
-        );
-        let parameters =
-            bellatrix_mde::uml::operations::owned_parameters(&references, &operation.id)
-                .expect("ordered parameters");
+    let project = projects.snapshot(&a).unwrap();
+    for format in ["json", "protobuf"] {
+        let reopened_document = roundtrip(&ctx, &project, format).await;
+        let persisted_section = reopened_document
+            .section(MODELING_NAMESPACE)
+            .unwrap()
+            .clone();
+        let reopened = events::project_document(reopened_document)
+            .await
+            .unwrap()
+            .section;
+        let inspector = reopened
+            .inspect_element(&operation.id)
+            .expect("reopened Inspector");
+        let parameters = &inspector.parameters;
         assert_eq!(
             parameters
                 .iter()
@@ -676,60 +767,51 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
                 .collect::<Vec<_>>(),
             vec![context.as_str(), input.as_str(), result.as_str()]
         );
-        assert_eq!(
-            bellatrix_mde::uml::operations::return_type(&references, &operation.id)
-                .expect("return Type")
-                .expect("typed")
-                .id(),
-            type_id
+        assert!(
+            inspector
+                .properties
+                .iter()
+                .any(|property| property.path == "properties.type"
+                    && property.value == serde_json::json!({"$ref":type_id}))
         );
-        let inspector = inspect_element(&reopened, &operation.id).expect("reopened Inspector");
         assert_eq!(
             inspector.display_label,
             "+findAgain(inout context: TaskList, key: Integer): Integer"
         );
-        let persisted = reopened
-            .elements
-            .iter()
-            .find(|element| element.id == operation.id)
-            .expect("Operation");
-        assert_eq!(
-            persisted.properties.get("signature"),
-            raw_signature.as_ref()
+        let persisted = &raw_element(&persisted_section, &operation.id)["properties"];
+        assert_eq!(persisted.get("signature"), raw_signature.as_ref());
+        assert!(!persisted.as_object().unwrap().contains_key("type"));
+        assert!(
+            !persisted
+                .as_object()
+                .unwrap()
+                .contains_key("ownedParameter")
         );
-        assert!(!persisted.properties.contains_key("type"));
-        assert!(!persisted.properties.contains_key("ownedParameter"));
         for key in ["isOrdered", "isUnique", "lower", "upper"] {
             assert!(
-                !persisted.properties.contains_key(key),
+                !persisted.as_object().unwrap().contains_key(key),
                 "derived return fields are never persisted"
             );
         }
-        let returned =
-            bellatrix_mde::uml::operations::return_properties(&references, &operation.id)
-                .expect("reopened return properties");
-        assert!(returned.is_ordered && !returned.is_unique);
-        assert_eq!(
-            returned
-                .lower()
-                .expect("lower")
-                .expect("return exists")
-                .to_string(),
-            "0"
-        );
-        assert!(
-            returned
-                .upper()
-                .expect("upper")
-                .expect("return exists")
-                .is_unlimited()
-        );
-        assert!(
-            parameters
-                .iter()
-                .all(|parameter| !parameter.properties.contains_key("operation"))
-        );
-        let tree = bellatrix_mde::project_hierarchy(&reopened);
+        for (key, value) in [
+            ("isOrdered", serde_json::json!(true)),
+            ("isUnique", serde_json::json!(false)),
+            ("lower", serde_json::json!("0")),
+            ("upper", serde_json::json!("*")),
+        ] {
+            assert!(
+                inspector
+                    .properties
+                    .iter()
+                    .any(|field| field.path == format!("properties.{key}") && field.value == value)
+            );
+        }
+        assert!(parameters.iter().all(|parameter| {
+            raw_element(&persisted_section, &parameter.id)["properties"]
+                .get("operation")
+                .is_none()
+        }));
+        let tree = &reopened.hierarchy_rows;
         assert!(
             tree.iter().position(|row| row.element_id == *context)
                 < tree.iter().position(|row| row.element_id == *input)
@@ -741,7 +823,7 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
                 .label,
             inspector.display_label
         );
-        let classifier = inspect_element(&reopened, "type-list").expect("classifier");
+        let classifier = reopened.inspect_element("type-list").expect("classifier");
         assert_eq!(
             classifier
                 .operations
@@ -768,7 +850,10 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
         }).await.expect("live type edit"), QueryOutcome::Answer(Ok(value)) if value == revision + 1)
         );
         revision += 1;
-        let inspector = inspect_element(&read_section(), &operation.id).expect("live Operation");
+        let inspector = read_section()
+            .await
+            .inspect_element(&operation.id)
+            .expect("live Operation");
         assert!(inspector.display_label.contains("key: Number"));
         if element_id == result
             && inspector
@@ -789,8 +874,10 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
         );
         revision += 1;
     }
-    let final_section = read_section();
-    let inspector = inspect_element(&final_section, &operation.id).expect("remaining Parameters");
+    let final_section = read_section().await;
+    let inspector = final_section
+        .inspect_element(&operation.id)
+        .expect("remaining Parameters");
     for (key, expected) in [
         ("isOrdered", serde_json::json!(false)),
         ("isUnique", serde_json::json!(true)),
@@ -858,22 +945,17 @@ async fn class_specializations_use_the_same_versioned_cordis_event() {
             .query::<ProjectCreate>(
                 Routing::Unscoped,
                 ProjectCreateRequested {
-                    document: model_document(project_id.as_str()),
+                    document: model_document(&context, project_id.as_str()).await,
                 }
             )
             .await
             .unwrap(),
         QueryOutcome::Answer(Ok(_))
     ));
-    let section: ModelingSection = serde_json::from_value(
-        projects
-            .snapshot(&project_id)
-            .unwrap()
-            .section(bellatrix_mde::MODELING_NAMESPACE)
-            .unwrap()
-            .clone(),
-    )
-    .unwrap();
+    let section = events::projection(&context, &projects, &project_id)
+        .await
+        .unwrap()
+        .section;
     let diagram_id = section.diagrams[0].id.clone();
     let actions = [
         UmlQuickCreate::TemplateParameter,
@@ -900,13 +982,10 @@ async fn class_specializations_use_the_same_versioned_cordis_event() {
     }
     let document = projects.snapshot(&project_id).unwrap();
     assert_eq!(document.revision(), 8);
-    let section: ModelingSection = serde_json::from_value(
-        document
-            .section(bellatrix_mde::MODELING_NAMESPACE)
-            .unwrap()
-            .clone(),
-    )
-    .unwrap();
+    let section = events::projection(&context, &projects, &project_id)
+        .await
+        .unwrap()
+        .section;
     for kind in ["uml.classifier_template_parameter", "uml.port", "uml.part"] {
         let node = section.elements.iter().find(|e| e.kind == kind).unwrap();
         assert!(section.relations.iter().any(|r| r.kind == "owns"
@@ -927,11 +1006,16 @@ async fn class_specializations_use_the_same_versioned_cordis_event() {
     assert_eq!(associations.len(), 3);
     for aggregation in ["shared", "composite"] {
         assert!(
-            associations.iter().any(|r| r
-                .properties
-                .get("end1Aggregation")
-                .and_then(|v| v.as_str())
-                == Some(aggregation)),
+            associations.iter().any(|relation| {
+                events::section(&projects, &project_id).unwrap()["relations"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|stored| {
+                        stored["id"] == relation.id
+                            && stored["properties"]["end1Aggregation"] == aggregation
+                    })
+            }),
             "{aggregation}"
         );
     }

@@ -1,6 +1,6 @@
-use bellatrix_mde::{
+use bellatrix_mde_cordis::{
     LineMode, RelationshipRouting, StereotypeDisplay, Style, TextAlignment, TextVerticalAlignment,
-    commands::ViewOrder,
+    ViewOrder,
 };
 use std::collections::HashMap;
 
@@ -439,7 +439,7 @@ impl StyleEditState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bellatrix_mde::{
+    use bellatrix_mde_cordis::{
         Project,
         commands::{Command, apply},
     };

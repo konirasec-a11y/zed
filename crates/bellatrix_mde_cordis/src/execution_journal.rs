@@ -1,6 +1,6 @@
 //! Bounded MDE execution history shared by host consumers.
 use crate::ModelingExecutionTrace;
-use bellatrix_mde::{ExecutionEvent, TraceOutcome, TracePhase};
+use crate::{ExecutionEvent, TraceOutcome, TracePhase};
 use std::{
     collections::VecDeque,
     sync::{

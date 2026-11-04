@@ -3,7 +3,8 @@ use crate::workbench_ui::style_drafts::{
     FIELDS, StyleEditState, StyleSubmission, field_error, style_value,
 };
 use crate::workbench_ui::{MdeWorkbenchItem, panels::MdeRightPanel};
-use bellatrix_mde::{RelationshipRouting, View, commands::ViewOrder};
+use bellatrix_mde_cordis::{RelationshipRouting, ViewOrder};
+use bellatrix_mde_cordis::projection::View;
 use bellatrix_mde_cordis::{
     MdeUiCommand, ModelingReorderViewRequested, ModelingSetViewRoutingRequested,
     ModelingSetViewStyleRequested,

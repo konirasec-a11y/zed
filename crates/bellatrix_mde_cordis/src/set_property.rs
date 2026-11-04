@@ -1,4 +1,4 @@
-use bellatrix_mde::commands::Command;
+use crate::Command;
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::{Context, Event};
 use serde_json::Value;

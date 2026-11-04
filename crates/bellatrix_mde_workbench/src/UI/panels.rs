@@ -10,9 +10,9 @@ use crate::workbench_ui::{
     integration::{OpenMdeSymbols, OpenMdeWorkbench},
     property_editor::render_inspector,
 };
-use bellatrix_mde::commands::{ModelingElementKind, ModelingTool};
-use bellatrix_mde::{
-    ModelingRelationKind, inspect_element,
+use bellatrix_mde_cordis::{ModelingElementKind, ModelingTool};
+use bellatrix_mde_cordis::{
+    ModelingRelationKind,
 };
 use bellatrix_ui_panels::PaneHeader;
 use bellatrix_ui_symbols::{ShapeKind, glyph};
@@ -66,7 +66,7 @@ fn explorer_move_menu(
         ExplorerMoveTarget::Diagram(_) => None,
     };
     let mut destinations = vec![(project_parent.clone(), format!("Project: {}", snapshot.name))];
-    destinations.extend(bellatrix_mde::project_hierarchy(&snapshot.section).into_iter()
+    destinations.extend(snapshot.section.hierarchy_rows.clone().into_iter()
         .filter(|row| project_parent.as_deref() != Some(row.element_id.as_str())
             && snapshot.section.elements.iter().any(|element| element.id == row.element_id))
         .map(|row| (Some(row.element_id), format!("{}{} · {}", "  ".repeat(row.depth.min(8)), row.label, row.kind))));
@@ -137,7 +137,7 @@ fn explorer_menu(
                 let project_id = snapshot.project_id.clone();
                 let element_id = subject.clone();
                 let revision = snapshot.revision;
-                let name = bellatrix_mde::template_parametered_element(&snapshot.section, element)
+                let name = element.template_parametered_id.as_ref().and_then(|id| snapshot.section.elements.iter().find(|element| &element.id == id))
                     .unwrap_or(element).name.clone();
                 menu = menu.entry("Rename element", None, move |window, cx| {
                     if let Err(error) = rename_panel.update(cx, |panel, cx| {
@@ -200,7 +200,7 @@ fn explorer_creation_menus(
 ) -> ui::ContextMenu {
     use crate::workbench_ui::explorer;
     let diagram_kinds = subject.map(|id| explorer::contextual_diagram_kinds(&snapshot.section, id))
-        .unwrap_or_else(explorer::project_diagram_kinds);
+        .unwrap_or_else(|| explorer::project_diagram_kinds(&snapshot.section));
     if !diagram_kinds.is_empty() {
         let owner = owner.clone();
         let snapshot = snapshot.clone();
@@ -213,8 +213,8 @@ fn explorer_creation_menus(
                 let owner = owner.clone();
                 let project_id = snapshot.project_id.clone();
                 let revision = snapshot.revision;
-                let model_elements = if kind.context_metaclass().is_some()
-                    || kind == bellatrix_mde::StructuralDiagramKind::CompositeStructure {
+                let model_elements = if snapshot.section.tools.diagram(kind).is_some_and(|metadata| metadata.context_metaclass.is_some())
+                    || kind == bellatrix_mde_cordis::StructuralDiagramKind::CompositeStructure {
                     subject.iter().cloned().collect::<Vec<_>>()
                 } else { Vec::new() };
                 let parent_id = subject.clone();
@@ -256,7 +256,7 @@ fn explorer_creation_menus(
                 let owner_id = subject.clone();
                 let panel = panel.clone();
                 let row_key = row_key.clone();
-                menu = menu.entry(kind.label(), None, move |_, cx| {
+                menu = menu.entry(snapshot.section.tools.element(kind).map(|metadata| metadata.label.clone()).unwrap_or_else(|| "Element".into()), None, move |_, cx| {
                     let sent = owner.update(cx, |workbench, cx| {
                         workbench.submit_explorer_command(
                             bellatrix_mde_cordis::MdeUiCommand::CreateModelElement(bellatrix_mde_cordis::ModelingCreateModelElementRequested {
@@ -654,7 +654,7 @@ impl Render for MdeRightPanel {
         let inspection = snapshot.as_ref().and_then(|snapshot| {
             selected_id
                 .as_deref()
-                .and_then(|id| inspect_element(&snapshot.section, id))
+                .and_then(|id| snapshot.section.inspect_element(id))
         });
         let explorer_query = self.explorer_search.read(cx).text(cx).trim().to_lowercase();
         let searching = !explorer_query.is_empty();
@@ -781,7 +781,7 @@ impl Render for MdeRightPanel {
                     .get(index + 1)
                     .is_some_and(|next| next.depth > row.depth);
                 let type_label = crate::workbench_ui::hierarchy::explorer_type_label(
-                    &row.kind,
+                    &snapshot.section, &row.kind,
                     snapshot.section.relations.iter().any(|relation| row.view.as_ref().and_then(|view| view.subject_id.as_deref()).unwrap_or(&row.element_id) == relation.id),
                 );
                 let drag_subject = row.view.as_ref().and_then(|view| view.subject_id.as_deref())
@@ -878,7 +878,7 @@ impl Render for MdeRightPanel {
                         .tooltip(ui::Tooltip::text(format!("Visual component · {type_label}. Drag onto an owner to move its semantic element; the view stays in this diagram.")))
                         .pl(px((row.depth.min(15) + 2) as f32 * 14.0)).flex().items_center().gap_1()
                         .when(selected, |row| row.bg(palette.surface))
-                        .child(crate::workbench_ui::hierarchy::explorer_view_icon(&row.key, &row.kind, selected, &palette))
+                        .child(crate::workbench_ui::hierarchy::explorer_view_icon(&row.key, &row.kind, &snapshot.section.identity(&row.kind), selected, &palette))
                         .child(div().flex_1().min_w_0().overflow_hidden().child(
                             ui::right_click_menu(format!("mde-explorer-view-menu-{}", row.key))
                             .trigger(move |_, _, _| TreeViewItem::new(view_row_key, view_row_label)
@@ -1107,7 +1107,7 @@ impl Render for MdeRightPanel {
                         .gap_1()
                         .when(selected, |row| row.bg(palette.surface))
                         .child(
-                            crate::workbench_ui::hierarchy::explorer_element_icon(&row.kind, &palette),
+                            crate::workbench_ui::hierarchy::explorer_element_icon(&row.kind, &snapshot.section.identity(&row.kind), &palette),
                         )
                         .child(
                             div().flex_1().min_w_0().overflow_hidden().child(

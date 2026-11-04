@@ -526,6 +526,131 @@ fn partition_represents_property_and_is_contained(
     accept_any([guard.map(|value| !value), consequence])
 }
 
+// UML.xmi ActionInputPin-one_output_pin: fromAction.output->size() = 1.
+fn action_input_pin_one_output(
+    references: &ReferenceIndex<'_>,
+    pin: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let action_id = optional_activity_reference(references, pin, "ActionInputPin", "fromAction")?
+        .ok_or_else(|| {
+        QueryError::unsupported(pin.id(), "required fromAction is unresolved")
+    })?;
+    let action = references
+        .element(&action_id)
+        .map_err(|error| QueryError::unsupported(pin.id(), error))?;
+    let mut incomplete = None;
+    let mut projection = None;
+    // Inspect every contributing authored slot, including external entries that
+    // have no local owns edge. A missing derived output list is not an empty list.
+    for descriptor in classifiers::properties(action)? {
+        if !classifiers::contributes(descriptor, "Action-output")
+            .map_err(|error| QueryError::unsupported(action.id(), error))?
+        {
+            continue;
+        }
+        let Some(value) = action.properties().get(descriptor.name) else {
+            continue;
+        };
+        // Check the stored output projection's shape/type/ownership separately
+        // from derivation. Membership is still established below from canonical
+        // composite roles; this local descriptor does not change the metamodel.
+        let projection_descriptor = schema::PropertyDescriptor {
+            is_derived: if descriptor.name == "output" {
+                false
+            } else {
+                descriptor.is_derived
+            },
+            ..*descriptor
+        };
+        match property_contracts::check_value(references, action, &projection_descriptor, value) {
+            PropertyOutcome::Violation(message) => {
+                return Err(QueryError::unsupported(action.id(), message));
+            }
+            PropertyOutcome::Unverified(message) => {
+                incomplete = Some(QueryError::unsupported(action.id(), message));
+            }
+            PropertyOutcome::Satisfied if descriptor.name == "output" => {
+                projection = Some(
+                    references
+                        .validate_many(descriptor, value)
+                        .map_err(|error| QueryError::unsupported(action.id(), error))?,
+                );
+            }
+            PropertyOutcome::Satisfied => {}
+        }
+    }
+    let mut outputs = Vec::new();
+    for child in references
+        .explicit_owned_elements(action.id())
+        .map_err(|error| QueryError::unsupported(action.id(), error))?
+    {
+        if child.metaclass().is_none() {
+            incomplete = Some(QueryError::unsupported(
+                child.id(),
+                "owned metaclass may be an OutputPin",
+            ));
+        } else if child.conforms_to("OutputPin") {
+            match classifiers::contributes_to_owned_union(action, child, "Action-output") {
+                Ok(true) => outputs.push(child.id()),
+                Ok(false) => {
+                    if action
+                        .properties()
+                        .get("output")
+                        .and_then(serde_json::Value::as_array)
+                        .is_some_and(|values| {
+                            values.iter().any(|value|
+                            matches!(reference_id(value), Ok(Some(id)) if id == child.id()))
+                        })
+                    {
+                        return Err(QueryError::unsupported(
+                            action.id(),
+                            "authored output includes a child outside the canonical output role",
+                        ));
+                    }
+                }
+                Err(error @ QueryError::Invalid { .. }) => {
+                    return Err(QueryError::unsupported(child.id(), error.to_string()));
+                }
+                Err(error @ QueryError::Unsupported { .. }) => incomplete = Some(error),
+            }
+        }
+    }
+    if action
+        .properties()
+        .get("output")
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(|values| values.len() < outputs.len())
+    {
+        return Err(QueryError::unsupported(
+            action.id(),
+            "authored output has too few slots for canonical output membership",
+        ));
+    }
+    if let Some(projection) = projection {
+        // This constraint only counts identities; it neither infers nor rewrites
+        // the order of the derived union. Contradictory membership is not proof
+        // of a cardinality violation.
+        if outputs
+            .iter()
+            .any(|id| !projection.iter().any(|element| element.id() == *id))
+            || (incomplete.is_none() && outputs.len() != projection.len())
+        {
+            return Err(QueryError::unsupported(
+                action.id(),
+                "authored output contradicts canonical membership",
+            ));
+        }
+    }
+    if outputs.len() > 1 {
+        // Additional opaque members cannot reduce two distinct known outputs.
+        Ok(false)
+    } else if let Some(error) = incomplete {
+        Err(error)
+    } else {
+        Ok(outputs.len() == 1)
+    }
+}
+
 // UML.xmi ValuePin-compatible_type: value.type.conformsTo(type).
 fn value_pin_compatible_type(
     references: &ReferenceIndex<'_>,
@@ -953,6 +1078,15 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "MDE_ACTIVITY_PARTITION_DIMENSION_NOT_CONTAINED_UNVERIFIED",
                 "ActivityPartition-dimension_not_contained",
                 "an ActivityPartition with isDimension=true must not be contained by another ActivityPartition",
+            ));
+        }
+        if node.conforms_to("ActionInputPin") {
+            checks.push((
+                action_input_pin_one_output(references, node),
+                "UML_ACTION_INPUT_PIN_ONE_OUTPUT_PIN",
+                "MDE_ACTION_INPUT_PIN_ONE_OUTPUT_PIN_UNVERIFIED",
+                "ActionInputPin-one_output_pin",
+                "the fromAction of an ActionInputPin must have exactly one OutputPin",
             ));
         }
         if node.conforms_to("ValuePin") {

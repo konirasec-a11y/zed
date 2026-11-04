@@ -1,5 +1,9 @@
-use bellatrix_mde::{Geometry, ModelingSection, Project};
-use bellatrix_mde_cordis::{MdePlugin, ModelingMoveView, ModelingMoveViewRequested, with_model};
+#[path = "support/events.rs"]
+mod events;
+use serde_json::Value;
+use bellatrix_mde_cordis::Geometry;
+use bellatrix_project::ProjectDocument;
+use bellatrix_mde_cordis::{MdePlugin, ModelingMoveView, ModelingMoveViewRequested};
 use bellatrix_project::{
     ProjectClose, ProjectCloseRequested, ProjectCreate, ProjectCreateRequested, ProjectDocument,
     ProjectId, ProjectOpen, ProjectOpenRequested, ProjectPlugin, ProjectSave, ProjectSaveRequested,
@@ -20,13 +24,12 @@ where
         .unwrap()
 }
 
-fn fixture(name: &str) -> ProjectDocument {
-    let mut model: Project =
+async fn fixture(ctx: &Context, name: &str) -> ProjectDocument {
+    let mut model: Value =
         serde_json::from_str(include_str!("../../bellatrix_mde/fixtures/todo.json")).unwrap();
-    model.id = name.into();
-    model.name = name.into();
-    let doc = ProjectDocument::new(ProjectId::new(name).unwrap(), name).unwrap();
-    with_model(doc, &model).unwrap()
+    model["id"] = name.into();
+    model["name"] = name.into();
+    events::prepare(ctx, &model).await.unwrap()
 }
 
 #[tokio::test]
@@ -49,7 +52,7 @@ async fn view_movement_is_public_versioned_and_isolated() {
         ctx.query::<ProjectCreate>(
             Routing::Unscoped,
             ProjectCreateRequested {
-                document: fixture(name),
+                document: fixture(&ctx, name).await,
             },
         )
         .await
@@ -85,13 +88,7 @@ async fn view_movement_is_public_versioned_and_isolated() {
         .unwrap();
     assert!(matches!(invalid, QueryOutcome::Answer(Err(_))));
     let document = service.snapshot(&a).unwrap();
-    let section: ModelingSection = serde_json::from_value(
-        document
-            .section(bellatrix_mde::MODELING_NAMESPACE)
-            .unwrap()
-            .clone(),
-    )
-    .unwrap();
+    let section = events::projection(&ctx, &service, &a).await.unwrap().section;
     let view = section
         .diagrams
         .iter()
@@ -116,7 +113,7 @@ async fn translated_view_roundtrips_through_public_project_save_and_open() {
     ctx.query::<ProjectCreate>(
         Routing::Unscoped,
         ProjectCreateRequested {
-            document: fixture("persisted-view"),
+            document: fixture(&ctx, "persisted-view").await,
         },
     )
     .await
@@ -172,12 +169,7 @@ async fn translated_view_roundtrips_through_public_project_save_and_open() {
     assert!(matches!(reopened, QueryOutcome::Answer(Ok(_))));
     let doc = service.snapshot(&id).unwrap();
     assert_eq!(doc.revision(), 1);
-    let section: ModelingSection = serde_json::from_value(
-        doc.section(bellatrix_mde::MODELING_NAMESPACE)
-            .unwrap()
-            .clone(),
-    )
-    .unwrap();
+    let section = events::projection(&ctx, &service, &id).await.unwrap().section;
     let view = section
         .diagrams
         .iter()

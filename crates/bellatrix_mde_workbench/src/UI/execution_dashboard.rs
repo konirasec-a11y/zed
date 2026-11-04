@@ -104,7 +104,7 @@ impl MdeExecutionDashboard {
             cx.notify();
         }
     }
-    fn event_line(event: &bellatrix_mde::ExecutionEvent) -> String {
+    fn event_line(event: &bellatrix_mde_cordis::ExecutionEvent) -> String {
         format!(
             "{}  #{}  t+{}ns  rev={}  {}::{}  {:?}  id={}  recorded deps=[{}]  outcome={:?}",
             event.run_id,
@@ -162,13 +162,13 @@ impl Render for MdeExecutionDashboard {
                 .to_lowercase();
                 text.contains(&query)
                     && (!self.errors_only
-                        || matches!(event.phase, bellatrix_mde::TracePhase::Error)
+                        || matches!(event.phase, bellatrix_mde_cordis::TracePhase::Error)
                         || matches!(
                             event.outcome,
                             Some(
-                                bellatrix_mde::TraceOutcome::Error
-                                    | bellatrix_mde::TraceOutcome::Invalid
-                                    | bellatrix_mde::TraceOutcome::Unsupported
+                                bellatrix_mde_cordis::TraceOutcome::Error
+                                    | bellatrix_mde_cordis::TraceOutcome::Invalid
+                                    | bellatrix_mde_cordis::TraceOutcome::Unsupported
                             )
                         ))
             })

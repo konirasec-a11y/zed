@@ -1,5 +1,6 @@
 //! View-only notation uses the same canvas figures and styles without pretending to be UML.
 use super::*;
+use bellatrix_mde_cordis::presentation_contract::UmlNotation;
 pub(super) type CanvasOrigin = std::rc::Rc<std::cell::Cell<Option<(f64, f64)>>>;
 
 impl MdeWorkbenchItem {
@@ -29,8 +30,8 @@ impl MdeWorkbenchItem {
 
     pub(super) fn render_visual_draft(
         &self,
-        view: &bellatrix_mde::View,
-        diagram: &bellatrix_mde::Diagram,
+        view: &bellatrix_mde_cordis::projection::View,
+        _diagram: &bellatrix_mde_cordis::projection::Diagram,
         revision: u64,
         canvas_origin: &CanvasOrigin,
         node_bounds: &std::rc::Rc<std::cell::RefCell<Vec<[f32; 4]>>>,
@@ -39,7 +40,7 @@ impl MdeWorkbenchItem {
         let draft = view.draft.as_ref()?;
         let zoom = self.zoom;
         let selected = self.presentation.selected_view() == Some(view.id.as_str());
-        let label = view.label.clone().unwrap_or_default();
+        let label = view.display_label.clone();
         let (mut x, mut y, mut width, mut height, figure) = match &view.geometry {
             Geometry::Rect {
                 x,
@@ -47,45 +48,24 @@ impl MdeWorkbenchItem {
                 width,
                 height,
             } => {
-                let interface_presentation = draft
-                    .properties
-                    .get("interface_presentation")
-                    .and_then(serde_json::Value::as_str)
-                    .filter(|value| matches!(*value, "provided" | "required"));
-                let figure = if UmlFigure::supports(&draft.notation_kind)
-                    || (draft.notation_kind == "uml.interface" && interface_presentation.is_some())
-                {
-                    UmlFigure::new(draft.notation_kind.clone(), label)
-                        .interface_presentation(interface_presentation)
-                        .diagram_presentation(diagram)
-                        .timing_presentation(view.timing.as_ref())
-                        .composite_role(
-                            draft
-                                .properties
-                                .get("aggregation")
-                                .and_then(serde_json::Value::as_str)
-                                == Some("composite"),
-                        )
-                        .interaction_operator(
-                            resolve_interaction_operator(&draft.properties).as_deref(),
-                        )
-                        .pseudostate_kind(
-                            draft
-                                .properties
-                                .get("kind")
-                                .and_then(serde_json::Value::as_str)
-                                .unwrap_or("initial"),
-                        )
-                        .view_style(&view.style)
+                let figure = if UmlFigure::supports(&view.figure) {
+                    UmlFigure::new(view.figure.clone(), label)
+                        .view_style(&view.render_style)
+                        .selected(selected)
+                        .view_size(*width, *height, zoom)
+                        .into_any_element()
+                } else if view.figure.notation == UmlNotation::ClassifierRectangle {
+                    UmlClassifier::new(label)
+                        .header(view.figure.header.clone())
+                        .presentation(view.classifier)
+                        .view_style(&view.render_style)
                         .selected(selected)
                         .view_size(*width, *height, zoom)
                         .into_any_element()
                 } else {
-                    UmlClassifier::new(label)
-                        .model_kind(&draft.notation_kind)
-                        .view_style(&view.style)
-                        .selected(selected)
-                        .view_size(*width, *height, zoom)
+                    div().size_full().border_1()
+                        .border_color(WorkbenchPalette::current(cx).border)
+                        .child(Label::new(format!("Unsupported notation: {}", draft.notation_kind)))
                         .into_any_element()
                 };
                 (*x, *y, *width, *height, figure)
@@ -122,7 +102,7 @@ impl MdeWorkbenchItem {
                     .fold(f64::NEG_INFINITY, f64::max)
                     - min_y
                     + padding;
-                let place = |point: bellatrix_mde::Point| {
+                let place = |point: bellatrix_mde_cordis::Point| {
                     (
                         ((point.x - min_x) as f32) * zoom,
                         ((point.y - min_y) as f32) * zoom,
@@ -143,37 +123,18 @@ impl MdeWorkbenchItem {
                         },
                     })
                     .collect();
-                let mut label_properties = draft.properties.clone();
-                if !label.is_empty() {
-                    label_properties.insert("name".into(), serde_json::json!(label));
-                }
-                let presentation = bellatrix_mde::RelationshipPresentation {
-                    name: bellatrix_mde::format_relationship_label(
-                        &draft.notation_kind,
-                        &label_properties,
-                    ),
-                    source_labels: Default::default(),
-                    target_labels: Default::default(),
-                    label: label.clone(),
-                    notation: draft.notation_kind.clone(),
-                    style: bellatrix_mde::resolve_relationship_style(
-                        &draft.notation_kind,
-                        &draft.properties,
-                    ),
-                    source_role: "source",
-                    target_role: "target",
-                };
+                let resolved = view.relationship.as_ref()?;
                 let figure = UmlRelationGlyph::new(
-                    presentation.style,
+                    resolved.style,
                     width as f32 * zoom,
                     height as f32 * zoom,
                     place(*start),
                     place(end),
                 )
                 .segments(segments)
-                .diagram_presentation(diagram, &draft.notation_kind)
-                .labels(presentation)
-                .view_style(&view.style)
+                .communication_message(resolved.communication_message)
+                .labels(resolved.presentation.clone())
+                .view_style(&view.render_style)
                 .view_scale(zoom)
                 .selected(selected)
                 .into_any_element();
@@ -345,49 +306,6 @@ impl MdeWorkbenchItem {
     }
 }
 
-pub(super) fn format_figure_label(
-    element: &bellatrix_mde::Element,
-    references: &bellatrix_mde::uml::references::ReferenceIndex<'_>,
-    style: &bellatrix_mde::Style,
-) -> String {
-    if element.kind == "uml.interaction_operand" {
-        bellatrix_mde::format_operand_guard(element, references)
-    } else if element.kind == "uml.constraint" {
-        format!("{{{}}}", element.name)
-    } else if matches!(
-        element.kind.as_str(),
-        "uml.port"
-            | "uml.part"
-            | "uml.note"
-            | "uml.comment"
-            | "uml.instance_specification"
-            | "uml.collaboration_use"
-    ) {
-        bellatrix_mde::format_element_label_for_view(element, references, style)
-    } else {
-        element.name.clone()
-    }
-}
-
-pub(super) fn resolve_interaction_operator(
-    properties: &std::collections::BTreeMap<String, serde_json::Value>,
-) -> Option<String> {
-    properties
-        .get("interactionOperator")
-        .cloned()
-        .or_else(resolve_interaction_operator_default)
-        .and_then(|value| value.as_str().map(str::to_owned))
-}
-
-pub(super) fn resolve_interaction_operator_default() -> Option<serde_json::Value> {
-    use bellatrix_mde::uml::schema;
-    schema::uml_property("CombinedFragment", "interactionOperator")
-        .ok()
-        .flatten()
-        .and_then(|property| schema::effective_default(property).ok().flatten())
-        .and_then(schema::DefaultValue::scalar_json)
-}
-
 impl MdeWorkbenchItem {
     pub(super) fn begin_draft_label_edit(
         &mut self,
@@ -537,17 +455,17 @@ impl MdeWorkbenchItem {
                 self.pan,
                 self.zoom,
             );
-            bellatrix_mde::Point { x, y }
+            bellatrix_mde_cordis::Point { x, y }
         });
         self.connect_relation_view(kind, view_id, point, cx);
     }
 }
 pub(super) fn resolve_message_anchor(
-    section: &bellatrix_mde::ModelingSection,
-    diagram: &bellatrix_mde::Diagram,
+    _section: &bellatrix_mde_cordis::projection::ModelingProjection,
+    diagram: &bellatrix_mde_cordis::projection::Diagram,
     view_id: &str,
-    point: bellatrix_mde::Point,
-) -> Option<bellatrix_mde::Point> {
+    point: bellatrix_mde_cordis::Point,
+) -> Option<bellatrix_mde_cordis::Point> {
     let view = diagram.views.iter().find(|view| view.id == view_id)?;
     let Geometry::Rect {
         x,
@@ -561,29 +479,49 @@ pub(super) fn resolve_message_anchor(
     if width <= 0.0 || height <= 0.0 {
         return None;
     }
-    let kind = view
-        .draft
-        .as_ref()
-        .map(|draft| draft.notation_kind.as_str())
-        .or_else(|| {
-            section
-                .elements
-                .iter()
-                .find(|element| view.subject.as_deref() == Some(element.id.as_str()))
-                .map(|element| element.kind.as_str())
-        });
-    let anchor_x = if kind == Some("uml.lifeline")
-        && diagram
-            .interaction_kind
-            .as_deref()
-            .is_none_or(|kind| kind == "sequence")
-    {
-        0.5
-    } else {
-        ((point.x - x) / width).clamp(0.0, 1.0)
-    };
-    Some(bellatrix_mde::Point {
+    let anchor_x = view.figure.fixed_message_anchor_x
+        .unwrap_or_else(|| ((point.x - x) / width).clamp(0.0, 1.0));
+    Some(bellatrix_mde_cordis::Point {
         x: anchor_x,
         y: ((point.y - y) / height).clamp(0.0, 1.0),
     })
+}
+
+pub(super) fn resolve_visual_center(geometry: &Geometry) -> Option<bellatrix_mde_cordis::Point> {
+    use bellatrix_mde_cordis::Point as ModelPoint;
+    match geometry {
+        Geometry::Layout { .. } => None,
+        Geometry::Rect { x, y, width, height } => Some(ModelPoint {
+            x: x + width / 2.0,
+            y: y + height / 2.0,
+        }),
+        Geometry::Ellipse { cx, cy, .. } => Some(ModelPoint { x: *cx, y: *cy }),
+        Geometry::Polygon { points } => {
+            if points.is_empty() {
+                return None;
+            }
+            Some(ModelPoint {
+                x: points.iter().map(|point| point.x).sum::<f64>() / points.len() as f64,
+                y: points.iter().map(|point| point.y).sum::<f64>() / points.len() as f64,
+            })
+        }
+        Geometry::Path { start, segments } => {
+            let index = segments.len() / 2;
+            let from = index.checked_sub(1).and_then(|index| segments.get(index))
+                .map(|segment| match segment {
+                    PathSegment::Line { to } | PathSegment::Cubic { to, .. } => *to,
+                }).unwrap_or(*start);
+            Some(match segments.get(index) {
+                Some(PathSegment::Line { to }) => ModelPoint {
+                    x: (from.x + to.x) / 2.0,
+                    y: (from.y + to.y) / 2.0,
+                },
+                Some(PathSegment::Cubic { control1, control2, to }) => ModelPoint {
+                    x: (from.x + 3.0 * control1.x + 3.0 * control2.x + to.x) / 8.0,
+                    y: (from.y + 3.0 * control1.y + 3.0 * control2.y + to.y) / 8.0,
+                },
+                None => from,
+            })
+        }
+    }
 }

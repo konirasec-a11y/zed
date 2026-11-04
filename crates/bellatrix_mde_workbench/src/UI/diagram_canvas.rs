@@ -1,4 +1,5 @@
 use super::*;
+use bellatrix_mde_cordis::presentation_contract::UmlNotation;
 
 impl Render for MdeWorkbenchItem {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -15,11 +16,13 @@ impl Render for MdeWorkbenchItem {
         let pan = self.pan;
         let canvas_origin = std::rc::Rc::new(std::cell::Cell::new(None::<(f64, f64)>));
         let relation_hint = match self.presentation.selected_tool() {
-            Some(ModelingTool::Relation(kind)) => Some(if self.presentation.pending_relation_source().is_some() {
-                format!("{}: click second element (target)", kind.label())
-            } else {
-                format!("{}: {}", kind.label(), kind.endpoint_instruction())
-            }),
+            Some(ModelingTool::Relation(kind)) => snapshot.as_ref().ok()
+                .and_then(|snapshot| snapshot.section.tools.relation(kind))
+                .map(|metadata| if self.presentation.pending_relation_source().is_some() {
+                    format!("{}: click second element (target)", metadata.label)
+                } else {
+                    format!("{}: {}", metadata.label, metadata.endpoint_instruction)
+                }),
             _ => None,
         };
         let mut title = format!("MDE · {}", self.project_id().as_str());
@@ -31,9 +34,6 @@ impl Render for MdeWorkbenchItem {
         let mut marker_diagnostics = Vec::new();
         match snapshot {
             Ok(snapshot) => {
-                let references = bellatrix_mde::uml::references::ReferenceIndex::new(
-                    bellatrix_mde::uml::root::Model::from_section(&snapshot.section),
-                );
                 let diagram = self.presentation.active_diagram()
                     .and_then(|id| {
                         snapshot
@@ -54,7 +54,6 @@ impl Render for MdeWorkbenchItem {
                         !view.children.is_empty()
                             || matches!(&view.geometry, Geometry::Layout { .. })
                     });
-                    let graph = RelationshipGraph::new(&snapshot.section, &diagram.id);
                     let views = imported_preview::ordered_views(&diagram.views);
                     for view in views {
                         if matches!(&view.geometry, Geometry::Layout { .. }) {
@@ -85,14 +84,13 @@ impl Render for MdeWorkbenchItem {
                             continue;
                         };
                         let relation = snapshot.section.relations.iter().find(|relation| relation.id == subject);
-                        if let Some(resolved) = bellatrix_mde::resolve_relationship_view(&snapshot.section, view) {
+                        if let Some(resolved) = &view.relationship {
                             if !resolved.diagnostics.is_empty() {
                                 incomplete_preview = true;
                                 marker_diagnostics.extend(resolved.diagnostics.iter().cloned());
                             }
-                            let routed_geometry = if view.style.routing == Some(bellatrix_mde::RelationshipRouting::Manual) { None } else { graph.view_path(&view.id) };
                             // Keep an unroutable draft visible using its stored geometry.
-                            let geometry = routed_geometry.as_ref().unwrap_or(&view.geometry);
+                            let geometry = view.routed_geometry.as_ref().unwrap_or(&view.geometry);
                             if let Geometry::Path { start, segments } = geometry {
                                 let mut points = vec![*start];
                                 for segment in segments {
@@ -138,7 +136,7 @@ impl Render for MdeWorkbenchItem {
                                 let padding = 24.0_f32.max(5.0 / zoom);
                                 let width = (max_x - min_x + 2.0 * padding).max(48.0) * zoom;
                                 let height = (max_y - min_y + 2.0 * padding).max(48.0) * zoom;
-                                let place = |point: bellatrix_mde::Point| {
+                                let place = |point: bellatrix_mde_cordis::Point| {
                                     (
                                         (point.x as f32 - min_x + padding) * zoom,
                                         (point.y as f32 - min_y + padding) * zoom,
@@ -194,7 +192,7 @@ impl Render for MdeWorkbenchItem {
                                         );
                                     }
                                 }
-                                let presentation = resolved.presentation;
+                                let presentation = resolved.presentation.clone();
                                 let local_segments = segments
                                     .iter()
                                     .map(|segment| match segment {
@@ -213,20 +211,20 @@ impl Render for MdeWorkbenchItem {
                                     })
                                     .collect();
                                 let glyph = UmlRelationGlyph::new(
-                                    presentation.style,
+                                    resolved.style,
                                     width,
                                     height,
                                     place(*start),
                                     place(end),
                                 )
-                                .view_style(&view.style)
+                                .view_style(&view.render_style)
                                 .segments(local_segments)
-                                .diagram_presentation(diagram, &resolved.kind)
+                                .communication_message(resolved.communication_message)
                                 .labels(presentation)
                                 .view_scale(zoom)
                                 .selected(self.presentation.selected_element() == Some(subject)
                                     && self.presentation.selected_canvas_view().is_none_or(|selected| selected == view.id));
-                                let glyph = if let Some((source, target)) = resolved.markers { glyph.endpoint_markers(source, target) } else { glyph };
+                                let glyph = if let Some((source, target)) = &resolved.markers { glyph.endpoint_markers(source.clone(), target.clone()) } else { glyph };
                                 let edge_owner = cx.weak_entity();
                                 let edge_id = subject.to_owned();
                                 let edge_view_id = view.id.clone();
@@ -253,7 +251,7 @@ impl Render for MdeWorkbenchItem {
                                                 return;
                                             }
                                             if let Err(error) = edge_owner.update(cx, |item, cx| {
-                                                item.source.record_interaction("canvas.relationship.click", Some(&edge_view_id), bellatrix_mde::TraceOutcome::Success);
+                                                item.source.record_interaction("canvas.relationship.click", Some(&edge_view_id), bellatrix_mde_cordis::TraceOutcome::Success);
                                                 item.select_or_connect_edge(
                                                     edge_id.clone(),
                                                     edge_view_id.clone(),
@@ -329,43 +327,31 @@ impl Render for MdeWorkbenchItem {
                                 view_id, dx, dy, ..
                             }) if view_id == &view.id => {
                                 let (minimum_width, minimum_height) =
-                                    bellatrix_mde::resolve_element_notation(element).minimum_size();
+                                    element.minimum_size;
                                 local_width = (width + dx).max(minimum_width) as f32;
                                 local_height = (height + dy).max(minimum_height) as f32;
                             }
                             _ => {}
                         }
-                        let notation = bellatrix_mde::uml_notation(&element.kind);
+                        let notation = view.figure.notation;
                         if matches!(
                             notation,
-                            bellatrix_mde::UmlNotation::ClassifierRectangle
-                                | bellatrix_mde::UmlNotation::PackageTab
+                            UmlNotation::ClassifierRectangle | UmlNotation::PackageTab
                         ) {
-                            let applied =
-                                bellatrix_mde::stereotype_presentation(&snapshot.section, element)
-                                    .label();
-                            local_height = local_height.max(
-                                bellatrix_mde::uml_header(&element.kind, applied)
-                                    .minimum_height(notation)
-                                    as f32,
-                            );
+                            local_height = local_height.max(element.minimum_header_height as f32);
                         }
-                        let semantic_type = UmlType::from_kind(&element.kind);
-                        let is_interface = semantic_type == Some(UmlType::Interface);
-                        let contents = classifier_contents(&snapshot.section, &element.id);
-                        if is_interface {
-                            local_height =
-                                local_height.max(contents.minimum_interface_height() as f32);
+                        if let Some(minimum_height) = element.minimum_interface_height {
+                            local_height = local_height.max(minimum_height as f32);
                         }
-                        let template_parameters =
-                            bellatrix_mde::template_parameters(&snapshot.section, &element.id);
+                        let template_parameters = element.template_parameters.iter()
+                            .filter_map(|identifier| snapshot.section.elements.iter().find(|candidate| candidate.id == *identifier))
+                            .collect::<Vec<_>>();
                         let signature_layout = matches!(
                             notation,
-                            bellatrix_mde::UmlNotation::ClassifierRectangle
-                                | bellatrix_mde::UmlNotation::PackageTab
+                            UmlNotation::ClassifierRectangle | UmlNotation::PackageTab
                         )
                         .then(|| {
-                            bellatrix_mde::template_signature_layout(
+                            bellatrix_ui_uml::template_signature_layout(
                                 f64::from(local_width),
                                 template_parameters.len(),
                             )
@@ -390,11 +376,7 @@ impl Render for MdeWorkbenchItem {
                                     .iter()
                                     .find(|parameter| parameter.id == id)
                                     .copied()
-                            } else if snapshot.section.relations.iter().any(|relation| {
-                                relation.kind == "owns"
-                                    && relation.from == element.id
-                                    && relation.to == id
-                            }) {
+                            } else if view.member_labels.contains_key(id) {
                                 snapshot
                                     .section
                                     .elements
@@ -439,19 +421,11 @@ impl Render for MdeWorkbenchItem {
                         });
                         let mut classifier = UmlClassifier::new(element.name.clone())
                             .show_internal_structure(
-                                has_nested_views
-                                    && bellatrix_mde::uml::root::ElementRef::Object(element)
-                                        .conforms_to("StructuredClassifier"),
+                                has_nested_views && element.structured_classifier,
                             )
-                            .presentation(bellatrix_mde::classifier_presentation(
-                                element,
-                                bellatrix_mde::ClassifierPresentationOptions {
-                                    // The editor chooses the optional active-Class notation.
-                                    show_active_class_sides: true,
-                                },
-                            ))
-                            .view_style(&view.style)
-                            .model_kind(&element.kind)
+                            .presentation(view.classifier)
+                            .view_style(&view.render_style)
+                            .header(view.figure.header.clone())
                             .view_size(f64::from(local_width), f64::from(local_height), zoom)
                             .class_id(element.id.clone())
                             .selected(is_selected)
@@ -467,7 +441,7 @@ impl Render for MdeWorkbenchItem {
                                 let id = member_id.to_owned();
                                 let _ = select_owner.update(cx, |item, cx| {
                                     let key = format!("view:{member_diagram}:{member_view}/member:{id}");
-                                    let occurrence = bellatrix_mde::ViewOccurrence {
+                                    let occurrence = bellatrix_mde_cordis::ViewOccurrence {
                                         diagram_id: member_diagram.clone(), view_id: member_view.clone(), member_path: vec![id.clone()],
                                     };
                                     item.select_explorer_element(id, key, Some(occurrence), cx);
@@ -479,37 +453,25 @@ impl Render for MdeWorkbenchItem {
                                 let _ = edit_owner
                                     .update(cx, |item, cx| {
                                         let key = format!("view:{edit_member_diagram}:{edit_member_view}/member:{id}");
-                                        let occurrence = bellatrix_mde::ViewOccurrence {
+                                        let occurrence = bellatrix_mde_cordis::ViewOccurrence {
                                             diagram_id: edit_member_diagram.clone(), view_id: edit_member_view.clone(), member_path: vec![id.clone()],
                                         };
                                         item.select_explorer_element(id.clone(), key, Some(occurrence), cx);
                                         item.begin_inline_edit(id, window, cx);
                                     });
                             });
-                        if let Some(value) =
-                            bellatrix_mde::stereotype_presentation(&snapshot.section, element)
-                            .label()
-                            .filter(|value| !value.trim().is_empty())
-                        {
-                            classifier = classifier.stereotype(value.to_owned());
-                        }
-                        for relation in &snapshot.section.relations {
-                            if relation.kind != "owns" || relation.from != element.id {
-                                continue;
-                            }
+                        for identifier in &element.members {
                             let Some(member) = snapshot
                                 .section
                                 .elements
                                 .iter()
-                                .find(|candidate| candidate.id == relation.to)
+                                .find(|candidate| candidate.id == *identifier)
                             else {
                                 continue;
                             };
-                            let text = bellatrix_mde::format_element_label_for_view(
-                                member,
-                                &references,
-                                &view.style,
-                            );
+                            let Some(text) = view.member_labels.get(&member.id).cloned() else {
+                                continue;
+                            };
                             match member.kind.as_str() {
                                 "rust.field" | "uml.attribute" => {
                                     classifier =
@@ -527,17 +489,13 @@ impl Render for MdeWorkbenchItem {
                             }
                             classifier = classifier.member_presentation(
                                 &member.id,
-                                bellatrix_mde::member_presentation(member),
+                                member.member,
                             );
                         }
                         for parameter in template_parameters {
                             classifier = classifier.template_parameter_with_id(
                                 parameter.id.clone(),
-                                bellatrix_mde::template_parameter_label_with_references(
-                                    &snapshot.section,
-                                    parameter,
-                                    &references,
-                                ),
+                                parameter.template_label.clone(),
                             );
                         }
                         if editing.is_some() {
@@ -562,40 +520,15 @@ impl Render for MdeWorkbenchItem {
                                 );
                             }
                         }
-                        let figure: gpui::AnyElement = if UmlFigure::supports(&element.kind) {
+                        let figure: gpui::AnyElement = if UmlFigure::supports(&view.figure) {
                             let edit_owner = cx.weak_entity();
                             let edit_id = element.id.clone();
                             let edit_diagram = diagram.id.clone();
                             let edit_view = view.id.clone();
-                            let label = super::visual_draft_canvas::format_figure_label(
-                                element,
-                                &references,
-                                &view.style,
-                            );
-                            let mut figure = UmlFigure::new(element.kind.clone(), label)
-                                .diagram_presentation(diagram)
-                                .timing_presentation(view.timing.as_ref())
-                                .diagram_subject(view.subject.as_deref(), diagram)
+                            let mut figure = UmlFigure::new(view.figure.clone(), view.display_label.clone())
                                 .nested_views(has_nested_views)
-                                .composite_role(
-                                    element
-                                        .properties
-                                        .get("aggregation")
-                                        .and_then(serde_json::Value::as_str)
-                                        == Some("composite"),
-                                )
-                                .interaction_operator(
-                                    super::visual_draft_canvas::resolve_interaction_operator(
-                                        &element.properties,
-                                    )
-                                    .as_deref(),
-                                )
-                                .slot_labels(bellatrix_mde::collect_instance_slot_labels(
-                                    element,
-                                    &references,
-                                ))
                                 .with_template_parameters_from(&classifier)
-                                .view_style(&view.style)
+                                .view_style(&view.render_style)
                                 .selected(is_selected)
                                 .view_size(f64::from(local_width), f64::from(local_height), zoom)
                                 .on_title_edit(move |window, cx| {
@@ -605,19 +538,6 @@ impl Render for MdeWorkbenchItem {
                                         item.begin_inline_edit(id, window, cx)
                                     });
                                 });
-                            if let Some(kind) = element
-                                .properties
-                                .get("kind")
-                                .and_then(serde_json::Value::as_str)
-                            {
-                                figure = figure.pseudostate_kind(kind);
-                            }
-                            if let Some(value) =
-                                bellatrix_mde::stereotype_presentation(&snapshot.section, element)
-                                    .label()
-                            {
-                                figure = figure.stereotype(value.to_owned());
-                            }
                             if editing.is_some_and(|target| target.id == element.id) {
                                 if let Some(field) = self.inline_editor.clone() {
                                     let confirm = cx.weak_entity();
@@ -640,7 +560,7 @@ impl Render for MdeWorkbenchItem {
                             figure.into_any_element()
                         } else if matches!(
                             notation,
-                            bellatrix_mde::UmlNotation::ClassifierRectangle
+                            UmlNotation::ClassifierRectangle
                         ) {
                             classifier.into_any_element()
                         } else {
@@ -690,7 +610,7 @@ impl Render for MdeWorkbenchItem {
                                         let _ = drag_owner.update(cx, |item, cx| {
                                             item.source.record_interaction(
                                                 if event.click_count >= 2 { "canvas.view.double_click" } else { "canvas.view.click" },
-                                                Some(&drag_id), bellatrix_mde::TraceOutcome::Success,
+                                                Some(&drag_id), bellatrix_mde_cordis::TraceOutcome::Success,
                                             );
                                             if is_selected && item.presentation.selected_tool().is_none() {
                                                 if let Some(field) = &item.inline_editor {
@@ -790,7 +710,7 @@ impl Render for MdeWorkbenchItem {
                                 .when(
                                     is_selected
                                         && !connection_mode
-                                        && semantic_type != Some(UmlType::Port),
+                                        && view.figure.resizable,
                                     |card| {
                                         card.child(
                                             div()
@@ -1079,7 +999,7 @@ impl Render for MdeWorkbenchItem {
                             return;
                         };
                         if let Err(error) = owner.update(cx, |item, cx| {
-                            item.source.record_interaction("canvas.background.click", item.presentation.active_diagram(), bellatrix_mde::TraceOutcome::Success);
+                            item.source.record_interaction("canvas.background.click", item.presentation.active_diagram(), bellatrix_mde_cordis::TraceOutcome::Success);
                             if let Some(tool) = item.presentation.selected_tool() {
                                 let position =
                                     (f64::from(event.position.x), f64::from(event.position.y));
@@ -1143,15 +1063,18 @@ impl Render for MdeWorkbenchItem {
                     })
                     .on_drop(move |drag: &MdeToolDrag, _, cx| {
                         if let Err(error) = dropping_owner.update(cx, |item, cx| {
+                            let label = item.source.snapshot().ok().and_then(|snapshot| {
+                                snapshot.section.tools.label(drag.kind).map(str::to_owned)
+                            });
                             if &drag.project_id != item.project_id() {
-                                item.source.record_interaction("canvas.tool_drop.wrong_project", Some(drag.kind.label()), bellatrix_mde::TraceOutcome::Invalid);
+                                item.source.record_interaction("canvas.tool_drop.wrong_project", label.as_deref(), bellatrix_mde_cordis::TraceOutcome::Invalid);
                                 return;
                             }
                             if item.source.is_read_only() {
-                                item.source.record_interaction("canvas.tool_drop.read_only", Some(drag.kind.label()), bellatrix_mde::TraceOutcome::Invalid);
+                                item.source.record_interaction("canvas.tool_drop.read_only", label.as_deref(), bellatrix_mde_cordis::TraceOutcome::Invalid);
                                 return;
                             }
-                            item.source.record_interaction("canvas.tool_drop.accepted", Some(drag.kind.label()), bellatrix_mde::TraceOutcome::Success);
+                            item.source.record_interaction("canvas.tool_drop.accepted", label.as_deref(), bellatrix_mde_cordis::TraceOutcome::Success);
                             let (x, y) = item.drop_point.take().unwrap_or((40.0, 40.0));
                             item.place_modeling_tool(drag.kind, x, y, cx);
                         }) {
@@ -1201,7 +1124,7 @@ impl MdeWorkbenchItem {
     fn render_imported_preview(
         &self,
         diagram_id: &str,
-        view: &bellatrix_mde::View,
+        view: &bellatrix_mde_cordis::projection::View,
         node_bounds: &mut Vec<[f32; 4]>,
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
@@ -1286,7 +1209,7 @@ pub(super) fn relationship_hit_test(
         pan,
         zoom,
     );
-    let position = bellatrix_mde::Point { x, y };
+    let position = bellatrix_mde_cordis::Point { x, y };
     // Keep the clickable stroke narrow at every zoom; control points are not painted edges.
     let tolerance = 5.0 / f64::from(zoom);
     let flatness = 0.25 / f64::from(zoom);
@@ -1321,9 +1244,9 @@ pub(super) fn relationship_hit_test(
 }
 
 fn relationship_segment_distance(
-    position: bellatrix_mde::Point,
-    start: bellatrix_mde::Point,
-    end: bellatrix_mde::Point,
+    position: bellatrix_mde_cordis::Point,
+    start: bellatrix_mde_cordis::Point,
+    end: bellatrix_mde_cordis::Point,
 ) -> f64 {
     let delta_x = end.x - start.x;
     let delta_y = end.y - start.y;
@@ -1338,8 +1261,8 @@ fn relationship_segment_distance(
 }
 
 fn relationship_cubic_hit(
-    position: bellatrix_mde::Point,
-    points: [bellatrix_mde::Point; 4],
+    position: bellatrix_mde_cordis::Point,
+    points: [bellatrix_mde_cordis::Point; 4],
     tolerance: f64,
     flatness: f64,
     depth: u8,
@@ -1374,7 +1297,7 @@ fn relationship_cubic_hit(
     {
         return relationship_segment_distance(position, start, end) <= tolerance;
     }
-    let midpoint = |left: bellatrix_mde::Point, right: bellatrix_mde::Point| bellatrix_mde::Point {
+    let midpoint = |left: bellatrix_mde_cordis::Point, right: bellatrix_mde_cordis::Point| bellatrix_mde_cordis::Point {
         x: left.x + (right.x - left.x) / 2.0,
         y: left.y + (right.y - left.y) / 2.0,
     };

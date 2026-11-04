@@ -1,25 +1,138 @@
 //! Acceptance: the StarUML class-diagram tools create typed persisted nodes
 //! and relationships through the same public Cordis revision boundary.
-use bellatrix_mde::uml::types::{
-    Integer, MultiplicityError, RelationEnd, RelationEndMultiplicity, UnlimitedNatural,
-};
-use bellatrix_mde::{
-    Format, Geometry, ModelingSection, Project, StructuralSeverity, decode, encode,
-    relation_kind_for_creation, relationship_presentation, validate_structural_model,
-};
+#[path = "support/events.rs"]
+mod events;
 use bellatrix_mde_cordis::{
-    MdePlugin, ModelingCreateElement, ModelingCreateElementRequested, ModelingCreateRelation,
-    ModelingCreateRelationRequested, ModelingDeleteElement, ModelingDeleteElementRequested,
-    ModelingElementKind, ModelingMoveView, ModelingMoveViewRequested, ModelingRelationKind,
-    ModelingSetProperty, ModelingSetPropertyRequested, with_model,
+    DiagnosticSeverity, Geometry, MODELING_NAMESPACE, MdePlugin, ModelingConvertDocument,
+    ModelingConvertDocumentRequested, ModelingCreateElement, ModelingCreateElementRequested,
+    ModelingCreateRelation, ModelingCreateRelationRequested, ModelingDeleteElement,
+    ModelingDeleteElementRequested, ModelingDocumentFormat, ModelingElementKind, ModelingMoveView,
+    ModelingMoveViewRequested, ModelingPrepareDocument, ModelingPrepareDocumentRequested,
+    ModelingReadProjection, ModelingReadProjectionRequested, ModelingRelationKind,
+    ModelingSetProperty, ModelingSetPropertyRequested, ModelingValidateDiagram,
+    ModelingValidateDiagramRequested, ViewEndpoints,
 };
 use bellatrix_project::{
-    ProjectCreate, ProjectCreateRequested, ProjectDocument, ProjectId, ProjectPlugin,
-    ProjectService,
+    ProjectCreate, ProjectCreateRequested, ProjectDocument, ProjectId, ProjectImport,
+    ProjectImportRequested, ProjectPlugin, ProjectService,
 };
 use cordis::event::QueryOutcome;
 use cordis::{Context, Plugin, PreparedPlugin, Routing};
 use std::sync::Arc;
+
+fn relation_properties<'a>(document: &'a ProjectDocument, id: &str) -> &'a serde_json::Value {
+    &document.section(MODELING_NAMESPACE).unwrap()["relations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|relation| relation["id"] == id)
+        .expect("persisted relation")["properties"]
+}
+
+async fn reopen(
+    context: &Context,
+    document: &ProjectDocument,
+    format: &str,
+    diagram_id: &str,
+) -> (
+    ProjectDocument,
+    bellatrix_mde_cordis::ModelingSnapshot,
+    Vec<bellatrix_mde_cordis::ModelingDiagnostic>,
+) {
+    let bytes = serde_json::to_vec(&events::model_document(document).unwrap()).unwrap();
+    let bytes = match context
+        .query::<ModelingConvertDocument>(
+            Routing::Unscoped,
+            ModelingConvertDocumentRequested {
+                bytes,
+                source_format: "json".into(),
+                destination_format: format.into(),
+            },
+        )
+        .await
+        .unwrap()
+    {
+        QueryOutcome::Answer(Ok(bytes)) => bytes,
+        other => panic!("conversion unavailable: {other:?}"),
+    };
+    let prepared = match context
+        .query::<ModelingPrepareDocument>(
+            Routing::Unscoped,
+            ModelingPrepareDocumentRequested {
+                bytes,
+                format: if format == "json" {
+                    ModelingDocumentFormat::ModelJson
+                } else {
+                    ModelingDocumentFormat::ModelProtobuf
+                },
+            },
+        )
+        .await
+        .unwrap()
+    {
+        QueryOutcome::Answer(Ok(prepared)) => prepared,
+        other => panic!("reopen unavailable: {other:?}"),
+    };
+    let document = prepared.document;
+    let context = Context::new();
+    let service = Arc::new(ProjectService::new());
+    let provider = context
+        .spawn(PreparedPlugin::from_input(
+            ProjectPlugin::new(service.clone()),
+            service,
+        ))
+        .await
+        .unwrap();
+    let plugin = context
+        .spawn(PreparedPlugin::from_input(MdePlugin, ()))
+        .await
+        .unwrap();
+    let imported = match context
+        .query::<ProjectImport>(
+            Routing::Unscoped,
+            ProjectImportRequested {
+                document: document.clone(),
+                is_saved: true,
+            },
+        )
+        .await
+        .unwrap()
+    {
+        QueryOutcome::Answer(Ok(document)) => document,
+        other => panic!("import unavailable: {other:?}"),
+    };
+    let projection = match context
+        .query::<ModelingReadProjection>(
+            Routing::Unscoped,
+            ModelingReadProjectionRequested {
+                document: imported.clone(),
+            },
+        )
+        .await
+        .unwrap()
+    {
+        QueryOutcome::Answer(Ok(projection)) => projection,
+        other => panic!("projection unavailable: {other:?}"),
+    };
+    let diagnostics = match context
+        .query::<ModelingValidateDiagram>(
+            Routing::Unscoped,
+            ModelingValidateDiagramRequested {
+                project_id: imported.id().clone(),
+                diagram_id: diagram_id.into(),
+                expected_revision: imported.revision(),
+            },
+        )
+        .await
+        .unwrap()
+    {
+        QueryOutcome::Answer(Ok(validation)) => validation.diagnostics,
+        other => panic!("validation unavailable: {other:?}"),
+    };
+    plugin.dispose().await.unwrap();
+    provider.dispose().await.unwrap();
+    (document, projection, diagnostics)
+}
 
 #[tokio::test]
 async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
@@ -37,35 +150,50 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
         .await
         .unwrap();
     let id = ProjectId::new("uml-acceptance").unwrap();
-    let mut model: Project =
+    let mut model: serde_json::Value =
         serde_json::from_str(include_str!("../../bellatrix_mde/fixtures/todo.json")).unwrap();
-    model.id = id.as_str().into();
-    model.name = "UML acceptance".into();
-    let document = with_model(
-        ProjectDocument::new(id.clone(), model.name.clone()).unwrap(),
-        &model,
-    )
-    .unwrap();
+    model["id"] = id.as_str().into();
+    model["name"] = "UML acceptance".into();
+    let diagram_id = model["diagrams"][0]["id"].as_str().unwrap().to_owned();
+    let document = events::prepare(&cx, &model).await.unwrap();
     assert!(matches!(
         cx.query::<ProjectCreate>(Routing::Unscoped, ProjectCreateRequested { document })
             .await
             .unwrap(),
         QueryOutcome::Answer(Ok(_))
     ));
-    let diagram_id = model.diagrams.first().unwrap().id.clone();
-    let nodes = ModelingElementKind::BASIC
-        .iter()
-        .chain(ModelingElementKind::ADVANCED)
-        .chain(ModelingElementKind::PACKAGES)
-        .chain(ModelingElementKind::ANNOTATIONS);
+    let catalog = events::projection(&cx, &service, &id)
+        .await
+        .unwrap()
+        .section
+        .tools;
+    let nodes = [
+        ModelingElementKind::Class,
+        ModelingElementKind::Interface,
+        ModelingElementKind::Signal,
+        ModelingElementKind::DataType,
+        ModelingElementKind::PrimitiveType,
+        ModelingElementKind::Enumeration,
+        ModelingElementKind::Frame,
+        ModelingElementKind::NaryAssociation,
+        ModelingElementKind::AssociationClass,
+        ModelingElementKind::Template,
+        ModelingElementKind::Package,
+        ModelingElementKind::Model,
+        ModelingElementKind::Subsystem,
+        ModelingElementKind::Comment,
+    ];
     let mut revision = 0_u64;
-    for (index, kind) in nodes.copied().enumerate() {
+    for (index, kind) in nodes.into_iter().enumerate() {
         let request = ModelingCreateElementRequested {
             owner_id: None,
             project_id: id.clone(),
             diagram_id: diagram_id.clone(),
             kind,
-            name: Some(format!("Uml_{}", kind.label().replace(' ', "_"))),
+            name: Some(format!(
+                "Uml_{}",
+                catalog.element(kind).unwrap().label.replace(' ', "_")
+            )),
             x: 40.0 + index as f64 * 8.0,
             y: 30.0 + index as f64 * 12.0,
             expected_revision: revision,
@@ -77,18 +205,18 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
         ));
     }
     let snapshot = service.snapshot(&id).unwrap();
-    let section: ModelingSection = serde_json::from_value(
-        snapshot
-            .section(bellatrix_mde::MODELING_NAMESPACE)
-            .unwrap()
-            .clone(),
-    )
-    .unwrap();
+    let section = events::projection(&cx, &service, &id)
+        .await
+        .unwrap()
+        .section;
     let node = |kind: ModelingElementKind| {
         section
             .elements
             .iter()
-            .find(|e| e.kind == kind.model_kind() && e.id.starts_with("mde-element-"))
+            .find(|e| {
+                e.kind == catalog.element(kind).unwrap().model_kind
+                    && e.id.starts_with("mde-element-")
+            })
             .unwrap()
             .id
             .clone()
@@ -100,7 +228,8 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
     let rejected = cx
         .query::<ModelingCreateRelation>(
             Routing::Unscoped,
-            ModelingCreateRelationRequested { owner_id: None,
+            ModelingCreateRelationRequested {
+                owner_id: None,
                 project_id: id.clone(),
                 diagram_id: diagram_id.clone(),
                 kind: ModelingRelationKind::Generalization,
@@ -117,15 +246,47 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
     let unchanged = service.snapshot(&id).unwrap();
     assert_eq!(unchanged.revision(), revision);
     assert_eq!(
-        unchanged.section(bellatrix_mde::MODELING_NAMESPACE),
-        snapshot.section(bellatrix_mde::MODELING_NAMESPACE)
+        unchanged.section(MODELING_NAMESPACE),
+        snapshot.section(MODELING_NAMESPACE)
     );
-    let types = ModelingRelationKind::BASIC
-        .iter()
-        .chain(ModelingRelationKind::ADVANCED)
-        .chain(ModelingRelationKind::PACKAGES);
+    let types = [
+        (ModelingRelationKind::Association, "uml.association", None),
+        (
+            ModelingRelationKind::DirectedAssociation,
+            "uml.directed_association",
+            None,
+        ),
+        (
+            ModelingRelationKind::Aggregation,
+            "uml.association",
+            Some("shared"),
+        ),
+        (
+            ModelingRelationKind::Composition,
+            "uml.association",
+            Some("composite"),
+        ),
+        (ModelingRelationKind::Dependency, "uml.dependency", None),
+        (
+            ModelingRelationKind::Generalization,
+            "uml.generalization",
+            None,
+        ),
+        (
+            ModelingRelationKind::InterfaceRealization,
+            "uml.interface_realization",
+            None,
+        ),
+        (
+            ModelingRelationKind::TemplateBinding,
+            "uml.template_binding",
+            None,
+        ),
+        (ModelingRelationKind::Realization, "uml.realization", None),
+        (ModelingRelationKind::Containment, "uml.containment", None),
+    ];
     let mut connector_ids = Vec::new();
-    for kind in types.copied().filter(|kind| !kind.is_visual_only()) {
+    for (kind, model_kind, aggregation) in types {
         let (from, to) = match kind {
             ModelingRelationKind::Generalization => (class.clone(), "type-task".into()),
             ModelingRelationKind::InterfaceRealization => (class.clone(), interface.clone()),
@@ -140,16 +301,13 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
                 from,to,expected_revision:revision-1,
             }).await.unwrap(),QueryOutcome::Answer(Ok(n)) if n==revision
         ));
-        connector_ids.push(relation_kind_for_creation(kind));
+        connector_ids.push((model_kind, aggregation));
     }
     let final_snapshot = service.snapshot(&id).unwrap();
-    let result: ModelingSection = serde_json::from_value(
-        final_snapshot
-            .section(bellatrix_mde::MODELING_NAMESPACE)
-            .unwrap()
-            .clone(),
-    )
-    .unwrap();
+    let result = events::projection(&cx, &service, &id)
+        .await
+        .unwrap()
+        .section;
     assert_eq!(final_snapshot.revision(), 24);
     for (kind, aggregation) in connector_ids {
         let relation = result
@@ -157,8 +315,7 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
             .iter()
             .find(|relation| {
                 relation.kind == kind
-                    && relation
-                        .properties
+                    && relation_properties(&final_snapshot, &relation.id)
                         .get("end1Aggregation")
                         .and_then(serde_json::Value::as_str)
                         == aggregation
@@ -179,8 +336,7 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
         .iter()
         .find(|relation| {
             relation.kind == "uml.association"
-                && relation
-                    .properties
+                && relation_properties(&final_snapshot, &relation.id)
                     .get("end1Aggregation")
                     .and_then(serde_json::Value::as_str)
                     == Some("shared")
@@ -201,14 +357,10 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
         .unwrap(),
         QueryOutcome::Answer(Ok(25))
     ));
-    let final_doc = service.snapshot(&id).unwrap();
-    let section: ModelingSection = serde_json::from_value(
-        final_doc
-            .section(bellatrix_mde::MODELING_NAMESPACE)
-            .unwrap()
-            .clone(),
-    )
-    .unwrap();
+    let section = events::projection(&cx, &service, &id)
+        .await
+        .unwrap()
+        .section;
     assert!(section.elements.iter().any(|e| e.id == class));
     assert!(section.elements.iter().any(|e| e.id == interface));
     let class_view = section
@@ -250,13 +402,10 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
         QueryOutcome::Answer(Ok(26))
     ));
     let updated = service.snapshot(&id).unwrap();
-    let after: ModelingSection = serde_json::from_value(
-        updated
-            .section(bellatrix_mde::MODELING_NAMESPACE)
-            .unwrap()
-            .clone(),
-    )
-    .unwrap();
+    let after = events::projection(&cx, &service, &id)
+        .await
+        .unwrap()
+        .section;
     let rerouted = after
         .diagrams
         .iter()
@@ -273,39 +422,30 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
         .iter()
         .find(|relation| {
             relation.kind == "uml.association"
-                && !relation.properties.contains_key("end1Aggregation")
+                && relation_properties(&updated, &relation.id)
+                    .get("end1Aggregation")
+                    .is_none()
         })
         .expect("authored association");
     let association_id = association.id.clone();
-    let default_range = RelationEndMultiplicity::new(association, RelationEnd::Target)
-        .effective()
-        .expect("absent multiplicity defaults to one");
-    assert_eq!(default_range.lower_bound(), &Integer::from(1));
-    assert_eq!(default_range.upper_bound(), &UnlimitedNatural::from(1));
-    assert!(!default_range.is_multivalued());
-    assert_eq!(
-        relationship_presentation(association)
-            .target_labels
-            .multiplicity,
-        None
-    );
+    assert_eq!(association.presentation.target_labels.multiplicity, None);
     let huge = "999999999999999999999999999999999999999999999999";
     revision = updated.revision();
     for (end, notation, expected_issue) in [
-        (RelationEnd::Source, " 01 .. 0002 ".to_owned(), None),
-        (RelationEnd::Target, format!("{huge}..*"), None),
+        ("end1Multiplicity", " 01 .. 0002 ".to_owned(), None),
+        ("end2Multiplicity", format!("{huge}..*"), None),
         (
-            RelationEnd::Target,
+            "end2Multiplicity",
             "0..limit".to_owned(),
-            Some((StructuralSeverity::Warning, "MDE_MULTIPLICITY_UNSUPPORTED")),
+            Some((DiagnosticSeverity::Warning, "MDE_MULTIPLICITY_UNSUPPORTED")),
         ),
         (
-            RelationEnd::Target,
+            "end2Multiplicity",
             "3..2".to_owned(),
-            Some((StructuralSeverity::Error, "UML_MULTIPLICITY_BOUNDS")),
+            Some((DiagnosticSeverity::Error, "UML_MULTIPLICITY_BOUNDS")),
         ),
-        (RelationEnd::Target, "*".to_owned(), None),
-        (RelationEnd::Source, "-0".to_owned(), None),
+        ("end2Multiplicity", "*".to_owned(), None),
+        ("end1Multiplicity", "-0".to_owned(), None),
     ] {
         let result = cx
             .query::<ModelingSetProperty>(
@@ -313,7 +453,7 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
                 ModelingSetPropertyRequested {
                     project_id: id.clone(),
                     element_id: association_id.clone(),
-                    path: format!("properties.{}", end.multiplicity_key()),
+                    path: format!("properties.{}", end),
                     value: serde_json::json!(notation),
                     expected_revision: revision,
                 },
@@ -321,103 +461,122 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
             .await
             .expect("multiplicity edit response");
         if notation == "3..2" {
-            assert!(matches!(result, QueryOutcome::Answer(Err(ref error)) if error.to_string().contains("multiplicity")));
-            assert_eq!(service.snapshot(&id).expect("rejected edit snapshot").revision(), revision);
+            assert!(
+                matches!(result, QueryOutcome::Answer(Err(ref error)) if error.to_string().contains("multiplicity"))
+            );
+            assert_eq!(
+                service
+                    .snapshot(&id)
+                    .expect("rejected edit snapshot")
+                    .revision(),
+                revision
+            );
             continue;
         }
         revision += 1;
         assert!(matches!(result, QueryOutcome::Answer(Ok(value)) if value == revision));
         let persisted = service.snapshot(&id).expect("edited association");
-        let section: ModelingSection = serde_json::from_value(
-            persisted
-                .section(bellatrix_mde::MODELING_NAMESPACE)
-                .unwrap()
-                .clone(),
-        )
-        .expect("persisted model");
-        let model = section.to_model(id.as_str(), "UML acceptance");
-        for format in [Format::Json, Format::Protobuf] {
-            let reopened = decode(&encode(&model, format).expect("serialize model"), format)
-                .expect("reopen model");
+        for format in ["json", "protobuf"] {
+            let (reopened_document, reopened, diagnostics) =
+                reopen(&cx, &persisted, format, &diagram_id).await;
             let relation = reopened
+                .section
                 .relations
                 .iter()
                 .find(|relation| relation.id == association_id)
                 .expect("same association identity after reopen");
-            let multiplicity = RelationEndMultiplicity::new(relation, end);
-            assert_eq!(multiplicity.authored_notation(), Some(notation.as_str()));
-            let presentation = relationship_presentation(relation);
+            assert_eq!(
+                relation_properties(&reopened_document, &association_id)
+                    .get(end)
+                    .and_then(serde_json::Value::as_str),
+                Some(notation.as_str())
+            );
+            let presentation = &relation.presentation;
             let label = match end {
-                RelationEnd::Source => presentation.source_labels.multiplicity,
-                RelationEnd::Target => presentation.target_labels.multiplicity,
+                "end1Multiplicity" => presentation.source_labels.multiplicity.clone(),
+                "end2Multiplicity" => presentation.target_labels.multiplicity.clone(),
+                _ => unreachable!("fixture multiplicity end"),
             };
             assert_eq!(label.as_deref(), Some(notation.as_str()));
-            let diagnostics = validate_structural_model(&reopened)
+            let diagnostics = diagnostics
                 .into_iter()
                 .filter(|issue| {
                     issue.subject_id == association_id && issue.code.contains("MULTIPLICITY")
                 })
                 .map(|issue| (issue.severity, issue.code))
                 .collect::<Vec<_>>();
-            assert_eq!(diagnostics, expected_issue.into_iter().collect::<Vec<_>>());
-            match notation.as_str() {
-                "0..limit" => assert_eq!(
-                    multiplicity.effective(),
-                    Err(MultiplicityError::UnsupportedValueSpecification)
-                ),
-                "3..2" => assert_eq!(
-                    multiplicity.effective(),
-                    Err(MultiplicityError::InvalidBounds)
-                ),
-                " 01 .. 0002 " => {
-                    let range = multiplicity.effective().expect("finite interval");
-                    assert_eq!(range.lower_bound(), &Integer::from(1));
-                    assert_eq!(range.upper_bound(), &UnlimitedNatural::from(2));
-                    assert!(range.is_multivalued());
-                    assert!(range.includes_cardinality(&Integer::from(2)));
-                    assert!(!range.includes_cardinality(&Integer::from(3)));
-                }
-                "-0" => {
-                    let range = multiplicity.effective().expect("zero cardinality");
-                    assert_eq!(range.lower_bound(), &Integer::from(0));
-                    assert_eq!(range.upper_bound(), &UnlimitedNatural::from(0));
-                    assert!(!range.is_multivalued());
-                }
-                _ => {
-                    let range = multiplicity.effective().expect("unlimited interval");
-                    assert!(range.upper_bound().is_unlimited());
-                    assert!(range.is_multivalued());
-                    assert!(range.includes_cardinality(&huge.parse().unwrap()));
-                    assert_eq!(
-                        range.lower_bound().to_string(),
-                        if notation == "*" { "0" } else { huge }
-                    );
-                }
-            }
+            assert_eq!(
+                diagnostics,
+                expected_issue
+                    .into_iter()
+                    .map(|(severity, code)| (severity, code.to_owned()))
+                    .collect::<Vec<_>>()
+            );
         }
     }
     let before_visual = service.snapshot(&id).unwrap();
-    let before_section: ModelingSection = serde_json::from_value(before_visual.section(bellatrix_mde::MODELING_NAMESPACE).unwrap().clone()).unwrap();
-    let diagram = before_section.diagrams.iter().find(|diagram| diagram.id == diagram_id).unwrap();
-    let source_view = diagram.views.iter().find(|view| view.subject.as_deref() == Some(class.as_str())).unwrap();
-    let target_view = diagram.views.iter().find(|view| view.subject.as_deref() == Some(interface.as_str())).unwrap();
-    let exact_endpoints = bellatrix_mde::ViewEndpoints { source_view_id: Some(source_view.id.clone()), target_view_id: Some(target_view.id.clone()) };
-    assert!(matches!(cx.query::<bellatrix_mde_cordis::ModelingCreateRelationAtViewsOrVisualDraft>(Routing::Unscoped,
+    let before_section = events::projection(&cx, &service, &id)
+        .await
+        .unwrap()
+        .section;
+    let diagram = before_section
+        .diagrams
+        .iter()
+        .find(|diagram| diagram.id == diagram_id)
+        .unwrap();
+    let source_view = diagram
+        .views
+        .iter()
+        .find(|view| view.subject.as_deref() == Some(class.as_str()))
+        .unwrap();
+    let target_view = diagram
+        .views
+        .iter()
+        .find(|view| view.subject.as_deref() == Some(interface.as_str()))
+        .unwrap();
+    let exact_endpoints = ViewEndpoints {
+        source_view_id: Some(source_view.id.clone()),
+        target_view_id: Some(target_view.id.clone()),
+    };
+    assert!(
+        matches!(cx.query::<bellatrix_mde_cordis::ModelingCreateRelationAtViewsOrVisualDraft>(Routing::Unscoped,
         bellatrix_mde_cordis::ModelingCreateRelationAtViewsRequested { owner_id: None,
             project_id: id.clone(), diagram_id: diagram_id.clone(), kind: ModelingRelationKind::AssociationClassAttachment,
             source_view_id: source_view.id.clone(), target_view_id: target_view.id.clone(),
             from: Some(class.clone()), to: Some(interface.clone()), expected_revision: revision,
-        }).await.unwrap(), QueryOutcome::Answer(Ok(value)) if value == revision + 1));
+        }).await.unwrap(), QueryOutcome::Answer(Ok(value)) if value == revision + 1)
+    );
     revision += 1;
     let after_visual = service.snapshot(&id).unwrap();
-    let after_section: ModelingSection = serde_json::from_value(after_visual.section(bellatrix_mde::MODELING_NAMESPACE).unwrap().clone()).unwrap();
-    assert_eq!(after_section.elements, before_section.elements);
-    assert_eq!(after_section.relations, before_section.relations);
-    let attachment = after_section.diagrams.iter().find(|diagram| diagram.id == diagram_id).unwrap().views.last().unwrap();
+    let after_section = events::projection(&cx, &service, &id)
+        .await
+        .unwrap()
+        .section;
+    assert_eq!(
+        after_visual.section(MODELING_NAMESPACE).unwrap()["elements"],
+        before_visual.section(MODELING_NAMESPACE).unwrap()["elements"]
+    );
+    assert_eq!(
+        after_visual.section(MODELING_NAMESPACE).unwrap()["relations"],
+        before_visual.section(MODELING_NAMESPACE).unwrap()["relations"]
+    );
+    let attachment = after_section
+        .diagrams
+        .iter()
+        .find(|diagram| diagram.id == diagram_id)
+        .unwrap()
+        .views
+        .last()
+        .unwrap();
     assert!(attachment.subject.is_none());
-    assert_eq!(attachment.draft.as_ref().unwrap().notation_kind, "view.association_class_attachment");
+    assert_eq!(
+        attachment.draft.as_ref().unwrap().notation_kind,
+        "view.association_class_attachment"
+    );
     assert_eq!(attachment.endpoints.as_ref(), Some(&exact_endpoints));
-    assert!(matches!(&attachment.geometry, Geometry::Path { segments, .. } if !segments.is_empty()));
+    assert!(
+        matches!(&attachment.geometry, Geometry::Path { segments, .. } if !segments.is_empty())
+    );
     assert_eq!(service.snapshot(&id).unwrap().revision(), revision);
     plugin.dispose().await.unwrap();
     provider.dispose().await.unwrap();

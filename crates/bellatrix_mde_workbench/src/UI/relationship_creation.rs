@@ -5,7 +5,7 @@ impl MdeWorkbenchItem {
         &mut self,
         kind: ModelingRelationKind,
         target: String,
-        point: Option<bellatrix_mde::Point>,
+        point: Option<bellatrix_mde_cordis::Point>,
         cx: &mut Context<Self>,
     ) {
         self.connect_relation_endpoint(kind, Some(target), point, cx);
@@ -14,10 +14,10 @@ impl MdeWorkbenchItem {
     pub(super) fn connect_free_message_endpoint(
         &mut self,
         kind: ModelingRelationKind,
-        point: bellatrix_mde::Point,
+        point: bellatrix_mde_cordis::Point,
         cx: &mut Context<Self>,
     ) {
-        if kind.resolve_message_kind().is_some() {
+        if self.source.snapshot().ok().and_then(|snapshot| snapshot.section.tools.relation(kind).map(|metadata| metadata.message_kind.is_some())).unwrap_or(false) {
             self.connect_relation_endpoint(kind, None, Some(point), cx);
         }
     }
@@ -26,7 +26,7 @@ impl MdeWorkbenchItem {
         &mut self,
         kind: ModelingRelationKind,
         target: Option<String>,
-        point: Option<bellatrix_mde::Point>,
+        point: Option<bellatrix_mde_cordis::Point>,
         cx: &mut Context<Self>,
     ) {
         if self.source.is_read_only() {
@@ -39,6 +39,9 @@ impl MdeWorkbenchItem {
                 cx.notify();
                 return;
             }
+        };
+        let Some(metadata) = snapshot.section.tools.relation(kind) else {
+            self.feedback = "Relationship tool metadata unavailable".into(); cx.notify(); return;
         };
         let Some(diagram) = snapshot
             .section
@@ -59,7 +62,7 @@ impl MdeWorkbenchItem {
             return;
         }
         let target_subject = target_view.and_then(|view| view.subject.clone());
-        let message_kind = kind.resolve_message_kind();
+        let message_kind = metadata.message_kind.as_deref();
         if self.presentation.pending_relation_source().is_none() {
             let valid_start = if message_kind == Some("found") {
                 target.is_none()
@@ -67,7 +70,7 @@ impl MdeWorkbenchItem {
                 target.is_some()
             };
             if !valid_start {
-                self.feedback = kind.endpoint_instruction().into();
+                self.feedback = metadata.endpoint_instruction.clone();
                 cx.notify();
                 return;
             }
@@ -82,8 +85,8 @@ impl MdeWorkbenchItem {
             self.apply_selection_change(change, cx);
             self.feedback = format!(
                 "{}: source selected. {}",
-                kind.label(),
-                kind.endpoint_instruction()
+                metadata.label,
+                metadata.endpoint_instruction
             );
             cx.notify();
             return;
@@ -119,14 +122,14 @@ impl MdeWorkbenchItem {
             target.is_some()
         };
         if !valid_end {
-            self.feedback = kind.endpoint_instruction().into();
+            self.feedback = metadata.endpoint_instruction.clone();
             cx.notify();
             return;
         }
         let from = source.view_id.clone();
         let change = self.presentation.select_relation_target(target_subject.clone(), target.clone());
         self.apply_selection_change(change, cx);
-        if !self.presentation.visual_draft_mode() && !kind.is_visual_only() {
+        if !self.presentation.visual_draft_mode() && !metadata.is_visual_only {
             let (Some(source_view_id), Some(target_view_id)) = (from.clone(), target.clone())
             else {
                 return;
@@ -161,12 +164,12 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         }
-        let locate = |id: Option<&str>, authored: Option<bellatrix_mde::Point>| match id {
+        let locate = |id: Option<&str>, authored: Option<bellatrix_mde_cordis::Point>| match id {
             Some(id) => diagram
                 .views
                 .iter()
                 .find(|view| view.id == id)
-                .and_then(|view| bellatrix_mde::resolve_visual_center(&view.geometry)),
+                .and_then(|view| super::visual_draft_canvas::resolve_visual_center(&view.geometry)),
             None => authored,
         };
         let (Some(start), Some(to)) = (
@@ -179,7 +182,7 @@ impl MdeWorkbenchItem {
         };
         let mut properties = std::collections::BTreeMap::new();
         let source_point = source.point;
-        if kind.uses_occurrence_anchors() {
+        if metadata.uses_occurrence_anchors {
             for (key, view_id, point) in [
                 ("source_anchor", from.as_deref(), source_point),
                 ("target_anchor", target.as_deref(), point),
@@ -197,7 +200,7 @@ impl MdeWorkbenchItem {
         if let Some(message_kind) = message_kind {
             properties.insert("messageKind".into(), serde_json::json!(message_kind));
         }
-        let label = if let Some(sort) = kind.resolve_message_sort() {
+        let label = if let Some(sort) = metadata.message_sort.as_deref() {
             properties.insert("messageSort".into(), serde_json::json!(sort));
             Some(
                 if diagram.interaction_kind.as_deref() == Some("communication") {
@@ -214,7 +217,7 @@ impl MdeWorkbenchItem {
                 bellatrix_mde_cordis::ModelingCreateVisualDraftRequested {
                     project_id: self.project_id().clone(),
                     diagram_id: diagram.id.clone(),
-                    notation_kind: kind.model_kind().into(),
+                    notation_kind: metadata.model_kind.clone(),
                     label,
                     geometry: Geometry::Path {
                         start,

@@ -1,8 +1,8 @@
-use bellatrix_mde::commands::Command;
+use crate::Command;
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::{Context, Event};
 
-pub use bellatrix_mde::commands::ModelingMemberKind;
+use crate::ModelingMemberKind;
 
 #[derive(Clone, Debug)]
 pub struct ModelingAddMemberRequested {

@@ -1,7 +1,9 @@
-use bellatrix_mde::{Project, Scope};
+#[path = "support/events.rs"]
+mod events;
+use serde_json::Value;
 use bellatrix_mde_cordis::{
     MdePlugin, MdeUiBridge, ModelingRename, ModelingRenameRequested, ModelingSetExplorerParent,
-    ModelingSetExplorerParentRequested, ModelingSetOwner, ModelingSetOwnerRequested, with_model,
+    ModelingSetExplorerParentRequested, ModelingSetOwner, ModelingSetOwnerRequested,
 };
 use bellatrix_mde_cordis::{ModelingRun, ModelingRunRequested, ModelingTaskKind, ModelingExecutionTrace, ModelingExecutionTraceEvent};
 use bellatrix_project::{
@@ -14,7 +16,7 @@ use cordis::event::{QueryOutcome, observer_sync};
 use cordis::{Context, FiberState, Plugin, PreparedPlugin, Routing};
 use std::sync::{Arc, Mutex};
 
-fn fixture() -> Project {
+fn fixture() -> Value {
     serde_json::from_str(include_str!("../../bellatrix_mde/fixtures/todo.json")).unwrap()
 }
 
@@ -29,13 +31,8 @@ where
         .unwrap()
 }
 
-fn make_document(model: &Project) -> ProjectDocument {
-    let doc = ProjectDocument::new(
-        ProjectId::new(model.id.clone()).unwrap(),
-        model.name.clone(),
-    )
-    .unwrap();
-    with_model(doc, model).unwrap()
+async fn make_document(context: &Context, model: &Value) -> ProjectDocument {
+    events::prepare(context, model).await.unwrap()
 }
 
 #[tokio::test]
@@ -58,16 +55,16 @@ async fn public_event_updates_only_requested_project_and_survives_modeling_dispo
 
     let a = fixture();
     let mut b = a.clone();
-    b.id = "bellatrix-project-other".into();
-    b.name = "Other Project".into();
-    let a_id = ProjectId::new(a.id.clone()).unwrap();
-    let b_id = ProjectId::new(b.id.clone()).unwrap();
+    b["id"] = "bellatrix-project-other".into();
+    b["name"] = "Other Project".into();
+    let a_id = ProjectId::new(a["id"].as_str().unwrap()).unwrap();
+    let b_id = ProjectId::new(b["id"].as_str().unwrap()).unwrap();
     for model in [&a, &b] {
         let response = ctx
             .query::<ProjectCreate>(
                 Routing::Unscoped,
                 ProjectCreateRequested {
-                    document: make_document(model),
+                    document: make_document(&ctx, model).await,
                 },
             )
             .await
@@ -105,7 +102,7 @@ async fn public_event_updates_only_requested_project_and_survives_modeling_dispo
     }
 
     // The same public event path moves an existing element without duplicating its edge.
-    let hierarchy: Project = serde_json::from_value(serde_json::json!({
+    let hierarchy: Value = serde_json::from_value(serde_json::json!({
         "id": "hierarchy", "name": "Hierarchy", "root_model": "model",
         "elements": [
             {"id": "model", "kind": "uml.model", "name": "Model"},
@@ -124,7 +121,7 @@ async fn public_event_updates_only_requested_project_and_survives_modeling_dispo
     ctx.query::<ProjectCreate>(
         Routing::Unscoped,
         ProjectCreateRequested {
-            document: make_document(&hierarchy),
+            document: make_document(&ctx, &hierarchy).await,
         },
     )
     .await
@@ -206,47 +203,47 @@ async fn public_event_updates_only_requested_project_and_survives_modeling_dispo
 
     // The Quick Tool event path publishes a View that the shared Explorer inventory sees.
     let mut quick_project = fixture();
-    quick_project.id = "quick-tool-flow".into();
-    let diagram = quick_project.diagrams.iter_mut().find(|diagram| diagram.id == "diagram-tasks").unwrap();
-    let mut repeated = diagram.views.iter().find(|view| view.id == "view-task").unwrap().clone();
-    repeated.id = "view-task-repeat".into();
-    repeated.geometry.translate(300.0, 150.0);
-    diagram.views.push(repeated);
-    diagram.views.push(serde_json::from_value(serde_json::json!({
+    quick_project["id"] = "quick-tool-flow".into();
+    let diagram = quick_project["diagrams"].as_array_mut().unwrap().iter_mut().find(|diagram| diagram["id"] == "diagram-tasks").unwrap();
+    let mut repeated = diagram["views"].as_array().unwrap().iter().find(|view| view["id"] == "view-task").unwrap().clone();
+    repeated["id"] = "view-task-repeat".into();
+    repeated["geometry"]["x"] = (repeated["geometry"]["x"].as_f64().unwrap() + 300.0).into();
+    repeated["geometry"]["y"] = (repeated["geometry"]["y"].as_f64().unwrap() + 150.0).into();
+    diagram["views"].as_array_mut().unwrap().push(repeated);
+    diagram["views"].as_array_mut().unwrap().push(serde_json::json!({
         "id":"visual-only", "geometry":{"kind":"rect","x":700.0,"y":100.0,"width":80.0,"height":50.0},
         "draft":{"notation_kind":"uml.class"}
-    })).unwrap());
-    let quick_id = ProjectId::new(quick_project.id.clone()).unwrap();
+    }));
+    let quick_id = ProjectId::new(quick_project["id"].as_str().unwrap()).unwrap();
     assert!(matches!(ctx.query::<ProjectCreate>(Routing::Unscoped, ProjectCreateRequested {
-        document: make_document(&quick_project),
+        document: make_document(&ctx, &quick_project).await,
     }).await.unwrap(), QueryOutcome::Answer(Ok(_))));
     assert!(matches!(ctx.query::<bellatrix_mde_cordis::ModelingCreateElementOrVisualDraft>(Routing::Unscoped,
         bellatrix_mde_cordis::ModelingCreateElementRequested {
             project_id: quick_id.clone(), diagram_id: "diagram-tasks".into(),
-            kind: bellatrix_mde::commands::ModelingElementKind::Class, name: Some("Quick class".into()),
+            kind: bellatrix_mde_cordis::ModelingElementKind::Class, name: Some("Quick class".into()),
             owner_id: None, x: 80.0, y: 90.0, expected_revision: 0,
         }).await.unwrap(), QueryOutcome::Answer(Ok(1))));
     assert!(matches!(ctx.query::<bellatrix_mde_cordis::ModelingCreateRelationOrVisualDraft>(Routing::Unscoped,
         bellatrix_mde_cordis::ModelingCreateRelationRequested { owner_id: None,
             project_id: quick_id.clone(), diagram_id: "diagram-tasks".into(),
-            kind: bellatrix_mde::ModelingRelationKind::Association, from: "type-list".into(),
+            kind: bellatrix_mde_cordis::ModelingRelationKind::Association, from: "type-list".into(),
             to: "type-task".into(), expected_revision: 1,
         }).await.unwrap(), QueryOutcome::Answer(Ok(2))));
     let quick_snapshot = service.snapshot(&quick_id).unwrap();
-    let quick_section: bellatrix_mde::ModelingSection = serde_json::from_value(
-        quick_snapshot.section("bellatrix.mde").unwrap().clone()).unwrap();
+    let quick_section = events::projection(&ctx, &service, &quick_id).await.unwrap().section;
     let diagram = quick_section.diagrams.iter().find(|diagram| diagram.id == "diagram-tasks").unwrap();
-    let inventory = bellatrix_mde::visual_components(&quick_section);
+    let inventory = quick_section.explorer.added.iter().filter_map(|row| row.view.as_ref()).collect::<Vec<_>>();
     assert_eq!(inventory.iter().filter(|component| component.diagram_id == diagram.id).count(), diagram.views.len());
     assert!(inventory.iter().any(|component| component.diagram_id == diagram.id && component.label == "Quick class"));
     let new_edge = diagram.views.last().unwrap();
-    assert!(matches!(&new_edge.geometry, bellatrix_mde::Geometry::Path { segments, .. } if !segments.is_empty()));
+    assert!(matches!(&new_edge.geometry, bellatrix_mde_cordis::Geometry::Path { segments, .. } if !segments.is_empty()));
     assert!(inventory.iter().any(|component| component.view_id == new_edge.id));
 
     let exact_request = |source: &str, target: &str, from: Option<&str>, to: Option<&str>, revision| {
         bellatrix_mde_cordis::ModelingCreateRelationAtViewsRequested { owner_id: None,
             project_id: quick_id.clone(), diagram_id: "diagram-tasks".into(),
-            kind: bellatrix_mde::ModelingRelationKind::Association,
+            kind: bellatrix_mde_cordis::ModelingRelationKind::Association,
             source_view_id: source.into(), target_view_id: target.into(),
             from: from.map(str::to_owned), to: to.map(str::to_owned), expected_revision: revision,
         }
@@ -261,14 +258,14 @@ async fn public_event_updates_only_requested_project_and_survives_modeling_dispo
         exact_request("view-task", "visual-only", Some("type-task"), None, 2)).await.unwrap(), QueryOutcome::Answer(Err(_))));
     let exact_snapshot = service.snapshot(&quick_id).unwrap();
     assert_eq!(exact_snapshot.revision(), 4);
-    let exact_section: bellatrix_mde::ModelingSection = serde_json::from_value(exact_snapshot.section("bellatrix.mde").unwrap().clone()).unwrap();
+    let exact_section = events::projection(&ctx, &service, &quick_id).await.unwrap().section;
     let exact_diagram = exact_section.diagrams.iter().find(|diagram| diagram.id == "diagram-tasks").unwrap();
     let edges = &exact_diagram.views[exact_diagram.views.len() - 2..];
     assert_eq!(edges[0].endpoints.as_ref().and_then(|ends| ends.source_view_id.as_deref()), Some("view-task-repeat"));
     assert_eq!(edges[0].endpoints.as_ref().and_then(|ends| ends.target_view_id.as_deref()), Some("visual-only"));
     assert_eq!(edges[1].endpoints.as_ref().and_then(|ends| ends.source_view_id.as_deref()), Some("visual-only"));
     assert_eq!(edges[1].endpoints.as_ref().and_then(|ends| ends.target_view_id.as_deref()), Some("view-task-repeat"));
-    assert_eq!(exact_section.relations, quick_section.relations);
+    assert_eq!(exact_snapshot.section("bellatrix.mde").unwrap()["relations"], quick_snapshot.section("bellatrix.mde").unwrap()["relations"]);
 
     engine.dispose().await.unwrap();
     let missed = ctx
@@ -295,11 +292,11 @@ async fn revision_conflict_save_close_reopen_and_missing_provider() {
     let storage = admit(&ctx, ProjectPlugin::new(Arc::clone(&service))).await;
     let engine = admit(&ctx, MdePlugin).await;
     let model = fixture();
-    let id = ProjectId::new(model.id.clone()).unwrap();
+    let id = ProjectId::new(model["id"].as_str().unwrap()).unwrap();
     ctx.query::<ProjectCreate>(
         Routing::Unscoped,
         ProjectCreateRequested {
-            document: make_document(&model),
+            document: make_document(&ctx, &model).await,
         },
     )
     .await
@@ -387,7 +384,7 @@ async fn revision_conflict_save_close_reopen_and_missing_provider() {
     let bridge = MdeUiBridge::start(&ctx, id.clone()).unwrap();
     let journal = bridge.execution_journal();
     let mut journal_changes = journal.subscribe();
-    let trace_events = Arc::new(Mutex::new(Vec::<bellatrix_mde::ExecutionEvent>::new()));
+    let trace_events = Arc::new(Mutex::new(Vec::<bellatrix_mde_cordis::ExecutionEvent>::new()));
     let trace_observer = Arc::clone(&trace_events);
     let _trace_listener = ctx.on::<ModelingExecutionTraceEvent, _>(observer_sync(move |_, batch: ModelingExecutionTrace| {
         trace_observer.lock().unwrap().extend(batch.events);
@@ -404,7 +401,7 @@ async fn revision_conflict_save_close_reopen_and_missing_provider() {
                 destination: destination.clone(),
                 replace_generated: false,
                 task: ModelingTaskKind::GenerateRust {
-                    scope: Scope::Project,
+                    element_ids: None,
                     skeleton: false,
                 },
             },
@@ -414,8 +411,8 @@ async fn revision_conflict_save_close_reopen_and_missing_provider() {
     assert!(matches!(generated, QueryOutcome::Answer(Ok(_))));
     tokio::time::timeout(std::time::Duration::from_secs(2), async {
         loop {
-            let observer_finished = trace_events.lock().unwrap().last().is_some_and(|event| event.action == "generate_rust" && event.phase == bellatrix_mde::TracePhase::Finish);
-            let journal_finished = journal.snapshot().events.back().is_some_and(|event| event.action == "generate_rust" && event.phase == bellatrix_mde::TracePhase::Finish);
+            let observer_finished = trace_events.lock().unwrap().last().is_some_and(|event| event.action == "generate_rust" && event.phase == bellatrix_mde_cordis::TracePhase::Finish);
+            let journal_finished = journal.snapshot().events.back().is_some_and(|event| event.action == "generate_rust" && event.phase == bellatrix_mde_cordis::TracePhase::Finish);
             if observer_finished && journal_finished { break; }
             tokio::task::yield_now().await;
         }
@@ -424,7 +421,7 @@ async fn revision_conflict_save_close_reopen_and_missing_provider() {
         let events = trace_events.lock().unwrap();
         assert!(events.windows(2).all(|pair| pair[0].run_id == pair[1].run_id && pair[0].sequence < pair[1].sequence));
         assert!(events.iter().all(|event| event.component == "cordis"));
-        assert!(events.iter().any(|event| event.action == "generate_rust" && event.phase == bellatrix_mde::TracePhase::Start));
+        assert!(events.iter().any(|event| event.action == "generate_rust" && event.phase == bellatrix_mde_cordis::TracePhase::Start));
         assert_eq!(events.last().map(|event| event.action.as_str()), Some("generate_rust"));
     }
     let snapshot = journal.snapshot();
@@ -482,11 +479,11 @@ async fn two_concurrent_edits_cannot_commit_the_same_revision() {
     let service = Arc::new(ProjectService::new());
     let handle = admit(&ctx, ProjectPlugin::new(Arc::clone(&service))).await;
     let model = fixture();
-    let id = ProjectId::new(model.id.clone()).unwrap();
+    let id = ProjectId::new(model["id"].as_str().unwrap()).unwrap();
     ctx.query::<ProjectCreate>(
         Routing::Unscoped,
         ProjectCreateRequested {
-            document: make_document(&model),
+            document: ProjectDocument::new(id.clone(), model["name"].as_str().unwrap()).unwrap(),
         },
     )
     .await

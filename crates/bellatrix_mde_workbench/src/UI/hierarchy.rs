@@ -13,7 +13,7 @@ pub(crate) struct ExplorerDiagramDrag {
     pub revision: u64,
     pub label: String,
     pub parent_checks:
-        std::rc::Rc<std::cell::RefCell<Vec<(Option<String>, Option<bellatrix_mde::ViewOccurrence>, Result<(), String>)>>>,
+        std::rc::Rc<std::cell::RefCell<Vec<(Option<String>, Option<bellatrix_mde_cordis::ViewOccurrence>, Result<(), String>)>>>,
 }
 
 impl gpui::Render for ExplorerDiagramDrag {
@@ -61,6 +61,7 @@ impl gpui::Render for ExplorerElementDrag {
 pub(crate) fn explorer_view_icon(
     id: &str,
     kind: &str,
+    identity: &bellatrix_mde_cordis::projection::SemanticIdentity,
     selected: bool,
     palette: &crate::workbench_ui::WorkbenchPalette,
 ) -> impl gpui::IntoElement {
@@ -80,19 +81,18 @@ pub(crate) fn explorer_view_icon(
                     ui::Color::Muted
                 }),
         )
-        .child(explorer_element_icon(kind, palette))
+        .child(explorer_element_icon(kind, identity, palette))
 }
 
-pub(crate) fn element_glyph(kind: &str) -> bellatrix_ui_symbols::ShapeKind {
+pub(crate) fn element_glyph(kind: &str, type_label: &str) -> bellatrix_ui_symbols::ShapeKind {
     use bellatrix_ui_symbols::ShapeKind;
-    let identity = bellatrix_mde::semantic_identity(kind);
     // Member and relationship symbols are metaclass based, never inferred from names.
     match kind {
         "uml.composition" => return ShapeKind::Composition,
         "uml.aggregation" => return ShapeKind::Aggregate,
         _ => {}
     }
-    match identity.type_label {
+    match type_label {
         "Attribute" | "Property" => return ShapeKind::Aggregate,
         "Operation" => return ShapeKind::Process,
         "Reception" => return ShapeKind::AcceptEvent,
@@ -105,7 +105,7 @@ pub(crate) fn element_glyph(kind: &str) -> bellatrix_ui_symbols::ShapeKind {
     let label = if kind == "rust.module" {
         "Package"
     } else {
-        identity.type_label
+        type_label
     };
     bellatrix_ui_symbols::groups(bellatrix_ui_symbols::Family::Uml)
         .iter()
@@ -117,10 +117,10 @@ pub(crate) fn element_glyph(kind: &str) -> bellatrix_ui_symbols::ShapeKind {
 
 pub(crate) fn explorer_element_icon(
     kind: &str,
+    identity: &bellatrix_mde_cordis::projection::SemanticIdentity,
     palette: &crate::workbench_ui::WorkbenchPalette,
 ) -> impl gpui::IntoElement {
     use bellatrix_ui_symbols::staruml::{ExplorerIconCategory, explorer_glyph};
-    let identity = bellatrix_mde::semantic_identity(kind);
     let name = match kind {
         "uml.attribute" | "uml.property" | "rust.field" => "Attribute",
         "uml.part" => "Part",
@@ -142,17 +142,15 @@ pub(crate) fn explorer_element_icon(
         "rust.enum" => "Enumeration",
         "rust.trait" => "Interface",
         "rust.function" | "rust.method" => "Operation",
-        _ => identity.metaclass.unwrap_or(identity.type_label),
+        _ => identity.metaclass.as_deref().unwrap_or(&identity.type_label),
     };
     let (data, category) = explorer_glyph(name).unwrap_or_else(|| {
-        let category = if identity.metaclass.is_some_and(|metaclass| {
-            bellatrix_mde::uml::metamodel::conforms_to(metaclass, "Relationship")
-        }) {
+        let category = if identity.relationship {
             ExplorerIconCategory::Relation
         } else {
             ExplorerIconCategory::Element
         };
-        (bellatrix_ui_symbols::glyph(element_glyph(kind)), category)
+        (bellatrix_ui_symbols::glyph(element_glyph(kind, &identity.type_label)), category)
     });
     explorer_colored_icon(data, category, palette)
 }

@@ -1,8 +1,98 @@
 use crate::class::ViewAppearance;
 use bellatrix_design_system::Palette;
-use bellatrix_mde::{UmlNotation, folded_note_layout};
+use bellatrix_mde_cordis::LineMode;
+use bellatrix_mde_cordis::presentation_contract::UmlNotation;
 use gpui::{Bounds, PathBuilder, Pixels, Window, point, px};
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TemplateSignatureLayout {
+    pub left: f64,
+    pub top: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+impl TemplateSignatureLayout {
+    pub fn outsets(self, body_width: f64, body_height: f64) -> (f64, f64, f64) {
+        (
+            (-self.top).max(0.0),
+            (self.left + self.width - body_width).max(0.0),
+            (self.top + self.height - body_height).max(0.0),
+        )
+    }
+}
+
+pub fn template_signature_layout(
+    body_width: f64,
+    parameter_count: usize,
+) -> Option<TemplateSignatureLayout> {
+    if parameter_count == 0 || !body_width.is_finite() || body_width <= 0.0 {
+        return None;
+    }
+    let width = body_width.min(120.0);
+    let height = 12.0 + parameter_count as f64 * 20.0;
+    Some(TemplateSignatureLayout {
+        left: body_width - width + 16.0,
+        top: 8.0 - height,
+        width,
+        height,
+    })
+}
+
+fn finite_size(value: f64) -> f64 {
+    if value.is_finite() && value > 0.0 {
+        value
+    } else {
+        1.0
+    }
+}
+
+struct FigurePoint {
+    x: f64,
+    y: f64,
+}
+
+struct FoldedNoteLayout {
+    outline: [FigurePoint; 5],
+    fold: [FigurePoint; 3],
+}
+
+fn folded_note_layout(width: f64, height: f64) -> FoldedNoteLayout {
+    let width = finite_size(width);
+    let height = finite_size(height);
+    let inset = 0.5_f64.min(width / 4.0).min(height / 4.0);
+    let fold_size = 12.0_f64.min(width / 4.0).min(height / 4.0);
+    let left = inset;
+    let top = inset;
+    let right = width - inset;
+    let bottom = height - inset;
+    FoldedNoteLayout {
+        outline: [
+            FigurePoint { x: left, y: top },
+            FigurePoint { x: right - fold_size, y: top },
+            FigurePoint { x: right, y: top + fold_size },
+            FigurePoint { x: right, y: bottom },
+            FigurePoint { x: left, y: bottom },
+        ],
+        fold: [
+            FigurePoint { x: right - fold_size, y: top },
+            FigurePoint { x: right - fold_size, y: top + fold_size },
+            FigurePoint { x: right, y: top + fold_size },
+        ],
+    }
+}
+
+pub(crate) struct PortLabelLayout {
+    pub(crate) left: f64,
+    pub(crate) top: f64,
+}
+
+pub(crate) fn port_label_layout(body_width: f64) -> PortLabelLayout {
+    PortLabelLayout {
+        left: finite_size(body_width) + 4.0,
+        top: 0.0,
+    }
+}
 pub(crate) fn paint_folded_paper(
     bounds: Bounds<Pixels>,
     scale: f32,
@@ -34,7 +124,7 @@ pub(crate) fn paint_folded_paper(
         Ok(path) => window.paint_path(path, appearance.fill(palette.panel)),
         Err(error) => log::error!("UML paper fill: {error}"),
     }
-    let dashes = appearance.resolve_stroke_pattern(bellatrix_mde::LineMode::Solid, scale);
+    let dashes = appearance.resolve_stroke_pattern(LineMode::Solid, scale);
     let mut border = PathBuilder::stroke(px(appearance.width(1.0, scale, selected)));
     if !dashes.is_empty() {
         border = border.dash_array(&dashes);
@@ -270,9 +360,9 @@ pub(crate) fn paint_notation(
         let mut outline = PathBuilder::stroke(px(appearance.width(1.0, scale, selected)));
         let dashes = appearance.resolve_stroke_pattern(
             if path.dashed {
-                bellatrix_mde::LineMode::Dashed
+                LineMode::Dashed
             } else {
-                bellatrix_mde::LineMode::Solid
+                LineMode::Solid
             },
             scale,
         );

@@ -1,4 +1,5 @@
-use bellatrix_mde::commands::{AssociationEndEdit, Command};
+use crate::Command;
+use crate::AssociationEndEdit;
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::{Context, Event};
 

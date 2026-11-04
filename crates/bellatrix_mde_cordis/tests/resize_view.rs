@@ -1,9 +1,12 @@
-use bellatrix_mde::{Geometry, ModelingSection, Project};
+#[path = "support/events.rs"]
+mod events;
+use serde_json::Value;
+use bellatrix_mde_cordis::Geometry;
 use bellatrix_mde_cordis::{
-    MdePlugin, ModelingResizeView, ModelingResizeViewRequested, with_model,
+    MdePlugin, ModelingResizeView, ModelingResizeViewRequested,
 };
 use bellatrix_project::{
-    ProjectCreate, ProjectCreateRequested, ProjectDocument, ProjectId, ProjectPlugin,
+    ProjectCreate, ProjectCreateRequested, ProjectId, ProjectPlugin,
     ProjectService,
 };
 use cordis::event::QueryOutcome;
@@ -26,13 +29,12 @@ async fn rectangle_resize_is_versioned_and_persisted() {
     let service = Arc::new(ProjectService::new());
     let project = admit(&ctx, ProjectPlugin::new(Arc::clone(&service))).await;
     let mde = admit(&ctx, MdePlugin).await;
-    let mut model: Project =
+    let mut model: Value =
         serde_json::from_str(include_str!("../../bellatrix_mde/fixtures/todo.json")).unwrap();
-    model.id = "resized-project".into();
-    model.name = "Resized project".into();
-    let id = ProjectId::new(model.id.clone()).unwrap();
-    let doc = ProjectDocument::new(id.clone(), model.name.clone()).unwrap();
-    let doc = with_model(doc, &model).unwrap();
+    model["id"] = "resized-project".into();
+    model["name"] = "Resized project".into();
+    let id = ProjectId::new("resized-project").unwrap();
+    let doc = events::prepare(&ctx, &model).await.unwrap();
     ctx.query::<ProjectCreate>(Routing::Unscoped, ProjectCreateRequested { document: doc })
         .await
         .unwrap();
@@ -63,13 +65,7 @@ async fn rectangle_resize_is_versioned_and_persisted() {
 
     let persisted = service.snapshot(&id).unwrap();
     assert_eq!(persisted.revision(), 1);
-    let section: ModelingSection = serde_json::from_value(
-        persisted
-            .section(bellatrix_mde::MODELING_NAMESPACE)
-            .unwrap()
-            .clone(),
-    )
-    .unwrap();
+    let section = events::projection(&ctx, &service, &id).await.unwrap().section;
     let view = section
         .diagrams
         .iter()

@@ -1,5 +1,5 @@
 use super::selection::ReconciledSelection;
-use bellatrix_mde::commands::ModelingTool;
+use bellatrix_mde_cordis::ModelingTool;
 use bellatrix_project::ProjectId;
 
 #[derive(Clone)]
@@ -9,7 +9,7 @@ pub(super) struct PendingRelationEndpoint {
     pub view_id: Option<String>,
     pub subject_id: Option<String>,
     pub revision: u64,
-    pub point: Option<bellatrix_mde::Point>,
+    pub point: Option<bellatrix_mde_cordis::Point>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -32,7 +32,7 @@ pub(super) struct WorkbenchState {
     active_diagram: Option<String>,
     selected_element: Option<String>,
     selected_view: Option<String>,
-    selected_explorer: Option<(String, Option<bellatrix_mde::ViewOccurrence>)>,
+    selected_explorer: Option<(String, Option<bellatrix_mde_cordis::ViewOccurrence>)>,
     selected_tool: Option<ModelingTool>,
     visual_draft_mode: bool,
     pending_relation_source: Option<PendingRelationEndpoint>,
@@ -75,7 +75,7 @@ impl WorkbenchState {
     }
 
     pub fn select_explorer_element(
-        &mut self, id: String, key: String, occurrence: Option<bellatrix_mde::ViewOccurrence>,
+        &mut self, id: String, key: String, occurrence: Option<bellatrix_mde_cordis::ViewOccurrence>,
     ) -> SelectionChange {
         let mut change = self.select_element(id);
         self.selected_explorer = Some((key, occurrence));
@@ -83,7 +83,7 @@ impl WorkbenchState {
         change
     }
 
-    pub fn reconcile_explorer_selection(&mut self, section: &bellatrix_mde::ModelingSection) {
+    pub fn reconcile_explorer_selection(&mut self, section: &bellatrix_mde_cordis::projection::ModelingProjection) {
         let Some((key, _)) = &self.selected_explorer else { return; };
         let rows = super::explorer::project_explorer(section, super::explorer::ExplorerSortOrder::Added);
         if !rows.iter().any(|row| &row.key == key

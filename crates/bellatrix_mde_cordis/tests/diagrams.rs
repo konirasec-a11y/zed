@@ -1,11 +1,14 @@
-use bellatrix_mde::{ModelingSection, Project, StructuralDiagramKind};
+#[path = "support/events.rs"]
+mod events;
+use serde_json::{Value, json};
+use bellatrix_mde_cordis::{StructuralDiagramKind, ModelingValidateDiagram, ModelingValidateDiagramRequested};
 use bellatrix_mde_cordis::{
     MODELING_NAMESPACE, MdePlugin, ModelingCreateDiagram, ModelingCreateDiagramRequested,
     ModelingDeleteDiagram, ModelingDeleteDiagramRequested, ModelingRenameDiagram,
-    ModelingRenameDiagramRequested, with_model,
+    ModelingRenameDiagramRequested,
 };
 use bellatrix_project::{
-    ProjectCreate, ProjectCreateRequested, ProjectDocument, ProjectId, ProjectPlugin,
+    ProjectCreate, ProjectCreateRequested, ProjectId, ProjectPlugin,
     ProjectService,
 };
 use cordis::event::QueryOutcome;
@@ -34,13 +37,11 @@ async fn diagram_lifecycle_is_revision_checked_and_preserves_semantic_model() ->
     let service = Arc::new(ProjectService::new());
     let platform = admit(&context, ProjectPlugin::new(Arc::clone(&service))).await?;
     let mde = admit(&context, MdePlugin).await?;
-    let model: Project =
+    let model: Value =
         serde_json::from_str(include_str!("../../bellatrix_mde/fixtures/todo.json"))?;
-    let id = ProjectId::new(model.id.clone())?;
-    let document = with_model(
-        ProjectDocument::new(id.clone(), model.name.clone())?,
-        &model,
-    )?;
+    let id = ProjectId::new(model["id"].as_str().ok_or("id missing")?)?;
+    let document = events::prepare(&context, &model).await?;
+    let baseline = document.section(MODELING_NAMESPACE).ok_or("section missing")?.clone();
     let result = context
         .query::<ProjectCreate>(Routing::Unscoped, ProjectCreateRequested { document })
         .await?;
@@ -57,12 +58,7 @@ async fn diagram_lifecycle_is_revision_checked_and_preserves_semantic_model() ->
         .await?;
     assert!(matches!(created, QueryOutcome::Answer(Ok(1))));
     let snapshot = service.snapshot(&id)?;
-    let section: ModelingSection = serde_json::from_value(
-        snapshot
-            .section(MODELING_NAMESPACE)
-            .ok_or("section missing")?
-            .clone(),
-    )?;
+    let section = events::projection(&context, &service, &id).await?.section;
     let diagram = section
         .diagrams
         .iter()
@@ -70,8 +66,8 @@ async fn diagram_lifecycle_is_revision_checked_and_preserves_semantic_model() ->
         .ok_or("created diagram missing")?;
     let diagram_id = diagram.id.clone();
     assert_eq!(diagram.uml_di_type.as_str(), "UMLClassDiagram");
-    assert_eq!(section.elements, model.elements);
-    assert_eq!(section.relations, model.relations);
+    assert_eq!(snapshot.section(MODELING_NAMESPACE).ok_or("section missing")?["elements"], baseline["elements"]);
+    assert_eq!(snapshot.section(MODELING_NAMESPACE).ok_or("section missing")?["relations"], baseline["relations"]);
 
     let stale = context
         .query::<ModelingCreateDiagram>(Routing::Unscoped, create(StructuralDiagramKind::Class, 0))
@@ -96,12 +92,7 @@ async fn diagram_lifecycle_is_revision_checked_and_preserves_semantic_model() ->
         QueryOutcome::Answer(Ok(2))
     ));
     let renamed = service.snapshot(&id)?;
-    let renamed_section: ModelingSection = serde_json::from_value(
-        renamed
-            .section(MODELING_NAMESPACE)
-            .ok_or("section missing")?
-            .clone(),
-    )?;
+    let renamed_section = events::projection(&context, &service, &id).await?.section;
     assert!(
         renamed_section
             .diagrams
@@ -109,7 +100,7 @@ async fn diagram_lifecycle_is_revision_checked_and_preserves_semantic_model() ->
             .any(|diagram| diagram.id == diagram_id && diagram.name == "Renamed diagram")
     );
     assert_eq!(renamed.id(), &id);
-    assert_eq!(renamed.name(), model.name);
+    assert_eq!(renamed.name(), model["name"].as_str().ok_or("name missing")?);
 
     let delete = |revision| ModelingDeleteDiagramRequested {
         project_id: id.clone(),
@@ -129,13 +120,8 @@ async fn diagram_lifecycle_is_revision_checked_and_preserves_semantic_model() ->
         QueryOutcome::Answer(Ok(3))
     ));
     let deleted = service.snapshot(&id)?;
-    let final_section: ModelingSection = serde_json::from_value(
-        deleted
-            .section(MODELING_NAMESPACE)
-            .ok_or("section missing")?
-            .clone(),
-    )?;
-    assert_eq!(final_section, ModelingSection::from_model(&model));
+    let final_section = events::section(&service, &id)?;
+    assert_eq!(final_section, baseline);
     assert!(matches!(
         context
             .query::<ModelingCreateDiagram>(
@@ -146,27 +132,20 @@ async fn diagram_lifecycle_is_revision_checked_and_preserves_semantic_model() ->
         QueryOutcome::Answer(Ok(4))
     ));
     let unverified = service.snapshot(&id)?;
-    let section: ModelingSection = serde_json::from_value(
-        unverified
-            .section(MODELING_NAMESPACE)
-            .ok_or("section missing")?
-            .clone(),
-    )?;
+    let section = events::projection(&context, &service, &id).await?.section;
     let diagram = section
         .diagrams
         .iter()
         .find(|diagram| diagram.uml_di_type == "UMLCompositeStructureDiagram")
         .ok_or("unverified diagram missing")?;
-    let projected = section.to_model(id.as_str(), unverified.name());
-    assert!(
-        bellatrix_mde::validate_structural_diagram(
-            &projected,
-            &diagram.id,
-            StructuralDiagramKind::CompositeStructure
-        )
-        .iter()
-        .any(|diagnostic| diagnostic.code == "UMLDI_CONTEXT_MULTIPLICITY")
-    );
+    let validation = match context.query::<ModelingValidateDiagram>(Routing::Unscoped,
+        ModelingValidateDiagramRequested { project_id: id.clone(), diagram_id: diagram.id.clone(),
+            expected_revision: unverified.revision() }).await? {
+        QueryOutcome::Answer(Ok(validation)) => validation,
+        other => return Err(format!("unexpected validation response: {other:?}").into()),
+    };
+    assert!(validation.diagnostics.iter()
+        .any(|diagnostic| diagnostic.code == "UMLDI_CONTEXT_MULTIPLICITY"));
     mde.dispose().await?;
     assert!(matches!(
         context
@@ -189,25 +168,19 @@ async fn repeated_validation_reports_hidden_semantics_without_mutating_or_bumpin
     let service = Arc::new(ProjectService::new());
     let platform = admit(&context, ProjectPlugin::new(Arc::clone(&service))).await?;
     let mde = admit(&context, MdePlugin).await?;
-    let mut model: Project =
+    let mut model: Value =
         serde_json::from_str(include_str!("../../bellatrix_mde/fixtures/todo.json"))?;
-    for diagram in &mut model.diagrams {
-        if diagram.id == "diagram-tasks" {
-            diagram.uml_di_type = "UMLClassDiagram".into();
+    for diagram in model["diagrams"].as_array_mut().ok_or("diagrams missing")? {
+        if diagram["id"] == "diagram-tasks" {
+            diagram["uml_di_type"] = "UMLClassDiagram".into();
         }
     }
-    model.relations.push(bellatrix_mde::Relation {
-        id: "hidden-self-generalization".into(),
-        kind: "uml.generalization".into(),
-        from: "type-list".into(),
-        to: "type-list".into(),
-        properties: Default::default(),
-    });
-    let id = ProjectId::new(model.id.clone())?;
-    let document = with_model(
-        ProjectDocument::new(id.clone(), model.name.clone())?,
-        &model,
-    )?;
+    model["relations"].as_array_mut().ok_or("relations missing")?.push(json!({
+        "id": "hidden-self-generalization", "kind": "uml.generalization",
+        "from": "type-list", "to": "type-list", "properties": {},
+    }));
+    let id = ProjectId::new(model["id"].as_str().ok_or("id missing")?)?;
+    let document = events::prepare(&context, &model).await?;
     assert!(matches!(
         context
             .query::<ProjectCreate>(Routing::Unscoped, ProjectCreateRequested { document })

@@ -1,26 +1,11 @@
 use crate::class::ViewAppearance;
 use bellatrix_design_system::Palette;
-use bellatrix_mde::LineMode;
+use bellatrix_mde_cordis::LineMode;
+use bellatrix_mde_cordis::presentation_contract::InterfacePresentation;
 use gpui::{
     AnyElement, Bounds, IntoElement, PathBuilder, Pixels, SharedString, Window, canvas, div, point,
     prelude::*, px,
 };
-
-#[derive(Clone, Copy)]
-pub(crate) enum InterfacePresentation {
-    Provided,
-    Required,
-}
-
-impl InterfacePresentation {
-    pub(crate) fn parse(value: &str) -> Option<Self> {
-        match value {
-            "provided" => Some(Self::Provided),
-            "required" => Some(Self::Required),
-            _ => None,
-        }
-    }
-}
 
 pub(crate) struct InterfaceFigure {
     pub(crate) presentation: InterfacePresentation,

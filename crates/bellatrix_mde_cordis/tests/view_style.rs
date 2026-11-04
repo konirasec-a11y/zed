@@ -1,7 +1,6 @@
-use bellatrix_mde::{
-    Format, Geometry, ModelingSection, PathSegment, Project, RelationshipRouting, Style,
-    TimingMode, TimingPoint, TimingPresentation, decode, encode,
-};
+#[path = "support/events.rs"]
+mod events;
+use serde_json::Value;
 use bellatrix_mde_cordis::*;
 use bellatrix_project::*;
 use cordis::{Context, Plugin, PreparedPlugin, Routing, event::QueryOutcome};
@@ -24,18 +23,19 @@ async fn styles_and_routes_use_revision_boundary_and_rollback()
         .spawn(PreparedPlugin::from_input(plugin, ()))
         .await?;
     let id = ProjectId::new("style-test")?;
-    let mut model: Project =
+    let mut model: Value =
         serde_json::from_str(include_str!("../../bellatrix_mde/fixtures/todo.json"))?;
-    model.id = id.as_str().into();
-    model.name = "Styles".into();
-    let document = with_model(ProjectDocument::new(id.clone(), "Styles")?, &model)?;
+    model["id"] = id.as_str().into();
+    model["name"] = "Styles".into();
+    let document = events::prepare(&context, &model).await?;
     assert!(matches!(
         context
             .query::<ProjectCreate>(Routing::Unscoped, ProjectCreateRequested { document })
             .await?,
         QueryOutcome::Answer(Ok(_))
     ));
-    let diagram = model.diagrams.first().ok_or("diagram missing")?;
+    let initial = events::projection(&context, &service, &id).await?;
+    let diagram = initial.section.diagrams.first().ok_or("diagram missing")?;
     let view = diagram.views.first().ok_or("view missing")?;
     let mut style = view.style.clone();
     style.fill = Some("#123456".into());
@@ -97,16 +97,12 @@ async fn styles_and_routes_use_revision_boundary_and_rollback()
         ));
     }
     let snapshot = service.snapshot(&id)?;
-    let section: ModelingSection = serde_json::from_value(
-        snapshot
-            .section(MODELING_NAMESPACE)
-            .ok_or("section missing")?
-            .clone(),
-    )?;
+    let section = events::projection(&context, &service, &id).await?.section;
+    let class_kind = &section.tools.element(ModelingElementKind::Class).ok_or("class tool missing")?.model_kind;
     let classes = section
         .elements
         .iter()
-        .filter(|element| element.kind == ModelingElementKind::Class.model_kind())
+        .filter(|element| &element.kind == class_kind)
         .collect::<Vec<_>>();
     let source = classes.first().ok_or("source missing")?;
     let target = classes.last().ok_or("target missing")?;
@@ -127,12 +123,8 @@ async fn styles_and_routes_use_revision_boundary_and_rollback()
         QueryOutcome::Answer(Ok(4))
     ));
     let snapshot = service.snapshot(&id)?;
-    let section: ModelingSection = serde_json::from_value(
-        snapshot
-            .section(MODELING_NAMESPACE)
-            .ok_or("section missing")?
-            .clone(),
-    )?;
+    let section = events::projection(&context, &service, &id).await?.section;
+    let before_routing = events::section(&service, &id)?;
     let edge = section
         .diagrams
         .iter()
@@ -155,13 +147,9 @@ async fn styles_and_routes_use_revision_boundary_and_rollback()
         QueryOutcome::Answer(Ok(5))
     ));
     let snapshot = service.snapshot(&id)?;
-    let updated: ModelingSection = serde_json::from_value(
-        snapshot
-            .section(MODELING_NAMESPACE)
-            .ok_or("section missing")?
-            .clone(),
-    )?;
-    assert_eq!(updated.relations, section.relations);
+    let updated = events::projection(&context, &service, &id).await?.section;
+    let updated_state = events::section(&service, &id)?;
+    assert_eq!(updated_state["relations"], before_routing["relations"]);
     let edge = updated
         .diagrams
         .iter()
@@ -274,12 +262,8 @@ async fn styles_and_routes_use_revision_boundary_and_rollback()
     tokio::time::timeout(std::time::Duration::from_secs(5), routing_receipt.changed()).await??;
     assert_eq!(*routing_receipt.borrow(), Some(Ok(9)));
     let snapshot = service.snapshot(&id)?;
-    let routed: ModelingSection = serde_json::from_value(
-        snapshot
-            .section(MODELING_NAMESPACE)
-            .ok_or("section missing")?
-            .clone(),
-    )?;
+    let routed = events::projection(&context, &service, &id).await?.section;
+    let routed_state = events::section(&service, &id)?;
     let routed_edge = routed
         .diagrams
         .iter()
@@ -294,7 +278,7 @@ async fn styles_and_routes_use_revision_boundary_and_rollback()
         matches!(&routed_edge.geometry, Geometry::Path { segments, .. }
         if segments.iter().all(|segment| matches!(segment, PathSegment::Line { .. })))
     );
-    assert_eq!(routed.relations, updated.relations);
+    assert_eq!(routed_state["relations"], updated_state["relations"]);
     let timing = TimingPresentation {
         mode: TimingMode::State,
         points: vec![
@@ -345,38 +329,35 @@ async fn styles_and_routes_use_revision_boundary_and_rollback()
         assert_eq!(service.snapshot(&id)?.revision(), 10);
     }
     let snapshot = service.snapshot(&id)?;
-    let timed: ModelingSection = serde_json::from_value(
-        snapshot
-            .section(MODELING_NAMESPACE)
-            .ok_or("section missing")?
-            .clone(),
-    )?;
-    let mut expected = routed.clone();
-    expected
-        .diagrams
-        .iter_mut()
-        .flat_map(|diagram| &mut diagram.views)
-        .find(|item| item.id == view.id)
-        .ok_or("view missing")?
-        .timing = Some(timing);
+    let timed = events::section(&service, &id)?;
+    let mut expected = routed_state.clone();
+    expected["diagrams"].as_array_mut().ok_or("diagrams missing")?.iter_mut()
+        .flat_map(|diagram| diagram["views"].as_array_mut().unwrap())
+        .find(|item| item["id"] == view.id).ok_or("view missing")?["timing"] = serde_json::to_value(timing)?;
     assert_eq!(
         timed, expected,
         "only the selected View presentation may change"
     );
     for mode in [TimingMode::State, TimingMode::Value] {
-        let mut persisted = timed.to_model(id.as_str(), snapshot.name());
-        persisted
-            .diagrams
-            .iter_mut()
-            .flat_map(|diagram| &mut diagram.views)
-            .find(|item| item.id == view.id)
-            .and_then(|view| view.timing.as_mut())
-            .ok_or("timing missing")?
-            .mode = mode;
-        for format in [Format::Json, Format::Protobuf] {
+        let mut persisted = events::model_document(&snapshot)?;
+        persisted["diagrams"].as_array_mut().ok_or("diagrams missing")?.iter_mut()
+            .flat_map(|diagram| diagram["views"].as_array_mut().unwrap())
+            .find(|item| item["id"] == view.id).ok_or("timing missing")?["timing"]["mode"] = serde_json::to_value(mode)?;
+        for format in ["json", "protobuf"] {
+            let encoded = match context.query::<ModelingConvertDocument>(Routing::Unscoped,
+                ModelingConvertDocumentRequested { bytes: serde_json::to_vec(&persisted)?,
+                    source_format: "json".into(), destination_format: format.into() }).await? {
+                QueryOutcome::Answer(Ok(bytes)) => bytes,
+                other => return Err(format!("unexpected encode response: {other:?}").into()),
+            };
+            let decoded = match context.query::<ModelingConvertDocument>(Routing::Unscoped,
+                ModelingConvertDocumentRequested { bytes: encoded,
+                    source_format: format.into(), destination_format: "json".into() }).await? {
+                QueryOutcome::Answer(Ok(bytes)) => serde_json::from_slice::<Value>(&bytes)?,
+                other => return Err(format!("unexpected decode response: {other:?}").into()),
+            };
             assert_eq!(
-                decode(&encode(&persisted, format)?, format)?,
-                persisted,
+                decoded, persisted,
                 "authored event order and values must survive persistence"
             );
         }
@@ -398,15 +379,9 @@ async fn styles_and_routes_use_revision_boundary_and_rollback()
         assert_eq!(*receipt.borrow(), Some(Ok(revision)));
         assert_eq!(service.snapshot(&id)?.revision(), revision);
     }
-    let cleared: ModelingSection = serde_json::from_value(
-        service
-            .snapshot(&id)?
-            .section(MODELING_NAMESPACE)
-            .ok_or("section missing")?
-            .clone(),
-    )?;
+    let cleared = events::section(&service, &id)?;
     assert_eq!(
-        cleared, routed,
+        cleared, routed_state,
         "clearing timing restores the prior View-only state"
     );
     drop(bridge);
@@ -432,11 +407,11 @@ async fn reorder_roundtrips_receipt_and_rejects_stale_revision()
         .spawn(PreparedPlugin::from_input(plugin, ()))
         .await?;
     let id = ProjectId::new("order-test")?;
-    let mut model: Project =
+    let mut model: Value =
         serde_json::from_str(include_str!("../../bellatrix_mde/fixtures/todo.json"))?;
-    model.id = id.as_str().into();
-    model.name = "Order".into();
-    let document = with_model(ProjectDocument::new(id.clone(), "Order")?, &model)?;
+    model["id"] = id.as_str().into();
+    model["name"] = "Order".into();
+    let document = events::prepare(&context, &model).await?;
     assert!(matches!(
         context
             .query::<ProjectCreate>(Routing::Unscoped, ProjectCreateRequested { document })
@@ -447,7 +422,7 @@ async fn reorder_roundtrips_receipt_and_rejects_stale_revision()
         project_id: id.clone(),
         diagram_id: "diagram-tasks".into(),
         view_id: "view-task".into(),
-        order: bellatrix_mde::commands::ViewOrder::SendToBack,
+        order: ViewOrder::SendToBack,
         expected_revision: 0,
     };
     assert!(matches!(

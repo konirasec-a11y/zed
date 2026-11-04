@@ -1,4 +1,6 @@
-use bellatrix_mde::{Diagram, Geometry, ModelingSection, UmlNotation};
+use bellatrix_mde_cordis::{Geometry};
+use bellatrix_mde_cordis::projection::{Diagram, ModelingProjection as ModelingSection};
+use bellatrix_mde_cordis::presentation_contract::UmlNotation;
 
 pub(super) struct ReconciledSelection {
     pub active_diagram: Option<String>,
@@ -80,23 +82,19 @@ fn has_inline_representation(section: &ModelingSection, diagram: &Diagram, targe
         else {
             return false;
         };
-        let notation = bellatrix_mde::uml_notation(&owner.kind);
+        let notation = view.figure.notation;
         if owner.id == target {
             return notation != UmlNotation::Unsupported;
         }
         if matches!(
             notation,
             UmlNotation::ClassifierRectangle | UmlNotation::PackageTab
-        ) && bellatrix_mde::template_parameters(section, &owner.id)
-            .iter()
-            .any(|parameter| parameter.id == target)
+        ) && owner.template_parameters.iter().any(|parameter| parameter == target)
         {
             return true;
         }
         if notation != UmlNotation::ClassifierRectangle
-            || !section.relations.iter().any(|relation| {
-                relation.kind == "owns" && relation.from == owner.id && relation.to == target
-            })
+            || !owner.members.iter().any(|member| member == target)
         {
             return false;
         }

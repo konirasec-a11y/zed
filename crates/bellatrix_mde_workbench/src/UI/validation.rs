@@ -178,7 +178,7 @@ impl MdeWorkbenchItem {
             return;
         };
         if let Err(error) =
-            bellatrix_mde::StructuralDiagramKind::from_diagram(diagram).ok_or_else(|| {
+            diagram.kind.ok_or_else(|| {
                 format!(
                     "Unsupported diagram presentation: {} {:?}",
                     diagram.uml_di_type, diagram.interaction_kind
@@ -190,18 +190,39 @@ impl MdeWorkbenchItem {
             return;
         }
         if self.source.is_read_only() {
-            if let Some(kind) = bellatrix_mde::StructuralDiagramKind::from_diagram(diagram) {
-                let model = snapshot
-                    .section
-                    .to_model(snapshot.project_id.as_str(), &snapshot.name);
-                let issues = bellatrix_mde::validate_structural_diagram(&model, &diagram.id, kind);
-                self.validation_status = if issues.is_empty() {
-                    "Read-only preview: no issues in implemented checks; full UML conformance is not checked".into()
-                } else {
-                    format!("Read-only preview validation: {issues:?}")
-                };
-                cx.notify();
-            }
+            let diagram_id = diagram.id.clone();
+            let revision = snapshot.revision;
+            let project_id = snapshot.project_id.clone();
+            let source = self.source.clone();
+            let validation = match source.validate_read_only(&snapshot, diagram_id.clone()) {
+                Ok(validation) => validation,
+                Err(error) => {
+                    self.validation_status = format!("Validation not sent: {error}");
+                    cx.notify();
+                    return;
+                }
+            };
+            self.validation_status = format!("Validation pending for revision {revision}");
+            cx.spawn(async move |this, cx| {
+                let result = validation.await.map_err(|message| bellatrix_mde_cordis::DiagramValidationFailure {
+                    diagram_id: diagram_id.clone(),
+                    revision,
+                    message,
+                });
+                if let Err(error) = this.update(cx, |item, cx| {
+                    if item.project_id() != &project_id
+                        || !source.snapshot_is_current()
+                        || !item.source.snapshot_is_current()
+                        || item.presentation.active_diagram() != Some(diagram_id.as_str())
+                    {
+                        return;
+                    }
+                    item.accept_validation(Some(result), cx);
+                }) {
+                    eprintln!("MDE snapshot validation update failed: {error}");
+                }
+            }).detach();
+            cx.notify();
             return;
         }
         self.validation_status = format!("Validation pending for revision {}", snapshot.revision);

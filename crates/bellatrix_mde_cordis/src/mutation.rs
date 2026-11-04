@@ -1,9 +1,9 @@
-use crate::project_integration::from_document;
+use crate::{TracePhase, TraceOutcome};
+use crate::{Command, MdjEditCommand, MODELING_NAMESPACE};
 use bellatrix_mde::{
-    ExecutionTrace, TracePhase, TraceOutcome, MODELING_NAMESPACE, ModelingSection,
-    commands::{self, Command},
+    MdeExecutionTrace as ExecutionTrace,
 };
-use bellatrix_project::{ProjectDocument, ProjectId, ProjectReplace, ProjectReplaceRequested, ProjectReplaceSnapshot, ProjectReplaceSnapshotRequested, ProjectService};
+use bellatrix_project::{ProjectDocument, ProjectId, ProjectReplaceSnapshot, ProjectReplaceSnapshotRequested, ProjectService};
 use cordis::{Context, Routing, event::QueryOutcome};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -25,9 +25,9 @@ pub(crate) async fn execute_mdj(
     context: &Context,
     projects: &ProjectService,
     document: Arc<ProjectDocument>,
-    command: Command,
+    command: MdjEditCommand,
 ) -> Result<Arc<ProjectDocument>, String> {
-    execute_with_interchange(context, projects, document.id().clone(), document.revision(), command, Some(document)).await
+    execute_with_interchange(context, projects, document.id().clone(), document.revision(), command.into(), Some(document)).await
 }
 
 async fn execute_with_interchange(
@@ -65,46 +65,30 @@ async fn execute_inner(
     if expected_snapshot.as_ref().is_some_and(|expected| !Arc::ptr_eq(expected, &document)) {
         return Err("stale MDJ document session; the requested snapshot is no longer open".into());
     }
-    let section = from_document(&document)?;
-    let source = section.to_model(document.id().as_str(), document.name());
-    if require_mdj_roundtrip {
-        crate::mdj_interchange::ensure_mdj_document(&document, &source)?;
+    if require_mdj_roundtrip && document.sections().keys().any(|namespace| namespace != MODELING_NAMESPACE) {
+        return Err("MDJ interchange cannot represent other platform sections; save the complete native project instead".into());
     }
+    let section_json = document.sections().get(MODELING_NAMESPACE)
+        .ok_or("MDE section is missing")?.to_string();
+    let model_id = document.id().as_str().to_owned();
+    let model_name = document.name().to_owned();
     let name = command_name(&command);
     trace.emit("kernel", "command.apply", TracePhase::Start, Some(name), &[], None);
     let (applied, failed_to_join) = match tokio::task::spawn_blocking(move || {
-        let updated = commands::apply(&source, &command, expected_revision)?;
-        if require_mdj_roundtrip {
-            crate::mdj_interchange::export_model_as_mdj(&updated)
-                .map_err(|error| format!("MDJ edit was not applied: {error}"))?;
-        }
-        Ok(updated)
+        bellatrix_mde::apply_model_command(&model_id, &model_name, &section_json,
+            expected_revision, command, require_mdj_roundtrip)
     }).await {
         Ok(result) => (result, false),
         Err(error) => (Err(error.to_string()), true),
     };
     let (phase, outcome) = if applied.is_ok() { (TracePhase::Finish, TraceOutcome::Success) } else if failed_to_join { (TracePhase::Error, TraceOutcome::Error) } else { (TracePhase::Error, TraceOutcome::Invalid) };
     trace.emit("kernel", "command.apply", phase, Some(name), &[], Some(outcome));
-    let updated = applied?;
-    let state = serde_json::to_value(ModelingSection::from_model(&updated))
-        .map_err(|error| error.to_string())?;
-    let replaced = if require_mdj_roundtrip {
-        context.query::<ProjectReplaceSnapshot>(Routing::Unscoped, ProjectReplaceSnapshotRequested {
-            document, namespace: MODELING_NAMESPACE.into(), state,
-        }).await
-    } else {
-        context
-        .query::<ProjectReplace>(
-            Routing::Unscoped,
-            ProjectReplaceRequested {
-                id: project_id,
-                namespace: MODELING_NAMESPACE.into(),
-                expected_revision,
-                state,
-            },
-        )
-        .await
-    }.map_err(|error| error.to_string())?;
+    let state = applied?;
+    // Bind publication to the exact source, including native documents: a close
+    // and reopen may reuse an ID and revision while changing the model entirely.
+    let replaced = context.query::<ProjectReplaceSnapshot>(Routing::Unscoped, ProjectReplaceSnapshotRequested {
+        document, namespace: MODELING_NAMESPACE.into(), state,
+    }).await.map_err(|error| error.to_string())?;
     match replaced {
         QueryOutcome::Answer(Ok(document)) => Ok(document),
         QueryOutcome::Answer(Err(error)) => Err(error.to_string()),

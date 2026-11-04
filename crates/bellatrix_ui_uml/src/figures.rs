@@ -1,13 +1,16 @@
 //! Non-classifier notations share editing, but not the classifier silhouette.
-use crate::figure_geometry::{paint_folded_paper, paint_notation};
+use crate::figure_geometry::{paint_folded_paper, paint_notation, port_label_layout};
 use crate::{
     class::{MemberInteractions, MemberRow, UmlClassifier, ViewAppearance, template_signature},
     inline_edit::UmlInlineNameEditor,
-    interface_presentation::{InterfaceFigure, InterfacePresentation},
+    interface_presentation::InterfaceFigure,
     timing::TimingLifeline,
 };
 use bellatrix_design_system::Palette;
-use bellatrix_mde::{UmlNotation, port_label_layout, uml_header, uml_notation};
+use bellatrix_mde_cordis::{LineMode, TimingPresentation};
+use bellatrix_mde_cordis::presentation_contract::{
+    FigurePresentation, InterfacePresentation, RenderStyle, UmlHeader, UmlNotation,
+};
 use gpui::{
     App, Entity, InteractiveElement, IntoElement, MouseButton, PathBuilder, RenderOnce,
     SharedString, Window, canvas, div, point, prelude::*, px,
@@ -18,18 +21,18 @@ type Action = Rc<dyn Fn(&mut Window, &mut App)>;
 
 #[derive(IntoElement)]
 pub struct UmlFigure {
-    kind: String,
-    pseudostate_kind: Option<String>,
-    interaction_presentation: Option<String>,
+    notation: UmlNotation,
+    header: UmlHeader,
+    title_underlined: bool,
+    history_label: String,
     interface_presentation: Option<InterfacePresentation>,
-    context_frame_kind: Option<&'static str>,
-    timing_presentation: Option<bellatrix_mde::TimingPresentation>,
+    context_frame_kind: Option<String>,
+    timing_presentation: Option<TimingPresentation>,
     name: SharedString,
     slot_labels: Vec<String>,
     interaction_operator: Option<String>,
     has_nested_views: bool,
     composite_role: bool,
-    applied_stereotype: Option<SharedString>,
     selected: bool,
     scale: f32,
     view_width: f64,
@@ -40,10 +43,11 @@ pub struct UmlFigure {
     template_parameters: Option<(Vec<MemberRow>, MemberInteractions, f64)>,
 }
 impl UmlFigure {
-    pub fn supports(kind: &str) -> bool {
-        kind == "uml.pseudostate"
+    pub fn supports(presentation: &FigurePresentation) -> bool {
+        presentation.interface.is_some()
+            || presentation.timing.is_some()
             || matches!(
-                uml_notation(kind),
+                presentation.notation,
                 UmlNotation::PackageTab
                     | UmlNotation::FoldedNote
                     | UmlNotation::Frame
@@ -76,20 +80,20 @@ impl UmlFigure {
                     | UmlNotation::Terminate
             )
     }
-    pub fn new(kind: impl Into<String>, name: impl Into<SharedString>) -> Self {
+    pub fn new(presentation: FigurePresentation, name: impl Into<SharedString>) -> Self {
         Self {
-            kind: kind.into(),
-            pseudostate_kind: None,
-            interaction_presentation: None,
-            interface_presentation: None,
-            context_frame_kind: None,
-            timing_presentation: None,
+            notation: presentation.notation,
+            header: presentation.header,
+            title_underlined: presentation.title_underlined,
+            history_label: presentation.history_label,
+            interface_presentation: presentation.interface,
+            context_frame_kind: presentation.frame_kind,
+            timing_presentation: presentation.timing,
             name: name.into(),
-            slot_labels: Vec::new(),
-            interaction_operator: None,
+            slot_labels: presentation.slot_labels,
+            interaction_operator: presentation.interaction_operator,
             has_nested_views: false,
-            composite_role: true,
-            applied_stereotype: None,
+            composite_role: presentation.composite_role,
             selected: false,
             scale: 1.0,
             view_width: 16.0,
@@ -104,90 +108,18 @@ impl UmlFigure {
         self.has_nested_views = nested;
         self
     }
-    pub fn composite_role(mut self, composite: bool) -> Self {
-        self.composite_role = composite;
-        self
-    }
-    pub fn interface_presentation(mut self, presentation: Option<&str>) -> Self {
-        self.interface_presentation = presentation.and_then(InterfacePresentation::parse);
-        self
-    }
-    pub fn interaction_operator(mut self, operator: Option<&str>) -> Self {
-        self.interaction_operator = operator.map(str::to_owned);
-        self
-    }
-    pub fn slot_labels(mut self, labels: Vec<String>) -> Self {
-        self.slot_labels = labels;
-        self
-    }
-    pub fn diagram_presentation(mut self, diagram: &bellatrix_mde::Diagram) -> Self {
-        if diagram.uml_di_type == "UMLInteractionDiagram" {
-            self.interaction_presentation = diagram.interaction_kind.clone();
-        }
-        self
-    }
-    pub fn diagram_subject(
-        mut self,
-        subject: Option<&str>,
-        diagram: &bellatrix_mde::Diagram,
-    ) -> Self {
-        if subject.is_some_and(|subject| diagram.model_elements.iter().any(|id| id == subject)) {
-            self.context_frame_kind = match (self.kind.as_str(), diagram.uml_di_type.as_str()) {
-                ("uml.activity", "UMLActivityDiagram") => Some("act"),
-                ("uml.state_machine", "UMLStateMachineDiagram") => Some("stm"),
-                _ => None,
-            };
-        }
-        self
-    }
-    pub fn timing_presentation(
-        mut self,
-        presentation: Option<&bellatrix_mde::TimingPresentation>,
-    ) -> Self {
-        self.timing_presentation = presentation.cloned();
-        self
-    }
-    pub fn pseudostate_kind(mut self, kind: &str) -> Self {
-        self.pseudostate_kind = Some(kind.to_owned());
-        self
-    }
-    fn notation(&self) -> UmlNotation {
-        if self.context_frame_kind.is_some() {
-            return UmlNotation::Frame;
-        }
-        // §17.9 uses compact participant heads, not the sequence time axis.
-        if self.kind == "uml.lifeline"
-            && self.interaction_presentation.as_deref() == Some("communication")
-        {
-            return UmlNotation::Instance;
-        }
-        if self.kind != "uml.pseudostate" {
-            return uml_notation(&self.kind);
-        }
-        bellatrix_mde::resolve_pseudostate_notation(
-            self.pseudostate_kind.as_deref().unwrap_or("initial"),
-        )
-    }
-
-    pub fn view_style(mut self, style: &bellatrix_mde::Style) -> Self {
+    pub fn view_style(mut self, style: &RenderStyle) -> Self {
         self.appearance = ViewAppearance(style.clone());
         self
     }
     pub fn with_template_parameters_from(mut self, projection: &UmlClassifier) -> Self {
-        if uml_notation(&self.kind) == UmlNotation::PackageTab {
+        if self.notation == UmlNotation::PackageTab {
             self.template_parameters = Some((
                 projection.template_parameters.clone(),
                 projection.member_interactions(),
                 projection.view_width,
             ));
         }
-        self
-    }
-    pub fn stereotype(mut self, value: impl Into<SharedString>) -> Self {
-        let value = value.into();
-        self.applied_stereotype = uml_header(&self.kind, Some(value.as_ref()))
-            .applied_stereotype
-            .map(SharedString::from);
         self
     }
     pub fn selected(mut self, value: bool) -> Self {
@@ -225,14 +157,12 @@ impl UmlFigure {
 }
 impl RenderOnce for UmlFigure {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let notation = self.notation();
+        let notation = self.notation;
         let palette = Palette::current(cx);
         let scale = self.scale;
         let port_label = port_label_layout(self.view_width);
         let selected = self.selected;
-        let frame_kind = self
-            .context_frame_kind
-            .or_else(|| (self.kind == "uml.interaction").then_some("sd"));
+        let frame_kind = self.context_frame_kind.as_deref();
         let is_diagram_frame = notation == UmlNotation::Frame || frame_kind.is_some();
         // Descriptor display is single-line; the canonical authored text stays unchanged.
         let descriptor_operator = self
@@ -311,8 +241,9 @@ impl RenderOnce for UmlFigure {
         let appearance = self.appearance;
         let alignment = appearance.clone();
         let applied_stereotype = self
-            .applied_stereotype
-            .filter(|_| alignment.0.uml.should_show_stereotype());
+            .header.applied_stereotype
+            .filter(|_| alignment.0.show_stereotype)
+            .map(SharedString::from);
         let font_family = appearance.0.font_family.clone();
         let border = appearance.stroke(palette, selected);
         let title: gpui::AnyElement = if let Some((field, confirm, cancel)) = self.editor {
@@ -342,14 +273,11 @@ impl RenderOnce for UmlFigure {
                 }
             })
             .when(
-                notation == UmlNotation::Instance && self.kind != "uml.lifeline",
+                self.title_underlined,
                 |element| element.underline(),
             )
             .child(title);
-        if let Some(presentation) = self
-            .interface_presentation
-            .filter(|_| self.kind == "uml.interface")
-        {
+        if let Some(presentation) = self.interface_presentation {
             return InterfaceFigure {
                 presentation,
                 title: title_area.into_any_element(),
@@ -362,8 +290,7 @@ impl RenderOnce for UmlFigure {
             }
             .render();
         }
-        if self.kind == "uml.lifeline" && self.interaction_presentation.as_deref() == Some("timing")
-        {
+        if self.timing_presentation.is_some() {
             return TimingLifeline {
                 title: div()
                     .flex()
@@ -425,7 +352,7 @@ impl RenderOnce for UmlFigure {
                 )
                 .into_any_element(),
             UmlNotation::PackageTab => {
-                let keyword = uml_header(&self.kind, None).keyword;
+                let keyword = self.header.keyword;
                 div()
                     .size_full()
                     .relative()
@@ -590,7 +517,7 @@ impl RenderOnce for UmlFigure {
                                         }
                                     }
                                     let dashes = appearance.resolve_stroke_pattern(
-                                        bellatrix_mde::LineMode::Solid,
+                                        LineMode::Solid,
                                         scale,
                                     );
                                     let mut outline = PathBuilder::stroke(px(
@@ -688,12 +615,8 @@ impl RenderOnce for UmlFigure {
                         | UmlNotation::DeploymentNode
                         | UmlNotation::TimingState
                 );
-                let history_label = match self.pseudostate_kind.as_deref() {
-                    Some("deepHistory") => "H*",
-                    Some("entryPoint") => "",
-                    _ => "H",
-                };
-                let keyword = uml_header(&self.kind, None).keyword;
+                let history_label = self.history_label;
+                let keyword = self.header.keyword;
                 let label_color = appearance.text(palette.text);
                 let label_size = appearance.font_size(10.0, scale);
                 let slot_font_size = appearance.font_size(12.0, scale);

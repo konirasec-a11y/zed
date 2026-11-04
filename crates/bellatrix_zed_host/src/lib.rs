@@ -2,7 +2,7 @@
 //! No GPUI Kit, separate Workspace, or parallel event bus is created here.
 use bellatrix_mde_cordis::{MdePlugin, MdeUiBridge};
 use bellatrix_mde_workbench::{
-    MdeUiSource, NativeDocumentImporter, NativeDocumentLease, from_document, register_mde_workspace,
+    MdeUiSource, NativeDocumentImporter, NativeDocumentLease, register_mde_workspace,
 };
 use bellatrix_project::{
     ProjectCreate, ProjectCreateRequested, ProjectId, ProjectOpen,
@@ -68,7 +68,6 @@ impl BellatrixZedHost {
                 // The Tokio task owns a successfully imported lease even when
                 // its GPUI receiver disappears while the request is in flight.
                 runtime.spawn(async move {
-                    let snapshot = from_document(&document)?;
                     let watched_id = document.id().clone();
                     let closed_id = watched_id.clone();
                     let (revision_tx, revisions) = tokio::sync::watch::channel(document.revision());
@@ -94,6 +93,20 @@ impl BellatrixZedHost {
                         QueryOutcome::Answer(Err(error @ bellatrix_project::ProjectError::AlreadyOpen(_))) => return Err(format!("Cannot open MDE preview: {error}. Close the existing MDE tab before reopening a saved copy with this identity. A configured/demo source may also own this identity.")),
                         QueryOutcome::Answer(Err(error)) => return Err(format!("Cannot open MDE preview: {error}")),
                         QueryOutcome::Miss => return Err("Project import service is unavailable".into()),
+                    };
+                    let snapshot = match context.query::<bellatrix_mde_cordis::ModelingReadProjection>(
+                        Routing::Unscoped,
+                        bellatrix_mde_cordis::ModelingReadProjectionRequested { document: Arc::clone(&imported) },
+                    ).await {
+                        Ok(QueryOutcome::Answer(Ok(snapshot))) => snapshot,
+                        result => {
+                            match context.query::<bellatrix_project::ProjectCloseSnapshot>(Routing::Unscoped,
+                                bellatrix_project::ProjectCloseSnapshotRequested { document: Arc::clone(&imported) }).await {
+                                Ok(QueryOutcome::Answer(Ok(()))) => {},
+                                cleanup => eprintln!("MDE projection failure cleanup retained state: {cleanup:?}"),
+                            }
+                            return Err(format!("Cannot prepare MDE project projection: {result:?}"));
+                        }
                     };
                     if editable_mdj {
                         let bridge = match MdeUiBridge::start_mdj(&context, Arc::clone(&imported)) {
@@ -169,7 +182,24 @@ impl BellatrixZedHost {
                             })
                         }));
                     }
-                    let mut source = MdeUiSource::read_only(Arc::clone(&projects), Arc::clone(&imported), snapshot);
+                    let validation_context = context.clone();
+                    let validation_runtime = cleanup_runtime.clone();
+                    let mut source = MdeUiSource::read_only(Arc::clone(&projects), Arc::clone(&imported), snapshot)
+                        .with_read_only_validation(move |document, diagram_id| {
+                            let context = validation_context.clone();
+                            let runtime = validation_runtime.clone();
+                            Box::pin(async move {
+                                runtime.spawn(async move {
+                                    match context.query::<bellatrix_mde_cordis::ModelingValidateSnapshot>(
+                                        Routing::Unscoped,
+                                        bellatrix_mde_cordis::ModelingValidateSnapshotRequested { document, diagram_id },
+                                    ).await.map_err(|error| error.to_string())? {
+                                        QueryOutcome::Answer(result) => result,
+                                        QueryOutcome::Miss => Err("MDE snapshot validation service unavailable".into()),
+                                    }
+                                }).await.map_err(|error| error.to_string())?
+                            })
+                        });
                     source.revisions = revisions;
                     Ok(NativeDocumentLease::new(source, move || {
                         drop(changed_listener);

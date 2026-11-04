@@ -1,5 +1,6 @@
 //! A typed GPUI -> Cordis transport, not an event bus or a second engine runtime.
 //! The host owns this bridge and its lifetime. The UI only owns a sender.
+use crate::Command;
 use crate::{
     ModelingAddMember, ModelingAddMemberRequested, ModelingCreateDiagram,
     ModelingCreateDiagramRequested, ModelingCreateElement, ModelingCreateElementOrVisualDraft,
@@ -22,7 +23,8 @@ use crate::{
     ModelingValidateDiagramRequested,
 };
 use bellatrix_project::{
-    ProjectId, ProjectSave, ProjectSaveRequested, ProjectSaved, ProjectSavedEvent,
+    ProjectClosed, ProjectClosedEvent, ProjectId, ProjectOpened, ProjectOpenedEvent,
+    ProjectSave, ProjectSaveRequested, ProjectSaved, ProjectSavedEvent,
     ProjectStateChanged, ProjectStateChangedEvent,
 };
 use cordis::event::{ListenerRegistration, ListenerRegistrationError, QueryOutcome, observer_sync};
@@ -96,6 +98,9 @@ pub enum MdeUiCommand {
 
 pub struct MdeUiBridge {
     project_id: ProjectId,
+    projections: watch::Receiver<Result<Arc<crate::ModelingSnapshot>, String>>,
+    projection_task: tokio::task::JoinHandle<()>,
+    move_previews: crate::move_preview::MovePreviewClient,
     commands: mpsc::Sender<MdeUiCommand>,
     changes: watch::Receiver<u64>,
     feedback: watch::Receiver<String>,
@@ -116,14 +121,47 @@ impl MdeUiBridge {
         let (validation_tx, validations) = watch::channel(None);
         let (save_tx, saves) = watch::channel(None);
         let id = project_id.clone();
+        let state_revision_tx = revision_tx.clone();
         let listener = ctx.on::<ProjectStateChangedEvent, _>(observer_sync(
             move |_, changed: ProjectStateChanged| {
                 if changed.id == id {
-                    revision_tx.send_replace(changed.revision);
+                    state_revision_tx.send_replace(changed.revision);
                 }
                 Ok::<_, Infallible>(())
             },
         ))?;
+        let opened_id = project_id.clone();
+        let opened_revision_tx = revision_tx.clone();
+        let opened_listener = match ctx.on::<ProjectOpenedEvent, _>(observer_sync(
+            move |_, opened: ProjectOpened| {
+                if opened.document.id() == &opened_id {
+                    opened_revision_tx.send_replace(opened.document.revision());
+                }
+                Ok::<_, Infallible>(())
+            },
+        )) {
+            Ok(listener) => listener,
+            Err(error) => {
+                listener.remove();
+                return Err(error);
+            }
+        };
+        let closed_id = project_id.clone();
+        let closed_listener = match ctx.on::<ProjectClosedEvent, _>(observer_sync(
+            move |_, closed: ProjectClosed| {
+                if closed.id == closed_id {
+                    revision_tx.send_modify(|_| {});
+                }
+                Ok::<_, Infallible>(())
+            },
+        )) {
+            Ok(listener) => listener,
+            Err(error) => {
+                listener.remove();
+                opened_listener.remove();
+                return Err(error);
+            }
+        };
         let save_id = project_id.clone();
         let save_listener =
             match ctx.on::<ProjectSavedEvent, _>(observer_sync(move |_, saved: ProjectSaved| {
@@ -135,6 +173,8 @@ impl MdeUiBridge {
                 Ok(listener) => listener,
                 Err(error) => {
                     listener.remove();
+                    opened_listener.remove();
+                    closed_listener.remove();
                     return Err(error);
                 }
             };
@@ -152,6 +192,8 @@ impl MdeUiBridge {
             Ok(listener) => listener,
             Err(error) => {
                 listener.remove();
+                opened_listener.remove();
+                closed_listener.remove();
                 save_listener.remove();
                 return Err(error);
             }
@@ -457,7 +499,11 @@ impl MdeUiBridge {
                 feedback_tx.send_replace(message);
             }
         });
+        let (projections, projection_task) = crate::projection::start_feed(
+            ctx.clone(), project_id.clone(), changes.clone(), None);
         Ok(Self {
+            projections, projection_task,
+            move_previews: crate::move_preview::MovePreviewClient::new(ctx.clone(), tokio::runtime::Handle::current()),
             project_id,
             commands: command_tx,
             changes,
@@ -465,7 +511,7 @@ impl MdeUiBridge {
             validations,
             saves,
             journal,
-            _listeners: vec![listener, save_listener, trace_listener],
+            _listeners: vec![listener, opened_listener, closed_listener, save_listener, trace_listener],
             task,
             mdj_session: None,
             mdj_shutdown: None,
@@ -499,7 +545,11 @@ impl MdeUiBridge {
             feedback_tx,
             validation_tx,
         ));
+        let (projections, projection_task) = crate::projection::start_feed(
+            ctx.clone(), project_id.clone(), changes.clone(), Some(session.clone()));
         Ok(Self {
+            projections, projection_task,
+            move_previews: crate::move_preview::MovePreviewClient::new(ctx.clone(), tokio::runtime::Handle::current()),
             project_id,
             commands: command_tx,
             changes,
@@ -526,6 +576,12 @@ impl MdeUiBridge {
     pub fn sender(&self) -> mpsc::Sender<MdeUiCommand> {
         self.commands.clone()
     }
+    pub fn projections(&self) -> watch::Receiver<Result<Arc<crate::ModelingSnapshot>, String>> {
+        self.projections.clone()
+    }
+    pub fn move_previews(&self) -> crate::move_preview::MovePreviewClient {
+        self.move_previews.clone()
+    }
     pub fn changes(&self) -> watch::Receiver<u64> {
         self.changes.clone()
     }
@@ -547,6 +603,7 @@ impl MdeUiBridge {
 }
 impl Drop for MdeUiBridge {
     fn drop(&mut self) {
+        self.projection_task.abort();
         if let Some(shutdown) = &self.mdj_shutdown {
             // Do not cancel an edit between its commit and delivery of the new Arc.
             shutdown.send_replace(true);

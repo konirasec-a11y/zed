@@ -1,26 +1,21 @@
-use bellatrix_mde::{Element, Project, Plan, physical_path};
+use super::emission::{Manifest, Rendered, TargetElement};
 use bellatrix_mde_templates::TemplatePack;
 use serde_json::Value as Json;
-use std::collections::HashSet;
 use toml::{Table, Value};
 
-pub fn plan_manifests(project: &Project, selected: &HashSet<String>, plan: &mut Plan,
+pub(super) fn render_manifests(manifests: &[Manifest], rendered: &mut Rendered,
     templates: &TemplatePack) -> Result<(), Box<dyn std::error::Error>> {
-    for element in &project.elements {
-        if !selected.contains(&element.id) { continue; }
-        match element.kind.as_str() {
-            "cargo.package" | "cargo.workspace" => {
-                let directory = physical_path(project, &element.id)?;
-                let table = manifest(element, plan)?;
-                plan.file(directory.join("Cargo.toml"), templates.render("rust/Cargo.toml.tera",
-                    &serde_json::json!({"manifest": toml::to_string_pretty(&table)?}))?.into_bytes(), &element.id)?;
-            }
-            _ => (),
+    for task in manifests {
+        if !matches!(task.element.kind.as_str(), "cargo.package" | "cargo.workspace") {
+            return Err("unsupported Cargo manifest emission task".into());
         }
+        let table = manifest(&task.element, rendered)?;
+        rendered.file(task.path.clone(), templates.render("rust/Cargo.toml.tera",
+            &serde_json::json!({"manifest": toml::to_string_pretty(&table)?}))?.into_bytes(), &task.element.id);
     }
     Ok(())
 }
-fn manifest(element: &Element, plan: &mut Plan) -> Result<Table, Box<dyn std::error::Error>> {
+fn manifest(element: &TargetElement, plan: &mut Rendered) -> Result<Table, Box<dyn std::error::Error>> {
     if let Some(raw) = element.properties.get("manifest") {
         return match convert(raw)? { Value::Table(table) => Ok(table), _ => Err("manifest must be a TOML-compatible object".into()) };
     }

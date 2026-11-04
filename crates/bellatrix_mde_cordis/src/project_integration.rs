@@ -1,30 +1,16 @@
+use crate::Command;
 use crate::view_edits::{ModelingMoveView, move_view};
-use bellatrix_mde::{Graph, MODELING_NAMESPACE, ModelingSection, Project, commands::Command};
+use crate::MODELING_NAMESPACE;
 use bellatrix_project::{ProjectDocument, ProjectId, ProjectService};
 use cordis::event::responder;
 use cordis::{Context, Event, InjectSpec, Plugin, Service};
 use std::{convert::Infallible, io, sync::Arc};
 
-pub(crate) fn from_document(document: &ProjectDocument) -> Result<ModelingSection, String> {
-    let state = document
-        .section(MODELING_NAMESPACE)
+/// Serialize the existing canonical section for an MDE application API.
+pub(crate) fn section_json(document: &ProjectDocument) -> Result<String, String> {
+    let section = document.section(MODELING_NAMESPACE)
         .ok_or("unsupported or missing MDE section: expected bellatrix.mde; beta documents in other namespaces are not supported")?;
-    let section: ModelingSection = serde_json::from_value(state.clone()).map_err(|error| error.to_string())?;
-    bellatrix_mde::validate_model_hierarchy(&section.to_model(document.id().as_str(), document.name()))?;
-    Ok(section)
-}
-pub fn with_model(document: ProjectDocument, model: &Project) -> Result<ProjectDocument, String> {
-    if document.id().as_str() != model.id || document.name() != model.name {
-        return Err("MDE and platform project identities differ".into());
-    }
-    Graph::new(model)
-        .validate_presentation()
-        .map_err(|error| error.to_string())?;
-    let state = serde_json::to_value(ModelingSection::from_model(model))
-        .map_err(|error| error.to_string())?;
-    document
-        .with_section(MODELING_NAMESPACE, state)
-        .map_err(|error| error.to_string())
+    serde_json::to_string(section).map_err(|error| error.to_string())
 }
 #[derive(Clone)]
 pub struct ModelingRenameRequested {
@@ -57,7 +43,7 @@ pub struct ModelingSetExplorerParentRequested {
     pub project_id: ProjectId,
     pub subject_id: String,
     pub parent_id: Option<String>,
-    pub parent_occurrence: Option<bellatrix_mde::ViewOccurrence>,
+    pub parent_occurrence: Option<crate::ViewOccurrence>,
     pub expected_revision: u64,
 }
 pub struct ModelingSetExplorerParent;
@@ -82,8 +68,11 @@ impl Plugin for MdePlugin {
         let projects = ctx
             .try_service::<ProjectService>()
             .map_err(|error| io::Error::other(error.to_string()))?;
+        crate::headless_operations::register(&ctx).map_err(|error| io::Error::other(error.to_string()))?;
         crate::html_export::register(&ctx).map_err(|error| io::Error::other(error.to_string()))?;
         crate::document_codec::register(&ctx).map_err(|error| io::Error::other(error.to_string()))?;
+        crate::projection::register(&ctx, Arc::clone(&projects))?;
+        crate::move_preview::register(&ctx, Arc::clone(&projects))?;
         crate::task_events::register(&ctx, Arc::clone(&projects))?;
         crate::diagrams::register(&ctx, Arc::clone(&projects))?;
         crate::views::register(&ctx, Arc::clone(&projects))?;

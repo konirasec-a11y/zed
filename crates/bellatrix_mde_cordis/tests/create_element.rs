@@ -1,7 +1,9 @@
-use bellatrix_mde::{Geometry, ModelingSection, Project};
+#[path = "support/events.rs"]
+mod events;
+use serde_json::{Value, json};
+use bellatrix_mde_cordis::Geometry;
 use bellatrix_mde_cordis::{
     MdePlugin, ModelingCreateElement, ModelingCreateElementRequested, ModelingElementKind,
-    with_model,
 };
 use bellatrix_project::{
     ProjectCreate, ProjectCreateRequested, ProjectDocument, ProjectId, ProjectPlugin,
@@ -21,16 +23,12 @@ where
         .await
         .unwrap()
 }
-fn document(name: &str) -> ProjectDocument {
-    let mut model: Project =
+async fn document(ctx: &Context, name: &str) -> ProjectDocument {
+    let mut model: Value =
         serde_json::from_str(include_str!("../../bellatrix_mde/fixtures/todo.json")).unwrap();
-    model.id = name.into();
-    model.name = name.into();
-    with_model(
-        ProjectDocument::new(ProjectId::new(name).unwrap(), name).unwrap(),
-        &model,
-    )
-    .unwrap()
+    model["id"] = name.into();
+    model["name"] = name.into();
+    events::prepare(ctx, &model).await.unwrap()
 }
 fn request(id: &ProjectId, revision: u64) -> ModelingCreateElementRequested {
     ModelingCreateElementRequested {
@@ -57,7 +55,7 @@ async fn class_creation_changes_one_project_and_rejects_stale_revision() {
             ctx.query::<ProjectCreate>(
                 Routing::Unscoped,
                 ProjectCreateRequested {
-                    document: document(name)
+                    document: document(&ctx, name).await
                 }
             )
             .await
@@ -66,13 +64,7 @@ async fn class_creation_changes_one_project_and_rejects_stale_revision() {
         ));
     }
     let current = projects.snapshot(&a).unwrap();
-    let section: ModelingSection = serde_json::from_value(
-        current
-            .section(bellatrix_mde::MODELING_NAMESPACE)
-            .unwrap()
-            .clone(),
-    )
-    .unwrap();
+    let section = events::projection(&ctx, &projects, &a).await.unwrap().section;
     let mut first_request = request(&a, 0);
     first_request.diagram_id = section.diagrams.first().unwrap().id.clone();
     assert!(matches!(
@@ -90,13 +82,7 @@ async fn class_creation_changes_one_project_and_rejects_stale_revision() {
     assert_eq!(projects.snapshot(&b).unwrap().revision(), 0);
     let updated = projects.snapshot(&a).unwrap();
     assert_eq!(updated.revision(), 1);
-    let section: ModelingSection = serde_json::from_value(
-        updated
-            .section(bellatrix_mde::MODELING_NAMESPACE)
-            .unwrap()
-            .clone(),
-    )
-    .unwrap();
+    let section = events::projection(&ctx, &projects, &a).await.unwrap().section;
     let created = section
         .elements
         .iter()
@@ -130,7 +116,7 @@ async fn rejects_invalid_geometry_and_missing_diagram() {
     ctx.query::<ProjectCreate>(
         Routing::Unscoped,
         ProjectCreateRequested {
-            document: document("invalid-create"),
+            document: document(&ctx, "invalid-create").await,
         },
     )
     .await
@@ -165,26 +151,21 @@ async fn component_and_artifact_creation_require_explicit_owner_and_commit_atomi
     let projects = Arc::new(ProjectService::new());
     let provider = admit(&context, ProjectPlugin::new(Arc::clone(&projects))).await;
     let mde = admit(&context, MdePlugin).await;
-    let mut model: Project =
+    let mut model: Value =
         serde_json::from_str(include_str!("../../bellatrix_mde/fixtures/todo.json"))?;
     for (id, kind) in [
         ("package-owner", "uml.package"),
         ("model-owner", "uml.model"),
     ] {
-        model
-            .elements
-            .push(serde_json::from_value(serde_json::json!({
-                "id": id, "kind": kind, "name": id
-            }))?);
+        model["elements"].as_array_mut().ok_or("elements missing")?
+            .push(json!({"id": id, "kind": kind, "name": id}));
     }
     // Context must never silently select semantic ownership.
-    model
-        .diagrams
-        .first_mut()
-        .ok_or("diagram missing")?
-        .model_elements = vec!["package-owner".into()];
-    let id = ProjectId::new(model.id.clone())?;
-    let document = with_model(ProjectDocument::new(id.clone(), &model.name)?, &model)?;
+    model["diagrams"].as_array_mut().and_then(|diagrams| diagrams.first_mut())
+        .ok_or("diagram missing")?["model_elements"] = json!(["package-owner"]);
+    let id = ProjectId::new(model["id"].as_str().ok_or("id missing")?)?;
+    let document = events::prepare(&context, &model).await?;
+    let baseline = document.section(bellatrix_mde_cordis::MODELING_NAMESPACE).ok_or("section missing")?.clone();
     assert!(matches!(
         context
             .query::<ProjectCreate>(Routing::Unscoped, ProjectCreateRequested { document })
@@ -214,13 +195,8 @@ async fn component_and_artifact_creation_require_explicit_owner_and_commit_atomi
             ));
             let unchanged = projects.snapshot(&id)?;
             assert_eq!(unchanged.revision(), 0);
-            let section: ModelingSection = serde_json::from_value(
-                unchanged
-                    .section(bellatrix_mde::MODELING_NAMESPACE)
-                    .ok_or("section missing")?
-                    .clone(),
-            )?;
-            assert_eq!(section, ModelingSection::from_model(&model));
+            let section = events::section(&projects, &id)?;
+            assert_eq!(section, baseline);
         }
     }
     for (index, (kind, model_kind, owner)) in [
@@ -241,12 +217,12 @@ async fn component_and_artifact_creation_require_explicit_owner_and_commit_atomi
         );
         let updated = projects.snapshot(&id)?;
         let state = updated
-            .section(bellatrix_mde::MODELING_NAMESPACE)
+            .section(bellatrix_mde_cordis::MODELING_NAMESPACE)
             .ok_or("section missing")?
             .clone();
-        let section: ModelingSection = serde_json::from_value(state.clone())?;
-        assert_eq!(section.elements.len(), model.elements.len() + index + 1);
-        assert_eq!(section.relations.len(), model.relations.len() + index + 1);
+        let section = events::projection(&context, &projects, &id).await?.section;
+        assert_eq!(section.elements.len(), baseline["elements"].as_array().ok_or("elements missing")?.len() + index + 1);
+        assert_eq!(section.relations.len(), baseline["relations"].as_array().ok_or("relations missing")?.len() + index + 1);
         let created = section
             .elements
             .iter()
@@ -264,7 +240,7 @@ async fn component_and_artifact_creation_require_explicit_owner_and_commit_atomi
         assert_eq!(diagram.model_elements, vec!["package-owner"]);
         assert_eq!(
             diagram.views.len(),
-            model.diagrams.first().ok_or("diagram missing")?.views.len() + index + 1
+            baseline["diagrams"][0]["views"].as_array().ok_or("views missing")?.len() + index + 1
         );
         assert!(
             diagram
@@ -272,7 +248,7 @@ async fn component_and_artifact_creation_require_explicit_owner_and_commit_atomi
                 .iter()
                 .any(|view| view.subject.as_deref() == Some(created.id.as_str()))
         );
-        assert_eq!(section.diagrams.get(1), model.diagrams.get(1));
+        assert_eq!(state["diagrams"].get(1), baseline["diagrams"].get(1));
         assert!(matches!(
             context
                 .query::<ModelingCreateElement>(
@@ -285,7 +261,7 @@ async fn component_and_artifact_creation_require_explicit_owner_and_commit_atomi
         let unchanged = projects.snapshot(&id)?;
         assert_eq!(unchanged.revision(), revision + 1);
         assert_eq!(
-            unchanged.section(bellatrix_mde::MODELING_NAMESPACE),
+            unchanged.section(bellatrix_mde_cordis::MODELING_NAMESPACE),
             Some(&state)
         );
     }

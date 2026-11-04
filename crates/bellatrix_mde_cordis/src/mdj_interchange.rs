@@ -1,5 +1,6 @@
-use crate::project_integration::from_document;
-use bellatrix_mde::{MODELING_NAMESPACE, Project, commands::Command, export_mdj_document};
+use crate::MdjEditCommand;
+use crate::project_integration::section_json;
+use crate::MODELING_NAMESPACE;
 use bellatrix_project::{ProjectDocument, ProjectPrepareEncodedSaveRequested, ProjectService};
 use cordis::{Context, Event, event::responder};
 use std::{convert::Infallible, io, sync::Arc};
@@ -59,18 +60,61 @@ fn document_from_response(response: &str) -> Result<PreparedModelingDocument, St
     if imported.api_version != 1 {
         return Err("Unsupported model document API version".into());
     }
-    let model: Project = serde_json::from_str(imported.model.get())
-        .map_err(|error| format!("Invalid imported model: {error}"))?;
-    let id = bellatrix_project::ProjectId::new(model.id.clone())
+    #[derive(serde::Serialize)]
+    struct ModelRequest<'a> { api_version: u32, model: &'a serde_json::value::RawValue }
+    let request = serde_json::to_string(&ModelRequest { api_version: imported.api_version, model: &imported.model })
         .map_err(|error| error.to_string())?;
-    let document = ProjectDocument::new(id, model.name.clone())
-        .map_err(|error| error.to_string())?;
-    let document = crate::project_integration::with_model(document, &model)?;
+    let parts = bellatrix_mde::prepare_model_document(&request).map_err(api_error_message)?;
+    let id = bellatrix_project::ProjectId::new(parts.id).map_err(|error| error.to_string())?;
+    let state = serde_json::from_str(&parts.section_json).map_err(|error| error.to_string())?;
+    let document = ProjectDocument::new(id, parts.name).map_err(|error| error.to_string())?
+        .with_section(MODELING_NAMESPACE, state).map_err(|error| error.to_string())?;
     let diagnostics = imported.diagnostics.into_iter().map(|diagnostic| {
         let path = if diagnostic.path.is_empty() { "/" } else { &diagnostic.path };
         format!("{path}: {}", diagnostic.message)
     }).collect();
     Ok(PreparedModelingDocument { document, diagnostics })
+}
+
+#[derive(serde::Deserialize)]
+struct RawProjectDocument {
+    id: bellatrix_project::ProjectId,
+    name: String,
+    #[serde(default, deserialize_with = "deserialize_raw_sections")]
+    sections: std::collections::BTreeMap<String, Box<serde_json::value::RawValue>>,
+}
+
+fn deserialize_raw_sections<'de, D>(
+    deserializer: D,
+) -> Result<std::collections::BTreeMap<String, Box<serde_json::value::RawValue>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct SectionsVisitor;
+    impl<'de> serde::de::Visitor<'de> for SectionsVisitor {
+        type Value = std::collections::BTreeMap<String, Box<serde_json::value::RawValue>>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str("project sections with unique namespaces")
+        }
+
+        fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
+        where
+            M: serde::de::MapAccess<'de>,
+        {
+            let mut sections = std::collections::BTreeMap::new();
+            while let Some(namespace) = access.next_key::<String>()? {
+                if sections.contains_key(&namespace) {
+                    return Err(serde::de::Error::custom(format!(
+                        "duplicate project namespace: {namespace}"
+                    )));
+                }
+                sections.insert(namespace, access.next_value::<Box<serde_json::value::RawValue>>()?);
+            }
+            Ok(sections)
+        }
+    }
+    deserializer.deserialize_map(SectionsVisitor)
 }
 
 fn prepare_document(request: ModelingPrepareDocumentRequested) -> Result<PreparedModelingDocument, String> {
@@ -90,11 +134,15 @@ fn prepare_document(request: ModelingPrepareDocumentRequested) -> Result<Prepare
             document_from_response(&response)
         }
         ModelingDocumentFormat::ProjectJson => {
+            // Validate the original section before Value can overwrite duplicate
+            // authoring, hierarchy or composition keys rejected by the engine.
+            let raw: RawProjectDocument = serde_json::from_slice(&request.bytes)
+                .map_err(|error| format!("Invalid Bellatrix project document: {error}"))?;
+            let section = raw.sections.get(MODELING_NAMESPACE)
+                .ok_or("unsupported or missing MDE section: expected bellatrix.mde; beta documents in other namespaces are not supported")?;
+            bellatrix_mde::validate_model_section(raw.id.as_str(), &raw.name, section.get())?;
             let document: ProjectDocument = serde_json::from_slice(&request.bytes)
                 .map_err(|error| format!("Invalid Bellatrix project document: {error}"))?;
-            let section = from_document(&document)?;
-            bellatrix_mde::Graph::new(&section.to_model(document.id().as_str(), document.name()))
-                .validate_presentation().map_err(|error| error.to_string())?;
             Ok(PreparedModelingDocument { document, diagnostics: Vec::new() })
         }
     }
@@ -103,7 +151,7 @@ fn prepare_document(request: ModelingPrepareDocumentRequested) -> Result<Prepare
 #[derive(Clone)]
 pub struct ModelingApplyMdjEditRequested {
     pub document: Arc<ProjectDocument>,
-    pub command: Command,
+    pub command: MdjEditCommand,
 }
 
 pub struct ModelingApplyMdjEdit;
@@ -164,33 +212,11 @@ impl MdjExportReceipt {
     }
 }
 
-pub(crate) fn ensure_mdj_document(
-    document: &ProjectDocument,
-    model: &Project,
-) -> Result<(), String> {
-    if model.mdj_provenance.is_none() {
-        return Err("MDJ interchange requires an imported StarUML document".into());
-    }
-    if document
-        .sections()
-        .keys()
-        .any(|namespace| namespace != MODELING_NAMESPACE)
-    {
+fn ensure_mdj_sections(document: &ProjectDocument) -> Result<(), String> {
+    if document.sections().keys().any(|namespace| namespace != MODELING_NAMESPACE) {
         return Err("MDJ interchange cannot represent other platform sections; save the complete native project instead".into());
     }
     Ok(())
-}
-
-pub(crate) fn export_model_as_mdj(model: &Project) -> Result<Vec<u8>, String> {
-    #[derive(serde::Serialize)]
-    struct ExportRequest<'a> {
-        api_version: u32,
-        model: &'a Project,
-    }
-
-    let request = serde_json::to_string(&ExportRequest { api_version: 1, model })
-        .map_err(|error| error.to_string())?;
-    export_mdj_document(&request).map_err(api_error_message)
 }
 
 async fn export_snapshot(
@@ -203,9 +229,11 @@ async fn export_snapshot(
     if !Arc::ptr_eq(&document, &request.document) {
         return Err("stale MDJ export; the requested snapshot is no longer open".into());
     }
-    let model = from_document(&document)?.to_model(document.id().as_str(), document.name());
-    ensure_mdj_document(&document, &model)?;
-    let bytes = tokio::task::spawn_blocking(move || export_model_as_mdj(&model))
+    ensure_mdj_sections(&document)?;
+    let section = section_json(&document)?;
+    let id = document.id().as_str().to_owned();
+    let name = document.name().to_owned();
+    let bytes = tokio::task::spawn_blocking(move || bellatrix_mde::export_mdj_section(&id, &name, &section).map_err(api_error_message))
         .await
         .map_err(|error| error.to_string())??;
     let current = projects

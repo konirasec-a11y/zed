@@ -1,9 +1,9 @@
 //! Map domain action descriptors to controls; no action semantics belong to a shape.
 use crate::workbench_ui::MdeWorkbenchItem;
-use bellatrix_mde::commands::ModelingMemberKind;
-use bellatrix_mde::{
-    Element, QuickEditAction, QuickEditAvailability, QuickEditControl, QuickEditSide,
-    UmlQuickCreate, quick_edit_for,
+use bellatrix_mde_cordis::{
+    ModelingMemberKind, QuickEditAction, QuickEditAvailability, QuickEditControl, QuickEditSide,
+    UmlQuickCreate,
+    projection::{Element, ModelingProjection, Relation},
 };
 use bellatrix_project::ProjectId;
 use bellatrix_ui_uml::{UmlQuickAction, UmlQuickEdit, UmlVisibilityPicker};
@@ -38,9 +38,10 @@ impl ParameterAction {
     }
 }
 
-pub(crate) fn parameter_actions(kind: &str) -> Vec<(QuickEditAction, ParameterAction)> {
-    quick_edit_for(kind)
-        .into_iter()
+pub(crate) fn parameter_actions(actions: &[QuickEditAction]) -> Vec<(QuickEditAction, ParameterAction)> {
+    actions
+        .iter()
+        .copied()
         .filter(|action| {
             action.availability == QuickEditAvailability::Implemented
                 && action.control == QuickEditControl::Button
@@ -59,7 +60,7 @@ pub(crate) fn quick_edit_for_element(
     Option<UmlQuickEdit>,
     Option<UmlVisibilityPicker>,
 ) {
-    let descriptors = quick_edit_for(&element.kind);
+    let descriptors = &element.quick_actions;
     let actions: Vec<(QuickEditSide, UmlQuickAction)> = descriptors
         .iter()
         .filter(|action| {
@@ -173,11 +174,7 @@ pub(crate) fn quick_edit_for_element(
                 && action.availability == QuickEditAvailability::Implemented
         })
         .then(|| {
-            let current = element
-                .properties
-                .get("visibility")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("public");
+            let current = element.visibility.as_deref().unwrap_or("public");
             UmlVisibilityPicker::new(current, move |value, _, cx| {
                 owner.update(cx, |item, cx| {
                     item.set_selected_property(
@@ -192,8 +189,8 @@ pub(crate) fn quick_edit_for_element(
 }
 
 pub(crate) fn quick_edit_for_relationship(
-    section: &bellatrix_mde::ModelingSection,
-    relation: &bellatrix_mde::Relation,
+    section: &ModelingProjection,
+    relation: &Relation,
     owner: Entity<MdeWorkbenchItem>,
     project: ProjectId,
     revision: u64,
@@ -202,20 +199,19 @@ pub(crate) fn quick_edit_for_relationship(
     cx: &mut gpui::App,
 ) -> Option<gpui::AnyElement> {
     use crate::workbench_ui::{WorkbenchPalette, panels::element_glyph};
-    use bellatrix_mde::{PropertyEditor, inspect_element, relationship_presentation, semantic_identity};
-    use bellatrix_mde_cordis::{MdeUiCommand, ModelingSetPropertyRequested};
+    use bellatrix_mde_cordis::{MdeUiCommand, ModelingSetPropertyRequested, PropertyEditor};
     use bellatrix_ui_symbols::glyph;
     use gpui::{MouseButton, div, prelude::*, px, svg};
     use ui::{ContextMenu, DropdownMenu, Icon, IconButton, Label, Tooltip, prelude::*};
 
-    let inspection = inspect_element(section, &relation.id)?;
-    let presentation = relationship_presentation(relation);
-    let type_label = semantic_identity(&inspection.presentation_kind).type_label;
+    let inspection = section.inspect_element(&relation.id)?;
+    let presentation = &relation.presentation;
+    let type_label = inspection.type_label.as_str();
     let palette = WorkbenchPalette::current(cx);
     let mut controls = Vec::new();
     for (id, role, icon) in [
-        (&relation.from, presentation.source_role, IconName::ArrowLeft),
-        (&relation.to, presentation.target_role, IconName::ArrowRight),
+        (&relation.from, relation.source_role.as_str(), IconName::ArrowLeft),
+        (&relation.to, relation.target_role.as_str(), IconName::ArrowRight),
     ] {
         let endpoint = section.elements.iter().find(|element| element.id == *id);
         let name = endpoint
@@ -243,11 +239,11 @@ pub(crate) fn quick_edit_for_relationship(
                 && property.group != "Other properties"
                 && property.path != "properties.navigable"
         }) {
-            let options: Vec<(String, serde_json::Value)> = match property.editor {
+            let options: Vec<(String, serde_json::Value)> = match &property.editor {
                 PropertyEditor::Choice(options) => options
                     .iter()
                     .map(|option| {
-                        ((*option).to_owned(), serde_json::Value::String((*option).into()))
+                        (option.clone(), serde_json::Value::String(option.clone()))
                     })
                     .collect(),
                 PropertyEditor::Boolean => [false, true]
@@ -345,7 +341,7 @@ pub(crate) fn quick_edit_for_relationship(
                     .gap_2()
                     .child(
                         svg()
-                            .data(glyph(element_glyph(&inspection.presentation_kind)))
+                            .data(glyph(element_glyph(&inspection.presentation_kind, &inspection.type_label)))
                             .size(px(16.0))
                             .flex_none()
                             .text_color(palette.muted),

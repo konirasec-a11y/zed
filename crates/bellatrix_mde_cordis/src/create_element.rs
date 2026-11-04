@@ -1,4 +1,5 @@
-use bellatrix_mde::commands::{Command, ModelingElementKind};
+use crate::Command;
+use crate::ModelingElementKind;
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::{Context, Event};
 

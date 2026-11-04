@@ -1,5 +1,5 @@
 use super::*;
-use bellatrix_mde::Geometry;
+use bellatrix_mde_cordis::Geometry;
 
 impl MdeRightPanel {
     pub(super) fn render_view_presentation(
@@ -136,9 +136,9 @@ impl MdeRightPanel {
                         ("Height", &bounds.height),
                     ] {
                         let value = match value {
-                            bellatrix_mde::Authored::Missing => "Absent".to_owned(),
-                            bellatrix_mde::Authored::Null => "Null".to_owned(),
-                            bellatrix_mde::Authored::Value(value) => value.to_string(),
+                            bellatrix_mde_cordis::Authored::Missing => "Absent".to_owned(),
+                            bellatrix_mde_cordis::Authored::Null => "Null".to_owned(),
+                            bellatrix_mde_cordis::Authored::Value(value) => value.to_string(),
                         };
                         presentation_rows.push(presentation_row(name, &value));
                     }
@@ -263,7 +263,7 @@ fn presentation_row(name: &str, value: &str) -> AnyElement {
 fn view_navigation(
     item: &Entity<MdeWorkbenchItem>,
     diagram_id: &str,
-    view: &bellatrix_mde::View,
+    view: &bellatrix_mde_cordis::projection::View,
     relationship: &str,
     icon: IconName,
 ) -> AnyElement {

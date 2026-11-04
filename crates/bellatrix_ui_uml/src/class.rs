@@ -1,7 +1,10 @@
 //! Shared classifier labels, compartments and editing. The notation selects the silhouette.
 use crate::inline_edit::UmlInlineNameEditor;
 use bellatrix_design_system::Palette;
-use bellatrix_mde::{ClassifierPresentation, MemberPresentation, UmlHeader, uml_header};
+use bellatrix_mde_cordis::{LineMode, TextAlignment, TextVerticalAlignment};
+use bellatrix_mde_cordis::presentation_contract::{
+    ClassifierPresentation, MemberPresentation, RenderStyle, UmlHeader,
+};
 use gpui::{
     App, Entity, InteractiveElement, IntoElement, MouseButton, PathBuilder, RenderOnce,
     SharedString, Window, canvas, div, point, prelude::*, px, rgb,
@@ -10,7 +13,7 @@ use std::rc::Rc;
 use ui_input::InputField;
 
 #[derive(Clone, Default)]
-pub(crate) struct ViewAppearance(pub(crate) bellatrix_mde::Style);
+pub(crate) struct ViewAppearance(pub(crate) RenderStyle);
 impl ViewAppearance {
     fn color(&self, value: Option<&str>, fallback: u32) -> gpui::Rgba {
         value
@@ -38,11 +41,14 @@ impl ViewAppearance {
     }
     pub(crate) fn resolve_stroke_pattern(
         &self,
-        notation_mode: bellatrix_mde::LineMode,
+        notation_mode: LineMode,
         scale: f32,
     ) -> Vec<gpui::Pixels> {
-        self.0
-            .resolve_stroke_pattern(notation_mode)
+        self.0.stroke_pattern.as_deref().unwrap_or(match notation_mode {
+            LineMode::Solid => &[],
+            LineMode::Dotted => &[1.0, 3.0],
+            LineMode::Dashed => &[6.0, 5.0],
+        })
             .iter()
             .map(|value| px(*value as f32 * scale))
             .collect()
@@ -78,9 +84,9 @@ impl ViewAppearance {
         let color = self.stroke(palette, selected);
         let pattern = self.resolve_stroke_pattern(
             if notation_dashed {
-                bellatrix_mde::LineMode::Dashed
+                LineMode::Dashed
             } else {
-                bellatrix_mde::LineMode::Solid
+                LineMode::Solid
             },
             scale,
         );
@@ -155,39 +161,39 @@ impl ViewAppearance {
     pub(crate) fn align_text<T: gpui::Styled>(&self, element: T) -> T {
         let element = self.apply_text_wrap(element);
         match self.0.text_align {
-            Some(bellatrix_mde::TextAlignment::Left) => element.text_left(),
-            Some(bellatrix_mde::TextAlignment::Center) => element.text_center(),
-            Some(bellatrix_mde::TextAlignment::Right) => element.text_right(),
+            Some(TextAlignment::Left) => element.text_left(),
+            Some(TextAlignment::Center) => element.text_center(),
+            Some(TextAlignment::Right) => element.text_right(),
             None => element,
         }
     }
     pub(crate) fn align_row<T: gpui::Styled>(&self, element: T) -> T {
         let element = self.align_text(element);
         let element = match self.0.text_align {
-            Some(bellatrix_mde::TextAlignment::Left) => element.justify_start(),
-            Some(bellatrix_mde::TextAlignment::Center) => element.justify_center(),
-            Some(bellatrix_mde::TextAlignment::Right) => element.justify_end(),
+            Some(TextAlignment::Left) => element.justify_start(),
+            Some(TextAlignment::Center) => element.justify_center(),
+            Some(TextAlignment::Right) => element.justify_end(),
             None => element,
         };
         match self.0.text_vertical_align {
-            Some(bellatrix_mde::TextVerticalAlignment::Top) => element.items_start(),
-            Some(bellatrix_mde::TextVerticalAlignment::Center) => element.items_center(),
-            Some(bellatrix_mde::TextVerticalAlignment::Bottom) => element.items_end(),
+            Some(TextVerticalAlignment::Top) => element.items_start(),
+            Some(TextVerticalAlignment::Center) => element.items_center(),
+            Some(TextVerticalAlignment::Bottom) => element.items_end(),
             None => element,
         }
     }
     pub(crate) fn align_column<T: gpui::Styled>(&self, element: T) -> T {
         let element = self.align_text(element);
         let element = match self.0.text_align {
-            Some(bellatrix_mde::TextAlignment::Left) => element.items_start(),
-            Some(bellatrix_mde::TextAlignment::Center) => element.items_center(),
-            Some(bellatrix_mde::TextAlignment::Right) => element.items_end(),
+            Some(TextAlignment::Left) => element.items_start(),
+            Some(TextAlignment::Center) => element.items_center(),
+            Some(TextAlignment::Right) => element.items_end(),
             None => element,
         };
         match self.0.text_vertical_align {
-            Some(bellatrix_mde::TextVerticalAlignment::Top) => element.justify_start(),
-            Some(bellatrix_mde::TextVerticalAlignment::Center) => element.justify_center(),
-            Some(bellatrix_mde::TextVerticalAlignment::Bottom) => element.justify_end(),
+            Some(TextVerticalAlignment::Top) => element.justify_start(),
+            Some(TextVerticalAlignment::Center) => element.justify_center(),
+            Some(TextVerticalAlignment::Bottom) => element.justify_end(),
             None => element,
         }
     }
@@ -251,7 +257,7 @@ impl UmlClassifier {
         Self {
             class_id: None,
             title: title.into(),
-            header: uml_header("", None),
+            header: UmlHeader::default(),
             presentation: ClassifierPresentation::default(),
             attributes: Vec::new(),
             operations: Vec::new(),
@@ -275,7 +281,7 @@ impl UmlClassifier {
         self.presentation = presentation;
         self
     }
-    pub fn view_style(mut self, style: &bellatrix_mde::Style) -> Self {
+    pub fn view_style(mut self, style: &RenderStyle) -> Self {
         self.appearance = ViewAppearance(style.clone());
         self
     }
@@ -291,13 +297,8 @@ impl UmlClassifier {
         }
         self
     }
-    pub fn model_kind(mut self, kind: &str) -> Self {
-        self.header.keyword = uml_header(kind, None).keyword;
-        self
-    }
-    pub fn stereotype(mut self, value: impl Into<SharedString>) -> Self {
-        let value = value.into();
-        self.header.applied_stereotype = uml_header("", Some(value.as_ref())).applied_stereotype;
+    pub fn header(mut self, header: UmlHeader) -> Self {
+        self.header = header;
         self
     }
     pub fn class_id(mut self, id: impl Into<String>) -> Self {
@@ -526,7 +527,7 @@ pub(crate) fn template_signature(
     palette: Palette,
     selected: bool,
 ) -> Option<gpui::AnyElement> {
-    let layout = bellatrix_mde::template_signature_layout(body_width, rows.len())?;
+    let layout = crate::figure_geometry::template_signature_layout(body_width, rows.len())?;
     let scale = interactions.scale;
     let appearance = interactions.appearance.clone();
     Some(
@@ -622,10 +623,10 @@ impl RenderOnce for UmlClassifier {
         };
         let edit_title = self.edit_title.clone();
         let mut header = self.header;
-        if !appearance.0.uml.should_show_stereotype() {
+        if !appearance.0.show_stereotype {
             header.applied_stereotype = None;
         }
-        let header_height = header.classifier_header_height();
+        let header_height = header.classifier_header_height;
         let keyword = header.keyword;
         let applied_stereotype = header.applied_stereotype;
         let body = div()
@@ -703,7 +704,7 @@ impl RenderOnce for UmlClassifier {
                     ),
             )
             .when(
-                appearance.0.uml.suppress_attributes != Some(true) && !self.attributes.is_empty(),
+                appearance.0.show_attributes && !self.attributes.is_empty(),
                 |element| {
                     element.child(compartment(
                         self.attributes,
@@ -715,7 +716,7 @@ impl RenderOnce for UmlClassifier {
                 },
             )
             .when(
-                appearance.0.uml.suppress_operations != Some(true) && !self.operations.is_empty(),
+                appearance.0.show_operations && !self.operations.is_empty(),
                 |element| {
                     element.child(compartment(
                         self.operations,
@@ -727,7 +728,7 @@ impl RenderOnce for UmlClassifier {
                 },
             )
             .when(
-                appearance.0.uml.suppress_receptions != Some(true) && !self.receptions.is_empty(),
+                appearance.0.show_receptions && !self.receptions.is_empty(),
                 |element| {
                     element.child(compartment(
                         self.receptions,

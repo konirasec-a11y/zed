@@ -1,4 +1,5 @@
-use bellatrix_mde::{UmlQuickCreate, commands::Command};
+use crate::Command;
+use crate::UmlQuickCreate;
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::{Context, Event};
 

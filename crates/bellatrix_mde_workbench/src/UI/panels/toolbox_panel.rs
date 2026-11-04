@@ -236,12 +236,13 @@ impl Render for MdeLeftPanel {
                 state.presentation.visual_draft_mode(),
             )
         };
+        let catalog = snapshot.as_ref().map(|snapshot| snapshot.section.tools.clone()).unwrap_or_default();
         let mut diagrams = Vec::new();
         if let Some(snapshot) = &snapshot {
             for diagram in &snapshot.section.diagrams {
                 let diagram_id = diagram.id.clone();
                 let owner = item.clone();
-                let diagram_kind = bellatrix_mde::StructuralDiagramKind::from_diagram(diagram)
+                let diagram_kind = diagram.kind
                     .map(crate::workbench_ui::diagram_kind_label)
                     .unwrap_or("Unsupported diagram");
                 diagrams.push(
@@ -281,9 +282,9 @@ impl Render for MdeLeftPanel {
             }
         }
         let create_item = item.clone();
+        let diagram_kinds = catalog.diagrams.iter().map(|entry| entry.kind).collect::<Vec<_>>();
         let create_menu = ui::ContextMenu::build(window, cx, move |menu, _, _| {
-            bellatrix_mde::StructuralDiagramKind::ALL_DIAGRAMS
-                .into_iter()
+            diagram_kinds.into_iter()
                 .fold(menu, |menu, kind| {
                     let owner = create_item.clone();
                     let label = crate::workbench_ui::diagram_kind_label(kind).to_owned();
@@ -296,154 +297,7 @@ impl Render for MdeLeftPanel {
                     })
                 })
         });
-        let tool_groups: [(&str, Vec<ModelingTool>); 18] = [
-            (
-                "Classes · basic",
-                ModelingElementKind::BASIC
-                    .iter()
-                    .copied()
-                    .map(ModelingTool::Element)
-                    .collect(),
-            ),
-            (
-                "Relationships · basic",
-                ModelingRelationKind::BASIC
-                    .iter()
-                    .copied()
-                    .map(ModelingTool::Relation)
-                    .collect(),
-            ),
-            (
-                "Classes · advanced",
-                ModelingElementKind::ADVANCED
-                    .iter()
-                    .copied()
-                    .map(ModelingTool::Element)
-                    .collect(),
-            ),
-            (
-                "Relationships · advanced",
-                ModelingRelationKind::ADVANCED
-                    .iter()
-                    .copied()
-                    .map(ModelingTool::Relation)
-                    .collect(),
-            ),
-            (
-                "Packages",
-                ModelingElementKind::PACKAGES
-                    .iter()
-                    .copied()
-                    .map(ModelingTool::Element)
-                    .chain(
-                        ModelingRelationKind::PACKAGES
-                            .iter()
-                            .copied()
-                            .map(ModelingTool::Relation),
-                    )
-                    .collect(),
-            ),
-            (
-                "Components & deployment",
-                ModelingElementKind::STRUCTURAL
-                    .iter()
-                    .copied()
-                    .map(ModelingTool::Element)
-                    .collect(),
-            ),
-            (
-                "Profiles",
-                ModelingElementKind::PROFILES
-                    .iter()
-                    .copied()
-                    .map(ModelingTool::Element)
-                    .collect(),
-            ),
-            (
-                "Behavior roots · notation",
-                ModelingElementKind::BEHAVIOR
-                    .iter()
-                    .copied()
-                    .map(ModelingTool::Element)
-                    .collect(),
-            ),
-            (
-                "Activity nodes",
-                ModelingElementKind::ACTIVITY_NODES
-                    .iter()
-                    .copied()
-                    .map(ModelingTool::Element)
-                    .collect(),
-            ),
-            (
-                "States",
-                ModelingElementKind::STATE_NODES
-                    .iter()
-                    .copied()
-                    .map(ModelingTool::Element)
-                    .collect(),
-            ),
-            (
-                "Interactions",
-                ModelingElementKind::INTERACTION_NODES
-                    .iter()
-                    .copied()
-                    .map(ModelingTool::Element)
-                    .collect(),
-            ),
-            (
-                "Structural relationships",
-                ModelingRelationKind::STRUCTURAL
-                    .iter()
-                    .copied()
-                    .map(ModelingTool::Relation)
-                    .collect(),
-            ),
-            (
-                "Behavior relationships",
-                ModelingRelationKind::BEHAVIOR
-                    .iter()
-                    .copied()
-                    .map(ModelingTool::Relation)
-                    .collect(),
-            ),
-            (
-                "Ports, roles & nested elements",
-                ModelingElementKind::DETAILS
-                    .iter()
-                    .copied()
-                    .map(ModelingTool::Element)
-                    .collect(),
-            ),
-            (
-                "State pseudostates",
-                ModelingElementKind::PSEUDOSTATES
-                    .iter()
-                    .copied()
-                    .map(ModelingTool::Element)
-                    .collect(),
-            ),
-            (
-                "Interaction links · visual",
-                ModelingRelationKind::MESSAGES
-                    .iter()
-                    .copied()
-                    .map(ModelingTool::Relation)
-                    .collect(),
-            ),
-            (
-                "Interface forms · visual",
-                ModelingTool::INTERFACE_FORMS.to_vec(),
-            ),
-            (
-                "Annotations",
-                ModelingElementKind::ANNOTATIONS
-                    .iter()
-                    .copied()
-                    .map(ModelingTool::Element)
-                    .collect(),
-            ),
-        ];
+        let tool_groups = catalog.groups.iter().map(|group| (group.name.clone(), group.tools.clone())).collect::<Vec<_>>();
         let query = self.search_input.read(cx).text(cx).trim().to_lowercase();
         let searching = !query.is_empty();
         let mut tool_buttons: Vec<gpui::AnyElement> = Vec::new();
@@ -469,9 +323,11 @@ impl Render for MdeLeftPanel {
             .into_iter()
             .enumerate()
             {
+                if catalog.label(tool).is_none() { continue; }
                 tool_buttons.push(tool_entry(
                     format!("mde-quick-tool-{index}"),
                     tool,
+                    catalog.label(tool).unwrap_or("Tool unavailable").to_owned(),
                     chosen,
                     &item,
                     cx,
@@ -510,7 +366,7 @@ impl Render for MdeLeftPanel {
             }
             let tools: Vec<_> = tools
                 .into_iter()
-                .filter(|tool| tool_matches_query(tool.label(), &query))
+                .filter(|tool| catalog.label(*tool).is_some_and(|label| tool_matches_query(label, &query)))
                 .collect();
             if tools.is_empty() {
                 continue;
@@ -550,6 +406,7 @@ impl Render for MdeLeftPanel {
                     tool_buttons.push(tool_entry(
                         format!("mde-tool-{group_index}-{index}"),
                         tool,
+                        catalog.label(tool).unwrap_or("Tool unavailable").to_owned(),
                         chosen,
                         &item,
                         cx,
@@ -763,11 +620,12 @@ impl Render for MdeLeftPanel {
                         )
                         .when_some(chosen, |pane, tool| {
                             let owner = item.clone();
+                            let label = catalog.label(tool).unwrap_or("Tool unavailable").to_owned();
                             let instruction = match tool {
-                                ModelingTool::Relation(kind) => format!(
-                                    "{}: {}", kind.label(), kind.endpoint_instruction()
-                                ),
-                                _ => format!("{}: drag to canvas or click empty space", tool.label()),
+                                ModelingTool::Relation(kind) => catalog.relation(kind)
+                                    .map(|metadata| format!("{}: {}", metadata.label, metadata.endpoint_instruction))
+                                    .unwrap_or_else(|| "Tool metadata unavailable".into()),
+                                _ => format!("{label}: drag to canvas or click empty space"),
                             };
                             pane.child(
                                 div()
@@ -778,7 +636,7 @@ impl Render for MdeLeftPanel {
                                     .border_t_1()
                                     .border_color(palette.border)
                                     .p_2()
-                                    .child(div().flex_1().min_w_0().overflow_hidden().child(Label::new(tool.label())))
+                                    .child(div().flex_1().min_w_0().overflow_hidden().child(Label::new(label)))
                                     .child(
                                         ui::IconButton::new("mde-tool-instructions", IconName::Info)
                                             .aria_label(instruction.clone())
@@ -822,6 +680,7 @@ pub(super) fn tool_matches_query(label: &str, query: &str) -> bool {
 fn tool_entry(
     id: String,
     tool: ModelingTool,
+    label: String,
     chosen: Option<ModelingTool>,
     item: &Entity<MdeWorkbenchItem>,
     cx: &App,
@@ -857,7 +716,7 @@ fn tool_entry(
                     palette.muted
                 }),
         )
-        .child(Label::new(tool.label()));
+        .child(Label::new(label.clone()));
     if !matches!(tool, ModelingTool::Relation(_)) {
         entry
             .cursor_grab()
@@ -865,6 +724,7 @@ fn tool_entry(
                 MdeToolDrag {
                     project_id: item.read(cx).project_id().clone(),
                     kind: tool,
+                    label,
                 },
                 |drag: &MdeToolDrag, _, _, cx| cx.new(|_| drag.clone()),
             )

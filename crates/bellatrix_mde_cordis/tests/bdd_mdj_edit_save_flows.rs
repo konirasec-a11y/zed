@@ -1,6 +1,4 @@
-use bellatrix_mde::{
-    MODELING_NAMESPACE, ModelingSection, Project, Style, commands::Command,
-};
+use bellatrix_mde_cordis::{MODELING_NAMESPACE, MdjEditCommand, Style};
 use bellatrix_mde_cordis::{
     MdePlugin, ModelingApplyMdjEdit, ModelingApplyMdjEditRequested, ModelingDocumentFormat,
     ModelingExportMdj, ModelingExportMdjRequested, ModelingPrepareDocument,
@@ -90,24 +88,18 @@ async fn document(context: &Context, bytes: &[u8]) -> FlowResult<ProjectDocument
     .document)
 }
 
-fn model(document: &ProjectDocument) -> FlowResult<Project> {
-    let section: ModelingSection = serde_json::from_value(
-        document
-            .section(MODELING_NAMESPACE)
-            .ok_or("missing MDE section")?
-            .clone(),
-    )?;
-    Ok(section.to_model(document.id().as_str(), document.name()))
-}
-
 fn style(document: &ProjectDocument) -> FlowResult<Style> {
-    model(document)?
-        .diagrams
+    let section = document
+        .section(MODELING_NAMESPACE)
+        .ok_or("missing MDE section")?;
+    let view = section["diagrams"]
+        .as_array()
+        .ok_or("missing diagrams")?
         .iter()
-        .flat_map(|diagram| diagram.all_views())
-        .find(|view| view.id == "class-view")
-        .map(|view| view.style.clone())
-        .ok_or_else(|| "missing View".into())
+        .flat_map(|diagram| diagram["views"].as_array().into_iter().flatten())
+        .find(|view| view["id"] == "class-view")
+        .ok_or("missing View")?;
+    Ok(serde_json::from_value(view["style"].clone())?)
 }
 
 async fn edit(
@@ -120,7 +112,7 @@ async fn edit(
             Routing::Unscoped,
             ModelingApplyMdjEditRequested {
                 document: Arc::clone(document),
-                command: Command::SetViewStyle {
+                command: MdjEditCommand::SetViewStyle {
                     diagram_id: "diagram".into(),
                     view_id: "class-view".into(),
                     style,
@@ -265,10 +257,7 @@ async fn mdj_edit_commit_and_external_save_acknowledgement_follow_the_actual_fil
     )?;
     fs::write(&destination, ticket.bytes())?;
     let reopened = fs::read(&destination)?;
-    assert_eq!(
-        reexport(&reopened).await?,
-        reopened
-    );
+    assert_eq!(reexport(&reopened).await?, reopened);
     assert_eq!(
         answer(
             context

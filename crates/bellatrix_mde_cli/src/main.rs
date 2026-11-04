@@ -1,8 +1,6 @@
 //! Headless entrypoint. Commands cross a typed Cordis event before execution.
-mod graph_report;
 mod runner;
 use bellatrix_mde_cordis::{ModelingCommand, ModelingCompleted, ModelingCompletion, ModelingOperation, ModelingPlugin, ModelingRequested};
-use bellatrix_mde::Scope;
 use clap::{Parser, Subcommand};
 use cordis::{Context, Plugin, PreparedPlugin, Routing};
 use std::{error::Error, io, path::PathBuf};
@@ -24,7 +22,7 @@ enum Action {
     Export { source: PathBuf, #[arg(long, default_value = "html")] format: String, #[arg(long)] output: PathBuf, #[arg(long)] replace_generated: bool },
     Convert { source: PathBuf, #[arg(long)] output: PathBuf },
 }
-fn scope(elements: Vec<String>) -> Scope { if elements.is_empty() { Scope::Project } else { Scope::Elements(elements) } }
+fn selection(elements: Vec<String>) -> Option<Vec<String>> { if elements.is_empty() { None } else { Some(elements) } }
 fn operation(action: Action) -> Result<ModelingOperation, io::Error> {
     Ok(match action {
         Action::Check { source } => ModelingOperation::Check { source },
@@ -33,10 +31,10 @@ fn operation(action: Action) -> Result<ModelingOperation, io::Error> {
             if to.is_some() && from.is_none() { return Err(io::Error::other("--to requires --from")); }
             ModelingOperation::Analyze { source, from, to, relation }
         }
-        Action::Plan { source, elements, skeleton } => ModelingOperation::Plan { source, scope: scope(elements), skeleton },
+        Action::Plan { source, elements, skeleton } => ModelingOperation::Plan { source, element_ids: selection(elements), skeleton },
         Action::Generate { source, target, output, elements, replace_generated, skeleton } => {
             if target != "rust" { return Err(io::Error::other("only Rust target is supported")); }
-            ModelingOperation::Generate { source, scope: scope(elements), destination: output, replace: replace_generated, skeleton }
+            ModelingOperation::Generate { source, element_ids: selection(elements), destination: output, replace: replace_generated, skeleton }
         }
         Action::Export { source, format, output, replace_generated } => {
             if format != "html" { return Err(io::Error::other("only HTML export is supported")); }

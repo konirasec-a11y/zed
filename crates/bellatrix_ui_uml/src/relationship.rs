@@ -1,9 +1,10 @@
 //! Paint the domain's relationship notation with native GPUI paths.
 use crate::class::ViewAppearance;
 use bellatrix_design_system::Palette;
-use bellatrix_mde::{
+use bellatrix_mde_cordis::LineMode;
+use bellatrix_mde_cordis::presentation_contract::{
     EndpointMarkerComposition, EndpointMarkerGlyph, EndpointMarkerPlacement, RelationshipMarker,
-    RelationshipPresentation, RelationshipStyle,
+    RelationshipPresentation, RelationshipStyle, RenderStyle,
 };
 use gpui::{
     App, Bounds, IntoElement, PathBuilder, Pixels, RenderOnce, Window, canvas, div, point,
@@ -55,12 +56,11 @@ impl UmlRelationGlyph {
             endpoint_markers: None,
         }
     }
-    pub fn diagram_presentation(mut self, diagram: &bellatrix_mde::Diagram, kind: &str) -> Self {
-        self.communication_message =
-            kind == "uml.message" && diagram.interaction_kind.as_deref() == Some("communication");
+    pub fn communication_message(mut self, value: bool) -> Self {
+        self.communication_message = value;
         self
     }
-    pub fn view_style(mut self, style: &bellatrix_mde::Style) -> Self {
+    pub fn view_style(mut self, style: &RenderStyle) -> Self {
         self.appearance = ViewAppearance(style.clone());
         self
     }
@@ -586,7 +586,7 @@ impl RenderOnce for UmlRelationGlyph {
         let endpoint_markers = self.endpoint_markers;
         let dashes = appearance.resolve_stroke_pattern(
             if communication_message {
-                bellatrix_mde::LineMode::Solid
+                LineMode::Solid
             } else {
                 line_mode
             },
@@ -757,9 +757,7 @@ impl RenderOnce for UmlRelationGlyph {
             .size_full()
             .child(glyph)
             .when_some(labels, |element, labels| {
-                let type_label = bellatrix_mde::semantic_identity(&labels.notation)
-                    .type_label
-                    .to_owned();
+                let type_label = labels.type_label;
                 element
                     .when(selected, |element| {
                         element.child(label_block(

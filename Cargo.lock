@@ -2160,6 +2160,7 @@ name = "bellatrix_mde"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "bellatrix_mde_protocol",
  "num-bigint",
  "petgraph",
  "prost",
@@ -2173,12 +2174,9 @@ dependencies = [
 name = "bellatrix_mde_cli"
 version = "0.1.0"
 dependencies = [
- "bellatrix_mde",
  "bellatrix_mde_cordis",
- "bellatrix_mde_rust_generator",
  "clap",
  "cordis-rs",
- "serde_json",
  "smol",
  "tokio",
 ]
@@ -2189,11 +2187,13 @@ version = "0.1.0"
 dependencies = [
  "bellatrix_mde",
  "bellatrix_mde_html_exporter",
+ "bellatrix_mde_protocol",
  "bellatrix_mde_rust_generator",
  "bellatrix_project",
  "cordis-rs",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
 ]
 
@@ -2206,11 +2206,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "bellatrix_mde_protocol"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "bellatrix_mde_rust_generator"
 version = "0.1.0"
 dependencies = [
- "bellatrix_mde",
  "bellatrix_mde_templates",
+ "serde",
  "serde_json",
  "toml 0.9.8",
 ]
@@ -2230,7 +2238,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bellatrix_design_system",
- "bellatrix_mde",
  "bellatrix_mde_cordis",
  "bellatrix_project",
  "bellatrix_ui_panels",
@@ -2324,7 +2331,7 @@ name = "bellatrix_ui_uml"
 version = "0.1.0"
 dependencies = [
  "bellatrix_design_system",
- "bellatrix_mde",
+ "bellatrix_mde_cordis",
  "gpui",
  "log",
  "ui",

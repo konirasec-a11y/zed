@@ -1,4 +1,5 @@
-use bellatrix_mde::{Geometry, View};
+use bellatrix_mde_cordis::Geometry;
+use bellatrix_mde_cordis::projection::View;
 
 pub(super) struct CanvasBounds {
     pub x: f32,
@@ -86,22 +87,5 @@ pub(super) fn ordered_views(views: &[View]) -> Vec<&View> {
 }
 
 fn visible_in_preview(view: &View) -> bool {
-    let Some(source) = view
-        .presentation
-        .source
-        .as_ref()
-        .filter(|source| source.format == "mdj")
-    else {
-        return true;
-    };
-    match source.residual.get("visible") {
-        // StarUML View initializes visible=true (core.js:1492); load preserves it
-        // for an absent property. This derived default must not enter the document.
-        None => true,
-        Some(serde_json::Value::Bool(visible)) => *visible,
-        // Reader.read and Element.load retain null, which is falsy when drawing.
-        Some(serde_json::Value::Null) => false,
-        // Other values are not interpreted as the missing-property default.
-        Some(_) => false,
-    }
+    view.presentation.visible
 }

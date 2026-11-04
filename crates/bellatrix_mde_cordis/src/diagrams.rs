@@ -1,8 +1,10 @@
 //! Diagram lifecycle requests share the same revision-checked mutation boundary as element edits.
+use crate::Command;
+use crate::{ExecutionEvent, TracePhase, TraceOutcome, ModelingDiagnostic, StructuralDiagramKind};
 use bellatrix_mde::{
-    ExecutionEvent, ExecutionTrace, TraceOutcome, TracePhase, StructuralDiagnostic, StructuralDiagramKind, commands::Command, validate_structural_diagram, validate_structural_diagram_traced,
+    MdeExecutionTrace as ExecutionTrace,
 };
-use bellatrix_project::{ProjectId, ProjectService};
+use bellatrix_project::{ProjectDocument, ProjectId, ProjectService};
 use cordis::event::responder;
 use cordis::{Context, Event};
 use std::{convert::Infallible, io, sync::{Arc, atomic::{AtomicU64, Ordering}}};
@@ -26,7 +28,7 @@ impl Event for ModelingCreateDiagram {
 pub struct ModelingCreateExplorerDiagramRequested {
     pub diagram: ModelingCreateDiagramRequested,
     pub parent_id: Option<String>,
-    pub parent_occurrence: Option<bellatrix_mde::ViewOccurrence>,
+    pub parent_occurrence: Option<crate::ViewOccurrence>,
 }
 pub struct ModelingCreateExplorerDiagram;
 impl Event for ModelingCreateExplorerDiagram {
@@ -73,12 +75,24 @@ pub struct ModelingValidateDiagramRequested {
 pub struct DiagramValidationResult {
     pub diagram_id: String,
     pub revision: u64,
-    pub diagnostics: Vec<StructuralDiagnostic>,
+    pub diagnostics: Vec<ModelingDiagnostic>,
 }
 pub struct ModelingValidateDiagram;
 impl Event for ModelingValidateDiagram {
     const NAME: &'static str = "bellatrix.mde.validate-diagram.v1";
     type Args = ModelingValidateDiagramRequested;
+    type Output = Result<DiagramValidationResult, String>;
+}
+
+#[derive(Clone)]
+pub struct ModelingValidateSnapshotRequested {
+    pub document: Arc<ProjectDocument>,
+    pub diagram_id: String,
+}
+pub struct ModelingValidateSnapshot;
+impl Event for ModelingValidateSnapshot {
+    const NAME: &'static str = "bellatrix.mde.validate-snapshot.v1";
+    type Args = ModelingValidateSnapshotRequested;
     type Output = Result<DiagramValidationResult, String>;
 }
 
@@ -133,27 +147,40 @@ fn validate_inner(
             document.revision()
         ));
     }
-    let model = crate::project_integration::from_document(&document)?
-        .to_model(document.id().as_str(), document.name());
-    let diagram = model
-        .diagrams
-        .iter()
-        .find(|diagram| diagram.id == request.diagram_id)
-        .ok_or("diagram not found")?;
-    let stored = diagram.uml_di_type.as_str();
-    let kind = StructuralDiagramKind::from_diagram(diagram)
-        .ok_or_else(|| format!("unsupported UMLDI diagram type: {stored}"))?;
-    Ok(DiagramValidationResult {
-        diagram_id: request.diagram_id.clone(),
-        revision: document.revision(),
-        diagnostics: match trace {
-            Some(trace) => validate_structural_diagram_traced(&model, &request.diagram_id, kind, trace),
-            None => validate_structural_diagram(&model, &request.diagram_id, kind),
-        },
-    })
+    let section_json = document.section(crate::MODELING_NAMESPACE).ok_or("MDE section is missing")?.to_string();
+    let diagnostics = bellatrix_mde::validate_model_section_diagram(document.id().as_str(),
+        document.name(), &section_json, &request.diagram_id, trace)?;
+    Ok(DiagramValidationResult { diagram_id: request.diagram_id, revision: document.revision(), diagnostics })
 }
 
 pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Result<(), io::Error> {
+    let snapshot_projects = Arc::clone(&projects);
+    let _validate_snapshot = context.on::<ModelingValidateSnapshot, _>(responder(
+        move |_: Context, request: ModelingValidateSnapshotRequested| {
+            let projects = Arc::clone(&snapshot_projects);
+            async move {
+                let result = tokio::task::spawn_blocking(move || {
+                    let current = projects.snapshot(request.document.id())
+                        .map_err(|error| error.to_string())?;
+                    if !Arc::ptr_eq(&current, &request.document) {
+                        return Err("Validation source is no longer the active project snapshot".into());
+                    }
+                    let result = validate_inner(&projects, ModelingValidateDiagramRequested {
+                        project_id: request.document.id().clone(),
+                        diagram_id: request.diagram_id,
+                        expected_revision: request.document.revision(),
+                    }, None);
+                    let current = projects.snapshot(request.document.id())
+                        .map_err(|error| error.to_string())?;
+                    if !Arc::ptr_eq(&current, &request.document) {
+                        return Err("Project changed while validating its snapshot".into());
+                    }
+                    result
+                }).await.map_err(|error| error.to_string()).and_then(|result| result);
+                Ok::<_, Infallible>(Some(result))
+            }
+        },
+    )).map_err(|error| io::Error::other(error.to_string()))?;
     let create_projects = Arc::clone(&projects);
     let _create = context
         .on::<ModelingCreateDiagram, _>(responder(
@@ -246,7 +273,7 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
                     let result = validate_inner(&projects, traced.request, Some(&mut trace));
                     let (phase, outcome) = if result.is_ok() { (TracePhase::Finish, TraceOutcome::Success) } else { (TracePhase::Error, TraceOutcome::Error) };
                     trace.emit("cordis", "diagram.validate.request", phase, None, &[], Some(outcome));
-                    Ok::<_, Infallible>(Some(TracedDiagramValidationResult { result, events: trace.events().to_vec(), dropped: trace.dropped() }))
+                    Ok::<_, Infallible>(Some(TracedDiagramValidationResult { result, events: trace.events(), dropped: trace.dropped() }))
                 }
             },
         ))

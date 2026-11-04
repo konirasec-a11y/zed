@@ -13,23 +13,30 @@ events and invokes MDE; calls inside MDE remain direct. MDE does not depend on
 Cordis, UI or Zed types. Purely visual interaction and presentation state remain
 inside the UI, rather than becoming integration events.
 
-The public functions implemented in this directory are reexported directly from
-the crate root:
+The application facade is defined here and reexported from `src/mde.rs`:
 
-- `bellatrix_mde::decode_model_document`, implemented in `document.rs`.
-- `bellatrix_mde::encode_model_document`, implemented in `document.rs`.
-- `bellatrix_mde::convert_model_document`, implemented in `document.rs`.
-- `bellatrix_mde::import_mdj_document`, implemented in `interchange.rs`.
-- `bellatrix_mde::export_mdj_document`, implemented in `interchange.rs`.
-- `bellatrix_mde::reparent_uml_element`, implemented in `commands.rs`.
-- `bellatrix_mde::project_documentation`, implemented in `presentation.rs`.
+- `document.rs`: `decode_model_document`, `encode_model_document`,
+  `convert_model_document`, `prepare_model_document`, `validate_model_section`,
+  `encode_model_section`.
+- `interchange.rs`: `import_mdj_document`, `export_mdj_document`, `export_mdj_section`.
+- `commands.rs`: `reparent_uml_element`, `apply_model_command`.
+- `projection.rs`: `project_model_section`.
+- `presentation.rs`: `project_documentation`.
+- `generation.rs`: `project_rust_generation`.
+- `headless.rs`: `report_model_document`.
+- `artifacts.rs`: `prepare_artifact_publication`, `publish_artifact_manifest`.
+- `observability.rs`: `validate_model_section_diagram`, plus the opaque
+  `MdeExecutionTrace` struct and its public methods `new`, `set_sink`, `clear_sink`,
+  `run_id`, `events`, `dropped` and `emit`.
 
-Their implementation modules and request types are private. There is no second
-public namespace, compatibility alias, public command enum or registry for this
-boundary. `src/api_contract.rs` privately owns the shared envelope version, errors
-and full-document decoder. Both API directories depend on that neutral helper;
-neither API depends on the other. The semantic-only UML decoding projection stays
-in `kernel-api/contract.rs` and must not be used to save or replace a document.
+Implementation modules are private. Input commands and derived read records are
+independent DTOs in `bellatrix_mde_protocol`; they do not expose engine model,
+graph, compiler or UML types. The protocol depends on neither MDE nor Cordis and
+contains no runtime, document store or semantic algorithm. `ModelDocumentParts`
+contains identity plus opaque canonical section JSON, rather than a second model.
+`src/api_contract.rs` owns the common envelope version, errors and full-document
+decoder. Kernel and application APIs use that private helper independently.
+The semantic-only projection in `kernel-api/contract.rs` is never a save format.
 
 ## Document decoding
 
@@ -149,13 +156,52 @@ bytes and retains its buffer guards, local interaction state and messages.
 import/graph functions. `ProjectDocument` belongs to the platform project crate, which does not
 depend on MDE. The Zed host has no direct Cargo dependency on MDE.
 
-This is an incremental integration checkpoint. The host still obtains the
-workbench's typed snapshot through its existing `from_document` helper. That
-helper and other workbench snapshots and
-event payloads still expose MDE typed contracts, and other consumer paths remain
-to migrate. In particular, the existing MDJ edit request still carries `Command`.
-Removing direct calls on one path does not establish complete UI independence
-or eliminate those remaining transitive dependencies.
+The workbench now receives `ModelingReadProjection` results through its Cordis
+bridge. Read results are tied to the exact immutable `ProjectDocument` Arc and
+revision; an old or reopened source cannot replace the current projection.
+The canonical section remains in the platform document. Derived inspector,
+hierarchy, tool catalog and notation records are rebuilt inside MDE, not edited
+or persisted. Local selection, gestures, drafts and painting remain in the UI.
+
+`ModelingApplyMdjEdit` carries the neutral `MdjEditCommand`, translated only inside
+the MDE command facade. `apply_model_command` computes a candidate section; Cordis
+retains compare-and-swap publication and the native MDJ exact-snapshot guard.
+For MDJ sessions the engine requires imported provenance and successful verified
+export before returning a candidate. Preparation and export preserve original
+MDJ bytes in provenance; unsupported edits still fail without publication.
+
+`prepare_model_document` extracts identity and canonical section JSON from a model
+envelope after presentation checks. `validate_model_section` applies hierarchy
+and presentation checks before opening a native platform document.
+`encode_model_section` and `export_mdj_section` reconstruct the same universal
+contract from section JSON plus platform identity, without leaking typed model
+internals to Cordis. JSON numbers retain arbitrary precision. Non-finite binary
+dimensions use the byte-to-byte codec path; JSON cannot carry them.
+
+`ModelingPreviewMove` evaluates the same command facade without publishing, and
+`ModelingValidateSnapshot` validates a stored diagram with before/after snapshot
+guards. These are integration queries, not UI-only pointer or selection events.
+
+## Read projection, generation and publication
+
+`project_model_section` returns `protocol::projection::ModelingProjection`, a
+read-only projection containing labels, inspector data, hierarchy, tool metadata,
+view geometry and resolved notation. Private `projection_*.rs` producers reuse
+engine semantics. The projection omits source/provenance and is not accepted as
+a canonical model or mutation input.
+
+`project_rust_generation` returns a versioned emission document consumed by the
+independent Rust renderer. `report_model_document` handles the existing headless
+check/inspect/analyze reports. `prepare_artifact_publication` validates a renderer
+manifest and returns canonical artifact information and counts.
+`publish_artifact_manifest` is the explicitly effectful API: it uses the existing
+safe path/ownership publication implementation at the caller-selected directory.
+Cordis owns orchestration and destination selection; renderers do not query MDE.
+
+`MdeExecutionTrace` hides the engine trace implementation behind neutral events.
+Unlike pure projection/codec functions it reads timing and invokes an explicitly
+registered sink; it does not expose mutable model state. Diagram validation accepts
+an optional trace handle and returns neutral diagnostics, not a UML certificate.
 
 ## Semantic reparenting candidate
 
@@ -196,31 +242,35 @@ The single document contract remains in `contracts/`, including composition,
 source provenance and current authoring knowledge. This facade does not create
 a second DTO model or reinterpret source-specific fields as normative UML.
 
-Errors are JSON strings with `api_version` and an `error` object containing
-`code` and `message`. Codes identify the failure; message text is explanatory.
-None of these facade functions performs I/O, reads clocks, invokes callbacks or retains state.
-Results depend only on the input and implementation. They do not publish, save,
-advance revisions or mark documents clean. The application must compare the
+Versioned envelope functions return JSON error strings with `api_version` and
+an `error` object containing `code` and `message`. Typed in-process section,
+command and observation functions return explanatory `String` errors; callers
+should not treat those messages as stable error codes.
+Codec, projection and command-candidate functions are in-memory and do not
+publish, advance revisions or mark documents clean. Publication and observation
+have the explicit effects described above. The application must compare the
 source snapshot/revision and publish atomically; a client-supplied revision alone
 cannot provide that guarantee.
 
 ## Existing exposure and remaining migration
 
-This is the first physical separation, not complete public API encapsulation.
-`mde.rs` still exposes `contracts`, `commands` and `uml`
-modules, together with typed graph, compiler, persistence and projection exports.
-CLI, Cordis and workbench consumers still use those types and, in some cases,
-UML internals. They must migrate before the corresponding visibility can close.
-Those exports are not duplicated under this facade.
+Production consumers now use only Cordis events, and Cordis invokes the explicit
+MDE application facade rather than typed engine internals. The engine has no
+Cordis, UI, Zed or platform-project dependency. CLI and both renderer crates have
+no direct dependency on MDE; UI receives neutral protocol records via Cordis.
 
-MDJ conversion still lives in `persistence/mdj_conversion.rs`; the new MDE
-interchange functions delegate to it. Both `mdj` and `mdj_conversion` are now
-private after their consumers migrated; no compatibility aliases remain.
-No general command-serialization protocol is
-introduced here. Further application-command entry points belong in this
-directory, with explicit requests and without leaking the internal `Command`
-enum. Snapshot comparison and save acknowledgement remain in the host integration
-rather than a second session manager here.
+Visibility closure is still pending for legacy engine integration tests. At this
+checkpoint `mde.rs` still exports `contracts`, `commands`, `uml` and the typed
+items inventoried below. These are temporary exposed internals, not additional
+supported adapter routes. Production migration is not proof that encapsulation
+is complete. The remaining test consumers must be consolidated around existing
+public workflows before those exports close; no compatibility aliases or new
+semantic endpoints should be added merely to preserve microimplementation tests.
+
+MDJ conversion stays private in `persistence/mdj_conversion.rs`. Application
+commands are translated privately from independent protocol intents. Snapshot
+comparison and save acknowledgement remain in Cordis, not a second session
+manager inside MDE.
 
 The existing `validate_graph_model` and `validate_uml_diagram` kernel facades still
 include presentation checks. Their behavior and placement are unchanged in this
@@ -239,8 +289,8 @@ only the intermediate reexport modules. All source paths below are relative to
 `bellatrix_mde::<name>`; a module table gives the namespace to prepend.
 
 Functions, structs, enums, traits, type aliases, constants and modules are
-different API items. The thirteen function-only facades below are not the entire
-crate API. The remaining tables enumerate the current named root exports and the
+different API items. The 18 application functions and six kernel functions below, plus the opaque
+observation struct, are not yet the entire crate API. The remaining tables enumerate the current named root exports and the
 top-level declarations in the public contract, command and UML modules. Private
 MDJ implementation items are identified separately, not counted as public paths.
 This is not a complete inventory of inherent methods, trait methods, public
@@ -251,7 +301,8 @@ inventory, and it is based on source inspection, not a build or rustdoc run.
 ### Function-only facades
 
 These are the explicit functional boundaries. Request/response implementation
-types remain private; their current public signatures contain no domain structs.
+types remain private. Typed inputs/results come only from the independent
+protocol crate or the documented opaque observation handle, never domain structs.
 
 | Root functions | Definition file | Responsibility |
 | --- | --- | --- |
@@ -259,6 +310,14 @@ types remain private; their current public signatures contain no domain structs.
 | `encode_model_document` | `mde-api/document.rs` | MDE document encoding |
 | `convert_model_document` | `mde-api/document.rs` | Byte-to-byte codec conversion without a JSON envelope |
 | `import_mdj_document`, `export_mdj_document` | `mde-api/interchange.rs` | MDE interchange with explicit diagnostics and inverse verification |
+| `prepare_model_document`, `validate_model_section`, `encode_model_section` | `mde-api/document.rs` | Platform identity/canonical section preparation and encoding |
+| `export_mdj_section` | `mde-api/interchange.rs` | Verified native export of a canonical section |
+| `apply_model_command` | `mde-api/commands.rs` | Neutral command to atomic candidate section |
+| `project_model_section` | `mde-api/projection.rs` | Revision-bound read data for Cordis |
+| `validate_model_section_diagram`; struct `MdeExecutionTrace` | `mde-api/observability.rs` | Diagram diagnostics and opaque trace handle |
+| `project_rust_generation` | `mde-api/generation.rs` | Neutral Rust emission projection |
+| `report_model_document` | `mde-api/headless.rs` | Existing headless graph/model reports |
+| `prepare_artifact_publication`, `publish_artifact_manifest` | `mde-api/artifacts.rs` | Validate manifests and explicitly publish artifacts |
 | `project_documentation` | `mde-api/presentation.rs` | Read-only neutral documentation projection for the Cordis export handler |
 | `reparent_uml_element` | `mde-api/commands.rs` | MDE application-command candidate |
 | `validate_uml_model`, `validate_uml_diagram`, `validate_graph_model` | `kernel-api/validation.rs` | Kernel validation adapters, with the presentation overlap noted above |
@@ -268,8 +327,8 @@ types remain private; their current public signatures contain no domain structs.
 ### Other functions and types reexported directly at the root
 
 These are the existing typed surface, not additional function-only facades.
-They expose implementation contracts directly and remain pending consumer
-migration or an explicit decision to keep a supported typed API. A private
+They expose implementation contracts directly and remain pending legacy test
+consolidation and visibility closure. Production adapters no longer use them. A private
 implementation module does not make its reexported items private.
 
 | Definition file | Root functions | Root structs, enums and type aliases |

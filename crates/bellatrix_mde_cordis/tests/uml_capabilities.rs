@@ -1,9 +1,11 @@
-use bellatrix_mde::{ModelingSection, Project};
+#[path = "support/events.rs"]
+mod events;
+use serde_json::Value;
 use bellatrix_mde_cordis::{
-    MdePlugin, ModelingQuickEdit, ModelingQuickEditRequested, UmlQuickCreate, with_model,
+    MdePlugin, ModelingQuickEdit, ModelingQuickEditRequested, UmlQuickCreate,
 };
 use bellatrix_project::{
-    ProjectCreate, ProjectCreateRequested, ProjectDocument, ProjectId, ProjectPlugin,
+    ProjectCreate, ProjectCreateRequested, ProjectId, ProjectPlugin,
     ProjectService,
 };
 use cordis::event::QueryOutcome;
@@ -28,18 +30,14 @@ async fn common_quick_edit_is_revisioned_project_scoped_and_disposed() {
         .unwrap();
     let mut active_diagram = String::new();
     for name in ["capabilities-a", "capabilities-b"] {
-        let mut model: Project =
+        let mut model: Value =
             serde_json::from_str(include_str!("../../bellatrix_mde/fixtures/todo.json")).unwrap();
-        model.id = name.into();
-        model.name = name.into();
-        model.elements.iter_mut().find(|element| element.id == "type-task")
-            .expect("classifier").properties.insert("isActive".into(), true.into());
-        active_diagram = model.diagrams[0].id.clone();
-        let document = with_model(
-            ProjectDocument::new(ProjectId::new(name).unwrap(), name).unwrap(),
-            &model,
-        )
-        .unwrap();
+        model["id"] = name.into();
+        model["name"] = name.into();
+        model["elements"].as_array_mut().unwrap().iter_mut()
+            .find(|element| element["id"] == "type-task").expect("classifier")["properties"]["isActive"] = true.into();
+        active_diagram = model["diagrams"][0]["id"].as_str().unwrap().to_owned();
+        let document = events::prepare(&context, &model).await.unwrap();
         assert!(matches!(
             context
                 .query::<ProjectCreate>(Routing::Unscoped, ProjectCreateRequested { document })
@@ -86,13 +84,7 @@ async fn common_quick_edit_is_revisioned_project_scoped_and_disposed() {
     let document = projects.snapshot(&project_id).unwrap();
     assert_eq!(document.revision(), 5);
     assert_eq!(projects.snapshot(&untouched_id).unwrap().revision(), 0);
-    let section: ModelingSection = serde_json::from_value(
-        document
-            .section(bellatrix_mde::MODELING_NAMESPACE)
-            .unwrap()
-            .clone(),
-    )
-    .unwrap();
+    let section = events::projection(&context, &projects, &project_id).await.unwrap().section;
     for kind in ["uml.note", "uml.constraint", "uml.reception"] {
         assert!(section.elements.iter().any(|element| element.kind == kind));
     }

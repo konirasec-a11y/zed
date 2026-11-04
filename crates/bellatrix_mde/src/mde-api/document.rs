@@ -101,3 +101,34 @@ pub(super) fn model_value(model: Project) -> Result<serde_json::Value, String> {
     serde_json::to_value(model)
         .map_err(|_| error_response("RESPONSE_SERIALIZATION_FAILED", "decoded model cannot be encoded as JSON"))
 }
+
+/// Prepare a decoded model envelope for a platform document without leaking domain types.
+/// The section is the same canonical contract, encoded as opaque JSON, not a read projection.
+/// Checks presentation integrity, but does not assert full UML validity or retain state.
+pub fn prepare_model_document(input_json: &str) -> Result<bellatrix_mde_protocol::ModelDocumentParts, String> {
+    let model = decode_model_request(input_json)?;
+    ensure_json_model(&model)?;
+    crate::Graph::new(&model).validate_presentation().map_err(|error| error.to_string())?;
+    let section_json = serde_json::to_string(&crate::ModelingSection::from_model(&model))
+        .map_err(|error| error.to_string())?;
+    Ok(bellatrix_mde_protocol::ModelDocumentParts { id: model.id, name: model.name, section_json })
+}
+
+/// Check a canonical section before a platform document is opened. No UML validation or I/O.
+pub fn validate_model_section(project_id: &str, name: &str, section_json: &str) -> Result<(), String> {
+    let section = crate::mde_api_projection::decode_section(project_id, name, section_json)?;
+    crate::Graph::new(&section.to_model(project_id, name)).validate_presentation()
+        .map_err(|error| error.to_string())
+}
+
+/// Reconstitute document bytes from canonical section JSON and its platform identity.
+/// Preserves authoring knowledge, composition and original MDJ bytes in provenance.
+/// JSON output rejects non-finite dimensions; binary output uses the unchanged BLX1 codec.
+/// No persistence, publication or UML validation occurs here.
+pub fn encode_model_section(project_id: &str, name: &str, section_json: &str, format: &str) -> Result<Vec<u8>, String> {
+    let format = document_format(format)?;
+    let section = crate::mde_api_projection::decode_section(project_id, name, section_json)?;
+    let model = section.to_model(project_id, name);
+    if matches!(format, Format::Json) { ensure_json_model(&model)?; }
+    encode(&model, format).map_err(invalid_model)
+}

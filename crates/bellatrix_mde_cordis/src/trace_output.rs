@@ -1,5 +1,6 @@
 //! Host adapter: bounded, nonblocking transfer from the pure engine to observers.
-use bellatrix_mde::{ExecutionEvent, ExecutionTrace};
+use bellatrix_mde::MdeExecutionTrace as ExecutionTrace;
+use crate::ExecutionEvent;
 use cordis::{Context, Routing};
 use std::{sync::{Arc, atomic::{AtomicU64, Ordering}}, time::Duration};
 

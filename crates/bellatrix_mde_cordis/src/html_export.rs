@@ -1,7 +1,6 @@
-use bellatrix_mde::{Plan, Project};
+use crate::artifact_publication::{self, PreparedArtifacts};
 use cordis::event::{ListenerRegistrationError, responder};
 use cordis::{Context, Event};
-use serde::{Deserialize, Serialize};
 use std::{convert::Infallible, path::PathBuf};
 
 #[derive(Clone, Debug)]
@@ -32,52 +31,15 @@ impl Event for ModelingPublishHtml {
     type Output = Result<usize, String>;
 }
 
-#[derive(Serialize)]
-struct ModelRequest<'a> {
-    api_version: u32,
-    model: &'a Project,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RenderedArtifacts {
-    api_version: u32,
-    artifacts: Vec<RenderedArtifact>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RenderedArtifact {
-    path: String,
-    contents: Option<String>,
-    origin: String,
-}
-
 fn render_document(bytes: &[u8], format: &str) -> Result<String, String> {
     let model = bellatrix_mde::decode_model_document(bytes, format)?;
     let projection = bellatrix_mde::project_documentation(&model)?;
     bellatrix_mde_html_exporter::render(&projection)
 }
 
-fn plan_from_rendered(rendered: &str) -> Result<Plan, String> {
-    let response: RenderedArtifacts =
-        serde_json::from_str(rendered).map_err(|error| error.to_string())?;
-    if response.api_version != 1 {
-        return Err("unsupported HTML artifact response version".into());
-    }
-    let mut plan = Plan::new();
-    for artifact in response.artifacts {
-        plan.insert(artifact.path.into(), artifact.contents.map(String::into_bytes), artifact.origin)
-            .map_err(|error| error.to_string())?;
-    }
-    Ok(plan)
-}
-
-pub(crate) fn plan(model: &Project) -> Result<Plan, String> {
-    let request = serde_json::to_string(&ModelRequest { api_version: 1, model })
-        .map_err(|error| error.to_string())?;
-    let projection = bellatrix_mde::project_documentation(&request)?;
-    plan_from_rendered(&bellatrix_mde_html_exporter::render(&projection)?)
+pub(crate) fn prepare(model_envelope: &str) -> Result<PreparedArtifacts, String> {
+    let projection = bellatrix_mde::project_documentation(model_envelope)?;
+    artifact_publication::prepare(&bellatrix_mde_html_exporter::render(&projection)?)
 }
 
 pub(crate) fn register(context: &Context) -> Result<(), ListenerRegistrationError> {
@@ -92,13 +54,9 @@ pub(crate) fn register(context: &Context) -> Result<(), ListenerRegistrationErro
         move |_: Context, request: ModelingPublishHtmlRequested| async move {
             let result = tokio::task::spawn_blocking(move || {
                 let rendered = render_document(&request.bytes, &request.format)?;
-                let plan = plan_from_rendered(&rendered)?;
-                if request.replace_generated {
-                    bellatrix_mde::publish_replace(&plan, &request.destination)
-                } else {
-                    bellatrix_mde::publish_new(&plan, &request.destination)
-                }.map_err(|error| error.to_string())?;
-                Ok::<usize, String>(plan.count())
+                let prepared = artifact_publication::prepare(&rendered)?;
+                prepared.publish(&request.destination, request.replace_generated)?;
+                Ok::<usize, String>(prepared.artifact_count)
             }).await.map_err(|error| error.to_string()).and_then(|result| result);
             Ok::<_, Infallible>(Some(result))
         },

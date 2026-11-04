@@ -1,4 +1,4 @@
-use bellatrix_mde::commands::Command;
+use crate::Command;
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::event::responder;
 use cordis::{Context, Event};
@@ -10,7 +10,7 @@ pub struct ModelingCreateVisualDraftRequested {
     pub diagram_id: String,
     pub notation_kind: String,
     pub label: Option<String>,
-    pub geometry: bellatrix_mde::Geometry,
+    pub geometry: crate::Geometry,
     pub properties: std::collections::BTreeMap<String, serde_json::Value>,
     pub parent_view_id: Option<String>,
     pub source_view_id: Option<String>,
@@ -61,6 +61,7 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
             move |context: Context, request: ModelingCreateVisualDraftRequested| {
                 let projects = Arc::clone(&draft_projects);
                 async move {
+                    let geometry = request.geometry;
                     let result = crate::mutation::execute(
                         &context,
                         &projects,
@@ -70,7 +71,7 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
                             diagram_id: request.diagram_id,
                             notation_kind: request.notation_kind,
                             label: request.label,
-                            geometry: request.geometry,
+                            geometry,
                             properties: request.properties,
                             parent_view_id: request.parent_view_id,
                             source_view_id: request.source_view_id,

@@ -1,8 +1,8 @@
-use bellatrix_mde::{ModelingRelationKind, commands::Command};
+use crate::Command;
+use crate::ModelingRelationKind;
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::{Context, Event};
 
-pub use bellatrix_mde::projected_relationship_paths as projected_automatic_routes;
 
 #[derive(Clone, Debug)]
 pub struct ModelingCreateRelationRequested {

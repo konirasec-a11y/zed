@@ -1,11 +1,11 @@
-//! Native Zed controls driven by the single MDE inspector schema.
+//! Native Zed controls driven by the Cordis inspector projection.
 use crate::workbench_ui::{
     MdeWorkbenchItem, WorkbenchPalette,
     inspector_drafts::{DraftKey, DraftState},
     panels::{MdeRightPanel, element_glyph},
     quick_edit_view::parameter_actions,
 };
-use bellatrix_mde::{
+use bellatrix_mde_cordis::{
     ElementInspector, InspectorProperty, InspectorReferenceChoice, PropertyEditor,
 };
 use bellatrix_project::ProjectId;
@@ -71,14 +71,14 @@ fn reference_options(
 fn property_label(property: &InspectorProperty, choices: &[InspectorReferenceChoice]) -> String {
     if property.path == "properties.type" {
         reference_label(&property.value, choices)
-    } else if matches!(property.editor, PropertyEditor::Reference | PropertyEditor::Stereotype) {
+    } else if matches!(&property.editor, PropertyEditor::Reference | PropertyEditor::Stereotype) {
         reference_label_with_kind(&property.value, choices, "reference")
     } else {
         property_text(property)
     }
 }
 
-fn same_value(editor: PropertyEditor, left: &str, right: &str) -> bool {
+fn same_value(editor: &PropertyEditor, left: &str, right: &str) -> bool {
     if left == right {
         return true;
     }
@@ -88,10 +88,6 @@ fn same_value(editor: PropertyEditor, left: &str, right: &str) -> bool {
     matches!((serde_json::from_str::<Value>(left), serde_json::from_str::<Value>(right)),
         (Ok(left), Ok(right)) if left == right
             && (matches!(editor, PropertyEditor::Reference | PropertyEditor::Stereotype) || (left.is_number() && right.is_number())))
-}
-
-fn display_kind(kind: &str) -> &str {
-    bellatrix_mde::semantic_identity(kind).type_label
 }
 
 fn section_title(group: &str) -> AnyElement {
@@ -189,7 +185,7 @@ pub(crate) fn reconcile_inputs(
         let canonical = property_text(property);
         let draft = drafts.entry(key.clone()).or_insert_with(|| {
             let input = matches!(
-                property.editor,
+                &property.editor,
                 PropertyEditor::Text | PropertyEditor::Multiline | PropertyEditor::Number | PropertyEditor::Reference | PropertyEditor::Stereotype
             )
             .then(|| {
@@ -283,7 +279,7 @@ pub(crate) fn reconcile_inputs(
             let text = draft.text(cx);
             // Equivalent numeric or reference JSON formatting must not move the caret after acknowledgement.
             let reconciled = if revision >= draft.state.revision
-                && same_value(property.editor, &text, &canonical)
+                && same_value(&property.editor, &text, &canonical)
             {
                 draft.state.reload(&text, revision);
                 text.clone()
@@ -401,7 +397,7 @@ pub(crate) fn flush_property_edits(
         let Some(text) = draft.admitted_text.clone() else {
             continue;
         };
-        let Some(inspection) = bellatrix_mde::inspect_element(&snapshot.section, &key.element)
+        let Some(inspection) = snapshot.section.inspect_element(&key.element)
         else {
             draft.state.error = Some("Element no longer exists".into());
             continue;
@@ -414,11 +410,11 @@ pub(crate) fn flush_property_edits(
             continue;
         };
         let canonical = property_text(property);
-        if same_value(property.editor, &text, &canonical) {
+        if same_value(&property.editor, &text, &canonical) {
             draft.state.reload(&text, snapshot.revision);
             continue;
         }
-        if !same_value(property.editor, &canonical, &draft.state.baseline) {
+        if !same_value(&property.editor, &canonical, &draft.state.baseline) {
             draft.state.conflict = true;
             continue;
         }
@@ -426,7 +422,7 @@ pub(crate) fn flush_property_edits(
         draft.state.revision = snapshot.revision;
         let value = if let Some(value) = &draft.discrete {
             value.clone()
-        } else if matches!(property.editor, PropertyEditor::Reference | PropertyEditor::Stereotype) {
+        } else if matches!(&property.editor, PropertyEditor::Reference | PropertyEditor::Stereotype) {
             match serde_json::from_str::<Value>(&text) {
                 Ok(value) => value,
                 Err(_) => {
@@ -531,7 +527,7 @@ fn property_row(
     let label = property.label.clone();
     let project = project.clone();
     let element = element.to_owned();
-    let control: AnyElement = match property.editor {
+    let control: AnyElement = match &property.editor {
         PropertyEditor::Text | PropertyEditor::Multiline | PropertyEditor::Number
             if property.editable =>
         {
@@ -591,10 +587,10 @@ fn property_row(
                                 {
                                     return;
                                 }
-                                let Some(inspection) = bellatrix_mde::inspect_element(
-                                    &snapshot.section,
-                                    &reload_key.element,
-                                ) else {
+                                let Some(inspection) = snapshot
+                                    .section
+                                    .inspect_element(&reload_key.element)
+                                else {
                                     return;
                                 };
                                 let Some(property) = inspection
@@ -660,14 +656,14 @@ fn property_row(
                     let target = target.clone();
                     let key = choice_key.clone();
                     let panel = panel.clone();
-                    let selected = *option;
-                    menu.entry(selected, None, move |_, cx| {
+                    let selected = option.clone();
+                    menu.entry(selected.clone(), None, move |_, cx| {
                         if let Err(error) = panel.update(cx, |panel, cx| {
                             queue_discrete_property(
                                 panel,
                                 &target,
                                 &key,
-                                Value::String(selected.into()),
+                                Value::String(selected.clone()),
                                 cx,
                             )
                         }) {
@@ -740,7 +736,7 @@ fn property_row(
             .into_any_element(),
     };
     if matches!(
-        property.editor,
+        &property.editor,
         PropertyEditor::Boolean | PropertyEditor::Choice(_) | PropertyEditor::Reference | PropertyEditor::Stereotype
     ) {
         let key = DraftKey {
@@ -791,7 +787,7 @@ fn property_row(
                                 return;
                             }
                             let Some(inspection) =
-                                bellatrix_mde::inspect_element(&snapshot.section, &key.element)
+                                snapshot.section.inspect_element(&key.element)
                             else {
                                 return;
                             };
@@ -900,7 +896,7 @@ pub(crate) fn render_inspector(
             .border_color(palette.border)
             .child(
                 svg()
-                    .data(glyph(element_glyph(&inspector.presentation_kind)))
+                    .data(glyph(element_glyph(&inspector.presentation_kind, &inspector.type_label)))
                     .size(px(20.0))
                     .flex_none()
                     .text_color(palette.muted),
@@ -919,7 +915,7 @@ pub(crate) fn render_inspector(
                     .child(
                         Label::new(format!(
                             "{} · {selection_status}",
-                            display_kind(&inspector.presentation_kind)
+                            inspector.type_label
                         ))
                         .size(LabelSize::XSmall)
                         .color(Color::Muted),
@@ -956,7 +952,7 @@ pub(crate) fn render_inspector(
         let pending = drafts.iter().any(|(key, draft)| {
             draft.pending.is_some() || (key.project == project.as_str() && draft.state.queued)
         });
-        for (descriptor, action) in parameter_actions(&inspector.kind) {
+        for (descriptor, action) in parameter_actions(&inspector.quick_actions) {
             let target = item.clone();
             let project = project.clone();
             let element = inspector.element_id.clone();
@@ -1141,9 +1137,9 @@ pub(crate) fn render_inspector(
         if advanced_open {
             let mut group = None;
             for property in advanced {
-                if group != Some(property.group) {
-                    children.push(section_title(property.group));
-                    group = Some(property.group);
+                if group != Some(property.group.as_str()) {
+                    children.push(section_title(&property.group));
+                    group = Some(property.group.as_str());
                 }
                 children.push(property_row(
                     property,

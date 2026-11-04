@@ -9,6 +9,7 @@ rust-version = "1.98.1"
 path = "src/mde.rs"
 
 [dependencies]
+bellatrix_mde_protocol = { path = "../bellatrix_mde_protocol" }
 base64.workspace = true
 num-bigint = "0.4.8"
 prost.workspace = true

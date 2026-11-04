@@ -54,3 +54,15 @@ pub fn export_mdj_document(input_json: &str) -> Result<Vec<u8>, String> {
     mdj_conversion::export(&model)
         .map_err(|error| error_response("MDJ_EXPORT_FAILED", error.to_string()))
 }
+
+/// Verify and export an immutable canonical section with platform identity as MDJ.
+/// The integration layer must reject unrelated platform sections and guard the snapshot.
+/// Original provenance bytes and the existing inverse-mapping verification are preserved.
+pub fn export_mdj_section(project_id: &str, name: &str, section_json: &str) -> Result<Vec<u8>, String> {
+    let section = crate::mde_api_projection::decode_section(project_id, name, section_json)?;
+    let model = section.to_model(project_id, name);
+    if model.mdj_provenance.is_none() {
+        return Err("MDJ interchange requires an imported StarUML document".into());
+    }
+    mdj_conversion::export(&model).map_err(|error| error_response("MDJ_EXPORT_FAILED", error.to_string()))
+}

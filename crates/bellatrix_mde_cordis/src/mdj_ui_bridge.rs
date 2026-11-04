@@ -3,7 +3,7 @@ use crate::{
     DiagramValidationFailure, DiagramValidationResult, MdeUiCommand, ModelingApplyMdjEditRequested,
     mdj_interchange::ModelingApplyMdjEditSnapshot,
 };
-use bellatrix_mde::commands::Command;
+use crate::MdjEditCommand as Command;
 use bellatrix_project::{ProjectDocument, ProjectId};
 use cordis::{Context, Routing, event::QueryOutcome};
 use std::sync::{

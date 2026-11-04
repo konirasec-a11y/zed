@@ -1,9 +1,13 @@
 //! Cordis transport and project-revision integration for the single MDE domain.
+use bellatrix_mde_protocol::trace as trace_contract;
+pub use trace_contract::{DiagnosticSeverity, ModelingDiagnostic, ExecutionEvent, TraceOutcome, TracePhase};
 mod execution_journal;
 pub use execution_journal::{ExecutionJournal, ExecutionJournalSnapshot};
-pub use bellatrix_mde::MODELING_NAMESPACE;
-pub use bellatrix_mde::commands::{ModelingElementKind, ModelingTool};
-pub use bellatrix_mde::{ModelingRelationKind, ModelingSection, UmlQuickCreate};
+pub use bellatrix_mde_protocol::MODELING_NAMESPACE;
+use bellatrix_mde_protocol::command as command_contract;
+use bellatrix_mde_protocol::tools as tool_catalog;
+pub use tool_catalog::{ToolCatalog, ToolGroup, ElementToolMetadata, RelationToolMetadata, DiagramToolMetadata, InterfaceToolMetadata};
+pub use command_contract::*;
 mod diagrams;
 mod trace_output;
 mod mutation;
@@ -19,9 +23,13 @@ pub use diagrams::{
     ModelingCreateExplorerDiagram, ModelingCreateExplorerDiagramRequested,
     DiagramValidationResult, ModelingExecutionTrace, ModelingExecutionTraceEvent, ModelingCreateDiagram, ModelingCreateDiagramRequested, ModelingDeleteDiagram,
     ModelingDeleteDiagramRequested, ModelingRenameDiagram, ModelingRenameDiagramRequested,
-    ModelingValidateDiagram, ModelingValidateDiagramRequested, ModelingValidateDiagramTraced,
+    ModelingValidateDiagram, ModelingValidateDiagramRequested, ModelingValidateSnapshot, ModelingValidateSnapshotRequested, ModelingValidateDiagramTraced,
     ModelingValidateDiagramTracedRequested, TracedDiagramValidationResult,
 };
+mod artifact_publication;
+mod headless_operations;
+mod rust_generation;
+pub use headless_operations::ModelingExecute;
 mod html_export;
 pub use html_export::{
     ModelingPublishHtml, ModelingPublishHtmlRequested, ModelingRenderHtml,
@@ -40,14 +48,14 @@ pub use quick_edit_commands::{ModelingQuickEdit, ModelingQuickEditRequested};
 mod create_relation;
 pub use create_relation::{
     ModelingCreateRelation, ModelingCreateRelationOrVisualDraft, ModelingCreateRelationRequested,
-    ModelingCreateRelationAtViewsOrVisualDraft, ModelingCreateRelationAtViewsRequested, projected_automatic_routes,
+    ModelingCreateRelationAtViewsOrVisualDraft, ModelingCreateRelationAtViewsRequested,
 };
 mod association_ends;
 pub use association_ends::{ModelingEditAssociationEnds, ModelingEditAssociationEndsRequested};
 mod add_member;
 mod create_element;
 pub use add_member::{
-    ModelingAddMember, ModelingAddMemberRequested, ModelingMemberKind, ModelingMoveParameter,
+    ModelingAddMember, ModelingAddMemberRequested, ModelingMoveParameter,
     ModelingMoveParameterRequested,
 };
 mod delete_element;
@@ -73,13 +81,12 @@ pub use views::{
 mod mdj_ui_bridge;
 pub use mdj_ui_bridge::MdjSession;
 mod ui_bridge;
-use bellatrix_mde::Scope;
 use cordis::event::{ListenerRegistrationError, observer_sync};
 use cordis::{Context, Event, Plugin};
 pub use create_element::{ModelingCreateModelElement, ModelingCreateModelElementRequested, ModelingCreateElement, ModelingCreateElementOrVisualDraft, ModelingCreateElementRequested};
 pub use project_integration::{
     MdePlugin, ModelingRename, ModelingRenameRequested, ModelingSetExplorerParent,
-    ModelingSetExplorerParentRequested, ModelingSetOwner, ModelingSetOwnerRequested, with_model,
+    ModelingSetExplorerParentRequested, ModelingSetOwner, ModelingSetOwnerRequested,
 };
 use std::convert::Infallible;
 use tokio::sync::mpsc;
@@ -102,12 +109,14 @@ pub enum ModelingOperation {
     },
     Plan {
         source: std::path::PathBuf,
-        scope: Scope,
+        /// None selects the project; Some([]) preserves an explicitly empty selection.
+        element_ids: Option<Vec<String>>,
         skeleton: bool,
     },
     Generate {
         source: std::path::PathBuf,
-        scope: Scope,
+        /// None selects the project; Some([]) preserves an explicitly empty selection.
+        element_ids: Option<Vec<String>>,
         destination: std::path::PathBuf,
         replace: bool,
         skeleton: bool,
@@ -175,6 +184,7 @@ impl Plugin for ModelingPlugin {
         Ok(self.channels.clone())
     }
     async fn apply(&self, ctx: Context, input: &Self::Input) -> Result<(), Self::ApplyError> {
+        crate::headless_operations::register(&ctx)?;
         crate::html_export::register(&ctx)?;
         crate::document_codec::register(&ctx)?;
         let request_sender = input.requests.clone();
@@ -197,3 +207,15 @@ impl Plugin for ModelingPlugin {
         Ok(())
     }
 }
+
+use bellatrix_mde_protocol::inspector as inspector_contract;
+pub use inspector_contract::{ElementInspector, InspectorMember, InspectorProperty, InspectorReferenceChoice, PropertyEditor, QuickEditAction, QuickEditAvailability, QuickEditControl, QuickEditSide};
+pub use bellatrix_mde_protocol::presentation as presentation_contract;
+use bellatrix_mde_protocol::explorer as explorer_projection;
+pub use explorer_projection::{ExplorerProjection, ExplorerRow, VisualComponent};
+#[path = "read_projection.rs"]
+pub mod projection;
+pub use projection::{ModelingReadProjection, ModelingReadProjectionRequested, ModelingSnapshot};
+
+mod move_preview;
+pub use move_preview::{ModelingPreviewMove, ModelingPreviewMoveRequested, MovePreviewClient, MOVE_PREVIEW_PENDING};

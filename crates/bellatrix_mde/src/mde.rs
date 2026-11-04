@@ -29,6 +29,8 @@ mod execution_trace;
 pub use execution_trace::{ExecutionEvent, ExecutionTrace, TraceOutcome, TracePhase, execution_trace_jsonl, validate_structural_diagram_traced, validate_structural_model_traced};
 #[path = "KERNEL/compiler/analysis/generation_graph.rs"]
 mod generation;
+#[path = "KERNEL/compiler/projection/rust_emission.rs"]
+mod kernel_rust_emission;
 #[path = "KERNEL/graph/graph.rs"]
 mod graph;
 #[path = "view-model/hierarchy/hierarchy.rs"]
@@ -174,16 +176,46 @@ pub use kernel_api_generation::analyze_generation_dependencies;
 
 #[path = "mde-api/document.rs"]
 mod mde_api_document;
-pub use mde_api_document::{convert_model_document, decode_model_document, encode_model_document};
+pub use mde_api_document::{convert_model_document, decode_model_document, encode_model_document, prepare_model_document, validate_model_section, encode_model_section};
 
 #[path = "mde-api/interchange.rs"]
 mod mde_api_interchange;
-pub use mde_api_interchange::{export_mdj_document, import_mdj_document};
+pub use mde_api_interchange::{export_mdj_document, import_mdj_document, export_mdj_section};
 
 #[path = "mde-api/presentation.rs"]
 mod mde_api_presentation;
 pub use mde_api_presentation::project_documentation;
 
+#[path = "mde-api/generation.rs"]
+mod mde_api_generation;
+pub use mde_api_generation::project_rust_generation;
+
+#[path = "mde-api/artifacts.rs"]
+mod mde_api_artifacts;
+pub use mde_api_artifacts::{prepare_artifact_publication, publish_artifact_manifest};
+
+#[path = "mde-api/headless.rs"]
+mod mde_api_headless;
+pub use mde_api_headless::report_model_document;
+
 #[path = "mde-api/commands.rs"]
 mod mde_api_commands;
-pub use mde_api_commands::reparent_uml_element;
+pub use mde_api_commands::{reparent_uml_element, apply_model_command};
+
+#[path = "mde-api/projection.rs"]
+mod mde_api_projection;
+pub use mde_api_projection::project_model_section;
+#[path = "mde-api/projection_inspector.rs"]
+mod mde_api_projection_inspector;
+#[path = "mde-api/projection_explorer.rs"]
+mod mde_api_projection_explorer;
+#[path = "mde-api/projection_notation.rs"]
+mod mde_api_projection_notation;
+#[path = "mde-api/projection_tools.rs"]
+mod mde_api_projection_tools;
+#[path = "mde-api/command_conversion.rs"]
+mod mde_api_command_conversion;
+
+#[path = "mde-api/observability.rs"]
+mod mde_api_observability;
+pub use mde_api_observability::{MdeExecutionTrace, validate_model_section_diagram};

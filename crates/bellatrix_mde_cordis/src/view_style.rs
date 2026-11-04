@@ -1,4 +1,5 @@
-use bellatrix_mde::{RelationshipRouting, Style, TimingPresentation, commands::Command};
+use crate::Command;
+use crate::{RelationshipRouting, Style, TimingPresentation, ViewOrder};
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::{Context, Event, event::responder};
 use std::{convert::Infallible, io, sync::Arc};
@@ -66,7 +67,7 @@ pub struct ModelingReorderViewRequested {
     pub project_id: ProjectId,
     pub diagram_id: String,
     pub view_id: String,
-    pub order: bellatrix_mde::commands::ViewOrder,
+    pub order: ViewOrder,
     pub expected_revision: u64,
 }
 pub struct ModelingReorderView;
@@ -105,6 +106,7 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
             move |context: Context, request: ModelingSetViewTimingRequested| {
                 let projects = Arc::clone(&service);
                 async move {
+                    let timing = request.timing;
                     let result = crate::mutation::execute(
                         &context,
                         &projects,
@@ -112,7 +114,7 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
                         request.expected_revision,
                         Command::SetViewTiming {
                             view_id: request.view_id,
-                            timing: request.timing,
+                            timing,
                         },
                     )
                     .await;
@@ -127,6 +129,7 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
             move |context: Context, request: ModelingSetViewStyleRequested| {
                 let projects = Arc::clone(&service);
                 async move {
+                    let style = request.style;
                     let result = crate::mutation::execute(
                         &context,
                         &projects,
@@ -135,7 +138,7 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
                         Command::SetViewStyle {
                             diagram_id: request.diagram_id,
                             view_id: request.view_id,
-                            style: request.style,
+                            style,
                         },
                     )
                     .await;
@@ -150,6 +153,7 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
             move |context: Context, request: ModelingSetViewRoutingRequested| {
                 let projects = Arc::clone(&service);
                 async move {
+                    let routing = request.routing;
                     let result = crate::mutation::execute(
                         &context,
                         &projects,
@@ -158,7 +162,7 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
                         Command::SetViewRouting {
                             diagram_id: request.diagram_id,
                             view_id: request.view_id,
-                            routing: request.routing,
+                            routing,
                         },
                     )
                     .await;
