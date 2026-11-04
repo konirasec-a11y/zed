@@ -20,6 +20,15 @@ fn view<'a>(
 }
 
 impl DiagramOperations for ModelingDiagramOperations {
+    fn reanchor_manual_paths(
+        &self,
+        previous: &ModelingSection,
+        current: &mut ModelingSection,
+        diagram_id: &str,
+    ) -> Result<(), String> {
+        crate::relationships::reanchor_manual_paths(previous, current, diagram_id)
+    }
+
     fn current_path(
         &self,
         section: &ModelingSection,

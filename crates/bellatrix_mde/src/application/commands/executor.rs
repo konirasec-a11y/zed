@@ -759,6 +759,15 @@ pub(crate) fn apply_with_diagram_operations(
             }
         }
     }
+    if let Command::MoveView { view_id, .. } | Command::ResizeView { view_id, .. } = command
+        && let Some(diagram) = previous_section
+            .diagrams
+            .iter()
+            .find(|diagram| diagram.all_views().any(|view| view.id == *view_id))
+    {
+        // Reanchor only after an authored geometry change, never while projecting imported paths.
+        diagram_operations.reanchor_manual_paths(&previous_section, &mut section, &diagram.id)?;
+    }
     let draft_view_edit = match command {
         Command::MoveView { view_id, .. } | Command::ResizeView { view_id, .. } => project
             .diagrams

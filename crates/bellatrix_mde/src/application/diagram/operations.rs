@@ -6,6 +6,13 @@ pub(crate) struct RoutingProjection {
 }
 
 pub(crate) trait DiagramOperations {
+    fn reanchor_manual_paths(
+        &self,
+        previous: &ModelingSection,
+        current: &mut ModelingSection,
+        diagram_id: &str,
+    ) -> Result<(), String>;
+
     fn current_path(
         &self,
         section: &ModelingSection,
