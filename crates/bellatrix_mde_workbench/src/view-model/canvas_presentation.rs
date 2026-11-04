@@ -1,7 +1,7 @@
 use bellatrix_design_system::Palette;
 use bellatrix_mde_cordis::Geometry;
 use bellatrix_mde_cordis::presentation_contract::{RenderStyle, UmlNotation};
-use bellatrix_mde_cordis::projection::View;
+use bellatrix_mde_cordis::projection::{ModelingProjection, View};
 
 pub(super) struct CanvasBounds {
     pub x: f32,
@@ -98,7 +98,7 @@ pub(super) fn render_style(view: &View, palette: Palette) -> RenderStyle {
     style
 }
 
-pub(super) fn ordered_views(views: &[View]) -> Vec<&View> {
+pub(super) fn ordered_views<'a>(section: &ModelingProjection, views: &'a [View]) -> Vec<&'a View> {
     let mut siblings = views.iter().collect::<Vec<_>>();
     siblings.sort_by_key(|view| view.z_index);
     let mut pending = siblings
@@ -117,7 +117,7 @@ pub(super) fn ordered_views(views: &[View]) -> Vec<&View> {
         let native_parent = if view.presentation.internal {
             native_parent
         } else {
-            uses_native_contents(view)
+            uses_native_contents(section, view)
         };
         let mut children = view.children.iter().collect::<Vec<_>>();
         children.sort_by_key(|child| child.z_index);
@@ -126,22 +126,59 @@ pub(super) fn ordered_views(views: &[View]) -> Vec<&View> {
     ordered
 }
 
-pub(super) fn uses_native_contents(view: &View) -> bool {
+fn uses_native_contents(section: &ModelingProjection, view: &View) -> bool {
     // Imported compartments remain in the document, but supported semantic
     // figures own their title and member rows just like newly created figures.
-    view.subject.is_some()
-        && view.entity_box.is_none()
-        && !matches!(
-            view.figure.notation,
-            UmlNotation::Unsupported
-                | UmlNotation::Rectangle
-                | UmlNotation::Label
-                | UmlNotation::Compartment
-        )
+    let Some(element) = section
+        .elements
+        .iter()
+        .find(|element| Some(element.id.as_str()) == view.subject.as_deref())
+    else {
+        return false;
+    };
+    if !matches!(element.kind.as_str(), "uml.class" | "uml.interface")
+        || view.figure.notation != UmlNotation::ClassifierRectangle
+        || view.entity_box.is_some()
+    {
+        return false;
+    }
+    let mut pending = view.children.iter().collect::<Vec<_>>();
+    while let Some(child) = pending.pop() {
+        if !child.presentation.internal || !child.presentation.visible {
+            continue;
+        }
+        if child.figure.notation == UmlNotation::Label
+            && let Some(text) = child
+                .rendered_label
+                .text
+                .as_deref()
+                .filter(|text| !text.is_empty())
+        {
+            let native_member = child.subject.as_deref().is_some_and(|subject| {
+                element.template_parameters.iter().any(|id| id == subject)
+                    || element.members.iter().any(|id| id == subject)
+                        && section.elements.iter().any(|member| {
+                            member.id == subject
+                                && matches!(
+                                    member.kind.as_str(),
+                                    "uml.attribute" | "uml.operation" | "uml.reception"
+                                )
+                        })
+            });
+            let native_header = view.presentation.name_label.as_deref() == Some(child.id.as_str())
+                || view.figure.header.keyword.as_deref() == Some(text)
+                || view.figure.header.applied_stereotype.as_deref() == Some(text);
+            if !native_member && !native_header {
+                return false;
+            }
+        }
+        pending.extend(child.children.iter());
+    }
+    true
 }
 
-pub(super) fn has_authored_contents(view: &View) -> bool {
-    !uses_native_contents(view)
+pub(super) fn has_authored_contents(section: &ModelingProjection, view: &View) -> bool {
+    !uses_native_contents(section, view)
         && view.children.iter().any(|child| child.presentation.internal)
 }
 
@@ -155,7 +192,7 @@ pub(super) fn minimum_size(
 ) -> (f64, f64) {
     if view.draft.is_some()
         || view.presentation.internal
-        || has_authored_contents(view)
+        || has_authored_contents(section, view)
         || matches!(
             view.presentation.kind.as_deref(),
             Some("presentation.label" | "presentation.compartment" | "presentation.rectangle")

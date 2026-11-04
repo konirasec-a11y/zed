@@ -54,7 +54,7 @@ impl Render for MdeWorkbenchItem {
                 );
                 if let Some(diagram) = diagram {
                     title = format!("{} / {}", snapshot.name, diagram.name);
-                    let views = canvas_presentation::ordered_views(&diagram.views);
+                    let views = canvas_presentation::ordered_views(&snapshot.section, &diagram.views);
                     for view in views {
                         if matches!(
                             view.geometry,
@@ -429,7 +429,8 @@ impl Render for MdeWorkbenchItem {
                         let local_width = preview_width as f32;
                         let mut local_height = preview_height as f32;
                         let notation = view.figure.notation;
-                        let authored_contents = canvas_presentation::has_authored_contents(view);
+                        let authored_contents =
+                            canvas_presentation::has_authored_contents(&snapshot.section, view);
                         if !authored_contents
                             && matches!(
                                 notation,
@@ -1402,7 +1403,7 @@ impl MdeWorkbenchItem {
         let title_view = target_view.id.clone();
         let mut figure = UmlFigure::new(view.figure.clone(), label)
             .interface_icon(view.interface_icon.clone())
-            .authored_contents(canvas_presentation::has_authored_contents(view))
+            .authored_contents(canvas_presentation::has_authored_contents(section, view))
             .divider(view.presentation.divider)
             .view_style(&style)
             .view_size(width, height, self.zoom)
