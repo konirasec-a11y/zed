@@ -58,7 +58,7 @@ impl Render for MdeWorkbenchItem {
                     let views = imported_preview::ordered_views(&diagram.views);
                     for view in views {
                         if matches!(&view.geometry, Geometry::Layout { .. }) {
-                            if let Some(card) = self.render_imported_preview(view, &mut node_bounds.borrow_mut(), cx) {
+                            if let Some(card) = self.render_imported_preview(&diagram.id, view, &mut node_bounds.borrow_mut(), cx) {
                                 cards.push(card);
                             }
                             continue;
@@ -224,7 +224,8 @@ impl Render for MdeWorkbenchItem {
                                 .diagram_presentation(diagram, &resolved.kind)
                                 .labels(presentation)
                                 .view_scale(zoom)
-                                .selected(self.presentation.selected_element() == Some(subject));
+                                .selected(self.presentation.selected_element() == Some(subject)
+                                    && self.presentation.selected_view().is_none_or(|selected| selected == view.id));
                                 let glyph = if let Some((source, target)) = resolved.markers { glyph.endpoint_markers(source, target) } else { glyph };
                                 let edge_owner = cx.weak_entity();
                                 let edge_id = subject.to_owned();
@@ -401,7 +402,7 @@ impl Render for MdeWorkbenchItem {
                             } else {
                                 None
                             }
-                        });
+                        }).filter(|_| self.presentation.selected_view().is_none_or(|selected| selected == view.id));
                         let is_selected = selected_target.is_some();
                         let editing = selected_target.filter(|selected| {
                             self.presentation.editing_element() == Some(selected.id.as_str())
@@ -889,7 +890,10 @@ impl Render for MdeWorkbenchItem {
                     && !event.keystroke.modifiers.modified();
                 if event.keystroke.key.eq_ignore_ascii_case("f2") || plain_enter {
                     if let Err(error) = f2_owner.update(cx, |item, cx| {
-                        if !item.focus_handle.is_focused(window) || item.presentation.selected_tool().is_some() {
+                        if !item.focus_handle.is_focused(window)
+                            || item.presentation.selected_tool().is_some()
+                            || item.selected_view_is_inspection_only()
+                        {
                             return;
                         }
                         if let Some(field) = &item.inline_editor {
@@ -1159,6 +1163,7 @@ impl Render for MdeWorkbenchItem {
 impl MdeWorkbenchItem {
     fn render_imported_preview(
         &self,
+        diagram_id: &str,
         view: &bellatrix_mde::View,
         node_bounds: &mut Vec<[f32; 4]>,
         cx: &mut Context<Self>,
@@ -1186,18 +1191,20 @@ impl MdeWorkbenchItem {
                 card = card.text_size(px(12.0 * self.zoom));
             }
         }
+        if self.presentation.selected_view() == Some(view.id.as_str()) {
+            card = card.border_1().border_color(palette.selection);
+        }
         if let Some(label) = &view.label {
             card = card.child(label.clone());
         }
         let owner = cx.weak_entity();
         let identifier = view.id.clone();
-        let kind = view.presentation.kind.clone()?;
+        let diagram_id = diagram_id.to_owned();
         node_bounds.push([bounds.x, bounds.y, bounds.width, bounds.height]);
         Some(
             card.on_mouse_down(MouseButton::Left, move |_, _, cx| {
                 if let Err(error) = owner.update(cx, |item, cx| {
-                    item.feedback = format!("Imported {kind} · {identifier} · read-only partial preview");
-                    cx.notify();
+                    item.select_diagram_view(diagram_id.clone(), identifier.clone(), cx);
                 }) {
                     eprintln!("MDE imported preview inspection failed: {error}");
                 }

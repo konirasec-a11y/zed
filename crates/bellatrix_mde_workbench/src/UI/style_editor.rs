@@ -98,6 +98,7 @@ fn target_is_active(
 ) -> bool {
     let item_state = item.read(cx);
     panel.is_bound_to(item)
+        && !item_state.selected_view_is_inspection_only()
         && !item_state.source().is_read_only()
         && item_state.project_id().as_str() == key.0
         && item_state.presentation.active_diagram() == Some(key.1.as_str())
@@ -343,6 +344,7 @@ pub(crate) fn render_styles(
     target: Option<(&str, &View, bool)>,
     item: Entity<MdeWorkbenchItem>,
     draft: Option<&StyleDraft>,
+    read_only: bool,
     open: bool,
     _window: &mut Window,
     cx: &mut Context<MdeRightPanel>,
@@ -388,7 +390,7 @@ pub(crate) fn render_styles(
         );
         return rows;
     };
-    if item.read(cx).source().is_read_only() {
+    if read_only {
         for (key, label) in FIELDS {
             if is_edge && *key == "fill" {
                 continue;
@@ -999,6 +1001,12 @@ impl MdeWorkbenchItem {
             return Err(
                 "Select the original editable diagram view before changing its style".into(),
             );
+        }
+        let snapshot = self.source().snapshot()?;
+        if !snapshot.section.diagrams.iter().any(|diagram| {
+            diagram.id == key.1 && super::selection::supports_view_editing(diagram, &key.2)
+        }) {
+            return Err("This view supports inspection only".into());
         }
         let command = if let Some(order) = submission.order {
             MdeUiCommand::ReorderViewTracked {

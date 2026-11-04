@@ -368,7 +368,7 @@ fn explorer_unbound_views_menu(
             });
         }
         if nested_count > 0 {
-            menu = menu.header(format!("{nested_count} nested views retained; selection/editing not yet supported"));
+            menu = menu.header(format!("{nested_count} nested views: inspect through their parent View; visual editing unavailable"));
         }
         menu
     })

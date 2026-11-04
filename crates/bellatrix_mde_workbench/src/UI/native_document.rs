@@ -231,7 +231,7 @@ pub(crate) fn register_preview_action(
                             .map_err(|error| error.to_string())?;
                         let document = bellatrix_mde_cordis::with_model(document, &imported.project)?;
                         let mut diagnostics = vec![
-                            "StarUML import is a conservative, read-only projection. UML semantics, associations and ends are preserved as MDJ data, not mapped to native UML. Rendering is partial; styles, routing and resources may not appear. The source file is not modified. Provenance retains the current editor text; original file encoding and line endings are not an export guarantee.".to_owned(),
+                            "StarUML import is a conservative, read-only projection. Native UML mapping, including associations and ends, is partial; unsupported data is preserved as MDJ source residue. Rendering is partial; styles, routing and resources may not appear. The source file is not modified. Provenance retains the current editor text; original file encoding and line endings are not an export guarantee.".to_owned(),
                         ];
                         diagnostics.extend(imported.diagnostics.into_iter().map(|diagnostic| {
                             let path = if diagnostic.path.is_empty() {

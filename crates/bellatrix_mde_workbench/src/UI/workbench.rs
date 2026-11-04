@@ -330,7 +330,7 @@ impl MdeWorkbenchItem {
         if self.source.is_presentation_suspended() { return; }
         let selection = self.source.snapshot().and_then(|snapshot| {
             snapshot.section.diagrams.iter().find(|diagram| diagram.id == diagram_id)
-                .and_then(|diagram| diagram.views.iter().find(|view| view.id == view_id))
+                .and_then(|diagram| diagram.all_views().find(|view| view.id == view_id))
                 .map(|view| view.subject.clone())
                 .ok_or_else(|| "The original diagram View no longer exists".to_owned())
         });
@@ -345,6 +345,17 @@ impl MdeWorkbenchItem {
             "Visual View selected; no semantic subject is required".into()
         } else { "Diagram View selected".into() };
         cx.notify();
+    }
+
+    fn selected_view_is_inspection_only(&self) -> bool {
+        let Some(view_id) = self.presentation.selected_view() else {
+            return false;
+        };
+        self.source.snapshot().ok().is_none_or(|snapshot| {
+            snapshot.section.diagrams.iter()
+                .find(|diagram| Some(diagram.id.as_str()) == self.presentation.active_diagram())
+                .is_none_or(|diagram| !selection::supports_view_editing(diagram, view_id))
+        })
     }
 
     pub fn remove_selected_view(&mut self, cx: &mut Context<Self>) {
@@ -372,9 +383,9 @@ impl MdeWorkbenchItem {
             return;
         };
         if !snapshot.section.diagrams.iter().any(|diagram| {
-            diagram.id == diagram_id && diagram.views.iter().any(|view| view.id == view_id)
+            diagram.id == diagram_id && selection::supports_view_editing(diagram, &view_id)
         }) {
-            self.feedback = "Selected diagram view no longer exists".into();
+            self.feedback = "This view is unavailable or supports inspection only".into();
             cx.notify();
             return;
         }
@@ -481,7 +492,7 @@ impl MdeWorkbenchItem {
         );
     }
     fn begin_inline_edit(&mut self, id: String, window: &mut Window, cx: &mut Context<Self>) {
-        if self.source.is_read_only() {
+        if self.source.is_read_only() || self.selected_view_is_inspection_only() {
             return;
         }
         let Ok(snapshot) = self.source.snapshot() else {

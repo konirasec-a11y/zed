@@ -25,22 +25,16 @@ pub(super) fn reconcile_selection(
         section.elements.iter().any(|element| element.id == id)
             || section.relations.iter().any(|relation| relation.id == id)
     };
-    let view = diagram
-        .filter(|_| same_diagram)
-        .and_then(|diagram| {
-            diagram
-                .views
-                .iter()
-                .find(|view| Some(view.id.as_str()) == selected_view)
-        })
-        .filter(|view| match view.subject.as_deref() {
-            Some(subject) => subject_exists(subject),
-            None => view.draft.is_some(),
-        });
+    let view = diagram.filter(|_| same_diagram).and_then(|diagram| {
+        diagram
+            .all_views()
+            .find(|view| Some(view.id.as_str()) == selected_view)
+    });
     let element = if !same_diagram {
         None
     } else if selected_view.is_some() {
         view.and_then(|view| view.subject.as_deref())
+            .filter(|id| subject_exists(id))
     } else {
         selected_element.filter(|id| subject_exists(id))
     };
@@ -49,7 +43,12 @@ pub(super) fn reconcile_selection(
             (Some(id) == element
                 && diagram.is_some_and(|diagram| has_inline_representation(section, diagram, id)))
                 || view.is_some_and(|view| {
-                    view.id == id && view.subject.is_none() && view.draft.is_some()
+                    view.id == id
+                        && view.subject.is_none()
+                        && view.draft.is_some()
+                        && diagram.is_some_and(|diagram| {
+                            diagram.views.iter().any(|root| root.id == view.id)
+                        })
                 })
         });
     ReconciledSelection {
@@ -104,7 +103,9 @@ fn has_inline_representation(section: &ModelingSection, diagram: &Diagram, targe
         section.elements.iter().any(|element| {
             element.id == target
                 && match element.kind.as_str() {
-                    "rust.field" | "uml.attribute" => view.style.uml.suppress_attributes != Some(true),
+                    "rust.field" | "uml.attribute" => {
+                        view.style.uml.suppress_attributes != Some(true)
+                    }
                     "rust.function" | "uml.operation" => {
                         view.style.uml.suppress_operations != Some(true)
                     }
@@ -112,5 +113,11 @@ fn has_inline_representation(section: &ModelingSection, diagram: &Diagram, targe
                     _ => false,
                 }
         })
+    })
+}
+
+pub(super) fn supports_view_editing(diagram: &Diagram, view_id: &str) -> bool {
+    diagram.views.iter().any(|view| {
+        view.id == view_id && matches!(view.geometry, Geometry::Rect { .. } | Geometry::Path { .. })
     })
 }

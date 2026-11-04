@@ -22,6 +22,12 @@ pub(crate) struct TimingDraft {
     listeners: Vec<Subscription>,
 }
 impl TimingDraft {
+    pub(crate) fn inspection_notice(&self) -> Option<&str> {
+        self.state.error.as_deref().or_else(|| {
+            (self.state.queued || self.pending.is_some())
+                .then_some("Timing edits are retained while this view is read-only")
+        })
+    }
     pub(crate) fn has_focused_input(&self, window: &Window, cx: &gpui::App) -> bool {
         self.rows.iter().any(|(time, value)| {
             [time, value]
@@ -116,6 +122,7 @@ fn is_active(
 ) -> bool {
     let item_state = item.read(cx);
     panel.is_bound_to(item)
+        && !item_state.selected_view_is_inspection_only()
         && !item_state.source().is_read_only()
         && item_state.project_id().as_str() == key.0
         && item_state.presentation.active_diagram() == Some(key.1.as_str())
@@ -325,6 +332,18 @@ fn flush_timing_edits(
             return;
         }
     };
+    if !snapshot.section.diagrams.iter().any(|diagram| {
+        diagram.id == key.1 && super::selection::supports_view_editing(diagram, &key.2)
+    }) {
+        let error = format!("Timing View {} is unavailable or inspection-only; admitted edits are preserved", key.2);
+        draft.state.error = Some(error.clone());
+        item.update(cx, |item, cx| {
+            item.feedback = error;
+            cx.notify();
+        });
+        cx.notify();
+        return;
+    }
     let Some(view) = snapshot
         .section
         .diagrams
