@@ -6,8 +6,6 @@ use ui::prelude::ActiveTheme;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Palette {
-    pub bar: u32,
-    pub rail: u32,
     pub panel: u32,
     pub panel_alt: u32,
     pub canvas: u32,
@@ -15,7 +13,6 @@ pub struct Palette {
     pub text: u32,
     pub muted: u32,
     pub accent: u32,
-    pub selected: u32,
     pub selection: u32,
 }
 
@@ -30,8 +27,6 @@ impl Palette {
                 | ((rgba.b.clamp(0.0, 1.0) * 255.0).round() as u32)
         };
         Self {
-            bar: rgb24(c.title_bar_background),
-            rail: rgb24(c.status_bar_background),
             panel: rgb24(c.panel_background),
             panel_alt: rgb24(c.surface_background),
             canvas: rgb24(c.editor_background),
@@ -39,7 +34,6 @@ impl Palette {
             text: rgb24(c.text),
             muted: rgb24(c.text_muted),
             accent: rgb24(c.text_accent),
-            selected: rgb24(c.element_selected),
             selection: rgb24(c.border_selected),
         }
     }
