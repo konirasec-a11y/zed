@@ -937,6 +937,17 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "an ActivityPartition with isDimension=true must not be contained by another ActivityPartition",
             ));
         }
+        if node.conforms_to("ValuePin") {
+            // UML.xmi ValuePin-no_incoming_edges: incoming->isEmpty(). A
+            // known incoming edge proves failure even with other opaque edges.
+            checks.push((
+                activity_edge_exists(references, node, "target").map(|exists| !exists),
+                "UML_VALUE_PIN_NO_INCOMING_EDGES",
+                "MDE_VALUE_PIN_NO_INCOMING_EDGES_UNVERIFIED",
+                "ValuePin-no_incoming_edges",
+                "a ValuePin cannot have incoming ActivityEdges",
+            ));
+        }
         if node.conforms_to("Pin") {
             checks.push((
                 schema::read_effective_boolean(node, "isUnique")
