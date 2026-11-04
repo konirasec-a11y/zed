@@ -68,6 +68,39 @@ fn connection_points(references: &ReferenceIndex<'_>, owner: ElementRef<'_>) -> 
     require_all(checks)
 }
 
+// These Behavior roles share the same target type. Canonical containment alone
+// must not arbitrarily choose entry, exit or doActivity; use the existing
+// composite-role resolver and retain uncertainty when the role is ambiguous.
+fn final_state_behavior_empty(
+    references: &ReferenceIndex<'_>, state: ElementRef<'_>, role: &str,
+) -> Result<bool, QueryError> {
+    let descriptor = schema::uml_property("FinalState", role)
+        .map_err(|error| QueryError::unsupported(state.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(state.id(), format!("missing State::{role} contract")))?;
+    let mut checks = Vec::new();
+    if let Some(value) = state.properties().get(role) {
+        checks.push(match property_contracts::check_value(references, state, descriptor, value) {
+            PropertyOutcome::Satisfied => Ok(true),
+            PropertyOutcome::Violation(message) => Err(QueryError::invalid(state.id(), message)),
+            PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(state.id(), message)),
+        });
+        // A well-formed external reference also establishes nonempty content.
+        // Invalid contracts are still checked and dominate the cardinality result.
+        checks.push(Ok(value.is_null()));
+    }
+    for child in references.explicit_owned_elements(state.id())
+        .map_err(|error| QueryError::invalid(state.id(), error))?
+    {
+        if child.metaclass().is_none() {
+            checks.push(Err(QueryError::unsupported(child.id(), format!("owned element metaclass is unresolved; {role} membership is unknown"))));
+        } else if child.conforms_to("Behavior") {
+            checks.push(classifiers::contributes_to_owned_union(state, child, descriptor.id.fragment)
+                .map(|member| !member));
+        }
+    }
+    require_all(checks)
+}
+
 fn final_state_submachine(references: &ReferenceIndex<'_>, state: ElementRef<'_>) -> Result<bool, QueryError> {
     let descriptor = schema::uml_property("FinalState", "submachine")
         .map_err(|error| QueryError::unsupported(state.id(), error.to_string()))?
@@ -368,6 +401,16 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "Region-owned", "a Region cannot have both state and stateMachine owners"));
         }
         if element.conforms_to("FinalState") {
+            for (role, code, unknown, constraint, violation) in [
+                ("entry", "UML_FINAL_STATE_NO_ENTRY_BEHAVIOR", "MDE_FINAL_STATE_ENTRY_BEHAVIOR_UNVERIFIED",
+                    "FinalState-no_entry_behavior", "a FinalState cannot have entry Behavior"),
+                ("exit", "UML_FINAL_STATE_NO_EXIT_BEHAVIOR", "MDE_FINAL_STATE_EXIT_BEHAVIOR_UNVERIFIED",
+                    "FinalState-no_exit_behavior", "a FinalState cannot have exit Behavior"),
+                ("doActivity", "UML_FINAL_STATE_NO_STATE_BEHAVIOR", "MDE_FINAL_STATE_STATE_BEHAVIOR_UNVERIFIED",
+                    "FinalState-no_state_behavior", "a FinalState cannot have doActivity Behavior"),
+            ] {
+                constraints.push((final_state_behavior_empty(references, element, role), code, unknown, constraint, violation));
+            }
             constraints.push((outgoing_at_most(references, element, 0),
                 "UML_FINAL_STATE_NO_OUTGOING_TRANSITIONS", "MDE_FINAL_STATE_OUTGOING_UNVERIFIED",
                 "FinalState-no_outgoing_transitions", "a FinalState cannot have outgoing Transitions"));
