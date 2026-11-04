@@ -150,7 +150,7 @@ fn normalize_views(
                 .map(str::to_owned)
             })
             .or_else(|| entity_name_label.clone());
-        if semantic_kind.is_some() {
+        if semantic_kind.is_some() && !view.presentation.internal {
             if let Some(name_label) = name_label {
                 if let Some(label) = find_view(&mut view.children, &name_label) {
                     if let Some(text) = label.label.take() {

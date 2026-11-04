@@ -574,6 +574,8 @@ pub(crate) fn apply_with_diagram_operations(
         || matches!(
             command,
             Command::CreateDiagram { .. }
+                | Command::MoveView { .. }
+                | Command::ResizeView { .. }
                 | Command::CreateExplorerDiagram { .. }
                 | Command::CreateVisualDraft { .. }
                 | Command::SetExplorerParent { .. }
@@ -723,6 +725,14 @@ fn ensure_visual_edit_supported(project: &Project, command: &Command) -> Result<
             .flat_map(|diagram| diagram.all_views())
             .find(|view| view.id == *view_id)
             .ok_or("view not found")?;
+        if matches!(command, Command::MoveView { .. }) {
+            if matches!(view.geometry, Geometry::Layout { .. }) {
+                return Err("this View has unresolved layout; its authored presentation was not changed".into());
+            }
+            // Translation already moves only authored coordinates. Missing bounds
+            // in dormant compartments must not immobilize a resolved parent.
+            return Ok(());
+        }
         let mut pending = vec![view];
         while let Some(view) = pending.pop() {
             if matches!(view.geometry, Geometry::Layout { .. }) {

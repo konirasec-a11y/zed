@@ -54,9 +54,6 @@ impl Render for MdeWorkbenchItem {
                 );
                 if let Some(diagram) = diagram {
                     title = format!("{} / {}", snapshot.name, diagram.name);
-                    unresolved_presentation = diagram
-                        .all_views()
-                        .any(|view| matches!(&view.geometry, Geometry::Layout { .. }));
                     let views = canvas_presentation::ordered_views(&diagram.views);
                     for view in views {
                         if matches!(
@@ -432,10 +429,7 @@ impl Render for MdeWorkbenchItem {
                         let local_width = preview_width as f32;
                         let mut local_height = preview_height as f32;
                         let notation = view.figure.notation;
-                        let authored_contents = view
-                            .children
-                            .iter()
-                            .any(|child| child.presentation.internal);
+                        let authored_contents = canvas_presentation::has_authored_contents(view);
                         if !authored_contents
                             && matches!(
                                 notation,
@@ -1373,7 +1367,10 @@ impl MdeWorkbenchItem {
         let (x, y, width, height) = self.preview_rectangle(section, diagram, view)?;
         let owner_view = diagram
             .all_views()
-            .find(|owner| owner.presentation.name_label.as_deref() == Some(view.id.as_str()));
+            .find(|owner| {
+                !owner.presentation.internal
+                    && owner.presentation.name_label.as_deref() == Some(view.id.as_str())
+            });
         let subject = owner_view
             .and_then(|owner| owner.subject.clone())
             .or_else(|| view.subject.clone());
@@ -1405,11 +1402,7 @@ impl MdeWorkbenchItem {
         let title_view = target_view.id.clone();
         let mut figure = UmlFigure::new(view.figure.clone(), label)
             .interface_icon(view.interface_icon.clone())
-            .authored_contents(
-                view.children
-                    .iter()
-                    .any(|child| child.presentation.internal),
-            )
+            .authored_contents(canvas_presentation::has_authored_contents(view))
             .divider(view.presentation.divider)
             .view_style(&style)
             .view_size(width, height, self.zoom)

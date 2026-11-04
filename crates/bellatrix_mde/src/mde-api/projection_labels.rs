@@ -22,7 +22,10 @@ pub(super) fn project(
     };
     let name_owners = diagram
         .all_views()
-        .filter(|owner| owner.presentation.name_label.as_deref() == Some(view.id.as_str()))
+        .filter(|owner| {
+            !owner.presentation.internal
+                && owner.presentation.name_label.as_deref() == Some(view.id.as_str())
+        })
         .collect::<Vec<_>>();
     if !name_owners.is_empty() {
         rendered.bound = true;

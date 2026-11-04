@@ -1,6 +1,6 @@
 use bellatrix_design_system::Palette;
 use bellatrix_mde_cordis::Geometry;
-use bellatrix_mde_cordis::presentation_contract::RenderStyle;
+use bellatrix_mde_cordis::presentation_contract::{RenderStyle, UmlNotation};
 use bellatrix_mde_cordis::projection::View;
 
 pub(super) struct CanvasBounds {
@@ -101,18 +101,48 @@ pub(super) fn render_style(view: &View, palette: Palette) -> RenderStyle {
 pub(super) fn ordered_views(views: &[View]) -> Vec<&View> {
     let mut siblings = views.iter().collect::<Vec<_>>();
     siblings.sort_by_key(|view| view.z_index);
-    let mut pending = siblings.into_iter().rev().collect::<Vec<_>>();
+    let mut pending = siblings
+        .into_iter()
+        .rev()
+        .map(|view| (view, false))
+        .collect::<Vec<_>>();
     let mut ordered = Vec::new();
-    while let Some(view) = pending.pop() {
+    while let Some((view, native_parent)) = pending.pop() {
         if !visible_on_canvas(view) {
             continue;
         }
-        ordered.push(view);
+        if !native_parent || !view.presentation.internal {
+            ordered.push(view);
+        }
+        let native_parent = if view.presentation.internal {
+            native_parent
+        } else {
+            uses_native_contents(view)
+        };
         let mut children = view.children.iter().collect::<Vec<_>>();
         children.sort_by_key(|child| child.z_index);
-        pending.extend(children.into_iter().rev());
+        pending.extend(children.into_iter().rev().map(|child| (child, native_parent)));
     }
     ordered
+}
+
+pub(super) fn uses_native_contents(view: &View) -> bool {
+    // Imported compartments remain in the document, but supported semantic
+    // figures own their title and member rows just like newly created figures.
+    view.subject.is_some()
+        && view.entity_box.is_none()
+        && !matches!(
+            view.figure.notation,
+            UmlNotation::Unsupported
+                | UmlNotation::Rectangle
+                | UmlNotation::Label
+                | UmlNotation::Compartment
+        )
+}
+
+pub(super) fn has_authored_contents(view: &View) -> bool {
+    !uses_native_contents(view)
+        && view.children.iter().any(|child| child.presentation.internal)
 }
 
 fn visible_on_canvas(view: &View) -> bool {
@@ -125,10 +155,7 @@ pub(super) fn minimum_size(
 ) -> (f64, f64) {
     if view.draft.is_some()
         || view.presentation.internal
-        || view
-            .children
-            .iter()
-            .any(|child| child.presentation.internal)
+        || has_authored_contents(view)
         || matches!(
             view.presentation.kind.as_deref(),
             Some("presentation.label" | "presentation.compartment" | "presentation.rectangle")
