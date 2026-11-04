@@ -560,8 +560,61 @@ fn member_end_evidence<'a>(
     })
 }
 
-// UML.xmi Association-ends_must_be_typed, Association-binary_associations and
-// Association-association_ends.
+// UML.xmi Property-type_of_opposite_end compares the inverse attribute role,
+// not just the canonical owner. The caller establishes a binary memberEnd set;
+// neither applicability nor equality depends on this end's own Type.
+fn property_type_of_opposite_end(
+    references: &ReferenceIndex<'_>,
+    end: ElementRef<'_>,
+    opposite: Option<ElementRef<'_>>,
+) -> Result<bool, classifiers::QueryError> {
+    use super::feature_compatibility::{accept_any, resolve_feature_type};
+    use classifiers::QueryError;
+    let owner = references
+        .model()
+        .owner(end)
+        .map_err(|error| QueryError::invalid(end.id(), error))?;
+    if owner.is_some_and(|owner| owner.metaclass().is_none()) {
+        return Err(QueryError::unsupported(
+            end.id(),
+            "member end owner has no resolved UML metaclass",
+        ));
+    }
+    let owning_association = match owner.filter(|owner| owner.conforms_to("Association")) {
+        Some(owner) => classifiers::contributes_to_owned_union(owner, end, "Association-ownedEnd"),
+        None => Ok(false),
+    };
+    if matches!(owning_association, Ok(true)) {
+        return Ok(true);
+    }
+    let classifier = match owner.filter(|owner| owner.conforms_to("Classifier")) {
+        Some(owner) => {
+            classifiers::is_owned_attribute(owner, end).map(|attribute| attribute.then_some(owner))
+        }
+        None => Ok(None),
+    };
+    let opposite_type = match opposite {
+        Some(opposite) if opposite.properties().get("type").is_none_or(Value::is_null) => Ok(None),
+        Some(opposite) => resolve_feature_type(references, opposite).map(Some),
+        None => Err(QueryError::unsupported(
+            end.id(),
+            "opposite member end is unresolved",
+        )),
+    };
+    let same_classifier = (|| {
+        for result in [&classifier, &opposite_type] {
+            if let Err(error @ QueryError::Invalid { .. }) = result {
+                return Err(error.clone());
+            }
+        }
+        Ok(classifier?.map(|classifier| classifier.id())
+            == opposite_type?.map(|opposite_type| opposite_type.id()))
+    })();
+    accept_any([owning_association, same_classifier])
+}
+
+// UML.xmi Association-ends_must_be_typed, Association-binary_associations,
+// Association-association_ends and Property-type_of_opposite_end.
 // A quantified violation needs only a local witness, not a complete end query.
 fn association_end_constraints(
     references: &ReferenceIndex<'_>,
@@ -649,6 +702,25 @@ fn association_end_constraints(
                 })),
         )
     };
+    let opposite_types = if evidence.cardinality != 2 {
+        Ok(true)
+    } else {
+        super::feature_compatibility::require_all(
+            evidence
+                .unresolved
+                .clone()
+                .map(Err)
+                .into_iter()
+                .chain(evidence.known.iter().map(|(position, end)| {
+                    let opposite = evidence
+                        .known
+                        .iter()
+                        .find(|(other_position, _)| *other_position == 1 - *position)
+                        .map(|(_, opposite)| ElementRef::Object(opposite));
+                    property_type_of_opposite_end(references, ElementRef::Object(end), opposite)
+                })),
+        )
+    };
     [
         (
             "Association::ends_must_be_typed",
@@ -670,6 +742,13 @@ fn association_end_constraints(
             "MDE_ASSOCIATION_NARY_END_OWNERSHIP_UNVERIFIED",
             "all n-ary member ends must be Association-owned ends",
             nary_ownership,
+        ),
+        (
+            "Property::type_of_opposite_end",
+            "UML_ASSOCIATION_ENDS",
+            "MDE_ASSOCIATION_UNSUPPORTED",
+            "a classifier-owned end's classifier must equal the opposite end Type",
+            opposite_types,
         ),
     ]
     .into_iter()
@@ -765,15 +844,6 @@ fn validate_association_structure(
                     "Association member end must be owned by its Association or a Classifier"
                         .into(),
                 );
-            }
-            if ends.len() == 2 && evaluate_type_constraints {
-                let other = ends
-                    .get(1 - index)
-                    .ok_or("binary opposite end is missing")?;
-                if property_type(references, other)?.is_none_or(|target| target.id() != owner.id())
-                {
-                    return Err("Property::type_of_opposite_end requires a classifier-owned end's owner to be the opposite end Type".into());
-                }
             }
         }
         match multiplicity(references, end) {
@@ -1224,11 +1294,9 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
                     "UML_ASSOCIATION_ENDS",
                     "ownedAttribute and ownedEnd must be disjoint".to_owned(),
                 )),
-                Err(classifiers::QueryError::Invalid { message, .. }) => Some((
-                    StructuralSeverity::Error,
-                    "UML_ASSOCIATION_ENDS",
-                    message,
-                )),
+                Err(classifiers::QueryError::Invalid { message, .. }) => {
+                    Some((StructuralSeverity::Error, "UML_ASSOCIATION_ENDS", message))
+                }
                 Err(classifiers::QueryError::Unsupported { message, .. }) => Some((
                     StructuralSeverity::Warning,
                     "MDE_ASSOCIATION_CLASS_DISJOINT_ATTRIBUTES_ENDS_UNVERIFIED",

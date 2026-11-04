@@ -161,6 +161,16 @@ or roles without a counterexample produce
 `MDE_ASSOCIATION_NARY_END_OWNERSHIP_UNVERIFIED`. Binary associations have no
 additional ownership restriction from this particular invariant.
 
+`Property-type_of_opposite_end` compares each binary end's classifier role with
+the opposite end's Type independently of its own Type. Canonical ownership alone
+does not establish the classifier role: AssociationClass attributes and owned
+ends are distinguished through their composite roles. A known mismatch keeps
+the public `UML_ASSOCIATION_ENDS` error, even when the other comparison is
+unresolved; unknown roles or opposite Types produce `MDE_ASSOCIATION_UNSUPPORTED`.
+An absent Type is compared as absent, not converted into an unresolved reference.
+The previous Type-gated structural check is replaced, so this rule is emitted
+only once per Association.
+
 `AssociationClass-disjoint_attributes_ends` checks the intersection of owned
 attribute/end roles without first demanding complete `memberEnd` resolution.
 A known Property in both roles produces
