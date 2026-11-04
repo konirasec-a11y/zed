@@ -478,3 +478,160 @@ fn cross_domain_namespace_and_type_references_preserve_provable_scalar_errors() 
     assert_eq!(validate(&invalid)?, proved);
     Ok(())
 }
+
+#[test]
+fn cross_domain_ownership_retains_multiple_owner_and_cycle_findings_through_repair()
+-> FlowResult<()> {
+    assert!(include_str!("features/kernel_boundary.feature").contains(
+        "Scenario: Preserve canonical ownership integrity across opaque domain boundaries"
+    ));
+    println!("Given a valid UML project alongside two opaque external objects");
+    let original = imported_project()?;
+    let mut mixed = original.clone();
+    mixed["model"]["elements"]
+        .as_array_mut()
+        .ok_or("missing elements")?
+        .extend([
+            json!({"id":"external-a", "kind":"rust.struct", "name":"A"}),
+            json!({"id":"external-b", "kind":"c4.software_system", "name":"B"}),
+        ]);
+    let baseline = validate(&mixed)?;
+    assert_eq!(baseline["coverage"], "implemented_uml_subset_rules_only");
+    assert_eq!(baseline["validity"], "unverified");
+    let integrity_error = |response: &Value, message: &str| -> FlowResult<()> {
+        assert_eq!(response["validity"], "unverified");
+        assert_eq!(response["has_errors"], true);
+        let errors: Vec<_> = response["diagnostics"]
+            .as_array()
+            .ok_or("missing diagnostics")?
+            .iter()
+            .filter(|diagnostic| diagnostic["severity"] == "error")
+            .collect();
+        assert_eq!(
+            errors.len(),
+            2,
+            "Only capacity and the proved ownership violation are errors: {response}"
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|diagnostic| diagnostic["code"] == "GRAPH_INTEGRITY"
+                    && diagnostic["subject_id"] == "class-project"
+                    && diagnostic["message"] == message),
+            "{response}"
+        );
+        Ok(())
+    };
+    println!("When a UML Class already owned by its Package also receives an external owner");
+    let mut multiple = mixed.clone();
+    multiple["model"]["relations"].as_array_mut().ok_or("missing relations")?.push(
+        json!({"id":"external-second-owner", "kind":"owns", "from":"external-a", "to":"customer"}));
+    let multiple_result = validate(&multiple)?;
+    integrity_error(
+        &multiple_result,
+        "element customer has more than one semantic owner",
+    )?;
+    reopen_mixed_flow("mixed-multiple-owners", &multiple, &multiple_result)?;
+    println!("Then removing only the second owner repairs the proved violation");
+    multiple["model"]["relations"]
+        .as_array_mut()
+        .ok_or("missing relations")?
+        .retain(|relation| relation["id"] != "external-second-owner");
+    assert_eq!(multiple, mixed);
+    assert_eq!(validate(&multiple)?, baseline);
+
+    println!("When an ownership path returns to the UML Class through two external identities");
+    let mut cyclic = mixed.clone();
+    let relations = cyclic["model"]["relations"]
+        .as_array_mut()
+        .ok_or("missing relations")?;
+    relations.retain(|relation| !(relation["kind"] == "owns" && relation["to"] == "customer"));
+    relations.extend([
+        json!({"id":"uml-to-external", "kind":"owns", "from":"customer", "to":"external-a"}),
+        json!({"id":"external-middle", "kind":"owns", "from":"external-a", "to":"external-b"}),
+        json!({"id":"external-to-uml", "kind":"owns", "from":"external-b", "to":"customer"}),
+    ]);
+    let cyclic_result = validate(&cyclic)?;
+    integrity_error(&cyclic_result, "cycle in owns hierarchy")?;
+    reopen_mixed_flow("mixed-ownership-cycle", &cyclic, &cyclic_result)?;
+    println!(
+        "Then restoring the authored ownership edges repairs the cycle without mapping external types"
+    );
+    cyclic["model"]["relations"] = mixed["model"]["relations"].clone();
+    assert_eq!(cyclic, mixed);
+    assert_eq!(validate(&cyclic)?, baseline);
+
+    println!("When an ownership cycle remains entirely within a disconnected external domain");
+    let mut isolated = mixed.clone();
+    isolated["model"]["relations"]
+        .as_array_mut()
+        .ok_or("missing relations")?
+        .extend([
+            json!({"id":"isolated-forward", "kind":"owns", "from":"external-a", "to":"external-b"}),
+            json!({"id":"isolated-reverse", "kind":"owns", "from":"external-b", "to":"external-a"}),
+        ]);
+    let isolated_result = validate(&isolated)?;
+    assert_eq!(
+        isolated_result["coverage"],
+        "implemented_uml_subset_rules_only"
+    );
+    assert_eq!(isolated_result["validity"], "unverified");
+    assert!(
+        !isolated_result["diagnostics"]
+            .as_array()
+            .ok_or("missing diagnostics")?
+            .iter()
+            .any(|diagnostic| diagnostic["code"] == "GRAPH_INTEGRITY"),
+        "{isolated_result}"
+    );
+    reopen_mixed_flow("isolated-external-cycle", &isolated, &isolated_result)?;
+    println!("When an unrelated cross-domain Type reference forces partial integrity evaluation");
+    let mut partial_isolated = isolated.clone();
+    partial_isolated["model"]["elements"]
+        .as_array_mut()
+        .ok_or("missing elements")?
+        .push(json!({"id":"external-type-only", "kind":"rust.struct", "name":"Opaque Type"}));
+    model_element_mut(&mut partial_isolated, "price")?["properties"]["type"] =
+        json!({"$ref":"external-type-only"});
+    let partial_isolated_result = validate(&partial_isolated)?;
+    assert_eq!(
+        partial_isolated_result["coverage"],
+        "implemented_uml_scalars_and_integrity_only"
+    );
+    assert_eq!(partial_isolated_result["validity"], "unverified");
+    assert_eq!(partial_isolated_result["has_errors"], true);
+    let errors: Vec<_> = partial_isolated_result["diagnostics"]
+        .as_array()
+        .ok_or("missing diagnostics")?
+        .iter()
+        .filter(|diagnostic| diagnostic["severity"] == "error")
+        .collect();
+    assert_eq!(
+        errors.len(),
+        1,
+        "Partial ownership checks must still exclude the disconnected external cycle: {partial_isolated_result}"
+    );
+    assert_eq!(errors[0]["code"], "UML_MODEL_SEMANTICS_UNVERIFIED");
+    assert!(
+        partial_isolated_result["diagnostics"]
+            .as_array()
+            .ok_or("missing diagnostics")?
+            .iter()
+            .any(
+                |diagnostic| diagnostic["code"] == "UML_EXTERNAL_REFERENCE_UNVERIFIED"
+                    && diagnostic["subject_id"] == "price"
+            )
+    );
+    reopen_mixed_flow(
+        "partial-isolated-external-cycle",
+        &partial_isolated,
+        &partial_isolated_result,
+    )?;
+    assert_eq!(validate(&isolated)?, isolated_result);
+    println!(
+        "Then the external-only cycle is not claimed as a UML violation, and prior findings repeat"
+    );
+    assert_eq!(validate(&mixed)?, baseline);
+    assert_eq!(validate(&original)?["validity"], "no_violations_found");
+    Ok(())
+}

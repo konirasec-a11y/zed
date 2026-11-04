@@ -50,3 +50,21 @@ Feature: Pure UML validation at the Bellatrix document boundary
     When an external object alone references the UML namespace
     Then reverse dependencies also suspend global absence queries
     And reopening and restoring the pure UML graph retain deterministic findings
+
+  Scenario: Preserve canonical ownership integrity across opaque domain boundaries
+    Given a valid UML project and two opaque external objects
+    When an already owned UML Class receives an additional external owner
+    Then canonical ownership reports the proved multiple-owner violation
+    When I save, close and reopen the project through JSON and BLX
+    Then all domain records and diagnostics remain identical
+    When I remove only the added owner
+    Then the proved violation disappears without claiming external validity
+    When the UML Class owns a path through both external objects back to itself
+    Then canonical ownership reports the proved cross-domain cycle
+    And saving, reopening and restoring the original ownership preserves the findings and repair
+    When the ownership cycle instead remains entirely in a disconnected external component
+    Then it is not falsely reported as a UML violation
+    When a separate cross-domain Type reference forces partial integrity evaluation
+    Then the disconnected external ownership cycle is still excluded from UML diagnostics
+    And JSON and BLX reopening preserve that partial coverage and capacity error
+    And persistence and repeated pure and mixed requests retain their distinct evaluation states

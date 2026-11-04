@@ -307,7 +307,7 @@ fn mixed_domain_diagnostics(project: &crate::Project) -> Vec<Diagnostic> {
             subject_id: project.id.clone(),
             message: "Cross-domain dependencies prevent closed UML evaluation: relational and global rules are suspended; independent scalar contracts and local graph integrity are still checked".into(),
         });
-        if let Err(error) = validate_partial_uml_integrity(&projection, &external) {
+        if let Err(error) = validate_partial_uml_integrity(&projection, project, &external) {
             diagnostics.push(integrity_diagnostic(project, error));
         }
         for element in crate::uml::root::Model::from_project(&projection).elements() {
@@ -408,14 +408,52 @@ fn has_cross_domain_dependencies(project: &crate::Project, external: &HashSet<&s
 }
 
 fn validate_partial_uml_integrity(
-    project: &crate::Project,
+    projection: &crate::Project,
+    authored: &crate::Project,
     external: &HashSet<&str>,
 ) -> Result<(), crate::GraphError> {
-    let model = crate::uml::root::Model::from_project(project);
+    let model = crate::uml::root::Model::from_project(projection);
     model.root().map_err(crate::GraphError::InvalidRoot)?;
     let identities: HashSet<_> = model.elements().map(|element| element.id()).collect();
+    // `owns` is the canonical ownership contract, even when a participant's
+    // metaclass is unmapped. Keep its original paths to prove cycles/ambiguity,
+    // but do not validate disconnected, entirely external ownership components.
+    let mut ownership = petgraph::graphmap::DiGraphMap::<&str, ()>::new();
+    for relation in authored
+        .relations
+        .iter()
+        .filter(|relation| relation.kind == "owns")
+    {
+        ownership.add_edge(relation.from.as_str(), relation.to.as_str(), ());
+    }
+    let mut relevant = HashSet::new();
+    let mut pending: Vec<_> = authored
+        .elements
+        .iter()
+        .filter(|element| element.kind.starts_with("uml."))
+        .map(|element| element.id.as_str())
+        .chain(
+            authored
+                .relations
+                .iter()
+                .filter(|relation| relation.kind.starts_with("uml."))
+                .map(|relation| relation.id.as_str()),
+        )
+        .collect();
+    while let Some(identifier) = pending.pop() {
+        if relevant.insert(identifier) {
+            pending.extend(ownership.neighbors_directed(identifier, petgraph::Direction::Outgoing));
+            pending.extend(ownership.neighbors_directed(identifier, petgraph::Direction::Incoming));
+        }
+    }
     let mut owners = HashSet::new();
-    for relation in &project.relations {
+    for relation in &authored.relations {
+        let relevant_ownership = relation.kind == "owns"
+            && (relevant.contains(relation.from.as_str())
+                || relevant.contains(relation.to.as_str()));
+        if !relation.kind.starts_with("uml.") && !relevant_ownership {
+            continue;
+        }
         for endpoint in [&relation.from, &relation.to] {
             if !external.contains(endpoint.as_str()) && !identities.contains(endpoint.as_str()) {
                 return Err(crate::GraphError::MissingEndpoint {
@@ -424,13 +462,21 @@ fn validate_partial_uml_integrity(
                 });
             }
         }
-        if relation.kind == "owns" && !owners.insert(relation.to.as_str()) {
+        if relevant_ownership && !owners.insert(relation.to.as_str()) {
             return Err(crate::GraphError::MultipleOwners(relation.to.clone()));
         }
     }
-    if !crate::GraphIndex::new(project)
-        .cyclic_components("owns")
-        .is_empty()
+    if petgraph::algo::kosaraju_scc(&ownership)
+        .iter()
+        .any(|component| {
+            component
+                .iter()
+                .any(|identifier| relevant.contains(identifier))
+                && (component.len() > 1
+                    || component
+                        .iter()
+                        .any(|identifier| ownership.contains_edge(identifier, identifier)))
+        })
     {
         return Err(crate::GraphError::Cycle("owns".into()));
     }

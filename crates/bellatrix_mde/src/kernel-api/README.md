@@ -89,6 +89,11 @@ is never changed. Two conservative coverage levels apply:
   record, and local root, missing-endpoint and ownership integrity checks still
   report independently provable errors. Known external endpoints are unresolved
   boundaries, not falsely reported as missing or wrongly typed UML elements.
+  Ownership checks traverse the original authored `owns` graph, including opaque
+  external identities, for every ownership component touching UML. Multiple
+  owners and cycles crossing a domain boundary are still provable integrity
+  violations. Entirely external, disconnected ownership components are not
+  evaluated as UML.
 
 The conservative global suspension is necessary because some rules inspect all
 candidate objects of a metaclass, including malformed candidates without explicit
