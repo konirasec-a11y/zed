@@ -8,6 +8,8 @@ pub struct ModelingSection {
     pub root_model: Option<String>,
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub explorer_parents: std::collections::BTreeMap<String, Option<String>>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub explorer_diagram_occurrences: std::collections::BTreeMap<String, (String, String)>,
     pub elements: Vec<Element>,
     pub relations: Vec<Relation>,
     pub diagrams: Vec<Diagram>,
@@ -18,6 +20,7 @@ impl ModelingSection {
         Self {
             root_model: model.root_model.clone(),
             explorer_parents: model.explorer_parents.clone(),
+            explorer_diagram_occurrences: model.explorer_diagram_occurrences.clone(),
             elements: model.elements.clone(),
             relations: model.relations.clone(),
             diagrams: model.diagrams.clone(),
@@ -31,6 +34,7 @@ impl ModelingSection {
             name: name.into(),
             root_model: self.root_model.clone(),
             explorer_parents: self.explorer_parents.clone(),
+            explorer_diagram_occurrences: self.explorer_diagram_occurrences.clone(),
             elements: self.elements.clone(),
             relations: self.relations.clone(),
             diagrams: self.diagrams.clone(),

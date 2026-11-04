@@ -8,6 +8,7 @@ mod diagrams;
 mod trace_output;
 mod mutation;
 pub use diagrams::{
+    ModelingCreateExplorerDiagram, ModelingCreateExplorerDiagramRequested,
     DiagramValidationResult, ModelingExecutionTrace, ModelingExecutionTraceEvent, ModelingCreateDiagram, ModelingCreateDiagramRequested, ModelingDeleteDiagram,
     ModelingDeleteDiagramRequested, ModelingRenameDiagram, ModelingRenameDiagramRequested,
     ModelingValidateDiagram, ModelingValidateDiagramRequested, ModelingValidateDiagramTraced,
@@ -60,7 +61,7 @@ mod ui_bridge;
 use bellatrix_mde::Scope;
 use cordis::event::{ListenerRegistrationError, observer_sync};
 use cordis::{Context, Event, Plugin};
-pub use create_element::{ModelingCreateElement, ModelingCreateElementOrVisualDraft, ModelingCreateElementRequested};
+pub use create_element::{ModelingCreateModelElement, ModelingCreateModelElementRequested, ModelingCreateElement, ModelingCreateElementOrVisualDraft, ModelingCreateElementRequested};
 pub use project_integration::{
     MdePlugin, ModelingRename, ModelingRenameRequested, ModelingSetExplorerParent,
     ModelingSetExplorerParentRequested, ModelingSetOwner, ModelingSetOwnerRequested, with_model,

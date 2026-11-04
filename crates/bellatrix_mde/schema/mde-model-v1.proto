@@ -14,6 +14,7 @@ message Project {
   repeated Diagram diagrams = 6;
   optional string root_model = 7;
   bytes explorer_parents_json = 8; // map from identity to parent identity or null (project root)
+  bytes explorer_diagram_occurrences_json = 9; // map from diagram identity to [parent diagram, parent view]
 }
 message Element {
   string id = 1;

@@ -36,6 +36,18 @@ pub(crate) fn set_explorer_parent(section: &mut ModelingSection, subject: &str, 
         cursor = parents.get(id).and_then(|parent| parent.as_deref());
     }
     section.explorer_parents.insert(subject.to_owned(), parent.map(str::to_owned));
+    section.explorer_diagram_occurrences.remove(subject);
     Ok(())
 }
 
+
+pub(crate) fn prune_diagram_occurrences(section: &mut ModelingSection) {
+    section.explorer_diagram_occurrences.retain(|diagram_id, (parent_diagram, parent_view)| {
+        let parent = section.explorer_parents.get(diagram_id).and_then(|parent| parent.as_deref());
+        parent.is_some()
+            && section.diagrams.iter().any(|diagram| diagram.id == *diagram_id)
+            && section.diagrams.iter().find(|diagram| diagram.id == *parent_diagram)
+                .is_some_and(|diagram| diagram.views.iter().any(|view|
+                    view.id == *parent_view && view.subject.as_deref() == parent))
+    });
+}

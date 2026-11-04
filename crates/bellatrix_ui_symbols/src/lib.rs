@@ -1,6 +1,7 @@
 //! Visual vocabulary from the reviewed v3 reference (not a bellatrix-mde-modeling schema).
 //! Names, groups and SVG geometry are reusable in any GPUI host.
 pub mod gallery;
+pub mod staruml;
 pub use gallery::SymbolGallery;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]

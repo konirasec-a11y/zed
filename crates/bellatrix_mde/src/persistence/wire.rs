@@ -22,6 +22,8 @@ struct WireProject {
     root_model: Option<String>,
     #[prost(bytes, tag = "8")]
     explorer_parents_json: Vec<u8>,
+    #[prost(bytes, tag = "9")]
+    explorer_diagram_occurrences_json: Vec<u8>,
 }
 #[derive(Clone, PartialEq, Message)]
 struct WireElement {
@@ -208,6 +210,7 @@ pub(super) fn encode(project: &Project) -> Result<Vec<u8>, ModelIoError> {
         version: project.schema_version,
         root_model: project.root_model.clone(),
         explorer_parents_json: serde_json::to_vec(&project.explorer_parents)?,
+        explorer_diagram_occurrences_json: serde_json::to_vec(&project.explorer_diagram_occurrences)?,
         id: project.id.clone(),
         name: project.name.clone(),
         elements,
@@ -318,6 +321,11 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Project, ModelIoError> {
             Default::default()
         } else {
             serde_json::from_slice(&data.explorer_parents_json)?
+        },
+        explorer_diagram_occurrences: if data.explorer_diagram_occurrences_json.is_empty() {
+            Default::default()
+        } else {
+            serde_json::from_slice(&data.explorer_diagram_occurrences_json)?
         },
         id: data.id,
         name: data.name,

@@ -63,12 +63,14 @@ pub enum MdeUiCommand {
         completion: watch::Sender<Option<Result<u64, String>>>,
     },
     CreateDiagram(ModelingCreateDiagramRequested),
+    CreateExplorerDiagram(crate::ModelingCreateExplorerDiagramRequested),
     RenameDiagram(ModelingRenameDiagramRequested),
     DeleteDiagram(ModelingDeleteDiagramRequested),
     ValidateDiagram(ModelingValidateDiagramRequested),
     CreateVisualDraft(ModelingCreateVisualDraftRequested),
     CreateElementOrVisualDraft(ModelingCreateElementRequested),
     CreateElement(ModelingCreateElementRequested),
+    CreateModelElement(crate::ModelingCreateModelElementRequested),
     CreateRelationOrVisualDraft(ModelingCreateRelationRequested),
     CreateRelationAtViewsOrVisualDraft(ModelingCreateRelationAtViewsRequested),
     CreateRelation(ModelingCreateRelationRequested),
@@ -274,6 +276,10 @@ impl MdeUiBridge {
                         validation_tx.send_replace(Some(outcome));
                         continue;
                     }
+                    MdeUiCommand::CreateExplorerDiagram(request) => describe(
+                        "Diagram created",
+                        cordis.query::<crate::ModelingCreateExplorerDiagram>(Routing::Unscoped, request).await,
+                    ),
                     MdeUiCommand::CreateDiagram(request) => describe(
                         "Diagram created",
                         cordis
@@ -297,6 +303,10 @@ impl MdeUiBridge {
                         cordis
                             .query::<ModelingCreateElementOrVisualDraft>(Routing::Unscoped, request)
                             .await,
+                    ),
+                    MdeUiCommand::CreateModelElement(request) => describe(
+                        "Model element created",
+                        cordis.query::<crate::ModelingCreateModelElement>(Routing::Unscoped, request).await,
                     ),
                     MdeUiCommand::CreateElement(request) => describe(
                         "Element created",

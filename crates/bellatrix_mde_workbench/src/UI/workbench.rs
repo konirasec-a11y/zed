@@ -10,6 +10,8 @@ use workbench_state::switch_diagram_selection;
 mod diagram_canvas;
 #[path = "execution_dashboard.rs"]
 mod execution_dashboard;
+#[path = "../view-model/explorer.rs"]
+mod explorer;
 #[path = "hierarchy.rs"]
 mod hierarchy;
 #[path = "../view-model/inspector_drafts.rs"]

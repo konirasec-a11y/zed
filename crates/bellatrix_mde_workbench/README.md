@@ -136,8 +136,8 @@ acceptance scenarios above, independently of headless command tests.
 The Model Explorer lists each diagram once, with its persisted view occurrences
 beneath it. A single resolved UMLDI context can place a diagram beneath its
 unambiguous external element occurrence. Missing, ambiguous or cyclic contexts
-remain at the project root. Root uml.model containers are omitted from the tree
-and their children are promoted; model data remains unchanged. When a semantic subject has a diagram occurrence,
+remain at the project root. Only the designated root_model container is omitted from the tree
+and its children are promoted; explicit Model elements stay visible and renamable; model data remains unchanged. When a semantic subject has a diagram occurrence,
 its standalone row is omitted; distinct subjects with equal names and legitimate
 occurrences in different diagrams remain distinct. Items without a diagram view
 remain accessible through semantic ownership. Unpictured members of a pictured
@@ -147,7 +147,8 @@ identity is retained for selection and presentation editing, including in
 read-only previews.
 Relationship rows show source, authored relationship name (or relationship type),
 relationship type, semantic endpoint markers and line style, and destination. Projection does not delete elements,
-change ownership, or modify any diagram or view. Legacy cosmetic placements do not override the projected hierarchy.
+change ownership, or modify any diagram or view. Explicit diagram placements are read from
+explorer_parents; cosmetic element placements do not override semantic ownership.
 
 Explorer navigation follows the StarUML interaction contract for selecting a
 right-clicked target before opening its menu, revealing selected nodes through
@@ -216,3 +217,36 @@ and unique default names, and may grow classifier views to fit new compartments.
 No canvas coordinates, duplicate semantic elements, cosmetic parents or invented
 container rules are used. New-member selection/rename on commit is not yet wired;
 queue acceptance is not reported as completed publication.
+
+Element context menus now rename existing semantic elements through the Rename
+command, preserving identity and ownership. The editor starts with the semantic
+name (including the parametered element for template parameters), not a rendered
+relationship label or visual occurrence caption. Enter commits and Escape cancels
+only while this name editor has focus; neither key creates content or confirms
+diagram deletion. Blank names stay in the editor with feedback. The same captured
+project/revision guard, read-only checks and document-switch cleanup apply.
+Explorer creation/placement routes use AddMember, CreateDiagram and PlaceElementView;
+they do not call semantic-to-visual-draft fallback commands.
+
+Explorer creation uses separate Add Diagram and Add submenus. Add on the project,
+Model or Package creates supported semantic elements, including Model, without
+requiring an open diagram or adding a canvas view. Classifier members remain
+contextual Add entries. Add Diagram on a Model or Package stores its Explorer parent separately from
+UMLDI model_elements. Creation and placement are one revision-checked mutation;
+behavior diagrams still require their supported UMLDI contexts. Commands
+pass through Cordis and the kernel with the captured project revision. Rename
+changes the semantic name; Explorer occurrences show that name even when their
+canvas view has a separately authored label. Projection and menu capabilities
+live in view-model/explorer.rs, while panels and hierarchy render the controls.
+
+When Add Diagram is invoked on a visual occurrence, its exact diagram/view pair
+is persisted separately in explorer_diagram_occurrences while explorer_parents
+keeps the semantic parent ID. Multiple occurrences therefore do not duplicate the
+new diagram or arbitrarily relocate it to another occurrence. If that view is
+removed, the Explorer falls back to an unambiguous surviving parent placement,
+or the project root when none can be resolved. Removal of views, elements and
+diagrams prunes only invalid occurrence references. Both JSON and protobuf retain
+this metadata; older documents default to an empty map.
+The occurrence hint currently requires the clicked semantic parent to have its
+own view. An unpictured member repeated beneath several owner occurrences uses
+the semantic fallback above; no arbitrary owner occurrence is selected.

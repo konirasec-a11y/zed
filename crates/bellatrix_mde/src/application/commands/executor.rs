@@ -60,6 +60,18 @@ pub enum Command {
     DeleteDiagram {
         diagram_id: String,
     },
+    CreateExplorerDiagram {
+        kind: StructuralDiagramKind,
+        name: String,
+        model_elements: Vec<String>,
+        parent_id: Option<String>,
+        parent_occurrence: Option<(String, String)>,
+    },
+    CreateModelElement {
+        owner_id: Option<String>,
+        kind: ModelingElementKind,
+        name: Option<String>,
+    },
     CreateElement {
         diagram_id: String,
         owner_id: Option<String>,
@@ -239,13 +251,27 @@ pub(crate) fn apply_with_diagram_operations(project: &Project, command: &Command
             name,
             model_elements,
         } => diagrams::create(&mut section, project, *kind, name, model_elements, revision)?,
+        Command::CreateExplorerDiagram { kind, name, model_elements, parent_id, parent_occurrence } => {
+            diagrams::create(&mut section, project, *kind, name, model_elements, revision)?;
+            let diagram_id = section.diagrams.last().ok_or("created diagram missing")?.id.clone();
+            crate::explorer_placement::set_explorer_parent(&mut section, &diagram_id, parent_id.as_deref())?;
+            if let Some((parent_diagram, parent_view)) = parent_occurrence {
+                let view = section.diagrams.iter().find(|diagram| diagram.id == *parent_diagram)
+                    .and_then(|diagram| diagram.views.iter().find(|view| view.id == *parent_view))
+                    .ok_or("Explorer parent occurrence not found")?;
+                if parent_id.is_none() || view.subject.as_ref() != parent_id.as_ref() {
+                    return Err("Explorer occurrence does not represent the requested parent".into());
+                }
+                section.explorer_diagram_occurrences.insert(diagram_id, (parent_diagram.clone(), parent_view.clone()));
+            }
+        }
         Command::RenameDiagram { diagram_id, name } => {
             diagrams::rename(&mut section, diagram_id, name)?
         }
         Command::DeleteDiagram { diagram_id } => diagrams::delete(&mut section, diagram_id)?,
         Command::CreateRelationOrVisualDraft { .. } | Command::CreateRelationAtViewsOrVisualDraft { .. } => return Err("visual relation dispatch failed".into()),
         Command::CreateElementOrVisualDraft { .. } => return Err("visual creation dispatch failed".into()),
-        Command::CreateElement { .. } => {
+        Command::CreateElement { .. } | Command::CreateModelElement { .. } => {
             create_element(&mut section, command, revision, &project.id)?
         }
         Command::CreateRelation {
@@ -363,6 +389,7 @@ pub(crate) fn apply_with_diagram_operations(project: &Project, command: &Command
             }
         }
     }
+    crate::explorer_placement::prune_diagram_occurrences(&mut section);
     let draft_view_edit = match command {
         Command::MoveView { view_id, .. } | Command::ResizeView { view_id, .. } => project.diagrams.iter()
             .flat_map(|diagram| &diagram.views).any(|view| view.id == *view_id && view.draft.is_some()),
@@ -370,7 +397,7 @@ pub(crate) fn apply_with_diagram_operations(project: &Project, command: &Command
             .is_some_and(|diagram| diagram.views.iter().any(|view| view.id == *view_id && view.draft.is_some())),
         _ => false,
     };
-    let presentation_only = draft_view_edit || matches!(command, Command::CreateDiagram { .. } | Command::CreateVisualDraft { .. } | Command::SetExplorerParent { .. } | Command::SetViewLabel { .. } | Command::SetViewTiming { .. } | Command::SetViewEndpoints { .. } | Command::SetViewStyle { .. } | Command::SetViewRouting { .. } | Command::ReorderView { .. });
+    let presentation_only = draft_view_edit || matches!(command, Command::CreateDiagram { .. } | Command::CreateExplorerDiagram { .. } | Command::CreateVisualDraft { .. } | Command::SetExplorerParent { .. } | Command::SetViewLabel { .. } | Command::SetViewTiming { .. } | Command::SetViewEndpoints { .. } | Command::SetViewStyle { .. } | Command::SetViewRouting { .. } | Command::ReorderView { .. });
     if !presentation_only {
         crate::uml::associations::materialize_new(project, &mut section)?;
         crate::uml::associations::synchronize_changes(&previous_section, &mut section)?;
@@ -402,6 +429,8 @@ fn fresh_ids<const N: usize>(
         let ids = prefixes.map(|prefix| format!("{prefix}-{sequence}"));
         let occupied = ids.iter().any(|id| {
             id == project_id
+                || section.explorer_diagram_occurrences.contains_key(id)
+                || section.explorer_diagram_occurrences.values().any(|(diagram, view)| diagram == id || view == id)
                 || section.explorer_parents.contains_key(id)
                 || section.explorer_parents.values().any(|parent| parent.as_ref() == Some(id))
                 || section.elements.iter().any(|element| &element.id == id)
@@ -423,28 +452,25 @@ fn create_element(
     revision: u64,
     project_id: &str,
 ) -> Result<(), String> {
-    let Command::CreateElement {
-        diagram_id,
-        owner_id,
-        kind,
-        name,
-        x,
-        y,
-    } = command
-    else {
-        return Err("expected element creation command".into());
+    let (diagram_id, owner_id, kind, name, x, y) = match command {
+        Command::CreateElement { diagram_id, owner_id, kind, name, x, y } =>
+            (Some(diagram_id.as_str()), owner_id, kind, name, *x, *y),
+        Command::CreateModelElement { owner_id, kind, name } =>
+            (None, owner_id, kind, name, 0.0, 0.0),
+        _ => return Err("expected element creation command".into()),
     };
     if !x.is_finite() || !y.is_finite() {
         return Err("element position must be finite".into());
     }
     if ModelingElementKind::DETAILS.contains(kind) && !section.diagrams.iter().any(|diagram|
-        diagram.id == *diagram_id && diagram.views.iter().any(|view| view.subject.as_ref() == owner_id.as_ref())) {
+        Some(diagram.id.as_str()) == diagram_id && diagram.views.iter().any(|view| view.subject.as_ref() == owner_id.as_ref())) {
         return Err("place the containing Action or CombinedFragment in this diagram before adding its detail".into());
     }
     let requested_name = name.as_deref();
     let mut chosen_name = requested_name.unwrap_or(kind.default_name()).to_owned();
     let basic_classifier = matches!(kind, ModelingElementKind::Class | ModelingElementKind::Interface);
-    if kind.requires_owner() && owner_id.is_none() && !basic_classifier {
+    if kind.requires_owner() && owner_id.is_none() && !basic_classifier
+        && (diagram_id.is_some() || kind.requires_nested_owner()) {
         return Err(if kind.requires_nested_owner() {
             "Select the containing Activity, StateMachine, State, Region, or Interaction first"
         } else { "this element requires an explicit Package or Model owner" }.into());
@@ -465,12 +491,11 @@ fn create_element(
             return Err("this creation command requires a Package or Model owner".into());
         }
     }
-    if !section
-        .diagrams
-        .iter()
-        .any(|diagram| diagram.id == *diagram_id)
-    {
+    if diagram_id.is_some_and(|id| !section.diagrams.iter().any(|diagram| diagram.id == id)) {
         return Err("diagram not found".into());
+    }
+    if requested_name.is_some_and(|name| name.trim().is_empty()) {
+        return Err("element name must not be blank".into());
     }
     if requested_name.is_none() {
         let base = chosen_name.clone();
@@ -486,30 +511,32 @@ fn create_element(
         revision,
         project_id,
     )?;
-    let diagram = section
-        .diagrams
-        .iter_mut()
-        .find(|diagram| diagram.id == *diagram_id)
-        .ok_or("diagram not found")?;
-    let z_index = diagram
-        .views
-        .iter()
-        .map(|view| view.z_index)
-        .max()
-        .unwrap_or(0)
-        .checked_add(1)
-        .ok_or("diagram z-index overflow")?;
-    diagram.views.push(View {
-        endpoints: None,
-        timing: None,
+    if let Some(diagram_id) = diagram_id {
+        let diagram = section
+            .diagrams
+            .iter_mut()
+            .find(|diagram| diagram.id == diagram_id)
+            .ok_or("diagram not found")?;
+        let z_index = diagram
+            .views
+            .iter()
+            .map(|view| view.z_index)
+            .max()
+            .unwrap_or(0)
+            .checked_add(1)
+            .ok_or("diagram z-index overflow")?;
+        diagram.views.push(View {
+            endpoints: None,
+            timing: None,
             draft: None,
-        id: view_id,
-        subject: Some(element_id.clone()),
-        label: None,
-        geometry: views::initial_geometry_in_diagram(*kind, diagram, *x, *y),
-        style: Style::default(),
-        z_index,
-    });
+            id: view_id,
+            subject: Some(element_id.clone()),
+            label: None,
+            geometry: views::initial_geometry_in_diagram(*kind, diagram, x, y),
+            style: Style::default(),
+            z_index,
+        });
+    }
     let mut properties = std::collections::BTreeMap::new();
     if crate::uml::root::object_metaclass(kind.model_kind()).is_some_and(|metaclass|
         crate::uml::metamodel::conforms_to(metaclass, "PackageableElement")) {
@@ -549,7 +576,7 @@ fn create_element(
     if let Some(owner_id) = resolved_owner {
         if kind.requires_nested_owner() || basic_classifier {
             crate::uml::root::set_owner(section, project_id, &element_id, &owner_id)?;
-            if kind.requires_nested_owner() {
+            if kind.requires_nested_owner() && let Some(diagram_id) = diagram_id {
                 features::reposition_boundary_nodes(section, diagram_id, &owner_id);
                 features::layout_interaction_operands(section, diagram_id, &owner_id);
             }
@@ -844,6 +871,12 @@ fn remove_element(section: &mut ModelingSection, id: &str) -> Result<(), String>
     section
         .relations
         .retain(|relation| !incident.contains(&relation.id) && !deleted.contains(&relation.id));
+    section.explorer_parents.retain(|subject, parent| {
+        if parent.as_ref().is_some_and(|id| deleted.contains(id) || incident.contains(id)) {
+            *parent = None;
+        }
+        !deleted.contains(subject) && !incident.contains(subject)
+    });
     if section.root_model.as_ref().is_some_and(|root| deleted.contains(root)) { section.root_model = None; }
     for diagram in &mut section.diagrams {
         diagram.views.retain(|view| {

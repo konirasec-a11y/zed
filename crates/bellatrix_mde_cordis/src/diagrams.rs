@@ -23,6 +23,19 @@ impl Event for ModelingCreateDiagram {
 }
 
 #[derive(Clone, Debug)]
+pub struct ModelingCreateExplorerDiagramRequested {
+    pub diagram: ModelingCreateDiagramRequested,
+    pub parent_id: Option<String>,
+    pub parent_occurrence: Option<(String, String)>,
+}
+pub struct ModelingCreateExplorerDiagram;
+impl Event for ModelingCreateExplorerDiagram {
+    const NAME: &'static str = "bellatrix.mde.create-explorer-diagram.v1";
+    type Args = ModelingCreateExplorerDiagramRequested;
+    type Output = Result<u64, String>;
+}
+
+#[derive(Clone, Debug)]
 pub struct ModelingRenameDiagramRequested {
     pub project_id: ProjectId,
     pub diagram_id: String,
@@ -164,6 +177,21 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
             },
         ))
         .map_err(|error| io::Error::other(error.to_string()))?;
+    let explorer_projects = Arc::clone(&projects);
+    let _create_explorer = context.on::<ModelingCreateExplorerDiagram, _>(responder(
+        move |context: Context, request: ModelingCreateExplorerDiagramRequested| {
+            let projects = Arc::clone(&explorer_projects);
+            async move {
+                let diagram = request.diagram;
+                let result = crate::mutation::execute(&context, &projects, diagram.project_id, diagram.expected_revision,
+                    Command::CreateExplorerDiagram { kind: diagram.kind, name: diagram.name,
+                        model_elements: diagram.model_elements, parent_id: request.parent_id,
+                        parent_occurrence: request.parent_occurrence },
+                ).await;
+                Ok::<_, Infallible>(Some(result))
+            }
+        },
+    )).map_err(|error| io::Error::other(error.to_string()))?;
     let rename_projects = Arc::clone(&projects);
     let _rename = context
         .on::<ModelingRenameDiagram, _>(responder(

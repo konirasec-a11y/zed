@@ -18,6 +18,8 @@ pub struct Project {
     /// a present null parent places the identity at the project root.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub explorer_parents: std::collections::BTreeMap<String, Option<String>>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub explorer_diagram_occurrences: std::collections::BTreeMap<String, (String, String)>,
     #[serde(default)]
     pub elements: Vec<Element>,
     #[serde(default)]

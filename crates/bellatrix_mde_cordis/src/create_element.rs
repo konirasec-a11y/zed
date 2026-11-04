@@ -67,3 +67,27 @@ pub(crate) async fn create_element(
     )
     .await
 }
+
+#[derive(Clone, Debug)]
+pub struct ModelingCreateModelElementRequested {
+    pub project_id: ProjectId,
+    pub kind: ModelingElementKind,
+    pub name: Option<String>,
+    pub owner_id: Option<String>,
+    pub expected_revision: u64,
+}
+pub struct ModelingCreateModelElement;
+impl Event for ModelingCreateModelElement {
+    const NAME: &'static str = "bellatrix.mde.create-model-element.v1";
+    type Args = ModelingCreateModelElementRequested;
+    type Output = Result<u64, String>;
+}
+pub(crate) async fn create_model_element(
+    context: &Context,
+    projects: &ProjectService,
+    request: ModelingCreateModelElementRequested,
+) -> Result<u64, String> {
+    crate::mutation::execute(context, projects, request.project_id, request.expected_revision,
+        Command::CreateModelElement { owner_id: request.owner_id, kind: request.kind, name: request.name },
+    ).await
+}

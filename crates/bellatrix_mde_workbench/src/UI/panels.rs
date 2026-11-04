@@ -92,15 +92,10 @@ fn explorer_menu(
     panel: gpui::WeakEntity<MdeRightPanel>, row_key: String,
     window: &mut Window, cx: &mut App,
 ) -> Entity<ui::ContextMenu> {
-    let read_only = owner.read(cx).source().is_read_only();
+    let read_only = owner.read(cx).source().is_read_only()
+        || owner.read(cx).source().is_presentation_suspended();
     let mut occurrences = Vec::new();
     let snapshot = owner.read(cx).source().snapshot().ok();
-    let member_kinds = snapshot.as_ref().filter(|_| !read_only).map(|snapshot|
-        crate::workbench_ui::hierarchy::member_creation_kinds(&snapshot.section, subject)
-    ).unwrap_or_default();
-    let contextual_kinds = snapshot.as_ref().filter(|_| !read_only).map(|snapshot|
-        crate::workbench_ui::hierarchy::contextual_diagram_kinds(&snapshot.section, subject)
-    ).unwrap_or_default();
     if let Some(snapshot) = &snapshot {
         for diagram in &snapshot.section.diagrams {
             for (index, view) in diagram.views.iter().enumerate() {
@@ -122,60 +117,38 @@ fn explorer_menu(
             });
         }
         if read_only { return menu.header("Read-only preview"); }
-        let has_creation_actions = !member_kinds.is_empty() || !contextual_kinds.is_empty();
-        if !member_kinds.is_empty() {
-            menu = menu.header("Add member");
-            if let Some(snapshot) = &snapshot {
-                for (kind, label) in member_kinds {
-                    let create_owner = owner.clone();
-                    let owner_id = subject.clone();
-                    let project_id = snapshot.project_id.clone();
-                    let revision = snapshot.revision;
-                    let panel = panel.clone();
-                    let row_key = row_key.clone();
-                    menu = menu.entry(label, None, move |_, cx| {
-                        let sent = create_owner.update(cx, |workbench, cx| {
-                            workbench.submit_explorer_command(
-                                bellatrix_mde_cordis::MdeUiCommand::AddMember(bellatrix_mde_cordis::ModelingAddMemberRequested {
-                                    project_id: project_id.clone(), owner_id: owner_id.clone(),
-                                    kind, expected_revision: revision,
-                                }), &project_id, revision, cx)
+        if let Some(snapshot) = &snapshot {
+            menu = explorer_creation_menus(menu, &owner, snapshot, Some(&subject), panel.clone(), &row_key);
+        }
+        if let Some(snapshot) = &snapshot {
+            if let Some(element) = snapshot.section.elements.iter().find(|element| element.id == subject) {
+                let rename_owner = owner.clone();
+                let rename_panel = panel.clone();
+                let project_id = snapshot.project_id.clone();
+                let element_id = subject.clone();
+                let revision = snapshot.revision;
+                let name = bellatrix_mde::template_parametered_element(&snapshot.section, element)
+                    .unwrap_or(element).name.clone();
+                menu = menu.entry("Rename element", None, move |window, cx| {
+                    if let Err(error) = rename_panel.update(cx, |panel, cx| {
+                        if !panel.is_bound_to(&rename_owner) || rename_owner.read(cx).source().is_read_only() { return; }
+                        let input = cx.new(|cx| {
+                            let input = InputField::new(window, cx, "Element name").label_min_width(px(0.0));
+                            input.set_text(&name, window, cx);
+                            input
                         });
-                        if sent {
-                            if let Err(error) = panel.update(cx, |panel, cx| {
-                                if panel.is_bound_to(&create_owner) {
-                                    panel.collapsed_elements.remove(&row_key);
-                                    cx.notify();
-                                }
-                            }) { eprintln!("MDE member owner reveal failed: {error}"); }
-                        }
-                    });
-                }
+                        window.focus(&input.read(cx).focus_handle(cx), cx);
+                        panel.explorer_action = Some(ExplorerActionDraft {
+                            item_id: rename_owner.entity_id(), project_id: project_id.clone(),
+                            target: ExplorerActionTarget::Element(element_id.clone()), revision,
+                            name: name.clone(), rename: Some(input),
+                        });
+                        panel.explorer_open = true;
+                        cx.notify();
+                    }) { eprintln!("MDE element rename failed: {error}"); }
+                });
             }
         }
-        if !contextual_kinds.is_empty() {
-            menu = menu.header("Create diagram for this element");
-            if let Some(snapshot) = &snapshot {
-                for kind in contextual_kinds {
-                    let create_owner = owner.clone();
-                    let context_id = subject.clone();
-                    let project_id = snapshot.project_id.clone();
-                    let revision = snapshot.revision;
-                    let label = crate::workbench_ui::diagram_kind_label(kind).to_owned();
-                    let name = format!("{} diagram {}", label, snapshot.section.diagrams.len().saturating_add(1));
-                    menu = menu.entry(label, None, move |_, cx| {
-                        create_owner.update(cx, |workbench, cx| {
-                            workbench.submit_explorer_command(
-                                bellatrix_mde_cordis::MdeUiCommand::CreateDiagram(bellatrix_mde_cordis::ModelingCreateDiagramRequested {
-                                    project_id: project_id.clone(), kind, name: name.clone(),
-                                    model_elements: vec![context_id.clone()], expected_revision: revision,
-                                }), &project_id, revision, cx);
-                        });
-                    });
-                }
-            }
-        }
-        if has_creation_actions { menu = menu.header("Model element"); }
         let show_owner = owner.clone();
         let show_subject = subject.clone();
         menu.entry("Show in active diagram", None, move |window, cx| {
@@ -193,44 +166,147 @@ fn explorer_menu(
     })
 }
 
-struct DiagramActionDraft {
+enum ExplorerActionTarget {
+    Diagram(String),
+    Element(String),
+}
+
+struct ExplorerActionDraft {
     item_id: gpui::EntityId,
     project_id: bellatrix_project::ProjectId,
-    diagram_id: String,
+    target: ExplorerActionTarget,
     revision: u64,
     name: String,
     rename: Option<Entity<InputField>>,
 }
 
+fn explorer_creation_menus(
+    mut menu: ui::ContextMenu,
+    owner: &Entity<MdeWorkbenchItem>,
+    snapshot: &crate::workbench_ui::MdeSnapshot,
+    subject: Option<&str>,
+    panel: gpui::WeakEntity<MdeRightPanel>,
+    row_key: &str,
+) -> ui::ContextMenu {
+    use crate::workbench_ui::explorer;
+    let diagram_kinds = subject.map(|id| explorer::contextual_diagram_kinds(&snapshot.section, id))
+        .unwrap_or_else(explorer::project_diagram_kinds);
+    if !diagram_kinds.is_empty() {
+        let owner = owner.clone();
+        let snapshot = snapshot.clone();
+        let parent_occurrence = explorer::parent_occurrence(&snapshot.section, subject, row_key);
+        let subject = subject.map(str::to_owned);
+        let panel = panel.clone();
+        let row_key = row_key.to_owned();
+        menu = menu.submenu("Add Diagram", move |mut menu, _, _| {
+            for kind in diagram_kinds.iter().copied() {
+                let owner = owner.clone();
+                let project_id = snapshot.project_id.clone();
+                let revision = snapshot.revision;
+                let model_elements = if kind.context_metaclass().is_some()
+                    || kind == bellatrix_mde::StructuralDiagramKind::CompositeStructure {
+                    subject.iter().cloned().collect::<Vec<_>>()
+                } else { Vec::new() };
+                let parent_id = subject.clone();
+                let parent_occurrence = parent_occurrence.clone();
+                let label = crate::workbench_ui::diagram_kind_label(kind).to_owned();
+                let name = format!("{} diagram {}", label, snapshot.section.diagrams.len().saturating_add(1));
+                let panel = panel.clone();
+                let row_key = row_key.clone();
+                menu = menu.entry(label, None, move |_, cx| {
+                    let sent = owner.update(cx, |workbench, cx| {
+                        workbench.submit_explorer_command(
+                            bellatrix_mde_cordis::MdeUiCommand::CreateExplorerDiagram(bellatrix_mde_cordis::ModelingCreateExplorerDiagramRequested {
+                                diagram: bellatrix_mde_cordis::ModelingCreateDiagramRequested {
+                                    project_id: project_id.clone(), kind, name: name.clone(),
+                                    model_elements: model_elements.clone(), expected_revision: revision,
+                                },
+                                parent_id: parent_id.clone(),
+                                parent_occurrence: parent_occurrence.clone(),
+                            }), &project_id, revision, cx)
+                    });
+                    if sent { reveal_explorer_owner(&panel, &owner, &row_key, cx); }
+                });
+            }
+            menu
+        });
+    }
+    let element_kinds = explorer::model_creation_kinds(&snapshot.section, subject);
+    let member_kinds = subject.map(|id| explorer::member_creation_kinds(&snapshot.section, id)).unwrap_or_default();
+    if !element_kinds.is_empty() || !member_kinds.is_empty() {
+        let owner = owner.clone();
+        let snapshot = snapshot.clone();
+        let subject = subject.map(str::to_owned);
+        let row_key = row_key.to_owned();
+        menu = menu.submenu("Add", move |mut menu, _, _| {
+            for kind in element_kinds.iter().copied() {
+                let owner = owner.clone();
+                let project_id = snapshot.project_id.clone();
+                let revision = snapshot.revision;
+                let owner_id = subject.clone();
+                let panel = panel.clone();
+                let row_key = row_key.clone();
+                menu = menu.entry(kind.label(), None, move |_, cx| {
+                    let sent = owner.update(cx, |workbench, cx| {
+                        workbench.submit_explorer_command(
+                            bellatrix_mde_cordis::MdeUiCommand::CreateModelElement(bellatrix_mde_cordis::ModelingCreateModelElementRequested {
+                                project_id: project_id.clone(), kind, name: None,
+                                owner_id: owner_id.clone(), expected_revision: revision,
+                            }), &project_id, revision, cx)
+                    });
+                    if sent { reveal_explorer_owner(&panel, &owner, &row_key, cx); }
+                });
+            }
+            if let Some(subject) = &subject {
+                for (kind, label) in member_kinds.iter().copied() {
+                    let owner = owner.clone();
+                    let project_id = snapshot.project_id.clone();
+                    let revision = snapshot.revision;
+                    let owner_id = subject.clone();
+                    let panel = panel.clone();
+                    let row_key = row_key.clone();
+                    menu = menu.entry(label, None, move |_, cx| {
+                        let sent = owner.update(cx, |workbench, cx| {
+                            workbench.submit_explorer_command(
+                                bellatrix_mde_cordis::MdeUiCommand::AddMember(bellatrix_mde_cordis::ModelingAddMemberRequested {
+                                    project_id: project_id.clone(), owner_id: owner_id.clone(), kind,
+                                    expected_revision: revision,
+                                }), &project_id, revision, cx)
+                        });
+                        if sent { reveal_explorer_owner(&panel, &owner, &row_key, cx); }
+                    });
+                }
+            }
+            menu
+        });
+    }
+    menu
+}
+
+fn reveal_explorer_owner(
+    panel: &gpui::WeakEntity<MdeRightPanel>, owner: &Entity<MdeWorkbenchItem>, row_key: &str, cx: &mut App,
+) {
+    if let Err(error) = panel.update(cx, |panel, cx| {
+        if panel.is_bound_to(owner) {
+            panel.collapsed_elements.remove(row_key);
+            cx.notify();
+        }
+    }) { eprintln!("MDE element owner reveal failed: {error}"); }
+}
+
 fn explorer_project_menu(
-    owner: &Entity<MdeWorkbenchItem>, window: &mut Window, cx: &mut App,
+    owner: &Entity<MdeWorkbenchItem>, panel: gpui::WeakEntity<MdeRightPanel>, row_key: &str,
+    window: &mut Window, cx: &mut App,
 ) -> Entity<ui::ContextMenu> {
     let snapshot = owner.read(cx).source().snapshot();
     let editable = !owner.read(cx).source().is_read_only()
         && !owner.read(cx).source().is_presentation_suspended();
     let owner = owner.clone();
+    let row_key = row_key.to_owned();
     ui::ContextMenu::build(window, cx, move |menu, _, _| {
         if !editable { return menu.header("Read-only preview"); }
         let Ok(snapshot) = snapshot else { return menu.header("Project snapshot unavailable"); };
-        bellatrix_mde::StructuralDiagramKind::ALL_DIAGRAMS.into_iter()
-            .filter(|kind| kind.context_metaclass().is_none()
-                && *kind != bellatrix_mde::StructuralDiagramKind::CompositeStructure)
-            .fold(menu.header("Create diagram"), |menu, kind| {
-                let owner = owner.clone();
-                let project_id = snapshot.project_id.clone();
-                let revision = snapshot.revision;
-                let label = crate::workbench_ui::diagram_kind_label(kind).to_owned();
-                let name = format!("{} diagram {}", label, snapshot.section.diagrams.len().saturating_add(1));
-                menu.entry(label, None, move |_, cx| {
-                    owner.update(cx, |workbench, cx| {
-                        workbench.submit_explorer_command(
-                            bellatrix_mde_cordis::MdeUiCommand::CreateDiagram(bellatrix_mde_cordis::ModelingCreateDiagramRequested {
-                                project_id: project_id.clone(), kind, name: name.clone(),
-                                model_elements: Vec::new(), expected_revision: revision,
-                            }), &project_id, revision, cx);
-                    });
-                })
-            })
+        explorer_creation_menus(menu, &owner, &snapshot, None, panel, &row_key)
     })
 }
 
@@ -280,9 +356,9 @@ fn explorer_diagram_menu(
                         input
                     }));
                     if let Some(input) = &input { window.focus(&input.read(cx).focus_handle(cx), cx); }
-                    panel.diagram_action = Some(DiagramActionDraft {
+                    panel.explorer_action = Some(ExplorerActionDraft {
                         item_id: owner.entity_id(), project_id: project_id.clone(),
-                        diagram_id: diagram_id.clone(), revision, name: name.clone(), rename: input,
+                        target: ExplorerActionTarget::Diagram(diagram_id.clone()), revision, name: name.clone(), rename: input,
                     });
                     panel.explorer_open = true;
                     cx.notify();
@@ -348,7 +424,7 @@ impl PanelState {
 pub struct MdeRightPanel {
     state: PanelState,
     editing_id: Option<String>,
-    diagram_action: Option<DiagramActionDraft>,
+    explorer_action: Option<ExplorerActionDraft>,
     pub(crate) property_drafts:
         HashMap<crate::workbench_ui::inspector_drafts::DraftKey, crate::workbench_ui::property_editor::InspectorDraft>,
     style_target_id: Option<crate::workbench_ui::style_editor::StyleKey>,
@@ -378,31 +454,37 @@ impl MdeRightPanel {
             .is_some_and(|bound| bound.entity_id() == item.entity_id())
     }
 
-    fn commit_diagram_action(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(draft) = self.diagram_action.as_ref() else { return; };
+    fn commit_explorer_action(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(draft) = self.explorer_action.as_ref() else { return; };
         let Some(owner) = self.state.item.as_ref().and_then(gpui::WeakEntity::upgrade) else { return; };
-        if owner.entity_id() != draft.item_id { self.diagram_action = None; return; }
+        if owner.entity_id() != draft.item_id { self.explorer_action = None; return; }
         let command = if let Some(input) = &draft.rename {
             let name = input.read(cx).text(cx).trim().to_owned();
             if name.is_empty() {
                 owner.update(cx, |workbench, cx| {
-                    workbench.feedback = "Diagram name cannot be blank".into();
+                    workbench.feedback = "Name cannot be blank".into();
                     cx.notify();
                 });
                 return;
             }
-            bellatrix_mde_cordis::MdeUiCommand::RenameDiagram(bellatrix_mde_cordis::ModelingRenameDiagramRequested {
-                project_id: draft.project_id.clone(), diagram_id: draft.diagram_id.clone(),
-                name, expected_revision: draft.revision,
+            match &draft.target {
+                ExplorerActionTarget::Diagram(id) => bellatrix_mde_cordis::MdeUiCommand::RenameDiagram(bellatrix_mde_cordis::ModelingRenameDiagramRequested {
+                    project_id: draft.project_id.clone(), diagram_id: id.clone(), name, expected_revision: draft.revision,
+                }),
+                ExplorerActionTarget::Element(id) => bellatrix_mde_cordis::MdeUiCommand::Rename(bellatrix_mde_cordis::ModelingRenameRequested {
+                    project_id: draft.project_id.clone(), element_id: id.clone(), new_name: name, expected_revision: draft.revision,
+                }),
+            }
+        } else if let ExplorerActionTarget::Diagram(id) = &draft.target {
+            bellatrix_mde_cordis::MdeUiCommand::DeleteDiagram(bellatrix_mde_cordis::ModelingDeleteDiagramRequested {
+                project_id: draft.project_id.clone(), diagram_id: id.clone(), expected_revision: draft.revision,
             })
         } else {
-            bellatrix_mde_cordis::MdeUiCommand::DeleteDiagram(bellatrix_mde_cordis::ModelingDeleteDiagramRequested {
-                project_id: draft.project_id.clone(), diagram_id: draft.diagram_id.clone(), expected_revision: draft.revision,
-            })
+            return;
         };
         if owner.update(cx, |workbench, cx| workbench.submit_explorer_command(
             command, &draft.project_id, draft.revision, cx)) {
-            self.diagram_action = None;
+            self.explorer_action = None;
             window.focus(&self.state.focus, cx);
         }
         cx.notify();
@@ -428,7 +510,7 @@ impl MdeRightPanel {
         Self {
             state: PanelState::new(item, DockPosition::Right, 230.0, cx),
             editing_id: None,
-            diagram_action: None,
+            explorer_action: None,
             property_drafts: HashMap::new(),
             style_drafts: HashMap::new(),
             style_target_id: None,
@@ -504,8 +586,8 @@ impl Render for MdeRightPanel {
                 .child(Label::new("Select an MDE document to inspect its model."))
                 .into_any_element();
         };
-        if self.diagram_action.as_ref().is_some_and(|draft| draft.item_id != item.entity_id()) {
-            self.diagram_action = None;
+        if self.explorer_action.as_ref().is_some_and(|draft| draft.item_id != item.entity_id()) {
+            self.explorer_action = None;
         }
         let read_only = item.read(cx).source().is_read_only();
         let palette = WorkbenchPalette::current(cx);
@@ -585,11 +667,13 @@ impl Render for MdeRightPanel {
             let root_panel = cx.weak_entity();
             let root_disclosure_key = root_key.clone();
             let project_menu_owner = item.clone();
+            let project_menu_panel = cx.weak_entity();
+            let project_menu_key = root_key.clone();
             let project_row_key = root_key.clone();
             let project_row_name = snapshot.name.clone();
             let project_has_children = !tree.is_empty();
             rows.push(div().id("mde-explorer-project").flex().items_center().gap_1()
-                .child(svg().data(glyph(ShapeKind::Package)).size(px(14.0)).flex_none().text_color(palette.muted))
+                .child(crate::workbench_ui::hierarchy::explorer_project_icon(&palette))
                 .child(ui::right_click_menu("mde-explorer-project-menu")
                     .trigger(move |_, _, _| TreeViewItem::new(project_row_key, project_row_name)
                     .root_item(project_has_children).expanded(root_expanded)
@@ -600,7 +684,7 @@ impl Render for MdeRightPanel {
                             cx.notify();
                         }) { eprintln!("MDE project expansion failed: {error}"); }
                     }))
-                    .menu(move |window, cx| explorer_project_menu(&project_menu_owner, window, cx))));
+                    .menu(move |window, cx| explorer_project_menu(&project_menu_owner, project_menu_panel.clone(), &project_menu_key, window, cx))));
             let mut hidden_by_depth: Option<usize> = None;
             for (index, row) in tree.iter().enumerate() {
                 if !root_expanded { break; }
@@ -724,7 +808,7 @@ impl Render for MdeRightPanel {
                 if row.diagram {
                     let id = row.element_id.clone();
                     let owner = item.clone();
-                    let is_active = active_diagram.as_deref() == Some(id.as_str());
+                    let selected = selected_row.is_some_and(|selected| selected.key == row.key);
                     let expanded = searching || !self.collapsed_elements.contains(&row.key);
                     let disclosure_id = row.key.clone();
                     let disclosure_panel = cx.weak_entity();
@@ -747,8 +831,8 @@ impl Render for MdeRightPanel {
                             .tooltip(ui::Tooltip::text("Diagram"))
                             .pl(px((row.depth.min(15) + 2) as f32 * 14.0))
                             .flex().items_center().gap_1()
-                            .when(is_active, |row| row.bg(palette.surface))
-                            .child(svg().data(glyph(ShapeKind::Document)).size(px(14.0)).flex_none().text_color(if is_active { palette.selection } else { palette.muted }))
+                            .when(selected, |row| row.bg(palette.surface))
+                            .child(crate::workbench_ui::hierarchy::explorer_diagram_icon(&row.kind, &palette))
                             .child(div().flex_1().min_w_0().overflow_hidden().child(
                                 ui::right_click_menu(format!("mde-explorer-diagram-menu-{id}"))
                                 .trigger(move |_, _, _| TreeViewItem::new(diagram_row_key, diagram_row_label.clone())
@@ -764,7 +848,7 @@ impl Render for MdeRightPanel {
                                             eprintln!("MDE diagram expansion failed: {error}");
                                         }
                                     })
-                                    .toggle_state(is_active)
+                                    .toggle_state(selected)
                                     .on_secondary_mouse_down(move |_, _, cx| {
                                         secondary_owner.update(cx, |workbench, cx| {
                                             workbench.select_diagram(secondary_diagram.clone(), cx);
@@ -867,17 +951,7 @@ impl Render for MdeRightPanel {
                         .gap_1()
                         .when(selected, |row| row.bg(palette.surface))
                         .child(
-                            svg()
-                                .data(glyph(element_glyph(&row.kind)))
-                                .size(px(14.0))
-                                .flex_none()
-                                .text_color(
-                                    if selected {
-                                        palette.selection
-                                    } else {
-                                        palette.muted
-                                    },
-                                ),
+                            crate::workbench_ui::hierarchy::explorer_element_icon(&row.kind, &palette),
                         )
                         .child(
                             div().flex_1().min_w_0().overflow_hidden().child(
@@ -1069,21 +1143,37 @@ impl Render for MdeRightPanel {
                                 }))))
                     })
                     .when(self.explorer_open, |pane| {
-                        pane.when_some(self.diagram_action.as_ref(), |pane, draft| {
+                        pane.when_some(self.explorer_action.as_ref(), |pane, draft| {
                             let rename = draft.rename.is_some();
                             pane.child(div().p_2().flex().items_center().gap_1()
+                                .capture_key_down(cx.listener(|panel, event: &gpui::KeyDownEvent, window, cx| {
+                                    let input_focused = panel.explorer_action.as_ref().and_then(|draft| draft.rename.as_ref())
+                                        .is_some_and(|input| input.read(cx).focus_handle(cx).contains_focused(window, cx));
+                                    if !input_focused || event.keystroke.modifiers.modified() { return; }
+                                    if event.keystroke.key.eq_ignore_ascii_case("enter") {
+                                        panel.commit_explorer_action(window, cx);
+                                        cx.stop_propagation();
+                                        window.prevent_default();
+                                    } else if event.keystroke.key.eq_ignore_ascii_case("escape") {
+                                        panel.explorer_action = None;
+                                        window.focus(&panel.state.focus, cx);
+                                        cx.notify();
+                                        cx.stop_propagation();
+                                        window.prevent_default();
+                                    }
+                                }))
                                 .child(div().flex_1().min_w_0()
                                     .when_some(draft.rename.clone(), |row, input| row.child(input))
                                     .when(!rename, |row| row.child(Label::new(format!("Delete {} and its views? Model elements remain.", draft.name)).size(ui::LabelSize::Small))))
                                 .child(IconButton::new("mde-diagram-action-confirm", if rename { IconName::Check } else { IconName::Trash })
-                                    .aria_label(if rename { "Save diagram name" } else { "Confirm diagram deletion" })
-                                    .tooltip(ui::Tooltip::text(if rename { "Save diagram name" } else { "Delete diagram and its views; keep model elements" }))
+                                    .aria_label(if rename { "Save name" } else { "Confirm diagram deletion" })
+                                    .tooltip(ui::Tooltip::text(if rename { "Save name (Enter); cancel (Escape)" } else { "Delete diagram and its views; keep model elements" }))
                                     .disabled(read_only || item.read(cx).source().is_presentation_suspended())
-                                    .on_click(cx.listener(|panel, _, window, cx| panel.commit_diagram_action(window, cx))))
+                                    .on_click(cx.listener(|panel, _, window, cx| panel.commit_explorer_action(window, cx))))
                                 .child(IconButton::new("mde-diagram-action-cancel", IconName::Close)
-                                    .aria_label("Cancel diagram action").tooltip(ui::Tooltip::text("Cancel"))
+                                    .aria_label("Cancel Explorer action").tooltip(ui::Tooltip::text("Cancel"))
                                     .on_click(cx.listener(|panel, _, window, cx| {
-                                        panel.diagram_action = None;
+                                        panel.explorer_action = None;
                                         window.focus(&panel.state.focus, cx);
                                         cx.notify();
                                     }))))
@@ -1370,12 +1460,12 @@ pub(crate) fn bind_panels(
                         .values()
                         .any(|input| input.read(cx).focus_handle(cx).contains_focused(window, cx))
                 }) || panel.timing_drafts.values().any(|draft| draft.has_focused_input(window, cx))
-                    || panel.diagram_action.as_ref().and_then(|draft| draft.rename.as_ref())
+                    || panel.explorer_action.as_ref().and_then(|draft| draft.rename.as_ref())
                         .is_some_and(|input| input.read(cx).focus_handle(cx).contains_focused(window, cx));
                 if hidden_input_focused {
                     window.focus(&panel.state.focus, cx);
                 }
-                panel.diagram_action = None;
+                panel.explorer_action = None;
                 if let Some(previous) = previous {
                     panel
                         .collapsed_by_document
