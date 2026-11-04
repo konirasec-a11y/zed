@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 const PROJECTION_VERSION: u32 = 1;
 const CLASS_BOOLEAN_FIELDS: [&str; 2] = ["isAbstract", "isActive"];
+const SEMANTIC_FIELDS: [&str; 3] = ["isAbstract", "isActive", "visibility"];
 
 #[derive(Debug)]
 pub struct Import {
@@ -159,14 +160,12 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
             }
             let properties = if canonical_kind.is_some() {
                 let mut properties = BTreeMap::new();
-                if canonical_kind == Some("uml.class") {
-                    // The vendored StarUML and kernel defaults are both false.
-                    // Keep absence distinct from an explicitly authored false.
-                    for field in CLASS_BOOLEAN_FIELDS {
-                        if let Some(value) = residue.remove(field) {
-                            properties.insert(field.into(), value);
-                            mapped_fields.insert(field.into());
-                        }
+                // Vendored StarUML and kernel defaults agree: false for class
+                // flags, public for visibility. Keep absence distinct from authored values.
+                for field in SEMANTIC_FIELDS {
+                    if let Some(value) = residue.remove(field) {
+                        properties.insert(field.into(), value);
+                        mapped_fields.insert(field.into());
                     }
                 }
                 properties
@@ -190,12 +189,12 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
             diagnostics.push(Diagnostic {
                 path: object.path.clone(),
                 message: if canonical_kind.is_some() {
-                    format!("{} mapped by identity, name, supported explicit ownership and Boolean class flags only; remaining MDJ properties are preserved as source residue", object.type_name)
+                    format!("{} mapped by identity, name, supported explicit ownership, visibility and Boolean class flags only; remaining MDJ properties are preserved as source residue", object.type_name)
                 } else if matches!(object.type_name, "UMLModel" | "UMLPackage" | "UMLClass") {
                     let fields = object.properties.iter()
                         .filter(|(field, value)| !supported_semantic_field(object.type_name, field, value))
                         .map(|(field, _)| field.clone()).collect::<Vec<_>>().join(", ");
-                    format!("{} kept opaque, not promoted to UML: unmapped or non-Boolean class fields [{}], a non-string name, presentation containment or an unmappable explicit ownership chain; source semantics must not be replaced with UML defaults", object.type_name, fields)
+                    format!("{} kept opaque, not promoted to UML: unmapped or unrepresentable fields [{}], a non-string name, presentation containment or an unmappable explicit ownership chain; source semantics must not be replaced with UML defaults", object.type_name, fields)
                 } else {
                     format!("{} preserved as an MDJ object; canonical UML mapping (including associations and ends) is not implemented", object.type_name)
                 },
@@ -462,7 +461,7 @@ fn metadata_after_export(project: &Project) -> Project {
                     metadata.type_name = kind.into();
                 }
                 if metadata.mapped_fields.contains("_type") {
-                    for field in CLASS_BOOLEAN_FIELDS {
+                    for field in SEMANTIC_FIELDS {
                         if element.properties.contains_key(field) {
                             metadata.mapped_fields.insert(field.into());
                         } else {
@@ -529,10 +528,7 @@ fn export_document(project: &Project) -> Result<Value, MdjError> {
         };
         if canonical {
             for (field, value) in &element.properties {
-                if element.kind != "uml.class"
-                    || !CLASS_BOOLEAN_FIELDS.contains(&field.as_str())
-                    || !value.is_boolean()
-                {
+                if !supported_semantic_property(kind, field, value) {
                     return Err(failure(
                         "",
                         "canonical UML property has no lossless MDJ mapping",
@@ -541,7 +537,7 @@ fn export_document(project: &Project) -> Result<Value, MdjError> {
                 if residual.insert(field.clone(), value.clone()).is_some() {
                     return Err(failure(
                         "",
-                        "mapped class flag conflicts with source residue",
+                        "mapped semantic property conflicts with source residue",
                     ));
                 }
             }
@@ -747,7 +743,18 @@ fn supported_semantic_field(kind: &str, field: &str, value: &Value) -> bool {
     matches!(
         field,
         "_id" | "_type" | "name" | "_parent" | "ownedElements"
-    ) || (kind == "UMLClass" && CLASS_BOOLEAN_FIELDS.contains(&field) && value.is_boolean())
+    ) || supported_semantic_property(kind, field, value)
+}
+
+fn supported_semantic_property(kind: &str, field: &str, value: &Value) -> bool {
+    if field == "visibility" && canonical_kind(kind).is_some() {
+        matches!(
+            value.as_str(),
+            Some("public" | "private" | "protected" | "package")
+        )
+    } else {
+        kind == "UMLClass" && CLASS_BOOLEAN_FIELDS.contains(&field) && value.is_boolean()
+    }
 }
 
 fn canonical_kind_for_object<'document>(
