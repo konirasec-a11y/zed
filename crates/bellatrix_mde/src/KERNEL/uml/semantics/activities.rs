@@ -183,10 +183,56 @@ fn uniform_activity_edges(
     references: &ReferenceIndex<'_>,
     node: ElementRef<'_>,
 ) -> Result<bool, QueryError> {
+    uniform_activity_edges_excluding(references, node, Ok(None))
+}
+
+fn decision_input_flow(
+    references: &ReferenceIndex<'_>,
+    node: ElementRef<'_>,
+) -> Result<Option<String>, QueryError> {
+    let Some(value) = node
+        .properties()
+        .get("decisionInputFlow")
+        .filter(|value| !value.is_null())
+    else {
+        return Ok(None);
+    };
+    let descriptor = schema::uml_property("DecisionNode", "decisionInputFlow")
+        .map_err(|error| QueryError::unsupported(node.id(), error.to_string()))?
+        .ok_or_else(|| {
+            QueryError::unsupported(node.id(), "decisionInputFlow contract is unavailable")
+        })?;
+    match property_contracts::check_value(references, node, descriptor, value) {
+        PropertyOutcome::Satisfied => {}
+        PropertyOutcome::Violation(message) | PropertyOutcome::Unverified(message) => {
+            return Err(QueryError::unsupported(node.id(), message));
+        }
+    }
+    let identifier = reference_id(value)
+        .map_err(|message| QueryError::unsupported(node.id(), message))?
+        .ok_or_else(|| {
+            QueryError::unsupported(node.id(), "decisionInputFlow identity is unresolved")
+        })?;
+    references
+        .element(identifier)
+        .map_err(|message| QueryError::unsupported(node.id(), message))?;
+    Ok(Some(identifier.to_owned()))
+}
+
+fn uniform_activity_edges_excluding(
+    references: &ReferenceIndex<'_>,
+    node: ElementRef<'_>,
+    exclusion: Result<Option<String>, QueryError>,
+) -> Result<bool, QueryError> {
     let mut controls = Vec::new();
     let mut objects = Vec::new();
     let candidates = activity_edge_candidates(references);
     for edge in candidates {
+        // Exclusion is by identity, even for outgoing edges or self-loops.
+        // Membership of decisionInputFlow in incoming is a separate constraint.
+        if matches!(&exclusion, Ok(Some(identifier)) if identifier == edge.id()) {
+            continue;
+        }
         // The union contains each edge once, even for a self-loop. Either known
         // endpoint establishes incidence despite an unresolved opposite end.
         let incidence = accept_any([
@@ -195,6 +241,12 @@ fn uniform_activity_edges(
             activity_endpoint(references, edge, "target")
                 .map(|endpoint| endpoint.id() == node.id()),
         ]);
+        let incidence = require_all([
+            incidence,
+            exclusion.as_ref().map(|_| true).map_err(Clone::clone),
+        ]);
+        // An unknown exclusion can only remove edges. A homogeneous union
+        // remains homogeneous, but a mixed union need not remain mixed.
         match incidence {
             Ok(false) => continue,
             Ok(true) if edge.metaclass().is_some() => {
@@ -364,6 +416,13 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             ));
         }
         if node.conforms_to("DecisionNode") {
+            checks.push((
+                uniform_activity_edges_excluding(references, node, decision_input_flow(references, node)),
+                "UML_DECISION_NODE_EDGES",
+                "MDE_DECISION_NODE_EDGES_UNVERIFIED",
+                "DecisionNode-edges",
+                "DecisionNode edges other than decisionInputFlow must be all ControlFlows or all ObjectFlows",
+            ));
             checks.push((require_all([
                 incident_edges(references, node, "target", 1, 2, false),
                 incident_edges(references, node, "source", 1, usize::MAX, false),

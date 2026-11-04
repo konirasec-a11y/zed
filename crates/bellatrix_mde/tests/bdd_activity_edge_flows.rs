@@ -795,3 +795,129 @@ fn join_unknown_inputs_and_outputs_preserve_proved_conditional_findings() -> Flo
     assert_eq!(validate(&original)?, baseline);
     Ok(())
 }
+
+#[test]
+fn decision_edge_exclusion_survives_import_edit_persistence_and_repair() -> FlowResult<()> {
+    assert!(
+        include_str!("features/activity_edge_lifecycle.feature")
+            .contains("Scenario: Preserve Decision edge identity exclusion through repair")
+    );
+    let original = imported_activity()?;
+    let baseline = validate(&original)?;
+    uniform_rule(&baseline, "DECISION", "check", None)?;
+    let mut edited = original.clone();
+    println!("When an ObjectFlow decision input accompanies ordinary ControlFlows");
+    add_activity_edge_object(
+        &mut edited,
+        "decision-input",
+        "uml.object_flow",
+        json!({"$ref":"receive"}),
+        json!({"$ref":"check"}),
+    )?;
+    let mixed = validate(&edited)?;
+    uniform_rule(&mixed, "DECISION", "check", Some("error"))?;
+    reopen("decision-mixed", &edited, &mixed)?;
+    element(&mut edited, "check")?["properties"]["decisionInputFlow"] =
+        json!({"$ref":"decision-input"});
+    let excluded = validate(&edited)?;
+    uniform_rule(&excluded, "DECISION", "check", None)?;
+    reopen("decision-excluded", &edited, &excluded)?;
+    let mut too_many_inputs = edited.clone();
+    add_activity_edge_object(
+        &mut too_many_inputs,
+        "third-input",
+        "uml.control_flow",
+        json!({"$ref":"receive"}),
+        json!({"$ref":"check"}),
+    )?;
+    let cardinality = validate(&too_many_inputs)?;
+    uniform_rule(&cardinality, "DECISION", "check", None)?;
+    assert!(
+        cardinality["diagnostics"]
+            .as_array()
+            .ok_or("missing diagnostics")?
+            .iter()
+            .any(|diagnostic| diagnostic["subject_id"] == "check"
+                && diagnostic["code"] == "UML_DECISION_NODE_INCOMING_OUTGOING_EDGES")
+    );
+    reopen(
+        "decision-exclusion-preserves-cardinality",
+        &too_many_inputs,
+        &cardinality,
+    )?;
+    let mut all_objects = edited.clone();
+    for id in ["flow-2", "flow-3", "flow-9"] {
+        relation(&mut all_objects, id)?["kind"] = json!("uml.object_flow");
+    }
+    let object_response = validate(&all_objects)?;
+    uniform_rule(&object_response, "DECISION", "check", None)?;
+    reopen("decision-all-objects", &all_objects, &object_response)?;
+
+    println!("Then exclusion removes one identity, not the entire ObjectFlow family");
+    relation(&mut edited, "flow-9")?["kind"] = json!("uml.object_flow");
+    let second_object = validate(&edited)?;
+    uniform_rule(&second_object, "DECISION", "check", Some("error"))?;
+    reopen("decision-second-object", &edited, &second_object)?;
+    relation(&mut edited, "flow-9")?["kind"] = json!("uml.control_flow");
+    for (name, selector) in [
+        ("null", Value::Null),
+        ("unrelated", json!({"$ref":"order-data"})),
+    ] {
+        element(&mut edited, "check")?["properties"]["decisionInputFlow"] = selector;
+        let response = validate(&edited)?;
+        uniform_rule(&response, "DECISION", "check", Some("error"))?;
+        reopen(&format!("decision-{name}"), &edited, &response)?;
+    }
+    println!("When exclusion is unresolved or malformed it does not establish a violation");
+    for (name, selector) in [
+        ("href", json!({"href":"external.uml#edge"})),
+        ("malformed", json!(42)),
+        ("wrong-type", json!({"$ref":"receive"})),
+    ] {
+        element(&mut edited, "check")?["properties"]["decisionInputFlow"] = selector;
+        let response = validate(&edited)?;
+        uniform_rule(&response, "DECISION", "check", Some("warning"))?;
+        if name == "malformed" || name == "wrong-type" {
+            assert!(
+                response["diagnostics"]
+                    .as_array()
+                    .ok_or("missing diagnostics")?
+                    .iter()
+                    .any(|diagnostic| diagnostic["subject_id"] == "check"
+                        && diagnostic["code"] == "UML_PROPERTY_CONTRACT"
+                        && diagnostic["severity"] == "error"),
+                "{response}"
+            );
+        } else {
+            assert_eq!(response["has_errors"], false, "{response}");
+        }
+        reopen(&format!("decision-{name}"), &edited, &response)?;
+    }
+    let mut homogeneous = original.clone();
+    element(&mut homogeneous, "check")?["properties"]["decisionInputFlow"] =
+        json!({"href":"external.uml#edge"});
+    let response = validate(&homogeneous)?;
+    uniform_rule(&response, "DECISION", "check", None)?;
+    reopen(
+        "decision-homogeneous-unknown-exclusion",
+        &homogeneous,
+        &response,
+    )?;
+
+    println!("Then exclusion applies to outgoing identity independently of incoming membership");
+    element(&mut edited, "check")?["properties"]["decisionInputFlow"] =
+        json!({"$ref":"decision-input"});
+    element(&mut edited, "decision-input")?["properties"]["source"] = json!({"$ref":"check"});
+    element(&mut edited, "decision-input")?["properties"]["target"] = json!({"$ref":"receive"});
+    let outgoing = validate(&edited)?;
+    uniform_rule(&outgoing, "DECISION", "check", None)?;
+    reopen("decision-excluded-outgoing", &edited, &outgoing)?;
+    element(&mut edited, "decision-input")?["properties"]["target"] = json!({"$ref":"check"});
+    let self_loop = validate(&edited)?;
+    uniform_rule(&self_loop, "DECISION", "check", None)?;
+    reopen("decision-excluded-self-loop", &edited, &self_loop)?;
+    let repaired = validate(&original)?;
+    assert_eq!(repaired, baseline);
+    reopen("decision-repaired", &original, &repaired)?;
+    Ok(())
+}

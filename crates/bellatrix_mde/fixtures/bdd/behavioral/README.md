@@ -96,3 +96,12 @@ ObjectFlow witness selects the object branch despite other unknown inputs. If
 both output-family branches have the same proved outcome, that result is
 independent of possible completions of the unknown guard, not an evaluation of
 an OCL null/invalid condition. Outgoing cardinality is checked separately.
+
+DecisionNode-edges follows the pinned UML.xmi Set union and excludes only the
+resolved decisionInputFlow identity, including outgoing/self-loop identities.
+An absent or null optional selector excludes nothing. An unresolved or invalid
+selector leaves a mixed union unverified; a homogeneous union is safe under any
+removal. Property-contract diagnostics remain separate. This slice does not
+implement decision_input_flow_incoming and does not discount the selected edge
+from the existing incoming/outgoing cardinality checks. The lifecycle flow saves
+and reopens every edited state as JSON and BLX before restoring the baseline.

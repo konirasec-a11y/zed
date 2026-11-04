@@ -95,3 +95,16 @@ Feature: ControlFlow object-node endpoint semantics across the authored Activity
     And empty-output cardinality remains a separate diagnostic
     When I save, close and reopen every state through JSON and BLX and repair the graph
     Then unknown data, proofs and authored records remain unchanged
+
+  Scenario: Preserve Decision edge identity exclusion through repair
+    Given an imported Activity with homogeneous DecisionNode ControlFlows
+    When an ObjectFlow input is added and selected as decisionInputFlow
+    Then only that identity is excluded from the incoming and outgoing union
+    And another ObjectFlow still proves a mixed-family violation
+    And null or a nonincident selector does not remove an incident edge
+    When the selector is external, malformed or of the wrong type
+    Then mixed-family evaluation is unverified rather than a fabricated violation
+    And an already homogeneous union remains homogeneous under any exclusion
+    And outgoing and self-loop identities are excluded without inventing incoming membership
+    Then every state is saved and reopened as JSON and BLX with identical diagnostics
+    And restoring the original document restores the baseline result
