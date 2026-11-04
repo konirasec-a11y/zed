@@ -65,7 +65,7 @@ pub enum Command {
         name: String,
         model_elements: Vec<String>,
         parent_id: Option<String>,
-        parent_occurrence: Option<(String, String)>,
+        parent_occurrence: Option<crate::ExplorerDiagramOccurrence>,
     },
     CreateModelElement {
         owner_id: Option<String>,
@@ -255,14 +255,10 @@ pub(crate) fn apply_with_diagram_operations(project: &Project, command: &Command
             diagrams::create(&mut section, project, *kind, name, model_elements, revision)?;
             let diagram_id = section.diagrams.last().ok_or("created diagram missing")?.id.clone();
             crate::explorer_placement::set_explorer_parent(&mut section, &diagram_id, parent_id.as_deref())?;
-            if let Some((parent_diagram, parent_view)) = parent_occurrence {
-                let view = section.diagrams.iter().find(|diagram| diagram.id == *parent_diagram)
-                    .and_then(|diagram| diagram.views.iter().find(|view| view.id == *parent_view))
-                    .ok_or("Explorer parent occurrence not found")?;
-                if parent_id.is_none() || view.subject.as_ref() != parent_id.as_ref() {
-                    return Err("Explorer occurrence does not represent the requested parent".into());
-                }
-                section.explorer_diagram_occurrences.insert(diagram_id, (parent_diagram.clone(), parent_view.clone()));
+            if let Some(occurrence) = parent_occurrence {
+                let parent_id = parent_id.as_deref().ok_or("Explorer occurrence requires a semantic parent")?;
+                crate::explorer_placement::validate_diagram_occurrence(&section, parent_id, occurrence)?;
+                section.explorer_diagram_occurrences.insert(diagram_id, occurrence.clone());
             }
         }
         Command::RenameDiagram { diagram_id, name } => {
@@ -430,7 +426,8 @@ fn fresh_ids<const N: usize>(
         let occupied = ids.iter().any(|id| {
             id == project_id
                 || section.explorer_diagram_occurrences.contains_key(id)
-                || section.explorer_diagram_occurrences.values().any(|(diagram, view)| diagram == id || view == id)
+                || section.explorer_diagram_occurrences.values().any(|occurrence|
+                    &occurrence.diagram_id == id || &occurrence.view_id == id || occurrence.member_path.contains(id))
                 || section.explorer_parents.contains_key(id)
                 || section.explorer_parents.values().any(|parent| parent.as_ref() == Some(id))
                 || section.elements.iter().any(|element| &element.id == id)

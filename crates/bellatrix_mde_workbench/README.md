@@ -239,14 +239,12 @@ changes the semantic name; Explorer occurrences show that name even when their
 canvas view has a separately authored label. Projection and menu capabilities
 live in view-model/explorer.rs, while panels and hierarchy render the controls.
 
-When Add Diagram is invoked on a visual occurrence, its exact diagram/view pair
-is persisted separately in explorer_diagram_occurrences while explorer_parents
-keeps the semantic parent ID. Multiple occurrences therefore do not duplicate the
-new diagram or arbitrarily relocate it to another occurrence. If that view is
-removed, the Explorer falls back to an unambiguous surviving parent placement,
-or the project root when none can be resolved. Removal of views, elements and
-diagrams prunes only invalid occurrence references. Both JSON and protobuf retain
-this metadata; older documents default to an empty map.
-The occurrence hint currently requires the clicked semantic parent to have its
-own view. An unpictured member repeated beneath several owner occurrences uses
-the semantic fallback above; no arbitrary owner occurrence is selected.
+When Add Diagram is invoked on a visual occurrence or an unpictured descendant,
+explorer_diagram_occurrences stores one canonical path: the anchor diagram/view
+and the ordered semantic member IDs below that anchor. An empty member_path
+identifies the view itself. explorer_parents keeps the semantic parent ID.
+The kernel validates every ownership step, and the Explorer resolves the exact
+selected branch without duplicating the new diagram or picking another occurrence.
+If a path changes or its anchor disappears, invalid hints are removed and the
+Explorer falls back to an unambiguous surviving parent placement, or the project
+root. JSON and protobuf encode the same canonical path object.

@@ -9,7 +9,7 @@ pub struct ModelingSection {
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub explorer_parents: std::collections::BTreeMap<String, Option<String>>,
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
-    pub explorer_diagram_occurrences: std::collections::BTreeMap<String, (String, String)>,
+    pub explorer_diagram_occurrences: std::collections::BTreeMap<String, crate::ExplorerDiagramOccurrence>,
     pub elements: Vec<Element>,
     pub relations: Vec<Relation>,
     pub diagrams: Vec<Diagram>,

@@ -52,8 +52,8 @@ pub(super) fn delete(section: &mut ModelingSection, identifier: &str) -> Result<
     }
     section.diagrams.retain(|diagram| diagram.id != identifier);
     section.explorer_parents.remove(identifier);
-    section.explorer_diagram_occurrences.retain(|diagram, (parent_diagram, _)|
-        diagram != identifier && parent_diagram != identifier);
+    section.explorer_diagram_occurrences.retain(|diagram, occurrence|
+        diagram != identifier && occurrence.diagram_id != identifier);
     for parent in section.explorer_parents.values_mut() {
         if parent.as_deref() == Some(identifier) { *parent = None; }
     }

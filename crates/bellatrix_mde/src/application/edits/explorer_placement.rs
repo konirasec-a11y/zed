@@ -41,13 +41,42 @@ pub(crate) fn set_explorer_parent(section: &mut ModelingSection, subject: &str, 
 }
 
 
+pub fn validate_diagram_occurrence(
+    section: &ModelingSection,
+    parent_id: &str,
+    occurrence: &crate::ExplorerDiagramOccurrence,
+) -> Result<(), String> {
+    let crate::ExplorerDiagramOccurrence { diagram_id, view_id, member_path } = occurrence;
+    let diagram = section.diagrams.iter().find(|diagram| diagram.id == *diagram_id)
+        .ok_or("Explorer occurrence diagram not found")?;
+    let anchor = diagram.views.iter().find(|view| view.id == *view_id)
+        .and_then(|view| view.subject.as_deref()).ok_or("Explorer occurrence subject not found")?;
+    let model = crate::uml::root::Model::from_section(section);
+    if model.element(anchor).is_none() { return Err("Explorer occurrence subject no longer exists".into()); }
+    let mut owner_id = anchor;
+    let mut seen = HashSet::from([anchor]);
+    for member_id in member_path {
+        if !seen.insert(member_id.as_str()) { return Err("Explorer member path contains a cycle".into()); }
+        let member = model.element(member_id).ok_or("Explorer member no longer exists")?;
+        if model.owner(member)?.is_none_or(|owner| owner.id() != owner_id) {
+            return Err("Explorer member ownership changed".into());
+        }
+        if diagram.views.iter().any(|view| view.subject.as_deref() == Some(member_id.as_str())) {
+            return Err("Explorer member now has its own occurrence".into());
+        }
+        owner_id = member_id;
+    }
+    if owner_id != parent_id { return Err("Explorer occurrence does not resolve to the requested parent".into()); }
+    Ok(())
+}
+
 pub(crate) fn prune_diagram_occurrences(section: &mut ModelingSection) {
-    section.explorer_diagram_occurrences.retain(|diagram_id, (parent_diagram, parent_view)| {
-        let parent = section.explorer_parents.get(diagram_id).and_then(|parent| parent.as_deref());
-        parent.is_some()
+    let valid = section.explorer_diagram_occurrences.iter().filter_map(|(diagram_id, occurrence)| {
+        let parent = section.explorer_parents.get(diagram_id).and_then(|parent| parent.as_deref())?;
+        (occurrence.diagram_id != *diagram_id
             && section.diagrams.iter().any(|diagram| diagram.id == *diagram_id)
-            && section.diagrams.iter().find(|diagram| diagram.id == *parent_diagram)
-                .is_some_and(|diagram| diagram.views.iter().any(|view|
-                    view.id == *parent_view && view.subject.as_deref() == parent))
-    });
+            && validate_diagram_occurrence(section, parent, occurrence).is_ok())
+            .then(|| diagram_id.clone())
+    }).collect::<HashSet<_>>();
+    section.explorer_diagram_occurrences.retain(|diagram_id, _| valid.contains(diagram_id));
 }

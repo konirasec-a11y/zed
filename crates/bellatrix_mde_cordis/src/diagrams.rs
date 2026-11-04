@@ -26,7 +26,7 @@ impl Event for ModelingCreateDiagram {
 pub struct ModelingCreateExplorerDiagramRequested {
     pub diagram: ModelingCreateDiagramRequested,
     pub parent_id: Option<String>,
-    pub parent_occurrence: Option<(String, String)>,
+    pub parent_occurrence: Option<bellatrix_mde::ExplorerDiagramOccurrence>,
 }
 pub struct ModelingCreateExplorerDiagram;
 impl Event for ModelingCreateExplorerDiagram {

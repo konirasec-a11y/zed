@@ -141,7 +141,7 @@ pub use template_presentation::{template_parameter_label, template_parameter_lab
 
 #[path = "application/edits/explorer_placement.rs"]
 mod explorer_placement;
-pub use explorer_placement::explorer_parent_map;
+pub use explorer_placement::{explorer_parent_map, validate_diagram_occurrence};
 
 #[path = "KERNEL/compiler/artifacts/ownership_manifest.rs"]
 mod ownership_manifest;

@@ -89,6 +89,10 @@ fn view_key(diagram: &str, view: &str) -> String {
     format!("view:{}:{diagram}:{view}", diagram.len())
 }
 
+fn member_key(parent: &str, member: &str) -> String {
+    format!("member:{}:{parent}:{member}", parent.len())
+}
+
 fn relationship_label(section: &ModelingSection, relation: &bellatrix_mde::Relation) -> String {
     use bellatrix_mde::RelationshipMarker;
     let endpoint = |id: &str| {
@@ -182,7 +186,7 @@ pub(crate) fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrde
                 diagram_context.as_ref().is_none_or(|diagram| views.iter().any(|(candidate, _)| candidate == diagram))
             }) { continue; }
             let key = if diagram_context.is_some() {
-                format!("member:{}:{parent}:{}", parent.len(), row.element_id)
+                member_key(&parent, &row.element_id)
             } else { semantic_key(&row.element_id) };
             parents.insert(key.clone(), (!parent.is_empty()).then_some(parent));
             row_placements.push((diagram_context.clone(), key.clone()));
@@ -213,11 +217,19 @@ pub(crate) fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrde
                 _ => None,
             });
         let explicit_occurrence = section.explorer_diagram_occurrences.get(&diagram.id)
-            .and_then(|(parent_diagram, parent_view)| {
-                section.diagrams.iter().find(|candidate| candidate.id == *parent_diagram && candidate.id != diagram.id)
-                    .and_then(|candidate| candidate.views.iter().find(|view|
-                        view.id == *parent_view && view.subject.as_deref() == parent_subject && parent_subject.is_some()))
-                    .map(|_| view_key(parent_diagram, parent_view))
+            .and_then(|occurrence| {
+                let subject = parent_subject?;
+                if occurrence.diagram_id == diagram.id
+                    || bellatrix_mde::validate_diagram_occurrence(section, subject, occurrence).is_err() {
+                    return None;
+                }
+                let key = occurrence.member_path.iter().fold(
+                    view_key(&occurrence.diagram_id, &occurrence.view_id),
+                    |parent, member| member_key(&parent, member),
+                );
+                placements.get(subject).into_iter().flatten()
+                    .any(|(context, candidate)| context.as_deref() == Some(occurrence.diagram_id.as_str()) && *candidate == key)
+                    .then_some(key)
             });
         let context_parent = if explicit_occurrence.is_some() {
             explicit_occurrence
@@ -257,8 +269,11 @@ pub(crate) fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrde
         let semantic_parent = view.subject_id.as_ref()
             .and_then(|subject| owners.get(subject)).and_then(|owner| owner.as_ref())
             .and_then(|owner| placements.get(owner))
-            .and_then(|views| views.iter().find(|(diagram, _)| diagram.as_ref() == Some(&view.diagram_id)))
-            .map(|(_, key)| key.clone());
+            .and_then(|placements| {
+                let mut candidates = placements.iter().filter(|(diagram, _)| diagram.as_ref() == Some(&view.diagram_id));
+                let (_, key) = candidates.next()?;
+                candidates.next().is_none().then(|| key.clone())
+            });
         parents.insert(key.clone(), Some(visual_parent.or(semantic_parent)
             .unwrap_or_else(|| diagram_key(&view.diagram_id))));
         nodes.push(ExplorerRow {
@@ -379,9 +394,30 @@ pub(crate) fn project_diagram_kinds() -> Vec<bellatrix_mde::StructuralDiagramKin
         .collect()
 }
 
-pub(crate) fn parent_occurrence(section: &ModelingSection, subject: Option<&str>, row_key: &str) -> Option<(String, String)> {
+pub(crate) fn parent_occurrence(
+    section: &ModelingSection, subject: Option<&str>, row_key: &str,
+) -> Option<bellatrix_mde::ExplorerDiagramOccurrence> {
     let subject = subject?;
-    section.diagrams.iter().find_map(|diagram| diagram.views.iter()
-        .find(|view| view.subject.as_deref() == Some(subject) && view_key(&diagram.id, &view.id) == row_key)
-        .map(|view| (diagram.id.clone(), view.id.clone())))
+    let rows = project_explorer(section, ExplorerSortOrder::Added);
+    let index = rows.iter().position(|row| row.key == row_key)?;
+    let row = rows.get(index)?;
+    if row.diagram || row.view.as_ref().and_then(|view| view.subject_id.as_deref())
+        .unwrap_or(row.element_id.as_str()) != subject { return None; }
+    let mut member_path = Vec::new();
+    let mut depth = row.depth;
+    for candidate in std::iter::once(row).chain(rows[..index].iter().rev().filter(|candidate| candidate.depth < row.depth)) {
+        if candidate.key != row.key && candidate.depth >= depth { continue; }
+        depth = candidate.depth;
+        if candidate.diagram { return None; }
+        if let Some(view) = &candidate.view {
+            member_path.reverse();
+            let occurrence = bellatrix_mde::ExplorerDiagramOccurrence {
+                diagram_id: view.diagram_id.clone(), view_id: view.view_id.clone(), member_path,
+            };
+            return bellatrix_mde::validate_diagram_occurrence(section, subject, &occurrence)
+                .is_ok().then_some(occurrence);
+        }
+        member_path.push(candidate.element_id.clone());
+    }
+    None
 }
