@@ -144,16 +144,8 @@ impl<'document> Index<'document> {
         self.objects.values()
     }
 
-    pub fn references(&self) -> &[Reference<'document>] {
-        &self.references
-    }
-
     pub fn diagnostics(&self) -> &[Diagnostic] {
         &self.diagnostics
-    }
-
-    pub fn resolve(&self, reference: &Reference<'_>) -> Option<&Object<'document>> {
-        self.object(reference.target_id)
     }
 
     /// Missing targets are reported, never removed or assigned new identities.

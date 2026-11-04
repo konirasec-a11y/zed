@@ -1,59 +1,9 @@
-use crate::{Project, StructuralSeverity, validate_structural_model};
-use std::collections::HashSet;
-
-pub(super) fn new_relationships(before: &Project, after: &Project) -> Result<(), String> {
-    let existing = before
-        .relations
-        .iter()
-        .map(|relation| relation.id.as_str())
-        .collect::<HashSet<_>>();
-    let added = after
-        .relations
-        .iter()
-        .filter(|relation| !existing.contains(relation.id.as_str()))
-        .collect::<Vec<_>>();
-    if added.is_empty() {
-        return Ok(());
-    }
-    let identifiers = added
-        .iter()
-        .map(|relation| relation.id.as_str())
-        .collect::<HashSet<_>>();
-    // Draft diagnostics on unrelated, existing relationships must not block edits.
-    for diagnostic in validate_structural_model(after) {
-        if diagnostic.severity == StructuralSeverity::Error
-            && identifiers.contains(diagnostic.subject_id.as_str())
-        {
-            return Err(format!("{}: {}", diagnostic.code, diagnostic.message));
-        }
-    }
-    let graph = crate::GraphIndex::new(after);
-    // Use the shared graph query: a pre-existing unrelated cycle must not hide
-    // a second cycle introduced by a new edge, nor block an unrelated edit.
-    for relation in added
-        .into_iter()
-        .filter(|relation| relation.kind == "uml.generalization")
-    {
-        if graph
-            .shortest_path(&relation.to, &relation.from, Some("uml.generalization"))
-            .map_err(|error| error.to_string())?
-            .is_some()
-        {
-            return Err(format!(
-                "UML_GENERALIZATION_CYCLE: {} would create a generalization cycle",
-                relation.id
-            ));
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::{
-        ModelingRelationKind, Relation, UmlQuickCreate,
+        ModelingRelationKind, Project, Relation, StructuralSeverity, UmlQuickCreate,
         commands::{Command, apply},
+        validate_structural_model,
     };
 
     fn project(kinds: [&str; 4]) -> serde_json::Result<Project> {

@@ -53,41 +53,6 @@ pub fn classifier_contents(section: &ModelingSection, owner: &str) -> Classifier
     contents
 }
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct TemplateSignatureLayout {
-    pub left: f64,
-    pub top: f64,
-    pub width: f64,
-    pub height: f64,
-}
-
-impl TemplateSignatureLayout {
-    pub fn outsets(self, body_width: f64, body_height: f64) -> (f64, f64, f64) {
-        (
-            (-self.top).max(0.0),
-            (self.left + self.width - body_width).max(0.0),
-            (self.top + self.height - body_height).max(0.0),
-        )
-    }
-}
-
-pub fn template_signature_layout(
-    body_width: f64,
-    parameter_count: usize,
-) -> Option<TemplateSignatureLayout> {
-    if parameter_count == 0 || !body_width.is_finite() || body_width <= 0.0 {
-        return None;
-    }
-    let width = body_width.min(120.0);
-    let height = 12.0 + parameter_count as f64 * 20.0;
-    Some(TemplateSignatureLayout {
-        left: body_width - width + 16.0,
-        top: 8.0 - height,
-        width,
-        height,
-    })
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct InterfaceLayout {
     pub center: Point,
     pub radius: f64,
@@ -180,88 +145,6 @@ fn finite_size(value: f64) -> f64 {
         value
     } else {
         1.0
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct FoldedNoteLayout {
-    pub outline: [Point; 5],
-    pub fold: [Point; 3],
-    pub fold_size: f64,
-}
-pub fn folded_note_layout(width: f64, height: f64) -> FoldedNoteLayout {
-    let width = finite_size(width);
-    let height = finite_size(height);
-    let inset = 0.5_f64.min(width / 4.0).min(height / 4.0);
-    let fold_size = 12.0_f64.min(width / 4.0).min(height / 4.0);
-    let left = inset;
-    let top = inset;
-    let right = width - inset;
-    let bottom = height - inset;
-    FoldedNoteLayout {
-        outline: [
-            Point { x: left, y: top },
-            Point {
-                x: right - fold_size,
-                y: top,
-            },
-            Point {
-                x: right,
-                y: top + fold_size,
-            },
-            Point {
-                x: right,
-                y: bottom,
-            },
-            Point { x: left, y: bottom },
-        ],
-        fold: [
-            Point {
-                x: right - fold_size,
-                y: top,
-            },
-            Point {
-                x: right - fold_size,
-                y: top + fold_size,
-            },
-            Point {
-                x: right,
-                y: top + fold_size,
-            },
-        ],
-        fold_size,
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct FrameHeadingLayout {
-    pub outline: [Point; 5],
-}
-
-pub fn frame_heading_layout(width: f64, height: f64) -> FrameHeadingLayout {
-    let width = finite_size(width);
-    let height = finite_size(height);
-    let inset = 0.5_f64.min(width / 4.0).min(height / 4.0);
-    let cut = 10.0_f64.min(width / 4.0).min(height / 3.0);
-    let right = width - inset;
-    let bottom = height - inset;
-    FrameHeadingLayout {
-        outline: [
-            Point { x: inset, y: inset },
-            Point { x: right, y: inset },
-            Point {
-                x: right,
-                y: bottom - cut,
-            },
-            Point {
-                x: right - cut,
-                y: bottom,
-            },
-            Point {
-                x: inset,
-                y: bottom,
-            },
-        ],
     }
 }
 

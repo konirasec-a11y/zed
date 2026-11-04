@@ -1,6 +1,4 @@
-use crate::project::{
-    ProjectDocument, ProjectId, ProjectPrepareEncodedSaveRequested, ProjectSaveRequested,
-};
+use crate::project::{ProjectDocument, ProjectId, ProjectPrepareEncodedSaveRequested};
 use crate::protocol::command::*;
 use crate::protocol::projection::ModelingProjection;
 use crate::protocol::trace::{ExecutionEvent, ModelingDiagnostic};
@@ -852,7 +850,7 @@ pub enum MdeUiCommand {
     MoveParameter(ModelingMoveParameterRequested),
     QuickEdit(ModelingQuickEditRequested),
     SetNameExpression(ModelingSetNameExpressionRequested),
-    SaveProject(ProjectSaveRequested),
+    SaveProject(crate::project::ProjectSaveRequested),
 }
 
 #[derive(Clone, Debug)]

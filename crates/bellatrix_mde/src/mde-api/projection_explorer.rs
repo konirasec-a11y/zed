@@ -1,6 +1,6 @@
 use crate::ModelingSection;
 use bellatrix_mde_contracts::protocol::command::{
-    ModelingElementKind, ModelingMemberKind, StructuralDiagramKind, ViewOccurrence,
+    ModelingElementKind, ModelingMemberKind, StructuralDiagramKind,
 };
 use bellatrix_mde_contracts::protocol::explorer::*;
 use std::collections::BTreeMap;

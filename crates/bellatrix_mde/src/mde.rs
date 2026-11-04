@@ -27,7 +27,7 @@ mod diagram_operations;
 #[path = "observability/execution_trace.rs"]
 mod execution_trace;
 pub(crate) use execution_trace::{
-    ExecutionEvent, ExecutionTrace, TraceOutcome, TracePhase, execution_trace_jsonl,
+    ExecutionTrace, TraceOutcome, TracePhase, execution_trace_jsonl,
     validate_structural_diagram_traced, validate_structural_model_traced,
 };
 #[path = "KERNEL/compiler/analysis/generation_graph.rs"]
@@ -42,7 +42,7 @@ mod kernel_rust_emission;
 mod kernel_uml_rust_struct;
 #[path = "view-model/hierarchy/visual_consistency.rs"]
 mod visual_consistency;
-pub(crate) use visual_consistency::{VisualComponent, visual_components};
+pub(crate) use visual_consistency::visual_components;
 #[path = "KERNEL/I_O/generated_files.rs"]
 mod generated_files;
 #[path = "KERNEL/graph/index.rs"]
@@ -73,7 +73,7 @@ mod quick_edit;
 mod relationship_tools;
 #[path = "view-model/diagram/relationships.rs"]
 mod relationships;
-pub(crate) use endpoint_markers::{ResolvedRelationshipView, resolve_relationship_view};
+pub(crate) use endpoint_markers::resolve_relationship_view;
 #[path = "view-model/notation/relationship_notation.rs"]
 mod relationship_notation;
 pub(crate) use relationship_notation::{format_relationship_label, resolve_relationship_style};
@@ -96,54 +96,44 @@ mod uml_types;
 pub(crate) use templates::{template_parametered_element, template_parameters};
 
 pub(crate) use construction_script::{ConstructionScriptError, python_construction_script};
-pub(crate) use generation::{
-    GenerationGraphError, GenerationModel, GenerationReference, GenerationUnit,
-    analyze_generation_graph,
-};
+pub(crate) use generation::{GenerationGraphError, analyze_generation_graph};
 pub(crate) use graph::{Graph, GraphError};
-pub(crate) use hierarchy::{HierarchyRow, project_hierarchy};
-pub(crate) use index::{GraphIndex, GraphLookupError};
-pub(crate) use inspector::{
-    ElementInspector, InspectorMember, InspectorProperty, InspectorReferenceChoice, PropertyEditor,
-    inspect_element,
-};
+pub(crate) use hierarchy::project_hierarchy;
+pub(crate) use index::GraphIndex;
+pub(crate) use inspector::{InspectorMember, InspectorProperty, PropertyEditor, inspect_element};
 pub(crate) use operation_graph::{
     InputPort, Operation, OperationDefinition, OperationGraph, OperationGraphError,
     OperationImplementation, OperationValue, OperationValues, PortType,
 };
-pub(crate) use path::{PathError, physical_path, validate_segment};
-pub(crate) use plan::{Artifact, Diagnostic, Plan, PlanError};
+pub(crate) use path::{physical_path, validate_segment};
+pub(crate) use plan::{Plan, PlanError};
 pub(crate) use presentation::{
-    ClassifierPresentation, ClassifierPresentationOptions, MemberPresentation, SemanticIdentity,
-    classifier_presentation, element_display_label, element_display_label_with_references,
-    format_element_label_for_view, member_presentation, semantic_identity,
+    ClassifierPresentationOptions, classifier_presentation, element_display_label,
+    element_display_label_with_references, format_element_label_for_view, member_presentation,
+    semantic_identity,
 };
 pub(crate) use publish::{publish_new, publish_replace};
-pub(crate) use quick_edit::{
-    QuickEditAction, QuickEditAvailability, QuickEditControl, QuickEditSide, quick_edit_for,
-};
+pub(crate) use quick_edit::{QuickEditAvailability, QuickEditControl, QuickEditSide, quick_edit_for};
 pub(crate) use relationships::{
-    ModelingRelationKind, QuickRelationRule, RelationshipEndpointLabels, RelationshipGraph,
-    RelationshipMarker, RelationshipPresentation, RelationshipStyle, projected_relationship_paths,
-    quick_relation_rule, relation_kind_for_creation, relationship_presentation,
+    ModelingRelationKind, RelationshipEndpointLabels, RelationshipGraph, RelationshipMarker,
+    RelationshipPresentation, RelationshipStyle, quick_relation_rule, relation_kind_for_creation,
+    relationship_presentation,
     relationship_style_for_notation, reroute_relationships, route as route_relationship,
 };
-pub(crate) use scope::{Scope, ScopeError, select_elements};
+pub(crate) use scope::{Scope, select_elements};
 pub(crate) use structural_diagrams::{
     RootMetaclass, StructuralDiagnostic, StructuralDiagramKind, StructuralSeverity,
     element_root_kind, relationship_root_kind, validate_structural_diagram,
     validate_structural_model,
 };
 pub(crate) use uml_geometry::{
-    ClassifierContents, FoldedNoteLayout, FrameHeadingLayout, InterfaceLayout, PortLabelLayout,
-    TemplateSignatureLayout, classifier_contents, folded_note_layout, frame_heading_layout,
-    interface_layout, interface_view_layout, port_label_layout, template_signature_layout,
+    ClassifierContents, InterfaceLayout, classifier_contents, interface_view_layout,
 };
 pub(crate) use uml_types::{UmlCapability, UmlQuickCreate, UmlType};
 
 pub(crate) use uml_notation::{
-    StereotypePresentation, UmlHeader, UmlNotation, resolve_element_notation,
-    resolve_pseudostate_notation, stereotype_presentation, uml_header, uml_notation,
+    StereotypePresentation, UmlNotation, resolve_element_notation, resolve_pseudostate_notation,
+    stereotype_presentation, uml_header, uml_notation,
 };
 
 #[path = "view-model/diagram/visual_draft_routing.rs"]
@@ -158,9 +148,7 @@ mod template_presentation;
 
 #[path = "application/edits/property_edit.rs"]
 mod property_edit;
-pub(crate) use template_presentation::{
-    template_parameter_label, template_parameter_label_with_references,
-};
+pub(crate) use template_presentation::template_parameter_label_with_references;
 
 #[path = "application/edits/hierarchy_placement.rs"]
 mod hierarchy_placement;
