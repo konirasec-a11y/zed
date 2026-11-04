@@ -508,3 +508,290 @@ fn fork_and_merge_known_incidence_and_mixtures_do_not_depend_on_unresolved_neigh
     }
     Ok(())
 }
+
+fn join_rule(response: &Value, subject: &str, severity: Option<&str>) -> FlowResult<()> {
+    let matching: Vec<_> = response["diagnostics"]
+        .as_array()
+        .ok_or("missing diagnostics")?
+        .iter()
+        .filter(|diagnostic| {
+            diagnostic["subject_id"] == subject
+                && matches!(
+                    diagnostic["code"].as_str(),
+                    Some(
+                        "UML_JOIN_NODE_INCOMING_OBJECT_FLOW"
+                            | "MDE_JOIN_NODE_INCOMING_OBJECT_FLOW_UNVERIFIED"
+                    )
+                )
+        })
+        .collect();
+    if let Some(severity) = severity {
+        assert_eq!(matching.len(), 1, "{response}");
+        assert_eq!(matching[0]["severity"], severity);
+        assert_eq!(
+            matching[0]["code"],
+            if severity == "error" {
+                "UML_JOIN_NODE_INCOMING_OBJECT_FLOW"
+            } else {
+                "MDE_JOIN_NODE_INCOMING_OBJECT_FLOW_UNVERIFIED"
+            }
+        );
+    } else {
+        assert!(matching.is_empty(), "{response}");
+    }
+    Ok(())
+}
+
+fn add_activity_edge_object(
+    envelope: &mut Value,
+    id: &str,
+    kind: &str,
+    source: Value,
+    target: Value,
+) -> FlowResult<()> {
+    envelope["model"]["elements"]
+        .as_array_mut()
+        .ok_or("missing elements")?
+        .push(
+            json!({"id":id,"kind":kind,"name":id,"properties":{"activity":{"$ref":"fulfillment"},
+            "source":source,"target":target}}),
+        );
+    envelope["model"]["relations"]
+        .as_array_mut()
+        .ok_or("missing relations")?
+        .push(json!({"id":format!("owns-{id}"),"kind":"owns","from":"fulfillment","to":id}));
+    Ok(())
+}
+
+#[test]
+fn join_outgoing_family_follows_object_input_existence_through_repair_and_self_loops()
+-> FlowResult<()> {
+    assert!(
+        include_str!("features/activity_edge_lifecycle.feature")
+            .contains("Scenario: Preserve the Join input-existence conditional across repairs")
+    );
+    println!("Given an imported JoinNode with ControlFlow inputs and a ControlFlow output");
+    let original = imported_activity()?;
+    let baseline = validate(&original)?;
+    join_rule(&baseline, "synchronize", None)?;
+    let mut authored = original.clone();
+    println!("When its output becomes ObjectFlow without an incoming ObjectFlow");
+    relation(&mut authored, "flow-8")?["kind"] = json!("uml.object_flow");
+    let wrong_default_branch = validate(&authored)?;
+    join_rule(&wrong_default_branch, "synchronize", Some("error"))?;
+    reopen("join-no-object-input", &authored, &wrong_default_branch)?;
+    println!("When one incoming edge becomes ObjectFlow, remaining ControlFlow inputs are allowed");
+    relation(&mut authored, "flow-6")?["kind"] = json!("uml.object_flow");
+    let object_branch = validate(&authored)?;
+    join_rule(&object_branch, "synchronize", None)?;
+    assert_eq!(object_branch["has_errors"], false, "{object_branch}");
+    reopen("join-mixed-inputs-object-output", &authored, &object_branch)?;
+    println!(
+        "Then changing only the output back to ControlFlow violates the selected object branch"
+    );
+    relation(&mut authored, "flow-8")?["kind"] = json!("uml.control_flow");
+    let wrong_object_branch = validate(&authored)?;
+    join_rule(&wrong_object_branch, "synchronize", Some("error"))?;
+    reopen(
+        "join-object-input-control-output",
+        &authored,
+        &wrong_object_branch,
+    )?;
+    relation(&mut authored, "flow-6")?["kind"] = json!("uml.control_flow");
+    assert_eq!(validate(&authored)?, baseline);
+
+    println!("When an isolated Join has an empty input and output set");
+    let mut isolated = original.clone();
+    isolated["model"]["elements"]
+        .as_array_mut()
+        .ok_or("missing elements")?
+        .push(
+            json!({"id":"isolated-join","kind":"uml.join_node","name":"Isolated join",
+            "properties":{"activity":{"$ref":"fulfillment"}}}),
+        );
+    isolated["model"]["relations"].as_array_mut().ok_or("missing relations")?.push(
+        json!({"id":"owns-isolated-join","kind":"owns","from":"fulfillment","to":"isolated-join"}));
+    let empty = validate(&isolated)?;
+    join_rule(&empty, "isolated-join", None)?;
+    assert!(
+        empty["diagnostics"]
+            .as_array()
+            .ok_or("missing diagnostics")?
+            .iter()
+            .any(
+                |diagnostic| diagnostic["code"] == "UML_JOIN_NODE_ONE_OUTGOING_EDGE"
+                    && diagnostic["subject_id"] == "isolated-join"
+            )
+    );
+    reopen("join-empty-inputs-and-outputs", &isolated, &empty)?;
+    println!("Then a ControlFlow self-loop selects and satisfies the control branch");
+    add_activity_edge_object(
+        &mut isolated,
+        "join-loop",
+        "uml.control_flow",
+        json!({"$ref":"isolated-join"}),
+        json!({"$ref":"isolated-join"}),
+    )?;
+    let control_loop = validate(&isolated)?;
+    join_rule(&control_loop, "isolated-join", None)?;
+    assert_eq!(control_loop["has_errors"], false, "{control_loop}");
+    reopen("join-control-self-loop", &isolated, &control_loop)?;
+    println!("And the same identity as ObjectFlow witnesses and satisfies the object branch");
+    element(&mut isolated, "join-loop")?["kind"] = json!("uml.object_flow");
+    let object_loop = validate(&isolated)?;
+    join_rule(&object_loop, "isolated-join", None)?;
+    assert_eq!(object_loop["has_errors"], false, "{object_loop}");
+    reopen("join-object-self-loop", &isolated, &object_loop)?;
+    assert_eq!(validate(&original)?, baseline);
+    Ok(())
+}
+
+#[test]
+fn join_unknown_inputs_and_outputs_preserve_proved_conditional_findings() -> FlowResult<()> {
+    assert!(
+        include_str!("features/activity_edge_lifecycle.feature")
+            .contains("Scenario: Keep unresolved Join inputs distinct from proved absence")
+    );
+    let original = imported_activity()?;
+    let baseline = validate(&original)?;
+    println!("Given known control inputs and a possibly incoming ObjectFlow");
+    let mut unknown = original.clone();
+    add_activity_edge_object(
+        &mut unknown,
+        "possible-join-input",
+        "uml.object_flow",
+        json!({"$ref":"receive"}),
+        json!({"href":"unloaded.uml#target"}),
+    )?;
+    let unknown_control_output = validate(&unknown)?;
+    join_rule(&unknown_control_output, "synchronize", Some("warning"))?;
+    reopen(
+        "join-unknown-input-control-output",
+        &unknown,
+        &unknown_control_output,
+    )?;
+    println!("When the possible input is known ControlFlow, it cannot change ObjectFlow existence");
+    element(&mut unknown, "possible-join-input")?["kind"] = json!("uml.control_flow");
+    let irrelevant_control_input = validate(&unknown)?;
+    join_rule(&irrelevant_control_input, "synchronize", None)?;
+    reopen(
+        "join-unknown-control-input",
+        &unknown,
+        &irrelevant_control_input,
+    )?;
+    element(&mut unknown, "possible-join-input")?["kind"] = json!("uml.object_flow");
+    relation(&mut unknown, "flow-8")?["kind"] = json!("uml.object_flow");
+    let unknown_object_output = validate(&unknown)?;
+    join_rule(&unknown_object_output, "synchronize", Some("warning"))?;
+    reopen(
+        "join-unknown-input-object-output",
+        &unknown,
+        &unknown_object_output,
+    )?;
+    println!("When an incoming ObjectFlow is independently known, it selects the object branch");
+    relation(&mut unknown, "flow-6")?["kind"] = json!("uml.object_flow");
+    let known_witness = validate(&unknown)?;
+    join_rule(&known_witness, "synchronize", None)?;
+    reopen("join-known-object-witness", &unknown, &known_witness)?;
+    println!("When a possibly outgoing ControlFlow prevents proving the required output family");
+    add_activity_edge_object(
+        &mut unknown,
+        "possible-join-output",
+        "uml.control_flow",
+        json!({"href":"unloaded.uml#source"}),
+        json!({"$ref":"receive"}),
+    )?;
+    let unknown_output = validate(&unknown)?;
+    join_rule(&unknown_output, "synchronize", Some("warning"))?;
+    reopen("join-unknown-wrong-output", &unknown, &unknown_output)?;
+    element(&mut unknown, "possible-join-output")?["kind"] = json!("uml.object_flow");
+    let compatible_output = validate(&unknown)?;
+    join_rule(&compatible_output, "synchronize", None)?;
+    reopen(
+        "join-unknown-compatible-output",
+        &unknown,
+        &compatible_output,
+    )?;
+    relation(&mut unknown, "flow-8")?["kind"] = json!("uml.control_flow");
+    let proved_violation = validate(&unknown)?;
+    join_rule(&proved_violation, "synchronize", Some("error"))?;
+    reopen("join-known-wrong-output", &unknown, &proved_violation)?;
+
+    println!("When incoming incidence is known but its edge family is unresolved");
+    let mut unknown_family = original.clone();
+    add_activity_edge_object(
+        &mut unknown_family,
+        "join-unknown-family",
+        "uml.future_activity_edge",
+        json!({"$ref":"receive"}),
+        json!({"$ref":"synchronize"}),
+    )?;
+    let unresolved_family = validate(&unknown_family)?;
+    join_rule(&unresolved_family, "synchronize", Some("warning"))?;
+    reopen(
+        "join-unknown-input-family",
+        &unknown_family,
+        &unresolved_family,
+    )?;
+
+    println!("When the guard remains unknown but no output can violate either branch");
+    let mut empty_output = original.clone();
+    add_activity_edge_object(
+        &mut empty_output,
+        "possible-join-input",
+        "uml.object_flow",
+        json!({"$ref":"receive"}),
+        json!({"href":"unloaded.uml#target"}),
+    )?;
+    empty_output["model"]["relations"]
+        .as_array_mut()
+        .ok_or("missing relations")?
+        .retain(|relation| {
+            relation["id"] != "flow-8"
+                && !(relation["kind"] == "owns" && relation["to"] == "flow-8")
+        });
+    let vacuous_branches = validate(&empty_output)?;
+    join_rule(&vacuous_branches, "synchronize", None)?;
+    assert!(
+        vacuous_branches["diagnostics"]
+            .as_array()
+            .ok_or("missing diagnostics")?
+            .iter()
+            .any(
+                |diagnostic| diagnostic["code"] == "UML_JOIN_NODE_ONE_OUTGOING_EDGE"
+                    && diagnostic["subject_id"] == "synchronize"
+            )
+    );
+    reopen(
+        "join-unknown-guard-empty-output",
+        &empty_output,
+        &vacuous_branches,
+    )?;
+    println!(
+        "Then the family conclusion is independent of guard completions, not an OCL null default"
+    );
+    let mut both_branches_false = original.clone();
+    add_activity_edge_object(
+        &mut both_branches_false,
+        "possible-join-input",
+        "uml.object_flow",
+        json!({"$ref":"receive"}),
+        json!({"href":"unloaded.uml#target"}),
+    )?;
+    add_activity_edge_object(
+        &mut both_branches_false,
+        "extra-join-output",
+        "uml.object_flow",
+        json!({"$ref":"synchronize"}),
+        json!({"$ref":"receive"}),
+    )?;
+    let independent_false = validate(&both_branches_false)?;
+    join_rule(&independent_false, "synchronize", Some("error"))?;
+    reopen(
+        "join-both-branches-false",
+        &both_branches_false,
+        &independent_false,
+    )?;
+    assert_eq!(validate(&original)?, baseline);
+    Ok(())
+}

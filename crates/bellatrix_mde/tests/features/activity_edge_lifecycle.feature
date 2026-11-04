@@ -61,3 +61,37 @@ Feature: ControlFlow object-node endpoint semantics across the authored Activity
     But another definitely incident ObjectFlow still proves the known mixture
     When I save, close and reopen every state through JSON and BLX and repair the graph
     Then all collections and diagnostic findings are repeatable
+
+  Scenario: Preserve the Join input-existence conditional across repairs
+    Given a JoinNode whose incoming and outgoing edges are ControlFlows
+    When only its outgoing edge becomes ObjectFlow
+    Then JoinNode-incoming_object_flow rejects the output family without an incoming ObjectFlow
+    When one incoming edge becomes ObjectFlow while another remains ControlFlow
+    Then the mixed inputs select the object-output branch and satisfy it
+    When the outgoing edge becomes ControlFlow again
+    Then the independently selected object branch fails
+    When an isolated Join has empty input and output sets
+    Then the family predicate is true and outgoing cardinality fails separately
+    When one ControlFlow self-loop becomes ObjectFlow
+    Then the same edge witnesses and satisfies each corresponding branch
+    When I save, close and reopen each state through JSON and BLX and repair the model
+    Then all data and findings repeat unchanged
+
+  Scenario: Keep unresolved Join inputs distinct from proved absence
+    Given a possibly incoming ObjectFlow with unresolved incidence
+    Then neither control nor object output allows silently choosing the guard branch
+    When the possible input is known ControlFlow
+    Then it cannot change whether an incoming ObjectFlow exists
+    When a definitely incoming ObjectFlow provides a witness
+    Then unrelated unresolved inputs do not prevent selecting the object branch
+    When a possible outgoing edge has the wrong family
+    Then output conformance is unverified
+    But a possible outgoing edge of the required family does not prevent proof
+    And a definitely wrong outgoing edge still proves a violation
+    When the incoming edge family itself is unknown
+    Then known incidence alone cannot prove or disprove ObjectFlow existence
+    When the guard is unknown and the outgoing set is empty or contains both families
+    Then agreement of both branches proves true or false independently of all guard completions
+    And empty-output cardinality remains a separate diagnostic
+    When I save, close and reopen every state through JSON and BLX and repair the graph
+    Then unknown data, proofs and authored records remain unchanged

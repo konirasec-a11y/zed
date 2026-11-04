@@ -87,3 +87,12 @@ establish incidence despite an unresolved opposite endpoint, while ambiguous
 incidence alone cannot prove a mixture. Possible edges already known to share the
 established family do not invalidate homogeneity. JoinNode and DecisionNode have
 different normative predicates and are not folded into this rule.
+
+`JoinNode-incoming_object_flow` is checked as its own conditional: any incoming
+ObjectFlow requires ObjectFlow outputs; otherwise outputs must be ControlFlows.
+Mixed input families are permitted. Incidence is directional, and unresolved
+input incidence/families never become proof of ObjectFlow absence. A known
+ObjectFlow witness selects the object branch despite other unknown inputs. If
+both output-family branches have the same proved outcome, that result is
+independent of possible completions of the unknown guard, not an evaluation of
+an OCL null/invalid condition. Outgoing cardinality is checked separately.

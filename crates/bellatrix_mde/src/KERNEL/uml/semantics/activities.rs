@@ -164,12 +164,7 @@ fn control_flow_endpoint(
         .map_err(|error| QueryError::unsupported(endpoint.id(), error))
 }
 
-fn uniform_activity_edges(
-    references: &ReferenceIndex<'_>,
-    node: ElementRef<'_>,
-) -> Result<bool, QueryError> {
-    let mut controls = Vec::new();
-    let mut objects = Vec::new();
+fn activity_edge_candidates<'a>(references: &ReferenceIndex<'a>) -> Vec<ElementRef<'a>> {
     let mut candidates: Vec<_> = references
         .model()
         .elements()
@@ -181,6 +176,16 @@ fn uniform_activity_edges(
         })
         .collect();
     candidates.sort_by(|left, right| left.id().cmp(right.id()));
+    candidates
+}
+
+fn uniform_activity_edges(
+    references: &ReferenceIndex<'_>,
+    node: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let mut controls = Vec::new();
+    let mut objects = Vec::new();
+    let candidates = activity_edge_candidates(references);
     for edge in candidates {
         // The union contains each edge once, even for a self-loop. Either known
         // endpoint establishes incidence despite an unresolved opposite end.
@@ -222,6 +227,51 @@ fn uniform_activity_edges(
         }
     }
     accept_any([require_all(controls), require_all(objects)])
+}
+
+fn join_edge_families(
+    references: &ReferenceIndex<'_>,
+    node: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let mut incoming_objects = Vec::new();
+    let mut outgoing_objects = Vec::new();
+    let mut outgoing_controls = Vec::new();
+    for edge in activity_edge_candidates(references) {
+        let incoming = activity_endpoint(references, edge, "target")
+            .map(|endpoint| endpoint.id() == node.id());
+        let outgoing = activity_endpoint(references, edge, "source")
+            .map(|endpoint| endpoint.id() == node.id());
+        let family = |metaclass: &str| {
+            if edge.metaclass().is_some() {
+                Ok(edge.conforms_to(metaclass))
+            } else {
+                Err(QueryError::unsupported(
+                    node.id(),
+                    format!("ActivityEdge {} has unresolved metaclass", edge.id(),),
+                ))
+            }
+        };
+        let object = family("ObjectFlow");
+        incoming_objects.push(require_all([incoming, object.clone()]));
+        outgoing_objects.push(accept_any([outgoing.clone().map(|value| !value), object]));
+        outgoing_controls.push(accept_any([
+            outgoing.map(|value| !value),
+            family("ControlFlow"),
+        ]));
+    }
+    let has_incoming_object = accept_any(incoming_objects);
+    let all_outgoing_objects = require_all(outgoing_objects);
+    let all_outgoing_controls = require_all(outgoing_controls);
+    // If both consequent branches hold (notably an empty outgoing set), unknown
+    // incoming incidence cannot change the result. Cardinality is checked alone.
+    accept_any([
+        require_all([has_incoming_object.clone(), all_outgoing_objects.clone()]),
+        require_all([
+            has_incoming_object.map(|value| !value),
+            all_outgoing_controls.clone(),
+        ]),
+        require_all([all_outgoing_objects, all_outgoing_controls]),
+    ])
 }
 
 pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
@@ -282,6 +332,13 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             ));
         }
         if node.conforms_to("JoinNode") {
+            checks.push((
+                join_edge_families(references, node),
+                "UML_JOIN_NODE_INCOMING_OBJECT_FLOW",
+                "MDE_JOIN_NODE_INCOMING_OBJECT_FLOW_UNVERIFIED",
+                "JoinNode-incoming_object_flow",
+                "outgoing JoinNode edges must be ObjectFlows when an incoming ObjectFlow exists, and ControlFlows otherwise",
+            ));
             checks.push((
                 incident_edges(references, node, "source", 1, 1, false),
                 "UML_JOIN_NODE_ONE_OUTGOING_EDGE",
