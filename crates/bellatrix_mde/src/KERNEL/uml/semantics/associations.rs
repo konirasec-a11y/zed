@@ -678,7 +678,14 @@ fn validate_association_structure(
             .model()
             .owner(ElementRef::Object(end))?
             .ok_or("Association member end requires an owner")?;
-        if owner.id() != association.id() {
+        if owner.id() != association.id() && owner.metaclass().is_none() {
+            unresolved.get_or_insert_with(|| {
+                format!(
+                    "Unsupported Association member end owner {} has no resolved UML metaclass",
+                    owner.id(),
+                )
+            });
+        } else if owner.id() != association.id() {
             if owner.conforms_to("Association")
                 && classifiers::contributes_to_owned_union(
                     owner,
