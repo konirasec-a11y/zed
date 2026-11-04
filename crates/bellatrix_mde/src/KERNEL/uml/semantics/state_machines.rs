@@ -185,6 +185,67 @@ fn region_owned(references: &ReferenceIndex<'_>, region: ElementRef<'_>) -> Resu
     require_all(checks)
 }
 
+fn final_state_regions(references: &ReferenceIndex<'_>, state: ElementRef<'_>) -> Result<bool, QueryError> {
+    let descriptor = schema::uml_property("FinalState", "region")
+        .map_err(|error| QueryError::unsupported(state.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(state.id(), "missing State::region contract"))?;
+    let opposite = schema::uml_property("Region", "state")
+        .map_err(|error| QueryError::unsupported(state.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(state.id(), "missing Region::state contract"))?;
+    let mut checks = Vec::new();
+    if let Some(value) = state.properties().get("region") {
+        checks.push(match property_contracts::check_value(references, state, descriptor, value) {
+            PropertyOutcome::Satisfied => Ok(true),
+            PropertyOutcome::Violation(message) => Err(QueryError::invalid(state.id(), message)),
+            PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(state.id(), message)),
+        });
+        // Even unresolved members establish a nonzero authored cardinality.
+        checks.push(Ok(value.as_array().is_some_and(Vec::is_empty)));
+    }
+    let mut owned_regions = HashSet::new();
+    for child in references.explicit_owned_elements(state.id())
+        .map_err(|error| QueryError::invalid(state.id(), error))?
+    {
+        if child.conforms_to("Region") {
+            owned_regions.insert(child.id());
+            checks.push(Ok(false));
+            checks.push(region_owned(references, child));
+            checks.push(classifiers::contributes_to_owned_union(state, child, "State-region")
+                .and_then(|member| if member { Ok(true) } else {
+                    Err(QueryError::invalid(state.id(), "canonical ownership is excluded from State::region"))
+                }));
+        } else if child.metaclass().is_none() {
+            checks.push(Err(QueryError::unsupported(child.id(), "owned element metaclass is unresolved; Region membership is unknown")));
+        }
+    }
+    for region in references.model().elements().filter(|element| element.conforms_to("Region")) {
+        if owned_regions.contains(region.id()) { continue; }
+        let Some(value) = region.properties().get("state") else { continue; };
+        match reference_id(value) {
+            Ok(Some(id)) if id == state.id() => {
+                references.element(region.id()).map_err(|error| QueryError::invalid(region.id(), error))?;
+                checks.push(Ok(false));
+                checks.push(region_owned(references, region));
+            }
+            Ok(_) => continue,
+            Err(_) => {
+                // A different canonical owner excludes this FinalState even
+                // when the stored inverse is incomplete. Its own contract is
+                // still checked on the Region; do not spread that uncertainty.
+                let owner = references.model().owner(region)
+                    .map_err(|error| QueryError::invalid(region.id(), error))?;
+                if owner.is_some_and(|owner| owner.id() != state.id()) { continue; }
+            }
+        }
+        checks.push(match property_contracts::check_value(references, region, opposite, value) {
+            PropertyOutcome::Satisfied => Ok(true),
+            PropertyOutcome::Violation(message) => Err(QueryError::invalid(region.id(), message)),
+            PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(region.id(), message)),
+        });
+    }
+    require_all(checks)
+}
+
 pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     for element in references.model().elements() {
@@ -204,6 +265,9 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "Region-owned", "a Region cannot have both state and stateMachine owners"));
         }
         if element.conforms_to("FinalState") {
+            constraints.push((final_state_regions(references, element),
+                "UML_FINAL_STATE_NO_REGIONS", "MDE_FINAL_STATE_REGIONS_UNVERIFIED",
+                "FinalState-no_regions", "a FinalState cannot have Regions"));
             constraints.push((final_state_submachine(references, element),
                 "UML_FINAL_STATE_CANNOT_REFERENCE_SUBMACHINE", "MDE_FINAL_STATE_SUBMACHINE_UNVERIFIED",
                 "FinalState-cannot_reference_submachine", "a FinalState cannot reference a submachine"));

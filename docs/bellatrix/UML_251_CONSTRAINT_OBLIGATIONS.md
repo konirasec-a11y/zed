@@ -108,6 +108,10 @@ FinalState::cannot_reference_submachine tem recorte publicado em
 inverso submachineState. Nove integrações e um teste unitário novos passam;
 o gate completo posterior de `-p bellatrix_mde` passa **884/884, zero falhas
 e ignorados**. submachine permanece read-only no editor.
+Region::owned tem recorte publicado em
+`b901416697fdc9fbe994befde77d77d312b50989` (E73), com oito testes novos e
+gate completo de `-p bellatrix_mde` **892/892, zero falhas e ignorados**.
+Exclusividade de state/stateMachine não exige owner para drafts sem owner.
 Nenhum teste novo foi iniciado para elaborar este documento: os resultados
 abaixo foram conferidos em logs de gates já executados. Não há percentual de
 cobertura, build de UI ou geração de aplicação nesta auditoria.
@@ -223,7 +227,7 @@ o implementador precisa justificar o predicado a partir dessa descrição.
 Os caminhos de código nesta lista começam em
 `crates/bellatrix_mde/src/KERNEL/uml/`; os testes começam em
 `crates/bellatrix_mde/tests/`. E01–E11 são pontos de inspeção, não relatórios
-de execução nova. E12–E72 possuem os gates delimitados nas seções seguintes.
+de execução nova. E12–E73 possuem os gates delimitados nas seções seguintes.
 
 - **E01**: `semantics/root.rs`, `Model::validate`, e
   `validation/structural_rules.rs`; `ownership_namespace_flow.rs`,
@@ -1184,6 +1188,39 @@ de execução nova. E12–E72 possuem os gates delimitados nas seções seguinte
   não são suprimidas. Diagnósticos da regra:
   `UML_FINAL_STATE_CANNOT_REFERENCE_SUBMACHINE` e
   `MDE_FINAL_STATE_SUBMACHINE_UNVERIFIED`.
+
+- **E73**: `semantics/state_machines.rs`, `region_owned` e `validate`;
+  `region_ownership.rs`, oito testes. Verifica exclusividade de state e
+  stateMachine a partir do owner canônico e dos inversos explicitamente
+  armazenados. A regra proíbe ambos presentes; não exige que um esteja
+  presente. Drafts sem owner e sem evidência contraditória permanecem
+  permitidos, sem inventar uma obrigação de ownership obrigatório.
+  O owner canônico State/StateMachine fornece testemunho do respectivo papel,
+  mesmo quando referências não resolvidas na coleção region impedem provar
+  completude. Inversos locais devem concordar com identidade e papel do owner;
+  null explícito no papel canônico, exclusão na coleção composta, duplicatas
+  e ownership ambíguo são Invalid. Dois papéis presentes refutam o predicado
+  mesmo com referências externas em ambos.
+  Owner de metaclasse desconhecida e evidência externa/incompleta permanecem
+  Unknown quando não há testemunho de violação ou contradição. Malformados e
+  contradições conhecidas não são ocultados por Unknown. Diagnósticos:
+  `UML_REGION_OWNED` e `MDE_REGION_OWNED_UNVERIFIED`.
+
+### Evidência publicada da exclusividade de ownership de Region
+
+Commit inspecionado: `b901416697fdc9fbe994befde77d77d312b50989`.
+O log `/tmp/region-ownership-reviewed-gate.log` registra **892/892 aprovados,
+zero falhas e zero ignorados** no gate completo de `-p bellatrix_mde`,
+incluindo **8/8** no novo alvo region_ownership. Os casos incluem drafts sem
+owner, owner canônico State/StateMachine, inversos locais/externos,
+projeções incompletas, duplicatas, API pública e reparenting: mudança com
+inverso armazenado obsoleto é rejeitada atomicamente; mudança consistente é
+aceita. O recorte não certifica todos os contratos de Region nem autoria geral
+de seus inversos pelo editor.
+
+Gate anterior à publicação, sem rerun no SHA publicado nem execução nova por
+esta matriz. Não certifica StateMachines integralmente, execução
+comportamental, UI, geração, interchange ou conformidade UML completa.
 
 ### Evidência publicada de submachine em FinalState
 
@@ -2812,7 +2849,7 @@ mesmo quando há infraestrutura relacionada, para não inferir cobertura.
 
 ## Obrigações adicionais ao inventário estrutural inicial
 
-Estas três linhas de StateMachines têm evidência própria. Não alteram a
+Estas quatro linhas de StateMachines têm evidência própria. Não alteram a
 extração histórica das 127 invariantes diretas dos sete pacotes selecionados
 nem constituem inventário completo de StateMachines.
 
@@ -2833,6 +2870,12 @@ nem constituem inventário completo de StateMachines.
 - Metaclass: `FinalState`. Estado: **P**. Evidência: E72; commit `94364915625c7d775b9acbfcf497a6126cfa2339`.
 - OCL publicado: `submachine->isEmpty()`.
 - Referência direta e inverso submachineState são verificados; inverso incompleto sem testemunho independente permanece Unknown. submachine continua read-only no editor.
+
+### `Region-owned`
+
+- Metaclass: `Region`. Estado: **P**. Evidência: E73; commit `b901416697fdc9fbe994befde77d77d312b50989`.
+- OCL publicado: `(stateMachine <> null implies state = null) and (state <> null implies stateMachine = null)`.
+- Exclusividade não exige owner: drafts sem owner permanecem permitidos. Evidência externa/incompleta ou owner de metaclasse desconhecida permanece Unknown sem testemunho independente de violação; inversos devem concordar com ownership canônico.
 
 ## Plano executável e dependências
 
