@@ -496,6 +496,101 @@ fn pseudostate_outgoing_from_initial(references: &ReferenceIndex<'_>, point: Ele
     require_all(checks)
 }
 
+fn region_pseudostate_limit(references: &ReferenceIndex<'_>, region: ElementRef<'_>, kind: &str) -> Result<bool, QueryError> {
+    let descriptor = schema::uml_property("Region", "subvertex")
+        .map_err(|error| QueryError::unsupported(region.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(region.id(), "missing Region::subvertex contract"))?;
+    let opposite = schema::uml_property("Vertex", "container")
+        .map_err(|error| QueryError::unsupported(region.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(region.id(), "missing Vertex::container contract"))?;
+    let mut checks = Vec::new();
+    // Local identities are deduplicated across forward, canonical and inverse
+    // evidence. true means membership is proven, false means merely possible.
+    let mut members = std::collections::HashMap::<String, bool>::new();
+    let mut external = HashSet::new();
+    if let Some(value) = region.properties().get("subvertex") {
+        if let PropertyOutcome::Violation(message) = property_contracts::check_value(references, region, descriptor, value) {
+            checks.push(Err(QueryError::invalid(region.id(), message)));
+        }
+        if let Some(values) = value.as_array() {
+            for value in values {
+                if let Ok(Some(id)) = reference_id(value) {
+                    members.insert(id.to_owned(), true);
+                } else {
+                    external.insert(value.to_string());
+                }
+            }
+        }
+    }
+    for child in references.explicit_owned_elements(region.id())
+        .map_err(|error| QueryError::invalid(region.id(), error))?
+    {
+        if child.conforms_to("Vertex") {
+            // Region has one direct composite Vertex role. An unresolved
+            // forward projection cannot erase this canonical membership proof.
+            members.insert(child.id().to_owned(), true);
+            match classifiers::contributes_to_owned_union(region, child, descriptor.id.fragment) {
+                Ok(true) | Err(QueryError::Unsupported { .. }) => {}
+                Ok(false) => checks.push(Err(QueryError::invalid(child.id(), "canonical Region ownership excludes subvertex"))),
+                Err(error) => checks.push(Err(error)),
+            }
+        } else if child.metaclass().is_none() {
+            members.entry(child.id().to_owned()).or_insert(false);
+        }
+    }
+    for vertex in references.model().elements().filter(|element| element.conforms_to("Vertex") || element.metaclass().is_none()) {
+        let Some(value) = vertex.properties().get("container") else { continue; };
+        let owner = references.model().owner(vertex)
+            .map_err(|error| QueryError::invalid(vertex.id(), error))?;
+        let canonical_member = owner.is_some_and(|owner| owner.id() == region.id());
+        match reference_id(value) {
+            Ok(Some(id)) if id == region.id() => {
+                // A same-named extension property is not proven to be the UML
+                // Vertex opposite until the element's metaclass is resolved.
+                members.entry(vertex.id().to_owned())
+                    .and_modify(|certain| *certain |= vertex.conforms_to("Vertex"))
+                    .or_insert_with(|| vertex.conforms_to("Vertex"));
+                if vertex.conforms_to("Vertex") && !canonical_member {
+                    checks.push(Err(QueryError::invalid(vertex.id(), "Vertex::container contradicts canonical Region ownership")));
+                }
+            }
+            Ok(_) => {
+                if canonical_member && vertex.conforms_to("Vertex") {
+                    checks.push(Err(QueryError::invalid(vertex.id(), "Vertex::container excludes its canonical Region")));
+                }
+                continue;
+            }
+            Err(_) if owner.is_some() && !canonical_member => continue,
+            Err(_) => { members.entry(vertex.id().to_owned()).or_insert(false); }
+        }
+        if vertex.conforms_to("Vertex")
+            && let PropertyOutcome::Violation(message) = property_contracts::check_value(references, vertex, opposite, value)
+        {
+            checks.push(Err(QueryError::invalid(vertex.id(), message)));
+        }
+    }
+    let mut known = 0_usize;
+    let mut possible = external.len();
+    for (id, certain) in members {
+        let vertex = references.element(&id).map_err(|error| QueryError::invalid(region.id(), error))?;
+        if vertex.metaclass().is_none() {
+            possible += 1;
+        } else if vertex.conforms_to("Pseudostate") {
+            match schema::read_effective_scalar(vertex, "kind") {
+                Ok(value) if value.as_str() == Some(kind) => {
+                    if certain { known += 1; } else { possible += 1; }
+                }
+                Ok(_) => {}
+                Err(error) => checks.push(Err(QueryError::invalid(vertex.id(), error))),
+            }
+        }
+    }
+    checks.push(if known > 1 { Ok(false) }
+        else if known.saturating_add(possible) <= 1 { Ok(true) }
+        else { Err(QueryError::unsupported(region.id(), format!("{kind} subvertex membership or kind is unresolved"))) });
+    require_all(checks)
+}
+
 pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     for element in references.model().elements() {
@@ -533,6 +628,14 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "Pseudostate-history_vertices", "a history Pseudostate can have at most one outgoing Transition"));
         }
         if element.conforms_to("Region") {
+            for (kind, code, unknown, constraint) in [
+                ("initial", "UML_REGION_INITIAL_VERTEX", "MDE_REGION_INITIAL_VERTEX_UNVERIFIED", "Region-initial_vertex"),
+                ("deepHistory", "UML_REGION_DEEP_HISTORY_VERTEX", "MDE_REGION_DEEP_HISTORY_VERTEX_UNVERIFIED", "Region-deep_history_vertex"),
+                ("shallowHistory", "UML_REGION_SHALLOW_HISTORY_VERTEX", "MDE_REGION_SHALLOW_HISTORY_VERTEX_UNVERIFIED", "Region-shallow_history_vertex"),
+            ] {
+                constraints.push((region_pseudostate_limit(references, element, kind), code, unknown, constraint,
+                    "a Region cannot have more than one direct Pseudostate of this kind"));
+            }
             constraints.push((region_owned(references, element),
                 "UML_REGION_OWNED", "MDE_REGION_OWNED_UNVERIFIED",
                 "Region-owned", "a Region cannot have both state and stateMachine owners"));

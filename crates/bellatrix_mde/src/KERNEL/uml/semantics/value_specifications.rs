@@ -7,7 +7,7 @@ use super::{
     root::ElementRef,
     schema,
     types::{
-        Integer, MultiplicityError, MultiplicityRange, UnlimitedNatural, literal_multiplicity,
+        Integer, MultiplicityError, MultiplicityRange, StandardPrimitiveType, UnlimitedNatural, literal_multiplicity,
         literal_lower_bound, literal_upper_bound,
     },
 };
@@ -49,6 +49,44 @@ pub enum LiteralValue {
     Boolean(bool),
     String(Option<String>),
     Null,
+}
+
+impl LiteralValue {
+    pub fn primitive_type(&self) -> Option<StandardPrimitiveType> {
+        match self {
+            Self::Integer(_) => Some(StandardPrimitiveType::Integer),
+            Self::UnlimitedNatural(_) => Some(StandardPrimitiveType::UnlimitedNatural),
+            Self::Real(_) => Some(StandardPrimitiveType::Real),
+            Self::Boolean(_) => Some(StandardPrimitiveType::Boolean),
+            Self::String(_) => Some(StandardPrimitiveType::String),
+            Self::Null => None,
+        }
+    }
+}
+
+/// Only source-qualified identities in the pinned primitive documents establish
+/// normative types. A local Element named Integer is not that library identity.
+pub(crate) fn standard_primitive_reference(
+    value: &Value,
+) -> Result<Option<StandardPrimitiveType>, String> {
+    let Some(href) = external_reference_href(value)? else { return Ok(None); };
+    let Some((document_url, fragment)) = href.split_once('#') else { return Ok(None); };
+    let Some(source) = super::metamodel::SOURCES.iter().find(|source|
+        source.url == document_url && matches!(source.document,
+            schema::Document::PrimitiveTypes | schema::Document::PrimitiveTypes20131001))
+    else { return Ok(None); };
+    // Encoded fragments need URI normalization, which this exact-identity
+    // adapter deliberately does not implement.
+    if fragment.contains('%') { return Ok(None); }
+    for primitive in StandardPrimitiveType::ALL {
+        let identity = schema::XmiId::new(source.document, primitive.name());
+        if let Some(classifier) = schema::classifier(identity) {
+            if classifier.id.fragment == fragment && classifier.kind == schema::ClassifierKind::Primitive {
+                return Ok(Some(primitive));
+            }
+        }
+    }
+    Err(format!("unknown PrimitiveType identity in pinned document: {href}"))
 }
 
 fn resolve<'a>(

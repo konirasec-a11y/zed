@@ -179,6 +179,7 @@ fn evaluate_owned_values(
 }
 
 struct OwnedValueEvidence<'a> {
+    specifications: Vec<ElementRef<'a>>,
     values: Vec<(ElementRef<'a>, LiteralValue)>,
     unknown: Option<QueryError>,
 }
@@ -233,10 +234,14 @@ fn owned_value_evidence<'a>(
             }
         }
     }
+    let mut specifications = values.clone();
     let mut owned_values = Vec::new();
     for child in references.explicit_owned_elements(owner.id())
         .map_err(|error| QueryError::invalid(owner.id(), error))?
     {
+        if child.conforms_to("ValueSpecification") && !specifications.iter().any(|value| value.id() == child.id()) {
+            specifications.push(child);
+        }
         match classifiers::contributes_to_owned_union(owner, child, role) {
             Ok(true) => owned_values.push(child),
             Ok(false) => {}
@@ -284,7 +289,7 @@ fn owned_value_evidence<'a>(
             }
         }
     }
-    Ok(OwnedValueEvidence { values: evaluated, unknown })
+    Ok(OwnedValueEvidence { specifications, values: evaluated, unknown })
 }
 
 fn slot_values_conform(
@@ -303,6 +308,11 @@ fn slot_values_conform(
         multiplicity.as_ref().map(|_| true).map_err(Clone::clone),
         unique.as_ref().map(|_| true).map_err(Clone::clone),
     ];
+    if let Err(error) = value_specifications::standard_primitive_reference(
+        feature.properties().get("type").unwrap_or(&Value::Null),
+    ) {
+        checks.push(Err(QueryError::invalid(feature.id(), error)));
+    }
     match feature_compatibility::resolve_feature_type(references, feature) {
         Err(error @ QueryError::Invalid { .. }) => checks.push(Err(error)),
         // An empty value set requires no type witness. Nonempty values below
@@ -312,6 +322,11 @@ fn slot_values_conform(
     match values {
         Err(error) => checks.push(Err(error)),
         Ok(evidence) => {
+            // Reference validity belongs to the specification, even when it
+            // contributes no value (LiteralNull) or cannot yet be evaluated.
+            for specification in evidence.specifications {
+                checks.push(declared_value_type_contract(references, specification));
+            }
             let complete = evidence.unknown.is_none();
             if let Some(error) = evidence.unknown {
                 checks.push(Err(error));
@@ -337,13 +352,8 @@ fn slot_values_conform(
                     Ok(multiplicity.includes_cardinality(&known_count))
                 });
             }
-            for (specification, _) in &present {
-                checks.push(feature_compatibility::compare_type_conformance(references, *specification, feature));
-                // A user-authored Type reference cannot redefine a literal's
-                // intrinsic primitive domain. Until that normative identity is
-                // resolved, matching declared Types is necessary, not sufficient.
-                checks.push(Err(QueryError::unsupported(specification.id(),
-                    "literal primitive Type identity is not resolved; declared Type alone cannot establish value conformance")));
+            for (specification, value) in &present {
+                checks.push(literal_type_conformance(references, *specification, value, feature));
             }
             if matches!(unique, Ok(true)) {
                 for (position, (_, value)) in present.iter().enumerate() {
@@ -351,6 +361,54 @@ fn slot_values_conform(
                         checks.push(literal_values_distinct(slot.id(), value, other));
                     }
                 }
+            }
+        }
+    }
+    require_all(checks)
+}
+
+fn declared_value_type_contract(
+    references: &ReferenceIndex<'_>,
+    specification: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let Some(declared) = specification.properties().get("type").filter(|value| !value.is_null())
+    else { return Ok(true); };
+    match value_specifications::standard_primitive_reference(declared) {
+        Ok(Some(_)) => Ok(true),
+        Err(error) => Err(QueryError::invalid(specification.id(), error)),
+        Ok(None) => super::feature_compatibility::resolve_feature_type(references, specification).map(|_| true),
+    }
+}
+
+fn literal_type_conformance(
+    references: &ReferenceIndex<'_>,
+    specification: ElementRef<'_>,
+    value: &LiteralValue,
+    feature: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    use super::feature_compatibility::{self, require_all};
+    let intrinsic = value.primitive_type();
+    let required = value_specifications::standard_primitive_reference(
+        feature.properties().get("type").unwrap_or(&Value::Null),
+    ).map_err(|error| QueryError::invalid(feature.id(), error));
+    let mut checks = Vec::new();
+    match required {
+        Ok(Some(required)) => checks.push(Ok(intrinsic == Some(required))),
+        Err(error) => checks.push(Err(error)),
+        Ok(None) => {
+            checks.push(feature_compatibility::compare_type_conformance(references, specification, feature));
+            checks.push(Err(QueryError::unsupported(specification.id(),
+                "literal conformance requires a source-qualified normative PrimitiveType identity")));
+        }
+    }
+    if let Some(declared) = specification.properties().get("type").filter(|value| !value.is_null()) {
+        match value_specifications::standard_primitive_reference(declared) {
+            Ok(Some(declared)) => checks.push(Ok(intrinsic == Some(declared))),
+            Err(error) => checks.push(Err(QueryError::invalid(specification.id(), error))),
+            Ok(None) => {
+                checks.push(feature_compatibility::resolve_feature_type(references, specification).map(|_| true));
+                checks.push(Err(QueryError::unsupported(specification.id(),
+                    "declared literal Type has no proven link to its normative primitive domain")));
             }
         }
     }
