@@ -357,6 +357,79 @@ fn decision_input_parameters(
     accept_any([guard.map(|applies| !applies), input_count])
 }
 
+
+// ActivityPartition::superPartition is an authored inverse of the composite
+// subpartition role. Resolve the canonical role before treating omission as
+// absence; neither diagram nesting nor arbitrary Element ownership suffices.
+fn partition_dimension_not_contained(
+    references: &ReferenceIndex<'_>,
+    partition: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let not_dimension = schema::read_effective_boolean(partition, "isDimension")
+        .map(|dimension| !dimension)
+        .map_err(|error| QueryError::unsupported(partition.id(), error));
+    let no_super_partition = (|| {
+        let owner = references
+            .model()
+            .owner(partition)
+            .map_err(|error| QueryError::unsupported(partition.id(), error))?
+            .ok_or_else(|| {
+                QueryError::unsupported(
+                    partition.id(),
+                    "canonical ActivityPartition containment is incomplete",
+                )
+            })?;
+        let (nested, composite) = if owner.conforms_to("ActivityPartition") {
+            (true, "ActivityPartition-subpartition")
+        } else if owner.conforms_to("Activity") {
+            (false, "Activity-group")
+        } else {
+            return Err(QueryError::unsupported(
+                partition.id(),
+                "canonical owner does not resolve ActivityPartition containment",
+            ));
+        };
+        if !classifiers::contributes_to_owned_union(owner, partition, composite)
+            .map_err(|error| QueryError::unsupported(partition.id(), error.to_string()))?
+        {
+            return Err(QueryError::unsupported(
+                partition.id(),
+                "canonical partition containment role is unresolved",
+            ));
+        }
+        // Stored inverse projections must agree with the same canonical owner.
+        // Invalid contracts are reported separately, not as this UML violation.
+        for (metaclass, property, expected) in [
+            (
+                "ActivityPartition",
+                "superPartition",
+                nested.then_some(owner.id()),
+            ),
+            ("ActivityGroup", "superGroup", nested.then_some(owner.id())),
+            (
+                "ActivityGroup",
+                "inActivity",
+                (!nested).then_some(owner.id()),
+            ),
+        ] {
+            if partition.properties().contains_key(property)
+                && optional_activity_reference(references, partition, metaclass, property)?
+                    .as_deref()
+                    != expected
+            {
+                return Err(QueryError::unsupported(
+                    partition.id(),
+                    format!("authored {property} contradicts canonical containment"),
+                ));
+            }
+        }
+        Ok(!nested)
+    })();
+    // A non-dimension is unconstrained, and known top-level containment proves
+    // the consequent even when the Boolean itself has an invalid value.
+    accept_any([not_dimension, no_super_partition])
+}
+
 fn object_node_selection(
     references: &ReferenceIndex<'_>,
     node: ElementRef<'_>,
@@ -752,6 +825,15 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
     let mut issues = Vec::new();
     for node in references.model().elements() {
         let mut checks = Vec::new();
+        if node.conforms_to("ActivityPartition") {
+            checks.push((
+                partition_dimension_not_contained(references, node),
+                "UML_ACTIVITY_PARTITION_DIMENSION_NOT_CONTAINED",
+                "MDE_ACTIVITY_PARTITION_DIMENSION_NOT_CONTAINED_UNVERIFIED",
+                "ActivityPartition-dimension_not_contained",
+                "an ActivityPartition with isDimension=true must not be contained by another ActivityPartition",
+            ));
+        }
         if node.conforms_to("Pin") {
             checks.push((
                 schema::read_effective_boolean(node, "isUnique")
