@@ -35,6 +35,7 @@ pub enum ModelIoError {
 
 pub fn encode(project: &Project, format: Format) -> Result<Vec<u8>, ModelIoError> {
     ensure_version(project.schema_version)?;
+    crate::composition_paths(&project).map_err(ModelIoError::Hierarchy)?;
     if let Some(provenance) = &project.mdj_provenance {
         provenance
             .validate_residual_ownership(&project)
@@ -60,6 +61,7 @@ pub fn decode(bytes: &[u8], format: Format) -> Result<Project, ModelIoError> {
         }
     };
     ensure_version(project.schema_version)?;
+    crate::composition_paths(&project).map_err(ModelIoError::Hierarchy)?;
     if let Some(provenance) = &project.mdj_provenance {
         provenance
             .validate_residual_ownership(&project)

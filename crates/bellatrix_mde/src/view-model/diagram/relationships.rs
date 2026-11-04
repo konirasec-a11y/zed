@@ -309,6 +309,7 @@ fn projected_relationship_view_path(
         return None;
     }
     match view.style.routing {
+        Some(RelationshipRouting::Manual) => Some(view.geometry.clone()),
         Some(routing @ (RelationshipRouting::Automatic | RelationshipRouting::Straight)) => {
             route_for_routing(section, diagram_id, relation, view.endpoints.as_ref(), routing).ok()
         }
@@ -326,6 +327,7 @@ pub(crate) fn route_for_routing(
     routing: RelationshipRouting,
 ) -> Result<Geometry, String> {
     let lane = match routing {
+        RelationshipRouting::Manual => return Err("Manual routing preserves the authored path; edit its points directly".into()),
         RelationshipRouting::Straight => 0.0,
         RelationshipRouting::Automatic => lane_for_relation(section, diagram_id, relation),
         RelationshipRouting::Curve => 48.0,

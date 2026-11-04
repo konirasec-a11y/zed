@@ -23,6 +23,8 @@ pub struct Project {
         deserialize_with = "deserialize_hierarchy"
     )]
     pub hierarchy: std::collections::BTreeMap<String, crate::HierarchyPlacement>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty", deserialize_with = "super::composition::deserialize_composition")]
+    pub composition: std::collections::BTreeMap<String, crate::CompositionPlacement>,
     #[serde(default)]
     pub elements: Vec<Element>,
     #[serde(default)]

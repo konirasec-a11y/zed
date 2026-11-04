@@ -8,9 +8,20 @@ pub enum StereotypeDisplay {
     Label,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AssociationEndConvention {
+    Uml,
+    StarUml,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct UmlStyle {
+    /// Selects end-marker placement only; never changes Property aggregation
+    /// or treats an unspecified navigation declaration as false.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub association_end_convention: Option<AssociationEndConvention>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stereotype_display: Option<StereotypeDisplay>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

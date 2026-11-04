@@ -28,6 +28,7 @@ impl Render for MdeWorkbenchItem {
         let node_bounds = std::rc::Rc::new(std::cell::RefCell::new(Vec::<[f32; 4]>::new()));
         let mut relationship_controls = Vec::new();
         let mut incomplete_preview = false;
+        let mut marker_diagnostics = Vec::new();
         match snapshot {
             Ok(snapshot) => {
                 let references = bellatrix_mde::uml::references::ReferenceIndex::new(
@@ -83,13 +84,13 @@ impl Render for MdeWorkbenchItem {
                         let Some(subject) = view.subject.as_deref() else {
                             continue;
                         };
-                        if let Some(relation) = snapshot
-                            .section
-                            .relations
-                            .iter()
-                            .find(|relation| relation.id == subject)
-                        {
-                            let routed_geometry = graph.view_path(&view.id);
+                        let relation = snapshot.section.relations.iter().find(|relation| relation.id == subject);
+                        if let Some(resolved) = bellatrix_mde::resolve_relationship_view(&snapshot.section, view) {
+                            if !resolved.diagnostics.is_empty() {
+                                incomplete_preview = true;
+                                marker_diagnostics.extend(resolved.diagnostics.iter().cloned());
+                            }
+                            let routed_geometry = if view.style.routing == Some(bellatrix_mde::RelationshipRouting::Manual) { None } else { graph.view_path(&view.id) };
                             // Keep an unroutable draft visible using its stored geometry.
                             let geometry = routed_geometry.as_ref().unwrap_or(&view.geometry);
                             if let Geometry::Path { start, segments } = geometry {
@@ -163,6 +164,7 @@ impl Render for MdeWorkbenchItem {
                                         |selected| selected == view.id,
                                     )
                                     && self.presentation.selected_tool().is_none()
+                                    && let Some(relation) = relation
                                 {
                                     if let Some(controls) = quick_edit_view::quick_edit_for_relationship(
                                         &snapshot.section,
@@ -192,7 +194,7 @@ impl Render for MdeWorkbenchItem {
                                         );
                                     }
                                 }
-                                let presentation = relationship_presentation(relation);
+                                let presentation = resolved.presentation;
                                 let local_segments = segments
                                     .iter()
                                     .map(|segment| match segment {
@@ -219,17 +221,18 @@ impl Render for MdeWorkbenchItem {
                                 )
                                 .view_style(&view.style)
                                 .segments(local_segments)
-                                .diagram_presentation(diagram, &relation.kind)
+                                .diagram_presentation(diagram, &resolved.kind)
                                 .labels(presentation)
                                 .view_scale(zoom)
                                 .selected(self.presentation.selected_element() == Some(subject));
+                                let glyph = if let Some((source, target)) = resolved.markers { glyph.endpoint_markers(source, target) } else { glyph };
                                 let edge_owner = cx.weak_entity();
-                                let edge_id = relation.id.clone();
+                                let edge_id = subject.to_owned();
                                 let edge_view_id = view.id.clone();
                                 let menu_owner = cx.entity();
                                 let menu_diagram = diagram.id.clone();
                                 let menu_view = view.id.clone();
-                                let menu_subject = relation.id.clone();
+                                let menu_subject = subject.to_owned();
                                 let hit_geometry = geometry.clone();
                                 let hit_origin = canvas_origin.clone();
                                 let menu_geometry = hit_geometry.clone();
@@ -1010,7 +1013,7 @@ impl Render for MdeWorkbenchItem {
                         .border_color(border)
                         .child(
                             Label::new(
-                                "Partial, read-only imported preview: only supported rectangles and labels with complete bounds are drawn. Unresolved bounds or visibility, other view types, styles, routing and resources are not rendered. Their data is preserved.",
+                                format!("Partial imported preview: supported rectangles, labels and stored association paths are drawn. Unresolved data, other view types, styles and resources may not be rendered; their data is preserved. {}", marker_diagnostics.join("; ")),
                             )
                             .color(ui::Color::Warning),
                         ),

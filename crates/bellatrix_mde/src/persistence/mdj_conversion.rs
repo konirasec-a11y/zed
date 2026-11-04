@@ -1,5 +1,7 @@
 #[path = "mdj_associations.rs"]
 mod associations;
+#[path = "mdj_view_projection.rs"]
+mod view_projection;
 
 use super::mdj::{self, Diagnostic, MdjError};
 use crate::{
@@ -45,6 +47,7 @@ pub fn export(project: &Project) -> Result<Vec<u8>, MdjError> {
     })?;
     let original = mdj::decode(provenance.source_bytes_for_verification())?;
     let (original_import, residuals, paths) = project_document(&original)?;
+    ensure_composition_unchanged(project, &original_import.project)?;
     if equivalent(project, &original_import.project, &residuals, &paths) {
         return Ok(provenance.source_bytes_for_verification().to_vec());
     }
@@ -81,6 +84,7 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
         root_model: None,
         mdj_provenance: None,
         hierarchy: BTreeMap::new(),
+        composition: BTreeMap::new(),
         elements: Vec::new(),
         relations: Vec::new(),
         diagrams: Vec::new(),
@@ -229,17 +233,19 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
                     if source.residual.contains_key(field) {
                         diagnostics.push(Diagnostic {
                             path: format!("{}/{field}", paths.get(&view.id).map(String::as_str).unwrap_or_default()),
-                            message: "layout value preserved as residue: not an exactly round-trippable finite number; native coordinate editing is unavailable for this field".into(),
+                            message: "layout value preserved as residue: unavailable in this geometry projection or not an exactly round-trippable finite number; native coordinate editing is unavailable for this field".into(),
                         });
                     }
                 }
             }
             diagnostics.push(Diagnostic {
                 path: paths.get(&view.id).cloned().unwrap_or_default(),
-                message: "view/subview retained with subject, text and exact representable layout; style, routing, resources and other fields remain source residue, not native rendering support".into(),
+                message: "view/subview retained with subject, text, exact representable layout/path and attachments; unsupported style, route encodings, resources and other fields remain source residue; rendering is a partial preview".into(),
             });
         }
     }
+    capture_composition(&index, &mut project, &residuals, &mut diagnostics)?;
+    view_projection::bind_markers(&index, &mut project, &mut diagnostics);
     Ok((
         Import {
             project,
@@ -277,20 +283,22 @@ fn read_views(value: Option<&Value>, ids: &mut BTreeSet<String>) -> Result<Vec<V
                 }
                 None => None,
             };
-            let geometry = Geometry::Layout {
+            let path = view_projection::take_path(&mut residual);
+            let geometry = path.unwrap_or_else(|| Geometry::Layout {
                 bounds: LayoutBounds {
                     x: take_number(&mut residual, "left"),
                     y: take_number(&mut residual, "top"),
                     width: take_number(&mut residual, "width"),
                     height: take_number(&mut residual, "height"),
                 },
-            };
+            });
+            let endpoints = view_projection::take_endpoints(&mut residual);
             let children = read_views(object.get("subViews"), ids)?;
             Ok(View {
                 id,
                 subject,
                 draft: None,
-                endpoints: None,
+                endpoints,
                 timing: None,
                 label,
                 geometry,
@@ -635,7 +643,11 @@ fn export_document(project: &Project) -> Result<Value, MdjError> {
             "adding, removing or duplicating MDJ objects is not yet supported",
         ));
     }
-    let mut entries: Vec<_> = provenance.object_paths.iter().collect();
+    // Current authored composition, not historical paths, locates model objects.
+    // Views retain their existing nested representation in this first slice.
+    let mut export_paths = provenance.object_paths.clone();
+    export_paths.extend(crate::composition_paths(project).map_err(|message| failure("", message))?);
+    let mut entries: Vec<_> = export_paths.iter().collect();
     entries.sort_by_key(|(_, path)| path.matches('/').count());
     let mut document = Value::Null;
     for (id, path) in entries {
@@ -703,6 +715,8 @@ fn export_view(view: &View) -> Result<Value, MdjError> {
     if let Some(label) = &view.label {
         insert_mapped(&mut object, "text", Value::String(label.clone()))?;
     }
+    view_projection::export_endpoints(view, &mut object)?;
+    if view_projection::export_path(view, &mut object)? { return Ok(Value::Object(object)); }
     let Geometry::Layout { bounds } = &view.geometry else {
         return Err(failure(
             "",
@@ -882,4 +896,131 @@ fn failure(path: &str, message: impl Into<String>) -> MdjError {
         path: path.into(),
         message: message.into(),
     }
+}
+
+/// Capture non-view document composition independently of semantic type mapping.
+/// View composition remains authored by Diagram.views / View.children in this slice.
+fn capture_composition(
+    index: &mdj::Index<'_>,
+    project: &mut Project,
+    residuals: &Residuals,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Result<(), MdjError> {
+    let objects = index.objects().collect::<Vec<_>>();
+    let paths: Paths = objects
+        .iter()
+        .map(|object| (object.id.to_owned(), object.path.clone()))
+        .collect();
+    let view_ids = project
+        .diagrams
+        .iter()
+        .flat_map(|diagram| diagram.all_views())
+        .map(|view| view.id.as_str())
+        .collect::<BTreeSet<_>>();
+    for object in &objects {
+        if object.id == project.id || view_ids.contains(object.id) {
+            continue;
+        }
+        let Some(parent) = objects
+            .iter()
+            .copied()
+            .filter(|parent| {
+                parent.path.len() < object.path.len()
+                    && object.path.starts_with(&format!("{}/", parent.path))
+            })
+            .max_by_key(|parent| parent.path.len())
+        else {
+            diagnostics.push(Diagnostic {
+                path: object.path.clone(),
+                message: "document composition has no identified container; no parent inferred"
+                    .into(),
+            });
+            continue;
+        };
+        if view_ids.contains(parent.id)
+            || objects.iter().any(|ancestor| {
+                view_ids.contains(ancestor.id)
+                    && object.path.starts_with(&format!("{}/", ancestor.path))
+            })
+        {
+            diagnostics.push(Diagnostic { path: object.path.clone(), message: "non-view object embedded in view composition remains preserved; authoring-tree placement is not projected in this slice".into() });
+            continue;
+        }
+        let relative = &object.path[parent.path.len()..];
+        let (slot, order) = relative
+            .rsplit_once('/')
+            .and_then(|(slot, index)| {
+                let parent_value = Value::Object(parent.properties.clone());
+                parent_value
+                    .pointer(slot)
+                    .filter(|value| value.is_array())?;
+                index
+                    .parse::<usize>()
+                    .ok()
+                    .map(|index| (slot.to_owned(), Some(index)))
+            })
+            .unwrap_or_else(|| (relative.to_owned(), None));
+        let explicit_parent = object
+            .properties
+            .get("_parent")
+            .and_then(Value::as_object)
+            .filter(|value| value.len() == 1)
+            .and_then(|value| value.get("$ref"))
+            .and_then(Value::as_str);
+        if explicit_parent.is_some_and(|reference| reference != parent.id) {
+            diagnostics.push(Diagnostic { path: object.path.clone(), message: "explicit _parent differs from document composition; both values are preserved, Explorer follows composition".into() });
+        }
+        // Only the adapter's mapped edge for this source _parent may supply the
+        // parent. A coincidentally matching unrelated relationship is not evidence.
+        let mapped_parent = residuals
+            .get(object.id)
+            .is_some_and(|metadata| metadata.mapped_fields.contains("_parent"));
+        let ownership_id = ownership_relation_id(object.id, &paths);
+        let ownership = project.relations.iter().find(|relation| {
+            relation.id == ownership_id
+                && relation.kind == "owns"
+                && relation.to == object.id
+                && relation.from == parent.id
+        });
+        let parent = if mapped_parent && explicit_parent == Some(parent.id) {
+            ownership
+                .map(|relation| crate::CompositionParent::SemanticOwner {
+                    relation_id: relation.id.clone(),
+                })
+                .unwrap_or_else(|| crate::CompositionParent::Object {
+                    id: parent.id.to_owned(),
+                })
+        } else {
+            crate::CompositionParent::Object {
+                id: parent.id.to_owned(),
+            }
+        };
+        project.composition.insert(
+            object.id.to_owned(),
+            crate::CompositionPlacement {
+                parent,
+                slot,
+                order,
+            },
+        );
+    }
+    Ok(())
+}
+
+fn ensure_composition_unchanged(current: &Project, original: &Project) -> Result<(), MdjError> {
+    if current.composition != original.composition
+        || current.composition.iter().any(|(id, placement)| {
+            placement.parent_id(id, &current.relations)
+                != original
+                    .composition
+                    .get(id)
+                    .and_then(|placement| placement.parent_id(id, &original.relations))
+        })
+    {
+        return Err(failure(
+            "",
+            "document composition changes are not yet supported by MDJ export; parent, slot and order must not be discarded",
+        ));
+    }
+    Ok(())
 }

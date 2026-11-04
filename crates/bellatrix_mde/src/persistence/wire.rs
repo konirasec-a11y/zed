@@ -29,6 +29,8 @@ struct WireProject {
     hierarchy: Vec<WireHierarchyPlacement>,
     #[prost(bytes, optional, tag = "11")]
     mdj_provenance_json: Option<Vec<u8>>,
+    #[prost(bytes, optional, tag = "12")]
+    composition_json: Option<Vec<u8>>,
 }
 #[derive(Clone, PartialEq, Message)]
 struct WireHierarchyPlacement {
@@ -292,6 +294,7 @@ pub(super) fn encode(project: &Project) -> Result<Vec<u8>, ModelIoError> {
         .collect::<Result<Vec<_>, _>>()?;
     Ok(WireProject {
         version: project.schema_version,
+        composition_json: Some(serde_json::to_vec(&project.composition)?),
         root_model: project.root_model.clone(),
         mdj_provenance_json: project
             .mdj_provenance
@@ -430,6 +433,18 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Project, ModelIoError> {
         .collect::<Result<Vec<_>, _>>()?;
     Ok(Project {
         schema_version: data.version,
+        composition: data
+            .composition_json
+            .as_deref()
+            .map(|bytes| {
+                let mut deserializer = serde_json::Deserializer::from_slice(bytes);
+                let composition =
+                    crate::contracts::composition::deserialize_composition(&mut deserializer)?;
+                deserializer.end()?;
+                Ok::<_, serde_json::Error>(composition)
+            })
+            .transpose()?
+            .unwrap_or_default(),
         root_model: data.root_model,
         mdj_provenance: data
             .mdj_provenance_json

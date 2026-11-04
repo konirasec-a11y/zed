@@ -193,6 +193,32 @@ fn validate_presentation_references(
                 return Err(GraphError::PresentationReference { view: view.id.clone(), role: role.clone(), target: target.clone() });
             }
         }
+        if let Some(endpoints) = &view.presentation.relationship_endpoints {
+            for (side, binding) in [("source", &endpoints.source), ("target", &endpoints.target)] {
+                let (target, valid) = match &binding.target {
+                    crate::EndpointMarkerTarget::ModelEnd { id } => (
+                        id,
+                        !id.trim().is_empty()
+                            && (!check_model_references || nodes.contains(id.as_str()) || relations.contains(id.as_str())),
+                    ),
+                    crate::EndpointMarkerTarget::View { id } => (
+                        id,
+                        !id.trim().is_empty() && (!check_model_references || views.contains(id.as_str())),
+                    ),
+                    crate::EndpointMarkerTarget::RelationshipRole { role } => (
+                        role,
+                        !role.trim().is_empty() && (!check_model_references || view.subject.is_some() || view.draft.is_some()),
+                    ),
+                };
+                if !valid {
+                    return Err(GraphError::PresentationReference {
+                        view: view.id.clone(),
+                        role: format!("relationship_endpoints.{side}"),
+                        target: target.clone(),
+                    });
+                }
+            }
+        }
         if let Some(placement) = &view.presentation.label_placement {
             if [&placement.angle, &placement.distance].iter().any(|value| value.value().is_some_and(|number| !number.is_finite())) {
                 return Err(GraphError::Geometry(view.id.clone()));

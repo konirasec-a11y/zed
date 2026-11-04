@@ -235,6 +235,14 @@ pub(crate) fn apply_with_diagram_operations(project: &Project, command: &Command
             source_view_id: source.id.clone(), target_view_id: target.id.clone(),
         }, revision, diagram_operations);
     }
+    if match command {
+        Command::SetOwner { element_id, .. } | Command::DeleteElement { element_id } => project.composition.contains_key(element_id),
+        Command::DeleteDiagram { diagram_id } => project.composition.contains_key(diagram_id),
+        Command::SetExplorerParent { subject_id, .. } => project.composition.contains_key(subject_id),
+        _ => false,
+    } {
+        return Err("Imported document composition is read-only for moves and deletion until a lossless MDJ inverse is available".into());
+    }
     let previous_section = ModelingSection::from_model(project);
     let mut section = previous_section.clone();
     if let Command::SetProperty { element_id, path, .. } = command
@@ -403,6 +411,9 @@ pub(crate) fn apply_with_diagram_operations(project: &Project, command: &Command
     }
     let mut updated = section.to_model(&project.id, &project.name);
     updated.schema_version = project.schema_version;
+    if crate::composition_paths(&updated)? != crate::composition_paths(project)? {
+        return Err("Document composition changes are not yet supported losslessly; no change was applied".into());
+    }
     crate::validate_model_hierarchy(&updated)?;
     // Explorer placement must not be blocked by unrelated semantic or diagram drafts.
     if matches!(command, Command::SetExplorerParent { .. }) { return Ok(updated); }

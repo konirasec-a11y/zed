@@ -478,6 +478,12 @@ impl MdeWorkbenchItem {
         if snapshot.revision != revision {
             return Err("The model changed; reopen the menu or drag the item again".into());
         }
+        let subject = match target {
+            hierarchy::ExplorerMoveTarget::Element(id) | hierarchy::ExplorerMoveTarget::Diagram(id) => id,
+        };
+        if snapshot.section.composition.contains_key(subject) {
+            return Err("Document composition moves are not yet supported losslessly".into());
+        }
         let command = match target {
             hierarchy::ExplorerMoveTarget::Element(element_id) => {
                 bellatrix_mde::commands::Command::SetOwner {
@@ -555,6 +561,9 @@ impl MdeWorkbenchItem {
         let snapshot = self.source.snapshot()?;
         if snapshot.revision != drag.revision {
             return Err("The model changed during the drag; drag the element again".into());
+        }
+        if snapshot.section.composition.contains_key(&drag.element_id) {
+            return Err("Document composition moves are not yet supported losslessly".into());
         }
         if drag.element_id == owner_id {
             return Err("An element cannot own itself".into());

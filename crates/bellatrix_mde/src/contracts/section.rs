@@ -15,6 +15,8 @@ pub struct ModelingSection {
         deserialize_with = "super::project::deserialize_hierarchy"
     )]
     pub hierarchy: std::collections::BTreeMap<String, crate::HierarchyPlacement>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty", deserialize_with = "super::composition::deserialize_composition")]
+    pub composition: std::collections::BTreeMap<String, crate::CompositionPlacement>,
     pub elements: Vec<Element>,
     pub relations: Vec<Relation>,
     pub diagrams: Vec<Diagram>,
@@ -26,6 +28,7 @@ impl ModelingSection {
             root_model: model.root_model.clone(),
             mdj_provenance: model.mdj_provenance.clone(),
             hierarchy: model.hierarchy.clone(),
+            composition: model.composition.clone(),
             elements: model.elements.clone(),
             relations: model.relations.clone(),
             diagrams: model.diagrams.clone(),
@@ -40,6 +43,7 @@ impl ModelingSection {
             root_model: self.root_model.clone(),
             mdj_provenance: self.mdj_provenance.clone(),
             hierarchy: self.hierarchy.clone(),
+            composition: self.composition.clone(),
             elements: self.elements.clone(),
             relations: self.relations.clone(),
             diagrams: self.diagrams.clone(),

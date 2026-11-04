@@ -333,6 +333,47 @@ fn explorer_project_menu(
     })
 }
 
+/// Navigation only: unbound visual objects are not model-tree children.
+fn explorer_unbound_views_menu(
+    owner: &Entity<MdeWorkbenchItem>, diagram_id: &str, window: &mut Window, cx: &mut App,
+) -> Entity<ui::ContextMenu> {
+    let snapshot = owner.read(cx).source().snapshot().ok();
+    let diagram = snapshot.as_ref().and_then(|snapshot|
+        snapshot.section.diagrams.iter().find(|diagram| diagram.id == diagram_id));
+    let mut entries = Vec::new();
+    let mut nested_count = 0usize;
+    if let Some(diagram) = diagram {
+        for view in diagram.all_views().filter(|view| view.subject.is_none()) {
+            if !diagram.views.iter().any(|top_level| top_level.id == view.id) {
+                nested_count += 1;
+                continue;
+            }
+            let kind = view.draft.as_ref().map(|draft| draft.notation_kind.as_str())
+                .or(view.presentation.kind.as_deref()).unwrap_or("Visual View");
+            let label = view.label.as_deref().filter(|label| !label.trim().is_empty()).unwrap_or(kind);
+            entries.push((view.id.clone(), format!("{} · {} · {}", entries.len() + 1,
+                if view.draft.is_some() { "Draft" } else { "Unbound View" }, label)));
+        }
+    }
+    let owner = owner.clone();
+    let diagram_id = diagram_id.to_owned();
+    ui::ContextMenu::build(window, cx, move |mut menu, _, _| {
+        menu = menu.header("Visual objects without a model subject");
+        if entries.is_empty() { menu = menu.header("No selectable top-level views"); }
+        for (view_id, label) in entries {
+            let owner = owner.clone();
+            let diagram_id = diagram_id.clone();
+            menu = menu.entry(label, None, move |_, cx| {
+                owner.update(cx, |workbench, cx| workbench.select_diagram_view(diagram_id.clone(), view_id.clone(), cx));
+            });
+        }
+        if nested_count > 0 {
+            menu = menu.header(format!("{nested_count} nested views retained; selection/editing not yet supported"));
+        }
+        menu
+    })
+}
+
 fn explorer_diagram_menu(
     owner: &Entity<MdeWorkbenchItem>, panel: gpui::WeakEntity<MdeRightPanel>,
     diagram_id: &str, window: &mut Window, cx: &mut App,
@@ -890,6 +931,12 @@ impl Render for MdeRightPanel {
                     let menu_panel = cx.weak_entity();
                     let diagram_row_key = row.key.clone();
                     let diagram_row_label = row.label.clone();
+                    let visual_menu_owner = item.clone();
+                    let visual_menu_diagram = id.clone();
+                    let visual_menu_id = format!("mde-unbound-views-{id}");
+                    let has_unbound_views = snapshot.section.diagrams.iter()
+                        .find(|diagram| diagram.id == id)
+                        .is_some_and(|diagram| diagram.all_views().any(|view| view.subject.is_none()));
                     if reveal_selected && selected_row.is_some_and(|selected| selected.key == row.key) {
                         self.explorer_scroll.scroll_to_item(rows.len());
                     }
@@ -940,6 +987,17 @@ impl Render for MdeRightPanel {
                                         });
                                     }))
                                 .menu(move |window, cx| explorer_diagram_menu(&menu_owner, menu_panel.clone(), &menu_diagram, window, cx))
+                            ))
+                            .when(has_unbound_views, |row| row.child(
+                                ui::PopoverMenu::new(visual_menu_id.clone())
+                                    .trigger_with_tooltip(
+                                        IconButton::new(format!("{visual_menu_id}-trigger"), IconName::Crosshair)
+                                            .aria_label("Navigate visual drafts and unbound views"),
+                                        ui::Tooltip::text("Navigate visual drafts and unbound views; separate from model hierarchy"),
+                                    )
+                                    .menu(move |window, cx| Some(explorer_unbound_views_menu(
+                                        &visual_menu_owner, &visual_menu_diagram, window, cx,
+                                    )))
                             )),
                     );
                     if has_children && !expanded { hidden_by_depth = Some(row.depth); }

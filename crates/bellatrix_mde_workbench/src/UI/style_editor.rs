@@ -979,6 +979,7 @@ pub(crate) fn render_styles(
 
 fn routing_label(routing: Option<RelationshipRouting>) -> &'static str {
     match routing {
+        Some(RelationshipRouting::Manual) => "Manual",
         Some(RelationshipRouting::Straight) => "Straight",
         Some(RelationshipRouting::Automatic) => "Automatic",
         Some(RelationshipRouting::Curve) => "Curve",

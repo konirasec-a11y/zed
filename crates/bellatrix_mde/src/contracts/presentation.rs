@@ -1,3 +1,4 @@
+use super::endpoint_presentation::RelationshipEndpointPresentation;
 use super::uml_presentation::UmlStyle;
 use serde::{Deserialize, Serialize};
 
@@ -133,6 +134,8 @@ pub struct LayoutBounds {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ViewPresentation {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relationship_endpoints: Option<RelationshipEndpointPresentation>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<String>,
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
@@ -346,6 +349,7 @@ pub enum PathSegment {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RelationshipRouting {
+    Manual,
     Straight,
     Automatic,
     Curve,

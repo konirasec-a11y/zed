@@ -59,6 +59,16 @@ impl MdjProvenance {
             .flat_map(|diagram| diagram.all_views())
             .map(|view| view.id.as_str())
             .collect();
+        let view_paths = view_ids.iter().filter_map(|id| self.object_paths.get(*id)).collect::<Vec<_>>();
+        for (id, path) in &self.object_paths {
+            if id == &project.id || view_ids.contains(id.as_str())
+                || view_paths.iter().any(|view_path| path.starts_with(&format!("{view_path}/"))) {
+                continue;
+            }
+            if !project.composition.contains_key(id) {
+                return Err(format!("MDJ object {id} has no authored composition. Keep a backup of this edited file; automatic migration is not available. Reimporting the original MDJ does not preserve later edits"));
+            }
+        }
         for (id, object) in &self.object_residuals {
             if view_ids.contains(id.as_str()) {
                 return Err(format!(

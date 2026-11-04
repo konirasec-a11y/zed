@@ -17,6 +17,8 @@ message Project {
   reserved "explorer_parents_json", "explorer_diagram_occurrences_json";
   repeated HierarchyPlacement hierarchy = 10;
   optional bytes mdj_provenance_json = 11;
+  // Canonical CompositionPlacement map, not source provenance.
+  optional bytes composition_json = 12;
 }
 message HierarchyPlacement {
   string subject_id = 1;

@@ -1,7 +1,10 @@
 //! Paint the domain's relationship notation with native GPUI paths.
 use crate::class::ViewAppearance;
 use bellatrix_design_system::Palette;
-use bellatrix_mde::{RelationshipMarker, RelationshipPresentation, RelationshipStyle};
+use bellatrix_mde::{
+    EndpointMarkerComposition, EndpointMarkerGlyph, EndpointMarkerPlacement, RelationshipMarker,
+    RelationshipPresentation, RelationshipStyle,
+};
 use gpui::{
     App, Bounds, IntoElement, PathBuilder, Pixels, RenderOnce, Window, canvas, div, point,
     prelude::*, px, rgb,
@@ -29,6 +32,7 @@ pub struct UmlRelationGlyph {
     scale: f32,
     appearance: ViewAppearance,
     communication_message: bool,
+    endpoint_markers: Option<(EndpointMarkerComposition, EndpointMarkerComposition)>,
 }
 impl UmlRelationGlyph {
     pub fn new(
@@ -48,6 +52,7 @@ impl UmlRelationGlyph {
             scale: 1.0,
             appearance: ViewAppearance::default(),
             communication_message: false,
+            endpoint_markers: None,
         }
     }
     pub fn diagram_presentation(mut self, diagram: &bellatrix_mde::Diagram, kind: &str) -> Self {
@@ -57,6 +62,14 @@ impl UmlRelationGlyph {
     }
     pub fn view_style(mut self, style: &bellatrix_mde::Style) -> Self {
         self.appearance = ViewAppearance(style.clone());
+        self
+    }
+    pub fn endpoint_markers(
+        mut self,
+        source: EndpointMarkerComposition,
+        target: EndpointMarkerComposition,
+    ) -> Self {
+        self.endpoint_markers = Some((source, target));
         self
     }
     pub fn labels(mut self, presentation: RelationshipPresentation) -> Self {
@@ -404,6 +417,147 @@ fn paint_marker(
         }
     }
 }
+fn paint_marker_composition(
+    window: &mut Window,
+    composition: &EndpointMarkerComposition,
+    endpoint: (f32, f32),
+    inward_direction: (f32, f32),
+    bounds: Bounds<Pixels>,
+    stroke: gpui::Rgba,
+    background: gpui::Rgba,
+    width: f32,
+    scale: f32,
+) {
+    let mut previous_end = 0.0;
+    let arrow_length = 11.0 * (std::f32::consts::PI / 8.0).cos();
+    let arrow_half_width = 11.0 * (std::f32::consts::PI / 8.0).sin();
+    for part in &composition.glyphs {
+        let origin = match part.placement {
+            EndpointMarkerPlacement::Endpoint => 0.0,
+            EndpointMarkerPlacement::AfterPrevious => previous_end,
+        };
+        let offset = |forward: f32, side: f32| {
+            (
+                endpoint.0
+                    + ((origin + forward) * inward_direction.0 - side * inward_direction.1) * scale,
+                endpoint.1
+                    + ((origin + forward) * inward_direction.1 + side * inward_direction.0) * scale,
+            )
+        };
+        use EndpointMarkerGlyph::*;
+        let extent = match part.glyph {
+            OpenArrow => {
+                stroke_line(
+                    window,
+                    offset(arrow_length, arrow_half_width),
+                    offset(0.0, 0.0),
+                    bounds,
+                    stroke,
+                    width,
+                );
+                stroke_line(
+                    window,
+                    offset(0.0, 0.0),
+                    offset(arrow_length, -arrow_half_width),
+                    bounds,
+                    stroke,
+                    width,
+                );
+                arrow_length
+            }
+            SolidArrow | BlankArrow | OpenTriangle | FilledTriangle => {
+                let size = if matches!(part.glyph, OpenTriangle | FilledTriangle) {
+                    2.0
+                } else {
+                    1.0
+                };
+                polygon(
+                    window,
+                    &[
+                        offset(0.0, 0.0),
+                        offset(arrow_length * size, arrow_half_width * size),
+                        offset(arrow_length * size, -arrow_half_width * size),
+                    ],
+                    bounds,
+                    stroke,
+                    background,
+                    matches!(part.glyph, SolidArrow | FilledTriangle),
+                    width,
+                );
+                arrow_length * size
+            }
+            OpenDiamond | FilledDiamond => {
+                polygon(
+                    window,
+                    &[
+                        offset(0.0, 0.0),
+                        offset(arrow_length, arrow_half_width),
+                        offset(22.0, 0.0),
+                        offset(arrow_length, -arrow_half_width),
+                    ],
+                    bounds,
+                    stroke,
+                    background,
+                    part.glyph == FilledDiamond,
+                    width,
+                );
+                22.0
+            }
+            Cross => {
+                let diagonal = 5.0 / std::f32::consts::SQRT_2;
+                for side in [-1.0, 1.0] {
+                    stroke_line(
+                        window,
+                        offset(7.0 - diagonal, side * diagonal),
+                        offset(7.0 + diagonal, -side * diagonal),
+                        bounds,
+                        stroke,
+                        width,
+                    );
+                }
+                7.0 + diagonal
+            }
+            OpenCircle | FilledCircle | Dot | Containment => {
+                let radius = if part.glyph == Dot { 3.0 } else { 7.0 };
+                let vertices = (0..32)
+                    .map(|step| {
+                        let angle = step as f32 * std::f32::consts::TAU / 32.0;
+                        offset(radius + radius * angle.cos(), radius * angle.sin())
+                    })
+                    .collect::<Vec<_>>();
+                polygon(
+                    window,
+                    &vertices,
+                    bounds,
+                    stroke,
+                    background,
+                    matches!(part.glyph, FilledCircle | Dot),
+                    width,
+                );
+                if part.glyph == Containment {
+                    stroke_line(
+                        window,
+                        offset(0.0, 0.0),
+                        offset(radius * 2.0, 0.0),
+                        bounds,
+                        stroke,
+                        width,
+                    );
+                    stroke_line(
+                        window,
+                        offset(radius, -radius),
+                        offset(radius, radius),
+                        bounds,
+                        stroke,
+                        width,
+                    );
+                }
+                radius * 2.0
+            }
+        };
+        previous_end = origin + extent;
+    }
+}
 impl RenderOnce for UmlRelationGlyph {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let palette = Palette::current(cx);
@@ -429,6 +583,7 @@ impl RenderOnce for UmlRelationGlyph {
             self.selected,
         );
         let communication_message = self.communication_message;
+        let endpoint_markers = self.endpoint_markers;
         let dashes = appearance.resolve_stroke_pattern(
             if communication_message {
                 bellatrix_mde::LineMode::Solid
@@ -506,28 +661,53 @@ impl RenderOnce for UmlRelationGlyph {
                         _ => RelationshipMarker::None,
                     }
                 };
-                paint_marker(
-                    window,
-                    resolve_link_marker(source_marker),
-                    from,
-                    initial_tangent,
-                    bounds,
-                    stroke,
-                    background,
-                    width,
-                    scale,
-                );
-                paint_marker(
-                    window,
-                    resolve_link_marker(target_marker),
-                    last,
-                    (-final_tangent.0, -final_tangent.1),
-                    bounds,
-                    stroke,
-                    background,
-                    width,
-                    scale,
-                );
+                if let Some((source, target)) = &endpoint_markers {
+                    paint_marker_composition(
+                        window,
+                        source,
+                        from,
+                        initial_tangent,
+                        bounds,
+                        stroke,
+                        background,
+                        width,
+                        scale,
+                    );
+                    paint_marker_composition(
+                        window,
+                        target,
+                        last,
+                        (-final_tangent.0, -final_tangent.1),
+                        bounds,
+                        stroke,
+                        background,
+                        width,
+                        scale,
+                    );
+                } else {
+                    paint_marker(
+                        window,
+                        resolve_link_marker(source_marker),
+                        from,
+                        initial_tangent,
+                        bounds,
+                        stroke,
+                        background,
+                        width,
+                        scale,
+                    );
+                    paint_marker(
+                        window,
+                        resolve_link_marker(target_marker),
+                        last,
+                        (-final_tangent.0, -final_tangent.1),
+                        bounds,
+                        stroke,
+                        background,
+                        width,
+                        scale,
+                    );
+                }
                 if middle_marker != RelationshipMarker::None {
                     paint_marker(
                         window,

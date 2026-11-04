@@ -64,6 +64,9 @@ mod quick_edit;
 mod relationships;
 #[path = "view-model/authoring/relationship_tools.rs"]
 mod relationship_tools;
+#[path = "view-model/notation/endpoint_markers.rs"]
+mod endpoint_markers;
+pub use endpoint_markers::{ResolvedRelationshipView, resolve_relationship_view};
 #[path = "view-model/notation/relationship_notation.rs"]
 mod relationship_notation;
 pub use relationship_notation::{format_relationship_label, resolve_relationship_style};
