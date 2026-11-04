@@ -1,6 +1,6 @@
 use super::{
     classifiers::{self, QueryError},
-    feature_compatibility::{accept_any, require_all},
+    feature_compatibility::{accept_any, compare_type_conformance, require_all},
     operations,
     property_contracts::{self, PropertyOutcome},
     references::{ReferenceIndex, external_reference_href, reference_id},
@@ -526,6 +526,24 @@ fn partition_represents_property_and_is_contained(
     accept_any([guard.map(|value| !value), consequence])
 }
 
+// UML.xmi ValuePin-compatible_type: value.type.conformsTo(type).
+fn value_pin_compatible_type(
+    references: &ReferenceIndex<'_>,
+    pin: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    // ValuePin::value is required and composite. The property contract checks
+    // its metaclass and canonical owner before it can supply type evidence.
+    let value_id = optional_activity_reference(references, pin, "ValuePin", "value")?
+        .ok_or_else(|| QueryError::unsupported(pin.id(), "required ValuePin value is unresolved"))?;
+    let value = references
+        .element(&value_id)
+        .map_err(|error| QueryError::unsupported(pin.id(), error))?;
+    // Conformance is directional: the value may specialize the Pin's type,
+    // not the other way round. Invalid contracts have separate diagnostics.
+    compare_type_conformance(references, value, pin)
+        .map_err(|error| QueryError::unsupported(pin.id(), error.to_string()))
+}
+
 fn object_node_selection(
     references: &ReferenceIndex<'_>,
     node: ElementRef<'_>,
@@ -938,6 +956,13 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             ));
         }
         if node.conforms_to("ValuePin") {
+            checks.push((
+                value_pin_compatible_type(references, node),
+                "UML_VALUE_PIN_COMPATIBLE_TYPE",
+                "MDE_VALUE_PIN_COMPATIBLE_TYPE_UNVERIFIED",
+                "ValuePin-compatible_type",
+                "the ValueSpecification type must conform to the ValuePin type",
+            ));
             // UML.xmi ValuePin-no_incoming_edges: incoming->isEmpty(). A
             // known incoming edge proves failure even with other opaque edges.
             checks.push((
