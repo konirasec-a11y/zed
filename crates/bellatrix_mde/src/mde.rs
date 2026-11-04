@@ -1,9 +1,9 @@
 //! Single MDE domain: persisted objects, UML semantics, commands and validation.
 //! Adapters own transport/presentation, never another implementation of the model.
-pub const MODELING_NAMESPACE: &str = "bellatrix.mde";
+pub(crate) const MODELING_NAMESPACE: &str = "bellatrix.mde";
 
-pub mod contracts;
-pub use contracts::*;
+pub(crate) mod contracts;
+pub(crate) use contracts::*;
 #[path = "persistence/mdj.rs"]
 mod mdj;
 #[path = "persistence/mdj_conversion.rs"]
@@ -12,12 +12,12 @@ mod mdj_conversion;
 mod io;
 #[path = "persistence/wire.rs"]
 pub(crate) mod wire;
-pub use io::{Format, ModelIoError, decode, encode};
+pub(crate) use io::{Format, ModelIoError, decode, encode};
 
 #[path = "application/commands/executor.rs"]
 mod command_executor;
 #[path = "application/commands.rs"]
-pub mod commands;
+pub(crate) mod commands;
 #[path = "application/diagram/operations.rs"]
 mod diagram_operations;
 #[path = "view-model/diagram/diagram_operations.rs"]
@@ -26,7 +26,7 @@ mod diagram_operation_policy;
 mod construction_script;
 #[path = "observability/execution_trace.rs"]
 mod execution_trace;
-pub use execution_trace::{ExecutionEvent, ExecutionTrace, TraceOutcome, TracePhase, execution_trace_jsonl, validate_structural_diagram_traced, validate_structural_model_traced};
+pub(crate) use execution_trace::{ExecutionEvent, ExecutionTrace, TraceOutcome, TracePhase, execution_trace_jsonl, validate_structural_diagram_traced, validate_structural_model_traced};
 #[path = "KERNEL/compiler/analysis/generation_graph.rs"]
 mod generation;
 #[path = "KERNEL/compiler/projection/rust_emission.rs"]
@@ -37,7 +37,7 @@ mod graph;
 mod hierarchy;
 #[path = "view-model/hierarchy/visual_consistency.rs"]
 mod visual_consistency;
-pub use visual_consistency::{VisualComponent, visual_components};
+pub(crate) use visual_consistency::{VisualComponent, visual_components};
 #[path = "KERNEL/graph/index.rs"]
 mod index;
 #[path = "view-model/inspector/inspector.rs"]
@@ -56,8 +56,8 @@ mod presentation;
 mod instance_presentation;
 #[path = "view-model/notation/interaction_presentation.rs"]
 mod interaction_presentation;
-pub use interaction_presentation::format_operand_guard;
-pub use instance_presentation::{format_instance_heading, collect_instance_slot_labels};
+pub(crate) use interaction_presentation::format_operand_guard;
+pub(crate) use instance_presentation::{format_instance_heading, collect_instance_slot_labels};
 #[path = "KERNEL/I_O/publish.rs"]
 mod publish;
 #[path = "view-model/authoring/quick_edit.rs"]
@@ -68,10 +68,10 @@ mod relationships;
 mod relationship_tools;
 #[path = "view-model/notation/endpoint_markers.rs"]
 mod endpoint_markers;
-pub use endpoint_markers::{ResolvedRelationshipView, resolve_relationship_view};
+pub(crate) use endpoint_markers::{ResolvedRelationshipView, resolve_relationship_view};
 #[path = "view-model/notation/relationship_notation.rs"]
 mod relationship_notation;
-pub use relationship_notation::{format_relationship_label, resolve_relationship_style};
+pub(crate) use relationship_notation::{format_relationship_label, resolve_relationship_style};
 #[path = "KERNEL/graph/scope.rs"]
 mod scope;
 #[path = "KERNEL/uml/validation/structural_diagrams.rs"]
@@ -81,79 +81,79 @@ mod structural_rules;
 #[path = "KERNEL/uml/semantics/templates.rs"]
 mod templates;
 #[path = "KERNEL/uml/uml.rs"]
-pub mod uml;
+pub(crate) mod uml;
 #[path = "view-model/diagram/uml_geometry.rs"]
 mod uml_geometry;
 #[path = "view-model/notation/uml_notation.rs"]
 mod uml_notation;
 #[path = "KERNEL/uml/capabilities.rs"]
 mod uml_types;
-pub use templates::{
+pub(crate) use templates::{
     template_parametered_element, template_parameters,
 };
 
-pub use construction_script::{ConstructionScriptError, python_construction_script};
-pub use generation::{
+pub(crate) use construction_script::{ConstructionScriptError, python_construction_script};
+pub(crate) use generation::{
     GenerationGraphError, GenerationModel, GenerationReference, GenerationUnit,
     analyze_generation_graph,
 };
-pub use graph::{Graph, GraphError};
-pub use hierarchy::{HierarchyRow, project_hierarchy};
-pub use index::{GraphIndex, GraphLookupError};
-pub use inspector::{
+pub(crate) use graph::{Graph, GraphError};
+pub(crate) use hierarchy::{HierarchyRow, project_hierarchy};
+pub(crate) use index::{GraphIndex, GraphLookupError};
+pub(crate) use inspector::{
     ElementInspector, InspectorMember, InspectorProperty, InspectorReferenceChoice, PropertyEditor,
     inspect_element,
 };
-pub use operation_graph::{InputPort, Operation, OperationDefinition, OperationGraph, OperationGraphError, OperationImplementation, OperationValue, OperationValues, PortType};
-pub use path::{PathError, physical_path, validate_segment};
-pub use plan::{Artifact, Diagnostic, Plan, PlanError};
-pub use presentation::{
+pub(crate) use operation_graph::{InputPort, Operation, OperationDefinition, OperationGraph, OperationGraphError, OperationImplementation, OperationValue, OperationValues, PortType};
+pub(crate) use path::{PathError, physical_path, validate_segment};
+pub(crate) use plan::{Artifact, Diagnostic, Plan, PlanError};
+pub(crate) use presentation::{
     ClassifierPresentation, ClassifierPresentationOptions, MemberPresentation, SemanticIdentity,
     classifier_presentation, element_display_label, element_display_label_with_references,
     format_element_label_for_view, member_presentation, semantic_identity,
 };
-pub use publish::{publish_new, publish_replace};
-pub use quick_edit::{
+pub(crate) use publish::{publish_new, publish_replace};
+pub(crate) use quick_edit::{
     QuickEditAction, QuickEditAvailability, QuickEditControl, QuickEditSide, quick_edit_for,
 };
-pub use relationships::{
+pub(crate) use relationships::{
     ModelingRelationKind, QuickRelationRule, RelationshipEndpointLabels, RelationshipGraph,
     RelationshipMarker, RelationshipPresentation, RelationshipStyle, projected_relationship_paths,
     quick_relation_rule, relation_kind_for_creation, relationship_presentation,
     relationship_style_for_notation, reroute_relationships, route as route_relationship,
 };
-pub use scope::{Scope, ScopeError, select_elements};
-pub use structural_diagrams::{
+pub(crate) use scope::{Scope, ScopeError, select_elements};
+pub(crate) use structural_diagrams::{
     RootMetaclass, StructuralDiagnostic, StructuralDiagramKind, StructuralSeverity,
     element_root_kind, relationship_root_kind, validate_structural_diagram,
     validate_structural_model,
 };
-pub use uml_geometry::{
+pub(crate) use uml_geometry::{
     ClassifierContents, FoldedNoteLayout, FrameHeadingLayout, InterfaceLayout, PortLabelLayout,
     TemplateSignatureLayout, classifier_contents, folded_note_layout, frame_heading_layout,
     interface_layout, port_label_layout, template_signature_layout,
 };
-pub use uml_types::{UmlCapability, UmlQuickCreate, UmlType};
+pub(crate) use uml_types::{UmlCapability, UmlQuickCreate, UmlType};
 
-pub use uml_notation::{StereotypePresentation, stereotype_presentation, UmlHeader, UmlNotation, resolve_element_notation, resolve_pseudostate_notation, uml_header, uml_notation};
+pub(crate) use uml_notation::{StereotypePresentation, stereotype_presentation, UmlHeader, UmlNotation, resolve_element_notation, resolve_pseudostate_notation, uml_header, uml_notation};
 
 #[path = "view-model/diagram/visual_draft_routing.rs"]
 mod visual_draft_routing;
-pub use visual_draft_routing::{reroute_visual_drafts, resolve_visual_center};
+pub(crate) use visual_draft_routing::{reroute_visual_drafts, resolve_visual_center};
 
 #[path = "application/edits/inspector_edit.rs"]
 mod inspector_edit;
-pub use inspector_edit::set_inspected_property;
+pub(crate) use inspector_edit::set_inspected_property;
 #[path = "view-model/notation/template_presentation.rs"]
 mod template_presentation;
 
 #[path = "application/edits/property_edit.rs"]
 mod property_edit;
-pub use template_presentation::{template_parameter_label, template_parameter_label_with_references};
+pub(crate) use template_presentation::{template_parameter_label, template_parameter_label_with_references};
 
 #[path = "application/edits/hierarchy_placement.rs"]
 mod hierarchy_placement;
-pub use hierarchy_placement::{validate_diagram_occurrence, validate_model_hierarchy};
+pub(crate) use hierarchy_placement::{validate_diagram_occurrence, validate_model_hierarchy};
 
 #[path = "KERNEL/compiler/artifacts/ownership_manifest.rs"]
 mod ownership_manifest;
