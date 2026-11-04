@@ -558,6 +558,24 @@ fn action_pins_unit_multiplicity(
     }))
 }
 
+// UML conditional Pin multiplicity rules: absent optional Pins satisfy the
+// implication; unresolved or malformed references do not count as absence.
+fn optional_action_pin_unit_multiplicity(
+    references: &ReferenceIndex<'_>,
+    action: ElementRef<'_>,
+    metaclass: &str,
+    property: &str,
+) -> Result<bool, QueryError> {
+    let Some(identifier) = optional_activity_reference(references, action, metaclass, property)?
+    else {
+        return Ok(true);
+    };
+    let pin = references
+        .element(&identifier)
+        .map_err(|error| QueryError::unsupported(action.id(), error))?;
+    pin_unit_multiplicity(references, pin)
+}
+
 fn action_pins_untyped(
     references: &ReferenceIndex<'_>,
     action: ElementRef<'_>,
@@ -1348,6 +1366,76 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
         // inputs/outputs. In particular, TestIdentity multiplicity excludes result.
         for (metaclass, properties, code, unverified, rule) in [
             (
+                "ValueSpecificationAction",
+                &["result"][..],
+                "UML_VALUE_SPECIFICATION_ACTION_MULTIPLICITY",
+                "MDE_VALUE_SPECIFICATION_ACTION_MULTIPLICITY_UNVERIFIED",
+                "ValueSpecificationAction-multiplicity",
+            ),
+            (
+                "ClearAssociationAction",
+                &["object"][..],
+                "UML_CLEAR_ASSOCIATION_ACTION_MULTIPLICITY",
+                "MDE_CLEAR_ASSOCIATION_ACTION_MULTIPLICITY_UNVERIFIED",
+                "ClearAssociationAction-multiplicity",
+            ),
+            (
+                "CreateLinkObjectAction",
+                &["result"][..],
+                "UML_CREATE_LINK_OBJECT_ACTION_MULTIPLICITY",
+                "MDE_CREATE_LINK_OBJECT_ACTION_MULTIPLICITY_UNVERIFIED",
+                "CreateLinkObjectAction-multiplicity",
+            ),
+            (
+                "ReadLinkObjectEndAction",
+                &["object"][..],
+                "UML_READ_LINK_OBJECT_END_ACTION_MULTIPLICITY_OF_OBJECT",
+                "MDE_READ_LINK_OBJECT_END_ACTION_MULTIPLICITY_OF_OBJECT_UNVERIFIED",
+                "ReadLinkObjectEndAction-multiplicity_of_object",
+            ),
+            (
+                "ReadLinkObjectEndAction",
+                &["result"][..],
+                "UML_READ_LINK_OBJECT_END_ACTION_MULTIPLICITY_OF_RESULT",
+                "MDE_READ_LINK_OBJECT_END_ACTION_MULTIPLICITY_OF_RESULT_UNVERIFIED",
+                "ReadLinkObjectEndAction-multiplicity_of_result",
+            ),
+            (
+                "ReadLinkObjectEndQualifierAction",
+                &["object"][..],
+                "UML_READ_LINK_OBJECT_END_QUALIFIER_ACTION_MULTIPLICITY_OF_OBJECT",
+                "MDE_READ_LINK_OBJECT_END_QUALIFIER_ACTION_MULTIPLICITY_OF_OBJECT_UNVERIFIED",
+                "ReadLinkObjectEndQualifierAction-multiplicity_of_object",
+            ),
+            (
+                "ReadLinkObjectEndQualifierAction",
+                &["result"][..],
+                "UML_READ_LINK_OBJECT_END_QUALIFIER_ACTION_MULTIPLICITY_OF_RESULT",
+                "MDE_READ_LINK_OBJECT_END_QUALIFIER_ACTION_MULTIPLICITY_OF_RESULT_UNVERIFIED",
+                "ReadLinkObjectEndQualifierAction-multiplicity_of_result",
+            ),
+            (
+                "StartClassifierBehaviorAction",
+                &["object"][..],
+                "UML_START_CLASSIFIER_BEHAVIOR_ACTION_MULTIPLICITY",
+                "MDE_START_CLASSIFIER_BEHAVIOR_ACTION_MULTIPLICITY_UNVERIFIED",
+                "StartClassifierBehaviorAction-multiplicity",
+            ),
+            (
+                "StructuralFeatureAction",
+                &["object"][..],
+                "UML_STRUCTURAL_FEATURE_ACTION_MULTIPLICITY",
+                "MDE_STRUCTURAL_FEATURE_ACTION_MULTIPLICITY_UNVERIFIED",
+                "StructuralFeatureAction-multiplicity",
+            ),
+            (
+                "UnmarshallAction",
+                &["object"][..],
+                "UML_UNMARSHALL_ACTION_MULTIPLICITY_OF_OBJECT",
+                "MDE_UNMARSHALL_ACTION_MULTIPLICITY_OF_OBJECT_UNVERIFIED",
+                "UnmarshallAction-multiplicity_of_object",
+            ),
+            (
                 "StartObjectBehaviorAction",
                 &["object"][..],
                 "UML_START_OBJECT_BEHAVIOR_ACTION_MULTIPLICITY_OF_OBJECT",
@@ -1423,6 +1511,46 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                     unverified,
                     rule,
                     "the Pins named by this action constraint must have no type",
+                ));
+            }
+        }
+        for (metaclass, property, code, unverified, rule) in [
+            (
+                "WriteStructuralFeatureAction",
+                "result",
+                "UML_WRITE_STRUCTURAL_FEATURE_ACTION_MULTIPLICITY_OF_RESULT",
+                "MDE_WRITE_STRUCTURAL_FEATURE_ACTION_MULTIPLICITY_OF_RESULT_UNVERIFIED",
+                "WriteStructuralFeatureAction-multiplicity_of_result",
+            ),
+            (
+                "WriteStructuralFeatureAction",
+                "value",
+                "UML_WRITE_STRUCTURAL_FEATURE_ACTION_MULTIPLICITY_OF_VALUE",
+                "MDE_WRITE_STRUCTURAL_FEATURE_ACTION_MULTIPLICITY_OF_VALUE_UNVERIFIED",
+                "WriteStructuralFeatureAction-multiplicity_of_value",
+            ),
+            (
+                "WriteVariableAction",
+                "value",
+                "UML_WRITE_VARIABLE_ACTION_MULTIPLICITY",
+                "MDE_WRITE_VARIABLE_ACTION_MULTIPLICITY_UNVERIFIED",
+                "WriteVariableAction-multiplicity",
+            ),
+            (
+                "ClearStructuralFeatureAction",
+                "result",
+                "UML_CLEAR_STRUCTURAL_FEATURE_ACTION_MULTIPLICITY_OF_RESULT",
+                "MDE_CLEAR_STRUCTURAL_FEATURE_ACTION_MULTIPLICITY_OF_RESULT_UNVERIFIED",
+                "ClearStructuralFeatureAction-multiplicity_of_result",
+            ),
+        ] {
+            if node.conforms_to(metaclass) {
+                checks.push((
+                    optional_action_pin_unit_multiplicity(references, node, metaclass, property),
+                    code,
+                    unverified,
+                    rule,
+                    "when present, the Pin named by this action constraint must have multiplicity 1..1",
                 ));
             }
         }
