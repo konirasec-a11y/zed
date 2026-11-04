@@ -272,3 +272,239 @@ fn object_record_control_flow_keeps_external_and_unknown_endpoints_unverified() 
     assert_eq!(validate(&authored)?, valid);
     Ok(())
 }
+
+fn uniform_rule(
+    response: &Value,
+    family: &str,
+    subject: &str,
+    severity: Option<&str>,
+) -> FlowResult<()> {
+    let error_code = format!("UML_{family}_NODE_EDGES");
+    let warning_code = format!("MDE_{family}_NODE_EDGES_UNVERIFIED");
+    let matching: Vec<_> = response["diagnostics"]
+        .as_array()
+        .ok_or("missing diagnostics")?
+        .iter()
+        .filter(|diagnostic| {
+            diagnostic["subject_id"] == subject
+                && (diagnostic["code"] == error_code || diagnostic["code"] == warning_code)
+        })
+        .collect();
+    if let Some(severity) = severity {
+        assert_eq!(matching.len(), 1, "{response}");
+        assert_eq!(matching[0]["severity"], severity);
+        assert_eq!(
+            matching[0]["code"],
+            if severity == "error" {
+                error_code
+            } else {
+                warning_code
+            }
+        );
+    } else {
+        assert!(matching.is_empty(), "{response}");
+    }
+    Ok(())
+}
+
+#[test]
+fn fork_and_merge_edge_families_survive_homogeneous_mixed_empty_and_self_loop_repairs()
+-> FlowResult<()> {
+    assert!(
+        include_str!("features/activity_edge_lifecycle.feature")
+            .contains("Scenario: Preserve Fork and Merge edge-family semantics through repair")
+    );
+    for (family, node, kind, edges, cardinality) in [
+        (
+            "FORK",
+            "parallel",
+            "uml.fork_node",
+            ["flow-3", "flow-4", "flow-5"],
+            "UML_FORK_NODE_ONE_INCOMING_EDGE",
+        ),
+        (
+            "MERGE",
+            "merge",
+            "uml.merge_node",
+            ["flow-10", "flow-11", "flow-12"],
+            "UML_MERGE_NODE_ONE_OUTGOING_EDGE",
+        ),
+    ] {
+        println!("Given an imported Activity with homogeneous ControlFlows around {node}");
+        let original = imported_activity()?;
+        let baseline = validate(&original)?;
+        uniform_rule(&baseline, family, node, None)?;
+        println!("When I change one incident edge into an ObjectFlow");
+        let mut mixed = original.clone();
+        relation(&mut mixed, edges[1])?["kind"] = json!("uml.object_flow");
+        let mixture = validate(&mixed)?;
+        uniform_rule(&mixture, family, node, Some("error"))?;
+        reopen(&format!("{node}-mixed-families"), &mixed, &mixture)?;
+        println!("Then changing all incident edges into ObjectFlows restores homogeneity");
+        for edge in edges {
+            relation(&mut mixed, edge)?["kind"] = json!("uml.object_flow");
+        }
+        let all_objects = validate(&mixed)?;
+        uniform_rule(&all_objects, family, node, None)?;
+        reopen(&format!("{node}-all-object-flows"), &mixed, &all_objects)?;
+        assert_eq!(validate(&original)?, baseline);
+
+        println!("When I author an isolated {kind} with an empty incident-edge union");
+        let mut empty = original.clone();
+        empty["model"]["elements"].as_array_mut().ok_or("missing elements")?.push(
+            json!({"id":"isolated-node", "kind":kind, "name":"Isolated", "properties":{"activity":{"$ref":"fulfillment"}}}));
+        empty["model"]["relations"].as_array_mut().ok_or("missing relations")?.push(
+            json!({"id":"owns-isolated-node", "kind":"owns", "from":"fulfillment", "to":"isolated-node"}));
+        let vacuous = validate(&empty)?;
+        uniform_rule(&vacuous, family, "isolated-node", None)?;
+        assert!(
+            vacuous["diagnostics"]
+                .as_array()
+                .ok_or("missing diagnostics")?
+                .iter()
+                .any(|diagnostic| diagnostic["subject_id"] == "isolated-node"
+                    && diagnostic["code"] == cardinality
+                    && diagnostic["severity"] == "error")
+        );
+        reopen(&format!("{node}-empty-union"), &empty, &vacuous)?;
+        println!("Then vacuous edge-family truth does not hide the separate cardinality violation");
+        println!("When one self-loop supplies both the incoming and outgoing identity");
+        empty["model"]["relations"].as_array_mut().ok_or("missing relations")?.extend([
+            json!({"id":"isolated-loop", "kind":"uml.control_flow", "from":"isolated-node", "to":"isolated-node",
+                "properties":{"activity":{"$ref":"fulfillment"}}}),
+            json!({"id":"owns-isolated-loop", "kind":"owns", "from":"fulfillment", "to":"isolated-loop"}),
+        ]);
+        let self_loop = validate(&empty)?;
+        uniform_rule(&self_loop, family, "isolated-node", None)?;
+        assert!(
+            !self_loop["diagnostics"]
+                .as_array()
+                .ok_or("missing diagnostics")?
+                .iter()
+                .any(|diagnostic| diagnostic["subject_id"] == "isolated-node"
+                    && diagnostic["code"] == cardinality)
+        );
+        reopen(&format!("{node}-single-self-loop"), &empty, &self_loop)?;
+        println!("Then the union retains one edge identity and repair remains repeatable");
+        assert_eq!(validate(&original)?, baseline);
+    }
+    Ok(())
+}
+
+#[test]
+fn fork_and_merge_known_incidence_and_mixtures_do_not_depend_on_unresolved_neighbors()
+-> FlowResult<()> {
+    assert!(
+        include_str!("features/activity_edge_lifecycle.feature").contains(
+            "Scenario: Preserve provable Fork and Merge findings with unresolved incidence"
+        )
+    );
+    for (family, node, outgoing, other_edge, role) in [
+        ("FORK", "parallel", "flow-4", "flow-5", "source"),
+        ("MERGE", "merge", "flow-12", "flow-11", "source"),
+    ] {
+        let original = imported_activity()?;
+        let baseline = validate(&original)?;
+        println!("Given homogeneous ControlFlows and a possibly incident ObjectFlow near {node}");
+        let mut possible = original.clone();
+        possible["model"]["elements"]
+            .as_array_mut()
+            .ok_or("missing elements")?
+            .push(
+                json!({"id":"possible-edge", "kind":"uml.object_flow", "name":"Possibly incident",
+                "properties":{"activity":{"$ref":"fulfillment"},
+                    "source":{"href":"unloaded.uml#source"}, "target":{"$ref":"receive"}}}),
+            );
+        possible["model"]["relations"].as_array_mut().ok_or("missing relations")?.push(
+            json!({"id":"owns-possible-edge", "kind":"owns", "from":"fulfillment", "to":"possible-edge"}));
+        let uncertain = validate(&possible)?;
+        uniform_rule(&uncertain, family, node, Some("warning"))?;
+        reopen(
+            &format!("{node}-possible-object-flow"),
+            &possible,
+            &uncertain,
+        )?;
+
+        println!("When its known opposite endpoint reaches the node, incidence becomes certain");
+        element(&mut possible, "possible-edge")?["properties"]["target"] = json!({"$ref":node});
+        let witnessed = validate(&possible)?;
+        uniform_rule(&witnessed, family, node, Some("error"))?;
+        reopen(
+            &format!("{node}-known-target-witness"),
+            &possible,
+            &witnessed,
+        )?;
+        println!("And a further unknown edge type cannot hide the already proved mixture");
+        possible["model"]["elements"].as_array_mut().ok_or("missing elements")?.push(
+            json!({"id":"unknown-edge", "kind":"uml.future_activity_edge", "name":"Unknown edge family",
+                "properties":{"source":{"href":"unloaded.uml#source"},"target":{"href":"unloaded.uml#target"}}}));
+        possible["model"]["relations"].as_array_mut().ok_or("missing relations")?.push(
+            json!({"id":"owns-unknown-edge", "kind":"owns", "from":"fulfillment", "to":"unknown-edge"}));
+        let mixed_with_unknown = validate(&possible)?;
+        uniform_rule(&mixed_with_unknown, family, node, Some("error"))?;
+        reopen(
+            &format!("{node}-mixture-with-unknown-family"),
+            &possible,
+            &mixed_with_unknown,
+        )?;
+
+        println!("When incidence is known but only the extra edge's family is unresolved");
+        let mut unknown_family = original.clone();
+        unknown_family["model"]["elements"].as_array_mut().ok_or("missing elements")?.push(
+            json!({"id":"known-incidence-unknown-family", "kind":"uml.future_activity_edge", "name":"Unknown family",
+                "properties":{"source":{"$ref":"receive"}, "target":{"$ref":node}}}));
+        unknown_family["model"]["relations"].as_array_mut().ok_or("missing relations")?.push(
+            json!({"id":"owns-known-incidence-unknown-family", "kind":"owns", "from":"fulfillment", "to":"known-incidence-unknown-family"}));
+        let unknown_family_response = validate(&unknown_family)?;
+        uniform_rule(&unknown_family_response, family, node, Some("warning"))?;
+        assert_eq!(
+            unknown_family_response["has_errors"], false,
+            "An unknown extra family does not prove a mixture: {unknown_family_response}"
+        );
+        reopen(
+            &format!("{node}-known-incidence-unknown-family"),
+            &unknown_family,
+            &unknown_family_response,
+        )?;
+        assert_eq!(validate(&original)?, baseline);
+
+        println!("When the only possible extra edge is known to be of the same ControlFlow family");
+        let mut same_family = original.clone();
+        same_family["model"]["elements"].as_array_mut().ok_or("missing elements")?.push(
+            json!({"id":"same-family-edge", "kind":"uml.control_flow", "name":"Possibly incident control",
+                "properties":{"activity":{"$ref":"fulfillment"}, "source":{"href":"unloaded.uml#source"},
+                    "target":{"$ref":"receive"}}}));
+        same_family["model"]["relations"].as_array_mut().ok_or("missing relations")?.push(
+            json!({"id":"owns-same-family-edge", "kind":"owns", "from":"fulfillment", "to":"same-family-edge"}));
+        let compatible = validate(&same_family)?;
+        uniform_rule(&compatible, family, node, None)?;
+        reopen(
+            &format!("{node}-possible-same-family"),
+            &same_family,
+            &compatible,
+        )?;
+
+        println!("When an ObjectFlow has contradictory authored and canonical incidence");
+        let mut contradictory = original.clone();
+        relation(&mut contradictory, outgoing)?["kind"] = json!("uml.object_flow");
+        relation(&mut contradictory, outgoing)?["properties"][role] = json!({"$ref":"receive"});
+        let unresolved_incidence = validate(&contradictory)?;
+        uniform_rule(&unresolved_incidence, family, node, Some("warning"))?;
+        reopen(
+            &format!("{node}-contradictory-incidence"),
+            &contradictory,
+            &unresolved_incidence,
+        )?;
+        println!("Then a second, definitely incident ObjectFlow still proves a mixture");
+        relation(&mut contradictory, other_edge)?["kind"] = json!("uml.object_flow");
+        let independently_mixed = validate(&contradictory)?;
+        uniform_rule(&independently_mixed, family, node, Some("error"))?;
+        reopen(
+            &format!("{node}-independent-mixture"),
+            &contradictory,
+            &independently_mixed,
+        )?;
+        assert_eq!(validate(&original)?, baseline);
+    }
+    Ok(())
+}

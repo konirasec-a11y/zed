@@ -32,3 +32,32 @@ Feature: ControlFlow object-node endpoint semantics across the authored Activity
     Then the rule remains unverified without guessing its type
     When I save, close and reopen every state through JSON and BLX and repair the endpoint
     Then authored data and findings remain deterministic
+
+  Scenario: Preserve Fork and Merge edge-family semantics through repair
+    Given an imported Activity with homogeneous ControlFlows around a ForkNode or MergeNode
+    When I change one incident edge to ObjectFlow
+    Then the known mixture violates ForkNode-edges or MergeNode-edges from the pinned UML.xmi
+    When I change all incident edges to ObjectFlows
+    Then the same edge-family predicate is satisfied
+    When I author an isolated node with no incident edges
+    Then uniformity is vacuously true but the separate cardinality rule still fails
+    When one self-loop supplies both incoming and outgoing roles
+    Then the union contains one edge identity
+    When I save, close and reopen every state using JSON and BLX and restore the original graph
+    Then data and exact findings remain unchanged
+
+  Scenario: Preserve provable Fork and Merge findings with unresolved incidence
+    Given known ControlFlows and a possibly incident ObjectFlow with an unresolved endpoint
+    Then edge-family uniformity is unverified rather than falsely violated
+    When its opposite endpoint is known to reach the ForkNode or MergeNode
+    Then its incident ObjectFlow identity proves a mixture despite the unresolved end
+    And an additional unknown edge family cannot hide that proved violation
+    When the known incident edges are homogeneous and one additional known incident edge has unknown family
+    Then the family predicate reports only an unverified warning rather than a proved mixture
+    When a possibly incident edge is instead known to share the ControlFlow family
+    Then it cannot invalidate established uniformity
+    When authored and canonical endpoints contradict each other
+    Then uncertain incidence alone does not prove a mixture
+    But another definitely incident ObjectFlow still proves the known mixture
+    When I save, close and reopen every state through JSON and BLX and repair the graph
+    Then all collections and diagnostic findings are repeatable

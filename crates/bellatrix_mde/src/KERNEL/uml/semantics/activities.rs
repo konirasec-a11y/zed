@@ -1,6 +1,6 @@
 use super::{
     classifiers::QueryError,
-    feature_compatibility::require_all,
+    feature_compatibility::{accept_any, require_all},
     property_contracts::{self, PropertyOutcome},
     references::{ReferenceIndex, reference_id},
     root::ElementRef,
@@ -98,11 +98,11 @@ fn incident_edges<'a>(
     require_all(checks)
 }
 
-fn control_flow_endpoint(
-    references: &ReferenceIndex<'_>,
-    edge: ElementRef<'_>,
+fn activity_endpoint<'a>(
+    references: &ReferenceIndex<'a>,
+    edge: ElementRef<'a>,
     role: &str,
-) -> Result<bool, QueryError> {
+) -> Result<ElementRef<'a>, QueryError> {
     let descriptor = schema::uml_property("ActivityEdge", role)
         .map_err(|error| QueryError::unsupported(edge.id(), error.to_string()))?
         .ok_or_else(|| {
@@ -117,7 +117,7 @@ fn control_flow_endpoint(
     if canonical.is_none() && authored.is_none() {
         return Err(QueryError::unsupported(
             edge.id(),
-            format!("ControlFlow::{role} endpoint is not represented"),
+            format!("ActivityEdge::{role} endpoint is not represented"),
         ));
     }
     if let (Some(canonical), Some(authored)) = (canonical.as_ref(), authored)
@@ -132,13 +132,13 @@ fn control_flow_endpoint(
     let value = canonical.as_ref().or(authored).ok_or_else(|| {
         QueryError::unsupported(
             edge.id(),
-            format!("ControlFlow::{role} endpoint is not represented"),
+            format!("ActivityEdge::{role} endpoint is not represented"),
         )
     })?;
     match property_contracts::check_value(references, edge, descriptor, value) {
         PropertyOutcome::Satisfied => {}
         // Property validation reports malformed data separately. It does not
-        // prove the ObjectNode predicate false when its endpoint is unresolved.
+        // prove an edge predicate false when its endpoint is unresolved.
         PropertyOutcome::Violation(message) | PropertyOutcome::Unverified(message) => {
             return Err(QueryError::unsupported(edge.id(), message));
         }
@@ -146,14 +146,82 @@ fn control_flow_endpoint(
     let identifier = reference_id(value)
         .map_err(|error| QueryError::unsupported(edge.id(), error))?
         .ok_or_else(|| QueryError::unsupported(edge.id(), "ActivityEdge endpoint is unresolved"))?;
-    let endpoint = references
+    references
         .element(identifier)
-        .map_err(|error| QueryError::unsupported(edge.id(), error))?;
+        .map_err(|error| QueryError::unsupported(edge.id(), error))
+}
+
+fn control_flow_endpoint(
+    references: &ReferenceIndex<'_>,
+    edge: ElementRef<'_>,
+    role: &str,
+) -> Result<bool, QueryError> {
+    let endpoint = activity_endpoint(references, edge, role)?;
     if !endpoint.conforms_to("ObjectNode") {
         return Ok(true);
     }
     schema::read_effective_boolean(endpoint, "isControlType")
         .map_err(|error| QueryError::unsupported(endpoint.id(), error))
+}
+
+fn uniform_activity_edges(
+    references: &ReferenceIndex<'_>,
+    node: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let mut controls = Vec::new();
+    let mut objects = Vec::new();
+    let mut candidates: Vec<_> = references
+        .model()
+        .elements()
+        .filter(|element| {
+            element.conforms_to("ActivityEdge")
+                || (element.metaclass().is_none()
+                    && (element.properties().contains_key("source")
+                        || element.properties().contains_key("target")))
+        })
+        .collect();
+    candidates.sort_by(|left, right| left.id().cmp(right.id()));
+    for edge in candidates {
+        // The union contains each edge once, even for a self-loop. Either known
+        // endpoint establishes incidence despite an unresolved opposite end.
+        let incidence = accept_any([
+            activity_endpoint(references, edge, "source")
+                .map(|endpoint| endpoint.id() == node.id()),
+            activity_endpoint(references, edge, "target")
+                .map(|endpoint| endpoint.id() == node.id()),
+        ]);
+        match incidence {
+            Ok(false) => continue,
+            Ok(true) if edge.metaclass().is_some() => {
+                controls.push(Ok(edge.conforms_to("ControlFlow")));
+                objects.push(Ok(edge.conforms_to("ObjectFlow")));
+            }
+            _ => {
+                let unresolved = || {
+                    QueryError::unsupported(
+                        node.id(),
+                        format!(
+                            "ActivityEdge {} has unresolved incidence or metaclass",
+                            edge.id(),
+                        ),
+                    )
+                };
+                // A possibly incident edge already known to be a ControlFlow
+                // cannot invalidate an all-ControlFlow union (and vice versa).
+                controls.push(if edge.conforms_to("ControlFlow") {
+                    Ok(true)
+                } else {
+                    Err(unresolved())
+                });
+                objects.push(if edge.conforms_to("ObjectFlow") {
+                    Ok(true)
+                } else {
+                    Err(unresolved())
+                });
+            }
+        }
+    }
+    accept_any([require_all(controls), require_all(objects)])
 }
 
 pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
@@ -199,6 +267,13 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
         }
         if node.conforms_to("ForkNode") {
             checks.push((
+                uniform_activity_edges(references, node),
+                "UML_FORK_NODE_EDGES",
+                "MDE_FORK_NODE_EDGES_UNVERIFIED",
+                "ForkNode-edges",
+                "incoming and outgoing ForkNode edges must be all ControlFlows or all ObjectFlows",
+            ));
+            checks.push((
                 incident_edges(references, node, "target", 1, 1, false),
                 "UML_FORK_NODE_ONE_INCOMING_EDGE",
                 "MDE_FORK_NODE_ONE_INCOMING_EDGE_UNVERIFIED",
@@ -216,6 +291,13 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             ));
         }
         if node.conforms_to("MergeNode") {
+            checks.push((
+                uniform_activity_edges(references, node),
+                "UML_MERGE_NODE_EDGES",
+                "MDE_MERGE_NODE_EDGES_UNVERIFIED",
+                "MergeNode-edges",
+                "incoming and outgoing MergeNode edges must be all ControlFlows or all ObjectFlows",
+            ));
             checks.push((
                 incident_edges(references, node, "source", 1, 1, false),
                 "UML_MERGE_NODE_ONE_OUTGOING_EDGE",

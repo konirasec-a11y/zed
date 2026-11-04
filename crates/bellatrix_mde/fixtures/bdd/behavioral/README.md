@@ -76,3 +76,14 @@ and unknown metaclasses through JSON/BLX save-close-reopen flows. Malformed scal
 or endpoint data retains its own property-contract errors; it does not falsely
 prove `ControlFlow-object_nodes` violated. Unresolved or contradictory endpoints
 leave that rule unverified, while an independently known violating endpoint fails.
+
+The same Activity lifecycle harness also covers pinned `ForkNode-edges` and
+`MergeNode-edges`: the set union of incoming and outgoing edges must consist
+entirely of ControlFlows or entirely of ObjectFlows, using subtype conformance.
+An empty union satisfies this predicate; cardinality constraints remain separate.
+Each edge identity is considered once, including a self-loop. Known mixed families
+prove a violation despite unrelated unresolved candidates. A known endpoint can
+establish incidence despite an unresolved opposite endpoint, while ambiguous
+incidence alone cannot prove a mixture. Possible edges already known to share the
+established family do not invalidate homogeneity. JoinNode and DecisionNode have
+different normative predicates and are not folded into this rule.
