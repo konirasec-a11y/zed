@@ -31,7 +31,7 @@ impl MdeWorkbenchItem {
     pub(super) fn render_visual_draft(
         &self,
         view: &bellatrix_mde_cordis::projection::View,
-        _diagram: &bellatrix_mde_cordis::projection::Diagram,
+        diagram: &bellatrix_mde_cordis::projection::Diagram,
         revision: u64,
         canvas_origin: &CanvasOrigin,
         node_bounds: &std::rc::Rc<std::cell::RefCell<Vec<[f32; 4]>>>,
@@ -41,7 +41,8 @@ impl MdeWorkbenchItem {
         let zoom = self.zoom;
         let selected = self.presentation.selected_view() == Some(view.id.as_str());
         let label = view.display_label.clone();
-        let (mut x, mut y, mut width, mut height, figure) = match &view.geometry {
+        let geometry = self.path_preview_geometry(view);
+        let (mut x, mut y, mut width, mut height, figure) = match &geometry {
             Geometry::Rect {
                 x,
                 y,
@@ -175,8 +176,7 @@ impl MdeWorkbenchItem {
                 height as f32 * zoom,
             ]);
         }
-        let hit_geometry =
-            matches!(&view.geometry, Geometry::Path { .. }).then(|| view.geometry.clone());
+        let hit_geometry = matches!(&geometry, Geometry::Path { .. }).then(|| geometry.clone());
         let hit_nodes = node_bounds.clone();
         let hit_pan = (
             self.pan.0 + (x - original_position.0) as f32 * zoom,
@@ -185,6 +185,7 @@ impl MdeWorkbenchItem {
         let owner = cx.weak_entity();
         let click_origin = canvas_origin.clone();
         let id = view.id.clone();
+        let diagram_id = diagram.id.clone();
         let draft_editor = self
             .inline_editor
             .clone()
@@ -261,11 +262,22 @@ impl MdeWorkbenchItem {
                                     cx,
                                 );
                             } else {
+                                let selected = item.presentation.selected_canvas_view() == Some(id.as_str());
                                 let change = item.presentation.select_view(None, id.clone());
                                 item.apply_selection_change(change, cx);
                                 item.feedback =
                                     "Visual draft · not yet a semantic UML element".into();
-                                if !item.source.is_read_only() {
+                                if let Some(geometry) = &hit_geometry {
+                                    if selected && let Some(origin) = click_origin.get() {
+                                        let (x, y) = canvas_model_position(
+                                            (f64::from(event.position.x), f64::from(event.position.y)),
+                                            origin, hit_pan, zoom,
+                                        );
+                                        if let Some(handle) = super::diagram_canvas::path_segment_at_position(geometry, bellatrix_mde_cordis::Point { x, y }, zoom) {
+                                            item.start_path_edit(diagram_id.clone(), id.clone(), revision, handle, event.position, cx);
+                                        }
+                                    }
+                                } else if !item.source.is_read_only() {
                                     item.gesture = Some(CanvasGesture::Move {
                                         view_id: id.clone(),
                                         start: event.position,

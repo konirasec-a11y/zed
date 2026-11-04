@@ -1,4 +1,4 @@
-use crate::{Diagram, Geometry, PathSegment, Point, View};
+use crate::{Diagram, Geometry, PathSegment, Point, RelationshipRouting, View};
 
 pub fn resolve_visual_center(geometry: &Geometry) -> Option<Point> {
     match geometry {
@@ -97,6 +97,7 @@ pub fn reroute_visual_drafts(diagram: &mut Diagram) {
         let Some(view) = find_view_mut(&mut diagram.views, &identifier) else {
             continue;
         };
+        let manual = view.style.routing == Some(RelationshipRouting::Manual);
         let Some(draft) = &mut view.draft else {
             continue;
         };
@@ -131,6 +132,7 @@ pub fn reroute_visual_drafts(diagram: &mut Diagram) {
                 .zip(target_anchor)
                 .is_some_and(|(source, target)| source != target);
             if let Some(source) = source
+                && !manual
                 && attachments.source_view_id == attachments.target_view_id
                 && !(draft.notation_kind == "uml.general_ordering" && distinct_anchors)
                 && (segments.is_empty()
@@ -190,7 +192,9 @@ pub fn reroute_visual_drafts(diagram: &mut Diagram) {
             } else {
                 source_position
             };
-            let self_loop_offset = if source.is_some()
+            // Manual routes keep authored bends while their endpoints still follow attached nodes.
+            let self_loop_offset = if !manual
+                && source.is_some()
                 && attachments.source_view_id == attachments.target_view_id
                 && draft
                     .properties

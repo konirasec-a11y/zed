@@ -230,6 +230,7 @@ fn command_name(command: &Command) -> &'static str {
         Command::SetViewTiming { .. } => "SetViewTiming",
         Command::SetViewEndpoints { .. } => "SetViewEndpoints",
         Command::SetViewStyle { .. } => "SetViewStyle",
+        Command::SetViewPath { .. } => "SetViewPath",
         Command::SetViewRouting { .. } => "SetViewRouting",
         Command::MoveView { .. } => "MoveView",
         Command::ResizeView { .. } => "ResizeView",

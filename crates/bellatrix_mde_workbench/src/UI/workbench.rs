@@ -67,7 +67,7 @@ use bellatrix_mde_cordis::{
     MdeUiCommand, ModelingAddMemberRequested, ModelingCreateElementRequested,
     ModelingDeleteElementRequested, ModelingMoveParameterRequested, ModelingMoveViewRequested,
     ModelingQuickEditRequested, ModelingResizeViewRequested, ModelingSetNameExpressionRequested,
-    ModelingSetPropertyRequested,
+    ModelingSetPropertyRequested, ModelingSetViewPathRequested,
 };
 use bellatrix_mde_cordis::{ModelingElementKind, ModelingMemberKind, ModelingTool};
 use bellatrix_project::ProjectId;
@@ -104,6 +104,14 @@ impl Render for MdeToolDrag {
             .child(Label::new(self.label.clone()))
     }
 }
+#[derive(Clone, Copy)]
+enum PathHandle {
+    Vertex(usize),
+    Control1(usize),
+    Control2(usize),
+    Segment(usize),
+}
+
 enum CanvasGesture {
     Move {
         view_id: String,
@@ -118,6 +126,17 @@ enum CanvasGesture {
         start: Point<Pixels>,
         width: f64,
         height: f64,
+        dx: f64,
+        dy: f64,
+        revision: u64,
+        began: bool,
+    },
+    EditPath {
+        diagram_id: String,
+        view_id: String,
+        geometry: Geometry,
+        handle: PathHandle,
+        start: Point<Pixels>,
         dx: f64,
         dy: f64,
         revision: u64,
@@ -1031,7 +1050,10 @@ impl MdeWorkbenchItem {
         cx.notify();
     }
     fn update_gesture(&mut self, event: &MouseMoveEvent, cx: &mut Context<Self>) {
-        if self.source.is_read_only() || self.source.is_mdj() {
+        if self.source.is_read_only()
+            || (self.source.is_mdj()
+                && !matches!(&self.gesture, Some(CanvasGesture::EditPath { .. })))
+        {
             return;
         }
         if event.pressed_button != Some(MouseButton::Left) || !event.dragging() {
@@ -1057,6 +1079,14 @@ impl MdeWorkbenchItem {
                 view_id,
                 ..
             } => (start, dx, dy, began, view_id, "canvas.resize.start"),
+            CanvasGesture::EditPath {
+                start,
+                dx,
+                dy,
+                began,
+                view_id,
+                ..
+            } => (start, dx, dy, began, view_id, "canvas.path_edit.start"),
         };
         *dx = f64::from(event.position.x - start.x) / f64::from(self.zoom);
         *dy = f64::from(event.position.y - start.y) / f64::from(self.zoom);
@@ -1076,13 +1106,16 @@ impl MdeWorkbenchItem {
         };
         let (view_id, began) = match &gesture {
             CanvasGesture::Move { view_id, began, .. }
-            | CanvasGesture::Resize { view_id, began, .. } => (view_id, *began),
+            | CanvasGesture::Resize { view_id, began, .. }
+            | CanvasGesture::EditPath { view_id, began, .. } => (view_id, *began),
         };
         if !began {
             cx.notify();
             return;
         }
-        if self.source.is_read_only() || self.source.is_mdj() {
+        if self.source.is_read_only()
+            || (self.source.is_mdj() && !matches!(&gesture, CanvasGesture::EditPath { .. }))
+        {
             self.source.record_interaction(
                 "canvas.gesture.read_only",
                 Some(view_id),
@@ -1092,7 +1125,9 @@ impl MdeWorkbenchItem {
             return;
         }
         let expected_revision = match &gesture {
-            CanvasGesture::Move { revision, .. } | CanvasGesture::Resize { revision, .. } => {
+            CanvasGesture::Move { revision, .. }
+            | CanvasGesture::Resize { revision, .. }
+            | CanvasGesture::EditPath { revision, .. } => {
                 *revision
             }
         };
@@ -1104,7 +1139,9 @@ impl MdeWorkbenchItem {
             != Some(expected_revision)
         {
             let view_id = match &gesture {
-                CanvasGesture::Move { view_id, .. } | CanvasGesture::Resize { view_id, .. } => {
+                CanvasGesture::Move { view_id, .. }
+                | CanvasGesture::Resize { view_id, .. }
+                | CanvasGesture::EditPath { view_id, .. } => {
                     view_id
                 }
             };
@@ -1160,6 +1197,28 @@ impl MdeWorkbenchItem {
                     view_id,
                     width: (width + dx).max(80.0),
                     height: (height + dy).max(48.0),
+                    expected_revision,
+                })
+            }
+            CanvasGesture::EditPath {
+                diagram_id,
+                view_id,
+                geometry,
+                handle,
+                dx,
+                dy,
+                ..
+            } => {
+                let edited = diagram_canvas::edited_path_geometry(&geometry, handle, dx, dy);
+                if edited == geometry {
+                    cx.notify();
+                    return;
+                }
+                MdeUiCommand::SetViewPath(ModelingSetViewPathRequested {
+                    project_id: self.project_id().clone(),
+                    diagram_id,
+                    view_id,
+                    geometry: edited,
                     expected_revision,
                 })
             }

@@ -266,6 +266,8 @@ impl MdeUiSource {
         let identity = match &command {
             MdeUiCommand::MoveView(request) => Some(request.view_id.as_str()),
             MdeUiCommand::ResizeView(request) => Some(request.view_id.as_str()),
+            MdeUiCommand::SetViewPath(request)
+            | MdeUiCommand::SetViewPathTracked { request, .. } => Some(request.view_id.as_str()),
             _ => None,
         };
         let action = match &command {
@@ -275,11 +277,13 @@ impl MdeUiSource {
             MdeUiCommand::SetViewRoutingTracked { .. } => {
                 "command.enqueue.set_view_routing_tracked"
             }
+            MdeUiCommand::SetViewPathTracked { .. } => "command.enqueue.set_view_path_tracked",
             MdeUiCommand::ReorderViewTracked { .. } => "command.enqueue.reorder_view_tracked",
             MdeUiCommand::SetPropertyTracked { .. } => "command.enqueue.set_property_tracked",
             MdeUiCommand::SetViewLabel(..) => "command.enqueue.set_view_label",
             MdeUiCommand::SetViewStyle(..) => "command.enqueue.set_view_style",
             MdeUiCommand::SetViewRouting(..) => "command.enqueue.set_view_routing",
+            MdeUiCommand::SetViewPath(..) => "command.enqueue.set_view_path",
             MdeUiCommand::CreateDiagram(..) => "command.enqueue.create_diagram",
             MdeUiCommand::CreateExplorerDiagram(..) => "command.enqueue.create_explorer_diagram",
             MdeUiCommand::RenameDiagram(..) => "command.enqueue.rename_diagram",

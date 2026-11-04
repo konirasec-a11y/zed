@@ -6,6 +6,13 @@ pub(crate) struct RoutingProjection {
 }
 
 pub(crate) trait DiagramOperations {
+    fn current_path(
+        &self,
+        section: &ModelingSection,
+        diagram_id: &str,
+        view_id: &str,
+    ) -> Result<Geometry, String>;
+
     fn project_routing(
         &self,
         section: &ModelingSection,

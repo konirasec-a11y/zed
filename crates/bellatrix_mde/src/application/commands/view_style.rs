@@ -1,4 +1,4 @@
-use crate::{Geometry, ModelingSection, RelationshipRouting, Style, View};
+use crate::{Geometry, ModelingSection, PathSegment, Point, RelationshipRouting, Style, View};
 
 fn view<'a>(
     section: &'a ModelingSection,
@@ -85,6 +85,66 @@ pub(super) fn set_style(
         return Err("dash lengths must be finite and positive".into());
     }
     view_mut(section, diagram_id, view_id)?.style = style.clone();
+    Ok(())
+}
+
+pub(super) fn set_path(
+    section: &mut ModelingSection,
+    diagram_id: &str,
+    view_id: &str,
+    geometry: &Geometry,
+    operations: &dyn crate::diagram_operations::DiagramOperations,
+) -> Result<(), String> {
+    let Geometry::Path { start, segments } = geometry else {
+        return Err("path editing requires Path geometry".into());
+    };
+    let final_segment = segments.last().ok_or("path requires at least one segment")?;
+    let finite = |point: &Point| point.x.is_finite() && point.y.is_finite();
+    if !finite(start)
+        || segments.iter().any(|segment| match segment {
+            PathSegment::Line { to } => !finite(to),
+            PathSegment::Cubic {
+                control1,
+                control2,
+                to,
+            } => !finite(control1) || !finite(control2) || !finite(to),
+        })
+    {
+        return Err("path coordinates must be finite".into());
+    }
+    let current = view(section, diagram_id, view_id)?;
+    if !matches!(current.geometry, Geometry::Path { .. }) {
+        return Err("path editing requires an existing Path View".into());
+    }
+    if section.mdj_provenance.is_some() {
+        if current.style.routing != Some(RelationshipRouting::Manual) {
+            return Err("MDJ path editing requires the original manual routing".into());
+        }
+        if segments
+            .iter()
+            .any(|segment| matches!(segment, PathSegment::Cubic { .. }))
+        {
+            return Err("MDJ points cannot represent cubic control points losslessly".into());
+        }
+    }
+    let Geometry::Path {
+        start: current_start,
+        segments: current_segments,
+    } = operations.current_path(section, diagram_id, view_id)?
+    else {
+        return Err("view has no editable projected path".into());
+    };
+    let current_final = current_segments.last().ok_or("current path has no segments")?;
+    let endpoint = |segment: &PathSegment| match segment {
+        PathSegment::Line { to } | PathSegment::Cubic { to, .. } => *to,
+    };
+    // The submitted path is in rendered coordinates, which can differ from stored automatic routes.
+    if *start != current_start || endpoint(final_segment) != endpoint(current_final) {
+        return Err("path editing must preserve the rendered start and end points".into());
+    }
+    let current = view_mut(section, diagram_id, view_id)?;
+    current.geometry = geometry.clone();
+    current.style.routing = Some(RelationshipRouting::Manual);
     Ok(())
 }
 

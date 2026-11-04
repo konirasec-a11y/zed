@@ -832,6 +832,15 @@ pub(crate) fn command(value: Command) -> Result<crate::commands::Command, String
             view_id: view_id,
             style: presentation(style)?,
         },
+        Command::SetViewPath {
+            diagram_id,
+            view_id,
+            geometry,
+        } => crate::commands::Command::SetViewPath {
+            diagram_id,
+            view_id,
+            geometry: presentation(geometry)?,
+        },
         Command::SetViewRouting {
             diagram_id,
             view_id,

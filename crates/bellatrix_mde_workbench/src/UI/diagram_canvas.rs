@@ -34,6 +34,7 @@ impl Render for MdeWorkbenchItem {
         let mut cards = Vec::new();
         let node_bounds = std::rc::Rc::new(std::cell::RefCell::new(Vec::<[f32; 4]>::new()));
         let mut relationship_controls = Vec::new();
+        let mut path_handles = Vec::new();
         let mut incomplete_preview = false;
         let mut marker_diagnostics = Vec::new();
         match snapshot {
@@ -92,6 +93,12 @@ impl Render for MdeWorkbenchItem {
                             incomplete_preview = true;
                             continue;
                         }
+                        path_handles.extend(self.render_path_handles(
+                            &diagram.id,
+                            view,
+                            snapshot.revision,
+                            cx,
+                        ));
                         if view.subject.is_none() && view.draft.is_some() {
                             if let Some(card) = self.render_visual_draft(
                                 view,
@@ -119,8 +126,8 @@ impl Render for MdeWorkbenchItem {
                                 marker_diagnostics.extend(resolved.diagnostics.iter().cloned());
                             }
                             // Keep an unroutable draft visible using its stored geometry.
-                            let geometry = view.routed_geometry.as_ref().unwrap_or(&view.geometry);
-                            if let Geometry::Path { start, segments } = geometry {
+                            let geometry = self.path_preview_geometry(view);
+                            if let Geometry::Path { start, segments } = &geometry {
                                 let mut points = vec![*start];
                                 for segment in segments {
                                     match segment {
@@ -286,6 +293,8 @@ impl Render for MdeWorkbenchItem {
                                 let edge_owner = cx.weak_entity();
                                 let edge_id = subject.to_owned();
                                 let edge_view_id = view.id.clone();
+                                let edge_diagram_id = diagram.id.clone();
+                                let edge_revision = snapshot.revision;
                                 let menu_owner = cx.entity();
                                 let menu_diagram = diagram.id.clone();
                                 let menu_view = view.id.clone();
@@ -309,12 +318,22 @@ impl Render for MdeWorkbenchItem {
                                                 return;
                                             }
                                             if let Err(error) = edge_owner.update(cx, |item, cx| {
+                                                let selected = item.presentation.selected_canvas_view() == Some(edge_view_id.as_str());
                                                 item.source.record_interaction("canvas.relationship.click", Some(&edge_view_id), bellatrix_mde_cordis::TraceOutcome::Success);
                                                 item.select_or_connect_edge(
                                                     edge_id.clone(),
                                                     edge_view_id.clone(),
                                                     cx,
                                                 );
+                                                if selected && let Some(origin) = hit_origin.get() {
+                                                    let (x, y) = canvas_model_position(
+                                                        (f64::from(event.position.x), f64::from(event.position.y)),
+                                                        origin, pan, zoom,
+                                                    );
+                                                    if let Some(handle) = path_segment_at_position(&hit_geometry, bellatrix_mde_cordis::Point { x, y }, zoom) {
+                                                        item.start_path_edit(edge_diagram_id.clone(), edge_view_id.clone(), edge_revision, handle, event.position, cx);
+                                                    }
+                                                }
                                                 cx.focus_self(window);
                                             }) {
                                                 eprintln!("MDE relationship selection failed: {error}");
@@ -884,6 +903,7 @@ impl Render for MdeWorkbenchItem {
             }
             Err(error) => details = error,
         }
+        cards.extend(path_handles);
         cards.extend(relationship_controls);
         let owner = cx.weak_entity();
         let move_owner = cx.weak_entity();
@@ -978,7 +998,11 @@ impl Render for MdeWorkbenchItem {
                     cx.stop_propagation();
                 } else if event.keystroke.key.eq_ignore_ascii_case("escape") {
                     let _ = escape_relation_owner.update(cx, |item, cx| {
-                        if !item.presentation.is_editing() && item.presentation.selected_tool().is_some() {
+                        if item.gesture.take().is_some() {
+                            item.feedback = "Canvas drag canceled".into();
+                            cx.notify();
+                            cx.stop_propagation();
+                        } else if !item.presentation.is_editing() && item.presentation.selected_tool().is_some() {
                             item.cancel_tool(cx);
                         }
                     });
@@ -1303,6 +1327,308 @@ impl MdeWorkbenchItem {
                 })
                 .into_any_element(),
         )
+    }
+}
+
+impl MdeWorkbenchItem {
+    pub(super) fn path_preview_geometry(
+        &self,
+        view: &bellatrix_mde_cordis::projection::View,
+    ) -> Geometry {
+        if let Some(CanvasGesture::EditPath {
+            view_id,
+            geometry,
+            handle,
+            dx,
+            dy,
+            ..
+        }) = &self.gesture
+            && view_id == &view.id
+        {
+            return edited_path_geometry(geometry, *handle, *dx, *dy);
+        }
+        view.routed_geometry.as_ref().unwrap_or(&view.geometry).clone()
+    }
+
+    fn path_is_editable(&self, view: &bellatrix_mde_cordis::projection::View) -> bool {
+        if self.source.is_read_only() || view.relationship.is_none() {
+            return false;
+        }
+        let Geometry::Path { segments, .. } = &view.geometry else {
+            return false;
+        };
+        !segments.is_empty()
+            && (!self.source.is_mdj()
+                || (view.style.routing == Some(bellatrix_mde_cordis::RelationshipRouting::Manual)
+                    && segments.iter().all(|segment| matches!(segment, PathSegment::Line { .. }))))
+    }
+
+    pub(super) fn start_path_edit(
+        &mut self,
+        diagram_id: String,
+        view_id: String,
+        revision: u64,
+        handle: PathHandle,
+        position: Point<Pixels>,
+        cx: &mut Context<Self>,
+    ) {
+        if self.presentation.selected_tool().is_some() {
+            return;
+        }
+        let Ok(snapshot) = self.source.snapshot() else {
+            return;
+        };
+        if snapshot.revision != revision
+            || self.presentation.active_diagram() != Some(diagram_id.as_str())
+        {
+            return;
+        }
+        let Some(view) = snapshot.section.diagrams.iter()
+            .find(|diagram| diagram.id == diagram_id)
+            .and_then(|diagram| diagram.views.iter().find(|view| view.id == view_id))
+        else {
+            return;
+        };
+        if !self.path_is_editable(view) {
+            return;
+        }
+        let geometry = view.routed_geometry.as_ref().unwrap_or(&view.geometry).clone();
+        let change = self.presentation.select_view(view.subject.clone(), view_id.clone());
+        self.apply_selection_change(change, cx);
+        self.gesture = Some(CanvasGesture::EditPath {
+            diagram_id,
+            view_id,
+            geometry,
+            handle,
+            start: position,
+            dx: 0.0,
+            dy: 0.0,
+            revision,
+            began: false,
+        });
+        self.feedback = "Editing route · endpoints stay attached · Escape cancels".into();
+        cx.notify();
+    }
+
+    fn render_path_handles(
+        &self,
+        diagram_id: &str,
+        view: &bellatrix_mde_cordis::projection::View,
+        revision: u64,
+        cx: &mut Context<Self>,
+    ) -> Vec<gpui::AnyElement> {
+        if self.presentation.selected_canvas_view() != Some(view.id.as_str())
+            || self.presentation.selected_tool().is_some()
+            || self.presentation.is_editing()
+            || !self.path_is_editable(view)
+        {
+            return Vec::new();
+        }
+        let palette = WorkbenchPalette::current(cx);
+        let geometry = self.path_preview_geometry(view);
+        path_handle_positions(&geometry).into_iter().enumerate().filter_map(|(index, (handle, point))| {
+            let x = point.x as f32 * self.zoom + self.pan.0;
+            let y = point.y as f32 * self.zoom + self.pan.1;
+            if !x.is_finite() || !y.is_finite() {
+                return None;
+            }
+            let owner = cx.weak_entity();
+            let diagram_id = diagram_id.to_owned();
+            let view_id = view.id.clone();
+            let segment = matches!(handle, PathHandle::Segment(_));
+            let control = matches!(handle, PathHandle::Control1(_) | PathHandle::Control2(_));
+            let size = if segment { 7.0 } else { 9.0 };
+            Some(div()
+                .id(format!("mde-path-handle-{}-{index}", view.id))
+                .absolute()
+                .left(px(x - size / 2.0))
+                .top(px(y - size / 2.0))
+                .size(px(size))
+                .border_1()
+                .border_color(palette.selection)
+                .bg(if segment { palette.surface } else { palette.selection })
+                .when(segment || control, |handle| handle.rounded_full())
+                .cursor_move()
+                .tooltip(move |_, cx| ui::Tooltip::text(
+                    if segment { "Drag segment; endpoints stay attached" }
+                    else if control { "Drag curve control" }
+                    else { "Drag route point" }, cx))
+                .on_mouse_down(MouseButton::Left, move |event, window, cx| {
+                    if let Err(error) = owner.update(cx, |item, cx| {
+                        item.start_path_edit(diagram_id.clone(), view_id.clone(), revision, handle, event.position, cx);
+                        cx.focus_self(window);
+                    }) {
+                        eprintln!("MDE route edit failed: {error}");
+                    }
+                    cx.stop_propagation();
+                })
+                .into_any_element())
+        }).collect()
+    }
+}
+
+pub(super) fn path_segment_at_position(
+    geometry: &Geometry,
+    position: bellatrix_mde_cordis::Point,
+    zoom: f32,
+) -> Option<PathHandle> {
+    let Geometry::Path { start, segments } = geometry else {
+        return None;
+    };
+    let tolerance = 5.0 / f64::from(zoom);
+    let mut previous = *start;
+    for (index, segment) in segments.iter().enumerate() {
+        let (hit, end) = match segment {
+            PathSegment::Line { to } => (
+                relationship_segment_distance(position, previous, *to) <= tolerance,
+                *to,
+            ),
+            PathSegment::Cubic { control1, control2, to } => (
+                relationship_cubic_hit(position, [previous, *control1, *control2, *to], tolerance, 0.25 / f64::from(zoom), 0),
+                *to,
+            ),
+        };
+        if hit {
+            return Some(PathHandle::Segment(index));
+        }
+        previous = end;
+    }
+    None
+}
+
+fn path_handle_positions(geometry: &Geometry) -> Vec<(PathHandle, bellatrix_mde_cordis::Point)> {
+    let Geometry::Path { start, segments } = geometry else {
+        return Vec::new();
+    };
+    let mut handles = Vec::new();
+    let mut previous = *start;
+    for (index, segment) in segments.iter().enumerate() {
+        let end = match segment {
+            PathSegment::Line { to } => {
+                if (to.x - previous.x).hypot(to.y - previous.y) > f64::EPSILON {
+                    handles.push((PathHandle::Segment(index), bellatrix_mde_cordis::Point {
+                        x: previous.x / 2.0 + to.x / 2.0,
+                        y: previous.y / 2.0 + to.y / 2.0,
+                    }));
+                }
+                *to
+            }
+            PathSegment::Cubic { control1, control2, to } => {
+                handles.push((PathHandle::Control1(index), *control1));
+                handles.push((PathHandle::Control2(index), *control2));
+                handles.push((PathHandle::Segment(index), bellatrix_mde_cordis::Point {
+                    x: previous.x * 0.125 + control1.x * 0.375 + control2.x * 0.375 + to.x * 0.125,
+                    y: previous.y * 0.125 + control1.y * 0.375 + control2.y * 0.375 + to.y * 0.125,
+                }));
+                *to
+            }
+        };
+        if index + 1 < segments.len() {
+            handles.push((PathHandle::Vertex(index), end));
+        }
+        previous = end;
+    }
+    handles
+}
+
+pub(super) fn edited_path_geometry(
+    geometry: &Geometry,
+    handle: PathHandle,
+    dx: f64,
+    dy: f64,
+) -> Geometry {
+    if !dx.is_finite() || !dy.is_finite() || (dx == 0.0 && dy == 0.0) {
+        return geometry.clone();
+    }
+    let mut edited = geometry.clone();
+    let Geometry::Path { start, segments } = &mut edited else {
+        return edited;
+    };
+    let translate = |point: &mut bellatrix_mde_cordis::Point| {
+        point.x += dx;
+        point.y += dy;
+    };
+    match handle {
+        PathHandle::Vertex(index) if index + 1 < segments.len() => {
+            translate_path_vertex(segments, index, dx, dy);
+        }
+        PathHandle::Control1(index) => {
+            if let Some(PathSegment::Cubic { control1, .. }) = segments.get_mut(index) {
+                translate(control1);
+            }
+        }
+        PathHandle::Control2(index) => {
+            if let Some(PathSegment::Cubic { control2, .. }) = segments.get_mut(index) {
+                translate(control2);
+            }
+        }
+        PathHandle::Segment(index) => {
+            let previous = if index == 0 { *start } else {
+                match segments.get(index - 1) {
+                    Some(PathSegment::Line { to } | PathSegment::Cubic { to, .. }) => *to,
+                    None => return geometry.clone(),
+                }
+            };
+            match segments.get(index) {
+                Some(PathSegment::Cubic { .. }) => {
+                    if let Some(PathSegment::Cubic { control1, control2, .. }) = segments.get_mut(index) {
+                        translate(control1);
+                        translate(control2);
+                    }
+                }
+                Some(PathSegment::Line { to }) => {
+                    let end = *to;
+                    let (dx, dy) = if (previous.x - end.x).abs() < 0.000001 {
+                        (dx, 0.0)
+                    } else if (previous.y - end.y).abs() < 0.000001 {
+                        (0.0, dy)
+                    } else { (dx, dy) };
+                    if dx == 0.0 && dy == 0.0 {
+                        return geometry.clone();
+                    }
+                    let shifted = |point: bellatrix_mde_cordis::Point| bellatrix_mde_cordis::Point {
+                        x: point.x + dx,
+                        y: point.y + dy,
+                    };
+                    let mut replacement = Vec::new();
+                    if index == 0 {
+                        // Add a bend instead of detaching the first endpoint.
+                        replacement.push(PathSegment::Line { to: shifted(previous) });
+                    } else {
+                        translate_path_vertex(segments, index - 1, dx, dy);
+                    }
+                    replacement.push(PathSegment::Line { to: shifted(end) });
+                    if index + 1 == segments.len() {
+                        replacement.push(PathSegment::Line { to: end });
+                    } else if let Some(PathSegment::Cubic { control1, .. }) = segments.get_mut(index + 1) {
+                        control1.x += dx;
+                        control1.y += dy;
+                    }
+                    segments.splice(index..=index, replacement);
+                }
+                None => {}
+            }
+        }
+        PathHandle::Vertex(_) => {}
+    }
+    edited
+}
+
+fn translate_path_vertex(segments: &mut [PathSegment], index: usize, dx: f64, dy: f64) {
+    let translate = |point: &mut bellatrix_mde_cordis::Point| {
+        point.x += dx;
+        point.y += dy;
+    };
+    match segments.get_mut(index) {
+        Some(PathSegment::Line { to }) => translate(to),
+        Some(PathSegment::Cubic { control2, to, .. }) => {
+            translate(control2);
+            translate(to);
+        }
+        None => return,
+    }
+    if let Some(PathSegment::Cubic { control1, .. }) = segments.get_mut(index + 1) {
+        translate(control1);
     }
 }
 

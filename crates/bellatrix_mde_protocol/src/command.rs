@@ -887,6 +887,11 @@ pub enum Command {
         view_id: String,
         style: Style,
     },
+    SetViewPath {
+        diagram_id: String,
+        view_id: String,
+        geometry: Geometry,
+    },
     SetViewRouting {
         diagram_id: String,
         view_id: String,
@@ -929,6 +934,11 @@ pub enum NavigationKnowledge {
 /// Restricted edits supported by lossless native MDJ interchange.
 #[derive(Clone, Debug)]
 pub enum MdjEditCommand {
+    SetViewPath {
+        diagram_id: String,
+        view_id: String,
+        geometry: Geometry,
+    },
     SetViewLabel {
         view_id: String,
         label: Option<String>,
@@ -956,6 +966,15 @@ pub enum MdjEditCommand {
 impl From<MdjEditCommand> for Command {
     fn from(value: MdjEditCommand) -> Self {
         match value {
+            MdjEditCommand::SetViewPath {
+                diagram_id,
+                view_id,
+                geometry,
+            } => Self::SetViewPath {
+                diagram_id,
+                view_id,
+                geometry,
+            },
             MdjEditCommand::SetViewLabel { view_id, label } => {
                 Self::SetViewLabel { view_id, label }
             }

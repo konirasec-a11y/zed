@@ -214,6 +214,11 @@ pub enum Command {
         view_id: String,
         style: Style,
     },
+    SetViewPath {
+        diagram_id: String,
+        view_id: String,
+        geometry: Geometry,
+    },
     SetViewRouting {
         diagram_id: String,
         view_id: String,
@@ -695,6 +700,17 @@ pub(crate) fn apply_with_diagram_operations(
             view_id,
             style,
         } => view_style::set_style(&mut section, diagram_id, view_id, style)?,
+        Command::SetViewPath {
+            diagram_id,
+            view_id,
+            geometry,
+        } => view_style::set_path(
+            &mut section,
+            diagram_id,
+            view_id,
+            geometry,
+            diagram_operations,
+        )?,
         Command::SetViewRouting {
             diagram_id,
             view_id,
@@ -776,6 +792,7 @@ pub(crate) fn apply_with_diagram_operations(
                 | Command::SetViewEndpoints { .. }
                 | Command::SetViewStyle { .. }
                 | Command::SetViewRouting { .. }
+                | Command::SetViewPath { .. }
                 | Command::ReorderView { .. }
         );
     if !presentation_only {

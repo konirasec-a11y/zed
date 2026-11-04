@@ -73,6 +73,7 @@ mod view_edits;
 mod view_style;
 pub use view_style::{
     ModelingReorderView, ModelingReorderViewRequested, ModelingSetViewLabel,
+    ModelingSetViewPath, ModelingSetViewPathRequested,
     ModelingSetViewLabelRequested, ModelingSetViewRouting, ModelingSetViewRoutingRequested,
     ModelingSetViewStyle, ModelingSetViewStyleRequested, ModelingSetViewTiming,
     ModelingSetViewTimingRequested,

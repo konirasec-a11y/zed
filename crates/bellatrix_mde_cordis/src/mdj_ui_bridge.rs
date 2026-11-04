@@ -154,6 +154,7 @@ fn reject(command: MdeUiCommand, reason: &str) {
         | MdeUiCommand::SetViewTimingTracked { completion, .. }
         | MdeUiCommand::SetViewStyleTracked { completion, .. }
         | MdeUiCommand::SetViewRoutingTracked { completion, .. }
+        | MdeUiCommand::SetViewPathTracked { completion, .. }
         | MdeUiCommand::ReorderViewTracked { completion, .. }
         | MdeUiCommand::SetPropertyTracked { completion, .. } => {
             completion.send_replace(Some(Err(reason.to_owned())));
@@ -164,6 +165,10 @@ fn reject(command: MdeUiCommand, reason: &str) {
 
 fn edit(command: MdeUiCommand) -> Result<Edit, String> {
     let (command, completion) = match command {
+        MdeUiCommand::SetViewPathTracked {
+            request,
+            completion,
+        } => (MdeUiCommand::SetViewPath(request), Some(completion)),
         MdeUiCommand::SetViewLabelTracked {
             request,
             completion,
@@ -179,6 +184,15 @@ fn edit(command: MdeUiCommand) -> Result<Edit, String> {
         command => (command, None),
     };
     let (id, revision, command) = match command {
+        MdeUiCommand::SetViewPath(r) => (
+            r.project_id,
+            r.expected_revision,
+            Command::SetViewPath {
+                diagram_id: r.diagram_id,
+                view_id: r.view_id,
+                geometry: r.geometry,
+            },
+        ),
         MdeUiCommand::SetViewLabel(r) => (
             r.project_id,
             r.expected_revision,

@@ -20,6 +20,28 @@ fn view<'a>(
 }
 
 impl DiagramOperations for ModelingDiagramOperations {
+    fn current_path(
+        &self,
+        section: &ModelingSection,
+        diagram_id: &str,
+        view_id: &str,
+    ) -> Result<Geometry, String> {
+        let current = section
+            .diagrams
+            .iter()
+            .find(|diagram| diagram.id == diagram_id)
+            .ok_or("diagram not found")?
+            .all_views()
+            .find(|view| view.id == view_id)
+            .ok_or("view not found in diagram")?;
+        if current.style.routing == Some(RelationshipRouting::Manual) || current.draft.is_some() {
+            return Ok(current.geometry.clone());
+        }
+        crate::relationships::RelationshipGraph::new(section, diagram_id)
+            .view_path(view_id)
+            .ok_or_else(|| "view has no editable projected relationship path".into())
+    }
+
     fn project_routing(
         &self,
         section: &ModelingSection,

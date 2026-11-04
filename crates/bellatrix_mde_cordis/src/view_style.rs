@@ -1,4 +1,4 @@
-use crate::Command;
+use crate::{Command, Geometry};
 use crate::{RelationshipRouting, Style, TimingPresentation, ViewOrder};
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::{Context, Event, event::responder};
@@ -44,6 +44,21 @@ pub struct ModelingSetViewStyle;
 impl Event for ModelingSetViewStyle {
     const NAME: &'static str = "bellatrix.mde.set-view-style.v1";
     type Args = ModelingSetViewStyleRequested;
+    type Output = Result<u64, String>;
+}
+
+#[derive(Clone, Debug)]
+pub struct ModelingSetViewPathRequested {
+    pub project_id: ProjectId,
+    pub diagram_id: String,
+    pub view_id: String,
+    pub geometry: Geometry,
+    pub expected_revision: u64,
+}
+pub struct ModelingSetViewPath;
+impl Event for ModelingSetViewPath {
+    const NAME: &'static str = "bellatrix.mde.set-view-path.v1";
+    type Args = ModelingSetViewPathRequested;
     type Output = Result<u64, String>;
 }
 
@@ -139,6 +154,29 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
                             diagram_id: request.diagram_id,
                             view_id: request.view_id,
                             style,
+                        },
+                    )
+                    .await;
+                    Ok::<_, Infallible>(Some(result))
+                }
+            },
+        ))
+        .map_err(|error| io::Error::other(error.to_string()))?;
+    let service = Arc::clone(&projects);
+    let _path = context
+        .on::<ModelingSetViewPath, _>(responder(
+            move |context: Context, request: ModelingSetViewPathRequested| {
+                let projects = Arc::clone(&service);
+                async move {
+                    let result = crate::mutation::execute(
+                        &context,
+                        &projects,
+                        request.project_id,
+                        request.expected_revision,
+                        Command::SetViewPath {
+                            diagram_id: request.diagram_id,
+                            view_id: request.view_id,
+                            geometry: request.geometry,
                         },
                     )
                     .await;

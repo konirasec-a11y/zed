@@ -17,6 +17,7 @@ use crate::{
     ModelingResizeViewRequested, ModelingSetExplorerParent, ModelingSetExplorerParentRequested,
     ModelingSetNameExpression, ModelingSetNameExpressionRequested, ModelingSetOwner,
     ModelingSetOwnerRequested, ModelingSetProperty, ModelingSetPropertyRequested,
+    ModelingSetViewPath, ModelingSetViewPathRequested,
     ModelingSetViewLabel, ModelingSetViewLabelRequested, ModelingSetViewRouting,
     ModelingSetViewRoutingRequested, ModelingSetViewStyle, ModelingSetViewStyleRequested,
     ModelingSetViewTiming, ModelingSetViewTimingRequested, ModelingValidateDiagram,
@@ -53,6 +54,11 @@ pub enum MdeUiCommand {
     SetViewStyle(ModelingSetViewStyleRequested),
     SetViewStyleTracked {
         request: ModelingSetViewStyleRequested,
+        completion: watch::Sender<Option<Result<u64, String>>>,
+    },
+    SetViewPath(ModelingSetViewPathRequested),
+    SetViewPathTracked {
+        request: ModelingSetViewPathRequested,
         completion: watch::Sender<Option<Result<u64, String>>>,
     },
     SetViewRouting(ModelingSetViewRoutingRequested),
@@ -259,6 +265,28 @@ impl MdeUiBridge {
                         };
                         completion.send_replace(Some(receipt));
                         describe("View style updated", result)
+                    }
+                    MdeUiCommand::SetViewPath(request) => describe(
+                        "View path updated",
+                        cordis
+                            .query::<ModelingSetViewPath>(Routing::Unscoped, request)
+                            .await,
+                    ),
+                    MdeUiCommand::SetViewPathTracked {
+                        request,
+                        completion,
+                    } => {
+                        let result = cordis
+                            .query::<ModelingSetViewPath>(Routing::Unscoped, request)
+                            .await;
+                        let receipt = match &result {
+                            Ok(QueryOutcome::Answer(Ok(revision))) => Ok(*revision),
+                            Ok(QueryOutcome::Answer(Err(error))) => Err(error.to_string()),
+                            Ok(QueryOutcome::Miss) => Err("Cordis responder unavailable".into()),
+                            Err(error) => Err(error.to_string()),
+                        };
+                        completion.send_replace(Some(receipt));
+                        describe("View path updated", result)
                     }
                     MdeUiCommand::SetViewRouting(request) => describe(
                         "View routing updated",
