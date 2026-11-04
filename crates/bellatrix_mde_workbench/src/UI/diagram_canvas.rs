@@ -311,10 +311,9 @@ impl Render for MdeWorkbenchItem {
                             bellatrix_mde::UmlNotation::ClassifierRectangle
                                 | bellatrix_mde::UmlNotation::PackageTab
                         ) {
-                            let applied = element
-                                .properties
-                                .get("stereotype")
-                                .and_then(serde_json::Value::as_str);
+                            let applied =
+                                bellatrix_mde::stereotype_presentation(&snapshot.section, element)
+                                    .label();
                             local_height = local_height.max(
                                 bellatrix_mde::uml_header(&element.kind, applied)
                                     .minimum_height(notation)
@@ -437,10 +436,9 @@ impl Render for MdeWorkbenchItem {
                                 let _ = edit_owner
                                     .update(cx, |item, cx| item.begin_inline_edit(id, window, cx));
                             });
-                        if let Some(value) = element
-                            .properties
-                            .get("stereotype")
-                            .and_then(serde_json::Value::as_str)
+                        if let Some(value) =
+                            bellatrix_mde::stereotype_presentation(&snapshot.section, element)
+                            .label()
                             .filter(|value| !value.trim().is_empty())
                         {
                             classifier = classifier.stereotype(value.to_owned());
@@ -561,10 +559,9 @@ impl Render for MdeWorkbenchItem {
                             {
                                 figure = figure.pseudostate_kind(kind);
                             }
-                            if let Some(value) = element
-                                .properties
-                                .get("stereotype")
-                                .and_then(serde_json::Value::as_str)
+                            if let Some(value) =
+                                bellatrix_mde::stereotype_presentation(&snapshot.section, element)
+                                    .label()
                             {
                                 figure = figure.stereotype(value.to_owned());
                             }

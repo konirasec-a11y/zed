@@ -162,6 +162,12 @@ fn editor_for_value_type(value_type: PropertyValueType, multiline: bool) -> Prop
 fn apply_normative_contracts(element: crate::uml::root::ElementRef<'_>, properties: &mut [InspectorProperty]) {
     for field in properties {
         let Some(key) = field.path.strip_prefix("properties.") else { continue; };
+        if key == "stereotype" && !field.value.is_string() {
+            // The scalar editor would replace a reference or null with its JSON text.
+            field.editor = PropertyEditor::ReadOnly;
+            field.editable = false;
+            continue;
+        }
         let fallback = match field.editor {
             PropertyEditor::Text | PropertyEditor::Multiline => PropertyValueType::String,
             PropertyEditor::Boolean => PropertyValueType::Boolean,

@@ -130,7 +130,7 @@ pub use uml_geometry::{
 };
 pub use uml_types::{UmlCapability, UmlQuickCreate, UmlType};
 
-pub use uml_notation::{UmlHeader, UmlNotation, resolve_element_notation, resolve_pseudostate_notation, uml_header, uml_notation};
+pub use uml_notation::{StereotypePresentation, stereotype_presentation, UmlHeader, UmlNotation, resolve_element_notation, resolve_pseudostate_notation, uml_header, uml_notation};
 
 #[path = "view-model/diagram/visual_draft_routing.rs"]
 mod visual_draft_routing;

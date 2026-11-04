@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 const PROJECTION_VERSION: u32 = 1;
 const CLASS_BOOLEAN_FIELDS: [&str; 2] = ["isAbstract", "isActive"];
-const SEMANTIC_FIELDS: [&str; 3] = ["isAbstract", "isActive", "visibility"];
+const SEMANTIC_FIELDS: [&str; 4] = ["isAbstract", "isActive", "visibility", "stereotype"];
 
 #[derive(Debug)]
 pub struct Import {
@@ -189,7 +189,7 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
             diagnostics.push(Diagnostic {
                 path: object.path.clone(),
                 message: if canonical_kind.is_some() {
-                    format!("{} mapped by identity, name, supported explicit ownership, visibility and Boolean class flags only; remaining MDJ properties are preserved as source residue", object.type_name)
+                    format!("{} mapped by identity, name, supported explicit ownership, visibility, Boolean class flags and uninterpreted stereotype variants only; remaining MDJ properties are preserved as source residue", object.type_name)
                 } else if matches!(object.type_name, "UMLModel" | "UMLPackage" | "UMLClass") {
                     let fields = object.properties.iter()
                         .filter(|(field, value)| !supported_semantic_field(object.type_name, field, value))
@@ -747,7 +747,14 @@ fn supported_semantic_field(kind: &str, field: &str, value: &Value) -> bool {
 }
 
 fn supported_semantic_property(kind: &str, field: &str, value: &Value) -> bool {
-    if field == "visibility" && canonical_kind(kind).is_some() {
+    if field == "stereotype" && canonical_kind(kind).is_some() {
+        matches!(
+            crate::StereotypeValue::read(Some(value)),
+            crate::StereotypeValue::Null
+                | crate::StereotypeValue::Text(_)
+                | crate::StereotypeValue::Reference(_)
+        )
+    } else if field == "visibility" && canonical_kind(kind).is_some() {
         matches!(
             value.as_str(),
             Some("public" | "private" | "protected" | "package")

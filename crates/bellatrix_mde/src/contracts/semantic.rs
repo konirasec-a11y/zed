@@ -3,6 +3,32 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum StereotypeValue<'a> {
+    Missing,
+    Null,
+    Text(&'a str),
+    Reference(&'a str),
+    Unsupported(&'a Value),
+}
+
+impl<'a> StereotypeValue<'a> {
+    pub fn read(value: Option<&'a Value>) -> Self {
+        match value {
+            None => Self::Missing,
+            Some(Value::Null) => Self::Null,
+            Some(Value::String(text)) => Self::Text(text),
+            Some(value @ Value::Object(object)) if object.len() == 1 => {
+                match object.get("$ref").and_then(Value::as_str) {
+                    Some(target_id) => Self::Reference(target_id),
+                    None => Self::Unsupported(value),
+                }
+            }
+            Some(value) => Self::Unsupported(value),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Element {
     pub id: String,

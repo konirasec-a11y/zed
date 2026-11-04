@@ -129,10 +129,7 @@ fn route_with_lane(
                 let notation = crate::uml_notation(&element.kind);
                 let header = crate::uml_header(
                     &element.kind,
-                    element
-                        .properties
-                        .get("stereotype")
-                        .and_then(serde_json::Value::as_str),
+                    crate::stereotype_presentation(section, element).label(),
                 );
                 match notation {
                     crate::UmlNotation::ClassifierRectangle | crate::UmlNotation::PackageTab => {

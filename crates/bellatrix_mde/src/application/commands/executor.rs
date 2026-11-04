@@ -789,10 +789,7 @@ fn resize_view(
             } else {
                 crate::uml_header(
                     &element.kind,
-                    element
-                        .properties
-                        .get("stereotype")
-                        .and_then(serde_json::Value::as_str),
+                    crate::stereotype_presentation(section, element).label(),
                 )
                 .minimum_height(crate::resolve_element_notation(element))
             }

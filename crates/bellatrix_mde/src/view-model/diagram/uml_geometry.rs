@@ -26,8 +26,7 @@ pub fn classifier_contents(section: &ModelingSection, owner: &str) -> Classifier
             .elements
             .iter()
             .find(|element| element.id == owner)
-            .and_then(|element| element.properties.get("stereotype"))
-            .and_then(serde_json::Value::as_str)
+            .and_then(|element| crate::stereotype_presentation(section, element).label())
             .is_some_and(|value| !value.trim().is_empty()),
         ..Default::default()
     };

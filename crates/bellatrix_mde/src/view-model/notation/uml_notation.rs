@@ -1,4 +1,48 @@
-use crate::UmlType;
+use crate::{Element, ModelingSection, StereotypeValue, UmlType};
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum StereotypePresentation<'a> {
+    Missing,
+    Null,
+    Text(&'a str),
+    UnverifiedReference {
+        target_id: &'a str,
+        label: Option<&'a str>,
+    },
+    Unsupported(&'a serde_json::Value),
+}
+
+impl<'a> StereotypePresentation<'a> {
+    pub fn label(self) -> Option<&'a str> {
+        match self {
+            Self::Text(label) => Some(label),
+            Self::UnverifiedReference { label, .. } => label,
+            _ => None,
+        }
+    }
+}
+
+pub fn stereotype_presentation<'a>(
+    section: &'a ModelingSection,
+    element: &'a Element,
+) -> StereotypePresentation<'a> {
+    match StereotypeValue::read(element.properties.get("stereotype")) {
+        StereotypeValue::Missing => StereotypePresentation::Missing,
+        StereotypeValue::Null => StereotypePresentation::Null,
+        StereotypeValue::Text(text) => StereotypePresentation::Text(text),
+        StereotypeValue::Reference(target_id) => {
+            // Name lookup is presentation only, not verification of the UML application.
+            let mut targets = section
+                .elements
+                .iter()
+                .filter(|target| target.id == target_id);
+            let label = targets.next().map(|target| target.name.as_str());
+            let label = if targets.next().is_none() { label } else { None };
+            StereotypePresentation::UnverifiedReference { target_id, label }
+        }
+        StereotypeValue::Unsupported(value) => StereotypePresentation::Unsupported(value),
+    }
+}
 
 /// Supported presentation strategies, not UML metaclass inheritance.
 /// Unknown and deferred kinds must not acquire a class rectangle by fallback.

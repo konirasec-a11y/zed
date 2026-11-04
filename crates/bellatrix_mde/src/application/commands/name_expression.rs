@@ -35,7 +35,9 @@ pub(super) fn apply(section: &mut ModelingSection, id: &str, expression: &str) -
     }
     element.name = parsed.name;
     if let Some(stereotype) = parsed.stereotype { element.properties.insert("stereotype".into(), serde_json::json!(stereotype)); }
-    else { element.properties.remove("stereotype"); }
+    else if element.properties.get("stereotype").is_some_and(serde_json::Value::is_string) {
+        element.properties.remove("stereotype");
+    }
     if let Some(visibility) = parsed.visibility { element.properties.insert("visibility".into(), serde_json::json!(visibility)); }
     Ok(())
 }
