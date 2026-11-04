@@ -2011,3 +2011,181 @@ fn object_node_family_rule(response: &Value, severity: Option<&str>) -> FlowResu
     }
     Ok(())
 }
+
+#[test]
+fn object_node_selection_ordering_equivalence_survives_defaults_and_repair() -> FlowResult<()> {
+    assert!(
+        include_str!("features/activity_edge_lifecycle.feature").contains(
+            "Scenario: Preserve ObjectNode selection ordering equivalence through repair"
+        )
+    );
+    let mut original = imported_activity()?;
+    original["model"]["elements"].as_array_mut().ok_or("missing elements")?.push(
+        json!({"id":"node-selection","kind":"uml.opaque_behavior","name":"chooseToken","properties":{}}));
+    original["model"]["relations"]
+        .as_array_mut()
+        .ok_or("missing relations")?
+        .push(
+            json!({"id":"owns-node-selection","kind":"owns","from":"root","to":"node-selection"}),
+        );
+    let baseline = validate(&original)?;
+    object_node_selection_rule(&baseline, None)?;
+    assert_eq!(baseline["has_errors"], false, "{baseline}");
+    reopen("node-selection-defaults", &original, &baseline)?;
+    for ordering in ["FIFO", "LIFO", "unordered", "ordered"] {
+        for present in [false, true] {
+            let mut edited = original.clone();
+            element(&mut edited, "order-output")?["properties"]["ordering"] = json!(ordering);
+            element(&mut edited, "order-output")?["properties"]["selection"] = if present {
+                json!({"$ref":"node-selection"})
+            } else {
+                Value::Null
+            };
+            let response = validate(&edited)?;
+            let valid = present == (ordering == "ordered");
+            object_node_selection_rule(&response, if valid { None } else { Some("error") })?;
+            assert_eq!(response["has_errors"], !valid, "{response}");
+            reopen(
+                &format!("node-selection-{ordering}-{present}"),
+                &edited,
+                &response,
+            )?;
+        }
+    }
+    let mut defaulted = original.clone();
+    element(&mut defaulted, "order-output")?["properties"]["selection"] =
+        json!({"$ref":"node-selection"});
+    let default_violation = validate(&defaulted)?;
+    object_node_selection_rule(&default_violation, Some("error"))?;
+    assert!(
+        element(&mut defaulted, "order-output")?["properties"]
+            .get("ordering")
+            .is_none()
+    );
+    reopen(
+        "node-selection-implicit-FIFO",
+        &defaulted,
+        &default_violation,
+    )?;
+    for (name, ordering, selection, severity, value_error, contract_error) in [
+        (
+            "external-ordered",
+            json!("ordered"),
+            json!({"href":"external.uml#selection"}),
+            None,
+            false,
+            false,
+        ),
+        (
+            "external-FIFO",
+            json!("FIFO"),
+            json!({"href":"external.uml#selection"}),
+            Some("error"),
+            false,
+            false,
+        ),
+        (
+            "malformed-selection",
+            json!("ordered"),
+            json!(42),
+            Some("warning"),
+            false,
+            true,
+        ),
+        (
+            "wrong-selection-type",
+            json!("FIFO"),
+            json!({"$ref":"order"}),
+            Some("warning"),
+            false,
+            true,
+        ),
+        (
+            "invalid-ordering-present",
+            json!("fifo"),
+            json!({"$ref":"node-selection"}),
+            Some("warning"),
+            true,
+            false,
+        ),
+        (
+            "invalid-ordering-absent",
+            json!(false),
+            Value::Null,
+            Some("warning"),
+            true,
+            false,
+        ),
+        (
+            "null-ordering",
+            Value::Null,
+            Value::Null,
+            Some("warning"),
+            true,
+            false,
+        ),
+    ] {
+        let mut edited = original.clone();
+        element(&mut edited, "order-output")?["properties"]["ordering"] = ordering;
+        element(&mut edited, "order-output")?["properties"]["selection"] = selection;
+        let response = validate(&edited)?;
+        object_node_selection_rule(&response, severity)?;
+        for (required, code) in [
+            (value_error, "UML_PROPERTY_VALUE"),
+            (contract_error, "UML_PROPERTY_CONTRACT"),
+        ] {
+            if required {
+                assert!(
+                    response["diagnostics"]
+                        .as_array()
+                        .ok_or("missing diagnostics")?
+                        .iter()
+                        .any(|d| d["subject_id"] == "order-output"
+                            && d["code"] == code
+                            && d["severity"] == "error"),
+                    "{response}"
+                );
+            }
+        }
+        assert_eq!(
+            response["has_errors"],
+            value_error || contract_error || severity == Some("error"),
+            "{response}"
+        );
+        reopen(&format!("node-selection-{name}"), &edited, &response)?;
+    }
+    let mut dangling = original.clone();
+    element(&mut dangling, "order-output")?["properties"]["selection"] =
+        json!({"$ref":"missing-behavior"});
+    let unresolved = validate(&dangling)?;
+    object_node_selection_rule(&unresolved, Some("warning"))?;
+    reopen("node-selection-dangling", &dangling, &unresolved)?;
+    assert_eq!(validate(&original)?, baseline);
+    reopen("node-selection-repaired", &original, &baseline)?;
+    Ok(())
+}
+
+fn object_node_selection_rule(response: &Value, severity: Option<&str>) -> FlowResult<()> {
+    let matching: Vec<_> = response["diagnostics"]
+        .as_array()
+        .ok_or("missing diagnostics")?
+        .iter()
+        .filter(|d| {
+            d["subject_id"] == "order-output"
+                && matches!(
+                    d["code"].as_str(),
+                    Some(
+                        "UML_OBJECT_NODE_SELECTION_BEHAVIOR"
+                            | "MDE_OBJECT_NODE_SELECTION_BEHAVIOR_UNVERIFIED"
+                    )
+                )
+        })
+        .collect();
+    if let Some(severity) = severity {
+        assert_eq!(matching.len(), 1, "{response}");
+        assert_eq!(matching[0]["severity"], severity, "{response}");
+    } else {
+        assert!(matching.is_empty(), "{response}");
+    }
+    Ok(())
+}

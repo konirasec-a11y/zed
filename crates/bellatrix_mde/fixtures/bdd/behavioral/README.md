@@ -155,3 +155,12 @@ ObjectFlows cannot invalidate the universal. Malformed flags have separate
 scalar errors, and a proven consequent satisfies the implication independently.
 The lifecycle covers CentralBufferNode, both edge representations, default and
 malformed flags, incoming/outgoing witnesses, JSON/BLX reopen and repair.
+
+ObjectNode-selection_behavior implements the equivalence between selection
+presence and ordering=ordered, including ObjectNode subclasses. Ordering defaults
+to normative FIFO without being materialized. Well-formed external selection
+references establish presence; unresolved local or malformed references and
+invalid ordering leave equality unverified with separate contract findings.
+This is not a one-way implication and does not validate Behavior parameters.
+The OutputPin lifecycle covers all ordering literals, both selection states,
+external/malformed values, JSON/BLX reopen and repair.

@@ -175,3 +175,14 @@ Feature: ControlFlow object-node endpoint semantics across the authored Activity
     And possible ObjectFlows do not invalidate the universal
     And a known endpoint or self-loop establishes incidence despite another unknown endpoint
     Then relation and object records survive JSON and BLX reopening and baseline repair
+
+  Scenario: Preserve ObjectNode selection ordering equivalence through repair
+    Given an imported OutputPin with no selection and normative default ordering FIFO
+    When selection presence and every ordering enum are edited
+    Then selection is present if and only if ordering is ordered
+    And external well-formed selection references establish presence without their definitions
+    And absent or null selection establishes absence
+    And malformed ordering or selection leaves equality unverified with separate contract errors
+    And dangling local selection references remain unverified
+    Then each state survives JSON and BLX reopening without materializing defaults
+    And restoring the original document restores the baseline result

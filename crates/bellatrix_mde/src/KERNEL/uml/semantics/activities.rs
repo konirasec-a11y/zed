@@ -179,6 +179,37 @@ fn activity_edge_candidates<'a>(references: &ReferenceIndex<'a>) -> Vec<ElementR
     candidates
 }
 
+fn activity_reference_present(
+    references: &ReferenceIndex<'_>,
+    element: ElementRef<'_>,
+    metaclass: &str,
+    property: &str,
+) -> Result<bool, QueryError> {
+    // Presence does not need an external definition. Its unresolved type has
+    // a separate contract diagnostic; malformed envelopes prove no presence.
+    if element
+        .properties()
+        .get(property)
+        .is_some_and(|value| matches!(external_reference_href(value), Ok(Some(_))))
+    {
+        return Ok(true);
+    }
+    optional_activity_reference(references, element, metaclass, property)
+        .map(|reference| reference.is_some())
+}
+
+fn object_node_selection(
+    references: &ReferenceIndex<'_>,
+    node: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let present = activity_reference_present(references, node, "ObjectNode", "selection")?;
+    let ordering = schema::read_effective_scalar(node, "ordering")
+        .map_err(|error| QueryError::unsupported(node.id(), error))?;
+    // This is an equivalence, not merely selection implies ordered. Neither
+    // Boolean side alone decides equality if the other side is unknown.
+    Ok(present == (ordering.as_str() == Some("ordered")))
+}
+
 fn object_node_edges(
     references: &ReferenceIndex<'_>,
     node: ElementRef<'_>,
@@ -467,6 +498,13 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
         let mut checks = Vec::new();
         if node.conforms_to("ObjectNode") {
             checks.push((
+                object_node_selection(references, node),
+                "UML_OBJECT_NODE_SELECTION_BEHAVIOR",
+                "MDE_OBJECT_NODE_SELECTION_BEHAVIOR_UNVERIFIED",
+                "ObjectNode-selection_behavior",
+                "an ObjectNode has a selection Behavior if and only if its ordering is ordered",
+            ));
+            checks.push((
                 object_node_edges(references, node),
                 "UML_OBJECT_NODE_OBJECT_FLOW_EDGES",
                 "MDE_OBJECT_NODE_OBJECT_FLOW_EDGES_UNVERIFIED",
@@ -477,19 +515,8 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
         if node.conforms_to("ObjectFlow") {
             checks.push((
                 accept_any([
-                    // A well-formed external reference proves presence without
-                    // needing the external Behavior definition. Its unresolved
-                    // type still has a separate property-contract diagnostic.
-                    if node
-                        .properties()
-                        .get("selection")
-                        .is_some_and(|value| matches!(external_reference_href(value), Ok(Some(_))))
-                    {
-                        Ok(false)
-                    } else {
-                        optional_activity_reference(references, node, "ObjectFlow", "selection")
-                            .map(|selection| selection.is_none())
-                    },
+                    activity_reference_present(references, node, "ObjectFlow", "selection")
+                        .map(|present| !present),
                     activity_endpoint(references, node, "source")
                         .map(|source| source.conforms_to("ObjectNode")),
                 ]),
