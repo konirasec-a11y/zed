@@ -209,6 +209,7 @@ pub fn relationship_metaclass(kind: &str) -> Option<&'static str> {
         "uml.control_flow" => "ControlFlow",
         "uml.object_flow" => "ObjectFlow",
         "uml.transition" => "Transition",
+        "uml.protocol_transition" => "ProtocolTransition",
 
         "uml.realization" => "Realization",
         "uml.interface_realization" => "InterfaceRealization",

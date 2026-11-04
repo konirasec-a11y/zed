@@ -246,6 +246,48 @@ fn final_state_regions(references: &ReferenceIndex<'_>, state: ElementRef<'_>) -
     require_all(checks)
 }
 
+fn final_state_outgoing(references: &ReferenceIndex<'_>, state: ElementRef<'_>) -> Result<bool, QueryError> {
+    let descriptor = schema::uml_property("Transition", "source")
+        .map_err(|error| QueryError::unsupported(state.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(state.id(), "missing Transition::source contract"))?;
+    let mut checks = Vec::new();
+    // Vertex::outgoing is derived from Transition::source. The persisted
+    // outgoing cache is never evidence for either presence or absence.
+    for transition in references.model().elements().filter(|element| element.conforms_to("Transition")) {
+        references.element(transition.id()).map_err(|error| QueryError::invalid(transition.id(), error))?;
+        let canonical = match transition {
+            ElementRef::Relationship(relation) => Some(serde_json::json!({"$ref":relation.from})),
+            ElementRef::Object(_) => None,
+        };
+        let authored = transition.properties().get("source");
+        let Some(source) = canonical.as_ref().or(authored) else {
+            checks.push(Err(QueryError::unsupported(transition.id(), "Transition source is not materialized")));
+            continue;
+        };
+        let identity = reference_id(source).ok().flatten();
+        for value in canonical.as_ref().into_iter().chain(authored) {
+            checks.push(match property_contracts::check_value(references, transition, descriptor, value) {
+                PropertyOutcome::Satisfied => Ok(true),
+                PropertyOutcome::Violation(message) => Err(QueryError::invalid(transition.id(), message)),
+                // A different known local source excludes this FinalState even
+                // if that source's metaclass or a redundant reference is unknown.
+                PropertyOutcome::Unverified(_) if identity.is_some() => Ok(true),
+                PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(transition.id(), message)),
+            });
+        }
+        if let (Some(canonical), Some(authored)) = (canonical.as_ref(), authored)
+            && let (Ok(expected), Ok(actual)) = (reference_id(canonical), reference_id(authored))
+            && expected != actual
+        {
+            checks.push(Err(QueryError::invalid(transition.id(), "authored source contradicts canonical relation.from")));
+        }
+        if let Some(source) = identity {
+            checks.push(Ok(source != state.id()));
+        }
+    }
+    require_all(checks)
+}
+
 pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     for element in references.model().elements() {
@@ -265,6 +307,9 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "Region-owned", "a Region cannot have both state and stateMachine owners"));
         }
         if element.conforms_to("FinalState") {
+            constraints.push((final_state_outgoing(references, element),
+                "UML_FINAL_STATE_NO_OUTGOING_TRANSITIONS", "MDE_FINAL_STATE_OUTGOING_UNVERIFIED",
+                "FinalState-no_outgoing_transitions", "a FinalState cannot have outgoing Transitions"));
             constraints.push((final_state_regions(references, element),
                 "UML_FINAL_STATE_NO_REGIONS", "MDE_FINAL_STATE_REGIONS_UNVERIFIED",
                 "FinalState-no_regions", "a FinalState cannot have Regions"));
@@ -291,6 +336,26 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
 mod tests {
     use crate::{Project, uml::root::validate_changes};
     use serde_json::{Value, json};
+
+    #[test]
+    fn final_state_transaction_gate_rejects_new_outgoing_source_and_accepts_repair() -> Result<(), Box<dyn std::error::Error>> {
+        for kind in ["uml.transition", "uml.protocol_transition"] {
+            let project: Project = serde_json::from_value(json!({
+                "id":"model", "name":"Final state outgoing gate", "elements":[
+                    {"id":"final", "kind":"uml.final_state", "name":"Done"},
+                    {"id":"state", "kind":"uml.state", "name":"State"}
+                ], "relations":[{"id":"edge", "kind":kind, "from":"state", "to":"final"}]
+            }))?;
+            let before = project.clone();
+            let mut proposed = project.clone();
+            proposed.relations.first_mut().ok_or("Transition")?.from = "final".into();
+            let failure = validate_changes(&project, &proposed).expect_err("outgoing source must be rejected");
+            assert!(failure.starts_with("UML_FINAL_STATE_NO_OUTGOING_TRANSITIONS:"), "{failure}");
+            assert_eq!(project, before);
+            validate_changes(&proposed, &project)?;
+        }
+        Ok(())
+    }
 
     #[test]
     fn final_state_transaction_gate_rejects_new_submachine_and_accepts_repair() -> Result<(), Box<dyn std::error::Error>> {
