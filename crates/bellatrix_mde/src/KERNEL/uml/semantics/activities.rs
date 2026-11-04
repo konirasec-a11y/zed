@@ -526,9 +526,9 @@ fn partition_represents_property_and_is_contained(
     accept_any([guard.map(|value| !value), consequence])
 }
 
-// These action rules constrain named, required composite Pins. Resolve each
-// property independently so a known violation survives another opaque Pin.
-fn required_action_pin<'a>(
+// Resolve named required action references using their own normative descriptor.
+// Pin references additionally have their composite ownership checked there.
+fn required_action_element<'a>(
     references: &ReferenceIndex<'a>,
     action: ElementRef<'_>,
     metaclass: &str,
@@ -546,6 +546,62 @@ fn required_action_pin<'a>(
         .map_err(|error| QueryError::unsupported(action.id(), error))
 }
 
+fn action_result_matching_type(
+    references: &ReferenceIndex<'_>,
+    action: ElementRef<'_>,
+    metaclass: &str,
+    other_property: &str,
+    optional_result: bool,
+    compare_ordering: bool,
+) -> Result<bool, QueryError> {
+    let result_id = optional_activity_reference(references, action, metaclass, "result")?;
+    let Some(result_id) = result_id else {
+        return if optional_result {
+            Ok(true)
+        } else {
+            Err(QueryError::unsupported(
+                action.id(),
+                "required result OutputPin is unresolved",
+            ))
+        };
+    };
+    let result = references
+        .element(&result_id)
+        .map_err(|error| QueryError::unsupported(action.id(), error))?;
+    let other = required_action_element(references, action, metaclass, other_property)?;
+    // These OCL rules use equality of optional TypedElement::type identities,
+    // not classifier conformance. Even identical unresolved hrefs are unknown.
+    let same_type = (|| {
+        let result_type = optional_activity_reference(references, result, "TypedElement", "type")?;
+        let other_type = optional_activity_reference(references, other, "TypedElement", "type")?;
+        Ok(result_type == other_type)
+    })();
+    if !compare_ordering {
+        return same_type;
+    }
+    let same_ordering = (|| {
+        let result_ordered = schema::read_effective_boolean(result, "isOrdered")
+            .map_err(|error| QueryError::unsupported(result.id(), error))?;
+        let other_ordered = schema::read_effective_boolean(other, "isOrdered")
+            .map_err(|error| QueryError::unsupported(other.id(), error))?;
+        Ok(result_ordered == other_ordered)
+    })();
+    // Compare both clauses independently: a known mismatch cannot be hidden by
+    // an opaque Type or malformed ordering in the opposite clause.
+    require_all([same_type, same_ordering])
+}
+
+// UML.xmi ReadExtentAction-type_is_classifier: result.type = classifier.
+fn read_extent_type_is_classifier(
+    references: &ReferenceIndex<'_>,
+    action: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let classifier = required_action_element(references, action, "ReadExtentAction", "classifier")?;
+    let result = required_action_element(references, action, "ReadExtentAction", "result")?;
+    let result_type = optional_activity_reference(references, result, "TypedElement", "type")?;
+    Ok(result_type.as_deref() == Some(classifier.id()))
+}
+
 fn action_pins_unit_multiplicity(
     references: &ReferenceIndex<'_>,
     action: ElementRef<'_>,
@@ -553,7 +609,7 @@ fn action_pins_unit_multiplicity(
     properties: &[&str],
 ) -> Result<bool, QueryError> {
     require_all(properties.iter().map(|property| {
-        required_action_pin(references, action, metaclass, property)
+        required_action_element(references, action, metaclass, property)
             .and_then(|pin| pin_unit_multiplicity(references, pin))
     }))
 }
@@ -583,7 +639,7 @@ fn action_pins_untyped(
     properties: &[&str],
 ) -> Result<bool, QueryError> {
     require_all(properties.iter().map(|property| {
-        required_action_pin(references, action, metaclass, property).and_then(|pin| {
+        required_action_element(references, action, metaclass, property).and_then(|pin| {
             activity_reference_present(references, pin, "TypedElement", "type")
                 .map(|present| !present)
         })
@@ -1361,6 +1417,69 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "ActivityPartition-dimension_not_contained",
                 "an ActivityPartition with isDimension=true must not be contained by another ActivityPartition",
             ));
+        }
+        if node.conforms_to("ReadExtentAction") {
+            checks.push((
+                read_extent_type_is_classifier(references, node),
+                "UML_READ_EXTENT_ACTION_TYPE_IS_CLASSIFIER",
+                "MDE_READ_EXTENT_ACTION_TYPE_IS_CLASSIFIER_UNVERIFIED",
+                "ReadExtentAction-type_is_classifier",
+                "the result OutputPin type must be identical to the requested Classifier",
+            ));
+        }
+        for (metaclass, other_property, optional_result, compare_ordering, code, unverified, rule) in [
+            (
+                "WriteStructuralFeatureAction", "object", true, false,
+                "UML_WRITE_STRUCTURAL_FEATURE_ACTION_TYPE_OF_RESULT",
+                "MDE_WRITE_STRUCTURAL_FEATURE_ACTION_TYPE_OF_RESULT_UNVERIFIED",
+                "WriteStructuralFeatureAction-type_of_result",
+            ),
+            (
+                "ClearStructuralFeatureAction", "object", true, false,
+                "UML_CLEAR_STRUCTURAL_FEATURE_ACTION_TYPE_OF_RESULT",
+                "MDE_CLEAR_STRUCTURAL_FEATURE_ACTION_TYPE_OF_RESULT_UNVERIFIED",
+                "ClearStructuralFeatureAction-type_of_result",
+            ),
+            (
+                "ReadLinkObjectEndAction", "end", false, false,
+                "UML_READ_LINK_OBJECT_END_ACTION_TYPE_OF_RESULT",
+                "MDE_READ_LINK_OBJECT_END_ACTION_TYPE_OF_RESULT_UNVERIFIED",
+                "ReadLinkObjectEndAction-type_of_result",
+            ),
+            (
+                "ReadLinkObjectEndQualifierAction", "qualifier", false, false,
+                "UML_READ_LINK_OBJECT_END_QUALIFIER_ACTION_SAME_TYPE",
+                "MDE_READ_LINK_OBJECT_END_QUALIFIER_ACTION_SAME_TYPE_UNVERIFIED",
+                "ReadLinkObjectEndQualifierAction-same_type",
+            ),
+            (
+                "ReadStructuralFeatureAction", "structuralFeature", false, true,
+                "UML_READ_STRUCTURAL_FEATURE_ACTION_TYPE_AND_ORDERING",
+                "MDE_READ_STRUCTURAL_FEATURE_ACTION_TYPE_AND_ORDERING_UNVERIFIED",
+                "ReadStructuralFeatureAction-type_and_ordering",
+            ),
+            (
+                "ReadVariableAction", "variable", false, true,
+                "UML_READ_VARIABLE_ACTION_TYPE_AND_ORDERING",
+                "MDE_READ_VARIABLE_ACTION_TYPE_AND_ORDERING_UNVERIFIED",
+                "ReadVariableAction-type_and_ordering",
+            ),
+        ] {
+            if node.conforms_to(metaclass) {
+                checks.push((
+                    action_result_matching_type(
+                        references, node, metaclass, other_property, optional_result, compare_ordering,
+                    ),
+                    code,
+                    unverified,
+                    rule,
+                    if compare_ordering {
+                        "the result OutputPin must match the referenced element's type and ordering"
+                    } else {
+                        "the result OutputPin must match the referenced element's type"
+                    },
+                ));
+            }
         }
         // UML action constraints below name specific Pins, not all inherited
         // inputs/outputs. In particular, TestIdentity multiplicity excludes result.
