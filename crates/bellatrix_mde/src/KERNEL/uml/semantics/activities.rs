@@ -1298,6 +1298,18 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "an ActivityPartition with isDimension=true must not be contained by another ActivityPartition",
             ));
         }
+        if node.conforms_to("StartObjectBehaviorAction") {
+            // UML.xmi no_onport forbids presence, independently of the object
+            // InputPin, the resolved Behavior, or synchronous-call settings.
+            checks.push((
+                activity_reference_present(references, node, "InvocationAction", "onPort")
+                    .map(|present| !present),
+                "UML_START_OBJECT_BEHAVIOR_ACTION_NO_ONPORT",
+                "MDE_START_OBJECT_BEHAVIOR_ACTION_NO_ONPORT_UNVERIFIED",
+                "StartObjectBehaviorAction-no_onport",
+                "a StartObjectBehaviorAction must not specify onPort",
+            ));
+        }
         if node.conforms_to("ReadSelfAction") {
             checks.push((
                 read_self_result_multiplicity(references, node),
