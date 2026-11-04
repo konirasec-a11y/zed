@@ -526,6 +526,39 @@ fn partition_represents_property_and_is_contained(
     accept_any([guard.map(|value| !value), consequence])
 }
 
+fn pin_unit_multiplicity(
+    references: &ReferenceIndex<'_>,
+    pin: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    // MultiplicityElement::is compares bound queries, not interval validity.
+    // A known mismatch survives an opaque opposite bound; contracts and value
+    // evaluation errors keep their own diagnostics rather than becoming false.
+    require_all([
+        value_specifications::lower_bound(references, pin)
+            .map(|lower| lower == 1.into())
+            .map_err(|error| QueryError::unsupported(pin.id(), error.to_string())),
+        value_specifications::upper_bound(references, pin)
+            .map(|upper| upper == 1.into())
+            .map_err(|error| QueryError::unsupported(pin.id(), error.to_string())),
+    ])
+}
+
+// UML.xmi DestroyObjectAction-multiplicity: target.is(1,1).
+fn destroy_object_target_multiplicity(
+    references: &ReferenceIndex<'_>,
+    action: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let target_id =
+        optional_activity_reference(references, action, "DestroyObjectAction", "target")?
+            .ok_or_else(|| {
+                QueryError::unsupported(action.id(), "required target InputPin is unresolved")
+            })?;
+    let target = references
+        .element(&target_id)
+        .map_err(|error| QueryError::unsupported(action.id(), error))?;
+    pin_unit_multiplicity(references, target)
+}
+
 // UML.xmi DestroyObjectAction-no_type: target.type = null.
 fn destroy_object_target_no_type(
     references: &ReferenceIndex<'_>,
@@ -557,17 +590,7 @@ fn create_object_result_multiplicity(
     let result = references
         .element(&result_id)
         .map_err(|error| QueryError::unsupported(action.id(), error))?;
-    // MultiplicityElement::is compares bound queries, not interval validity.
-    // A known mismatch survives an opaque opposite bound; contracts and value
-    // evaluation errors keep their own diagnostics rather than becoming false.
-    require_all([
-        value_specifications::lower_bound(references, result)
-            .map(|lower| lower == 1.into())
-            .map_err(|error| QueryError::unsupported(result.id(), error.to_string())),
-        value_specifications::upper_bound(references, result)
-            .map(|upper| upper == 1.into())
-            .map_err(|error| QueryError::unsupported(result.id(), error.to_string())),
-    ])
+    pin_unit_multiplicity(references, result)
 }
 
 // UML.xmi CreateObjectAction-same_type: result.type = classifier.
@@ -1261,6 +1284,13 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             ));
         }
         if node.conforms_to("DestroyObjectAction") {
+            checks.push((
+                destroy_object_target_multiplicity(references, node),
+                "UML_DESTROY_OBJECT_ACTION_MULTIPLICITY",
+                "MDE_DESTROY_OBJECT_ACTION_MULTIPLICITY_UNVERIFIED",
+                "DestroyObjectAction-multiplicity",
+                "the target InputPin of a DestroyObjectAction must have multiplicity 1..1",
+            ));
             checks.push((
                 destroy_object_target_no_type(references, node),
                 "UML_DESTROY_OBJECT_ACTION_NO_TYPE",
