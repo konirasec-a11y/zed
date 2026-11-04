@@ -147,13 +147,15 @@ fn uses_native_contents(section: &ModelingProjection, view: &View) -> bool {
         if !child.presentation.internal || !child.presentation.visible {
             continue;
         }
-        if child.figure.notation == UmlNotation::Label
-            && let Some(text) = child
-                .rendered_label
-                .text
-                .as_deref()
-                .filter(|text| !text.is_empty())
-        {
+        if !child.rendered_label.diagnostics.is_empty() {
+            return false;
+        }
+        let text = child
+            .rendered_label
+            .text
+            .as_deref()
+            .unwrap_or(&child.display_label);
+        if child.figure.notation == UmlNotation::Label && !text.is_empty() {
             let native_member = view.interface_icon.is_none()
                 && child.subject.as_deref().is_some_and(|subject| {
                     section.elements.iter().any(|member| {
