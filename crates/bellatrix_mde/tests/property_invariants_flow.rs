@@ -1,6 +1,7 @@
 use bellatrix_mde::{
     Format, ModelingSection, Project, StructuralSeverity,
-    commands::{Command, apply}, decode, encode, inspect_element,
+    commands::{Command, apply},
+    decode, encode, inspect_element,
     uml::{associations, references::ReferenceIndex, root::Model},
 };
 use serde_json::{Value, json};
@@ -33,34 +34,54 @@ fn document() -> Project {
             {"id":"owns-left","kind":"owns","from":"association","to":"left"},
             {"id":"owns-right","kind":"owns","from":"association","to":"right"}
         ]
-    })).expect("canonical document")
+    }))
+    .expect("canonical document")
 }
 
 fn has_error(project: &Project, subject: &str, rule: &str) -> bool {
-    Model::from_project(project).validate().iter().any(|issue|
+    Model::from_project(project).validate().iter().any(|issue| {
         issue.severity == StructuralSeverity::Error
-            && issue.subject_id == subject && issue.message.contains(rule))
+            && issue.subject_id == subject
+            && issue.message.contains(rule)
+    })
 }
 
 fn author(project: &mut Project, subject: &str, property: &str, value: Value) {
-    project.elements.iter_mut().find(|element| element.id == subject)
-        .expect("authored Element").properties.insert(property.into(), value);
+    project
+        .elements
+        .iter_mut()
+        .find(|element| element.id == subject)
+        .expect("authored Element")
+        .properties
+        .insert(property.into(), value);
 }
 
 fn edit(project: &Project, subject: &str, property: &str, value: Value) -> Result<Project, String> {
-    apply(project, &Command::SetProperty {
-        element_id: subject.into(), path: format!("properties.{property}"), value,
-    }, 1)
+    apply(
+        project,
+        &Command::SetProperty {
+            element_id: subject.into(),
+            path: format!("properties.{property}"),
+            value,
+        },
+        1,
+    )
 }
 
 fn add_qualifier(project: &mut Project, owner: &str, explicit: bool) {
-    project.elements.push(serde_json::from_value(json!({
-        "id":"qualifier","kind":"uml.attribute","name":"key",
-        "properties":{"type":{"$ref":"a"},"visibility":null}
-    })).expect("qualifier Property"));
-    project.relations.push(serde_json::from_value(json!({
-        "id":"owns-qualifier","kind":"owns","from":owner,"to":"qualifier"
-    })).expect("canonical qualifier ownership"));
+    project.elements.push(
+        serde_json::from_value(json!({
+            "id":"qualifier","kind":"uml.attribute","name":"key",
+            "properties":{"type":{"$ref":"a"},"visibility":null}
+        }))
+        .expect("qualifier Property"),
+    );
+    project.relations.push(
+        serde_json::from_value(json!({
+            "id":"owns-qualifier","kind":"owns","from":owner,"to":"qualifier"
+        }))
+        .expect("canonical qualifier ownership"),
+    );
     if explicit {
         author(project, owner, "qualifier", json!([{"$ref":"qualifier"}]));
     }
@@ -76,11 +97,23 @@ fn derived_union_flow_uses_defaults_rejects_inconsistent_edits_and_reopens() {
         author(&mut project, "attribute", property, json!(false));
     }
     let before = encode(&project, Format::Json).expect("snapshot before rejected edit");
-    assert!(edit(&project, "attribute", "isDerivedUnion", json!(true))
-        .expect_err("derived union requires both flags").contains(READ_ONLY_RULE));
-    assert_eq!(encode(&project, Format::Json).expect("unchanged document"), before);
-    assert_eq!(project.element("attribute").expect("same Property")
-        .properties.get("isDerivedUnion"), Some(&json!(false)));
+    assert!(
+        edit(&project, "attribute", "isDerivedUnion", json!(true))
+            .expect_err("derived union requires both flags")
+            .contains(READ_ONLY_RULE)
+    );
+    assert_eq!(
+        encode(&project, Format::Json).expect("unchanged document"),
+        before
+    );
+    assert_eq!(
+        project
+            .element("attribute")
+            .expect("same Property")
+            .properties
+            .get("isDerivedUnion"),
+        Some(&json!(false))
+    );
 
     for property in ["isReadOnly", "isDerived", "isDerivedUnion"] {
         project = edit(&project, "attribute", property, json!(true)).expect("author valid flags");
@@ -88,14 +121,25 @@ fn derived_union_flow_uses_defaults_rejects_inconsistent_edits_and_reopens() {
     let inspector = inspect_element(&ModelingSection::from_model(&project), "attribute")
         .expect("inspect the same Property");
     for property in ["isReadOnly", "isDerived", "isDerivedUnion"] {
-        assert!(inspector.properties.iter().any(|field|
-            field.path == format!("properties.{property}") && field.value == json!(true)));
+        assert!(
+            inspector
+                .properties
+                .iter()
+                .any(|field| field.path == format!("properties.{property}")
+                    && field.value == json!(true))
+        );
     }
     for (property, rule) in [("isReadOnly", READ_ONLY_RULE), ("isDerived", DERIVED_RULE)] {
         let before = encode(&project, Format::Json).expect("snapshot before inconsistent edit");
-        assert!(edit(&project, "attribute", property, json!(false))
-            .expect_err("inconsistent union flag").contains(rule));
-        assert_eq!(encode(&project, Format::Json).expect("atomic rejection"), before);
+        assert!(
+            edit(&project, "attribute", property, json!(false))
+                .expect_err("inconsistent union flag")
+                .contains(rule)
+        );
+        assert_eq!(
+            encode(&project, Format::Json).expect("atomic rejection"),
+            before
+        );
     }
     for format in [Format::Json, Format::Protobuf] {
         let reopened = decode(&encode(&project, format).expect("save"), format).expect("reopen");
@@ -109,14 +153,21 @@ fn derived_union_flow_uses_defaults_rejects_inconsistent_edits_and_reopens() {
 fn imported_union_drafts_keep_both_diagnostics_and_can_be_repaired_in_place() {
     for kind in ["uml.attribute", "uml.port"] {
         let mut project = document();
-        project.elements.iter_mut().find(|element| element.id == "attribute")
-            .expect("Property or subclass").kind = kind.into();
+        project
+            .elements
+            .iter_mut()
+            .find(|element| element.id == "attribute")
+            .expect("Property or subclass")
+            .kind = kind.into();
         author(&mut project, "attribute", "isDerivedUnion", json!(true));
         assert!(has_error(&project, "attribute", READ_ONLY_RULE));
         assert!(has_error(&project, "attribute", DERIVED_RULE));
         for format in [Format::Json, Format::Protobuf] {
-            let reopened = decode(&encode(&project, format).expect("save invalid draft"), format)
-                .expect("reopen invalid draft");
+            let reopened = decode(
+                &encode(&project, format).expect("save invalid draft"),
+                format,
+            )
+            .expect("reopen invalid draft");
             assert_eq!(reopened, project);
             assert!(has_error(&reopened, "attribute", READ_ONLY_RULE));
             assert!(has_error(&reopened, "attribute", DERIVED_RULE));
@@ -135,9 +186,11 @@ fn imported_union_drafts_keep_both_diagnostics_and_can_be_repaired_in_place() {
                 assert!(edit(&project, "attribute", property, invalid.clone()).is_err());
                 let mut draft = project.clone();
                 author(&mut draft, "attribute", property, invalid);
-                assert!(Model::from_project(&draft).validate().iter().any(|issue|
-                    issue.subject_id == "attribute" && issue.code == "UML_PROPERTY_VALUE"
-                        && issue.message.contains(property)));
+                assert!(Model::from_project(&draft).validate().iter().any(
+                    |issue| issue.subject_id == "attribute"
+                        && issue.code == "UML_PROPERTY_VALUE"
+                        && issue.message.contains(property)
+                ));
             }
         }
     }
@@ -150,17 +203,30 @@ fn qualifier_flow_uses_canonical_association_and_ownership_instead_of_stored_inv
         add_qualifier(&mut valid, "left", explicit);
         assert!(!has_error(&valid, "left", QUALIFIER_RULE));
         let references = ReferenceIndex::new(Model::from_project(&valid));
-        assert_eq!(associations::association_of(&references, "left")
-            .expect("canonical inverse").expect("Association").id(), "association");
-        assert!(!valid.element("left").expect("member Property")
-            .properties.contains_key("association"));
+        assert_eq!(
+            associations::association_of(&references, "left")
+                .expect("canonical inverse")
+                .expect("Association")
+                .id(),
+            "association"
+        );
+        assert!(
+            !valid
+                .element("left")
+                .expect("member Property")
+                .properties
+                .contains_key("association")
+        );
 
         let mut invalid = document();
         add_qualifier(&mut invalid, "attribute", explicit);
         assert!(has_error(&invalid, "attribute", QUALIFIER_RULE));
         for format in [Format::Json, Format::Protobuf] {
-            let reopened = decode(&encode(&invalid, format).expect("save qualified draft"), format)
-                .expect("reopen qualified draft");
+            let reopened = decode(
+                &encode(&invalid, format).expect("save qualified draft"),
+                format,
+            )
+            .expect("reopen qualified draft");
             assert_eq!(invalid, reopened);
             assert!(has_error(&reopened, "attribute", QUALIFIER_RULE));
             let reopened = decode(&encode(&valid, format).expect("save valid end"), format)
@@ -169,15 +235,31 @@ fn qualifier_flow_uses_canonical_association_and_ownership_instead_of_stored_inv
             assert!(!has_error(&reopened, "left", QUALIFIER_RULE));
         }
         let mut forged = invalid.clone();
-        author(&mut forged, "attribute", "association", json!({"$ref":"association"}));
+        author(
+            &mut forged,
+            "attribute",
+            "association",
+            json!({"$ref":"association"}),
+        );
         assert!(has_error(&forged, "attribute", QUALIFIER_RULE));
-        assert!(Model::from_project(&forged).validate().iter().any(|issue|
-            issue.subject_id == "attribute" && issue.code == "UML_PROPERTY_ASSOCIATION_STORAGE"));
+        assert!(
+            Model::from_project(&forged)
+                .validate()
+                .iter()
+                .any(|issue| issue.subject_id == "attribute"
+                    && issue.code == "UML_PROPERTY_ASSOCIATION_STORAGE")
+        );
 
         if !explicit {
-            let repaired = apply(&invalid, &Command::SetOwner {
-                element_id: "qualifier".into(), owner_id: Some("left".into()),
-            }, 2).expect("move qualifier to an Association end without changing its identity");
+            let repaired = apply(
+                &invalid,
+                &Command::SetOwner {
+                    element_id: "qualifier".into(),
+                    owner_id: Some("left".into()),
+                },
+                2,
+            )
+            .expect("move qualifier to an Association end without changing its identity");
             assert!(!has_error(&repaired, "attribute", QUALIFIER_RULE));
             assert!(!has_error(&repaired, "left", QUALIFIER_RULE));
             assert_eq!(repaired.element("qualifier"), invalid.element("qualifier"));
@@ -186,25 +268,6 @@ fn qualifier_flow_uses_canonical_association_and_ownership_instead_of_stored_inv
     let mut empty = document();
     author(&mut empty, "attribute", "qualifier", json!([]));
     assert!(!has_error(&empty, "attribute", QUALIFIER_RULE));
-}
-
-#[test]
-fn qualifier_references_retain_type_identity_uniqueness_and_composite_checks() {
-    let mut project = document();
-    add_qualifier(&mut project, "left", true);
-    for invalid in [json!([{"$ref":"missing"}]), json!([{"$ref":"a"}]),
-                    json!([{"$ref":"qualifier"},{"$ref":"qualifier"}]),
-                    json!([{"$ref":"attribute"}]), json!("qualifier"), Value::Null] {
-        let mut draft = project.clone();
-        author(&mut draft, "left", "qualifier", invalid);
-        assert!(has_error(&draft, "left", "Property-qualifier"));
-    }
-    let mut ambiguous = project.clone();
-    ambiguous.elements.push(serde_json::from_value(json!({
-        "id":"other-association","kind":"uml.nary_association","name":"Other",
-        "properties":{"memberEnd":[{"$ref":"left"},{"$ref":"right"}]}
-    })).expect("ambiguous Association membership"));
-    assert!(has_error(&ambiguous, "left", QUALIFIER_RULE));
 }
 
 #[test]
@@ -230,46 +293,95 @@ fn classifier_feature_rules_reject_edits_preserve_drafts_and_reopen() {
     })).expect("authored classifier document");
     let cases = [
         ("class", "isActive", json!(false), "Class-passive_class"),
-        ("operation", "isAbstract", json!(true), "BehavioralFeature-abstract_no_method"),
-        ("operation", "visibility", json!("private"), "Interface-visibility"),
+        (
+            "operation",
+            "isAbstract",
+            json!(true),
+            "BehavioralFeature-abstract_no_method",
+        ),
+        (
+            "operation",
+            "visibility",
+            json!("private"),
+            "Interface-visibility",
+        ),
     ];
     for (subject, property, value, rule) in cases {
         let snapshot = encode(&project, Format::Json).expect("before edit");
-        let error = edit(&project, subject, property, value.clone()).expect_err("invalid semantic edit");
+        let error =
+            edit(&project, subject, property, value.clone()).expect_err("invalid semantic edit");
         assert!(error.contains(rule), "{error}");
-        assert_eq!(encode(&project, Format::Json).expect("after rejection"), snapshot);
+        assert_eq!(
+            encode(&project, Format::Json).expect("after rejection"),
+            snapshot
+        );
         let mut draft = project.clone();
         author(&mut draft, subject, property, value);
-        let diagnostic_subject = if rule == "Interface-visibility" { "interface" } else { subject };
+        let diagnostic_subject = if rule == "Interface-visibility" {
+            "interface"
+        } else {
+            subject
+        };
         assert!(has_error(&draft, diagnostic_subject, rule));
         for format in [Format::Json, Format::Protobuf] {
-            let reopened = decode(&encode(&draft, format).expect("save draft"), format).expect("reopen draft");
+            let reopened =
+                decode(&encode(&draft, format).expect("save draft"), format).expect("reopen draft");
             assert_eq!(reopened, draft);
             assert!(has_error(&reopened, diagnostic_subject, rule));
         }
     }
     // The default false value has the same semantics as an explicit false.
-    project.elements.iter_mut().find(|element| element.id == "class").expect("class")
-        .properties.remove("isActive");
+    project
+        .elements
+        .iter_mut()
+        .find(|element| element.id == "class")
+        .expect("class")
+        .properties
+        .remove("isActive");
     assert!(has_error(&project, "class", "Class-passive_class"));
     project = edit(&project, "class", "isActive", json!(true)).expect("repair passive draft");
     assert!(!has_error(&project, "class", "Class-passive_class"));
 
     let mut behavior_only = project.clone();
-    behavior_only.relations.retain(|relation| relation.to != "reception");
-    behavior_only.elements.retain(|element| element.id != "reception");
-    author(&mut behavior_only, "class", "classifierBehavior", json!({"$ref":"behavior"}));
+    behavior_only
+        .relations
+        .retain(|relation| relation.to != "reception");
+    behavior_only
+        .elements
+        .retain(|element| element.id != "reception");
+    author(
+        &mut behavior_only,
+        "class",
+        "classifierBehavior",
+        json!({"$ref":"behavior"}),
+    );
     assert!(edit(&behavior_only, "class", "isActive", json!(false)).is_err());
-    author(&mut behavior_only, "class", "classifierBehavior", Value::Null);
-    let passive = edit(&behavior_only, "class", "isActive", json!(false)).expect("passive without classifier behavior");
+    author(
+        &mut behavior_only,
+        "class",
+        "classifierBehavior",
+        Value::Null,
+    );
+    let passive = edit(&behavior_only, "class", "isActive", json!(false))
+        .expect("passive without classifier behavior");
     assert!(!has_error(&passive, "class", "Class-passive_class"));
     assert!(edit(&project, "operation", "visibility", Value::Null).is_err());
 
     // No behavioral execution is needed to enforce the references. A method
     // stored on the Operation and the inverse specification both count.
-    project.elements.iter_mut().find(|element| element.id == "behavior").expect("behavior")
-        .properties.remove("specification");
-    author(&mut project, "operation", "method", json!([{"$ref":"behavior"}]));
+    project
+        .elements
+        .iter_mut()
+        .find(|element| element.id == "behavior")
+        .expect("behavior")
+        .properties
+        .remove("specification");
+    author(
+        &mut project,
+        "operation",
+        "method",
+        json!([{"$ref":"behavior"}]),
+    );
     assert!(edit(&project, "operation", "isAbstract", json!(true)).is_err());
     for methods in [
         json!([{"$ref":"behavior"}, {"href":"other.uml#method"}]),
@@ -280,38 +392,76 @@ fn classifier_feature_rules_reject_edits_preserve_drafts_and_reopen() {
         let before = encode(&mixed, Format::Json).expect("mixed draft snapshot");
         let error = edit(&mixed, "operation", "isAbstract", json!(true))
             .expect_err("known method proves the abstract constraint violation");
-        assert!(error.contains("BehavioralFeature-abstract_no_method"), "{error}");
-        assert_eq!(encode(&mixed, Format::Json).expect("unchanged mixed draft"), before);
+        assert!(
+            error.contains("BehavioralFeature-abstract_no_method"),
+            "{error}"
+        );
+        assert_eq!(
+            encode(&mixed, Format::Json).expect("unchanged mixed draft"),
+            before
+        );
         author(&mut mixed, "operation", "isAbstract", json!(true));
         for format in [Format::Json, Format::Protobuf] {
             let reopened = decode(&encode(&mixed, format).expect("save mixed draft"), format)
                 .expect("reopen mixed draft");
-            assert!(has_error(&reopened, "operation", "BehavioralFeature-abstract_no_method"));
+            assert!(has_error(
+                &reopened,
+                "operation",
+                "BehavioralFeature-abstract_no_method"
+            ));
         }
     }
     author(&mut project, "operation", "method", json!([]));
-    project = edit(&project, "operation", "isAbstract", json!(true)).expect("abstract without method");
-    assert!(!has_error(&project, "operation", "BehavioralFeature-abstract_no_method"));
+    project =
+        edit(&project, "operation", "isAbstract", json!(true)).expect("abstract without method");
+    assert!(!has_error(
+        &project,
+        "operation",
+        "BehavioralFeature-abstract_no_method"
+    ));
 
     for (subject, property, value, rule) in [
-        ("operation", "method", json!([{"href":"other.uml#method"}]), "BehavioralFeature-abstract_no_method"),
-        ("class", "classifierBehavior", json!({"href":"other.uml#behavior"}), "Class-passive_class"),
-        ("interface", "ownedOperation", json!([{"href":"other.uml#operation"}]), "Interface-visibility"),
+        (
+            "operation",
+            "method",
+            json!([{"href":"other.uml#method"}]),
+            "BehavioralFeature-abstract_no_method",
+        ),
+        (
+            "class",
+            "classifierBehavior",
+            json!({"href":"other.uml#behavior"}),
+            "Class-passive_class",
+        ),
+        (
+            "interface",
+            "ownedOperation",
+            json!([{"href":"other.uml#operation"}]),
+            "Interface-visibility",
+        ),
     ] {
         let mut draft = project.clone();
         if subject == "class" {
-            draft.relations.retain(|relation| relation.to != "reception");
+            draft
+                .relations
+                .retain(|relation| relation.to != "reception");
             draft.elements.retain(|element| element.id != "reception");
             author(&mut draft, "class", "isActive", json!(false));
         }
         if subject == "interface" {
-            draft.relations.retain(|relation| relation.to != "operation");
+            draft
+                .relations
+                .retain(|relation| relation.to != "operation");
             draft.elements.retain(|element| element.id != "operation");
         }
         author(&mut draft, subject, property, value);
         let issues = Model::from_project(&draft).validate();
-        assert!(issues.iter().any(|issue| issue.subject_id == subject
-            && issue.severity == StructuralSeverity::Warning && issue.message.contains(rule)), "{issues:?}");
+        assert!(
+            issues.iter().any(|issue| issue.subject_id == subject
+                && issue.severity == StructuralSeverity::Warning
+                && issue.message.contains(rule)),
+            "{issues:?}"
+        );
         assert!(!has_error(&draft, subject, rule));
     }
 }

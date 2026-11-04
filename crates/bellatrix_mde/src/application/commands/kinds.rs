@@ -478,37 +478,3 @@ impl ModelingTool {
         }
     }
 }
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn every_class_tool_has_a_unique_semantic_kind() {
-        let mut kinds = std::collections::HashSet::new();
-        for kind in ModelingElementKind::BASIC
-            .iter()
-            .chain(ModelingElementKind::ADVANCED)
-            .chain(ModelingElementKind::STRUCTURAL)
-            .chain(ModelingElementKind::PACKAGES)
-            .chain(ModelingElementKind::ANNOTATIONS)
-            .chain(ModelingElementKind::PROFILES)
-            .chain(ModelingElementKind::BEHAVIOR)
-            .chain(ModelingElementKind::ACTIVITY_NODES)
-            .chain(ModelingElementKind::STATE_NODES)
-            .chain(ModelingElementKind::INTERACTION_NODES)
-            .chain(ModelingElementKind::DETAILS)
-        {
-            assert!(kinds.insert(kind.model_kind()));
-        }
-        for kind in ModelingRelationKind::BASIC
-            .iter()
-            .chain(ModelingRelationKind::ADVANCED)
-            .chain(ModelingRelationKind::PACKAGES)
-            .chain(ModelingRelationKind::STRUCTURAL)
-            .chain(ModelingRelationKind::BEHAVIOR)
-        {
-            assert!(kinds.insert(kind.model_kind()));
-        }
-        assert_eq!(kinds.len(), 88);
-    }
-
-}

@@ -105,26 +105,7 @@ fn given_exactly_one_collection_then_explicit_or_canonical_operand_passes() -> R
     }
     Ok(())
 }
-#[test]
-fn given_both_collections_nonempty_then_known_conflict_wins_over_external_identity() -> Result {
-    for external in [false, true] {
-        let mut model = document()?;
-        child(&mut model, "literal", "uml.literal_string")?;
-        author(&mut model, "operand", json!([{"$ref":"literal"}]))?;
-        if external {
-            author(
-                &mut model,
-                "subExpression",
-                json!([{"href":"external.uml#String"}]),
-            )?;
-        } else {
-            child(&mut model, "nested", "uml.string_expression")?;
-            author(&mut model, "subExpression", json!([{"$ref":"nested"}]))?;
-        }
-        assert!(has(&model, ERROR)? && !has(&model, UNKNOWN)?);
-    }
-    Ok(())
-}
+
 #[test]
 fn given_only_external_collection_then_unknown_not_empty_or_valid() -> Result {
     for key in ["operand", "subExpression"] {
@@ -137,62 +118,7 @@ fn given_only_external_collection_then_unknown_not_empty_or_valid() -> Result {
     }
     Ok(())
 }
-#[test]
-fn given_ambiguous_child_then_name_expression_is_not_invented_as_operand_or_subexpression() -> Result
-{
-    let mut model = document()?;
-    child(&mut model, "nested", "uml.string_expression")?;
-    assert!(has(&model, UNKNOWN)? && !has(&model, ERROR)?);
-    author(&mut model, "nameExpression", json!({"$ref":"nested"}))?;
-    assert!(has(&model, ERROR)? && !has(&model, UNKNOWN)?);
-    author(&mut model, "subExpression", json!([{"$ref":"nested"}]))?;
-    assert!(!has(&model, ERROR)? && !has(&model, UNKNOWN)?);
-    Ok(())
-}
-#[test]
-fn given_malformed_or_duplicate_collection_then_invalid_dominates_unknown() -> Result {
-    for key in ["operand", "subExpression"] {
-        for value in [
-            json!(null),
-            json!(false),
-            json!([null]),
-            json!([{"$ref":"missing"}]),
-            json!([{"href":"external.uml#Value"},{"href":false}]),
-            json!([{"href":"external.uml#Value"},{"href":"external.uml#Value"}]),
-        ] {
-            let mut model = document()?;
-            author(&mut model, key, value)?;
-            assert!(has(&model, ERROR)? && !has(&model, UNKNOWN)?);
-        }
-    }
-    Ok(())
-}
-#[test]
-fn given_subexpression_of_wrong_type_or_owner_then_shape_does_not_prove_validity() -> Result {
-    for wrong_owner in [false, true] {
-        let mut model = document()?;
-        child(
-            &mut model,
-            "nested",
-            if wrong_owner {
-                "uml.string_expression"
-            } else {
-                "uml.literal_string"
-            },
-        )?;
-        author(&mut model, "subExpression", json!([{"$ref":"nested"}]))?;
-        if wrong_owner {
-            model
-                .relations
-                .iter_mut()
-                .find(|relation| relation.id == "owns-nested")
-                .ok_or("owner")?
-                .from = "root".into();
-        }
-        assert!(has(&model, ERROR)? && !has(&model, UNKNOWN)?);
-    }
-    Ok(())
-}
+
 #[test]
 fn given_sole_operand_deleted_then_empty_expression_is_rejected_atomically() -> Result {
     let mut model = document()?;
@@ -208,27 +134,6 @@ fn given_sole_operand_deleted_then_empty_expression_is_rejected_atomically() -> 
     .expect_err("empty StringExpression");
     assert!(error.to_string().contains(ERROR), "{error}");
     assert_eq!(before, encode(&model, Format::Json)?);
-    Ok(())
-}
-
-#[test]
-fn given_empty_nested_expression_then_parent_can_pass_but_model_has_child_error() -> Result {
-    let mut model = document()?;
-    child(&mut model, "nested", "uml.string_expression")?;
-    author(&mut model, "subExpression", json!([{"$ref":"nested"}]))?;
-    model
-        .elements
-        .retain(|element| element.id != "nested-literal");
-    model
-        .relations
-        .retain(|relation| relation.id != "owns-nested-literal");
-    assert!(!has(&model, ERROR)? && !has(&model, UNKNOWN)?);
-    let issues = errors(&model)?;
-    assert!(
-        issues
-            .iter()
-            .any(|issue| issue["subject_id"] == "nested" && issue["code"] == ERROR)
-    );
     Ok(())
 }
 

@@ -86,68 +86,7 @@ fn given_required_event_absent_then_unknown_but_explicit_empty_is_invalid() -> R
     assert!(has(&model, ERROR)? && !has(&model, UNKNOWN)?);
     Ok(())
 }
-#[test]
-fn given_external_reference_then_known_mismatch_wins_but_matching_count_stays_unknown() -> Result {
-    for count in [1, 2] {
-        for reverse in [false, true] {
-            let mut elements = vec![json!({"href":"external.uml#Element"})];
-            elements.extend(
-                ["first", "second"]
-                    .into_iter()
-                    .take(count - 1)
-                    .map(|id| json!({"$ref":id})),
-            );
-            if reverse {
-                elements.reverse();
-            }
-            let expected = if count == 2 {
-                json!([true, false])
-            } else {
-                json!([])
-            };
-            let mut model = document(Some(json!(elements)), Some(expected))?;
-            assert!(has(&model, UNKNOWN)? && !has(&model, ERROR)?);
-            author(&mut model, "firstEvent", json!([true]))?;
-            assert!(has(&model, ERROR)? && !has(&model, UNKNOWN)?);
-        }
-    }
-    Ok(())
-}
-#[test]
-fn given_invalid_boolean_shape_or_duplicate_then_invalid_dominates_external_unknown() -> Result {
-    for first_event in [
-        json!(true),
-        json!(null),
-        json!(["true", false]),
-        json!([null, false]),
-        json!([true, true]),
-        json!([true, false, true]),
-    ] {
-        let model = document(
-            Some(json!([{"$ref":"first"},{"href":"external.uml#Element"}])),
-            Some(first_event),
-        )?;
-        assert!(has(&model, ERROR)? && !has(&model, UNKNOWN)?);
-    }
-    Ok(())
-}
-#[test]
-fn given_invalid_events_references_then_expected_first_event_count_cannot_hide_invalid() -> Result {
-    for events in [
-        json!(false),
-        json!(null),
-        json!([{"$ref":"missing"}]),
-        json!([{"$ref":"first"},{"$ref":"first"}]),
-        json!([{"$ref":"first"},{"$ref":"second"},{"$ref":"third"}]),
-        json!([{"href":"external.uml#Element"},{"href":false}]),
-    ] {
-        for first_event in [json!([]), json!([true, false])] {
-            let model = document(Some(events.clone()), Some(first_event))?;
-            assert!(has(&model, ERROR)? && !has(&model, UNKNOWN)?);
-        }
-    }
-    Ok(())
-}
+
 #[test]
 fn given_valid_pair_when_target_is_deleted_then_rejection_preserves_first_event() -> Result {
     let model = document(

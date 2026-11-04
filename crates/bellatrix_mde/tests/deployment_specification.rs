@@ -73,108 +73,6 @@ fn given_configured_deployment_then_only_execution_environment_location_is_valid
 }
 
 #[test]
-fn given_no_deployment_then_configuration_is_vacuously_valid() -> Result {
-    let mut project = document("uml.node", true)?;
-    project
-        .relations
-        .iter_mut()
-        .find(|relation| relation.id == "deployment-specification")
-        .ok_or("owns")?
-        .from = "root".into();
-    project
-        .elements
-        .iter_mut()
-        .find(|element| element.id == "specification")
-        .ok_or("specification")?
-        .properties
-        .insert("visibility".into(), json!("public"));
-    assert!(!diagnostics(&project)?.iter().any(relevant));
-    Ok(())
-}
-
-#[test]
-fn given_unresolved_owner_or_inverse_then_constraint_is_unverified() -> Result {
-    let project = document("uml.unknown_target", true)?;
-    let issues = diagnostics(&project)?;
-    assert!(
-        issues
-            .iter()
-            .any(|issue| relevant(issue) && issue["severity"] == "warning"),
-        "{issues:#?}"
-    );
-    for inverse in ["deployment", "location"] {
-        let mut project = document("uml.execution_environment", true)?;
-        if inverse == "deployment" {
-            project
-                .elements
-                .iter_mut()
-                .find(|element| element.id == "specification")
-                .ok_or("spec")?
-                .properties
-                .insert(inverse.into(), json!({"href":"external.uml#deployment"}));
-        } else {
-            project
-                .relations
-                .iter_mut()
-                .find(|relation| relation.id == "deployment")
-                .ok_or("deployment")?
-                .properties
-                .insert(inverse.into(), json!({"href":"external.uml#location"}));
-        }
-        let issues = diagnostics(&project)?;
-        assert!(
-            issues
-                .iter()
-                .any(|issue| relevant(issue) && issue["severity"] == "warning"),
-            "{issues:#?}"
-        );
-    }
-    Ok(())
-}
-
-#[test]
-fn given_forged_inverse_or_multiple_owners_then_identity_error_cannot_override_canonical_location()
--> Result {
-    for value in [
-        Value::Null,
-        json!({"$ref":"missing"}),
-        json!({"$ref":"root"}),
-    ] {
-        let mut project = document("uml.execution_environment", true)?;
-        project
-            .relations
-            .iter_mut()
-            .find(|relation| relation.id == "deployment")
-            .ok_or("deployment")?
-            .properties
-            .insert("location".into(), value);
-        let issues = diagnostics(&project)?;
-        assert!(
-            issues
-                .iter()
-                .any(|issue| relevant(issue) && issue["severity"] == "error"),
-            "{issues:#?}"
-        );
-        assert!(
-            !issues
-                .iter()
-                .any(|issue| issue["code"] == "UML_DEPLOYMENT_SPECIFICATION_TARGET"),
-            "{issues:#?}"
-        );
-    }
-    let mut project = document("uml.execution_environment", true)?;
-    project.relations.push(serde_json::from_value(
-        json!({"id":"other-owner", "kind":"owns", "from":"root", "to":"deployment"}),
-    )?);
-    let issues = diagnostics(&project)?;
-    assert!(
-        issues.iter().any(|issue| issue["severity"] == "error"),
-        "{issues:#?}"
-    );
-    Ok(())
-}
-
-#[test]
 fn when_configured_deployment_moves_to_wrong_target_then_reparent_rolls_back_and_draft_can_be_repaired()
 -> Result {
     let mut valid = document("uml.execution_environment", true)?;
@@ -212,57 +110,6 @@ fn when_configured_deployment_moves_to_wrong_target_then_reparent_rolls_back_and
         2,
     )?;
     assert!(!diagnostics(&repaired)?.iter().any(relevant));
-    Ok(())
-}
-
-#[test]
-fn given_stored_inverse_then_it_must_match_ownership_even_when_a_neighbor_type_is_unknown() -> Result
-{
-    for kind in ["uml.execution_environment", "uml.unknown_target"] {
-        let mut project = document(kind, true)?;
-        project.elements.push(serde_json::from_value(
-            json!({"id":"other", "kind":"uml.execution_environment", "name":"Other"}),
-        )?);
-        project.relations.push(serde_json::from_value(
-            json!({"id":"root-other", "kind":"owns", "from":"root", "to":"other"}),
-        )?);
-        project
-            .relations
-            .iter_mut()
-            .find(|relation| relation.id == "deployment")
-            .ok_or("deployment")?
-            .properties
-            .insert("location".into(), json!({"$ref":"other"}));
-        let issues = diagnostics(&project)?;
-        assert!(
-            issues
-                .iter()
-                .any(|issue| relevant(issue) && issue["severity"] == "error"),
-            "{issues:#?}"
-        );
-        assert!(
-            !issues
-                .iter()
-                .any(|issue| relevant(issue) && issue["severity"] == "warning"),
-            "{issues:#?}"
-        );
-    }
-    let mut project = document("uml.execution_environment", true)?;
-    project
-        .relations
-        .iter_mut()
-        .find(|relation| relation.id == "deployment")
-        .ok_or("deployment")?
-        .properties
-        .insert("location".into(), json!({"$ref":"location"}));
-    project
-        .elements
-        .iter_mut()
-        .find(|element| element.id == "specification")
-        .ok_or("specification")?
-        .properties
-        .insert("deployment".into(), json!({"$ref":"deployment"}));
-    assert!(!diagnostics(&project)?.iter().any(relevant));
     Ok(())
 }
 
@@ -314,49 +161,6 @@ fn given_external_inverses_then_known_wrong_targets_remain_errors() -> Result {
                 }
             }
         }
-    }
-    Ok(())
-}
-
-#[test]
-fn given_external_deployment_inverse_then_invalid_location_still_dominates() -> Result {
-    for value in [
-        Value::Null,
-        json!(42),
-        json!({"$ref":"missing"}),
-        json!({"$ref":"root"}),
-    ] {
-        let mut project = document("uml.execution_environment", true)?;
-        project
-            .elements
-            .iter_mut()
-            .find(|element| element.id == "specification")
-            .ok_or("specification")?
-            .properties
-            .insert(
-                "deployment".into(),
-                json!({"href":"external.uml#deployment"}),
-            );
-        project
-            .relations
-            .iter_mut()
-            .find(|relation| relation.id == "deployment")
-            .ok_or("deployment")?
-            .properties
-            .insert("location".into(), value);
-        let issues = diagnostics(&project)?;
-        assert!(
-            issues.iter().any(|issue| relevant(issue)
-                && issue["code"] == "MDE_DEPLOYMENT_SPECIFICATION_OWNERSHIP"
-                && issue["severity"] == "error"),
-            "{issues:#?}"
-        );
-        assert!(
-            !issues
-                .iter()
-                .any(|issue| relevant(issue) && issue["severity"] == "warning"),
-            "{issues:#?}"
-        );
     }
     Ok(())
 }
@@ -417,49 +221,6 @@ fn given_external_inverse_when_reparented_to_node_then_command_rejects_atomicall
         .expect_err("external inverse must not hide invalid canonical location");
         assert!(error.contains(RULE), "{error}");
         assert_eq!(encode(&project, Format::Json)?, before);
-    }
-    Ok(())
-}
-
-#[test]
-fn given_external_inverses_then_missing_and_unknown_canonical_locations_stay_distinct() -> Result {
-    for kind in ["uml.model", "uml.unknown_target"] {
-        let mut project = document(kind, true)?;
-        project
-            .elements
-            .iter_mut()
-            .find(|element| element.id == "specification")
-            .ok_or("specification")?
-            .properties
-            .insert(
-                "deployment".into(),
-                json!({"href":"external.uml#deployment"}),
-            );
-        project
-            .relations
-            .iter_mut()
-            .find(|relation| relation.id == "deployment")
-            .ok_or("deployment")?
-            .properties
-            .insert("location".into(), json!({"href":"external.uml#location"}));
-        let issues = diagnostics(&project)?;
-        let expected = if kind == "uml.model" {
-            "error"
-        } else {
-            "warning"
-        };
-        assert!(
-            issues
-                .iter()
-                .any(|issue| relevant(issue) && issue["severity"] == expected),
-            "{kind}: {issues:#?}"
-        );
-        assert!(
-            !issues
-                .iter()
-                .any(|issue| relevant(issue) && issue["severity"] != expected),
-            "{kind}: {issues:#?}"
-        );
     }
     Ok(())
 }

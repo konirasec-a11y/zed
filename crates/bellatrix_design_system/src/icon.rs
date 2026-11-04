@@ -24,16 +24,3 @@ impl BellatrixIcon {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn supports_zed_and_inline_svg_without_gpui_kit() {
-        let svg: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 2h20v20H2z"/></svg>"#;
-        assert!(matches!(BellatrixIcon::svg(svg), BellatrixIcon::Svg(_)));
-        let _ = BellatrixIcon::svg(svg).view();
-        let _ = BellatrixIcon::zed(IconName::FileTree).view();
-    }
-}

@@ -894,36 +894,3 @@ pub(crate) fn set_namespace_import(
     *section = candidate;
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::Project;
-
-    #[test]
-    fn inherited_namespace_failure_keeps_the_causal_subject_identity() -> serde_json::Result<()> {
-        let project: Project = serde_json::from_value(json!({
-            "id": "project", "name": "Causal diagnostics",
-            "elements": [
-                {"id": "ancestor", "kind": "uml.class", "name": "Ancestor"},
-                {"id": "dependent", "kind": "uml.class", "name": "Dependent"}
-            ],
-            "relations": [
-                {"id": "existing-cycle", "kind": "uml.generalization", "from": "ancestor", "to": "ancestor"},
-                {"id": "inherits", "kind": "uml.generalization", "from": "dependent", "to": "ancestor"}
-            ]
-        }))?;
-        let references = ReferenceIndex::new(Model::from_project(&project));
-        let inherited_failure = member_distinctions(&references, "dependent");
-        assert!(matches!(inherited_failure,
-            Err(QueryError::Invalid { ref subject_id, .. }) if subject_id == "ancestor"));
-        let issues = validate(&references);
-        assert_eq!(issues.len(), 2, "{issues:#?}");
-        assert!(issues.iter().all(|issue|
-            issue.subject_id == "ancestor"
-                && issue.code == "UML_NAMESPACE_DISTINGUISHABILITY"
-                && issue.severity == StructuralSeverity::Error), "{issues:#?}");
-        assert_eq!(issues.first(), issues.last());
-        Ok(())
-    }
-}

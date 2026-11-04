@@ -7,6 +7,7 @@ use serde_json::{Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
 const PROJECTION_VERSION: u32 = 1;
+const CLASS_BOOLEAN_FIELDS: [&str; 2] = ["isAbstract", "isActive"];
 
 #[derive(Debug)]
 pub struct Import {
@@ -156,6 +157,22 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
                     mapped_fields.insert("_parent".into());
                 }
             }
+            let properties = if canonical_kind.is_some() {
+                let mut properties = BTreeMap::new();
+                if canonical_kind == Some("uml.class") {
+                    // The vendored StarUML and kernel defaults are both false.
+                    // Keep absence distinct from an explicitly authored false.
+                    for field in CLASS_BOOLEAN_FIELDS {
+                        if let Some(value) = residue.remove(field) {
+                            properties.insert(field.into(), value);
+                            mapped_fields.insert(field.into());
+                        }
+                    }
+                }
+                properties
+            } else {
+                std::mem::take(&mut residue)
+            };
             project.elements.push(Element {
                 id: object.id.into(),
                 kind: canonical_kind
@@ -165,11 +182,7 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
                 label: None,
                 description: None,
                 // Opaque MDJ properties must not accidentally become UML properties.
-                properties: if canonical_kind.is_some() {
-                    BTreeMap::new()
-                } else {
-                    std::mem::take(&mut residue)
-                },
+                properties,
                 annotations: Vec::new(),
                 implementations: Vec::new(),
                 content: None,
@@ -177,12 +190,12 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
             diagnostics.push(Diagnostic {
                 path: object.path.clone(),
                 message: if canonical_kind.is_some() {
-                    format!("{} mapped by identity, name and supported explicit ownership only; remaining MDJ properties are preserved as source residue", object.type_name)
+                    format!("{} mapped by identity, name, supported explicit ownership and Boolean class flags only; remaining MDJ properties are preserved as source residue", object.type_name)
                 } else if matches!(object.type_name, "UMLModel" | "UMLPackage" | "UMLClass") {
-                    let fields = object.properties.keys()
-                        .filter(|field| !supported_semantic_field(field))
-                        .cloned().collect::<Vec<_>>().join(", ");
-                    format!("{} kept opaque, not promoted to UML: unmapped fields [{}], a non-string name, presentation containment or an unmappable explicit ownership chain; source semantics must not be replaced with UML defaults", object.type_name, fields)
+                    let fields = object.properties.iter()
+                        .filter(|(field, value)| !supported_semantic_field(object.type_name, field, value))
+                        .map(|(field, _)| field.clone()).collect::<Vec<_>>().join(", ");
+                    format!("{} kept opaque, not promoted to UML: unmapped or non-Boolean class fields [{}], a non-string name, presentation containment or an unmappable explicit ownership chain; source semantics must not be replaced with UML defaults", object.type_name, fields)
                 } else {
                     format!("{} preserved as an MDJ object; canonical UML mapping (including associations and ends) is not implemented", object.type_name)
                 },
@@ -432,7 +445,7 @@ fn equivalent(current: &Project, imported: &Project, residuals: &Residuals, path
 fn metadata_after_export(project: &Project) -> Project {
     let mut expected = project.clone();
     if let Some(provenance) = &mut expected.mdj_provenance {
-        // These two metadata fields describe the encoding of authored name/kind,
+        // These metadata fields describe the encoding of authored values,
         // not a competing value. Only adjust them after constructing actual output;
         // raw replay still requires exact metadata equality with reimported source.
         if !project.name.is_empty() {
@@ -447,6 +460,15 @@ fn metadata_after_export(project: &Project) -> Project {
                 }
                 if let Some(kind) = mdj_kind(&element.kind) {
                     metadata.type_name = kind.into();
+                }
+                if metadata.mapped_fields.contains("_type") {
+                    for field in CLASS_BOOLEAN_FIELDS {
+                        if element.properties.contains_key(field) {
+                            metadata.mapped_fields.insert(field.into());
+                        } else {
+                            metadata.mapped_fields.remove(field);
+                        }
+                    }
                 }
             }
         }
@@ -505,6 +527,25 @@ fn export_document(project: &Project) -> Result<Value, MdjError> {
         } else {
             element.properties.clone()
         };
+        if canonical {
+            for (field, value) in &element.properties {
+                if element.kind != "uml.class"
+                    || !CLASS_BOOLEAN_FIELDS.contains(&field.as_str())
+                    || !value.is_boolean()
+                {
+                    return Err(failure(
+                        "",
+                        "canonical UML property has no lossless MDJ mapping",
+                    ));
+                }
+                if residual.insert(field.clone(), value.clone()).is_some() {
+                    return Err(failure(
+                        "",
+                        "mapped class flag conflicts with source residue",
+                    ));
+                }
+            }
+        }
         if canonical && metadata.mapped_fields.contains("_parent") {
             let relation_id = ownership_relation_id(&element.id, &provenance.object_paths);
             let ownership = project
@@ -702,11 +743,11 @@ fn canonical_kind(kind: &str) -> Option<&'static str> {
     }
 }
 
-fn supported_semantic_field(field: &str) -> bool {
+fn supported_semantic_field(kind: &str, field: &str, value: &Value) -> bool {
     matches!(
         field,
         "_id" | "_type" | "name" | "_parent" | "ownedElements"
-    )
+    ) || (kind == "UMLClass" && CLASS_BOOLEAN_FIELDS.contains(&field) && value.is_boolean())
 }
 
 fn canonical_kind_for_object<'document>(
@@ -728,8 +769,8 @@ fn canonical_kind_for_object<'document>(
                 .is_some_and(|name| !name.is_string())
             || current
                 .properties
-                .keys()
-                .any(|field| !supported_semantic_field(field))
+                .iter()
+                .any(|(field, value)| !supported_semantic_field(current.type_name, field, value))
         {
             return None;
         }

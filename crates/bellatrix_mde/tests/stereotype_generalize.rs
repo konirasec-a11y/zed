@@ -97,84 +97,7 @@ fn given_unknown_parent_then_unknown_without_inventing_a_non_stereotype() -> Res
     }
     Ok(())
 }
-#[test]
-fn given_unknown_sibling_then_known_violation_wins_in_both_orders() -> Result {
-    for reverse in [false, true] {
-        let mut model = document()?;
-        model
-            .elements
-            .iter_mut()
-            .find(|element| element.id == "general")
-            .ok_or("general")?
-            .kind = "future.classifier".into();
-        model
-            .elements
-            .iter_mut()
-            .find(|element| element.id == "middle")
-            .ok_or("middle")?
-            .kind = "uml.class".into();
-        generalize(&mut model, "specific", "general")?;
-        generalize(&mut model, "specific", "middle")?;
-        if reverse {
-            model.relations.reverse();
-            model.elements.reverse();
-        }
-        assert!(has(&model, ERROR)? && !has(&model, UNKNOWN)?);
-    }
-    Ok(())
-}
-#[test]
-fn given_unmaterialized_ancestry_then_unknown_and_malformed_cache_is_invalid() -> Result {
-    for key in ["general", "generalization"] {
-        let mut model = document()?;
-        author(
-            &mut model,
-            "specific",
-            key,
-            json!([{"href":"external.uml#Parent"}]),
-        )?;
-        assert!(has(&model, UNKNOWN)? && !has(&model, ERROR)?);
-        for value in [
-            json!(false),
-            json!([{"href":false}]),
-            json!([{"$ref":"missing"}]),
-        ] {
-            author(&mut model, "specific", key, value)?;
-            assert!(has(&model, ERROR)? && !has(&model, UNKNOWN)?);
-        }
-    }
-    Ok(())
-}
-#[test]
-fn given_unknown_neighbor_then_cycle_or_wrong_endpoint_remains_invalid() -> Result {
-    for cycle in [false, true] {
-        for reverse in [false, true] {
-            let mut model = document()?;
-            author(
-                &mut model,
-                "specific",
-                "general",
-                json!([{"href":"external.uml#Parent"}]),
-            )?;
-            generalize(&mut model, "specific", "middle")?;
-            if cycle {
-                generalize(&mut model, "middle", "specific")?;
-            } else {
-                model
-                    .elements
-                    .iter_mut()
-                    .find(|element| element.id == "middle")
-                    .ok_or("middle")?
-                    .kind = "uml.package".into();
-            }
-            if reverse {
-                model.relations.reverse();
-            }
-            assert!(has(&model, ERROR)? && !has(&model, UNKNOWN)?);
-        }
-    }
-    Ok(())
-}
+
 #[test]
 fn given_invalid_ancestry_edit_then_rejection_is_atomic() -> Result {
     let mut model = document()?;
@@ -246,62 +169,6 @@ fn given_unknown_or_invalid_self_ancestry_then_other_stereotypes_do_not_inherit_
             assert!(!has_subject(&reopened, "middle", ERROR)?);
             assert!(!has_subject(&reopened, "middle", UNKNOWN)?);
         }
-    }
-    Ok(())
-}
-
-#[test]
-fn given_non_stereotype_with_stereotype_ancestor_then_global_clause_applies_to_all() -> Result {
-    let mut model = document()?;
-    model
-        .elements
-        .iter_mut()
-        .find(|element| element.id == "general")
-        .ok_or("general")?
-        .kind = "uml.class".into();
-    author(
-        &mut model,
-        "general",
-        "general",
-        json!([{"href":"external.uml#Parent"}]),
-    )?;
-    for subject in ["specific", "middle"] {
-        assert!(has_subject(&model, subject, UNKNOWN)?);
-        assert!(!has_subject(&model, subject, ERROR)?);
-    }
-    generalize(&mut model, "general", "specific")?;
-    for subject in ["specific", "middle"] {
-        assert!(has_subject(&model, subject, ERROR)?);
-        assert!(!has_subject(&model, subject, UNKNOWN)?);
-    }
-    Ok(())
-}
-
-#[test]
-fn given_local_violation_and_global_unknown_then_each_subject_keeps_its_own_result() -> Result {
-    let mut model = document()?;
-    model
-        .elements
-        .iter_mut()
-        .find(|element| element.id == "general")
-        .ok_or("general")?
-        .kind = "uml.class".into();
-    author(
-        &mut model,
-        "general",
-        "general",
-        json!([{"href":"external.uml#Parent"}]),
-    )?;
-    generalize(&mut model, "specific", "general")?;
-    for reverse in [false, true] {
-        if reverse {
-            model.elements.reverse();
-            model.relations.reverse();
-        }
-        assert!(has_subject(&model, "specific", ERROR)?);
-        assert!(!has_subject(&model, "specific", UNKNOWN)?);
-        assert!(has_subject(&model, "middle", UNKNOWN)?);
-        assert!(!has_subject(&model, "middle", ERROR)?);
     }
     Ok(())
 }

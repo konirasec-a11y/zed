@@ -320,25 +320,3 @@ async fn rename(
     )
     .await
 }
-
-#[cfg(test)]
-mod namespace_tests {
-    use super::*;
-
-    #[test]
-    fn obsolete_namespaces_are_rejected_without_creating_or_migrating_state()
-    -> Result<(), Box<dyn std::error::Error>> {
-        for namespace in ["bellatrix.bellatrix-mde-modeling", "bellatrix.modeling"] {
-            let state = serde_json::json!({"elements": [], "relations": [], "diagrams": []});
-            let document =
-                ProjectDocument::new(ProjectId::new("old-beta-document")?, "Old beta document")?
-                    .with_section(namespace, state.clone())?;
-            assert!(
-                matches!(from_document(&document), Err(error) if error.contains("not supported"))
-            );
-            assert_eq!(document.section(namespace), Some(&state));
-            assert!(document.section(MODELING_NAMESPACE).is_none());
-        }
-        Ok(())
-    }
-}

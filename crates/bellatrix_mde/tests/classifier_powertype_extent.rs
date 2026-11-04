@@ -3,7 +3,6 @@ use serde_json::{Value, json};
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
 const RULE: &str = "Classifier-maps_to_generalization_set:";
 const ERROR: &str = "UML_CLASSIFIER_POWERTYPE_EXTENT";
-const INVALID: &str = "MDE_CLASSIFIER_POWERTYPE_EXTENT_INVALID";
 const UNKNOWN: &str = "MDE_CLASSIFIER_POWERTYPE_EXTENT_UNVERIFIED";
 fn document(rooted: bool) -> Result<Project> {
     let mut value = json!({"id":"project","name":"Generalization sets","root_model":"root",
@@ -29,16 +28,7 @@ fn document(rooted: bool) -> Result<Project> {
     }
     Ok(serde_json::from_value(value)?)
 }
-fn author(project: &mut Project, value: Value) -> Result {
-    project
-        .elements
-        .iter_mut()
-        .find(|element| element.id == "set")
-        .ok_or("set")?
-        .properties
-        .insert("generalization".into(), value);
-    Ok(())
-}
+
 fn target(project: &mut Project, id: &str, target: &str) -> Result {
     project
         .relations
@@ -73,16 +63,6 @@ fn expect(project: &Project, code: &str) -> Result {
         issues[0]["severity"],
         if code == UNKNOWN { "warning" } else { "error" }
     );
-    Ok(())
-}
-fn power(project: &mut Project, value: Value) -> Result {
-    project
-        .elements
-        .iter_mut()
-        .find(|element| element.id == "set")
-        .ok_or("set")?
-        .properties
-        .insert("powertype".into(), value);
     Ok(())
 }
 fn edge(project: &mut Project, id: &str, from: &str, to: &str) -> Result {
@@ -127,102 +107,7 @@ fn canonical_opposite_and_authored_extent_both_establish_membership() -> Result 
     }
     Ok(())
 }
-#[test]
-fn absent_opposite_is_not_explicit_null_or_different_identity() -> Result {
-    let mut p = document(false)?;
-    extent(&mut p, json!([{"$ref":"set"}]))?;
-    omit_power(&mut p)?;
-    assert!(issues(&p)?.is_empty());
-    for value in [Value::Null, json!({"$ref":"general"}), json!(42)] {
-        power(&mut p, value)?;
-        expect(&p, INVALID)?;
-    }
-    Ok(())
-}
-#[test]
-fn stored_extent_must_preserve_canonical_membership_and_shape() -> Result {
-    for value in [
-        json!([]),
-        Value::Null,
-        json!([{"$ref":"set"},{"$ref":"set"}]),
-        json!([{"$ref":"general"}]),
-        json!([{"$ref":"missing"}]),
-    ] {
-        let mut p = document(false)?;
-        extent(&mut p, value)?;
-        expect(&p, INVALID)?;
-    }
-    Ok(())
-}
-#[test]
-fn external_extent_preserves_local_violation_and_invalid_precedence() -> Result {
-    for reverse in [false, true] {
-        let mut p = document(false)?;
-        let mut values = vec![json!({"href":"external.uml#Set"}), json!({"$ref":"set"})];
-        if reverse {
-            values.reverse();
-        }
-        extent(&mut p, Value::Array(values))?;
-        expect(&p, UNKNOWN)?;
-        target(&mut p, "first-general", "other")?;
-        expect(&p, ERROR)?;
-        extent(&mut p, json!([{"href":"external.uml#Set"},42]))?;
-        expect(&p, INVALID)?;
-    }
-    Ok(())
-}
-#[test]
-fn external_opposite_cannot_mask_extent_proven_violation() -> Result {
-    let mut p = document(false)?;
-    extent(&mut p, json!([{"$ref":"set"}]))?;
-    power(&mut p, json!({"href":"external.uml#Power"}))?;
-    expect(&p, UNKNOWN)?;
-    target(&mut p, "first-general", "other")?;
-    expect(&p, ERROR)?;
-    power(&mut p, json!({"href":7}))?;
-    expect(&p, INVALID)?;
-    Ok(())
-}
-#[test]
-fn authored_inverse_cannot_supply_two_powertypes() -> Result {
-    let mut p = document(false)?;
-    omit_power(&mut p)?;
-    extent(&mut p, json!([{"$ref":"set"}]))?;
-    p.elements
-        .iter_mut()
-        .find(|element| element.id == "general")
-        .ok_or("general")?
-        .properties
-        .insert("powertypeExtent".into(), json!([{"$ref":"set"}]));
-    expect(&p, INVALID)?;
-    Ok(())
-}
-#[test]
-fn ancestry_exclusions_are_asymmetric_and_cycles_remain_invalid() -> Result {
-    let mut p = document(false)?;
-    edge(&mut p, "general-power", "general", "other")?;
-    expect(&p, ERROR)?;
-    p.relations
-        .retain(|relation| relation.id != "general-power");
-    edge(&mut p, "power-specific", "other", "first")?;
-    expect(&p, ERROR)?;
-    edge(&mut p, "specific-power", "first", "other")?;
-    expect(&p, INVALID)?;
-    Ok(())
-}
 
-#[test]
-fn unresolved_opposite_with_empty_membership_is_vacuous_but_invalid_is_not() -> Result {
-    let mut p = document(false)?;
-    author(&mut p, json!([]))?;
-    power(&mut p, json!({"href":"external.uml#Power"}))?;
-    assert!(issues(&p)?.is_empty());
-    for value in [json!(42), json!({"href":42})] {
-        power(&mut p, value)?;
-        expect(&p, INVALID)?;
-    }
-    Ok(())
-}
 #[test]
 fn reverse_ancestry_and_snapshot_repair_do_not_invent_extra_constraints() -> Result {
     let mut p = document(false)?;

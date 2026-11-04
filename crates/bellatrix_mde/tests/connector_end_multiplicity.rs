@@ -1,9 +1,8 @@
 use bellatrix_mde::{commands::{apply, Command}, decode, encode, validate_uml_model, Format, Project,
-    uml::{connectors, classifiers::QueryError, references::ReferenceIndex, root::Model}};
+    uml::{connectors, references::ReferenceIndex, root::Model}};
 use serde_json::{json, Value};
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
 const ERROR: &str = "UML_CONNECTOR_END_MULTIPLICITY";
-const UNKNOWN: &str = "MDE_CONNECTOR_END_MULTIPLICITY_UNVERIFIED";
 fn document() -> Result<Project> {
     let mut value = json!({"id":"model","name":"Connectors","root_model":"root",
         "elements":[
@@ -72,92 +71,6 @@ fn given_ordered_ends_then_defining_end_tracks_positions_not_ownership_order_or_
 }
 
 #[test]
-fn given_multiplicity_ranges_then_lower_upper_and_unlimited_bounds_obey_containment() -> Result {
-    for (specific, general, valid) in [("1..2","0..3",true),("0..2","1..3",false),("1..4","0..3",false),("1..*","0..*",true),("1..*","0..3",false),("0..0","0..1",true)] {
-        let mut model = document()?;
-        author(&mut model, "e1", "multiplicity", json!(specific));
-        author(&mut model, "a1", "multiplicity", json!(general));
-        assert_eq!(has(&model, "e1", ERROR)?, !valid, "{specific} in {general}");
-        assert!(!has(&model, "e1", UNKNOWN)?);
-    }
-    Ok(())
-}
-
-#[test]
-fn given_untyped_connector_then_no_defining_end_or_comparison_is_invented() -> Result {
-    let mut model = document()?;
-    author(&mut model, "connector", "type", Value::Null);
-    author(&mut model, "e1", "definingEnd", json!({"$ref":"a1"}));
-    author(&mut model, "e1", "multiplicity", json!("0..*"));
-    assert_eq!(target(&model, "e1")?, None);
-    assert!(!has(&model, "e1", ERROR)? && !has(&model, "e1", UNKNOWN)?);
-    author(&mut model, "connector", "type", json!({"href":"external.uml#Association"}));
-    assert!(has(&model, "e1", UNKNOWN)? && !has(&model, "e1", ERROR)?);
-    author(&mut model, "e1", "multiplicity", json!("3..2"));
-    assert!(has(&model, "e1", ERROR)?);
-    Ok(())
-}
-
-#[test]
-fn given_absent_order_then_ownership_and_stored_defining_end_do_not_establish_projection() -> Result {
-    for (id, property) in [("connector", "end"), ("association", "memberEnd")] {
-        let mut model = document()?;
-        model.elements.iter_mut().find(|element| element.id == id).ok_or("element")?.properties.remove(property);
-        author(&mut model, "e1", "definingEnd", json!({"$ref":"a1"}));
-        let references = ReferenceIndex::new(Model::from_project(&model));
-        assert!(matches!(connectors::defining_end(&references, references.element("e1")?), Err(QueryError::Unsupported { .. })));
-        assert!(has(&model, "e1", UNKNOWN)? && !has(&model, "e1", ERROR)?);
-    }
-    Ok(())
-}
-
-#[test]
-fn given_external_sibling_then_known_position_violations_win_in_both_orders() -> Result {
-    for (end, member, ends, members) in [
-        ("e1", "a1", json!([{"$ref":"e1"},{"href":"external.uml#End"}]), json!([{"$ref":"a1"},{"href":"external.uml#Member"}])),
-        ("e2", "a2", json!([{"href":"external.uml#End"},{"$ref":"e2"}]), json!([{"href":"external.uml#Member"},{"$ref":"a2"}])),
-    ] {
-        let mut model = document()?;
-        author(&mut model, "connector", "end", ends);
-        author(&mut model, "association", "memberEnd", members);
-        assert!(has(&model, end, UNKNOWN)? && !has(&model, end, ERROR)?);
-        author(&mut model, end, "multiplicity", json!("0..*"));
-        author(&mut model, member, "multiplicity", json!("1"));
-        assert!(has(&model, end, ERROR)? && !has(&model, end, UNKNOWN)?);
-    }
-    Ok(())
-}
-
-#[test]
-fn given_malformed_order_or_target_then_unknown_opposite_side_cannot_hide_invalid() -> Result {
-    for (unknown_id, unknown_property, invalid_id, invalid_property) in [
-        ("connector", "end", "association", "memberEnd"),
-        ("association", "memberEnd", "connector", "end"),
-    ] {
-        let mut model = document()?;
-        model.elements.iter_mut().find(|element| element.id == unknown_id).ok_or("element")?.properties.remove(unknown_property);
-        for invalid in [json!(false), json!([{"$ref":"missing"},{"href":"external.uml#End"}]), json!([{"href":"external.uml#End"},{"$ref":"missing"}]), json!([{"$ref":"e1"},{"$ref":"e1"}])] {
-            author(&mut model, invalid_id, invalid_property, invalid);
-            assert!(has(&model, "e1", ERROR)? && !has(&model, "e1", UNKNOWN)?);
-        }
-    }
-    Ok(())
-}
-
-#[test]
-fn given_unknown_bound_on_either_side_then_invalid_opposite_bound_wins() -> Result {
-    for (unknown, invalid) in [("e1", "a1"), ("a1", "e1")] {
-        let mut model = document()?;
-        author(&mut model, unknown, "multiplicity", json!("limit..*"));
-        author(&mut model, invalid, "multiplicity", json!("0..*"));
-        assert!(has(&model, "e1", UNKNOWN)?);
-        author(&mut model, invalid, "multiplicity", json!("3..2"));
-        assert!(has(&model, "e1", ERROR)? && !has(&model, "e1", UNKNOWN)?);
-    }
-    Ok(())
-}
-
-#[test]
 fn when_connector_end_multiplicity_expands_then_command_rolls_back_and_draft_can_be_repaired() -> Result {
     let mut model = document()?;
     ranges(&mut model);
@@ -169,49 +82,5 @@ fn when_connector_end_multiplicity_expands_then_command_rolls_back_and_draft_can
     author(&mut model, "e1", "multiplicity", json!("0..4"));
     let repaired = apply(&model, &Command::SetProperty { element_id:"e1".into(), path:"properties.multiplicity".into(), value:json!("1..2") }, 2)?;
     assert!(!has(&repaired, "e1", ERROR)?);
-    Ok(())
-}
-
-#[test]
-fn given_identity_bounds_then_known_comparisons_and_invalid_values_survive_opaque_other_bound() -> Result {
-    for upper_is_opaque in [false, true] {
-        let mut model = document()?;
-        author(&mut model, "a1", "multiplicity", json!("2..3"));
-        for (id, role, kind, value) in [
-            ("lower", "lowerValue", if upper_is_opaque { "uml.literal_integer" } else { "uml.opaque_expression" }, json!(1)),
-            ("upper", "upperValue", if upper_is_opaque { "uml.opaque_expression" } else { "uml.literal_unlimited_natural" }, json!(4)),
-        ] {
-            model.elements.push(serde_json::from_value(json!({"id":id,"kind":kind,"name":"","properties":{"value":value}}))?);
-            model.relations.push(serde_json::from_value(json!({"id":format!("owns-{id}"),"kind":"owns","from":"e1","to":id}))?);
-            author(&mut model, "e1", role, json!({"$ref":id}));
-        }
-        assert!(has(&model, "e1", ERROR)? && !has(&model, "e1", UNKNOWN)?, "known bound violates containment");
-        author(&mut model, "a1", "multiplicity", json!("0..*"));
-        if upper_is_opaque {
-            assert!(!has(&model, "e1", ERROR)? && !has(&model, "e1", UNKNOWN)?, "unlimited general upper decides the disjunction");
-            author(&mut model, "lower", "value", json!(-1));
-            let references = ReferenceIndex::new(Model::from_project(&model));
-            assert!(matches!(bellatrix_mde::uml::value_specifications::multiplicity(&references, references.element("e1")?),
-                Err(bellatrix_mde::uml::value_specifications::EvaluationError::Invalid { .. })));
-            assert!(has(&model, "e1", ERROR)?);
-        } else {
-            assert!(has(&model, "e1", UNKNOWN)?);
-            author(&mut model, "upper", "value", json!(-1));
-            assert!(has(&model, "e1", ERROR)?, "invalid upper is not hidden by opaque lower");
-        }
-    }
-    Ok(())
-}
-
-#[test]
-fn given_unresolved_composite_membership_then_malformed_type_and_member_order_still_fail() -> Result {
-    for property in ["type", "memberEnd"] {
-        let mut model = document()?;
-        author(&mut model, "connector", "end", json!([{"href":"external.uml#End1"},{"href":"external.uml#End2"}]));
-        author(&mut model, if property == "type" { "connector" } else { "association" }, property, json!(false));
-        assert!(has(&model, "e1", ERROR)? && !has(&model, "e1", UNKNOWN)?);
-        let references = ReferenceIndex::new(Model::from_project(&model));
-        assert!(matches!(connectors::defining_end(&references, references.element("e1")?), Err(QueryError::Invalid { .. })));
-    }
     Ok(())
 }

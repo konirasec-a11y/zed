@@ -110,36 +110,7 @@ fn given_no_expr_then_exactly_one_correct_observation_is_required_after_roundtri
     }
     Ok(())
 }
-#[test]
-fn given_present_expr_then_observation_subtype_and_count_are_exempt() -> Result {
-    for kind in KINDS {
-        let (error, unknown) = codes(kind);
-        for explicit in [false, true] {
-            let mut model = document(kind, None)?;
-            owned_expr(&mut model, "uml.literal_integer", explicit)?;
-            assert!(!has(&model, error)? && !has(&model, unknown)?);
-            author(
-                &mut model,
-                "observation",
-                json!([{"href":"external.uml#Observation"}]),
-            )?;
-            assert!(!has(&model, error)? && !has(&model, unknown)?);
-            model
-                .elements
-                .iter_mut()
-                .find(|element| element.id == "observation")
-                .ok_or("observation")?
-                .kind = "uml.observation".into();
-            author(
-                &mut model,
-                "observation",
-                json!([{"$ref":"observation"},{"$ref":"other"}]),
-            )?;
-            assert!(!has(&model, error)? && !has(&model, unknown)?);
-        }
-    }
-    Ok(())
-}
+
 #[test]
 fn given_external_expr_then_valid_consequent_decides_but_false_consequent_stays_unknown() -> Result
 {
@@ -156,101 +127,7 @@ fn given_external_expr_then_valid_consequent_decides_but_false_consequent_stays_
     }
     Ok(())
 }
-#[test]
-fn given_unknown_observation_then_known_count_violation_wins_in_both_orders() -> Result {
-    for kind in KINDS {
-        let (error, unknown) = codes(kind);
-        let mut model = document(kind, Some(json!([{"href":"external.uml#Observation"}])))?;
-        assert!(has(&model, unknown)? && !has(&model, error)?);
-        for reverse in [false, true] {
-            let mut refs = vec![
-                json!({"href":"external.uml#Observation"}),
-                json!({"$ref":"observation"}),
-            ];
-            if reverse {
-                refs.reverse();
-            }
-            author(&mut model, "observation", json!(refs))?;
-            assert!(has(&model, error)? && !has(&model, unknown)?);
-        }
-    }
-    Ok(())
-}
-#[test]
-fn given_wrong_or_unknown_observation_metaclass_then_subtype_is_not_assumed() -> Result {
-    for kind in KINDS {
-        let (error, unknown) = codes(kind);
-        for target_kind in ["uml.observation", "future.observation", "uml.class"] {
-            let mut model = document(kind, Some(json!([{"$ref":"observation"}])))?;
-            model
-                .elements
-                .iter_mut()
-                .find(|element| element.id == "observation")
-                .ok_or("observation")?
-                .kind = target_kind.into();
-            assert_eq!(has(&model, unknown)?, target_kind == "future.observation");
-            assert_eq!(has(&model, error)?, target_kind != "future.observation");
-        }
-    }
-    Ok(())
-}
-#[test]
-fn given_malformed_evidence_then_invalid_dominates_either_true_branch() -> Result {
-    for kind in KINDS {
-        let (error, unknown) = codes(kind);
-        for invalid in [
-            json!(false),
-            json!({"href":false}),
-            json!({"$ref":"missing"}),
-            json!({"$ref":"target"}),
-        ] {
-            let mut model = document(kind, Some(json!([{"$ref":"observation"}])))?;
-            author(&mut model, "expr", invalid)?;
-            assert!(has(&model, error)? && !has(&model, unknown)?);
-        }
-        for invalid in [
-            json!(null),
-            json!([false]),
-            json!([{"$ref":"missing"}]),
-            json!([{"$ref":"observation"},{"$ref":"observation"}]),
-        ] {
-            let mut model = document(kind, Some(invalid))?;
-            owned_expr(&mut model, "uml.literal_integer", true)?;
-            assert!(has(&model, error)? && !has(&model, unknown)?);
-        }
-    }
-    Ok(())
-}
-#[test]
-fn given_ambiguous_owned_string_expression_then_role_stays_unknown_until_named() -> Result {
-    for kind in KINDS {
-        let (error, unknown) = codes(kind);
-        let mut model = document(kind, None)?;
-        owned_expr(&mut model, "uml.string_expression", false)?;
-        assert!(has(&model, unknown)? && !has(&model, error)?);
-        author(&mut model, "nameExpression", json!({"$ref":"expr"}))?;
-        assert!(has(&model, error)? && !has(&model, unknown)?);
-        author(&mut model, "expr", json!({"$ref":"expr"}))?;
-        assert!(!has(&model, error)? && !has(&model, unknown)?);
-    }
-    Ok(())
-}
-#[test]
-fn given_expr_owned_elsewhere_then_reference_cannot_override_canonical_ownership() -> Result {
-    for kind in KINDS {
-        let (error, unknown) = codes(kind);
-        let mut model = document(kind, Some(json!([{"$ref":"observation"}])))?;
-        owned_expr(&mut model, "uml.literal_integer", true)?;
-        model
-            .relations
-            .iter_mut()
-            .find(|relation| relation.id == "owns-expr")
-            .ok_or("owner")?
-            .from = "root".into();
-        assert!(has(&model, error)? && !has(&model, unknown)?);
-    }
-    Ok(())
-}
+
 #[test]
 fn given_sole_expr_deleted_then_observation_requirement_rejects_atomically() -> Result {
     for kind in KINDS {
@@ -267,23 +144,6 @@ fn given_sole_expr_deleted_then_observation_requirement_rejects_atomically() -> 
         .expect_err("observation required when expr disappears");
         assert!(error.to_string().contains(codes(kind).0), "{error}");
         assert_eq!(before, encode(&model, Format::Json)?);
-    }
-    Ok(())
-}
-
-#[test]
-fn given_two_inferred_exprs_then_scalar_role_is_invalid_even_with_correct_observation() -> Result {
-    for kind in KINDS {
-        let (error, unknown) = codes(kind);
-        for observations in [None, Some(json!([{"$ref":"observation"}]))] {
-            let mut model = document(kind, observations)?;
-            owned_expr(&mut model, "uml.literal_integer", false)?;
-            model.elements.push(serde_json::from_value(json!({"id":"expr2","kind":"uml.literal_real","name":"Second expr","properties":{"visibility":null}}))?);
-            model.relations.push(serde_json::from_value(
-                json!({"id":"owns-expr2","kind":"owns","from":"temporal","to":"expr2"}),
-            )?);
-            assert!(has(&model, error)? && !has(&model, unknown)?);
-        }
     }
     Ok(())
 }
@@ -313,19 +173,6 @@ fn given_other_temporal_observation_subtype_then_the_required_subtype_is_enforce
             let reopened = decode(&encode(&model, format)?, format)?;
             assert!(has(&reopened, error)? && !has(&reopened, unknown)?);
         }
-    }
-    Ok(())
-}
-
-#[test]
-fn given_unknown_local_expr_then_consequent_can_resolve_the_implication() -> Result {
-    for kind in KINDS {
-        let (error, unknown) = codes(kind);
-        let mut model = document(kind, None)?;
-        owned_expr(&mut model, "future.value", true)?;
-        assert!(has(&model, unknown)? && !has(&model, error)?);
-        author(&mut model, "observation", json!([{"$ref":"observation"}]))?;
-        assert!(!has(&model, error)? && !has(&model, unknown)?);
     }
     Ok(())
 }

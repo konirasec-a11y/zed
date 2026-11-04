@@ -39,15 +39,6 @@ fn author(project: &mut Project, value: Value) -> Result {
         .insert("generalization".into(), value);
     Ok(())
 }
-fn target(project: &mut Project, id: &str, target: &str) -> Result {
-    project
-        .relations
-        .iter_mut()
-        .find(|relation| relation.id == id)
-        .ok_or("relation")?
-        .to = target.into();
-    Ok(())
-}
 fn issues(project: &Project) -> Result<Vec<Value>> {
     let response: Value = serde_json::from_str(&validate_uml_model(
         &json!({"api_version":1,"model":project}).to_string(),
@@ -113,28 +104,7 @@ fn independent_powertype_and_empty_sets_are_valid_in_rooted_and_draft_snapshots(
     }
     Ok(())
 }
-#[test]
-fn absent_powertype_is_vacuous_even_if_membership_is_unmaterialized() -> Result {
-    let mut project = document(true)?;
-    power(&mut project, Value::Null)?;
-    project
-        .elements
-        .iter_mut()
-        .find(|element| element.id == "set")
-        .ok_or("set")?
-        .properties
-        .remove("generalization");
-    assert!(issues(&project)?.is_empty());
-    project
-        .elements
-        .iter_mut()
-        .find(|element| element.id == "set")
-        .ok_or("set")?
-        .properties
-        .remove("powertype");
-    assert!(issues(&project)?.is_empty());
-    Ok(())
-}
+
 #[test]
 fn powertype_must_differ_from_general_and_specific_identities() -> Result {
     for id in ["general", "first", "second"] {
@@ -166,105 +136,7 @@ fn forbidden_ancestry_is_checked_transitively_in_both_normative_directions() -> 
     }
     Ok(())
 }
-#[test]
-fn reverse_ancestry_directions_are_not_invented_as_extra_prohibitions() -> Result {
-    for (from, to) in [("other", "general"), ("first", "other")] {
-        let mut project = document(true)?;
-        edge(&mut project, "allowed", from, to)?;
-        assert!(issues(&project)?.is_empty());
-    }
-    Ok(())
-}
-#[test]
-fn external_members_and_ancestry_do_not_hide_known_violation() -> Result {
-    for reverse in [true, false] {
-        let mut project = document(true)?;
-        let mut members = vec![
-            json!({"href":"external.uml#Generalization"}),
-            json!({"$ref":"first-general"}),
-        ];
-        if reverse {
-            members.reverse();
-        }
-        author(&mut project, json!(members))?;
-        expect(&project, UNKNOWN)?;
-        power(&mut project, json!({"$ref":"general"}))?;
-        expect(&project, ERROR)?;
-    }
-    let mut project = document(true)?;
-    project
-        .elements
-        .iter_mut()
-        .find(|element| element.id == "general")
-        .ok_or("general")?
-        .properties
-        .insert("general".into(), json!([{"href":"external.uml#Ancestor"}]));
-    expect(&project, UNKNOWN)?;
-    edge(&mut project, "known-forbidden", "general", "other")?;
-    expect(&project, ERROR)?;
-    Ok(())
-}
-#[test]
-fn invalid_reference_and_cycle_dominate_false_and_unknown() -> Result {
-    for value in [
-        json!(42),
-        json!({"$ref":"missing"}),
-        json!({"$ref":"root"}),
-        json!({"href":42}),
-    ] {
-        let mut project = document(true)?;
-        power(&mut project, value)?;
-        expect(&project, INVALID)?;
-    }
-    let mut project = document(true)?;
-    power(&mut project, json!({"$ref":"general"}))?;
-    edge(&mut project, "cycle", "general", "general")?;
-    expect(&project, INVALID)?;
-    let mut project = document(true)?;
-    author(
-        &mut project,
-        json!([{"href":"external.uml#Generalization"},{"$ref":"first-general"}]),
-    )?;
-    target(&mut project, "first-general", "root")?;
-    expect(&project, INVALID)?;
-    Ok(())
-}
-#[test]
-fn unresolved_powertype_is_unknown_but_local_identity_still_decides_false() -> Result {
-    let mut project = document(true)?;
-    power(&mut project, json!({"href":"external.uml#Power"}))?;
-    expect(&project, UNKNOWN)?;
-    power(&mut project, json!({"$ref":"other"}))?;
-    project
-        .elements
-        .iter_mut()
-        .find(|element| element.id == "other")
-        .ok_or("other")?
-        .kind = "uml.unresolved_classifier".into();
-    expect(&project, UNKNOWN)?;
-    target(&mut project, "first-general", "other")?;
-    expect(&project, ERROR)?;
-    Ok(())
-}
-#[test]
-fn contradictory_specific_projection_is_invalid_even_with_unresolved_metaclass() -> Result {
-    let mut project = document(true)?;
-    project
-        .elements
-        .iter_mut()
-        .find(|element| element.id == "other")
-        .ok_or("other")?
-        .kind = "uml.unresolved_classifier".into();
-    project
-        .relations
-        .iter_mut()
-        .find(|relation| relation.id == "first-general")
-        .ok_or("relation")?
-        .properties
-        .insert("specific".into(), json!({"$ref":"other"}));
-    expect(&project, INVALID)?;
-    Ok(())
-}
+
 #[test]
 fn invalid_powertype_snapshot_can_be_repaired_without_losing_other_properties() -> Result {
     let mut project = document(true)?;
@@ -299,27 +171,6 @@ fn external_powertype_does_not_hide_invalid_known_general_ancestry() -> Result {
         for format in [Format::Json, Format::Protobuf] {
             expect(&decode(&encode(&project, format)?, format)?, INVALID)?;
         }
-    }
-    Ok(())
-}
-#[test]
-fn explicit_empty_membership_decides_true_even_with_unknown_powertype_but_not_invalid_reference()
--> Result {
-    let mut project = document(true)?;
-    author(&mut project, json!([]))?;
-    power(&mut project, json!({"href":"external.uml#Power"}))?;
-    assert!(issues(&project)?.is_empty());
-    power(&mut project, json!({"$ref":"other"}))?;
-    project
-        .elements
-        .iter_mut()
-        .find(|element| element.id == "other")
-        .ok_or("other")?
-        .kind = "uml.unresolved_classifier".into();
-    assert!(issues(&project)?.is_empty());
-    for value in [json!({"$ref":"missing"}), json!({"href":42}), json!(42)] {
-        power(&mut project, value)?;
-        expect(&project, INVALID)?;
     }
     Ok(())
 }

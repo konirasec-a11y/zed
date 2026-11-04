@@ -3,6 +3,7 @@ Feature: Complete authored UML project lifecycle through the public kernel bound
   Valid means accepted by the implemented contracts, not full UML certification.
   Unsupported semantic warnings remain visible and never prove valid or invalid.
   The Rust integration harness executes these examples; this file is a specification and inventory, not an interpreted Gherkin runner.
+  Document and validation responses retain API version 1 and the declared implemented-rule coverage.
   Expected error diagnostics match exactly; additional unsupported warnings are retained.
   Verdict mismatches fail the scenario after both persistence round-trips are exercised.
   These flows do not exercise the graphical interface or generated application runtime.

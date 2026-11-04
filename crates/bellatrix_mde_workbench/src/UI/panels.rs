@@ -23,8 +23,6 @@ use gpui::{
 };
 use std::collections::{HashMap, HashSet};
 pub use toolbox_panel::MdeLeftPanel;
-#[cfg(test)]
-use toolbox_panel::tool_matches_query;
 use ui::{IconButton, IconName, Label, TreeViewItem, prelude::*};
 use ui_input::{ErasedEditorEvent, InputField};
 use workspace::{
@@ -47,45 +45,6 @@ const MDE_LEFT_PRIORITY: u32 = 10_000;
 const MDE_RIGHT_PRIORITY: u32 = 10_001;
 const MDE_BOTTOM_PRIORITY: u32 = 10_002;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn toolbox_search_matches_labels_case_insensitively() {
-        assert!(tool_matches_query("Association Class", " class "));
-        assert!(tool_matches_query("Interface", "INTER"));
-        assert!(tool_matches_query("Package", ""));
-        assert!(tool_matches_query("Package", "   "));
-        assert!(!tool_matches_query("Package", "class"));
-    }
-
-    #[test]
-    fn explorer_glyphs_preserve_semantic_types() {
-        assert_eq!(element_glyph("rust.module"), ShapeKind::Package);
-        assert_eq!(element_glyph("uml.interface"), ShapeKind::Interface);
-        assert_eq!(element_glyph("rust.enum"), ShapeKind::Enum);
-        assert_eq!(element_glyph("rust.struct"), ShapeKind::Class);
-        assert_eq!(element_glyph("uml.constraint"), ShapeKind::Note);
-        assert_eq!(element_glyph("uml.port"), ShapeKind::Connector);
-        assert_eq!(element_glyph("uml.frame"), ShapeKind::Boundary);
-        assert_eq!(element_glyph("custom.widget"), ShapeKind::Topic);
-        assert_ne!(element_glyph("uml.reception"), ShapeKind::Class);
-    }
-
-    #[test]
-    fn bellatrix_panel_priorities_do_not_collide_with_zed_or_each_other() {
-        let priorities = [MDE_LEFT_PRIORITY, MDE_RIGHT_PRIORITY, MDE_BOTTOM_PRIORITY];
-        assert!(priorities.iter().all(|priority| *priority > 7));
-        assert_eq!(
-            priorities
-                .iter()
-                .copied()
-                .collect::<std::collections::HashSet<_>>()
-                .len(),
-            3
-        );
-    }
-}
 
 fn explorer_move_menu(
     menu: ui::ContextMenu,

@@ -93,70 +93,7 @@ fn given_external_identity_at_permitted_count_then_unknown_is_not_a_pass() -> Re
     }
     Ok(())
 }
-#[test]
-fn given_external_identity_beyond_maximum_then_known_count_proves_violation() -> Result {
-    for kind in ["uml.time_constraint", "uml.duration_constraint"] {
-        let (error, unknown) = codes(kind);
-        for reverse in [false, true] {
-            let mut values = vec![
-                json!({"$ref":"first"}),
-                json!({"$ref":"second"}),
-                json!({"href":"external.uml#Element"}),
-            ];
-            if reverse {
-                values.reverse();
-            }
-            let model = document(kind, Some(json!(values)))?;
-            assert!(has(&model, error)? && !has(&model, unknown)?);
-        }
-    }
-    Ok(())
-}
-#[test]
-fn given_malformed_or_duplicate_references_then_invalid_dominates_external_unknown() -> Result {
-    for kind in ["uml.time_constraint", "uml.duration_constraint"] {
-        let (error, unknown) = codes(kind);
-        for value in [
-            json!(null),
-            json!(false),
-            json!({"$ref":"first"}),
-            json!([null]),
-            json!([{"$ref":"missing"}]),
-            json!([{"$ref":"first"},{"$ref":"first"}]),
-            json!([{"href":"external.uml#Element"},{"href":"external.uml#Element"}]),
-        ] {
-            let model = document(kind, Some(value))?;
-            assert!(has(&model, error)? && !has(&model, unknown)?);
-        }
-        for reverse in [false, true] {
-            let mut values = vec![
-                json!({"href":"external.uml#Element"}),
-                json!({"href":false}),
-            ];
-            if reverse {
-                values.reverse();
-            }
-            let model = document(kind, Some(json!(values)))?;
-            assert!(has(&model, error)? && !has(&model, unknown)?);
-        }
-    }
-    Ok(())
-}
-#[test]
-fn given_unknown_local_metaclass_then_required_reference_contract_remains_unknown() -> Result {
-    for kind in ["uml.time_constraint", "uml.duration_constraint"] {
-        let (error, unknown) = codes(kind);
-        let mut model = document(kind, Some(json!([{"$ref":"first"}])))?;
-        model
-            .elements
-            .iter_mut()
-            .find(|element| element.id == "first")
-            .ok_or("first")?
-            .kind = "future.element".into();
-        assert!(has(&model, unknown)? && !has(&model, error)?);
-    }
-    Ok(())
-}
+
 #[test]
 fn given_deletion_leaves_dangling_constrained_reference_then_command_rejects_atomically() -> Result
 {

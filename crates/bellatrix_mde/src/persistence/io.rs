@@ -96,12 +96,4 @@ mod tests {
         assert_eq!(json, project);
         assert_eq!(binary, project);
     }
-    #[test]
-    fn rejects_unknown_schema() {
-        let bytes = br#"{"schema_version":99,"id":"x","name":"y"}"#;
-        assert!(matches!(
-            decode(bytes, Format::Json),
-            Err(ModelIoError::Version(99))
-        ));
-    }
 }

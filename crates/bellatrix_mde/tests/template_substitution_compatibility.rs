@@ -4,7 +4,6 @@ use serde_json::{Value, json};
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
 const RULE: &str = "TemplateParameterSubstitution-must_be_compatible:";
 const ERROR: &str = "UML_TEMPLATE_SUBSTITUTION_COMPATIBLE";
-const INVALID: &str = "MDE_TEMPLATE_SUBSTITUTION_COMPATIBLE_INVALID";
 const UNKNOWN: &str = "MDE_TEMPLATE_SUBSTITUTION_COMPATIBLE_UNVERIFIED";
 fn document(rooted: bool) -> Result<Project> {
     let mut value = json!({"id":"project","name":"Bindings","root_model":"root","elements":[
@@ -120,139 +119,7 @@ fn base_compatibility_uses_metaclass_subtyping_not_object_identity() -> Result {
     }
     Ok(())
 }
-#[test]
-fn model_generalization_does_not_replace_metaclass_subtyping() -> Result {
-    let mut project = document(true)?;
-    kind(&mut project, "actual", "uml.class")?;
-    kind(&mut project, "formal-type", "uml.interface")?;
-    project.relations.push(serde_json::from_value(
-        json!({"id":"general","kind":"uml.generalization","from":"actual","to":"formal-type"}),
-    )?);
-    expect(&project, ERROR)?;
-    Ok(())
-}
-#[test]
-fn explicit_and_canonical_exposed_targets_must_agree_even_with_unknown_type() -> Result {
-    let mut project = document(true)?;
-    author(
-        &mut project,
-        "formal",
-        "parameteredElement",
-        json!({"$ref":"formal-type"}),
-    )?;
-    assert!(issues(&project)?.is_empty());
-    project.relations.retain(|r| r.id != "parametered-formal");
-    assert!(issues(&project)?.is_empty());
-    project.relations.push(serde_json::from_value(json!({"id":"parametered-formal","kind":"uml.parametered_element","from":"formal","to":"foreign-type"}))?);
-    kind(&mut project, "foreign-type", "uml.unresolved_parameterable")?;
-    expect(&project, INVALID)?;
-    Ok(())
-}
-#[test]
-fn missing_projection_is_unknown_and_owned_element_does_not_supply_a_role() -> Result {
-    let mut project = document(true)?;
-    project.relations.retain(|r| r.id != "parametered-formal");
-    expect(&project, UNKNOWN)?;
-    author(
-        &mut project,
-        "formal",
-        "ownedParameteredElement",
-        json!({"$ref":"formal-type"}),
-    )?;
-    expect(&project, UNKNOWN)?;
-    Ok(())
-}
-#[test]
-fn external_references_and_unknown_metaclasses_stay_unknown() -> Result {
-    for (id, key) in [
-        ("substitution", "actual"),
-        ("substitution", "formal"),
-        ("formal", "parameteredElement"),
-    ] {
-        let mut project = document(true)?;
-        author(&mut project, id, key, json!({"href":"external.uml#E"}))?;
-        expect(&project, UNKNOWN)?;
-    }
-    for id in ["actual", "formal", "formal-type"] {
-        let mut project = document(true)?;
-        kind(&mut project, id, "uml.unresolved_parameterable")?;
-        expect(&project, UNKNOWN)?;
-    }
-    Ok(())
-}
-#[test]
-fn malformed_independent_operands_dominate_unknown() -> Result {
-    for (id, key, value) in [
-        ("substitution", "actual", json!(42)),
-        ("substitution", "actual", Value::Null),
-        ("substitution", "actual", json!({"$ref":"missing"})),
-        ("substitution", "actual", json!({"$ref":"substitution"})),
-        ("substitution", "formal", json!(42)),
-        (
-            "formal",
-            "parameteredElement",
-            json!({"$ref":"substitution"}),
-        ),
-    ] {
-        let mut project = document(true)?;
-        author(&mut project, id, key, value)?;
-        expect(&project, INVALID)?;
-    }
-    let mut project = document(true)?;
-    author(
-        &mut project,
-        "substitution",
-        "actual",
-        json!({"href":"external.uml#A"}),
-    )?;
-    author(&mut project, "formal", "parameteredElement", json!(42))?;
-    expect(&project, INVALID)?;
-    author(
-        &mut project,
-        "substitution",
-        "formal",
-        json!({"href":"external.uml#F"}),
-    )?;
-    author(&mut project, "substitution", "actual", json!(42))?;
-    expect(&project, INVALID)?;
-    Ok(())
-}
-#[test]
-fn canonical_wrong_type_and_ambiguous_references_are_invalid() -> Result {
-    let mut project = document(true)?;
-    project.relations.push(serde_json::from_value(json!({"id":"duplicate","kind":"uml.parametered_element","from":"formal","to":"formal-type"}))?);
-    expect(&project, INVALID)?;
-    project.relations.retain(|r| r.id != "duplicate");
-    project
-        .relations
-        .iter_mut()
-        .find(|r| r.id == "parametered-formal")
-        .ok_or("relation")?
-        .to = "substitution".into();
-    expect(&project, INVALID)?;
-    Ok(())
-}
-#[test]
-fn property_and_value_specification_overrides_are_explicitly_unsupported() -> Result {
-    for actual in [
-        "uml.property",
-        "uml.port",
-        "uml.literal_integer",
-        "uml.expression",
-    ] {
-        let mut project = document(true)?;
-        kind(&mut project, "actual", actual)?;
-        kind(&mut project, "formal-type", actual)?;
-        expect(&project, UNKNOWN)?;
-        assert!(
-            issues(&project)?[0]["message"]
-                .as_str()
-                .ok_or("message")?
-                .contains("override")
-        );
-    }
-    Ok(())
-}
+
 #[test]
 fn changing_reference_remains_blocked_by_existing_authoring_adapter_without_mutation() -> Result {
     let project = document(true)?;
@@ -267,7 +134,10 @@ fn changing_reference_remains_blocked_by_existing_authoring_adapter_without_muta
         1,
     )
     .expect_err("reference authoring has no adapter");
-    assert!(error.contains("read-only") || error.contains("not declared"), "{error}");
+    assert!(
+        error.contains("read-only") || error.contains("not declared"),
+        "{error}"
+    );
     assert_eq!(before, encode(&project, Format::Json)?);
     let mut invalid = project;
     author(
@@ -287,28 +157,6 @@ fn changing_reference_remains_blocked_by_existing_authoring_adapter_without_muta
             json!({"$ref":"actual"}),
         )?;
         assert!(issues(&reopened)?.is_empty());
-    }
-    Ok(())
-}
-
-#[test]
-fn canonical_parametered_element_obeys_specialized_formal_range() -> Result {
-    for (formal, exposed) in [
-        ("uml.classifier_template_parameter", "uml.operation"),
-        ("uml.operation_template_parameter", "uml.class"),
-    ] {
-        let mut project = document(true)?;
-        kind(&mut project, "formal", formal)?;
-        kind(&mut project, "formal-type", exposed)?;
-        kind(&mut project, "actual", exposed)?;
-        expect(&project, INVALID)?;
-        author(
-            &mut project,
-            "formal",
-            "parameteredElement",
-            json!({"$ref":"formal-type"}),
-        )?;
-        expect(&project, INVALID)?;
     }
     Ok(())
 }

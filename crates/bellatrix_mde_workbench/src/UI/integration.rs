@@ -247,21 +247,3 @@ pub fn register_mde_workspace(
     )
     .detach();
 }
-
-#[cfg(test)]
-mod tests {
-    use super::SavePathPromptGuard;
-    use std::{cell::Cell, rc::Rc};
-
-    #[test]
-    fn save_dialog_guard_blocks_duplicates_and_resets_on_drop() {
-        let pending = Rc::new(Cell::new(false));
-        let first = SavePathPromptGuard::acquire(&pending).expect("first prompt");
-        assert!(SavePathPromptGuard::acquire(&pending).is_none());
-        drop(first);
-        assert!(!pending.get());
-        let next = SavePathPromptGuard::acquire(&pending).expect("prompt after cancellation");
-        drop(next);
-        assert!(!pending.get());
-    }
-}

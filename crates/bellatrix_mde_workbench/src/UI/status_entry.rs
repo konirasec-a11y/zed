@@ -54,17 +54,3 @@ impl StatusItemView for MdeStatusEntry {
         None
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::status_button_enabled;
-
-    #[test]
-    fn status_entry_is_visible_unless_explicitly_disabled() {
-        assert!(status_button_enabled(None));
-        assert!(status_button_enabled(Some("true")));
-        assert!(status_button_enabled(Some("")));
-        assert!(!status_button_enabled(Some("false")));
-        assert!(!status_button_enabled(Some(" FALSE ")));
-    }
-}

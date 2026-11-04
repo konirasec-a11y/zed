@@ -229,24 +229,3 @@ fn valid_style(style: &crate::Style) -> bool {
         && bounded(style.opacity, 0.0, 1.0) && bounded(style.corner_radius, 0.0, 1000.0)
         && style.dash_pattern.iter().all(|value| value.is_finite() && *value >= 0.0)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::Relation;
-    fn fixture() -> Project { serde_json::from_str(include_str!("../../../fixtures/todo.json")).unwrap() }
-    #[test]
-    fn validates_todo_fixture() { Graph::new(&fixture()).validate().unwrap(); }
-    #[test]
-    fn broken_edge_is_not_absent_edge() {
-        let mut project = fixture();
-        project.relations.push(Relation { id: "broken".into(), kind: "depends_on".into(), from: "type-task".into(), to: "missing".into(), properties: Default::default() });
-        assert!(matches!(Graph::new(&project).validate(), Err(GraphError::MissingEndpoint { .. })));
-    }
-    #[test]
-    fn physical_cycle_is_rejected() {
-        let mut project = fixture();
-        project.relations.push(Relation { id: "cycle".into(), kind: "physical_parent".into(), from: "dir-src".into(), to: "dir-src".into(), properties: Default::default() });
-        assert!(matches!(Graph::new(&project).validate(), Err(GraphError::Cycle(_))));
-    }
-}

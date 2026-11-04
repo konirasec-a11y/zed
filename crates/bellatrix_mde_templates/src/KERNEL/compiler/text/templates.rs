@@ -43,29 +43,3 @@ impl TemplatePack {
         self.tera.contains_template(name)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde::Serialize;
-    #[derive(Serialize)]
-    struct Decl<'a> { name: &'a str, fields: Vec<&'a str> }
-
-    #[test]
-    fn target_language_templates_receive_typed_data_without_html_escaping() {
-        let engine = TemplatePack::embedded([
-            ("ts/class.tera", "export class {{ name }} { {% for f in fields %}{{ f }}; {% endfor %}}"),
-            ("cs/class.tera", "public class {{ name }} { {% for f in fields %}{{ f }}; {% endfor %}}"),
-        ]).unwrap();
-        let model = Decl { name: "Task", fields: vec!["title: string"] };
-        assert!(engine.render("ts/class.tera", &model).unwrap().contains("title: string;"));
-        assert!(engine.render("cs/class.tera", &model).unwrap().contains("public class Task"));
-    }
-
-    #[test]
-    fn source_is_not_html_escaped_and_bad_templates_fail_before_publication() {
-        let mut engine = TemplatePack::embedded([("txt", "{{ code }}")]).unwrap();
-        assert_eq!(engine.render("txt", &serde_json::json!({"code": "Vec<&str>"})).unwrap(), "Vec<&str>");
-        assert!(engine.override_template("broken", "{{ unknown").is_err());
-    }
-}

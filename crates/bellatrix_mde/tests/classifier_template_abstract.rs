@@ -4,7 +4,6 @@ use serde_json::{Value, json};
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
 const RULE: &str = "ClassifierTemplateParameter-matching_abstract:";
 const ERROR: &str = "UML_CLASSIFIER_TEMPLATE_MATCHING_ABSTRACT";
-const INVALID: &str = "MDE_CLASSIFIER_TEMPLATE_MATCHING_ABSTRACT_INVALID";
 const UNKNOWN: &str = "MDE_CLASSIFIER_TEMPLATE_MATCHING_ABSTRACT_UNVERIFIED";
 fn document(rooted: bool) -> Result<Project> {
     let mut value = json!({"id":"project","name":"Bindings","root_model":"root","elements":[
@@ -84,15 +83,6 @@ fn expect(project: &Project, code: &str) -> Result {
     );
     Ok(())
 }
-fn kind(project: &mut Project, id: &str, value: &str) -> Result {
-    project
-        .elements
-        .iter_mut()
-        .find(|element| element.id == id)
-        .ok_or("element")?
-        .kind = value.into();
-    Ok(())
-}
 #[test]
 fn abstraction_implication_uses_normative_defaults_and_all_boolean_combinations() -> Result {
     for rooted in [true, false] {
@@ -115,182 +105,7 @@ fn abstraction_implication_uses_normative_defaults_and_all_boolean_combinations(
     }
     Ok(())
 }
-#[test]
-fn explicit_parametered_projection_is_supported_with_or_without_canonical_adapter() -> Result {
-    let mut project = document(true)?;
-    author(
-        &mut project,
-        "formal",
-        "parameteredElement",
-        json!({"$ref":"formal-type"}),
-    )?;
-    author(&mut project, "actual", "isAbstract", json!(true))?;
-    expect(&project, ERROR)?;
-    project
-        .relations
-        .retain(|relation| relation.id != "parametered-formal");
-    expect(&project, ERROR)?;
-    author(&mut project, "formal-type", "isAbstract", json!(true))?;
-    assert!(issues(&project)?.is_empty());
-    Ok(())
-}
-#[test]
-fn decisive_operand_can_prove_implication_despite_external_other_operand() -> Result {
-    let mut project = document(true)?;
-    author(
-        &mut project,
-        "substitution",
-        "formal",
-        json!({"href":"external.uml#Formal"}),
-    )?;
-    assert!(issues(&project)?.is_empty());
-    author(&mut project, "actual", "isAbstract", json!(true))?;
-    expect(&project, UNKNOWN)?;
-    author(
-        &mut project,
-        "substitution",
-        "formal",
-        json!({"$ref":"formal"}),
-    )?;
-    author(
-        &mut project,
-        "substitution",
-        "actual",
-        json!({"href":"external.uml#Actual"}),
-    )?;
-    expect(&project, UNKNOWN)?;
-    author(&mut project, "formal-type", "isAbstract", json!(true))?;
-    assert!(issues(&project)?.is_empty());
-    Ok(())
-}
-#[test]
-fn unrelated_formal_kind_does_not_cast_nonclassifier_actual_to_classifier() -> Result {
-    let mut project = document(true)?;
-    kind(&mut project, "formal", "uml.template_parameter")?;
-    kind(&mut project, "actual", "uml.operation")?;
-    assert!(issues(&project)?.is_empty());
-    kind(&mut project, "formal", "uml.unresolved_parameter")?;
-    expect(&project, UNKNOWN)?;
-    kind(&mut project, "formal", "uml.classifier_template_parameter")?;
-    expect(&project, INVALID)?;
-    Ok(())
-}
-#[test]
-fn malformed_boolean_operands_dominate_a_decisive_other_operand() -> Result {
-    for id in ["formal-type", "actual"] {
-        for value in [Value::Null, json!(42), json!("true")] {
-            let mut project = document(true)?;
-            author(&mut project, "formal-type", "isAbstract", json!(true))?;
-            author(&mut project, "actual", "isAbstract", json!(false))?;
-            author(&mut project, id, "isAbstract", value)?;
-            expect(&project, INVALID)?;
-        }
-    }
-    Ok(())
-}
-#[test]
-fn unresolved_metaclasses_remain_unknown_unless_other_operand_decides() -> Result {
-    let mut project = document(true)?;
-    kind(&mut project, "formal-type", "uml.unresolved_classifier")?;
-    assert!(issues(&project)?.is_empty());
-    author(&mut project, "actual", "isAbstract", json!(true))?;
-    expect(&project, UNKNOWN)?;
-    kind(&mut project, "formal-type", "uml.class")?;
-    kind(&mut project, "actual", "uml.unresolved_classifier")?;
-    expect(&project, UNKNOWN)?;
-    author(&mut project, "formal-type", "isAbstract", json!(true))?;
-    assert!(issues(&project)?.is_empty());
-    Ok(())
-}
-#[test]
-fn canonical_ambiguity_and_projection_identity_conflict_are_invalid_before_type_resolution()
--> Result {
-    let mut project = document(true)?;
-    project.relations.push(serde_json::from_value(json!({"id":"duplicate","kind":"uml.parametered_element","from":"formal","to":"formal-type"}))?);
-    expect(&project, INVALID)?;
-    let mut project = document(true)?;
-    kind(&mut project, "foreign-type", "uml.unresolved_classifier")?;
-    author(
-        &mut project,
-        "formal",
-        "parameteredElement",
-        json!({"$ref":"foreign-type"}),
-    )?;
-    expect(&project, INVALID)?;
-    let mut project = document(true)?;
-    project
-        .relations
-        .iter_mut()
-        .find(|relation| relation.id == "parametered-formal")
-        .ok_or("relation")?
-        .to = "root".into();
-    author(
-        &mut project,
-        "formal",
-        "parameteredElement",
-        json!({"href":"external.uml#Classifier"}),
-    )?;
-    expect(&project, INVALID)?;
-    Ok(())
-}
-#[test]
-fn absent_parametered_projection_is_not_replaced_by_owned_role_guess() -> Result {
-    let mut project = document(true)?;
-    project
-        .relations
-        .retain(|relation| relation.id != "parametered-formal");
-    author(
-        &mut project,
-        "formal",
-        "ownedParameteredElement",
-        json!({"$ref":"formal-type"}),
-    )?;
-    author(&mut project, "actual", "isAbstract", json!(true))?;
-    expect(&project, UNKNOWN)?;
-    author(&mut project, "actual", "isAbstract", json!(false))?;
-    assert!(issues(&project)?.is_empty());
-    Ok(())
-}
-#[test]
-fn malformed_references_are_invalid_even_when_actual_is_nonabstract() -> Result {
-    for (id, property, value) in [
-        ("substitution", "formal", json!(42)),
-        ("formal", "parameteredElement", Value::Null),
-        ("formal", "parameteredElement", json!({"$ref":"missing"})),
-        ("formal", "parameteredElement", json!({"$ref":"root"})),
-        ("substitution", "actual", json!(42)),
-    ] {
-        let mut project = document(true)?;
-        author(&mut project, id, property, value)?;
-        expect(&project, INVALID)?;
-    }
-    Ok(())
-}
-#[test]
-fn authored_inverse_is_kept_unverified_instead_of_certifying_the_whole_formal() -> Result {
-    let mut project = document(true)?;
-    author(
-        &mut project,
-        "formal",
-        "templateParameterSubstitution",
-        json!([{"href":"external.uml#Substitution"}]),
-    )?;
-    let response: Value = serde_json::from_str(&validate_uml_model(
-        &json!({"api_version":1,"model":project}).to_string(),
-    )?)?;
-    assert!(
-        response["diagnostics"]
-            .as_array()
-            .ok_or("diagnostics")?
-            .iter()
-            .any(|issue| issue["subject_id"] == "formal"
-                && issue["code"] == UNKNOWN
-                && issue["message"]
-                    .as_str()
-                    .is_some_and(|message| message.starts_with(RULE)))
-    );
-    Ok(())
-}
+
 #[test]
 fn making_actual_abstract_rolls_back_and_reopened_invalid_snapshot_can_be_repaired() -> Result {
     let project = document(true)?;

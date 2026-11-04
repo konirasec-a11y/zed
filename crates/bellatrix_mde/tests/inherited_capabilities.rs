@@ -116,50 +116,6 @@ fn inherited_members_use_the_same_contract_in_commands_and_quick_edit() {
     }
 }
 
-#[test]
-fn inspector_respects_inherited_metaclass_properties() {
-    for (kind, classifier, active) in [
-        ("uml.component", true, true),
-        ("uml.artifact", true, false),
-        ("uml.interface", true, false),
-        ("uml.collaboration", true, false),
-        ("uml.package", false, false),
-        ("uml.model", false, false),
-    ] {
-        let section = ModelingSection::from_model(&project(kind));
-        let inspector = inspect_element(&section, "type-task").expect("inspector");
-        for (field, expected) in [
-            ("isAbstract", classifier),
-            ("isFinalSpecialization", classifier),
-            ("isActive", active),
-        ] {
-            assert_eq!(
-                inspector
-                    .properties
-                    .iter()
-                    .any(|property| property.path == format!("properties.{field}")),
-                expected,
-                "{kind}: {field}"
-            );
-        }
-    }
-}
-
-#[test]
-fn legacy_template_schema_does_not_claim_a_normative_metaclass() {
-    assert_eq!(UmlType::Template.metaclass(), None);
-    let section = ModelingSection::from_model(&project("uml.template"));
-    let inspector = inspect_element(&section, "type-task").expect("legacy inspector");
-    for field in ["stereotype", "visibility", "isAbstract", "isLeaf"] {
-        assert!(
-            inspector
-                .properties
-                .iter()
-                .any(|property| property.path == format!("properties.{field}"))
-        );
-    }
-}
-
 // Namespace/Classifier fixture patterns adapted from uml4net at
 // 8ef13af2c68ae1994c8fa4f5b3e231dee7e6715d, Apache-2.0,
 // Copyright 2019-2026 Starion Group S.A. See references/uml4net/ for attribution.

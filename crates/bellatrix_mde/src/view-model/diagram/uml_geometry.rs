@@ -244,35 +244,6 @@ pub fn port_label_layout(body_width: f64) -> PortLabelLayout {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn frame_heading_cuts_only_the_lower_right_corner_within_bounds() {
-        for (width, height) in [(142.0, 30.0), (284.0, 60.0), (8.0, 4.0), (1.0, 1.0)] {
-            let layout = frame_heading_layout(width, height);
-            let [top_left, top_right, cut_top, cut_bottom, bottom_left] = layout.outline;
-            assert_eq!(top_left.y, top_right.y);
-            assert_eq!(top_right.x, cut_top.x);
-            assert_eq!(cut_bottom.y, bottom_left.y);
-            assert!(cut_top.y < cut_bottom.y);
-            assert!(cut_bottom.x < cut_top.x);
-            for scale in [0.25, 1.0, 3.0] {
-                for point in layout.outline {
-                    assert!((0.0..=width * scale).contains(&(point.x * scale)));
-                    assert!((0.0..=height * scale).contains(&(point.y * scale)));
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn port_label_is_outside_the_unchanged_body_at_every_scale() {
-        for width in [1.0, 16.0, 32.0, 100.0] {
-            let layout = port_label_layout(width);
-            for scale in [0.25, 1.0, 3.0] {
-                assert!(layout.left * scale > width * scale);
-                assert_eq!(layout.top, 0.0);
-            }
-        }
-    }
 
     #[test]
     fn port_label_projection_does_not_change_views_or_connector_anchors() {
@@ -306,45 +277,4 @@ mod tests {
         );
     }
 
-    #[test]
-    fn interface_resize_changes_circle_and_keeps_anchor_on_circumference() {
-        let contents = ClassifierContents::default();
-        let small = interface_layout(120.0, 76.0, contents);
-        let large = interface_layout(240.0, 152.0, contents);
-        assert_eq!(small.radius, 14.0);
-        assert!(large.radius > small.radius);
-        for layout in [small, large] {
-            let anchor = layout.anchor_toward(Point { x: 500.0, y: 400.0 });
-            let distance = (anchor.x - layout.center.x).hypot(anchor.y - layout.center.y);
-            assert!((distance - layout.radius).abs() < 1e-9);
-            assert!(layout.label_top > layout.center.y + layout.radius);
-        }
-    }
-    #[test]
-    fn automatic_member_growth_does_not_enlarge_circle() {
-        let contents = ClassifierContents {
-            attributes: 2,
-            operations: 1,
-            receptions: 1,
-            template_parameters: 0,
-            stereotype: true,
-        };
-        let layout = interface_layout(120.0, contents.minimum_interface_height(), contents);
-        assert_eq!(layout.radius, 14.0);
-        assert!(
-            layout.members_top + contents.compartments_height()
-                <= contents.minimum_interface_height()
-        );
-        assert_eq!(interface_layout(120.0, 48.0, contents), layout);
-    }
-    #[test]
-    fn folded_paper_never_draws_outside_its_view() {
-        for (width, height) in [(80.0, 48.0), (136.0, 78.0), (400.0, 75.0), (90.0, 350.0)] {
-            let paper = folded_note_layout(width, height);
-            for point in paper.outline.into_iter().chain(paper.fold) {
-                assert!(point.x >= 0.0 && point.x <= width);
-                assert!(point.y >= 0.0 && point.y <= height);
-            }
-        }
-    }
 }

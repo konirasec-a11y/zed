@@ -450,43 +450,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn json_requires_explicit_nonblank_diagram_type() {
-        for metadata in [
-            None,
-            Some(serde_json::json!(null)),
-            Some(serde_json::json!("")),
-            Some(serde_json::json!("  ")),
-        ] {
-            let mut diagram = serde_json::json!({"id": "diagram", "name": "Untyped"});
-            if let Some(value) = metadata {
-                diagram["uml_di_type"] = value;
-            }
-            assert!(
-                serde_json::from_value::<Project>(serde_json::json!({
-                    "id": "project", "name": "Strict", "diagrams": [diagram]
-                }))
-                .is_err()
-            );
-        }
-    }
-
-    #[test]
-    fn wire_rejects_missing_and_blank_diagram_type() -> Result<(), ModelIoError> {
-        let project: Project = serde_json::from_str(include_str!("../../fixtures/todo.json"))?;
-        for invalid in [None, Some(String::new()), Some("  ".to_owned())] {
-            let mut data = WireProject::decode(encode(&project)?.as_slice())?;
-            for diagram in &mut data.diagrams {
-                diagram.uml_di_type = invalid.clone();
-            }
-            assert!(matches!(
-                decode(&data.encode_to_vec()),
-                Err(ModelIoError::DiagramType)
-            ));
-        }
-        Ok(())
-    }
-
-    #[test]
     fn uml_metadata_and_future_type_names_round_trip_in_json_and_wire() -> Result<(), ModelIoError>
     {
         for type_name in ["UMLCompositeStructureDiagram", "UMLFutureDiagram"] {

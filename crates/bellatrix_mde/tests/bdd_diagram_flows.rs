@@ -51,19 +51,34 @@ impl Drop for SavedFlow {
     }
 }
 
-fn validate(case: &Case, envelope: &Value) -> FlowResult<Value> {
-    let response = match (&case.diagram_kind, &case.diagram_id) {
-        (Some(kind), Some(id)) => validate_uml_diagram(
-            &json!({
-                "api_version":1, "model":envelope["model"], "diagram_kind":kind, "diagram_id":id
-            })
-            .to_string(),
-        ),
-        (None, None) => validate_uml_model(&envelope.to_string()),
-        _ => return Err("diagram_kind and diagram_id must be present together".into()),
+fn validation_response(response: Result<String, String>, coverage: &str) -> FlowResult<Value> {
+    let response: Value = serde_json::from_str(&response.map_err(std::io::Error::other)?)?;
+    if response["api_version"] != 1 || response["coverage"] != coverage {
+        return Err(format!("Unexpected validation API contract: {response}").into());
     }
-    .map_err(std::io::Error::other)?;
-    Ok(serde_json::from_str(&response)?)
+    Ok(response)
+}
+
+fn validate(case: &Case, envelope: &Value) -> FlowResult<Value> {
+    let model = envelope
+        .get("model")
+        .ok_or("decoded envelope missing model")?;
+    match (&case.diagram_kind, &case.diagram_id) {
+        (Some(kind), Some(id)) => validation_response(
+            validate_uml_diagram(
+                &json!({
+                    "api_version":1, "model":model, "diagram_kind":kind, "diagram_id":id
+                })
+                .to_string(),
+            ),
+            "implemented_model_and_diagram_rules_only",
+        ),
+        (None, None) => validation_response(
+            validate_uml_model(&envelope.to_string()),
+            "implemented_rules_only",
+        ),
+        _ => Err("diagram_kind and diagram_id must be present together".into()),
+    }
 }
 
 fn check_outcome(case: &Case, response: &Value) -> FlowResult<()> {
@@ -173,15 +188,15 @@ fn diagram_responses(
     case.diagrams
         .iter()
         .map(|diagram| {
-            let response: Value = serde_json::from_str(
-                &validate_uml_diagram(
+            let response = validation_response(
+                validate_uml_diagram(
                     &json!({
                         "api_version":1, "model":envelope["model"],
                         "diagram_id":diagram.diagram_id, "diagram_kind":diagram.diagram_kind
                     })
                     .to_string(),
-                )
-                .map_err(std::io::Error::other)?,
+                ),
+                "implemented_model_and_diagram_rules_only",
             )?;
             if let Err(error) = check_outcome(case, &response) {
                 failures.push(format!("diagram {}: {error}", diagram.diagram_id));
@@ -244,12 +259,34 @@ fn run_flow(group: &str, id: &str) -> FlowResult<()> {
     let envelope: Value = serde_json::from_str(
         &decode_model_document(&bytes, "json").map_err(std::io::Error::other)?,
     )?;
-    let project: Project = serde_json::from_value(envelope["model"].clone())?;
+    if envelope["api_version"] != 1 {
+        return Err(format!("{id}: unexpected document API version").into());
+    }
+    let project: Project = serde_json::from_value(
+        envelope
+            .get("model")
+            .ok_or("decoded envelope missing model")?
+            .clone(),
+    )?;
     if group != "todolist" && project.diagrams.len() != 1 {
         return Err("Isolated diagram cases must contain exactly one diagram".into());
     }
     if group == "todolist" {
-        if project.diagrams.len() < 2 || case.diagrams.len() != project.diagrams.len() {
+        let actual_ids: BTreeSet<_> = project
+            .diagrams
+            .iter()
+            .map(|diagram| &diagram.id)
+            .collect();
+        let expected_ids: BTreeSet<_> = case
+            .diagrams
+            .iter()
+            .map(|diagram| &diagram.diagram_id)
+            .collect();
+        if project.diagrams.len() < 2
+            || expected_ids.len() != case.diagrams.len()
+            || actual_ids.len() != project.diagrams.len()
+            || expected_ids != actual_ids
+        {
             return Err(
                 "TodoList flow must validate every diagram of a multi-diagram project".into(),
             );

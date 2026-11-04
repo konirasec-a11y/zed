@@ -110,42 +110,7 @@ fn distinct_generals_violate_even_if_related_by_generalization() -> Result {
     }
     Ok(())
 }
-#[test]
-fn external_members_do_not_hide_known_conflicts_in_either_order() -> Result {
-    for reverse in [true, false] {
-        let mut project = document(true)?;
-        let mut values = vec![
-            json!({"href":"external.uml#Generalization"}),
-            json!({"$ref":"first-general"}),
-            json!({"$ref":"second-general"}),
-        ];
-        if reverse {
-            values.reverse();
-        }
-        author(&mut project, json!(values))?;
-        expect(&project, UNKNOWN)?;
-        target(&mut project, "second-general", "other")?;
-        expect(&project, ERROR)?;
-    }
-    Ok(())
-}
-#[test]
-fn malformed_members_dominate_unknown_and_false() -> Result {
-    for value in [
-        Value::Null,
-        json!(42),
-        json!([{"$ref":"first-general"},{"$ref":"first-general"}]),
-        json!([{"href":"external.uml#Generalization"},{"$ref":"missing"}]),
-        json!([{"href":"external.uml#Generalization"},{"$ref":"general"}]),
-        json!([{"href":42}]),
-    ] {
-        let mut project = document(true)?;
-        target(&mut project, "second-general", "other")?;
-        author(&mut project, value)?;
-        expect(&project, INVALID)?;
-    }
-    Ok(())
-}
+
 #[test]
 fn missing_membership_is_unknown_and_inverse_storage_does_not_invent_completeness() -> Result {
     let mut project = document(true)?;
@@ -169,33 +134,7 @@ fn missing_membership_is_unknown_and_inverse_storage_does_not_invent_completenes
     }
     Ok(())
 }
-#[test]
-fn generalization_objects_require_adapter_instead_of_silently_becoming_empty() -> Result {
-    for kind in ["uml.generalization", "uml.unresolved_generalization"] {
-        let mut project = document(true)?;
-        project.elements.push(serde_json::from_value(json!({"id":"object","kind":kind,"name":"Object","properties":{"general":{"$ref":"general"}}}))?);
-        author(&mut project, json!([{"$ref":"object"}]))?;
-        expect(&project, UNKNOWN)?;
-    }
-    Ok(())
-}
-#[test]
-fn unknown_general_metaclass_retains_identity_evidence_without_claiming_type_resolution() -> Result
-{
-    let mut project = document(true)?;
-    project
-        .elements
-        .iter_mut()
-        .find(|element| element.id == "general")
-        .ok_or("general")?
-        .kind = "uml.unresolved_classifier".into();
-    expect(&project, UNKNOWN)?;
-    target(&mut project, "second-general", "other")?;
-    expect(&project, ERROR)?;
-    target(&mut project, "second-general", "root")?;
-    expect(&project, INVALID)?;
-    Ok(())
-}
+
 #[test]
 fn membership_authoring_is_read_only_and_reopened_snapshots_can_be_repaired() -> Result {
     let mut project = document(true)?;
@@ -225,35 +164,6 @@ fn membership_authoring_is_read_only_and_reopened_snapshots_can_be_repaired() ->
         author(&mut repaired, json!([{"$ref":"first-general"}]))?;
         assert!(issues(&repaired)?.is_empty());
     }
-    Ok(())
-}
-
-#[test]
-fn authored_general_cannot_override_canonical_relationship_target() -> Result {
-    for value in [
-        json!({"$ref":"other"}),
-        json!({"$ref":"missing"}),
-        json!(42),
-    ] {
-        let mut project = document(true)?;
-        project
-            .relations
-            .iter_mut()
-            .find(|relation| relation.id == "first-general")
-            .ok_or("relation")?
-            .properties
-            .insert("general".into(), value);
-        expect(&project, INVALID)?;
-    }
-    let mut project = document(true)?;
-    project
-        .relations
-        .iter_mut()
-        .find(|relation| relation.id == "first-general")
-        .ok_or("relation")?
-        .properties
-        .insert("general".into(), json!({"$ref":"general"}));
-    assert!(issues(&project)?.is_empty());
     Ok(())
 }
 

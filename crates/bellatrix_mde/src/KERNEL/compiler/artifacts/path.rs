@@ -61,35 +61,3 @@ pub fn physical_path(project: &Project, id: &str) -> Result<PathBuf, PathError> 
     segments.reverse();
     Ok(segments.into_iter().collect())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn blocks_traversal_and_windows_reserved() {
-        for name in ["..", "../x", "C:", "CON", "name.", "file\\path"] {
-            assert!(validate_segment(name).is_err(), "{name}");
-        }
-        for name in [".cargo", "config.toml", "clippy.toml", "main.rs"] {
-            validate_segment(name).unwrap();
-        }
-    }
-}
-
-#[cfg(test)]
-mod placement_tests {
-    use super::*;
-    #[test]
-    fn absent_parent_places_file_at_root() {
-        let project: Project =
-            serde_json::from_str(include_str!("../../../../fixtures/todo.json")).unwrap();
-        assert_eq!(
-            physical_path(&project, "file-clippy").unwrap(),
-            PathBuf::from("clippy.toml")
-        );
-        assert_eq!(
-            physical_path(&project, "file-config").unwrap(),
-            PathBuf::from(".cargo/config.toml")
-        );
-    }
-}

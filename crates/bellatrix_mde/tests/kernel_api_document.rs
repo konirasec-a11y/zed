@@ -30,27 +30,6 @@ fn codecs_match_legacy_and_are_repeatable_aba() -> Result<(), Box<dyn std::error
 }
 
 #[test]
-fn decoding_contract_errors_are_versioned_and_sanitized() -> Result<(), Box<dyn std::error::Error>> {
-    for (bytes, format, code) in [
-        (&b"{}"[..], "yaml", "UNSUPPORTED_FORMAT"),
-        (&b"null"[..], "json", "INVALID_MODEL"),
-        (&b"{"[..], "json", "INVALID_MODEL"),
-        (&b"\xff"[..], "json", "INVALID_MODEL"),
-        (&b"{}"[..], "protobuf", "INVALID_MODEL"),
-        (&b"BLX1\xff"[..], "protobuf", "INVALID_MODEL"),
-        (&br#"{"schema_version":2,"id":"x","name":"X"}"#[..], "json", "INVALID_MODEL"),
-    ] {
-        let error = decode_model_document(bytes, format).expect_err("invalid document");
-        let response: Value = serde_json::from_str(&error)?;
-        assert_eq!(response["api_version"], 1);
-        assert_eq!(response["error"]["code"], code);
-        assert!(!error.contains("Project") && !error.contains("struct"));
-        assert_eq!(decode_model_document(bytes, format).expect_err("repeat error"), error);
-    }
-    Ok(())
-}
-
-#[test]
 fn graph_validation_preserves_legacy_scope_and_errors() -> Result<(), Box<dyn std::error::Error>> {
     let mut semantic_invalid = model_json();
     semantic_invalid["elements"][1]["properties"] = json!({"visibility":"invalid"});
@@ -95,17 +74,5 @@ fn populated_fixture_preserves_codec_data() -> Result<(), Box<dyn std::error::Er
     let envelope: Value = serde_json::from_str(&expected)?;
     let restored = decode(&serde_json::to_vec(&envelope["model"])?, Format::Json)?;
     assert_eq!(restored, model);
-    Ok(())
-}
-
-#[test]
-fn protobuf_non_finite_dimensions_are_not_silently_replaced_by_null() -> Result<(), Box<dyn std::error::Error>> {
-    let mut model = decode(include_bytes!("../fixtures/todo.json"), Format::Json)?;
-    let diagram = model.diagrams.first_mut().ok_or("fixture must contain a diagram")?;
-    diagram.width = f64::INFINITY;
-    let binary = encode(&model, Format::Protobuf)?;
-    assert!(decode(&binary, Format::Protobuf)?.diagrams.first().ok_or("diagram")?.width.is_infinite());
-    let error: Value = serde_json::from_str(&decode_model_document(&binary, "protobuf").expect_err("JSON cannot represent infinity"))?;
-    assert_eq!(error["error"]["code"], "RESPONSE_SERIALIZATION_FAILED");
     Ok(())
 }

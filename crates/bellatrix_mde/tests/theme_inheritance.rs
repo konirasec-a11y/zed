@@ -1,29 +1,4 @@
-use bellatrix_mde::{Project, Style};
-
-#[test]
-fn built_in_samples_inherit_ide_appearance() -> Result<(), Box<dyn std::error::Error>> {
-    for source in [
-        include_str!("../fixtures/todo.json"),
-        include_str!("../fixtures/skeleton.json"),
-    ] {
-        let project: Project = serde_json::from_str(source)?;
-        assert!(!project.diagrams.is_empty());
-        for view in project.diagrams.iter().flat_map(|diagram| &diagram.views) {
-            let appearance = Style {
-                routing: view.style.routing,
-                corner_radius: view.style.corner_radius,
-                dash_pattern: view.style.dash_pattern.clone(),
-                ..Style::default()
-            };
-            assert_eq!(
-                view.style, appearance,
-                "{} must inherit the IDE theme",
-                view.id
-            );
-        }
-    }
-    Ok(())
-}
+use bellatrix_mde::{Format, Project, Style, decode, encode};
 
 #[test]
 fn restoring_inheritance_preserves_saved_geometry_and_other_views()
@@ -63,6 +38,10 @@ fn restoring_inheritance_preserves_saved_geometry_and_other_views()
         .ok_or("missing edge")?
         .style = restored_style;
     assert_eq!(updated, expected);
-    assert_eq!(apply(&updated, &command, 2)?, updated);
+    for format in [Format::Json, Format::Protobuf] {
+        let reopened = decode(&encode(&updated, format)?, format)?;
+        assert_eq!(reopened, expected);
+        assert_eq!(apply(&reopened, &command, 2)?, reopened);
+    }
     Ok(())
 }

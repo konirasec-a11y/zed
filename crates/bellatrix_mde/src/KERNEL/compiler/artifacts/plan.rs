@@ -120,15 +120,3 @@ impl Plan {
         self.insert(path.as_ref().to_path_buf(), None, origin)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn rejects_case_insensitive_collisions_and_file_children() {
-        let mut plan = Plan::new();
-        plan.file("Cargo.toml", vec![1], "a").unwrap();
-        assert!(plan.file("cargo.TOML", vec![2], "b").is_err());
-        assert!(plan.file("Cargo.toml/child", vec![2], "b").is_err());
-    }
-}

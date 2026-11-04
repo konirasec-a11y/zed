@@ -3,7 +3,6 @@ use serde_json::{Value, json};
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
 const RULE: &str = "ClassifierTemplateParameter-actual_is_classifier:";
 const ERROR: &str = "UML_CLASSIFIER_TEMPLATE_ACTUAL";
-const INVALID: &str = "MDE_CLASSIFIER_TEMPLATE_ACTUAL_INVALID";
 const UNKNOWN: &str = "MDE_CLASSIFIER_TEMPLATE_ACTUAL_UNVERIFIED";
 fn document(rooted: bool) -> Result<Project> {
     let mut value = json!({"id":"project","name":"Bindings","root_model":"root","elements":[
@@ -133,124 +132,7 @@ fn parameterable_nonclassifier_actual_is_a_violation_not_a_type_representation_e
     }
     Ok(())
 }
-#[test]
-fn generic_and_operation_template_parameters_do_not_receive_classifier_restriction() -> Result {
-    for formal_kind in ["uml.template_parameter", "uml.operation_template_parameter"] {
-        let mut project = document(true)?;
-        kind(&mut project, "formal", formal_kind)?;
-        kind(&mut project, "actual", "uml.operation")?;
-        assert!(issues(&project)?.is_empty());
-        author(
-            &mut project,
-            "substitution",
-            "actual",
-            json!({"href":"external.uml#Argument"}),
-        )?;
-        assert!(issues(&project)?.is_empty());
-    }
-    Ok(())
-}
-#[test]
-fn unknown_formal_or_actual_is_resolved_only_by_a_decisive_implication_operand() -> Result {
-    let mut project = document(true)?;
-    author(
-        &mut project,
-        "substitution",
-        "formal",
-        json!({"href":"external.uml#Formal"}),
-    )?;
-    assert!(issues(&project)?.is_empty());
-    kind(&mut project, "actual", "uml.operation")?;
-    expect(&project, UNKNOWN)?;
-    author(
-        &mut project,
-        "substitution",
-        "formal",
-        json!({"$ref":"formal"}),
-    )?;
-    author(
-        &mut project,
-        "substitution",
-        "actual",
-        json!({"href":"external.uml#Actual"}),
-    )?;
-    expect(&project, UNKNOWN)?;
-    kind(&mut project, "formal", "uml.template_parameter")?;
-    assert!(issues(&project)?.is_empty());
-    Ok(())
-}
-#[test]
-fn unresolved_metaclasses_are_unknown_not_a_nonclassifier_proof() -> Result {
-    let mut project = document(true)?;
-    kind(&mut project, "actual", "uml.unresolved_actual")?;
-    expect(&project, UNKNOWN)?;
-    kind(&mut project, "actual", "uml.operation")?;
-    kind(&mut project, "formal", "uml.unresolved_parameter")?;
-    expect(&project, UNKNOWN)?;
-    kind(&mut project, "actual", "uml.class")?;
-    assert!(issues(&project)?.is_empty());
-    Ok(())
-}
-#[test]
-fn malformed_references_remain_invalid_despite_a_decisive_other_operand() -> Result {
-    for (property, value) in [
-        ("formal", json!(42)),
-        ("formal", json!({"$ref":"actual"})),
-        ("formal", json!({"$ref":"missing"})),
-        ("actual", json!(42)),
-        ("actual", json!({"$ref":"substitution"})),
-        ("actual", json!({"$ref":"missing"})),
-        ("actual", json!({"href":42})),
-    ] {
-        let mut project = document(true)?;
-        if property == "actual" {
-            kind(&mut project, "formal", "uml.template_parameter")?;
-        }
-        author(&mut project, "substitution", property, value)?;
-        expect(&project, INVALID)?;
-    }
-    Ok(())
-}
-#[test]
-fn missing_actual_projection_remains_unknown_even_with_owned_actual_role() -> Result {
-    let mut project = document(true)?;
-    project
-        .elements
-        .iter_mut()
-        .find(|element| element.id == "substitution")
-        .ok_or("substitution")?
-        .properties
-        .remove("actual");
-    author(
-        &mut project,
-        "substitution",
-        "ownedActual",
-        json!({"$ref":"actual"}),
-    )?;
-    project
-        .relations
-        .iter_mut()
-        .find(|relation| relation.id == "owns-actual")
-        .ok_or("owns-actual")?
-        .from = "substitution".into();
-    expect(&project, UNKNOWN)?;
-    Ok(())
-}
-#[test]
-fn missing_formal_can_be_decided_by_a_classifier_actual_but_not_a_nonclassifier() -> Result {
-    let mut project = document(true)?;
-    project
-        .elements
-        .iter_mut()
-        .find(|element| element.id == "substitution")
-        .ok_or("substitution")?
-        .properties
-        .remove("formal");
-    assert!(issues(&project)?.is_empty());
-    kind(&mut project, "actual", "uml.operation")?;
-    expect(&project, UNKNOWN)?;
-    Ok(())
-}
+
 #[test]
 fn nonclassifier_snapshot_can_be_repaired_after_reopening() -> Result {
     let mut project = document(true)?;

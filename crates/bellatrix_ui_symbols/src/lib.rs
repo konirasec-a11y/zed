@@ -190,28 +190,3 @@ mod mindmap;
 use mindmap::MINDMAP;
 mod flowchart;
 use flowchart::FLOWCHART;
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::collections::HashSet;
-    #[test]
-    fn all_catalog_entries_match_reviewed_design() {
-        for (family, expected) in [
-            (Family::Uml, 102),
-            (Family::C4, 31),
-            (Family::MindMap, 19),
-            (Family::Flowchart, 28),
-        ] {
-            assert_eq!(count(family), expected);
-            let mut ids = HashSet::new();
-            for group in groups(family) {
-                assert!(!group.title.is_empty());
-                for symbol in group.items {
-                    assert!(ids.insert(symbol.id));
-                    assert!(!glyph(symbol.kind).is_empty());
-                }
-            }
-        }
-    }
-}

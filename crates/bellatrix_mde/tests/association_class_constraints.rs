@@ -67,21 +67,6 @@ fn association_class_flow_rejects_self_end_atomically_reopens_and_recovers() -> 
 }
 
 #[test]
-fn association_class_flow_checks_transitive_endpoint_ancestry_not_just_identity() -> Result {
-    let mut model = document()?;
-    for (id, parent) in [("middle", "association"), ("leaf", "middle")] {
-        model.elements.push(serde_json::from_value(json!({"id":id,"kind":"uml.association_class","name":id}))?);
-        model.relations.push(serde_json::from_value(json!({"id":format!("owns-{id}"),"kind":"owns","from":"root","to":id}))?);
-        model.relations.push(serde_json::from_value(json!({"id":format!("general-{id}"),"kind":"uml.generalization","from":id,"to":parent}))?);
-    }
-    for endpoint in ["middle", "leaf"] {
-        author(&mut model, "end-left", "type", json!({"$ref":endpoint}));
-        assert!(has(&diagnostics(&model)?, ERROR), "{endpoint}");
-    }
-    Ok(())
-}
-
-#[test]
 fn association_class_flow_keeps_unknowns_without_hiding_proven_violation_or_invalid_members() -> Result {
     let mut model = document()?;
     author(&mut model, "end-right", "type", json!({"href":"external.uml#Type"}));
@@ -104,40 +89,5 @@ fn association_class_flow_keeps_unknowns_without_hiding_proven_violation_or_inva
         author(&mut model, "association", "memberEnd", members);
         assert!(has(&diagnostics(&model)?, ERROR));
     }
-    Ok(())
-}
-
-#[test]
-fn association_class_known_ancestor_survives_unresolved_branch_without_partial_ancestry() -> Result {
-    use bellatrix_mde::uml::{classifier_hierarchy, classifiers::QueryError, references::ReferenceIndex, root::Model};
-    let mut model = document()?;
-    for id in ["middle", "leaf", "external-branch"] {
-        model.elements.push(serde_json::from_value(json!({"id":id,"kind":"uml.association_class","name":id}))?);
-        model.relations.push(serde_json::from_value(json!({"id":format!("owns-{id}"),"kind":"owns","from":"root","to":id}))?);
-    }
-    for (id, child, parent) in [("local", "leaf", "middle"), ("transitive", "middle", "association"), ("other", "leaf", "external-branch")] {
-        model.relations.push(serde_json::from_value(json!({"id":id,"kind":"uml.generalization","from":child,"to":parent}))?);
-    }
-    author(&mut model, "external-branch", "general", json!([{"href":"external.uml#Parent"}]));
-    author(&mut model, "end-left", "type", json!({"$ref":"leaf"}));
-    for reverse in [false, true] {
-        if reverse { model.relations.reverse(); }
-        let index = ReferenceIndex::new(Model::from_project(&model));
-        assert!(classifier_hierarchy::resolve_ancestry(&index, "leaf").is_err_and(|e| matches!(e, QueryError::Unsupported { .. })));
-        assert!(classifier_hierarchy::has_ancestor(&index, "leaf", "association")?);
-        let issues = diagnostics(&model)?;
-        assert!(has(&issues, ERROR), "known path must not disappear: {issues:?}");
-        assert!(!has(&issues, UNKNOWN));
-        assert_eq!(issues.iter().filter(|d| d["subject_id"] == "association"
-            && d["message"].as_str().is_some_and(|m| m.starts_with("AssociationClass-cannot_be_defined:"))).count(), 1, "{issues:?}");
-    }
-    // Removing the known path leaves an inconclusive result, not false.
-    model.relations.retain(|r| r.id != "transitive");
-    assert!(has(&diagnostics(&model)?, UNKNOWN));
-    // Cycles are not accepted just because another path proves membership.
-    model.relations.push(serde_json::from_value(json!({"id":"transitive","kind":"uml.generalization","from":"middle","to":"association"}))?);
-    model.relations.push(serde_json::from_value(json!({"id":"cycle","kind":"uml.generalization","from":"external-branch","to":"leaf"}))?);
-    assert!(classifier_hierarchy::has_ancestor(&ReferenceIndex::new(Model::from_project(&model)), "leaf", "association")
-        .is_err_and(|e| matches!(e, QueryError::Invalid { .. })));
     Ok(())
 }

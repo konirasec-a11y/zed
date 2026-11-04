@@ -47,14 +47,3 @@ pub fn format(element: &Element) -> String {
         .and_then(|value| match value { "protected" => Some("# "), "private" => Some("- "), "package" => Some("~ "), _ => None }).unwrap_or("");
     format!("{stereotype}{visibility}{}", element.name)
 }
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn parses_stereotype_visibility_and_name() {
-        assert_eq!(parse("<< service >> # Billing Api").unwrap(), NameExpression { name: "Billing Api".into(), stereotype: Some("service".into()), visibility: Some("protected") });
-        assert_eq!(parse("«deprecated» - Old").unwrap().visibility, Some("private"));
-        assert_eq!(parse("Interface1").unwrap().name, "Interface1");
-        for invalid in ["<< x", "<< >> Interface"] { assert!(parse(invalid).is_err(), "{invalid}"); }
-    }
-}

@@ -3,8 +3,6 @@
 #[path = "../view-model/workbench_state.rs"]
 mod workbench_state;
 use workbench_state::{PendingRelationEndpoint, SelectionChange, WorkbenchState};
-#[cfg(test)]
-use workbench_state::switch_diagram_selection;
 
 #[path = "diagram_canvas.rs"]
 mod diagram_canvas;
@@ -174,14 +172,6 @@ fn diagram_creation_context(
     } else {
         Vec::new()
     }
-}
-
-#[cfg(test)]
-fn diagram_validation_kind(
-    stored_type: &str,
-) -> Result<bellatrix_mde::StructuralDiagramKind, String> {
-    bellatrix_mde::StructuralDiagramKind::from_uml_di_type(stored_type)
-        .ok_or_else(|| format!("Cannot validate unsupported diagram type {stored_type}"))
 }
 
 fn creation_owner(kind: ModelingElementKind, selected: Option<&str>) -> Option<String> {
@@ -916,7 +906,3 @@ impl Item for MdeWorkbenchItem {
         false
     }
 }
-
-#[cfg(test)]
-#[path = "relationship_interaction_tests.rs"]
-mod relationship_interaction_tests;

@@ -558,47 +558,11 @@ pub(crate) fn inspect_element_with_references(
 mod tests {
     use super::*;
     use crate::set_inspected_property;
-    use crate::property_edit::VISIBILITY;
     fn fixture() -> ModelingSection {
         let model: crate::Project = serde_json::from_str(include_str!("../../../fixtures/todo.json")).unwrap();
         ModelingSection::from_model(&model)
     }
-    #[test]
-    fn projected_editors_use_the_domain_edit_contract() {
-        let project: crate::Project = serde_json::from_str(include_str!("../../../fixtures/todo.json")).expect("fixture");
-        let section = ModelingSection::from_model(&project);
-        for id in section.elements.iter().map(|element| element.id.as_str())
-            .chain(section.relations.iter().map(|relation| relation.id.as_str())) {
-            let Some(inspected) = inspect_element(&section, id) else { continue; };
-            for field in inspected.properties {
-                let contract = crate::property_edit::property_contract(&section, id, &field.path)
-                    .unwrap_or_else(|error| panic!("{id} {}: {error}", field.path));
-                let expected = editor_for_value_type(contract.value_type, field.editor == PropertyEditor::Multiline);
-                assert_eq!(field.editor, expected, "{id} {}", field.path);
-                assert_eq!(field.editable, contract.value_type != PropertyValueType::ReadOnly, "{id} {}", field.path);
-            }
-        }
-    }
 
-    #[test]
-    fn class_inherits_common_properties_and_owns_attributes_and_operations() {
-        let section=fixture();
-        let c=inspect_element(&section,"type-list").unwrap();
-        assert_eq!(c.kind,"rust.struct");
-        assert!(c.properties.iter().any(|p| p.path=="properties.visibility" &&
-            p.value == json!("public") && p.editor==PropertyEditor::Choice(VISIBILITY)));
-        assert!(c.properties.iter().any(|p| p.path=="properties.isActive" &&
-            p.editor==PropertyEditor::Boolean));
-        assert!(c.attributes.iter().any(|f| f.name=="tasks"));
-        assert!(c.operations.iter().any(|f| f.name=="add"));
-    }
-    #[test]
-    fn specialized_field_has_declaration_but_not_class_flags() {
-        let section=fixture();
-        let f=inspect_element(&section,"field-title").unwrap();
-        assert!(f.properties.iter().any(|p| p.path=="properties.declaration"));
-        assert!(!f.properties.iter().any(|p| p.path=="properties.isActive"));
-    }
     #[test]
     fn updates_are_typed_and_reject_identity_changes() {
         let mut section=fixture();

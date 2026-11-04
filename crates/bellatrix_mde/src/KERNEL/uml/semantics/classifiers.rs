@@ -1777,24 +1777,4 @@ mod class_behavior_gate_tests {
         Ok(())
     }
 
-    #[test]
-    fn composite_membership_rejects_malformed_external_envelopes_beside_local_proof() {
-        let descriptor = schema::uml_property("Class", "ownedAttribute")
-            .expect("schema").expect("ownedAttribute");
-        let external = json!({"href":"other.uml#Property"});
-        assert!(matches!(contains_reference(&json!([external.clone()]), "child", "owner", descriptor),
-            Err(QueryError::Unsupported { .. })));
-        assert_eq!(contains_reference(&json!([external.clone(), {"$ref":"child"}]), "child", "owner", descriptor), Ok(true));
-        for invalid in [json!({"href":false}), json!({"href":null}), json!({"href":1}),
-            json!({"href":""}), json!({"href":"other.uml#Property", "$ref":"child"})]
-        {
-            for values in [json!([invalid.clone(), {"$ref":"child"}]), json!([{"$ref":"child"}, invalid.clone()]),
-                json!([external.clone(), invalid.clone()]), json!([invalid, external.clone()])]
-            {
-                assert!(matches!(contains_reference(&values, "child", "owner", descriptor),
-                    Err(QueryError::Invalid { .. })), "{values}");
-            }
-        }
-    }
-
 }

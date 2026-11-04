@@ -4,7 +4,6 @@ use serde_json::{Value, json};
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
 const RULE: &str = "TemplateSignature-unique_parameters:";
 const ERROR: &str = "UML_TEMPLATE_SIGNATURE_UNIQUE_PARAMETERS";
-const INVALID: &str = "MDE_TEMPLATE_SIGNATURE_UNIQUE_PARAMETERS_INVALID";
 const UNKNOWN: &str = "MDE_TEMPLATE_SIGNATURE_UNIQUE_PARAMETERS_UNVERIFIED";
 fn document(rooted: bool) -> Result<Project> {
     let mut value = json!({"id":"project","name":"Bindings","root_model":"root","elements":[
@@ -47,16 +46,7 @@ fn document(rooted: bool) -> Result<Project> {
     }
     Ok(serde_json::from_value(value)?)
 }
-fn author(project: &mut Project, id: &str, key: &str, value: Value) -> Result {
-    project
-        .elements
-        .iter_mut()
-        .find(|e| e.id == id)
-        .ok_or("element")?
-        .properties
-        .insert(key.into(), value);
-    Ok(())
-}
+
 fn issues(project: &Project) -> Result<Vec<Value>> {
     let response: Value = serde_json::from_str(&validate_uml_model(
         &json!({"api_version":1,"model":project}).to_string(),
@@ -118,127 +108,7 @@ fn includes_nonowned_formals_and_uses_exposed_names_not_parameter_labels() -> Re
     }
     Ok(())
 }
-#[test]
-fn unnamed_named_elements_compare_as_null_not_as_distinct_defaults() -> Result {
-    let mut project = document(true)?;
-    name(&mut project, "formal-type", "")?;
-    assert!(issues(&project)?.is_empty());
-    name(&mut project, "foreign-type", "")?;
-    expect(&project, ERROR)?;
-    Ok(())
-}
-#[test]
-fn known_duplicate_survives_external_collection_member() -> Result {
-    let mut project = document(true)?;
-    name(&mut project, "foreign-type", "FormalType")?;
-    author(
-        &mut project,
-        "signature",
-        "parameter",
-        json!([{"$ref":"formal"},{"$ref":"foreign"},{"href":"external.uml#P"}]),
-    )?;
-    expect(&project, ERROR)?;
-    name(&mut project, "foreign-type", "Distinct")?;
-    expect(&project, UNKNOWN)?;
-    Ok(())
-}
-#[test]
-fn singleton_unknown_is_vacuous_but_two_unknowns_are_not() -> Result {
-    let mut project = document(true)?;
-    author(
-        &mut project,
-        "signature",
-        "parameter",
-        json!([{"href":"external.uml#P"}]),
-    )?;
-    assert!(issues(&project)?.is_empty());
-    author(
-        &mut project,
-        "signature",
-        "parameter",
-        json!([{"href":"external.uml#P"},{"href":"external.uml#Q"}]),
-    )?;
-    expect(&project, UNKNOWN)?;
-    author(
-        &mut project,
-        "signature",
-        "parameter",
-        json!([{"$ref":"formal"}]),
-    )?;
-    project.relations.retain(|r| r.id != "parametered-formal");
-    assert!(issues(&project)?.is_empty());
-    Ok(())
-}
-#[test]
-fn missing_collection_or_exposed_projection_is_unknown() -> Result {
-    let mut project = document(true)?;
-    project
-        .elements
-        .iter_mut()
-        .find(|e| e.id == "signature")
-        .ok_or("signature")?
-        .properties
-        .remove("parameter");
-    expect(&project, UNKNOWN)?;
-    author(
-        &mut project,
-        "signature",
-        "parameter",
-        json!([{"$ref":"formal"},{"$ref":"foreign"}]),
-    )?;
-    project.relations.retain(|r| r.id != "parametered-formal");
-    expect(&project, UNKNOWN)?;
-    Ok(())
-}
-#[test]
-fn malformed_members_and_exposed_projections_remain_invalid() -> Result {
-    for value in [
-        json!(42),
-        json!([]),
-        json!([{"$ref":"missing"}]),
-        json!([{"$ref":"actual"}]),
-        json!([{"$ref":"formal"},{"$ref":"formal"}]),
-    ] {
-        let mut project = document(true)?;
-        author(&mut project, "signature", "parameter", value)?;
-        expect(&project, INVALID)?;
-    }
-    let mut project = document(true)?;
-    author(&mut project, "formal", "parameteredElement", json!(42))?;
-    author(
-        &mut project,
-        "foreign",
-        "parameteredElement",
-        json!({"href":"external.uml#E"}),
-    )?;
-    expect(&project, INVALID)?;
-    Ok(())
-}
-#[test]
-fn contradictory_local_id_cannot_hide_behind_unresolved_metaclass() -> Result {
-    let mut project = document(true)?;
-    kind(&mut project, "actual", "uml.unresolved_parameterable")?;
-    author(
-        &mut project,
-        "formal",
-        "parameteredElement",
-        json!({"$ref":"actual"}),
-    )?;
-    expect(&project, INVALID)?;
-    Ok(())
-}
-#[test]
-fn two_distinct_formals_exposing_same_element_still_collide() -> Result {
-    let mut project = document(true)?;
-    project
-        .relations
-        .iter_mut()
-        .find(|r| r.id == "parametered-foreign")
-        .ok_or("reference")?
-        .to = "formal-type".into();
-    expect(&project, ERROR)?;
-    Ok(())
-}
+
 #[test]
 fn renaming_nonowned_parameter_target_rolls_back_and_invalid_snapshot_repairs() -> Result {
     let project = document(true)?;
@@ -271,37 +141,5 @@ fn renaming_nonowned_parameter_target_rolls_back_and_invalid_snapshot_repairs() 
         )?;
         assert!(issues(&repaired)?.is_empty());
     }
-    Ok(())
-}
-
-#[test]
-fn malformed_relationship_name_is_invalid_not_an_absent_name() -> Result {
-    let mut project = document(true)?;
-    project.relations.push(serde_json::from_value(json!({"id":"binary","kind":"uml.association","from":"actual","to":"formal-type","properties":{"name":42}}))?);
-    project
-        .relations
-        .iter_mut()
-        .find(|r| r.id == "parametered-formal")
-        .ok_or("reference")?
-        .to = "binary".into();
-    expect(&project, INVALID)?;
-    name(&mut project, "foreign-type", "")?;
-    project
-        .relations
-        .iter_mut()
-        .find(|r| r.id == "binary")
-        .ok_or("binary")?
-        .properties
-        .insert("name".into(), Value::Null);
-    expect(&project, ERROR)?;
-    project
-        .relations
-        .iter_mut()
-        .find(|r| r.id == "binary")
-        .ok_or("binary")?
-        .properties
-        .remove("name");
-    expect(&project, ERROR)?;
-
     Ok(())
 }

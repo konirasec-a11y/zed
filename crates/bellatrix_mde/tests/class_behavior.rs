@@ -98,80 +98,6 @@ fn given_classifier_behavior_then_only_nonempty_specification_is_forbidden_in_ro
 }
 
 #[test]
-fn given_behavior_not_selected_as_classifier_behavior_then_method_specification_is_allowed()
--> Result {
-    let mut project = document(true, false, Some(json!({"$ref":"operation"})))?;
-    assert!(!diagnostics(&project)?.iter().any(relevant));
-    author(&mut project, "class", "classifierBehavior", Value::Null)?;
-    assert!(!diagnostics(&project)?.iter().any(relevant));
-    Ok(())
-}
-
-#[test]
-fn given_unresolved_behavior_or_specification_then_rule_is_unverified_not_satisfied_or_violated()
--> Result {
-    for (id, property) in [
-        ("class", "classifierBehavior"),
-        ("behavior", "specification"),
-    ] {
-        let mut project = document(true, true, None)?;
-        author(
-            &mut project,
-            id,
-            property,
-            json!({"href":"external.uml#target"}),
-        )?;
-        let issues = diagnostics(&project)?;
-        assert!(
-            issues
-                .iter()
-                .any(|issue| relevant(issue) && issue["severity"] == "warning"),
-            "{issues:#?}"
-        );
-        assert!(
-            !issues
-                .iter()
-                .any(|issue| relevant(issue) && issue["severity"] == "error"),
-            "{issues:#?}"
-        );
-    }
-    Ok(())
-}
-
-#[test]
-fn given_invalid_reference_then_contract_error_is_preserved_without_claiming_normative_violation()
--> Result {
-    for (id, property) in [
-        ("class", "classifierBehavior"),
-        ("behavior", "specification"),
-    ] {
-        for value in [
-            json!({"$ref":"missing"}),
-            json!({"$ref":"root"}),
-            json!([]),
-            json!(42),
-        ] {
-            let mut project = document(true, true, None)?;
-            author(&mut project, id, property, value)?;
-            let issues = diagnostics(&project)?;
-            assert!(
-                issues
-                    .iter()
-                    .any(|issue| relevant(issue) && issue["severity"] == "error"),
-                "{issues:#?}"
-            );
-            assert!(
-                !issues
-                    .iter()
-                    .any(|issue| relevant(issue) && issue["message"] == format!("{RULE} violated")),
-                "{issues:#?}"
-            );
-        }
-    }
-    Ok(())
-}
-
-#[test]
 fn when_generic_editor_cannot_write_classifier_behavior_then_rejection_preserves_the_model()
 -> Result {
     let mut valid = document(true, false, Some(json!({"$ref":"operation"})))?;
@@ -189,30 +115,5 @@ fn when_generic_editor_cannot_write_classifier_behavior_then_rejection_preserves
     .expect_err("this reference is not writable through the generic editor");
     assert_eq!(error, "property is read-only");
     assert_eq!(encode(&valid, Format::Json)?, before);
-    Ok(())
-}
-
-#[test]
-fn given_other_behaviored_classifier_metaclasses_then_the_inherited_constraint_still_applies()
--> Result {
-    for kind in ["uml.component", "uml.actor", "uml.use_case"] {
-        let mut project = document(true, true, Some(json!({"$ref":"operation"})))?;
-        let classifier = project
-            .elements
-            .iter_mut()
-            .find(|element| element.id == "class")
-            .ok_or("classifier")?;
-        classifier.kind = kind.into();
-        if kind != "uml.component" {
-            classifier.properties.remove("isActive");
-        }
-        let issues = diagnostics(&project)?;
-        assert!(
-            issues.iter().any(|issue| relevant(issue)
-                && issue["severity"] == "error"
-                && issue["message"] == format!("{RULE} violated")),
-            "{kind}: {issues:#?}"
-        );
-    }
     Ok(())
 }

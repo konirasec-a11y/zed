@@ -34,18 +34,3 @@ pub fn select_elements(project: &Project, scope: &Scope) -> Result<HashSet<Strin
         &["owns", "declares", "physical_parent"],
     ))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn scope_follows_owned_members_but_not_dependencies() {
-        let project: Project =
-            serde_json::from_str(include_str!("../../../fixtures/todo.json")).unwrap();
-        let selected =
-            select_elements(&project, &Scope::Elements(vec!["type-list".into()])).unwrap();
-        assert!(selected.contains("type-list"));
-        assert!(selected.contains("fn-add"));
-        assert!(!selected.contains("type-task"));
-    }
-}

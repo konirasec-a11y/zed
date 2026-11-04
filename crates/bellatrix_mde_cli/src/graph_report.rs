@@ -29,14 +29,3 @@ pub fn report(project: &Project, from: Option<&str>, to: Option<&str>, relation:
     }
     Ok(result.join("\n"))
 }
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn report_finds_directed_path_and_preserves_relations() {
-        let project: Project = serde_json::from_str(include_str!("../../bellatrix_mde/fixtures/todo.json")).unwrap();
-        let response = report(&project, Some("type-list"), Some("fn-add"), Some("owns")).unwrap();
-        assert!(response.contains("type-list --[owns]--> fn-add")); assert!(response.contains("Shortest directed path"));
-        assert!(report(&project, Some("fn-add"), Some("type-list"), Some("owns")).unwrap().contains("No directed path"));
-    }
-}

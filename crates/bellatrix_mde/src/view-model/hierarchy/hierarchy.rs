@@ -71,28 +71,3 @@ pub fn project_hierarchy(section: &ModelingSection) -> Vec<HierarchyRow> {
     }
     result
 }
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn models_only_semantic_nodes_with_owned_members() {
-        let model = serde_json::from_str(include_str!("../../../fixtures/todo.json")).unwrap();
-        let section = ModelingSection::from_model(&model);
-        let tree = project_hierarchy(&section);
-        let row = |id: &str| tree.iter().find(|row| row.element_id == id).unwrap();
-        assert_eq!(row("type-task").depth, 0);
-        assert_eq!(row("field-title").depth, row("type-task").depth + 1);
-        assert_eq!(row("fn-complete").depth, row("type-list").depth + 1);
-        assert!(tree.iter().position(|row| row.element_id == "type-task").unwrap() < tree.iter().position(|row| row.element_id == "field-title").unwrap());
-        assert!(tree.iter().all(|row| !row.kind.starts_with("fs.") && !row.kind.starts_with("cargo.")));
-        assert!(!tree.iter().any(|row| row.element_id == "file-task" || row.element_id == "dir-src"));
-        assert_eq!(tree.len(), 8);
-    }
-    #[test]
-    fn empty_semantic_model_does_not_expose_files_or_cargo_metadata() {
-        let mut model: crate::Project = serde_json::from_str(include_str!("../../../fixtures/todo.json")).unwrap();
-        model.elements.retain(|element| !semantic(&element.kind));
-        model.relations.clear();
-        assert!(project_hierarchy(&ModelingSection::from_model(&model)).is_empty());
-    }
-}

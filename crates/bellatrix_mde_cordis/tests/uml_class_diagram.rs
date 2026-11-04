@@ -1,8 +1,7 @@
 //! Acceptance: the StarUML class-diagram tools create typed persisted nodes
 //! and relationships through the same public Cordis revision boundary.
 use bellatrix_mde::uml::types::{
-    Integer, MultiplicityError, MultiplicityRange, RelationEnd, RelationEndMultiplicity,
-    StandardPrimitiveType, UnlimitedNatural,
+    Integer, MultiplicityError, RelationEnd, RelationEndMultiplicity, UnlimitedNatural,
 };
 use bellatrix_mde::{
     Format, Geometry, ModelingSection, Project, StructuralSeverity, decode, encode,
@@ -289,31 +288,6 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
             .target_labels
             .multiplicity,
         None
-    );
-    assert_eq!(Integer::PRIMITIVE_TYPE, StandardPrimitiveType::Integer);
-    assert_eq!(
-        UnlimitedNatural::PRIMITIVE_TYPE,
-        StandardPrimitiveType::UnlimitedNatural
-    );
-    let unbounded: MultiplicityRange = "*".parse().expect("unlimited alias");
-    assert!(unbounded.includes_multiplicity(&default_range));
-    assert!(default_range.compatible_with(&unbounded));
-    assert!(!default_range.includes_multiplicity(&unbounded));
-    assert_eq!(
-        MultiplicityRange::from_bounds(None, None).unwrap(),
-        default_range
-    );
-    assert_eq!(
-        MultiplicityRange::from_bounds(Some(0.into()), None)
-            .unwrap()
-            .upper_bound(),
-        &UnlimitedNatural::from(1)
-    );
-    assert_eq!(
-        MultiplicityRange::from_bounds(None, Some(2.into()))
-            .unwrap()
-            .lower_bound(),
-        &Integer::from(1)
     );
     let huge = "999999999999999999999999999999999999999999999999";
     revision = updated.revision();

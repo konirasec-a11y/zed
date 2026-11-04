@@ -327,11 +327,6 @@ impl<'a> RelationEndMultiplicity<'a> {
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn from_value(value: Option<&'a Value>) -> Self {
-        Self { value }
-    }
-
     pub fn authored_notation(self) -> Option<&'a str> {
         self.value.and_then(Value::as_str)
     }
