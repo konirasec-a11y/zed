@@ -329,6 +329,7 @@ struct NativeMdePreviewItem {
     workbench: Entity<MdeWorkbenchItem>,
     lease: NativeDocumentLease,
     diagnostics: Vec<String>,
+    diagnostics_expanded: bool,
     diagnostic_page: usize,
     _subscription: Subscription,
     _workbench_subscription: Subscription,
@@ -413,6 +414,7 @@ impl NativeMdePreviewItem {
             workbench,
             lease,
             diagnostics,
+            diagnostics_expanded: false,
             diagnostic_page: 0,
             _subscription: subscription,
             _workbench_subscription: workbench_subscription,
@@ -694,8 +696,10 @@ impl Render for NativeMdePreviewItem {
         };
         v_flex()
             .size_full()
+            .min_h_0()
             .child(
                 h_flex()
+                    .flex_shrink_0()
                     .gap_2()
                     .child(Label::new(if self.lease.source.is_mdj() {
                         "MDJ · limited editing"
@@ -719,10 +723,26 @@ impl Render for NativeMdePreviewItem {
                         .on_click(move |_, _, cx| {
                             validate_owner.update(cx, |item, cx| item.validate_diagram(cx));
                         }),
-                    ),
+                    )
+                    .when(!self.diagnostics.is_empty(), |header| {
+                        header.child(
+                            Button::new(
+                                "mde-toggle-import-diagnostics",
+                                format!(
+                                    "{} import diagnostics ({})",
+                                    if self.diagnostics_expanded { "Hide" } else { "Show" },
+                                    self.diagnostics.len()
+                                ),
+                            )
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.diagnostics_expanded = !this.diagnostics_expanded;
+                                cx.notify();
+                            })),
+                        )
+                    }),
             )
             .child(Label::new(message))
-            .when(!self.diagnostics.is_empty(), |preview| {
+            .when(self.diagnostics_expanded && !self.diagnostics.is_empty(), |preview| {
                 let page_size = 50;
                 let page_count = self.diagnostics.len().div_ceil(page_size);
                 let start = self.diagnostic_page * page_size;
