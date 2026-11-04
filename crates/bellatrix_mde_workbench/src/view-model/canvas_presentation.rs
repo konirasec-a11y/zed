@@ -156,15 +156,20 @@ fn uses_native_contents(section: &ModelingProjection, view: &View) -> bool {
         {
             let native_member = view.interface_icon.is_none()
                 && child.subject.as_deref().is_some_and(|subject| {
-                    element.template_parameters.iter().any(|id| id == subject)
-                        || element.members.iter().any(|id| id == subject)
-                            && section.elements.iter().any(|member| {
-                                member.id == subject
-                                    && matches!(
-                                        member.kind.as_str(),
-                                        "uml.attribute" | "uml.operation" | "uml.reception"
-                                    )
-                            })
+                    section.elements.iter().any(|member| {
+                        member.id == subject
+                            && (element.template_parameters.iter().any(|id| id == subject)
+                                && member.template_label == text
+                                || element.members.iter().any(|id| id == subject)
+                                    && view.member_labels.get(subject).map(String::as_str)
+                                        == Some(text)
+                                    && match member.kind.as_str() {
+                                        "uml.attribute" => view.render_style.show_attributes,
+                                        "uml.operation" => view.render_style.show_operations,
+                                        "uml.reception" => view.render_style.show_receptions,
+                                        _ => false,
+                                    })
+                    })
                 });
             let native_header = view.presentation.name_label.as_deref() == Some(child.id.as_str())
                 || view.figure.header.keyword.as_deref() == Some(text)
