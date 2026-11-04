@@ -361,6 +361,67 @@ fn decision_input_parameters(
 // ActivityPartition::superPartition is an authored inverse of the composite
 // subpartition role. Resolve the canonical role before treating omission as
 // absence; neither diagram nesting nor arbitrary Element ownership suffices.
+// Resolve immediate partition containment, not containingActivity() ancestry.
+fn partition_super_partition(
+    references: &ReferenceIndex<'_>,
+    partition: ElementRef<'_>,
+) -> Result<Option<String>, QueryError> {
+    let owner = references
+        .model()
+        .owner(partition)
+        .map_err(|error| QueryError::unsupported(partition.id(), error))?
+        .ok_or_else(|| {
+            QueryError::unsupported(
+                partition.id(),
+                "canonical ActivityPartition containment is incomplete",
+            )
+        })?;
+    let (nested, composite) = if owner.conforms_to("ActivityPartition") {
+        (true, "ActivityPartition-subpartition")
+    } else if owner.conforms_to("Activity") {
+        (false, "Activity-group")
+    } else {
+        return Err(QueryError::unsupported(
+            partition.id(),
+            "canonical owner does not resolve ActivityPartition containment",
+        ));
+    };
+    if !classifiers::contributes_to_owned_union(owner, partition, composite)
+        .map_err(|error| QueryError::unsupported(partition.id(), error.to_string()))?
+    {
+        return Err(QueryError::unsupported(
+            partition.id(),
+            "canonical partition containment role is unresolved",
+        ));
+    }
+    // Stored inverse projections must agree with the same canonical owner.
+    // Invalid contracts are reported separately, not as this UML violation.
+    for (metaclass, property, expected) in [
+        (
+            "ActivityPartition",
+            "superPartition",
+            nested.then_some(owner.id()),
+        ),
+        ("ActivityGroup", "superGroup", nested.then_some(owner.id())),
+        (
+            "ActivityGroup",
+            "inActivity",
+            (!nested).then_some(owner.id()),
+        ),
+    ] {
+        if partition.properties().contains_key(property)
+            && optional_activity_reference(references, partition, metaclass, property)?.as_deref()
+                != expected
+        {
+            return Err(QueryError::unsupported(
+                partition.id(),
+                format!("authored {property} contradicts canonical containment"),
+            ));
+        }
+    }
+    Ok(nested.then(|| owner.id().to_owned()))
+}
+
 fn partition_dimension_not_contained(
     references: &ReferenceIndex<'_>,
     partition: ElementRef<'_>,
@@ -368,66 +429,101 @@ fn partition_dimension_not_contained(
     let not_dimension = schema::read_effective_boolean(partition, "isDimension")
         .map(|dimension| !dimension)
         .map_err(|error| QueryError::unsupported(partition.id(), error));
-    let no_super_partition = (|| {
-        let owner = references
-            .model()
-            .owner(partition)
-            .map_err(|error| QueryError::unsupported(partition.id(), error))?
-            .ok_or_else(|| {
-                QueryError::unsupported(
-                    partition.id(),
-                    "canonical ActivityPartition containment is incomplete",
-                )
-            })?;
-        let (nested, composite) = if owner.conforms_to("ActivityPartition") {
-            (true, "ActivityPartition-subpartition")
-        } else if owner.conforms_to("Activity") {
-            (false, "Activity-group")
-        } else {
-            return Err(QueryError::unsupported(
-                partition.id(),
-                "canonical owner does not resolve ActivityPartition containment",
-            ));
-        };
-        if !classifiers::contributes_to_owned_union(owner, partition, composite)
-            .map_err(|error| QueryError::unsupported(partition.id(), error.to_string()))?
-        {
-            return Err(QueryError::unsupported(
-                partition.id(),
-                "canonical partition containment role is unresolved",
-            ));
-        }
-        // Stored inverse projections must agree with the same canonical owner.
-        // Invalid contracts are reported separately, not as this UML violation.
-        for (metaclass, property, expected) in [
-            (
-                "ActivityPartition",
-                "superPartition",
-                nested.then_some(owner.id()),
-            ),
-            ("ActivityGroup", "superGroup", nested.then_some(owner.id())),
-            (
-                "ActivityGroup",
-                "inActivity",
-                (!nested).then_some(owner.id()),
-            ),
-        ] {
-            if partition.properties().contains_key(property)
-                && optional_activity_reference(references, partition, metaclass, property)?
-                    .as_deref()
-                    != expected
-            {
-                return Err(QueryError::unsupported(
-                    partition.id(),
-                    format!("authored {property} contradicts canonical containment"),
-                ));
-            }
-        }
-        Ok(!nested)
-    })();
+    let no_super_partition = partition_super_partition(references, partition)
+        .map(|super_partition| super_partition.is_none());
     // A non-dimension is unconstrained, and known top-level containment proves
     // the consequent even when the Boolean itself has an invalid value.
     accept_any([not_dimension, no_super_partition])
+}
+
+fn partition_represents_property_and_is_contained(
+    references: &ReferenceIndex<'_>,
+    partition: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let represented =
+        optional_activity_reference(references, partition, "ActivityPartition", "represents")
+            .and_then(|id| {
+                id.map(|id| {
+                    references
+                        .element(&id)
+                        .map_err(|error| QueryError::unsupported(partition.id(), error))
+                })
+                .transpose()
+            });
+    let represents_property = represented
+        .as_ref()
+        .map_err(Clone::clone)
+        .and_then(|element| match element {
+            None => Ok(false),
+            Some(element) if element.metaclass().is_some() => Ok(element.conforms_to("Property")),
+            Some(_) => Err(QueryError::unsupported(
+                partition.id(),
+                "represented metaclass is unresolved",
+            )),
+        });
+    let super_partition = partition_super_partition(references, partition);
+    let guard = require_all([
+        represents_property,
+        super_partition
+            .as_ref()
+            .map(|parent| parent.is_some())
+            .map_err(Clone::clone),
+    ]);
+    if matches!(guard, Ok(false)) {
+        return Ok(true);
+    }
+    let consequence = (|| {
+        let property = represented?
+            .filter(|element| element.conforms_to("Property"))
+            .ok_or_else(|| {
+                QueryError::unsupported(partition.id(), "represented Property is unresolved")
+            })?;
+        let parent_id = super_partition?.ok_or_else(|| {
+            QueryError::unsupported(partition.id(), "superPartition is unresolved")
+        })?;
+        let parent = references
+            .element(&parent_id)
+            .map_err(|error| QueryError::unsupported(partition.id(), error))?;
+        let Some(parent_represents_id) =
+            optional_activity_reference(references, parent, "ActivityPartition", "represents")?
+        else {
+            return Ok(false);
+        };
+        let parent_represents = references
+            .element(&parent_represents_id)
+            .map_err(|error| QueryError::unsupported(partition.id(), error))?;
+        // The two OCL alternatives compare identity, not subtype compatibility.
+        let expected_owner = if parent_represents.conforms_to("Classifier") {
+            Some(parent_represents_id)
+        } else if parent_represents.conforms_to("Property") {
+            optional_activity_reference(references, parent_represents, "TypedElement", "type")?
+        } else if parent_represents.metaclass().is_some() {
+            return Ok(false);
+        } else {
+            return Err(QueryError::unsupported(
+                partition.id(),
+                "superPartition represented metaclass is unresolved",
+            ));
+        };
+        let owner = references
+            .model()
+            .owner(property)
+            .map_err(|error| QueryError::unsupported(property.id(), error))?
+            .ok_or_else(|| {
+                QueryError::unsupported(property.id(), "represented Property owner is unresolved")
+            })?;
+        if property.properties().contains_key("owner")
+            && optional_activity_reference(references, property, "Element", "owner")?.as_deref()
+                != Some(owner.id())
+        {
+            return Err(QueryError::unsupported(
+                property.id(),
+                "authored owner contradicts canonical ownership",
+            ));
+        }
+        Ok(expected_owner.as_deref() == Some(owner.id()))
+    })();
+    accept_any([guard.map(|value| !value), consequence])
 }
 
 fn object_node_selection(
@@ -826,6 +922,13 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
     for node in references.model().elements() {
         let mut checks = Vec::new();
         if node.conforms_to("ActivityPartition") {
+            checks.push((
+                partition_represents_property_and_is_contained(references, node),
+                "UML_ACTIVITY_PARTITION_REPRESENTS_PROPERTY_AND_IS_CONTAINED",
+                "MDE_ACTIVITY_PARTITION_REPRESENTS_PROPERTY_AND_IS_CONTAINED_UNVERIFIED",
+                "ActivityPartition-represents_property_and_is_contained",
+                "a nested partition representing a Property must represent a Property owned by the parent partition's represented Classifier or represented Property type",
+            ));
             checks.push((
                 partition_dimension_not_contained(references, node),
                 "UML_ACTIVITY_PARTITION_DIMENSION_NOT_CONTAINED",
