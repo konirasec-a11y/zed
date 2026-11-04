@@ -7,7 +7,11 @@ use serde::{Deserialize, Serialize};
 pub struct ModelingSection {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub root_model: Option<String>,
-    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty", deserialize_with = "super::project::deserialize_hierarchy")]
+    #[serde(
+        default,
+        skip_serializing_if = "std::collections::BTreeMap::is_empty",
+        deserialize_with = "super::project::deserialize_hierarchy"
+    )]
     pub hierarchy: std::collections::BTreeMap<String, crate::HierarchyPlacement>,
     pub elements: Vec<Element>,
     pub relations: Vec<Relation>,

@@ -12,8 +12,11 @@ artifacts and emission; it is not limited to passive validation.
 - `KERNEL/uml/semantics/`: canonical UML identities, ownership, references,
   classifiers, properties, associations, operations, values and template rules.
 - `KERNEL/uml/validation/`: structural-model and diagram conformance checks.
-- `model/`: persisted document data types: elements, relations, diagrams,
-  projects and sections. These are data, not the validation kernel.
+- `contracts/`: the single persisted document contract consumed by the kernel,
+  application, persistence, projections and adapters. `semantic.rs` owns generic
+  elements and relations; `presentation.rs` owns diagrams, Views, geometry,
+  style and diagram hierarchy placements. `project.rs` and `section.rs` compose
+  these records, without defining a second semantic or presentation model.
 - `persistence/`: JSON/Protobuf encoding, decoding and wire representation.
 - `application/commands/`: transactional command execution, authoring workflows,
   revision-sensitive identifiers and command validation. `application/commands.rs`
@@ -45,7 +48,7 @@ remain distinct from its native UI implementation.
 
 ## Similar names with different contexts
 
-- `model/graph.rs` defines stored elements and relations;
+- `contracts/semantic.rs` defines stored elements and relations;
   `KERNEL/graph/graph.rs` validates the graph and `index.rs` queries it.
 - `KERNEL/uml/semantics/associations.rs` defines Association contracts;
   `view-model/diagram/relationships.rs` computes diagram paths and anchors.
@@ -58,9 +61,36 @@ remain distinct from its native UI implementation.
   `application/edits/property_edit.rs` provides shared edit contracts and
   `application/edits/inspector_edit.rs` applies a validated edit.
 - `view-model/hierarchy/hierarchy.rs` produces read-only rows;
-  `application/edits/explorer_placement.rs` changes document organization.
+  `application/edits/hierarchy_placement.rs` changes document organization.
 - `KERNEL/compiler/operations/operation_graph.rs` schedules typed generation operations;
   it is not the persisted UML relationship graph.
+
+## Shared contracts and references
+
+The generic semantic records are not a second UML metamodel. Normative UML
+identities, ownership and reference rules remain in `KERNEL/uml/`; they constrain
+the same elements and relations stored by the shared contracts. Presentation
+links to those records through `View.subject` and `Diagram.model_elements`.
+`HierarchyPlacement` locates diagrams; its optional `ViewOccurrence` identifies
+a diagram/View and semantic member path, without replacing UML ownership.
+
+The crate root reexports these exact types for existing consumers; there are no
+copied DTOs or conversion layer between contracts and the application. The wire
+representation remains a persistence encoding, not another authoring model.
+This change separates contract definitions, not the aggregate JSON fields or
+all existing kernel/presentation behavior. It does not claim complete UMLDI
+interchange or a separately enforced Cargo dependency boundary. Consumers still
+depend on `bellatrix_mde`; this is not yet a standalone, UML-independent contract
+crate. `Style` still contains UML notation preferences (stereotype labels,
+compartment suppression and member visibility/type/property display) alongside
+generic colors, fonts and line styling. Those are presentation settings, not
+semantic UML ownership, but extracting a notation-specific extension remains a
+separate change across the style editor, renderers and serialized format.
+
+Views use one current JSON shape: endpoint identities belong to `endpoints`,
+not `draft`. Unknown View, endpoint and draft fields are rejected with a decoding
+error, including the former draft-local endpoint fields; they are not migrated
+or silently discarded.
 
 ## Geometry boundary and remaining coupling
 

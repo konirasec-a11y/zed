@@ -2,10 +2,13 @@
 //! Adapters own transport/presentation, never another implementation of the model.
 pub const MODELING_NAMESPACE: &str = "bellatrix.mde";
 
-#[path = "model/model.rs"]
-mod model;
-pub(crate) use model::wire;
-pub use model::*;
+pub mod contracts;
+pub use contracts::*;
+#[path = "persistence/io.rs"]
+mod io;
+#[path = "persistence/wire.rs"]
+pub(crate) mod wire;
+pub use io::{Format, ModelIoError, decode, encode};
 
 #[path = "application/commands/executor.rs"]
 mod command_executor;
