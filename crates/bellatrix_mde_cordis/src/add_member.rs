@@ -17,11 +17,22 @@ impl Event for ModelingAddMember {
     type Args = ModelingAddMemberRequested;
     type Output = Result<u64, String>;
 }
-pub(crate) async fn add_member(context: &Context, projects: &ProjectService,
-    request: ModelingAddMemberRequested) -> Result<u64, String> {
-    crate::mutation::execute(context, projects, request.project_id, request.expected_revision, Command::AddMember {
-        owner_id: request.owner_id, kind: request.kind,
-    }).await
+pub(crate) async fn add_member(
+    context: &Context,
+    projects: &ProjectService,
+    request: ModelingAddMemberRequested,
+) -> Result<u64, String> {
+    crate::mutation::execute(
+        context,
+        projects,
+        request.project_id,
+        request.expected_revision,
+        Command::AddMember {
+            owner_id: request.owner_id,
+            kind: request.kind,
+        },
+    )
+    .await
 }
 
 #[derive(Clone, Debug)]

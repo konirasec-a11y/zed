@@ -23,9 +23,9 @@ use crate::{
     ModelingValidateDiagramRequested,
 };
 use bellatrix_project::{
-    ProjectClosed, ProjectClosedEvent, ProjectId, ProjectOpened, ProjectOpenedEvent,
-    ProjectSave, ProjectSaveRequested, ProjectSaved, ProjectSavedEvent,
-    ProjectStateChanged, ProjectStateChangedEvent,
+    ProjectClosed, ProjectClosedEvent, ProjectId, ProjectOpened, ProjectOpenedEvent, ProjectSave,
+    ProjectSaveRequested, ProjectSaved, ProjectSavedEvent, ProjectStateChanged,
+    ProjectStateChangedEvent,
 };
 use cordis::event::{ListenerRegistration, ListenerRegistrationError, QueryOutcome, observer_sync};
 use cordis::{Context, Routing};
@@ -132,36 +132,34 @@ impl MdeUiBridge {
         ))?;
         let opened_id = project_id.clone();
         let opened_revision_tx = revision_tx.clone();
-        let opened_listener = match ctx.on::<ProjectOpenedEvent, _>(observer_sync(
-            move |_, opened: ProjectOpened| {
+        let opened_listener =
+            match ctx.on::<ProjectOpenedEvent, _>(observer_sync(move |_, opened: ProjectOpened| {
                 if opened.document.id() == &opened_id {
                     opened_revision_tx.send_replace(opened.document.revision());
                 }
                 Ok::<_, Infallible>(())
-            },
-        )) {
-            Ok(listener) => listener,
-            Err(error) => {
-                listener.remove();
-                return Err(error);
-            }
-        };
+            })) {
+                Ok(listener) => listener,
+                Err(error) => {
+                    listener.remove();
+                    return Err(error);
+                }
+            };
         let closed_id = project_id.clone();
-        let closed_listener = match ctx.on::<ProjectClosedEvent, _>(observer_sync(
-            move |_, closed: ProjectClosed| {
+        let closed_listener =
+            match ctx.on::<ProjectClosedEvent, _>(observer_sync(move |_, closed: ProjectClosed| {
                 if closed.id == closed_id {
                     revision_tx.send_modify(|_| {});
                 }
                 Ok::<_, Infallible>(())
-            },
-        )) {
-            Ok(listener) => listener,
-            Err(error) => {
-                listener.remove();
-                opened_listener.remove();
-                return Err(error);
-            }
-        };
+            })) {
+                Ok(listener) => listener,
+                Err(error) => {
+                    listener.remove();
+                    opened_listener.remove();
+                    return Err(error);
+                }
+            };
         let save_id = project_id.clone();
         let save_listener =
             match ctx.on::<ProjectSavedEvent, _>(observer_sync(move |_, saved: ProjectSaved| {
@@ -499,11 +497,15 @@ impl MdeUiBridge {
                 feedback_tx.send_replace(message);
             }
         });
-        let (projections, projection_task) = crate::projection::start_feed(
-            ctx.clone(), project_id.clone(), changes.clone(), None);
+        let (projections, projection_task) =
+            crate::projection::start_feed(ctx.clone(), project_id.clone(), changes.clone(), None);
         Ok(Self {
-            projections, projection_task,
-            move_previews: crate::move_preview::MovePreviewClient::new(ctx.clone(), tokio::runtime::Handle::current()),
+            projections,
+            projection_task,
+            move_previews: crate::move_preview::MovePreviewClient::new(
+                ctx.clone(),
+                tokio::runtime::Handle::current(),
+            ),
             project_id,
             commands: command_tx,
             changes,
@@ -511,7 +513,13 @@ impl MdeUiBridge {
             validations,
             saves,
             journal,
-            _listeners: vec![listener, opened_listener, closed_listener, save_listener, trace_listener],
+            _listeners: vec![
+                listener,
+                opened_listener,
+                closed_listener,
+                save_listener,
+                trace_listener,
+            ],
             task,
             mdj_session: None,
             mdj_shutdown: None,
@@ -546,10 +554,18 @@ impl MdeUiBridge {
             validation_tx,
         ));
         let (projections, projection_task) = crate::projection::start_feed(
-            ctx.clone(), project_id.clone(), changes.clone(), Some(session.clone()));
+            ctx.clone(),
+            project_id.clone(),
+            changes.clone(),
+            Some(session.clone()),
+        );
         Ok(Self {
-            projections, projection_task,
-            move_previews: crate::move_preview::MovePreviewClient::new(ctx.clone(), tokio::runtime::Handle::current()),
+            projections,
+            projection_task,
+            move_previews: crate::move_preview::MovePreviewClient::new(
+                ctx.clone(),
+                tokio::runtime::Handle::current(),
+            ),
             project_id,
             commands: command_tx,
             changes,

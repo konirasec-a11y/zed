@@ -113,7 +113,10 @@ pub fn validate_uml_model(input_json: &str) -> Result<String, String> {
             .any(|diagnostic| diagnostic.code == "UML_CROSS_DOMAIN_RULES_UNVERIFIED")
         {
             "implemented_uml_scalars_and_integrity_only"
-        } else if diagnostics.iter().any(|diagnostic| diagnostic.code == "MDE_ASSOCIATION_NAVIGATION_UNVERIFIED") {
+        } else if diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "MDE_ASSOCIATION_NAVIGATION_UNVERIFIED")
+        {
             "implemented_rules_with_incomplete_authoring"
         } else if unverified {
             "implemented_uml_subset_rules_only"
@@ -546,8 +549,12 @@ pub fn validate_graph_model(input_json: &str) -> Result<String, String> {
         has_errors: !diagnostics.is_empty(),
         diagnostics,
     };
-    serde_json::to_string(&response)
-        .map_err(|_| error_response("RESPONSE_SERIALIZATION_FAILED", "validation response cannot be encoded as JSON"))
+    serde_json::to_string(&response).map_err(|_| {
+        error_response(
+            "RESPONSE_SERIALIZATION_FAILED",
+            "validation response cannot be encoded as JSON",
+        )
+    })
 }
 
 #[derive(Deserialize)]
@@ -642,7 +649,9 @@ pub fn validate_uml_diagram(input_json: &str) -> Result<String, String> {
         api_version: API_VERSION,
         coverage: "implemented_model_and_diagram_rules_only",
         validity: None,
-        has_errors: diagnostics.iter().any(|diagnostic| diagnostic.severity == "error"),
+        has_errors: diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == "error"),
         diagnostics,
     };
     serde_json::to_string(&response).map_err(|_| {

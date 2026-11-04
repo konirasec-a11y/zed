@@ -13,20 +13,35 @@ fn decode(bytes: &[u8], format: &str) -> FlowResult<Value> {
 }
 
 fn encode(model: &Value, format: &str) -> FlowResult<Vec<u8>> {
-    Ok(encode_model_document(&json!({"api_version": 1, "model": model}).to_string(), format)?)
+    Ok(encode_model_document(
+        &json!({"api_version": 1, "model": model}).to_string(),
+        format,
+    )?)
 }
 
 fn apply(model: &Value, command: &Command, revision: u64) -> FlowResult<Value> {
     let parts = prepare_model_document(&json!({"api_version": 1, "model": model}).to_string())?;
     let updated = apply_model_command(
-        &parts.id, &parts.name, &parts.section_json, revision, command.clone(), false,
+        &parts.id,
+        &parts.name,
+        &parts.section_json,
+        revision,
+        command.clone(),
+        false,
     )?;
-    decode(&encode_model_section(&parts.id, &parts.name, &updated.to_string(), "json")?, "json")
+    decode(
+        &encode_model_section(&parts.id, &parts.name, &updated.to_string(), "json")?,
+        "json",
+    )
 }
 
 fn edge(model: &mut Value) -> FlowResult<&mut Value> {
-    model["diagrams"][0]["views"].as_array_mut().ok_or("missing views")?
-        .iter_mut().find(|view| view["id"] == "view-dep").ok_or_else(|| "missing edge".into())
+    model["diagrams"][0]["views"]
+        .as_array_mut()
+        .ok_or("missing views")?
+        .iter_mut()
+        .find(|view| view["id"] == "view-dep")
+        .ok_or_else(|| "missing edge".into())
 }
 
 #[test]
@@ -41,7 +56,10 @@ fn restoring_inheritance_preserves_saved_geometry_and_other_views()
         ..Style::default()
     };
     let command = Command::SetViewStyle {
-        diagram_id: original["diagrams"][0]["id"].as_str().ok_or("missing diagram")?.into(),
+        diagram_id: original["diagrams"][0]["id"]
+            .as_str()
+            .ok_or("missing diagram")?
+            .into(),
         view_id: "view-dep".into(),
         style: restored_style.clone(),
     };

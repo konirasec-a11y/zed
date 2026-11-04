@@ -1,6 +1,6 @@
 use bellatrix_mde::{
-    Operation, OperationDefinition, OperationGraph, OperationGraphError,
-    OperationValue, OperationValues, Plan, PortType, python_construction_script,
+    Operation, OperationDefinition, OperationGraph, OperationGraphError, OperationValue,
+    OperationValues, Plan, PortType, python_construction_script,
 };
 use std::path::PathBuf;
 

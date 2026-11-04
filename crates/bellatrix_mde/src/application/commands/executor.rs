@@ -28,7 +28,9 @@ mod view_style;
 #[path = "views.rs"]
 mod views;
 
-pub use association_ends::{AssociationEndDraft, AssociationEndEdit, AssociationEndOwner, RemovedAssociationEnd};
+pub use association_ends::{
+    AssociationEndDraft, AssociationEndEdit, AssociationEndOwner, RemovedAssociationEnd,
+};
 pub use kinds::{ModelingElementKind, ModelingTool};
 pub use members::ModelingMemberKind;
 pub use name_expression::format as name_expression_text;
@@ -44,8 +46,15 @@ use std::collections::HashSet;
 #[derive(Clone, Debug)]
 pub enum Command {
     AdoptRootModel,
-    SetOwner { element_id: String, owner_id: Option<String> },
-    SetExplorerParent { subject_id: String, parent_id: Option<String>, parent_occurrence: Option<crate::ViewOccurrence> },
+    SetOwner {
+        element_id: String,
+        owner_id: Option<String>,
+    },
+    SetExplorerParent {
+        subject_id: String,
+        parent_id: Option<String>,
+        parent_occurrence: Option<crate::ViewOccurrence>,
+    },
     CreateDiagram {
         kind: StructuralDiagramKind,
         name: String,
@@ -79,15 +88,36 @@ pub enum Command {
         y: f64,
     },
     CreateElementOrVisualDraft {
-        diagram_id: String, owner_id: Option<String>, kind: ModelingElementKind, name: Option<String>, x: f64, y: f64,
+        diagram_id: String,
+        owner_id: Option<String>,
+        kind: ModelingElementKind,
+        name: Option<String>,
+        x: f64,
+        y: f64,
     },
-    CreateRelationOrVisualDraft { diagram_id: String, owner_id: Option<String>, kind: ModelingRelationKind, from: String, to: String },
+    CreateRelationOrVisualDraft {
+        diagram_id: String,
+        owner_id: Option<String>,
+        kind: ModelingRelationKind,
+        from: String,
+        to: String,
+    },
     CreateRelationAtViewsOrVisualDraft {
-        diagram_id: String, owner_id: Option<String>, kind: ModelingRelationKind, source_view_id: String, target_view_id: String,
-        from: Option<String>, to: Option<String>,
+        diagram_id: String,
+        owner_id: Option<String>,
+        kind: ModelingRelationKind,
+        source_view_id: String,
+        target_view_id: String,
+        from: Option<String>,
+        to: Option<String>,
     },
     CreateRelationAtViews {
-        diagram_id: String, owner_id: Option<String>, kind: ModelingRelationKind, from: String, to: String, endpoints: crate::ViewEndpoints,
+        diagram_id: String,
+        owner_id: Option<String>,
+        kind: ModelingRelationKind,
+        from: String,
+        to: String,
+        endpoints: crate::ViewEndpoints,
     },
     CreateRelation {
         diagram_id: String,
@@ -100,22 +130,56 @@ pub enum Command {
         owner_id: String,
         kind: ModelingMemberKind,
     },
-    MoveParameter { parameter_id: String, up: bool },
-    MigrateAssociation { association_id: String },
-    SetRedefinedElements { element_id: String, redefined_ids: Vec<String> },
-    SetSubsettedProperties { property_id: String, subsetted_ids: Vec<String> },
-    SetNamespaceImport { import_id: String, namespace_id: String, target_id: String, is_package: bool, alias: Option<String>, visibility: String },
-    SetAssociationEndNavigation { association_id: String, property_id: String, navigation: crate::NavigationKnowledge },
-    SetAssociationMemberEnds { association_id: String, member_end_ids: Vec<String> },
-    EditAssociationEnds { association_id: String, edits: Vec<AssociationEndEdit> },
+    MoveParameter {
+        parameter_id: String,
+        up: bool,
+    },
+    MigrateAssociation {
+        association_id: String,
+    },
+    SetRedefinedElements {
+        element_id: String,
+        redefined_ids: Vec<String>,
+    },
+    SetSubsettedProperties {
+        property_id: String,
+        subsetted_ids: Vec<String>,
+    },
+    SetNamespaceImport {
+        import_id: String,
+        namespace_id: String,
+        target_id: String,
+        is_package: bool,
+        alias: Option<String>,
+        visibility: String,
+    },
+    SetAssociationEndNavigation {
+        association_id: String,
+        property_id: String,
+        navigation: crate::NavigationKnowledge,
+    },
+    SetAssociationMemberEnds {
+        association_id: String,
+        member_end_ids: Vec<String>,
+    },
+    EditAssociationEnds {
+        association_id: String,
+        edits: Vec<AssociationEndEdit>,
+    },
     QuickEdit {
         diagram_id: String,
         element_id: String,
         action: UmlQuickCreate,
     },
     CreateVisualDraft {
-        diagram_id: String, notation_kind: String, label: Option<String>, geometry: Geometry, properties: std::collections::BTreeMap<String, Value>,
-        parent_view_id: Option<String>, source_view_id: Option<String>, target_view_id: Option<String>,
+        diagram_id: String,
+        notation_kind: String,
+        label: Option<String>,
+        geometry: Geometry,
+        properties: std::collections::BTreeMap<String, Value>,
+        parent_view_id: Option<String>,
+        source_view_id: Option<String>,
+        target_view_id: Option<String>,
     },
     PlaceElementView {
         diagram_id: String,
@@ -132,9 +196,19 @@ pub enum Command {
         view_id: String,
         order: ViewOrder,
     },
-    SetViewLabel { view_id: String, label: Option<String> },
-    SetViewTiming { view_id: String, timing: Option<crate::TimingPresentation> },
-    SetViewEndpoints { diagram_id: String, view_id: String, endpoints: crate::ViewEndpoints },
+    SetViewLabel {
+        view_id: String,
+        label: Option<String>,
+    },
+    SetViewTiming {
+        view_id: String,
+        timing: Option<crate::TimingPresentation>,
+    },
+    SetViewEndpoints {
+        diagram_id: String,
+        view_id: String,
+        endpoints: crate::ViewEndpoints,
+    },
     SetViewStyle {
         diagram_id: String,
         view_id: String,
@@ -175,38 +249,114 @@ pub enum Command {
 
 /// Failure never changes the input. `revision` seeds IDs; it is NOT a lock.
 /// The adapter must check its revision and publish with compare-and-swap.
-pub(crate) fn apply_with_diagram_operations(project: &Project, command: &Command, revision: u64, diagram_operations: &dyn crate::diagram_operations::DiagramOperations) -> Result<Project, String> {
+pub(crate) fn apply_with_diagram_operations(
+    project: &Project,
+    command: &Command,
+    revision: u64,
+    diagram_operations: &dyn crate::diagram_operations::DiagramOperations,
+) -> Result<Project, String> {
     ensure_visual_edit_supported(project, command)?;
-    if let Command::CreateElementOrVisualDraft { diagram_id, owner_id, kind, name, x, y } = command {
-        let semantic = Command::CreateElement { diagram_id: diagram_id.clone(), owner_id: owner_id.clone(), kind: *kind,
-            name: name.clone(), x: *x, y: *y };
-        return match apply_with_diagram_operations(project, &semantic, revision, diagram_operations) {
+    if let Command::CreateElementOrVisualDraft {
+        diagram_id,
+        owner_id,
+        kind,
+        name,
+        x,
+        y,
+    } = command
+    {
+        let semantic = Command::CreateElement {
+            diagram_id: diagram_id.clone(),
+            owner_id: owner_id.clone(),
+            kind: *kind,
+            name: name.clone(),
+            x: *x,
+            y: *y,
+        };
+        return match apply_with_diagram_operations(project, &semantic, revision, diagram_operations)
+        {
             Ok(updated) => Ok(updated),
             Err(reason) => {
-                let diagram = project.diagrams.iter().find(|diagram| diagram.id == *diagram_id).ok_or("diagram not found")?;
+                let diagram = project
+                    .diagrams
+                    .iter()
+                    .find(|diagram| diagram.id == *diagram_id)
+                    .ok_or("diagram not found")?;
                 let mut properties = std::collections::BTreeMap::new();
                 properties.insert("semantic_creation_diagnostic".into(), Value::String(reason));
-                if matches!(kind, ModelingElementKind::Part | ModelingElementKind::Port) { properties.insert("aggregation".into(), serde_json::json!("composite")); }
-                if let Some(pseudostate) = kind.resolve_pseudostate_kind() { properties.insert("kind".into(), Value::String(pseudostate.into())); }
-                if let Some(owner) = owner_id { properties.insert("requested_owner_id".into(), Value::String(owner.clone())); }
-                apply_with_diagram_operations(project, &Command::CreateVisualDraft { diagram_id: diagram_id.clone(),
-                    notation_kind: kind.model_kind().into(), label: name.clone(), geometry: views::initial_geometry_in_diagram(*kind, diagram, *x, *y),
-                    properties, parent_view_id: None, source_view_id: None, target_view_id: None }, revision, diagram_operations)
+                if matches!(kind, ModelingElementKind::Part | ModelingElementKind::Port) {
+                    properties.insert("aggregation".into(), serde_json::json!("composite"));
+                }
+                if let Some(pseudostate) = kind.resolve_pseudostate_kind() {
+                    properties.insert("kind".into(), Value::String(pseudostate.into()));
+                }
+                if let Some(owner) = owner_id {
+                    properties.insert("requested_owner_id".into(), Value::String(owner.clone()));
+                }
+                apply_with_diagram_operations(
+                    project,
+                    &Command::CreateVisualDraft {
+                        diagram_id: diagram_id.clone(),
+                        notation_kind: kind.model_kind().into(),
+                        label: name.clone(),
+                        geometry: views::initial_geometry_in_diagram(*kind, diagram, *x, *y),
+                        properties,
+                        parent_view_id: None,
+                        source_view_id: None,
+                        target_view_id: None,
+                    },
+                    revision,
+                    diagram_operations,
+                )
             }
         };
     }
-    if let Command::CreateRelationAtViewsOrVisualDraft { diagram_id, owner_id, kind, source_view_id, target_view_id, from, to } = command {
-        let diagram = project.diagrams.iter().find(|diagram| diagram.id == *diagram_id).ok_or("diagram not found")?;
-        let source = diagram.views.iter().find(|view| view.id == *source_view_id).ok_or("source View not found in diagram")?;
-        let target = diagram.views.iter().find(|view| view.id == *target_view_id).ok_or("target View not found in diagram")?;
+    if let Command::CreateRelationAtViewsOrVisualDraft {
+        diagram_id,
+        owner_id,
+        kind,
+        source_view_id,
+        target_view_id,
+        from,
+        to,
+    } = command
+    {
+        let diagram = project
+            .diagrams
+            .iter()
+            .find(|diagram| diagram.id == *diagram_id)
+            .ok_or("diagram not found")?;
+        let source = diagram
+            .views
+            .iter()
+            .find(|view| view.id == *source_view_id)
+            .ok_or("source View not found in diagram")?;
+        let target = diagram
+            .views
+            .iter()
+            .find(|view| view.id == *target_view_id)
+            .ok_or("target View not found in diagram")?;
         if source.subject != *from || target.subject != *to {
             return Err("selected endpoint View subject changed; select endpoints again".into());
         }
-        let endpoints = crate::ViewEndpoints { source_view_id: Some(source_view_id.clone()), target_view_id: Some(target_view_id.clone()) };
+        let endpoints = crate::ViewEndpoints {
+            source_view_id: Some(source_view_id.clone()),
+            target_view_id: Some(target_view_id.clone()),
+        };
         let semantic = match (from, to) {
-            (Some(from), Some(to)) => apply_with_diagram_operations(project, &Command::CreateRelationAtViews {
-                diagram_id: diagram_id.clone(), owner_id: owner_id.clone(), kind: *kind, from: from.clone(), to: to.clone(), endpoints,
-            }, revision, diagram_operations),
+            (Some(from), Some(to)) => apply_with_diagram_operations(
+                project,
+                &Command::CreateRelationAtViews {
+                    diagram_id: diagram_id.clone(),
+                    owner_id: owner_id.clone(),
+                    kind: *kind,
+                    from: from.clone(),
+                    to: to.clone(),
+                    endpoints,
+                },
+                revision,
+                diagram_operations,
+            ),
             _ => Err("relationship endpoint has no semantic subject".into()),
         };
         return match semantic {
@@ -214,68 +364,160 @@ pub(crate) fn apply_with_diagram_operations(project: &Project, command: &Command
             Err(reason) => {
                 let mut properties = std::collections::BTreeMap::new();
                 properties.insert("semantic_creation_diagnostic".into(), Value::String(reason));
-                if let Some(owner) = owner_id { properties.insert("requested_owner_id".into(), Value::String(owner.clone())); }
-                if let Some(from) = from { properties.insert("requested_source_id".into(), Value::String(from.clone())); }
-                if let Some(to) = to { properties.insert("requested_target_id".into(), Value::String(to.clone())); }
-                let center = crate::resolve_visual_center(&source.geometry).ok_or("source View has no center")?;
-                let geometry = Geometry::Path { start: center, segments: Vec::new() };
-                apply_with_diagram_operations(project, &Command::CreateVisualDraft { diagram_id: diagram_id.clone(), notation_kind: kind.model_kind().into(),
-                    label: None, geometry, properties, parent_view_id: None,
-                    source_view_id: Some(source_view_id.clone()), target_view_id: Some(target_view_id.clone()) }, revision, diagram_operations)
+                if let Some(owner) = owner_id {
+                    properties.insert("requested_owner_id".into(), Value::String(owner.clone()));
+                }
+                if let Some(from) = from {
+                    properties.insert("requested_source_id".into(), Value::String(from.clone()));
+                }
+                if let Some(to) = to {
+                    properties.insert("requested_target_id".into(), Value::String(to.clone()));
+                }
+                let center = crate::resolve_visual_center(&source.geometry)
+                    .ok_or("source View has no center")?;
+                let geometry = Geometry::Path {
+                    start: center,
+                    segments: Vec::new(),
+                };
+                apply_with_diagram_operations(
+                    project,
+                    &Command::CreateVisualDraft {
+                        diagram_id: diagram_id.clone(),
+                        notation_kind: kind.model_kind().into(),
+                        label: None,
+                        geometry,
+                        properties,
+                        parent_view_id: None,
+                        source_view_id: Some(source_view_id.clone()),
+                        target_view_id: Some(target_view_id.clone()),
+                    },
+                    revision,
+                    diagram_operations,
+                )
             }
         };
     }
-    if let Command::CreateRelationOrVisualDraft { diagram_id, owner_id, kind, from, to } = command {
-        let diagram = project.diagrams.iter().find(|diagram| diagram.id == *diagram_id).ok_or("diagram not found")?;
-        let source = diagram.views.iter().find(|view| view.subject.as_ref() == Some(from)).ok_or("source view not found")?;
-        let target = diagram.views.iter().find(|view| view.subject.as_ref() == Some(to)).ok_or("target view not found")?;
-        return apply_with_diagram_operations(project, &Command::CreateRelationAtViewsOrVisualDraft {
-            diagram_id: diagram_id.clone(), owner_id: owner_id.clone(), kind: *kind, from: Some(from.clone()), to: Some(to.clone()),
-            source_view_id: source.id.clone(), target_view_id: target.id.clone(),
-        }, revision, diagram_operations);
+    if let Command::CreateRelationOrVisualDraft {
+        diagram_id,
+        owner_id,
+        kind,
+        from,
+        to,
+    } = command
+    {
+        let diagram = project
+            .diagrams
+            .iter()
+            .find(|diagram| diagram.id == *diagram_id)
+            .ok_or("diagram not found")?;
+        let source = diagram
+            .views
+            .iter()
+            .find(|view| view.subject.as_ref() == Some(from))
+            .ok_or("source view not found")?;
+        let target = diagram
+            .views
+            .iter()
+            .find(|view| view.subject.as_ref() == Some(to))
+            .ok_or("target view not found")?;
+        return apply_with_diagram_operations(
+            project,
+            &Command::CreateRelationAtViewsOrVisualDraft {
+                diagram_id: diagram_id.clone(),
+                owner_id: owner_id.clone(),
+                kind: *kind,
+                from: Some(from.clone()),
+                to: Some(to.clone()),
+                source_view_id: source.id.clone(),
+                target_view_id: target.id.clone(),
+            },
+            revision,
+            diagram_operations,
+        );
     }
     if match command {
-        Command::SetOwner { element_id, .. } | Command::DeleteElement { element_id } => project.composition.contains_key(element_id),
+        Command::SetOwner { element_id, .. } | Command::DeleteElement { element_id } => {
+            project.composition.contains_key(element_id)
+        }
         Command::DeleteDiagram { diagram_id } => project.composition.contains_key(diagram_id),
-        Command::SetExplorerParent { subject_id, .. } => project.composition.contains_key(subject_id),
+        Command::SetExplorerParent { subject_id, .. } => {
+            project.composition.contains_key(subject_id)
+        }
         _ => false,
     } {
         return Err("Imported document composition is read-only for moves and deletion until a lossless MDJ inverse is available".into());
     }
     let previous_section = ModelingSection::from_model(project);
     let mut section = previous_section.clone();
-    if let Command::SetProperty { element_id, path, .. } = command
+    if let Command::SetProperty {
+        element_id, path, ..
+    } = command
         && crate::uml::associations::is_projection_path(path)
-        && section.relations.iter().any(|relation| relation.id == *element_id
-            && crate::uml::root::relationship_metaclass(&relation.kind) == Some("Association")
-            && !relation.properties.contains_key("memberEnd"))
+        && section.relations.iter().any(|relation| {
+            relation.id == *element_id
+                && crate::uml::root::relationship_metaclass(&relation.kind) == Some("Association")
+                && !relation.properties.contains_key("memberEnd")
+        })
     {
         crate::uml::associations::migrate(&mut section, &project.id, element_id)?;
     }
     match command {
-        Command::SetExplorerParent { subject_id, parent_id, parent_occurrence } => crate::hierarchy_placement::set_diagram_parent(
-            &mut section, subject_id, parent_id.as_deref(), parent_occurrence.as_ref(),
+        Command::SetExplorerParent {
+            subject_id,
+            parent_id,
+            parent_occurrence,
+        } => crate::hierarchy_placement::set_diagram_parent(
+            &mut section,
+            subject_id,
+            parent_id.as_deref(),
+            parent_occurrence.as_ref(),
         )?,
-        Command::SetOwner { element_id, owner_id } => crate::uml::root::reparent(&mut section, &project.id, element_id, owner_id.as_deref())?,
-        Command::AdoptRootModel => { crate::uml::root::adopt_root_model(&mut section, &project.id, &project.name)?; }
+        Command::SetOwner {
+            element_id,
+            owner_id,
+        } => {
+            crate::uml::root::reparent(&mut section, &project.id, element_id, owner_id.as_deref())?
+        }
+        Command::AdoptRootModel => {
+            crate::uml::root::adopt_root_model(&mut section, &project.id, &project.name)?;
+        }
         Command::CreateDiagram {
             kind,
             name,
             model_elements,
         } => diagrams::create(&mut section, project, *kind, name, model_elements, revision)?,
-        Command::CreateExplorerDiagram { kind, name, model_elements, parent_id, parent_occurrence } => {
+        Command::CreateExplorerDiagram {
+            kind,
+            name,
+            model_elements,
+            parent_id,
+            parent_occurrence,
+        } => {
             diagrams::create(&mut section, project, *kind, name, model_elements, revision)?;
-            let diagram_id = section.diagrams.last().ok_or("created diagram missing")?.id.clone();
+            let diagram_id = section
+                .diagrams
+                .last()
+                .ok_or("created diagram missing")?
+                .id
+                .clone();
             crate::hierarchy_placement::set_diagram_parent(
-                &mut section, &diagram_id, parent_id.as_deref(), parent_occurrence.as_ref(),
+                &mut section,
+                &diagram_id,
+                parent_id.as_deref(),
+                parent_occurrence.as_ref(),
             )?;
         }
         Command::RenameDiagram { diagram_id, name } => {
             diagrams::rename(&mut section, diagram_id, name)?
         }
         Command::DeleteDiagram { diagram_id } => diagrams::delete(&mut section, diagram_id)?,
-        Command::CreateRelationOrVisualDraft { .. } | Command::CreateRelationAtViewsOrVisualDraft { .. } => return Err("visual relation dispatch failed".into()),
-        Command::CreateElementOrVisualDraft { .. } => return Err("visual creation dispatch failed".into()),
+        Command::CreateRelationOrVisualDraft { .. }
+        | Command::CreateRelationAtViewsOrVisualDraft { .. } => {
+            return Err("visual relation dispatch failed".into());
+        }
+        Command::CreateElementOrVisualDraft { .. } => {
+            return Err("visual creation dispatch failed".into());
+        }
         Command::CreateElement { .. } | Command::CreateModelElement { .. } => {
             create_element(&mut section, command, revision, &project.id)?
         }
@@ -296,20 +538,85 @@ pub(crate) fn apply_with_diagram_operations(project: &Project, command: &Command
             revision,
             &project.id,
         )?,
-        Command::CreateRelationAtViews { diagram_id, owner_id, kind, from, to, endpoints } => create_relation(
-            &mut section, diagram_id, *kind, from, to, owner_id.as_deref(), Some(endpoints), revision, &project.id,
+        Command::CreateRelationAtViews {
+            diagram_id,
+            owner_id,
+            kind,
+            from,
+            to,
+            endpoints,
+        } => create_relation(
+            &mut section,
+            diagram_id,
+            *kind,
+            from,
+            to,
+            owner_id.as_deref(),
+            Some(endpoints),
+            revision,
+            &project.id,
         )?,
         Command::AddMember { owner_id, kind } => {
             members::append_member(&mut section, owner_id, *kind, revision, &project.id)?;
         }
-        Command::MoveParameter { parameter_id, up } => crate::uml::operations::move_parameter(&mut section, parameter_id, *up)?,
-        Command::SetRedefinedElements { element_id, redefined_ids } => crate::uml::classifiers::set_redefined_elements(&mut section, element_id, redefined_ids)?,
-        Command::SetSubsettedProperties { property_id, subsetted_ids } => crate::uml::property_subsetting::set_subsetted_properties(&mut section, property_id, subsetted_ids)?,
-        Command::SetNamespaceImport { import_id, namespace_id, target_id, is_package, alias, visibility } => crate::uml::namespace_imports::set_namespace_import(&mut section, import_id, namespace_id, target_id, *is_package, alias.as_deref(), visibility)?,
-        Command::MigrateAssociation { association_id } => crate::uml::associations::migrate(&mut section, &project.id, association_id)?,
-        Command::SetAssociationEndNavigation { association_id, property_id, navigation } => crate::uml::associations::set_navigation_knowledge(&mut section, association_id, property_id, *navigation)?,
-        Command::SetAssociationMemberEnds { association_id, member_end_ids } => crate::uml::associations::set_member_ends(&mut section, association_id, member_end_ids)?,
-        Command::EditAssociationEnds { association_id, edits } => association_ends::apply(&mut section, association_id, edits, revision, &project.id)?,
+        Command::MoveParameter { parameter_id, up } => {
+            crate::uml::operations::move_parameter(&mut section, parameter_id, *up)?
+        }
+        Command::SetRedefinedElements {
+            element_id,
+            redefined_ids,
+        } => crate::uml::classifiers::set_redefined_elements(
+            &mut section,
+            element_id,
+            redefined_ids,
+        )?,
+        Command::SetSubsettedProperties {
+            property_id,
+            subsetted_ids,
+        } => crate::uml::property_subsetting::set_subsetted_properties(
+            &mut section,
+            property_id,
+            subsetted_ids,
+        )?,
+        Command::SetNamespaceImport {
+            import_id,
+            namespace_id,
+            target_id,
+            is_package,
+            alias,
+            visibility,
+        } => crate::uml::namespace_imports::set_namespace_import(
+            &mut section,
+            import_id,
+            namespace_id,
+            target_id,
+            *is_package,
+            alias.as_deref(),
+            visibility,
+        )?,
+        Command::MigrateAssociation { association_id } => {
+            crate::uml::associations::migrate(&mut section, &project.id, association_id)?
+        }
+        Command::SetAssociationEndNavigation {
+            association_id,
+            property_id,
+            navigation,
+        } => crate::uml::associations::set_navigation_knowledge(
+            &mut section,
+            association_id,
+            property_id,
+            *navigation,
+        )?,
+        Command::SetAssociationMemberEnds {
+            association_id,
+            member_end_ids,
+        } => {
+            crate::uml::associations::set_member_ends(&mut section, association_id, member_end_ids)?
+        }
+        Command::EditAssociationEnds {
+            association_id,
+            edits,
+        } => association_ends::apply(&mut section, association_id, edits, revision, &project.id)?,
         Command::QuickEdit {
             diagram_id,
             element_id,
@@ -322,8 +629,28 @@ pub(crate) fn apply_with_diagram_operations(project: &Project, command: &Command
             revision,
             &project.id,
         )?,
-        Command::CreateVisualDraft { diagram_id, notation_kind, label, geometry, properties, parent_view_id, source_view_id, target_view_id } =>
-            views::create_draft(&mut section, diagram_id, notation_kind, label, geometry, properties, parent_view_id, source_view_id, target_view_id, revision, &project.id)?,
+        Command::CreateVisualDraft {
+            diagram_id,
+            notation_kind,
+            label,
+            geometry,
+            properties,
+            parent_view_id,
+            source_view_id,
+            target_view_id,
+        } => views::create_draft(
+            &mut section,
+            diagram_id,
+            notation_kind,
+            label,
+            geometry,
+            properties,
+            parent_view_id,
+            source_view_id,
+            target_view_id,
+            revision,
+            &project.id,
+        )?,
         Command::PlaceElementView {
             diagram_id,
             element_id,
@@ -342,14 +669,27 @@ pub(crate) fn apply_with_diagram_operations(project: &Project, command: &Command
             diagram_id,
             view_id,
         } => views::remove(&mut section, diagram_id, view_id)?,
-        Command::ReorderView { diagram_id, view_id, order } => view_style::reorder(&mut section, diagram_id, view_id, *order)?,
+        Command::ReorderView {
+            diagram_id,
+            view_id,
+            order,
+        } => view_style::reorder(&mut section, diagram_id, view_id, *order)?,
         Command::SetViewLabel { view_id, label } => {
-            let view = section.diagrams.iter_mut()
-                .find_map(|diagram| diagram.view_mut(view_id)).ok_or("view not found")?;
+            let view = section
+                .diagrams
+                .iter_mut()
+                .find_map(|diagram| diagram.view_mut(view_id))
+                .ok_or("view not found")?;
             view.label = label.clone();
         }
-        Command::SetViewTiming { view_id, timing } => views::set_timing(&mut section, view_id, timing)?,
-        Command::SetViewEndpoints { diagram_id, view_id, endpoints } => views::set_endpoints(&mut section, diagram_id, view_id, endpoints)?,
+        Command::SetViewTiming { view_id, timing } => {
+            views::set_timing(&mut section, view_id, timing)?
+        }
+        Command::SetViewEndpoints {
+            diagram_id,
+            view_id,
+            endpoints,
+        } => views::set_endpoints(&mut section, diagram_id, view_id, endpoints)?,
         Command::SetViewStyle {
             diagram_id,
             view_id,
@@ -359,7 +699,13 @@ pub(crate) fn apply_with_diagram_operations(project: &Project, command: &Command
             diagram_id,
             view_id,
             routing,
-        } => view_style::set_routing(&mut section, diagram_id, view_id, *routing, diagram_operations)?,
+        } => view_style::set_routing(
+            &mut section,
+            diagram_id,
+            view_id,
+            *routing,
+            diagram_operations,
+        )?,
         Command::MoveView { view_id, dx, dy } => move_view(&mut section, view_id, *dx, *dy)?,
         Command::ResizeView {
             view_id,
@@ -398,13 +744,40 @@ pub(crate) fn apply_with_diagram_operations(project: &Project, command: &Command
         }
     }
     let draft_view_edit = match command {
-        Command::MoveView { view_id, .. } | Command::ResizeView { view_id, .. } => project.diagrams.iter()
-            .flat_map(|diagram| &diagram.views).any(|view| view.id == *view_id && view.draft.is_some()),
-        Command::RemoveView { diagram_id, view_id } => project.diagrams.iter().find(|diagram| diagram.id == *diagram_id)
-            .is_some_and(|diagram| diagram.views.iter().any(|view| view.id == *view_id && view.draft.is_some())),
+        Command::MoveView { view_id, .. } | Command::ResizeView { view_id, .. } => project
+            .diagrams
+            .iter()
+            .flat_map(|diagram| &diagram.views)
+            .any(|view| view.id == *view_id && view.draft.is_some()),
+        Command::RemoveView {
+            diagram_id,
+            view_id,
+        } => project
+            .diagrams
+            .iter()
+            .find(|diagram| diagram.id == *diagram_id)
+            .is_some_and(|diagram| {
+                diagram
+                    .views
+                    .iter()
+                    .any(|view| view.id == *view_id && view.draft.is_some())
+            }),
         _ => false,
     };
-    let presentation_only = draft_view_edit || matches!(command, Command::CreateDiagram { .. } | Command::CreateExplorerDiagram { .. } | Command::CreateVisualDraft { .. } | Command::SetExplorerParent { .. } | Command::SetViewLabel { .. } | Command::SetViewTiming { .. } | Command::SetViewEndpoints { .. } | Command::SetViewStyle { .. } | Command::SetViewRouting { .. } | Command::ReorderView { .. });
+    let presentation_only = draft_view_edit
+        || matches!(
+            command,
+            Command::CreateDiagram { .. }
+                | Command::CreateExplorerDiagram { .. }
+                | Command::CreateVisualDraft { .. }
+                | Command::SetExplorerParent { .. }
+                | Command::SetViewLabel { .. }
+                | Command::SetViewTiming { .. }
+                | Command::SetViewEndpoints { .. }
+                | Command::SetViewStyle { .. }
+                | Command::SetViewRouting { .. }
+                | Command::ReorderView { .. }
+        );
     if !presentation_only {
         crate::uml::associations::materialize_new(project, &mut section)?;
         crate::uml::associations::synchronize_changes(&previous_section, &mut section)?;
@@ -413,20 +786,29 @@ pub(crate) fn apply_with_diagram_operations(project: &Project, command: &Command
     let mut updated = section.to_model(&project.id, &project.name);
     updated.schema_version = project.schema_version;
     if crate::composition_paths(&updated)? != crate::composition_paths(project)? {
-        return Err("Document composition changes are not yet supported losslessly; no change was applied".into());
+        return Err(
+            "Document composition changes are not yet supported losslessly; no change was applied"
+                .into(),
+        );
     }
     crate::validate_model_hierarchy(&updated)?;
     // Explorer placement must not be blocked by unrelated semantic or diagram drafts.
-    if matches!(command, Command::SetExplorerParent { .. }) { return Ok(updated); }
+    if matches!(command, Command::SetExplorerParent { .. }) {
+        return Ok(updated);
+    }
     let graph = Graph::new(&updated);
-    graph.validate_presentation().map_err(|error| error.to_string())?;
+    graph
+        .validate_presentation()
+        .map_err(|error| error.to_string())?;
     Ok(updated)
 }
 
 fn ensure_visual_edit_supported(project: &Project, command: &Command) -> Result<(), String> {
     let diagram = match command {
-        Command::MoveView { view_id, .. } | Command::ResizeView { view_id, .. } =>
-            project.diagrams.iter().find(|diagram| diagram.all_views().any(|view| view.id == *view_id)),
+        Command::MoveView { view_id, .. } | Command::ResizeView { view_id, .. } => project
+            .diagrams
+            .iter()
+            .find(|diagram| diagram.all_views().any(|view| view.id == *view_id)),
         Command::CreateElement { diagram_id, .. }
         | Command::CreateElementOrVisualDraft { diagram_id, .. }
         | Command::CreateRelation { diagram_id, .. }
@@ -439,13 +821,20 @@ fn ensure_visual_edit_supported(project: &Project, command: &Command) -> Result<
         | Command::ReorderView { diagram_id, .. }
         | Command::SetViewEndpoints { diagram_id, .. }
         | Command::SetViewRouting { diagram_id, .. }
-        | Command::QuickEdit { diagram_id, .. } =>
-            project.diagrams.iter().find(|diagram| diagram.id == *diagram_id),
+        | Command::QuickEdit { diagram_id, .. } => project
+            .diagrams
+            .iter()
+            .find(|diagram| diagram.id == *diagram_id),
         _ => None,
     };
     if let Some(diagram) = diagram {
-        if diagram.all_views().any(|view| !view.children.is_empty() || matches!(view.geometry, Geometry::Layout { .. })) {
-            return Err(format!("diagram {} requires hierarchy-aware layout before this visual operation; authored presentation was not changed", diagram.id));
+        if diagram.all_views().any(|view| {
+            !view.children.is_empty() || matches!(view.geometry, Geometry::Layout { .. })
+        }) {
+            return Err(format!(
+                "diagram {} requires hierarchy-aware layout before this visual operation; authored presentation was not changed",
+                diagram.id
+            ));
         }
     }
     Ok(())
@@ -462,10 +851,20 @@ fn fresh_ids<const N: usize>(
         let ids = prefixes.map(|prefix| format!("{prefix}-{sequence}"));
         let occupied = ids.iter().any(|id| {
             id == project_id
-                || section.hierarchy.values().filter_map(|placement| placement.occurrence.as_ref()).any(|occurrence|
-                    &occurrence.diagram_id == id || &occurrence.view_id == id || occurrence.member_path.contains(id))
+                || section
+                    .hierarchy
+                    .values()
+                    .filter_map(|placement| placement.occurrence.as_ref())
+                    .any(|occurrence| {
+                        &occurrence.diagram_id == id
+                            || &occurrence.view_id == id
+                            || occurrence.member_path.contains(id)
+                    })
                 || section.hierarchy.contains_key(id)
-                || section.hierarchy.values().any(|placement| placement.parent_id.as_ref() == Some(id))
+                || section
+                    .hierarchy
+                    .values()
+                    .any(|placement| placement.parent_id.as_ref() == Some(id))
                 || section.elements.iter().any(|element| &element.id == id)
                 || section.relations.iter().any(|relation| &relation.id == id)
                 || section.diagrams.iter().any(|diagram| {
@@ -486,31 +885,62 @@ fn create_element(
     project_id: &str,
 ) -> Result<(), String> {
     let (diagram_id, owner_id, kind, name, x, y) = match command {
-        Command::CreateElement { diagram_id, owner_id, kind, name, x, y } =>
-            (Some(diagram_id.as_str()), owner_id, kind, name, *x, *y),
-        Command::CreateModelElement { owner_id, kind, name } =>
-            (None, owner_id, kind, name, 0.0, 0.0),
+        Command::CreateElement {
+            diagram_id,
+            owner_id,
+            kind,
+            name,
+            x,
+            y,
+        } => (Some(diagram_id.as_str()), owner_id, kind, name, *x, *y),
+        Command::CreateModelElement {
+            owner_id,
+            kind,
+            name,
+        } => (None, owner_id, kind, name, 0.0, 0.0),
         _ => return Err("expected element creation command".into()),
     };
     if !x.is_finite() || !y.is_finite() {
         return Err("element position must be finite".into());
     }
-    if ModelingElementKind::DETAILS.contains(kind) && !section.diagrams.iter().any(|diagram|
-        Some(diagram.id.as_str()) == diagram_id && diagram.views.iter().any(|view| view.subject.as_ref() == owner_id.as_ref())) {
+    if ModelingElementKind::DETAILS.contains(kind)
+        && !section.diagrams.iter().any(|diagram| {
+            Some(diagram.id.as_str()) == diagram_id
+                && diagram
+                    .views
+                    .iter()
+                    .any(|view| view.subject.as_ref() == owner_id.as_ref())
+        })
+    {
         return Err("place the containing Action or CombinedFragment in this diagram before adding its detail".into());
     }
     let requested_name = name.as_deref();
     let mut chosen_name = requested_name.unwrap_or(kind.default_name()).to_owned();
-    let basic_classifier = matches!(kind, ModelingElementKind::Class | ModelingElementKind::Interface);
-    if kind.requires_owner() && owner_id.is_none() && !basic_classifier
-        && (diagram_id.is_some() || kind.requires_nested_owner()) {
+    let basic_classifier = matches!(
+        kind,
+        ModelingElementKind::Class | ModelingElementKind::Interface
+    );
+    if kind.requires_owner()
+        && owner_id.is_none()
+        && !basic_classifier
+        && (diagram_id.is_some() || kind.requires_nested_owner())
+    {
         return Err(if kind.requires_nested_owner() {
             "Select the containing Activity, StateMachine, State, Region, or Interaction first"
-        } else { "this element requires an explicit Package or Model owner" }.into());
+        } else {
+            "this element requires an explicit Package or Model owner"
+        }
+        .into());
     }
-    let resolved_owner = if let Some(owner_id) = owner_id { Some(owner_id.clone()) } else if crate::uml::root::object_metaclass(kind.model_kind()).is_some() {
-        Some(crate::uml::root::adopt_root_model(section, project_id, "Model")?)
-    } else { None };
+    let resolved_owner = if let Some(owner_id) = owner_id {
+        Some(owner_id.clone())
+    } else if crate::uml::root::object_metaclass(kind.model_kind()).is_some() {
+        Some(crate::uml::root::adopt_root_model(
+            section, project_id, "Model",
+        )?)
+    } else {
+        None
+    };
     if let Some(owner_id) = &resolved_owner {
         let owner = section
             .elements
@@ -519,8 +949,10 @@ fn create_element(
             .ok_or("element owner not found")?;
         // Basic classifiers use the canonical composite-role check below,
         // including nestedClassifier, rather than guessing from the selection.
-        if !kind.requires_nested_owner() && !basic_classifier
-            && !matches!(owner.kind.as_str(), "uml.package" | "uml.model") {
+        if !kind.requires_nested_owner()
+            && !basic_classifier
+            && !matches!(owner.kind.as_str(), "uml.package" | "uml.model")
+        {
             return Err("this creation command requires a Package or Model owner".into());
         }
     }
@@ -533,8 +965,17 @@ fn create_element(
     if requested_name.is_none() {
         let base = chosen_name.clone();
         for sequence in 1_u64.. {
-            let duplicate = section.elements.iter().any(|element| element.name == chosen_name && section.relations.iter().any(|relation| relation.kind == "owns" && Some(&relation.from) == resolved_owner.as_ref() && relation.to == element.id));
-            if !duplicate { break; }
+            let duplicate = section.elements.iter().any(|element| {
+                element.name == chosen_name
+                    && section.relations.iter().any(|relation| {
+                        relation.kind == "owns"
+                            && Some(&relation.from) == resolved_owner.as_ref()
+                            && relation.to == element.id
+                    })
+            });
+            if !duplicate {
+                break;
+            }
             chosen_name = format!("{base}{sequence}");
         }
     }
@@ -573,8 +1014,9 @@ fn create_element(
         });
     }
     let mut properties = std::collections::BTreeMap::new();
-    if crate::uml::root::object_metaclass(kind.model_kind()).is_some_and(|metaclass|
-        crate::uml::metamodel::conforms_to(metaclass, "PackageableElement")) {
+    if crate::uml::root::object_metaclass(kind.model_kind()).is_some_and(|metaclass| {
+        crate::uml::metamodel::conforms_to(metaclass, "PackageableElement")
+    }) {
         properties.insert("visibility".into(), serde_json::json!("public"));
     }
     if matches!(
@@ -611,18 +1053,20 @@ fn create_element(
     if let Some(owner_id) = resolved_owner {
         if kind.requires_nested_owner() || basic_classifier {
             crate::uml::root::set_owner(section, project_id, &element_id, &owner_id)?;
-            if kind.requires_nested_owner() && let Some(diagram_id) = diagram_id {
+            if kind.requires_nested_owner()
+                && let Some(diagram_id) = diagram_id
+            {
                 features::reposition_boundary_nodes(section, diagram_id, &owner_id);
                 features::layout_interaction_operands(section, diagram_id, &owner_id);
             }
         } else {
-        section.relations.push(Relation {
-            id: ownership_id,
-            kind: "owns".into(),
-            from: owner_id.clone(),
-            to: element_id,
-            properties: Default::default(),
-        });
+            section.relations.push(Relation {
+                id: ownership_id,
+                kind: "owns".into(),
+                from: owner_id.clone(),
+                to: element_id,
+                properties: Default::default(),
+            });
         }
     }
     Ok(())
@@ -640,15 +1084,28 @@ fn create_relation(
     revision: u64,
     project_id: &str,
 ) -> Result<(), String> {
-    if kind.is_visual_only() { return Err("this connector is View-only notation, not a semantic UML relationship".into()); }
+    if kind.is_visual_only() {
+        return Err("this connector is View-only notation, not a semantic UML relationship".into());
+    }
     for endpoint in [from, to] {
-        if !section.elements.iter().any(|element| element.id == endpoint) {
+        if !section
+            .elements
+            .iter()
+            .any(|element| element.id == endpoint)
+        {
             return Err(format!("relationship endpoint {endpoint} not found"));
         }
     }
     if let Some(owner_id) = owner_id {
-        if !section.elements.iter().any(|element| element.id == owner_id)
-            && !section.relations.iter().any(|relation| relation.id == owner_id) {
+        if !section
+            .elements
+            .iter()
+            .any(|element| element.id == owner_id)
+            && !section
+                .relations
+                .iter()
+                .any(|relation| relation.id == owner_id)
+        {
             return Err(format!("requested relationship owner {owner_id} not found"));
         }
     }
@@ -659,7 +1116,11 @@ fn create_relation(
     let geometry = crate::relationships::route_at_views(section, diagram_id, from, to, &endpoints)?;
     let [id, view_id, ownership_id] = fresh_ids(
         section,
-        ["mde-uml-relation", "mde-uml-relation-view", "mde-relation-owner"],
+        [
+            "mde-uml-relation",
+            "mde-uml-relation-view",
+            "mde-relation-owner",
+        ],
         revision,
         project_id,
     )?;
@@ -667,7 +1128,12 @@ fn create_relation(
     if kind == ModelingRelationKind::PackageImport {
         properties.insert("visibility".into(), serde_json::json!("public"));
     }
-    if matches!(kind, ModelingRelationKind::InterfaceRealization | ModelingRelationKind::Deployment | ModelingRelationKind::Manifestation) {
+    if matches!(
+        kind,
+        ModelingRelationKind::InterfaceRealization
+            | ModelingRelationKind::Deployment
+            | ModelingRelationKind::Manifestation
+    ) {
         // These composite owners do not project Namespace::ownedMember, so
         // PackageableElement's default public visibility must be cleared.
         properties.insert("visibility".into(), serde_json::Value::Null);
@@ -685,10 +1151,17 @@ fn create_relation(
     });
     // Source-owned relationship records already encode this owner in `from`.
     // Other authored ownership stays explicit, including incomplete UML drafts.
-    let owner_is_encoded_by_source = matches!(semantic_kind,
-        "uml.generalization" | "uml.interface_realization" | "uml.template_binding" | "uml.element_import" | "uml.package_import");
+    let owner_is_encoded_by_source = matches!(
+        semantic_kind,
+        "uml.generalization"
+            | "uml.interface_realization"
+            | "uml.template_binding"
+            | "uml.element_import"
+            | "uml.package_import"
+    );
     if let Some(owner_id) = owner_id
-        && !(owner_is_encoded_by_source && owner_id == from) {
+        && !(owner_is_encoded_by_source && owner_id == from)
+    {
         section.relations.push(Relation {
             id: ownership_id,
             kind: "owns".into(),
@@ -711,11 +1184,11 @@ fn create_relation(
         .checked_add(1)
         .ok_or("z-index overflow")?;
     diagram.views.push(View {
-            children: Vec::new(),
-            presentation: Default::default(),
+        children: Vec::new(),
+        presentation: Default::default(),
         endpoints: Some(endpoints),
         timing: None,
-            draft: None,
+        draft: None,
         id: view_id,
         subject: Some(id),
         label: None,
@@ -752,7 +1225,11 @@ fn move_view(section: &mut ModelingSection, view_id: &str, dx: f64, dy: f64) -> 
         features::translate_contained_views(section, &diagram_id, &subject, dx, dy);
     }
     reroute_relationships(section, &diagram_id);
-    if let Some(diagram) = section.diagrams.iter_mut().find(|diagram| diagram.id == diagram_id) {
+    if let Some(diagram) = section
+        .diagrams
+        .iter_mut()
+        .find(|diagram| diagram.id == diagram_id)
+    {
         crate::visual_draft_routing::translate_message_anchors(diagram, view_id, dy);
         crate::reroute_visual_drafts(diagram);
     }
@@ -765,8 +1242,12 @@ fn resize_view(
     width: f64,
     height: f64,
 ) -> Result<(), String> {
-    let is_draft = section.diagrams.iter().flat_map(|diagram| &diagram.views)
-        .find(|view| view.id == view_id).is_some_and(|view| view.draft.is_some());
+    let is_draft = section
+        .diagrams
+        .iter()
+        .flat_map(|diagram| &diagram.views)
+        .find(|view| view.id == view_id)
+        .is_some_and(|view| view.draft.is_some());
     if !width.is_finite() || !height.is_finite() || width <= 0.0 || height <= 0.0 {
         return Err("view dimensions must be finite and positive".into());
     }
@@ -788,7 +1269,8 @@ fn resize_view(
     let minimum = owner_id
         .as_deref()
         .and_then(|id| features::class_minimum_bounds(section, &diagram_id, id));
-    let notation_minimum = owner_id.as_deref()
+    let notation_minimum = owner_id
+        .as_deref()
         .and_then(|id| section.elements.iter().find(|element| element.id == id))
         .map(|element| crate::resolve_element_notation(element).minimum_size())
         .unwrap_or((80.0, 48.0));
@@ -820,8 +1302,16 @@ fn resize_view(
             height: current_height,
             ..
         } => {
-            *current_width = if is_draft { width } else { width.max(minimum_width) };
-            *current_height = if is_draft { height } else { height.max(minimum_height).max(minimum_part_height) };
+            *current_width = if is_draft {
+                width
+            } else {
+                width.max(minimum_width)
+            };
+            *current_height = if is_draft {
+                height
+            } else {
+                height.max(minimum_height).max(minimum_part_height)
+            };
         }
         _ => return Err("only node Views can be resized with this command".into()),
     }
@@ -830,7 +1320,11 @@ fn resize_view(
         features::layout_interaction_operands(section, &diagram_id, &owner_id);
     }
     reroute_relationships(section, &diagram_id);
-    if let Some(diagram) = section.diagrams.iter_mut().find(|diagram| diagram.id == diagram_id) {
+    if let Some(diagram) = section
+        .diagrams
+        .iter_mut()
+        .find(|diagram| diagram.id == diagram_id)
+    {
         crate::reroute_visual_drafts(diagram);
     }
     Ok(())
@@ -839,10 +1333,19 @@ fn resize_view(
 fn remove_element(section: &mut ModelingSection, id: &str) -> Result<(), String> {
     let semantic = crate::uml::root::Model::from_section(section);
     if semantic.element(id).is_none() {
-        if section.diagrams.iter().any(|diagram| RelationshipGraph::new(section, &diagram.id).visible_relations().iter().any(|relation| relation.id == id)) {
+        if section.diagrams.iter().any(|diagram| {
+            RelationshipGraph::new(section, &diagram.id)
+                .visible_relations()
+                .iter()
+                .any(|relation| relation.id == id)
+        }) {
             ensure_view_deletion_supported(section, &HashSet::from([id.to_owned()]))?;
             section.relations.retain(|relation| relation.id != id);
-            for diagram in &mut section.diagrams { diagram.views.retain(|view| view.subject.as_deref() != Some(id)); }
+            for diagram in &mut section.diagrams {
+                diagram
+                    .views
+                    .retain(|view| view.subject.as_deref() != Some(id));
+            }
             return Ok(());
         }
         return Err("element not found or structural link cannot be deleted directly".into());
@@ -851,12 +1354,20 @@ fn remove_element(section: &mut ModelingSection, id: &str) -> Result<(), String>
     loop {
         let mut changed = false;
         for element in semantic.elements() {
-            if semantic.owner(element)?.is_some_and(|owner| deleted.contains(owner.id()))
-                && deleted.insert(element.id().to_owned()) { changed = true; }
+            if semantic
+                .owner(element)?
+                .is_some_and(|owner| deleted.contains(owner.id()))
+                && deleted.insert(element.id().to_owned())
+            {
+                changed = true;
+            }
         }
         for relation in &section.relations {
             if (deleted.contains(&relation.from) || deleted.contains(&relation.to))
-                && deleted.insert(relation.id.clone()) { changed = true; }
+                && deleted.insert(relation.id.clone())
+            {
+                changed = true;
+            }
         }
         if !changed {
             break;
@@ -890,13 +1401,23 @@ fn remove_element(section: &mut ModelingSection, id: &str) -> Result<(), String>
         .relations
         .retain(|relation| !incident.contains(&relation.id) && !deleted.contains(&relation.id));
     section.hierarchy.retain(|subject, placement| {
-        if placement.parent_id.as_ref().is_some_and(|id| deleted.contains(id) || incident.contains(id)) {
+        if placement
+            .parent_id
+            .as_ref()
+            .is_some_and(|id| deleted.contains(id) || incident.contains(id))
+        {
             placement.parent_id = None;
             placement.occurrence = None;
         }
         !deleted.contains(subject) && !incident.contains(subject)
     });
-    if section.root_model.as_ref().is_some_and(|root| deleted.contains(root)) { section.root_model = None; }
+    if section
+        .root_model
+        .as_ref()
+        .is_some_and(|root| deleted.contains(root))
+    {
+        section.root_model = None;
+    }
     for diagram in &mut section.diagrams {
         diagram.views.retain(|view| {
             view.subject
@@ -914,8 +1435,13 @@ fn ensure_view_deletion_supported(
     for diagram in &section.diagrams {
         let mut pending: Vec<_> = diagram.views.iter().map(|view| (view, false)).collect();
         while let Some((view, nested)) = pending.pop() {
-            if view.subject.as_ref().is_some_and(|subject| affected_subjects.contains(subject))
-                && (nested || !view.children.is_empty() || matches!(view.geometry, Geometry::Layout { .. }))
+            if view
+                .subject
+                .as_ref()
+                .is_some_and(|subject| affected_subjects.contains(subject))
+                && (nested
+                    || !view.children.is_empty()
+                    || matches!(view.geometry, Geometry::Layout { .. }))
             {
                 return Err(format!(
                     "deleting this element affects View {} in diagram {}, which requires hierarchy-aware deletion; no elements or authored presentation were changed",

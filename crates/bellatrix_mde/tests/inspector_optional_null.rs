@@ -24,8 +24,11 @@ fn document() -> Value {
             {"id":"owns-readonly", "kind":"owns", "from":"class", "to":"readonly"}
         ]
     });
-    let decoded = decode_model_document(&serde_json::to_vec(&project).expect("fixture bytes"), "json")
-        .expect("normalize authored drafts");
+    let decoded = decode_model_document(
+        &serde_json::to_vec(&project).expect("fixture bytes"),
+        "json",
+    )
+    .expect("normalize authored drafts");
     let mut envelope: Value = serde_json::from_str(&decoded).expect("model envelope");
     envelope["model"].take()
 }
@@ -33,8 +36,16 @@ fn document() -> Value {
 fn set_property(model: &Value, owner: &str, path: &str, value: Value) -> Result<Value, String> {
     let parts = prepare_model_document(&json!({"api_version": 1, "model": model}).to_string())?;
     let section = apply_model_command(
-        &parts.id, &parts.name, &parts.section_json, 1,
-        Command::SetProperty { element_id: owner.into(), path: path.into(), value }, false,
+        &parts.id,
+        &parts.name,
+        &parts.section_json,
+        1,
+        Command::SetProperty {
+            element_id: owner.into(),
+            path: path.into(),
+            value,
+        },
+        false,
     )?;
     let bytes = encode_model_section(&parts.id, &parts.name, &section.to_string(), "json")?;
     let decoded = decode_model_document(&bytes, "json")?;
@@ -45,11 +56,22 @@ fn set_property(model: &Value, owner: &str, path: &str, value: Value) -> Result<
 #[test]
 fn optional_reference_can_be_cleared_without_unlocking_other_fields() {
     let mut section = document();
-    section = set_property(&section, "operation", "properties.bodyCondition", Value::Null)
-        .expect("clear an optional scalar reference represented by an editable legacy string");
-    assert_eq!(section["elements"].as_array().expect("canonical elements").iter()
-        .find(|element| element["id"] == "operation")
-        .expect("operation")["properties"]["bodyCondition"], Value::Null);
+    section = set_property(
+        &section,
+        "operation",
+        "properties.bodyCondition",
+        Value::Null,
+    )
+    .expect("clear an optional scalar reference represented by an editable legacy string");
+    assert_eq!(
+        section["elements"]
+            .as_array()
+            .expect("canonical elements")
+            .iter()
+            .find(|element| element["id"] == "operation")
+            .expect("operation")["properties"]["bodyCondition"],
+        Value::Null
+    );
     for (owner, property, expected) in [
         ("reception", "properties.signal", "expected string"),
         ("operation", "properties.raisedException", "expected string"),

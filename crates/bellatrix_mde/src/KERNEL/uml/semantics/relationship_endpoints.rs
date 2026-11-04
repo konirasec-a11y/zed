@@ -10,11 +10,17 @@ use serde_json::{Value, json};
 use std::collections::HashSet;
 
 fn invalid(id: &str, message: impl Into<String>) -> ElementGraphError {
-    ElementGraphError::Invalid { subject_id: id.into(), message: message.into() }
+    ElementGraphError::Invalid {
+        subject_id: id.into(),
+        message: message.into(),
+    }
 }
 
 fn unsupported(id: &str, message: impl Into<String>) -> ElementGraphError {
-    ElementGraphError::Unsupported { subject_id: id.into(), message: message.into() }
+    ElementGraphError::Unsupported {
+        subject_id: id.into(),
+        message: message.into(),
+    }
 }
 
 fn element<'a>(
@@ -46,12 +52,17 @@ fn read<'a>(
     value: &Value,
 ) -> Result<Vec<ElementRef<'a>>, ElementGraphError> {
     if property.property_type.resolution != schema::ReferenceResolution::Exact {
-        return Err(unsupported(subject.id(), format!(
-            "{} requires resolved local Element references", property.id.fragment,
-        )));
+        return Err(unsupported(
+            subject.id(),
+            format!(
+                "{} requires resolved local Element references",
+                property.id.fragment,
+            ),
+        ));
     }
     let result = if matches!(property.upper, "0" | "1") {
-        references.validate(property, value)
+        references
+            .validate(property, value)
             .map(|value| value.into_iter().collect())
     } else {
         references.validate_many(property, value)
@@ -66,10 +77,12 @@ fn read<'a>(
             ..*property
         };
         match super::property_contracts::check_value(references, subject, &contract, value) {
-            super::property_contracts::PropertyOutcome::Unverified(message) =>
-                unsupported(subject.id(), message),
-            super::property_contracts::PropertyOutcome::Violation(message) =>
-                invalid(subject.id(), message),
+            super::property_contracts::PropertyOutcome::Unverified(message) => {
+                unsupported(subject.id(), message)
+            }
+            super::property_contracts::PropertyOutcome::Violation(message) => {
+                invalid(subject.id(), message)
+            }
             super::property_contracts::PropertyOutcome::Satisfied => invalid(subject.id(), error),
         }
     })
@@ -77,11 +90,19 @@ fn read<'a>(
 
 fn unique<'a>(values: impl IntoIterator<Item = ElementRef<'a>>) -> Vec<ElementRef<'a>> {
     let mut seen = HashSet::new();
-    values.into_iter().filter(|element| seen.insert(element.id())).collect()
+    values
+        .into_iter()
+        .filter(|element| seen.insert(element.id()))
+        .collect()
 }
 
 fn references_value(values: &[ElementRef<'_>]) -> Value {
-    Value::Array(values.iter().map(|element| json!({"$ref": element.id()})).collect())
+    Value::Array(
+        values
+            .iter()
+            .map(|element| json!({"$ref": element.id()}))
+            .collect(),
+    )
 }
 
 fn stored_subsets<'a>(
@@ -116,10 +137,18 @@ fn dependency_subsets<'a>(
     if name == "client" && dependency.conforms_to("Substitution") {
         let owner = super::classifier_hierarchy::substituting_classifier(references, dependency)
             .map_err(|error| match error {
-                super::classifiers::QueryError::Invalid { subject_id, message } => invalid(&subject_id, message),
-                super::classifiers::QueryError::Unsupported { subject_id, message } => unsupported(&subject_id, message),
+                super::classifiers::QueryError::Invalid {
+                    subject_id,
+                    message,
+                } => invalid(&subject_id, message),
+                super::classifiers::QueryError::Unsupported {
+                    subject_id,
+                    message,
+                } => unsupported(&subject_id, message),
             })?;
-        if !subsets.iter().any(|element| element.id() == owner.id()) { subsets.push(owner); }
+        if !subsets.iter().any(|element| element.id() == owner.id()) {
+            subsets.push(owner);
+        }
     }
     Ok(subsets)
 }
@@ -142,16 +171,25 @@ pub(crate) fn validate_dependency_subsets(
             };
             match read(references, dependency, property, value) {
                 Ok(values) => {
-                    if subsets.iter().all(|subset| values.iter().any(|value| value.id() == subset.id())) {
+                    if subsets
+                        .iter()
+                        .all(|subset| values.iter().any(|value| value.id() == subset.id()))
+                    {
                         Ok(())
                     } else {
-                        Err(invalid(id, format!("specialized roles must subset Dependency::{name}")))
+                        Err(invalid(
+                            id,
+                            format!("specialized roles must subset Dependency::{name}"),
+                        ))
                     }
                 }
                 Err(error @ ElementGraphError::Unsupported { .. }) => {
                     // A known identity proves includes even beside unknowns.
                     // read() has already rejected any independently bad member.
-                    let known = value.as_array().into_iter().flatten()
+                    let known = value
+                        .as_array()
+                        .into_iter()
+                        .flatten()
                         .filter_map(|value| super::references::reference_id(value).ok().flatten())
                         .collect::<HashSet<_>>();
                     if subsets.iter().all(|subset| known.contains(subset.id())) {
@@ -182,19 +220,34 @@ fn dependency_role<'a>(
     let subsets = dependency_subsets(references, dependency, property)?;
     if let Some(value) = dependency.properties().get(name) {
         let values = read(references, dependency, property, value)?;
-        if subsets.iter().any(|subset| !values.iter().any(|value| value.id() == subset.id())) {
-            return Err(invalid(id, format!("specialized roles must subset Dependency::{name}")));
+        if subsets
+            .iter()
+            .any(|subset| !values.iter().any(|value| value.id() == subset.id()))
+        {
+            return Err(invalid(
+                id,
+                format!("specialized roles must subset Dependency::{name}"),
+            ));
         }
         return Ok(values);
     }
     if !subsets.is_empty() {
-        return read(references, dependency, property, &references_value(&subsets));
+        return read(
+            references,
+            dependency,
+            property,
+            &references_value(&subsets),
+        );
     }
     // Existing binary records supply the role only when no explicit collection
     // or specialized role exists. Their diagram projection never truncates it.
     let value = match dependency {
         ElementRef::Relationship(relation) => {
-            let endpoint = if name == "client" { &relation.from } else { &relation.to };
+            let endpoint = if name == "client" {
+                &relation.from
+            } else {
+                &relation.to
+            };
             json!([{"$ref": endpoint}])
         }
         ElementRef::Object(_) => Value::Array(Vec::new()),
@@ -202,74 +255,108 @@ fn dependency_role<'a>(
     read(references, dependency, property, &value)
 }
 
-pub fn clients<'a>(references: &ReferenceIndex<'a>, id: &str)
-    -> Result<Vec<ElementRef<'a>>, ElementGraphError>
-{
+pub fn clients<'a>(
+    references: &ReferenceIndex<'a>,
+    id: &str,
+) -> Result<Vec<ElementRef<'a>>, ElementGraphError> {
     dependency_role(references, id, "client")
 }
 
-pub fn suppliers<'a>(references: &ReferenceIndex<'a>, id: &str)
-    -> Result<Vec<ElementRef<'a>>, ElementGraphError>
-{
+pub fn suppliers<'a>(
+    references: &ReferenceIndex<'a>,
+    id: &str,
+) -> Result<Vec<ElementRef<'a>>, ElementGraphError> {
     dependency_role(references, id, "supplier")
 }
 
 fn ensure_derived(subject: ElementRef<'_>, name: &str) -> Result<(), ElementGraphError> {
     if subject.properties().contains_key(name) {
-        return Err(unsupported(subject.id(), format!(
-            "{name} must be derived from canonical relationship roles",
-        )));
+        return Err(unsupported(
+            subject.id(),
+            format!("{name} must be derived from canonical relationship roles",),
+        ));
     }
     Ok(())
 }
 
-fn directed_role<'a>(references: &ReferenceIndex<'a>, id: &str, name: &'static str)
-    -> Result<Vec<ElementRef<'a>>, ElementGraphError>
-{
+fn directed_role<'a>(
+    references: &ReferenceIndex<'a>,
+    id: &str,
+    name: &'static str,
+) -> Result<Vec<ElementRef<'a>>, ElementGraphError> {
     let subject = element(references, id, "DirectedRelationship")?;
     ensure_derived(subject, name)?;
     if subject.conforms_to("Dependency") {
-        return if name == "source" { clients(references, id) } else { suppliers(references, id) };
+        return if name == "source" {
+            clients(references, id)
+        } else {
+            suppliers(references, id)
+        };
     }
     let property = descriptor(id, "DirectedRelationship", name)?;
     let mut values = stored_subsets(references, subject, property.id.fragment)?;
-    if values.is_empty() && let ElementRef::Relationship(relation) = subject {
-        let endpoint = if name == "source" { &relation.from } else { &relation.to };
-        values.push(references.element(endpoint).map_err(|error| invalid(id, error))?);
+    if values.is_empty()
+        && let ElementRef::Relationship(relation) = subject
+    {
+        let endpoint = if name == "source" {
+            &relation.from
+        } else {
+            &relation.to
+        };
+        values.push(
+            references
+                .element(endpoint)
+                .map_err(|error| invalid(id, error))?,
+        );
     }
     read(references, subject, property, &references_value(&values))
 }
 
-pub fn sources<'a>(references: &ReferenceIndex<'a>, id: &str)
-    -> Result<Vec<ElementRef<'a>>, ElementGraphError>
-{
+pub fn sources<'a>(
+    references: &ReferenceIndex<'a>,
+    id: &str,
+) -> Result<Vec<ElementRef<'a>>, ElementGraphError> {
     directed_role(references, id, "source")
 }
 
-pub fn targets<'a>(references: &ReferenceIndex<'a>, id: &str)
-    -> Result<Vec<ElementRef<'a>>, ElementGraphError>
-{
+pub fn targets<'a>(
+    references: &ReferenceIndex<'a>,
+    id: &str,
+) -> Result<Vec<ElementRef<'a>>, ElementGraphError> {
     directed_role(references, id, "target")
 }
 
-pub fn related_elements<'a>(references: &ReferenceIndex<'a>, id: &str)
-    -> Result<Vec<ElementRef<'a>>, ElementGraphError>
-{
+pub fn related_elements<'a>(
+    references: &ReferenceIndex<'a>,
+    id: &str,
+) -> Result<Vec<ElementRef<'a>>, ElementGraphError> {
     let subject = element(references, id, "Relationship")?;
     ensure_derived(subject, "relatedElement")?;
     let values = if subject.conforms_to("DirectedRelationship") {
-        unique(sources(references, id)?.into_iter().chain(targets(references, id)?))
+        unique(
+            sources(references, id)?
+                .into_iter()
+                .chain(targets(references, id)?),
+        )
     } else if subject.conforms_to("Association")
-        && (subject.properties().contains_key("memberEnd") || matches!(subject, ElementRef::Object(_)))
+        && (subject.properties().contains_key("memberEnd")
+            || matches!(subject, ElementRef::Object(_)))
     {
         if !subject.properties().contains_key("memberEnd") {
-            return Err(unsupported(id, "Association memberEnd identities are not materialized; related Elements are unverified"));
+            return Err(unsupported(
+                id,
+                "Association memberEnd identities are not materialized; related Elements are unverified",
+            ));
         }
         associations::end_types(references, id).map_err(|error| invalid(id, error))?
     } else if let ElementRef::Relationship(relation) = subject {
         unique([
-            references.element(&relation.from).map_err(|error| invalid(id, error))?,
-            references.element(&relation.to).map_err(|error| invalid(id, error))?,
+            references
+                .element(&relation.from)
+                .map_err(|error| invalid(id, error))?,
+            references
+                .element(&relation.to)
+                .map_err(|error| invalid(id, error))?,
         ])
     } else {
         stored_subsets(references, subject, "Relationship-relatedElement")?
@@ -282,7 +369,9 @@ fn containment_owner<'a>(
     references: &ReferenceIndex<'a>,
     subject: ElementRef<'a>,
 ) -> Result<ElementRef<'a>, ElementGraphError> {
-    references.model().owner(subject)
+    references
+        .model()
+        .owner(subject)
         .map_err(|error| unsupported(subject.id(), error))?
         .ok_or_else(|| unsupported(subject.id(), "canonical containment is incomplete"))
 }
@@ -295,21 +384,33 @@ fn containment_role(
     composite: &'static str,
     alternatives: &[&str],
 ) -> Result<(), ElementGraphError> {
-    references.element(subject.id()).map_err(|error| unsupported(subject.id(), error))?;
-    references.element(owner.id()).map_err(|error| unsupported(subject.id(), error))?;
+    references
+        .element(subject.id())
+        .map_err(|error| unsupported(subject.id(), error))?;
+    references
+        .element(owner.id())
+        .map_err(|error| unsupported(subject.id(), error))?;
     for name in alternatives {
         if let Some(value) = subject.properties().get(*name) {
-            let expected = if *name == role { Some(owner.id()) } else { None };
+            let expected = if *name == role {
+                Some(owner.id())
+            } else {
+                None
+            };
             if super::references::reference_id(value).ok() != Some(expected) {
-                return Err(unsupported(subject.id(), format!(
-                    "authored {name} does not resolve to canonical containment",
-                )));
+                return Err(unsupported(
+                    subject.id(),
+                    format!("authored {name} does not resolve to canonical containment",),
+                ));
             }
         }
     }
     match classifiers::contributes_to_owned_union(owner, subject, composite) {
         Ok(true) => Ok(()),
-        Ok(false) => Err(unsupported(subject.id(), format!("canonical {composite} membership is unresolved"))),
+        Ok(false) => Err(unsupported(
+            subject.id(),
+            format!("canonical {composite} membership is unresolved"),
+        )),
         Err(error) => Err(unsupported(subject.id(), error.to_string())),
     }
 }
@@ -323,27 +424,51 @@ fn containing_context<'a>(
     let mut visited = HashSet::new();
     loop {
         if !visited.insert(current.id()) {
-            return Err(unsupported(subject.id(), "containment query encountered a cycle"));
+            return Err(unsupported(
+                subject.id(),
+                "containment query encountered a cycle",
+            ));
         }
         let owner = containment_owner(references, current)?;
         let (role, composite, alternatives): (&str, &'static str, &[&str]) = if activity {
             if !current.conforms_to("ActivityNode") {
-                return Err(unsupported(current.id(), "containingActivity requires a resolved ActivityNode"));
+                return Err(unsupported(
+                    current.id(),
+                    "containingActivity requires a resolved ActivityNode",
+                ));
             }
             if owner.conforms_to("StructuredActivityNode") {
-                ("inStructuredNode", "StructuredActivityNode-node", &["activity", "inStructuredNode"])
+                (
+                    "inStructuredNode",
+                    "StructuredActivityNode-node",
+                    &["activity", "inStructuredNode"],
+                )
             } else if owner.conforms_to("Activity") {
-                ("activity", "Activity-node", &["activity", "inStructuredNode"])
+                (
+                    "activity",
+                    "Activity-node",
+                    &["activity", "inStructuredNode"],
+                )
             } else {
-                return Err(unsupported(current.id(), "containingActivity has no supported containment path"));
+                return Err(unsupported(
+                    current.id(),
+                    "containingActivity has no supported containment path",
+                ));
             }
         } else if current.conforms_to("Region") {
             if owner.conforms_to("StateMachine") {
-                ("stateMachine", "StateMachine-region", &["state", "stateMachine"])
+                (
+                    "stateMachine",
+                    "StateMachine-region",
+                    &["state", "stateMachine"],
+                )
             } else if owner.conforms_to("State") {
                 ("state", "State-region", &["state", "stateMachine"])
             } else {
-                return Err(unsupported(current.id(), "Region containingStateMachine is unresolved"));
+                return Err(unsupported(
+                    current.id(),
+                    "Region containingStateMachine is unresolved",
+                ));
             }
         } else if current.conforms_to("Transition") && owner.conforms_to("Region") {
             ("container", "Region-transition", &["container"])
@@ -355,11 +480,21 @@ fn containing_context<'a>(
             let kind = schema::read_effective_scalar(current, "kind")
                 .map_err(|error| unsupported(current.id(), error))?;
             if !matches!(kind.as_str(), Some("entryPoint" | "exitPoint")) {
-                return Err(unsupported(current.id(), "Vertex containingStateMachine has no supported connection-point path"));
+                return Err(unsupported(
+                    current.id(),
+                    "Vertex containingStateMachine has no supported connection-point path",
+                ));
             }
-            ("stateMachine", "StateMachine-connectionPoint", &["container", "state", "stateMachine"])
+            (
+                "stateMachine",
+                "StateMachine-connectionPoint",
+                &["container", "state", "stateMachine"],
+            )
         } else {
-            return Err(unsupported(current.id(), "containingStateMachine has no supported containment path"));
+            return Err(unsupported(
+                current.id(),
+                "containingStateMachine has no supported containment path",
+            ));
         };
         containment_role(references, current, owner, role, composite, alternatives)?;
         if owner.conforms_to(if activity { "Activity" } else { "StateMachine" }) {
@@ -374,24 +509,36 @@ fn contained_endpoint<'a>(
     subject: ElementRef<'a>,
     role: &str,
 ) -> Result<ElementRef<'a>, ElementGraphError> {
-    let metaclass = subject.metaclass().ok_or_else(|| unsupported(subject.id(), "relationship metaclass is unresolved"))?;
+    let metaclass = subject
+        .metaclass()
+        .ok_or_else(|| unsupported(subject.id(), "relationship metaclass is unresolved"))?;
     let property = descriptor(subject.id(), metaclass, role)?;
     let canonical = match subject {
-        ElementRef::Relationship(relation) => Some(json!({"$ref": if role == "source" { &relation.from } else { &relation.to }})),
+        ElementRef::Relationship(relation) => {
+            Some(json!({"$ref": if role == "source" { &relation.from } else { &relation.to }}))
+        }
         ElementRef::Object(_) => None,
     };
     let authored = subject.properties().get(role);
     if let (Some(canonical), Some(authored)) = (&canonical, authored)
         && canonical != authored
     {
-        return Err(unsupported(subject.id(), format!("{role} differs from its binary projection")));
+        return Err(unsupported(
+            subject.id(),
+            format!("{role} differs from its binary projection"),
+        ));
     }
-    let value = canonical.as_ref().or(authored)
+    let value = canonical
+        .as_ref()
+        .or(authored)
         .ok_or_else(|| unsupported(subject.id(), format!("{role} is not materialized")))?;
     let values = read(references, subject, property, value)?;
     match values.as_slice() {
         [endpoint] => Ok(*endpoint),
-        _ => Err(unsupported(subject.id(), format!("{role} does not resolve to one endpoint"))),
+        _ => Err(unsupported(
+            subject.id(),
+            format!("{role} does not resolve to one endpoint"),
+        )),
     }
 }
 
@@ -403,13 +550,30 @@ fn endpoint_containment(
     let context = if activity {
         let owner = containment_owner(references, subject)?;
         if owner.conforms_to("StructuredActivityNode") {
-            containment_role(references, subject, owner, "inStructuredNode", "StructuredActivityNode-edge", &["activity", "inStructuredNode"])?;
+            containment_role(
+                references,
+                subject,
+                owner,
+                "inStructuredNode",
+                "StructuredActivityNode-edge",
+                &["activity", "inStructuredNode"],
+            )?;
             return Ok(());
         }
         if !owner.conforms_to("Activity") {
-            return Err(unsupported(subject.id(), "ActivityEdge::activity is unresolved"));
+            return Err(unsupported(
+                subject.id(),
+                "ActivityEdge::activity is unresolved",
+            ));
         }
-        containment_role(references, subject, owner, "activity", "Activity-edge", &["activity", "inStructuredNode"])?;
+        containment_role(
+            references,
+            subject,
+            owner,
+            "activity",
+            "Activity-edge",
+            &["activity", "inStructuredNode"],
+        )?;
         owner
     } else {
         containing_context(references, subject, false)?
@@ -419,9 +583,16 @@ fn endpoint_containment(
         let result = contained_endpoint(references, subject, role)
             .and_then(|endpoint| containing_context(references, endpoint, activity));
         match result {
-            Ok(actual) if actual.id() != context.id() => return Err(invalid(subject.id(), format!(
-                "{role} belongs to {}, but the relationship belongs to {}", actual.id(), context.id(),
-            ))),
+            Ok(actual) if actual.id() != context.id() => {
+                return Err(invalid(
+                    subject.id(),
+                    format!(
+                        "{role} belongs to {}, but the relationship belongs to {}",
+                        actual.id(),
+                        context.id(),
+                    ),
+                ));
+            }
             Ok(_) => {}
             Err(error @ ElementGraphError::Invalid { .. }) => return Err(error),
             Err(error) => unresolved = Some(error),
@@ -433,12 +604,24 @@ fn endpoint_containment(
 pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     for subject in references.model().elements().filter(|element| {
-        element.conforms_to("Relationship") || element.conforms_to("ActivityEdge") || element.conforms_to("Transition")
+        element.conforms_to("Relationship")
+            || element.conforms_to("ActivityEdge")
+            || element.conforms_to("Transition")
     }) {
         let containment_rule = if subject.conforms_to("ActivityEdge") {
-            Some((true, "ActivityEdge-source_and_target", "UML_ACTIVITY_EDGE_SOURCE_AND_TARGET", "MDE_ACTIVITY_EDGE_SOURCE_AND_TARGET_UNVERIFIED"))
+            Some((
+                true,
+                "ActivityEdge-source_and_target",
+                "UML_ACTIVITY_EDGE_SOURCE_AND_TARGET",
+                "MDE_ACTIVITY_EDGE_SOURCE_AND_TARGET_UNVERIFIED",
+            ))
         } else if subject.conforms_to("Transition") {
-            Some((false, "Transition-transition_vertices", "UML_TRANSITION_TRANSITION_VERTICES", "MDE_TRANSITION_TRANSITION_VERTICES_UNVERIFIED"))
+            Some((
+                false,
+                "Transition-transition_vertices",
+                "UML_TRANSITION_TRANSITION_VERTICES",
+                "MDE_TRANSITION_TRANSITION_VERTICES_UNVERIFIED",
+            ))
         } else {
             None
         };
@@ -450,10 +633,15 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 ElementGraphError::Unsupported { .. } => (StructuralSeverity::Warning, unknown),
             };
             issues.push(StructuralDiagnostic {
-                severity, code, subject_id: subject.id().into(), message: format!("{rule}: {error}"),
+                severity,
+                code,
+                subject_id: subject.id().into(),
+                message: format!("{rule}: {error}"),
             });
         }
-        if !subject.conforms_to("Relationship") { continue; }
+        if !subject.conforms_to("Relationship") {
+            continue;
+        }
         let result = related_elements(references, subject.id()).and_then(|_| {
             if subject.conforms_to("DirectedRelationship") && let ElementRef::Relationship(relation) = subject {
                 for (name, endpoint, values) in [
@@ -471,11 +659,19 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
         });
         if let Err(error) = result {
             let (severity, code) = match error {
-                ElementGraphError::Invalid { .. } => (StructuralSeverity::Error, "UML_RELATIONSHIP_ENDPOINTS"),
-                ElementGraphError::Unsupported { .. } => (StructuralSeverity::Warning, "MDE_RELATIONSHIP_ENDPOINTS_UNVERIFIED"),
+                ElementGraphError::Invalid { .. } => {
+                    (StructuralSeverity::Error, "UML_RELATIONSHIP_ENDPOINTS")
+                }
+                ElementGraphError::Unsupported { .. } => (
+                    StructuralSeverity::Warning,
+                    "MDE_RELATIONSHIP_ENDPOINTS_UNVERIFIED",
+                ),
             };
             issues.push(StructuralDiagnostic {
-                severity, code, subject_id: subject.id().into(), message: error.to_string(),
+                severity,
+                code,
+                subject_id: subject.id().into(),
+                message: error.to_string(),
             });
         }
     }

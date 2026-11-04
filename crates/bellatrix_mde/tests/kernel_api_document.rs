@@ -1,4 +1,6 @@
-use bellatrix_mde::{Format, Graph, decode, decode_model_document, encode, validate_graph_model, validate_uml_model};
+use bellatrix_mde::{
+    Format, Graph, decode, decode_model_document, encode, validate_graph_model, validate_uml_model,
+};
 use serde_json::{Value, json};
 
 fn model_json() -> Value {
@@ -15,8 +17,14 @@ fn codecs_match_legacy_and_are_repeatable_aba() -> Result<(), Box<dyn std::error
     let protobuf = encode(&model, Format::Protobuf)?;
     let expected = decode_model_document(&input, "json")?;
     assert_eq!(decode_model_document(&protobuf, "protobuf")?, expected);
-    assert_eq!(serde_json::from_str::<Value>(&expected)?["model"], serde_json::to_value(&model)?);
-    assert_eq!(serde_json::from_str::<Value>(&validate_graph_model(&expected)?)?["has_errors"], false);
+    assert_eq!(
+        serde_json::from_str::<Value>(&expected)?["model"],
+        serde_json::to_value(&model)?
+    );
+    assert_eq!(
+        serde_json::from_str::<Value>(&validate_graph_model(&expected)?)?["has_errors"],
+        false
+    );
     let other_input = br#"{"id":"other","name":"Other"}"#;
     let other = decode_model_document(other_input, "json")?;
     assert_ne!(other, expected);
@@ -36,10 +44,17 @@ fn graph_validation_preserves_legacy_scope_and_errors() -> Result<(), Box<dyn st
     let mut missing_endpoint = model_json();
     missing_endpoint["relations"][0]["to"] = json!("missing");
     let mut invalid_presentation = model_json();
-    invalid_presentation["diagrams"] = json!([{"id":"diagram","name":"Diagram","uml_di_type":"UMLClassDiagram","width":-1}]);
+    invalid_presentation["diagrams"] =
+        json!([{"id":"diagram","name":"Diagram","uml_di_type":"UMLClassDiagram","width":-1}]);
     let mut duplicate = model_json();
     duplicate["elements"][1]["id"] = json!("root");
-    for model in [model_json(), semantic_invalid.clone(), missing_endpoint, invalid_presentation, duplicate] {
+    for model in [
+        model_json(),
+        semantic_invalid.clone(),
+        missing_endpoint,
+        invalid_presentation,
+        duplicate,
+    ] {
         let bytes = serde_json::to_vec(&model)?;
         let legacy = decode(&bytes, Format::Json)?;
         let result = Graph::new(&legacy).validate();
@@ -53,11 +68,18 @@ fn graph_validation_preserves_legacy_scope_and_errors() -> Result<(), Box<dyn st
     }
     let envelope = json!({"api_version":1,"model":semantic_invalid}).to_string();
     let expected = validate_graph_model(&envelope)?;
-    assert_eq!(serde_json::from_str::<Value>(&expected)?["has_errors"], false);
-    assert_eq!(serde_json::from_str::<Value>(&validate_uml_model(&envelope)?)?["has_errors"], true);
+    assert_eq!(
+        serde_json::from_str::<Value>(&expected)?["has_errors"],
+        false
+    );
+    assert_eq!(
+        serde_json::from_str::<Value>(&validate_uml_model(&envelope)?)?["has_errors"],
+        true
+    );
     assert_eq!(validate_graph_model(&envelope)?, expected);
     for input in ["null", "{}", "{", r#"{"api_version":2,"model":{}}"#] {
-        let error: Value = serde_json::from_str(&validate_graph_model(input).expect_err("invalid request"))?;
+        let error: Value =
+            serde_json::from_str(&validate_graph_model(input).expect_err("invalid request"))?;
         assert_eq!(error["api_version"], 1);
         assert!(error["error"]["code"].is_string());
     }

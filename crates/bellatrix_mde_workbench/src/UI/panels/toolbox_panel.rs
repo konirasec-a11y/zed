@@ -236,20 +236,32 @@ impl Render for MdeLeftPanel {
                 state.presentation.visual_draft_mode(),
             )
         };
-        let catalog = snapshot.as_ref().map(|snapshot| snapshot.section.tools.clone()).unwrap_or_default();
-        let profile = active.as_deref().and_then(|id| catalog.profiles.get(id)).cloned();
+        let catalog = snapshot
+            .as_ref()
+            .map(|snapshot| snapshot.section.tools.clone())
+            .unwrap_or_default();
+        let profile = active
+            .as_deref()
+            .and_then(|id| catalog.profiles.get(id))
+            .cloned();
         let creation_available = item.read(cx).source().allows_creation();
-        let native_tools = creation_available && profile.as_ref().is_none_or(|profile| !profile.available_tools.is_empty());
+        let native_tools = creation_available
+            && profile
+                .as_ref()
+                .is_none_or(|profile| !profile.available_tools.is_empty());
         let chosen = chosen.filter(|tool| catalog.allows_tool(active.as_deref(), *tool));
         let mut diagrams = Vec::new();
         if let Some(snapshot) = &snapshot {
             for diagram in &snapshot.section.diagrams {
                 let diagram_id = diagram.id.clone();
                 let owner = item.clone();
-                let diagram_kind = diagram.kind
+                let diagram_kind = diagram
+                    .kind
                     .map(|kind| crate::workbench_ui::diagram_kind_label(kind).to_owned())
                     .unwrap_or_else(|| diagram.type_label.clone());
-                let display_name = diagram.owner_label.as_ref()
+                let display_name = diagram
+                    .owner_label
+                    .as_ref()
                     .map(|owner| format!("{} · {owner}", diagram.name))
                     .unwrap_or_else(|| diagram.name.clone());
                 diagrams.push(
@@ -261,7 +273,10 @@ impl Render for MdeLeftPanel {
                         .when(active.as_deref() == Some(diagram_id.as_str()), |row| {
                             row.bg(palette.surface)
                         })
-                        .child(crate::workbench_ui::hierarchy::explorer_diagram_icon(&diagram.uml_di_type, &palette))
+                        .child(crate::workbench_ui::hierarchy::explorer_diagram_icon(
+                            &diagram.uml_di_type,
+                            &palette,
+                        ))
                         .child(
                             div().flex_1().min_w_0().child(
                                 TreeViewItem::new(diagram_id.clone(), display_name)
@@ -284,138 +299,84 @@ impl Render for MdeLeftPanel {
             }
         }
         let create_item = item.clone();
-        let diagram_kinds = catalog.diagrams.iter().map(|entry| entry.kind).collect::<Vec<_>>();
+        let diagram_kinds = catalog
+            .diagrams
+            .iter()
+            .map(|entry| entry.kind)
+            .collect::<Vec<_>>();
         let create_menu = ui::ContextMenu::build(window, cx, move |menu, _, _| {
-            diagram_kinds.into_iter()
-                .fold(menu, |menu, kind| {
-                    let owner = create_item.clone();
-                    let label = crate::workbench_ui::diagram_kind_label(kind).to_owned();
-                    menu.entry(label, None, move |window, cx| {
-                        if owner.read(cx).source().is_read_only() {
-                            return;
-                        }
-                        owner.update(cx, |workbench, cx| workbench.create_diagram(kind, cx));
-                        window.dispatch_action(Box::new(OpenMdeWorkbench), cx);
-                    })
+            diagram_kinds.into_iter().fold(menu, |menu, kind| {
+                let owner = create_item.clone();
+                let label = crate::workbench_ui::diagram_kind_label(kind).to_owned();
+                menu.entry(label, None, move |window, cx| {
+                    if owner.read(cx).source().is_read_only() {
+                        return;
+                    }
+                    owner.update(cx, |workbench, cx| workbench.create_diagram(kind, cx));
+                    window.dispatch_action(Box::new(OpenMdeWorkbench), cx);
                 })
+            })
         });
-        let tool_groups = catalog.groups.iter().map(|group| (group.name.clone(), group.tools.iter().copied()
-            .filter(|tool| catalog.allows_tool(active.as_deref(), *tool)).collect::<Vec<_>>())).collect::<Vec<_>>();
+        let tool_groups = catalog
+            .groups
+            .iter()
+            .map(|group| {
+                (
+                    group.name.clone(),
+                    group
+                        .tools
+                        .iter()
+                        .copied()
+                        .filter(|tool| catalog.allows_tool(active.as_deref(), *tool))
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .collect::<Vec<_>>();
         let query = self.search_input.read(cx).text(cx).trim().to_lowercase();
         let searching = !query.is_empty();
         let mut tool_buttons: Vec<gpui::AnyElement> = Vec::new();
         let selection_owner = item.clone();
-        tool_buttons.push(div().p_2().child(
-            Button::new("mde-domain-select", "Select")
-                .toggle_state(chosen.is_none())
-                .tooltip(ui::Tooltip::text("Select and inspect existing objects"))
-                .on_click(move |_, _, cx| selection_owner.update(cx, |workbench, cx| workbench.cancel_tool(cx)))
-        ).into_any_element());
-        if native_tools {
-        if !searching {
-            tool_buttons.push(
-                div()
-                    .px_2()
-                    .pt_2()
-                    .pb_1()
-                    .text_xs()
-                    .text_color(palette.muted)
-                    .child("QUICK TOOLS")
-                    .into_any_element(),
-            );
-            for (index, tool) in [
-                ModelingTool::Element(ModelingElementKind::Class),
-                ModelingTool::Element(ModelingElementKind::Interface),
-                ModelingTool::Relation(ModelingRelationKind::Association),
-                ModelingTool::Relation(ModelingRelationKind::Composition),
-                ModelingTool::Element(ModelingElementKind::Package),
-                ModelingTool::Element(ModelingElementKind::Comment),
-            ]
-            .into_iter()
-            .enumerate()
-            {
-                if !catalog.allows_tool(active.as_deref(), tool) { continue; }
-                tool_buttons.push(tool_entry(
-                    format!("mde-quick-tool-{index}"),
-                    tool,
-                    catalog.label(tool).unwrap_or("Tool unavailable").to_owned(),
-                    chosen,
-                    &item,
-                    cx,
-                ));
-            }
-        }
         tool_buttons.push(
             div()
-                .pt_2()
+                .p_2()
                 .child(
-                    Button::new(
-                        "mde-toggle-symbol-library",
-                        if searching {
-                            "Search results"
-                        } else {
-                            "Symbol library"
-                        },
-                    )
-                    .disabled(searching)
-                    .start_icon(ui::Icon::new(if self.library_open || searching {
-                        IconName::ChevronDown
-                    } else {
-                        IconName::ChevronRight
-                    }))
-                    .on_click(cx.listener(|panel, _, _, cx| {
-                        panel.library_open = !panel.library_open;
-                        cx.notify();
-                    })),
+                    Button::new("mde-domain-select", "Select")
+                        .toggle_state(chosen.is_none())
+                        .tooltip(ui::Tooltip::text("Select and inspect existing objects"))
+                        .on_click(move |_, _, cx| {
+                            selection_owner.update(cx, |workbench, cx| workbench.cancel_tool(cx))
+                        }),
                 )
                 .into_any_element(),
         );
-        let mut matching_groups = 0;
-        for (group_index, (group_name, tools)) in tool_groups.into_iter().enumerate() {
-            if !self.library_open && !searching {
-                break;
-            }
-            let tools: Vec<_> = tools
+        if native_tools {
+            if !searching {
+                tool_buttons.push(
+                    div()
+                        .px_2()
+                        .pt_2()
+                        .pb_1()
+                        .text_xs()
+                        .text_color(palette.muted)
+                        .child("QUICK TOOLS")
+                        .into_any_element(),
+                );
+                for (index, tool) in [
+                    ModelingTool::Element(ModelingElementKind::Class),
+                    ModelingTool::Element(ModelingElementKind::Interface),
+                    ModelingTool::Relation(ModelingRelationKind::Association),
+                    ModelingTool::Relation(ModelingRelationKind::Composition),
+                    ModelingTool::Element(ModelingElementKind::Package),
+                    ModelingTool::Element(ModelingElementKind::Comment),
+                ]
                 .into_iter()
-                .filter(|tool| catalog.label(*tool).is_some_and(|label| tool_matches_query(label, &query)))
-                .collect();
-            if tools.is_empty() {
-                continue;
-            }
-            matching_groups += 1;
-            let expanded = searching || self.expanded_tool_groups.contains(&group_index);
-            tool_buttons.push(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .pr_2()
-                    .child(
-                        Button::new(format!("mde-tool-group-{group_index}"), group_name)
-                            .start_icon(ui::Icon::new(if expanded {
-                                IconName::ChevronDown
-                            } else {
-                                IconName::ChevronRight
-                            }))
-                            .on_click(cx.listener(move |panel, _, _, cx| {
-                                if !panel.expanded_tool_groups.insert(group_index) {
-                                    panel.expanded_tool_groups.remove(&group_index);
-                                }
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(palette.muted)
-                            .child(tools.len().to_string()),
-                    )
-                    .into_any_element(),
-            );
-            if expanded {
-                for (index, tool) in tools.into_iter().enumerate() {
+                .enumerate()
+                {
+                    if !catalog.allows_tool(active.as_deref(), tool) {
+                        continue;
+                    }
                     tool_buttons.push(tool_entry(
-                        format!("mde-tool-{group_index}-{index}"),
+                        format!("mde-quick-tool-{index}"),
                         tool,
                         catalog.label(tool).unwrap_or("Tool unavailable").to_owned(),
                         chosen,
@@ -424,27 +385,126 @@ impl Render for MdeLeftPanel {
                     ));
                 }
             }
-        }
-        if searching && matching_groups == 0 {
             tool_buttons.push(
                 div()
-                    .p_2()
-                    .text_xs()
-                    .text_color(palette.muted)
-                    .child("No symbols found.")
+                    .pt_2()
+                    .child(
+                        Button::new(
+                            "mde-toggle-symbol-library",
+                            if searching {
+                                "Search results"
+                            } else {
+                                "Symbol library"
+                            },
+                        )
+                        .disabled(searching)
+                        .start_icon(ui::Icon::new(if self.library_open || searching {
+                            IconName::ChevronDown
+                        } else {
+                            IconName::ChevronRight
+                        }))
+                        .on_click(cx.listener(|panel, _, _, cx| {
+                            panel.library_open = !panel.library_open;
+                            cx.notify();
+                        })),
+                    )
                     .into_any_element(),
             );
-        }
+            let mut matching_groups = 0;
+            for (group_index, (group_name, tools)) in tool_groups.into_iter().enumerate() {
+                if !self.library_open && !searching {
+                    break;
+                }
+                let tools: Vec<_> = tools
+                    .into_iter()
+                    .filter(|tool| {
+                        catalog
+                            .label(*tool)
+                            .is_some_and(|label| tool_matches_query(label, &query))
+                    })
+                    .collect();
+                if tools.is_empty() {
+                    continue;
+                }
+                matching_groups += 1;
+                let expanded = searching || self.expanded_tool_groups.contains(&group_index);
+                tool_buttons.push(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .pr_2()
+                        .child(
+                            Button::new(format!("mde-tool-group-{group_index}"), group_name)
+                                .start_icon(ui::Icon::new(if expanded {
+                                    IconName::ChevronDown
+                                } else {
+                                    IconName::ChevronRight
+                                }))
+                                .on_click(cx.listener(move |panel, _, _, cx| {
+                                    if !panel.expanded_tool_groups.insert(group_index) {
+                                        panel.expanded_tool_groups.remove(&group_index);
+                                    }
+                                    cx.notify();
+                                })),
+                        )
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(palette.muted)
+                                .child(tools.len().to_string()),
+                        )
+                        .into_any_element(),
+                );
+                if expanded {
+                    for (index, tool) in tools.into_iter().enumerate() {
+                        tool_buttons.push(tool_entry(
+                            format!("mde-tool-{group_index}-{index}"),
+                            tool,
+                            catalog.label(tool).unwrap_or("Tool unavailable").to_owned(),
+                            chosen,
+                            &item,
+                            cx,
+                        ));
+                    }
+                }
+            }
+            if searching && matching_groups == 0 {
+                tool_buttons.push(
+                    div()
+                        .p_2()
+                        .text_xs()
+                        .text_color(palette.muted)
+                        .child("No symbols found.")
+                        .into_any_element(),
+                );
+            }
         }
         if let Some(profile) = &profile {
-            tool_buttons.push(div().px_2().py_1().text_xs().text_color(palette.muted)
-                .child(profile.label.clone()).into_any_element());
+            tool_buttons.push(
+                div()
+                    .px_2()
+                    .py_1()
+                    .text_xs()
+                    .text_color(palette.muted)
+                    .child(profile.label.clone())
+                    .into_any_element(),
+            );
             for (index, tool) in profile.unavailable_tools.iter().enumerate() {
-                tool_buttons.push(div().px_2().py_1().child(
-                    Button::new(format!("mde-unavailable-domain-tool-{index}"), format!("{} · unavailable", tool.label))
-                        .disabled(true)
-                        .tooltip(ui::Tooltip::text(tool.reason.clone()))
-                ).into_any_element());
+                tool_buttons.push(
+                    div()
+                        .px_2()
+                        .py_1()
+                        .child(
+                            Button::new(
+                                format!("mde-unavailable-domain-tool-{index}"),
+                                format!("{} · unavailable", tool.label),
+                            )
+                            .disabled(true)
+                            .tooltip(ui::Tooltip::text(tool.reason.clone())),
+                        )
+                        .into_any_element(),
+                );
             }
             if !native_tools {
                 tool_buttons.push(div().p_2().text_xs().text_color(palette.muted)

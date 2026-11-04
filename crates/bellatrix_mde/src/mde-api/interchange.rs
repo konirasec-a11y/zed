@@ -27,9 +27,11 @@ pub fn import_mdj_document(document: &[u8]) -> Result<String, String> {
     let imported = mdj_conversion::import(document)
         .map_err(|error| error_response("MDJ_IMPORT_FAILED", error.to_string()))?;
     let model = model_value(imported.project)?;
-    let diagnostics = imported.diagnostics.into_iter().map(|diagnostic| {
-        json!({"path": diagnostic.path, "message": diagnostic.message})
-    }).collect::<Vec<_>>();
+    let diagnostics = imported
+        .diagnostics
+        .into_iter()
+        .map(|diagnostic| json!({"path": diagnostic.path, "message": diagnostic.message}))
+        .collect::<Vec<_>>();
     Ok(json!({"api_version": API_VERSION, "model": model, "diagnostics": diagnostics}).to_string())
 }
 
@@ -60,11 +62,16 @@ pub fn export_mdj_document(input_json: &str) -> Result<Vec<u8>, String> {
 /// Unsupported edits are rejected; this does not guarantee full StarUML compatibility.
 /// The integration layer must reject unrelated platform sections and guard the snapshot.
 /// Original provenance bytes and the existing inverse-mapping verification are preserved.
-pub fn export_mdj_section(project_id: &str, name: &str, section_json: &str) -> Result<Vec<u8>, String> {
+pub fn export_mdj_section(
+    project_id: &str,
+    name: &str,
+    section_json: &str,
+) -> Result<Vec<u8>, String> {
     let section = crate::mde_api_projection::decode_section(project_id, name, section_json)?;
     let model = section.to_model(project_id, name);
     if model.mdj_provenance.is_none() {
         return Err("MDJ interchange requires an imported StarUML document".into());
     }
-    mdj_conversion::export(&model).map_err(|error| error_response("MDJ_EXPORT_FAILED", error.to_string()))
+    mdj_conversion::export(&model)
+        .map_err(|error| error_response("MDJ_EXPORT_FAILED", error.to_string()))
 }

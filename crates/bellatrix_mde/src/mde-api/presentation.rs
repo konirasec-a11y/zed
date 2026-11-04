@@ -28,24 +28,36 @@ pub fn project_documentation(input_json: &str) -> Result<String, String> {
         .validate()
         .map_err(|error| error_response("GRAPH_INTEGRITY", error.to_string()))?;
     let references = ReferenceIndex::new(Model::from_project(&model));
-    let elements = model.elements.iter().map(|element| {
-        let properties = element.properties.iter()
-            .map(|(key, value)| (key.clone(), value.to_string()))
-            .collect::<std::collections::BTreeMap<_, _>>();
-        json!({
-            "id": element.id,
-            "name": element.name,
-            "label": element.label.as_deref().unwrap_or(&element.name),
-            "kind": element.kind,
-            "description": element.description,
-            "properties": properties,
-            "annotations": element.annotations,
-            "implementations": element.implementations,
+    let elements = model
+        .elements
+        .iter()
+        .map(|element| {
+            let properties = element
+                .properties
+                .iter()
+                .map(|(key, value)| (key.clone(), value.to_string()))
+                .collect::<std::collections::BTreeMap<_, _>>();
+            json!({
+                "id": element.id,
+                "name": element.name,
+                "label": element.label.as_deref().unwrap_or(&element.name),
+                "kind": element.kind,
+                "description": element.description,
+                "properties": properties,
+                "annotations": element.annotations,
+                "implementations": element.implementations,
+            })
         })
-    }).collect::<Vec<_>>();
-    let relations = model.relations.iter().map(|relation| json!({
-        "id": relation.id, "kind": relation.kind, "from": relation.from, "to": relation.to,
-    })).collect::<Vec<_>>();
+        .collect::<Vec<_>>();
+    let relations = model
+        .relations
+        .iter()
+        .map(|relation| {
+            json!({
+                "id": relation.id, "kind": relation.kind, "from": relation.from, "to": relation.to,
+            })
+        })
+        .collect::<Vec<_>>();
     let diagrams = model.diagrams.iter().map(|diagram| {
         let views = diagram.all_views().map(|view| {
             let label = view.label.clone().or_else(|| {
@@ -86,5 +98,6 @@ pub fn project_documentation(input_json: &str) -> Result<String, String> {
     }).collect::<Vec<_>>();
     Ok(json!({"api_version": API_VERSION, "document": {
         "name": model.name, "elements": elements, "relations": relations, "diagrams": diagrams,
-    }}).to_string())
+    }})
+    .to_string())
 }

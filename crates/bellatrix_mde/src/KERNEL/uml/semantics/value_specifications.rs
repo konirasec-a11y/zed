@@ -7,8 +7,8 @@ use super::{
     root::ElementRef,
     schema,
     types::{
-        Integer, MultiplicityError, MultiplicityRange, StandardPrimitiveType, UnlimitedNatural, literal_multiplicity,
-        literal_lower_bound, literal_upper_bound,
+        Integer, MultiplicityError, MultiplicityRange, StandardPrimitiveType, UnlimitedNatural,
+        literal_lower_bound, literal_multiplicity, literal_upper_bound,
     },
 };
 use serde_json::Value;
@@ -90,24 +90,39 @@ impl LiteralValue {
 pub(crate) fn standard_primitive_reference(
     value: &Value,
 ) -> Result<Option<StandardPrimitiveType>, String> {
-    let Some(href) = external_reference_href(value)? else { return Ok(None); };
-    let Some((document_url, fragment)) = href.split_once('#') else { return Ok(None); };
-    let Some(source) = super::metamodel::SOURCES.iter().find(|source|
-        source.url == document_url && matches!(source.document,
-            schema::Document::PrimitiveTypes | schema::Document::PrimitiveTypes20131001))
-    else { return Ok(None); };
+    let Some(href) = external_reference_href(value)? else {
+        return Ok(None);
+    };
+    let Some((document_url, fragment)) = href.split_once('#') else {
+        return Ok(None);
+    };
+    let Some(source) = super::metamodel::SOURCES.iter().find(|source| {
+        source.url == document_url
+            && matches!(
+                source.document,
+                schema::Document::PrimitiveTypes | schema::Document::PrimitiveTypes20131001
+            )
+    }) else {
+        return Ok(None);
+    };
     // Encoded fragments need URI normalization, which this exact-identity
     // adapter deliberately does not implement.
-    if fragment.contains('%') { return Ok(None); }
+    if fragment.contains('%') {
+        return Ok(None);
+    }
     for primitive in StandardPrimitiveType::ALL {
         let identity = schema::XmiId::new(source.document, primitive.name());
         if let Some(classifier) = schema::classifier(identity) {
-            if classifier.id.fragment == fragment && classifier.kind == schema::ClassifierKind::Primitive {
+            if classifier.id.fragment == fragment
+                && classifier.kind == schema::ClassifierKind::Primitive
+            {
                 return Ok(Some(primitive));
             }
         }
     }
-    Err(format!("unknown PrimitiveType identity in pinned document: {href}"))
+    Err(format!(
+        "unknown PrimitiveType identity in pinned document: {href}"
+    ))
 }
 
 fn resolve<'a>(
@@ -126,7 +141,10 @@ pub fn evaluate(
     id: &str,
 ) -> Result<LiteralValue, EvaluationError> {
     evaluate_literal(references, id)?.ok_or_else(|| {
-        EvaluationError::unsupported(id, "nonliteral ValueSpecification evaluation is not implemented")
+        EvaluationError::unsupported(
+            id,
+            "nonliteral ValueSpecification evaluation is not implemented",
+        )
     })
 }
 
@@ -139,23 +157,37 @@ pub fn referenced_instance<'a>(
 ) -> Result<ElementRef<'a>, EvaluationError> {
     let element = resolve(references, id)?;
     if element.metaclass().is_none() {
-        return Err(EvaluationError::unsupported(id, "InstanceValue metaclass is unresolved"));
+        return Err(EvaluationError::unsupported(
+            id,
+            "InstanceValue metaclass is unresolved",
+        ));
     }
     if !element.conforms_to("InstanceValue") {
         return Err(EvaluationError::invalid(id, "an InstanceValue is required"));
     }
     let descriptor = schema::uml_property("InstanceValue", "instance")
         .map_err(|error| EvaluationError::unsupported(id, error.to_string()))?
-        .ok_or_else(|| EvaluationError::unsupported(id, "InstanceValue instance contract is unavailable"))?;
+        .ok_or_else(|| {
+            EvaluationError::unsupported(id, "InstanceValue instance contract is unavailable")
+        })?;
     let value = element.properties().get("instance").unwrap_or(&Value::Null);
     match super::property_contracts::check_value(references, element, descriptor, value) {
-        super::property_contracts::PropertyOutcome::Violation(message) => return Err(EvaluationError::invalid(id, message)),
-        super::property_contracts::PropertyOutcome::Unverified(message) => return Err(EvaluationError::unsupported(id, message)),
+        super::property_contracts::PropertyOutcome::Violation(message) => {
+            return Err(EvaluationError::invalid(id, message));
+        }
+        super::property_contracts::PropertyOutcome::Unverified(message) => {
+            return Err(EvaluationError::unsupported(id, message));
+        }
         super::property_contracts::PropertyOutcome::Satisfied => {}
     }
     let target_id = reference_id(value)
         .map_err(|error| EvaluationError::invalid(id, error))?
-        .ok_or_else(|| EvaluationError::invalid(id, "InstanceValue requires exactly one represented instance"))?;
+        .ok_or_else(|| {
+            EvaluationError::invalid(
+                id,
+                "InstanceValue requires exactly one represented instance",
+            )
+        })?;
     resolve(references, target_id)
 }
 
@@ -182,7 +214,11 @@ fn evaluate_literal(
     }
     if !matches!(
         metaclass,
-        "LiteralInteger" | "LiteralUnlimitedNatural" | "LiteralReal" | "LiteralBoolean" | "LiteralString"
+        "LiteralInteger"
+            | "LiteralUnlimitedNatural"
+            | "LiteralReal"
+            | "LiteralBoolean"
+            | "LiteralString"
     ) {
         return Ok(None);
     }
@@ -234,10 +270,7 @@ fn evaluate_literal(
 }
 
 /// A malformed literal is an error, not an expression whose computation is unsupported.
-pub fn is_computable(
-    references: &ReferenceIndex<'_>,
-    id: &str,
-) -> Result<bool, EvaluationError> {
+pub fn is_computable(references: &ReferenceIndex<'_>, id: &str) -> Result<bool, EvaluationError> {
     Ok(evaluate_literal(references, id)?.is_some())
 }
 
@@ -294,11 +327,11 @@ pub fn string_value(
     })
 }
 
-pub fn is_null(
-    references: &ReferenceIndex<'_>,
-    id: &str,
-) -> Result<bool, EvaluationError> {
-    Ok(matches!(evaluate_literal(references, id)?, Some(LiteralValue::Null)))
+pub fn is_null(references: &ReferenceIndex<'_>, id: &str) -> Result<bool, EvaluationError> {
+    Ok(matches!(
+        evaluate_literal(references, id)?,
+        Some(LiteralValue::Null)
+    ))
 }
 
 pub fn has_bound_references(element: ElementRef<'_>) -> bool {
@@ -337,7 +370,8 @@ fn bound<'a>(
         return Ok(None);
     };
     if external_reference_href(value)
-        .map_err(|error| EvaluationError::invalid(element.id(), error))?.is_some()
+        .map_err(|error| EvaluationError::invalid(element.id(), error))?
+        .is_some()
     {
         return Err(EvaluationError::unsupported(
             element.id(),
@@ -367,8 +401,12 @@ fn bound<'a>(
     }
     match contract {
         super::property_contracts::PropertyOutcome::Satisfied => Ok(Some(target)),
-        super::property_contracts::PropertyOutcome::Violation(message) => Err(EvaluationError::invalid(element.id(), message)),
-        super::property_contracts::PropertyOutcome::Unverified(message) => Err(EvaluationError::unsupported(element.id(), message)),
+        super::property_contracts::PropertyOutcome::Violation(message) => {
+            Err(EvaluationError::invalid(element.id(), message))
+        }
+        super::property_contracts::PropertyOutcome::Unverified(message) => {
+            Err(EvaluationError::unsupported(element.id(), message))
+        }
     }
 }
 
@@ -412,7 +450,11 @@ fn evaluate_upper_bound(
 }
 
 fn default_lower_bound(element: ElementRef<'_>) -> Integer {
-    if element.conforms_to("ExtensionEnd") { 0.into() } else { 1.into() }
+    if element.conforms_to("ExtensionEnd") {
+        0.into()
+    } else {
+        1.into()
+    }
 }
 
 /// UML lowerBound() does not depend on whether upperValue can be evaluated.
@@ -421,21 +463,28 @@ pub fn lower_bound(
     element: ElementRef<'_>,
 ) -> Result<Integer, EvaluationError> {
     if !element.conforms_to("MultiplicityElement") {
-        return Err(EvaluationError::invalid(element.id(), "a MultiplicityElement is required"));
+        return Err(EvaluationError::invalid(
+            element.id(),
+            "a MultiplicityElement is required",
+        ));
     }
     if has_bound_references(element) {
-        return bound(references, element, "lowerValue")?.map_or(Ok(default_lower_bound(element)), |target| {
-            match evaluate(references, target.id())? {
-                LiteralValue::Integer(value) => Ok(value),
-                _ if element.conforms_to("ExtensionEnd") => Err(EvaluationError::invalid(
-                    target.id(), "ExtensionEnd::lowerBound requires an Integer value",
-                )),
-                // lowerBound's fallback is distinct from lower_is_integer.
-                // A computable value with no Integer projection yields 1;
-                // multiplicity() still diagnoses the violated invariant.
-                _ => Ok(1.into()),
-            }
-        });
+        return bound(references, element, "lowerValue")?.map_or(
+            Ok(default_lower_bound(element)),
+            |target| {
+                match evaluate(references, target.id())? {
+                    LiteralValue::Integer(value) => Ok(value),
+                    _ if element.conforms_to("ExtensionEnd") => Err(EvaluationError::invalid(
+                        target.id(),
+                        "ExtensionEnd::lowerBound requires an Integer value",
+                    )),
+                    // lowerBound's fallback is distinct from lower_is_integer.
+                    // A computable value with no Integer projection yields 1;
+                    // multiplicity() still diagnoses the violated invariant.
+                    _ => Ok(1.into()),
+                }
+            },
+        );
     }
     require_assigned_values(references, element)?;
     if !element.properties().contains_key("multiplicity") {
@@ -492,30 +541,41 @@ pub fn multiplicity(
         return literal_multiplicity(element.properties())
             .map_err(|error| classify_multiplicity_error(element.id(), error));
     }
-    let lower = (|| bound(references, element, "lowerValue")?
-        .map(|target| match evaluate(references, target.id())? {
-            LiteralValue::Integer(value) => Ok(value),
-            _ => Err(EvaluationError::invalid(
-                target.id(),
-                "MultiplicityElement::lower_is_integer requires a non-null integerValue()",
-            )),
-        })
-        .transpose())();
+    let lower = (|| {
+        bound(references, element, "lowerValue")?
+            .map(|target| match evaluate(references, target.id())? {
+                LiteralValue::Integer(value) => Ok(value),
+                _ => Err(EvaluationError::invalid(
+                    target.id(),
+                    "MultiplicityElement::lower_is_integer requires a non-null integerValue()",
+                )),
+            })
+            .transpose()
+    })();
     let lower = lower.and_then(|lower| {
         if lower.as_ref().is_some_and(Integer::is_negative) {
-            Err(EvaluationError::invalid(element.id(), "lower bound cannot be negative"))
-        } else { Ok(lower) }
+            Err(EvaluationError::invalid(
+                element.id(),
+                "lower bound cannot be negative",
+            ))
+        } else {
+            Ok(lower)
+        }
     });
     // Evaluate both bounds before selecting Unknown; an invalid opposite bound
     // remains a violation even when its neighbor is an opaque expression.
     let upper = evaluate_upper_bound(references, element).map(Some);
     let (lower, upper) = match (lower, upper) {
-        (Err(error @ EvaluationError::Invalid { .. }), _) | (_, Err(error @ EvaluationError::Invalid { .. })) => return Err(error),
+        (Err(error @ EvaluationError::Invalid { .. }), _)
+        | (_, Err(error @ EvaluationError::Invalid { .. })) => return Err(error),
         (Err(error), _) | (_, Err(error)) => return Err(error),
         (Ok(lower), Ok(upper)) => (lower, upper),
     };
-    MultiplicityRange::from_bounds(Some(lower.unwrap_or_else(|| default_lower_bound(element))), upper)
-        .map_err(|error| EvaluationError::invalid(element.id(), error.to_string()))
+    MultiplicityRange::from_bounds(
+        Some(lower.unwrap_or_else(|| default_lower_bound(element))),
+        upper,
+    )
+    .map_err(|error| EvaluationError::invalid(element.id(), error.to_string()))
 }
 
 // Both prose constraints apply only to nonliteral bounds. Their consequents
@@ -553,11 +613,17 @@ fn string_expression_operands(
     references: &ReferenceIndex<'_>,
     expression: ElementRef<'_>,
 ) -> Result<bool, super::classifiers::QueryError> {
-    use super::{classifiers::{self, QueryError}, property_contracts::{self, PropertyOutcome}};
+    use super::{
+        classifiers::{self, QueryError},
+        property_contracts::{self, PropertyOutcome},
+    };
     let mut checks = Vec::new();
     let literal_string = |operand: ElementRef<'_>| {
         if operand.metaclass().is_none() {
-            Err(QueryError::unsupported(operand.id(), "operand metaclass is unresolved"))
+            Err(QueryError::unsupported(
+                operand.id(),
+                "operand metaclass is unresolved",
+            ))
         } else {
             Ok(operand.conforms_to("LiteralString"))
         }
@@ -565,12 +631,20 @@ fn string_expression_operands(
     if let Some(value) = expression.properties().get("operand") {
         let descriptor = schema::uml_property("StringExpression", "operand")
             .map_err(|error| QueryError::unsupported(expression.id(), error.to_string()))?
-            .ok_or_else(|| QueryError::unsupported(expression.id(), "missing operand property contract"))?;
-        checks.push(match property_contracts::check_value(references, expression, descriptor, value) {
-            PropertyOutcome::Satisfied => Ok(true),
-            PropertyOutcome::Violation(message) => Err(QueryError::invalid(expression.id(), message)),
-            PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(expression.id(), message)),
-        });
+            .ok_or_else(|| {
+                QueryError::unsupported(expression.id(), "missing operand property contract")
+            })?;
+        checks.push(
+            match property_contracts::check_value(references, expression, descriptor, value) {
+                PropertyOutcome::Satisfied => Ok(true),
+                PropertyOutcome::Violation(message) => {
+                    Err(QueryError::invalid(expression.id(), message))
+                }
+                PropertyOutcome::Unverified(message) => {
+                    Err(QueryError::unsupported(expression.id(), message))
+                }
+            },
+        );
         // A known non-string operand disproves forAll even beside unresolved
         // references. The complete contract check above still retains Invalid.
         if let Some(values) = value.as_array() {
@@ -583,7 +657,8 @@ fn string_expression_operands(
             }
         }
     }
-    for child in references.explicit_owned_elements(expression.id())
+    for child in references
+        .explicit_owned_elements(expression.id())
         .map_err(|error| QueryError::invalid(expression.id(), error))?
     {
         // StringExpression children can also be subExpression or nameExpression;
@@ -601,24 +676,55 @@ fn string_expression_subexpressions(
     references: &ReferenceIndex<'_>,
     expression: ElementRef<'_>,
 ) -> Result<bool, super::classifiers::QueryError> {
-    use super::{classifiers::{self, QueryError}, feature_compatibility::{accept_any, require_all}, property_contracts::{self, PropertyOutcome}};
-    let children = references.explicit_owned_elements(expression.id())
+    use super::{
+        classifiers::{self, QueryError},
+        feature_compatibility::{accept_any, require_all},
+        property_contracts::{self, PropertyOutcome},
+    };
+    let children = references
+        .explicit_owned_elements(expression.id())
         .map_err(|error| QueryError::invalid(expression.id(), error))?;
     let mut contracts = Vec::new();
     let mut presences = [Ok(false), Ok(false)];
-    for (position, (name, role)) in [("operand", "Expression-operand"), ("subExpression", "StringExpression-subExpression")].into_iter().enumerate() {
+    for (position, (name, role)) in [
+        ("operand", "Expression-operand"),
+        ("subExpression", "StringExpression-subExpression"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
         let mut presence = Vec::new();
         if let Some(value) = expression.properties().get(name) {
             let descriptor = schema::uml_property("StringExpression", name)
                 .map_err(|error| QueryError::unsupported(expression.id(), error.to_string()))?
-                .ok_or_else(|| QueryError::unsupported(expression.id(), "missing StringExpression collection contract"))?;
-            contracts.push(match property_contracts::check_value(references, expression, descriptor, value) {
-                PropertyOutcome::Satisfied => Ok(true),
-                PropertyOutcome::Violation(message) => Err(QueryError::invalid(expression.id(), message)),
-                PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(expression.id(), message)),
-            });
-            presence.push(value.as_array().map(|values| !values.is_empty())
-                .ok_or_else(|| QueryError::invalid(expression.id(), format!("{name} requires a collection"))));
+                .ok_or_else(|| {
+                    QueryError::unsupported(
+                        expression.id(),
+                        "missing StringExpression collection contract",
+                    )
+                })?;
+            contracts.push(
+                match property_contracts::check_value(references, expression, descriptor, value) {
+                    PropertyOutcome::Satisfied => Ok(true),
+                    PropertyOutcome::Violation(message) => {
+                        Err(QueryError::invalid(expression.id(), message))
+                    }
+                    PropertyOutcome::Unverified(message) => {
+                        Err(QueryError::unsupported(expression.id(), message))
+                    }
+                },
+            );
+            presence.push(
+                value
+                    .as_array()
+                    .map(|values| !values.is_empty())
+                    .ok_or_else(|| {
+                        QueryError::invalid(
+                            expression.id(),
+                            format!("{name} requires a collection"),
+                        )
+                    }),
+            );
         }
         for child in &children {
             let membership = classifiers::contributes_to_owned_union(expression, *child, role);
@@ -637,7 +743,8 @@ fn string_expression_subexpressions(
     let [operands, subexpressions] = presences;
     contracts.push(match (operands, subexpressions) {
         (Ok(operands), Ok(subexpressions)) => Ok(operands != subexpressions),
-        (Err(error @ QueryError::Invalid { .. }), _) | (_, Err(error @ QueryError::Invalid { .. })) => Err(error),
+        (Err(error @ QueryError::Invalid { .. }), _)
+        | (_, Err(error @ QueryError::Invalid { .. })) => Err(error),
         (Err(error), _) | (_, Err(error)) => Err(error),
     });
     require_all(contracts)
@@ -648,20 +755,31 @@ fn constrained_element_cardinality(
     constraint: ElementRef<'_>,
     maximum: usize,
 ) -> Result<bool, super::classifiers::QueryError> {
-    use super::{classifiers::QueryError, property_contracts::{self, PropertyOutcome}};
+    use super::{
+        classifiers::QueryError,
+        property_contracts::{self, PropertyOutcome},
+    };
     let Some(value) = constraint.properties().get("constrainedElement") else {
         return Ok(false);
     };
     let descriptor = schema::uml_property("Constraint", "constrainedElement")
         .map_err(|error| QueryError::unsupported(constraint.id(), error.to_string()))?
-        .ok_or_else(|| QueryError::unsupported(constraint.id(), "missing constrainedElement contract"))?;
-    let contract = match property_contracts::check_value(references, constraint, descriptor, value) {
+        .ok_or_else(|| {
+            QueryError::unsupported(constraint.id(), "missing constrainedElement contract")
+        })?;
+    let contract = match property_contracts::check_value(references, constraint, descriptor, value)
+    {
         PropertyOutcome::Satisfied => Ok(true),
         PropertyOutcome::Violation(message) => Err(QueryError::invalid(constraint.id(), message)),
-        PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(constraint.id(), message)),
+        PropertyOutcome::Unverified(message) => {
+            Err(QueryError::unsupported(constraint.id(), message))
+        }
     };
-    let count = value.as_array()
-        .ok_or_else(|| QueryError::invalid(constraint.id(), "constrainedElement requires a collection"))?
+    let count = value
+        .as_array()
+        .ok_or_else(|| {
+            QueryError::invalid(constraint.id(), "constrainedElement requires a collection")
+        })?
         .len();
     // An external identity cannot repair an already disproven cardinality;
     // malformed or duplicate references still invalidate the collection itself.
@@ -674,34 +792,56 @@ fn duration_first_event_multiplicity(
     metaclass: &str,
     events_property: &str,
 ) -> Result<bool, super::classifiers::QueryError> {
-    use super::{classifiers::QueryError, property_contracts::{self, PropertyOutcome}};
+    use super::{
+        classifiers::QueryError,
+        property_contracts::{self, PropertyOutcome},
+    };
     let empty = Value::Array(Vec::new());
     let mut checks = Vec::new();
     let mut lengths = [None; 2];
     for (position, name) in [events_property, "firstEvent"].into_iter().enumerate() {
         let descriptor = schema::uml_property(metaclass, name)
             .map_err(|error| QueryError::unsupported(element.id(), error.to_string()))?
-            .ok_or_else(|| QueryError::unsupported(element.id(), "missing duration property contract"))?;
+            .ok_or_else(|| {
+                QueryError::unsupported(element.id(), "missing duration property contract")
+            })?;
         if !element.properties().contains_key(name) && descriptor.lower != "0" {
-            checks.push(Err(QueryError::unsupported(element.id(), format!("required {name} collection is not materialized"))));
+            checks.push(Err(QueryError::unsupported(
+                element.id(),
+                format!("required {name} collection is not materialized"),
+            )));
             continue;
         }
         let value = element.properties().get(name).unwrap_or(&empty);
-        checks.push(match property_contracts::check_value(references, element, descriptor, value) {
-            PropertyOutcome::Satisfied => Ok(true),
-            PropertyOutcome::Violation(message) => Err(QueryError::invalid(element.id(), message)),
-            PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(element.id(), message)),
-        });
-        lengths[position] = Some(value.as_array()
-            .ok_or_else(|| QueryError::invalid(element.id(), format!("{name} requires a collection")))?
-            .len());
+        checks.push(
+            match property_contracts::check_value(references, element, descriptor, value) {
+                PropertyOutcome::Satisfied => Ok(true),
+                PropertyOutcome::Violation(message) => {
+                    Err(QueryError::invalid(element.id(), message))
+                }
+                PropertyOutcome::Unverified(message) => {
+                    Err(QueryError::unsupported(element.id(), message))
+                }
+            },
+        );
+        lengths[position] = Some(
+            value
+                .as_array()
+                .ok_or_else(|| {
+                    QueryError::invalid(element.id(), format!("{name} requires a collection"))
+                })?
+                .len(),
+        );
     }
     checks.push(match (lengths[0], lengths[1]) {
         (Some(events), Some(first_events)) => Ok(first_events == if events == 2 { 2 } else { 0 }),
         // Both branches of the normative conditional exclude any other size,
         // even when a required event collection has not been materialized.
         (None, Some(first_events)) if first_events != 0 && first_events != 2 => Ok(false),
-        _ => Err(QueryError::unsupported(element.id(), "duration collection cardinality is unresolved")),
+        _ => Err(QueryError::unsupported(
+            element.id(),
+            "duration collection cardinality is unresolved",
+        )),
     });
     super::feature_compatibility::require_all(checks)
 }
@@ -713,15 +853,28 @@ fn temporal_expression_observation(
     expr_role: &'static str,
     observation_type: &str,
 ) -> Result<bool, super::classifiers::QueryError> {
-    use super::{classifiers::{self, QueryError}, feature_compatibility::{accept_any, require_all}, property_contracts::{self, PropertyOutcome}};
+    use super::{
+        classifiers::{self, QueryError},
+        feature_compatibility::{accept_any, require_all},
+        property_contracts::{self, PropertyOutcome},
+    };
     let contract = |name: &str, value: &Value| -> Result<bool, QueryError> {
         let descriptor = schema::uml_property(metaclass, name)
             .map_err(|error| QueryError::unsupported(expression.id(), error.to_string()))?
-            .ok_or_else(|| QueryError::unsupported(expression.id(), "missing temporal expression property contract"))?;
+            .ok_or_else(|| {
+                QueryError::unsupported(
+                    expression.id(),
+                    "missing temporal expression property contract",
+                )
+            })?;
         match property_contracts::check_value(references, expression, descriptor, value) {
             PropertyOutcome::Satisfied => Ok(true),
-            PropertyOutcome::Violation(message) => Err(QueryError::invalid(expression.id(), message)),
-            PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(expression.id(), message)),
+            PropertyOutcome::Violation(message) => {
+                Err(QueryError::invalid(expression.id(), message))
+            }
+            PropertyOutcome::Unverified(message) => {
+                Err(QueryError::unsupported(expression.id(), message))
+            }
         }
     };
     let mut expr_contract = Ok(true);
@@ -729,24 +882,35 @@ fn temporal_expression_observation(
     if let Some(value) = expression.properties().get("expr") {
         expr_contract = contract("expr", value);
         presence.push(match external_reference_href(value) {
-            Ok(Some(_)) => Err(QueryError::unsupported(expression.id(), "expr reference has no loaded resolver")),
-            Ok(None) => reference_id(value).map(|id| id.is_some())
+            Ok(Some(_)) => Err(QueryError::unsupported(
+                expression.id(),
+                "expr reference has no loaded resolver",
+            )),
+            Ok(None) => reference_id(value)
+                .map(|id| id.is_some())
                 .map_err(|error| QueryError::invalid(expression.id(), error)),
             Err(error) => Err(QueryError::invalid(expression.id(), error)),
         });
     }
     let mut owned_exprs = 0;
-    for child in references.explicit_owned_elements(expression.id())
+    for child in references
+        .explicit_owned_elements(expression.id())
         .map_err(|error| QueryError::invalid(expression.id(), error))?
     {
         match classifiers::contributes_to_owned_union(expression, child, expr_role) {
-            Ok(true) => { owned_exprs += 1; presence.push(Ok(true)); }
+            Ok(true) => {
+                owned_exprs += 1;
+                presence.push(Ok(true));
+            }
             Ok(false) => {}
             Err(error) => presence.push(Err(error)),
         }
     }
     if owned_exprs > 1 {
-        presence.push(Err(QueryError::invalid(expression.id(), "expr permits at most one owned ValueSpecification")));
+        presence.push(Err(QueryError::invalid(
+            expression.id(),
+            "expr permits at most one owned ValueSpecification",
+        )));
     }
     let expr_present = require_all([expr_contract, accept_any(presence)]);
 
@@ -759,8 +923,13 @@ fn temporal_expression_observation(
             if let Ok(Some(id)) = reference_id(value) {
                 if let Ok(observation) = references.element(id) {
                     observation_checks.push(if observation.metaclass().is_none() {
-                        Err(QueryError::unsupported(id, "observation metaclass is unresolved"))
-                    } else { Ok(observation.conforms_to(observation_type)) });
+                        Err(QueryError::unsupported(
+                            id,
+                            "observation metaclass is unresolved",
+                        ))
+                    } else {
+                        Ok(observation.conforms_to(observation_type))
+                    });
                 }
             }
         }
@@ -799,100 +968,259 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<crate::StructuralDiagnos
             })
         })
         .collect::<Vec<_>>();
-    for value in references.model().elements().filter(|element| element.conforms_to("InstanceValue")) {
+    for value in references
+        .model()
+        .elements()
+        .filter(|element| element.conforms_to("InstanceValue"))
+    {
         if let Err(error) = referenced_instance(references, value.id()) {
             issues.push(crate::StructuralDiagnostic {
-                severity: if error.is_unsupported() { crate::StructuralSeverity::Warning } else { crate::StructuralSeverity::Error },
-                code: if error.is_unsupported() { "MDE_INSTANCE_VALUE_REFERENCE_UNVERIFIED" } else { "UML_INSTANCE_VALUE_REFERENCE" },
+                severity: if error.is_unsupported() {
+                    crate::StructuralSeverity::Warning
+                } else {
+                    crate::StructuralSeverity::Error
+                },
+                code: if error.is_unsupported() {
+                    "MDE_INSTANCE_VALUE_REFERENCE_UNVERIFIED"
+                } else {
+                    "UML_INSTANCE_VALUE_REFERENCE"
+                },
                 subject_id: value.id().into(),
                 message: error.to_string(),
             });
         }
     }
-    for element in references.model().elements().filter(|element| element.conforms_to("MultiplicityElement")) {
+    for element in references
+        .model()
+        .elements()
+        .filter(|element| element.conforms_to("MultiplicityElement"))
+    {
         if let Err(error) = bound_expression_guarantees(references, element) {
             for (rule, invalid_code, unknown_code) in [
-                ("value_specification_constant", "MDE_MULTIPLICITY_CONSTANT_INVALID", "MDE_MULTIPLICITY_CONSTANT_UNVERIFIED"),
-                ("value_specification_no_side_effects", "MDE_MULTIPLICITY_NO_SIDE_EFFECTS_INVALID", "MDE_MULTIPLICITY_NO_SIDE_EFFECTS_UNVERIFIED"),
+                (
+                    "value_specification_constant",
+                    "MDE_MULTIPLICITY_CONSTANT_INVALID",
+                    "MDE_MULTIPLICITY_CONSTANT_UNVERIFIED",
+                ),
+                (
+                    "value_specification_no_side_effects",
+                    "MDE_MULTIPLICITY_NO_SIDE_EFFECTS_INVALID",
+                    "MDE_MULTIPLICITY_NO_SIDE_EFFECTS_UNVERIFIED",
+                ),
             ] {
                 issues.push(crate::StructuralDiagnostic {
-                    severity: if error.is_unsupported() { crate::StructuralSeverity::Warning } else { crate::StructuralSeverity::Error },
-                    code: if error.is_unsupported() { unknown_code } else { invalid_code },
+                    severity: if error.is_unsupported() {
+                        crate::StructuralSeverity::Warning
+                    } else {
+                        crate::StructuralSeverity::Error
+                    },
+                    code: if error.is_unsupported() {
+                        unknown_code
+                    } else {
+                        invalid_code
+                    },
                     subject_id: element.id().into(),
                     message: format!("MultiplicityElement-{rule}: {error}"),
                 });
             }
         }
     }
-    for expression in references.model().elements().filter(|element| element.conforms_to("StringExpression")) {
+    for expression in references
+        .model()
+        .elements()
+        .filter(|element| element.conforms_to("StringExpression"))
+    {
         let (severity, code, message) = match string_expression_operands(references, expression) {
             Ok(true) => continue,
-            Ok(false) => (crate::StructuralSeverity::Error, "UML_STRING_EXPRESSION_OPERANDS", "all operands must be LiteralStrings".to_owned()),
-            Err(super::classifiers::QueryError::Invalid { message, .. }) =>
-                (crate::StructuralSeverity::Error, "UML_STRING_EXPRESSION_OPERANDS", message),
-            Err(super::classifiers::QueryError::Unsupported { message, .. }) =>
-                (crate::StructuralSeverity::Warning, "MDE_STRING_EXPRESSION_OPERANDS_UNVERIFIED", message),
+            Ok(false) => (
+                crate::StructuralSeverity::Error,
+                "UML_STRING_EXPRESSION_OPERANDS",
+                "all operands must be LiteralStrings".to_owned(),
+            ),
+            Err(super::classifiers::QueryError::Invalid { message, .. }) => (
+                crate::StructuralSeverity::Error,
+                "UML_STRING_EXPRESSION_OPERANDS",
+                message,
+            ),
+            Err(super::classifiers::QueryError::Unsupported { message, .. }) => (
+                crate::StructuralSeverity::Warning,
+                "MDE_STRING_EXPRESSION_OPERANDS_UNVERIFIED",
+                message,
+            ),
         };
-        issues.push(crate::StructuralDiagnostic { severity, code, subject_id: expression.id().into(), message: format!("StringExpression-operands: {message}") });
+        issues.push(crate::StructuralDiagnostic {
+            severity,
+            code,
+            subject_id: expression.id().into(),
+            message: format!("StringExpression-operands: {message}"),
+        });
     }
     for constraint in references.model().elements() {
-        let (maximum, rule, error_code, unknown_code) = if constraint.conforms_to("TimeConstraint") {
-            (1, "TimeConstraint-has_one_constrainedElement", "UML_TIME_CONSTRAINT_CONSTRAINED_ELEMENTS", "MDE_TIME_CONSTRAINT_CONSTRAINED_ELEMENTS_UNVERIFIED")
+        let (maximum, rule, error_code, unknown_code) = if constraint.conforms_to("TimeConstraint")
+        {
+            (
+                1,
+                "TimeConstraint-has_one_constrainedElement",
+                "UML_TIME_CONSTRAINT_CONSTRAINED_ELEMENTS",
+                "MDE_TIME_CONSTRAINT_CONSTRAINED_ELEMENTS_UNVERIFIED",
+            )
         } else if constraint.conforms_to("DurationConstraint") {
-            (2, "DurationConstraint-has_one_or_two_constrainedElements", "UML_DURATION_CONSTRAINT_CONSTRAINED_ELEMENTS", "MDE_DURATION_CONSTRAINT_CONSTRAINED_ELEMENTS_UNVERIFIED")
-        } else { continue; };
-        let (severity, code, message) = match constrained_element_cardinality(references, constraint, maximum) {
-            Ok(true) => continue,
-            Ok(false) => (crate::StructuralSeverity::Error, error_code, format!("requires 1..={maximum} constrainedElements")),
-            Err(super::classifiers::QueryError::Invalid { message, .. }) =>
-                (crate::StructuralSeverity::Error, error_code, message),
-            Err(super::classifiers::QueryError::Unsupported { message, .. }) =>
-                (crate::StructuralSeverity::Warning, unknown_code, message),
+            (
+                2,
+                "DurationConstraint-has_one_or_two_constrainedElements",
+                "UML_DURATION_CONSTRAINT_CONSTRAINED_ELEMENTS",
+                "MDE_DURATION_CONSTRAINT_CONSTRAINED_ELEMENTS_UNVERIFIED",
+            )
+        } else {
+            continue;
         };
-        issues.push(crate::StructuralDiagnostic { severity, code, subject_id: constraint.id().into(), message: format!("{rule}: {message}") });
+        let (severity, code, message) =
+            match constrained_element_cardinality(references, constraint, maximum) {
+                Ok(true) => continue,
+                Ok(false) => (
+                    crate::StructuralSeverity::Error,
+                    error_code,
+                    format!("requires 1..={maximum} constrainedElements"),
+                ),
+                Err(super::classifiers::QueryError::Invalid { message, .. }) => {
+                    (crate::StructuralSeverity::Error, error_code, message)
+                }
+                Err(super::classifiers::QueryError::Unsupported { message, .. }) => {
+                    (crate::StructuralSeverity::Warning, unknown_code, message)
+                }
+            };
+        issues.push(crate::StructuralDiagnostic {
+            severity,
+            code,
+            subject_id: constraint.id().into(),
+            message: format!("{rule}: {message}"),
+        });
     }
     for element in references.model().elements() {
-        let (metaclass, events_property, error_code, unknown_code) = if element.conforms_to("DurationConstraint") {
-            ("DurationConstraint", "constrainedElement", "UML_DURATION_CONSTRAINT_FIRST_EVENT", "MDE_DURATION_CONSTRAINT_FIRST_EVENT_UNVERIFIED")
-        } else if element.conforms_to("DurationObservation") {
-            ("DurationObservation", "event", "UML_DURATION_OBSERVATION_FIRST_EVENT", "MDE_DURATION_OBSERVATION_FIRST_EVENT_UNVERIFIED")
-        } else { continue; };
-        let (severity, code, message) = match duration_first_event_multiplicity(references, element, metaclass, events_property) {
+        let (metaclass, events_property, error_code, unknown_code) =
+            if element.conforms_to("DurationConstraint") {
+                (
+                    "DurationConstraint",
+                    "constrainedElement",
+                    "UML_DURATION_CONSTRAINT_FIRST_EVENT",
+                    "MDE_DURATION_CONSTRAINT_FIRST_EVENT_UNVERIFIED",
+                )
+            } else if element.conforms_to("DurationObservation") {
+                (
+                    "DurationObservation",
+                    "event",
+                    "UML_DURATION_OBSERVATION_FIRST_EVENT",
+                    "MDE_DURATION_OBSERVATION_FIRST_EVENT_UNVERIFIED",
+                )
+            } else {
+                continue;
+            };
+        let (severity, code, message) = match duration_first_event_multiplicity(
+            references,
+            element,
+            metaclass,
+            events_property,
+        ) {
             Ok(true) => continue,
-            Ok(false) => (crate::StructuralSeverity::Error, error_code, format!("firstEvent must contain two values exactly when {events_property} has two elements, and no values otherwise")),
-            Err(super::classifiers::QueryError::Invalid { message, .. }) =>
-                (crate::StructuralSeverity::Error, error_code, message),
-            Err(super::classifiers::QueryError::Unsupported { message, .. }) =>
-                (crate::StructuralSeverity::Warning, unknown_code, message),
+            Ok(false) => (
+                crate::StructuralSeverity::Error,
+                error_code,
+                format!(
+                    "firstEvent must contain two values exactly when {events_property} has two elements, and no values otherwise"
+                ),
+            ),
+            Err(super::classifiers::QueryError::Invalid { message, .. }) => {
+                (crate::StructuralSeverity::Error, error_code, message)
+            }
+            Err(super::classifiers::QueryError::Unsupported { message, .. }) => {
+                (crate::StructuralSeverity::Warning, unknown_code, message)
+            }
         };
-        issues.push(crate::StructuralDiagnostic { severity, code, subject_id: element.id().into(), message: format!("{metaclass}-first_event_multiplicity: {message}") });
+        issues.push(crate::StructuralDiagnostic {
+            severity,
+            code,
+            subject_id: element.id().into(),
+            message: format!("{metaclass}-first_event_multiplicity: {message}"),
+        });
     }
     for expression in references.model().elements() {
-        let (metaclass, expr_role, observation_type, error_code, unknown_code) = if expression.conforms_to("Duration") {
-            ("Duration", "Duration-expr", "DurationObservation", "UML_DURATION_OBSERVATION_REQUIRED", "MDE_DURATION_OBSERVATION_REQUIRED_UNVERIFIED")
-        } else if expression.conforms_to("TimeExpression") {
-            ("TimeExpression", "TimeExpression-expr", "TimeObservation", "UML_TIME_EXPRESSION_OBSERVATION_REQUIRED", "MDE_TIME_EXPRESSION_OBSERVATION_REQUIRED_UNVERIFIED")
-        } else { continue; };
-        let (severity, code, message) = match temporal_expression_observation(references, expression, metaclass, expr_role, observation_type) {
+        let (metaclass, expr_role, observation_type, error_code, unknown_code) =
+            if expression.conforms_to("Duration") {
+                (
+                    "Duration",
+                    "Duration-expr",
+                    "DurationObservation",
+                    "UML_DURATION_OBSERVATION_REQUIRED",
+                    "MDE_DURATION_OBSERVATION_REQUIRED_UNVERIFIED",
+                )
+            } else if expression.conforms_to("TimeExpression") {
+                (
+                    "TimeExpression",
+                    "TimeExpression-expr",
+                    "TimeObservation",
+                    "UML_TIME_EXPRESSION_OBSERVATION_REQUIRED",
+                    "MDE_TIME_EXPRESSION_OBSERVATION_REQUIRED_UNVERIFIED",
+                )
+            } else {
+                continue;
+            };
+        let (severity, code, message) = match temporal_expression_observation(
+            references,
+            expression,
+            metaclass,
+            expr_role,
+            observation_type,
+        ) {
             Ok(true) => continue,
-            Ok(false) => (crate::StructuralSeverity::Error, error_code, format!("without expr, exactly one {observation_type} is required")),
-            Err(super::classifiers::QueryError::Invalid { message, .. }) =>
-                (crate::StructuralSeverity::Error, error_code, message),
-            Err(super::classifiers::QueryError::Unsupported { message, .. }) =>
-                (crate::StructuralSeverity::Warning, unknown_code, message),
+            Ok(false) => (
+                crate::StructuralSeverity::Error,
+                error_code,
+                format!("without expr, exactly one {observation_type} is required"),
+            ),
+            Err(super::classifiers::QueryError::Invalid { message, .. }) => {
+                (crate::StructuralSeverity::Error, error_code, message)
+            }
+            Err(super::classifiers::QueryError::Unsupported { message, .. }) => {
+                (crate::StructuralSeverity::Warning, unknown_code, message)
+            }
         };
-        issues.push(crate::StructuralDiagnostic { severity, code, subject_id: expression.id().into(), message: format!("{metaclass}-no_expr_requires_observation: {message}") });
+        issues.push(crate::StructuralDiagnostic {
+            severity,
+            code,
+            subject_id: expression.id().into(),
+            message: format!("{metaclass}-no_expr_requires_observation: {message}"),
+        });
     }
-    for expression in references.model().elements().filter(|element| element.conforms_to("StringExpression")) {
-        let (severity, code, message) = match string_expression_subexpressions(references, expression) {
-            Ok(true) => continue,
-            Ok(false) => (crate::StructuralSeverity::Error, "UML_STRING_EXPRESSION_SUBEXPRESSIONS", "exactly one of operand and subExpression must be nonempty".to_owned()),
-            Err(super::classifiers::QueryError::Invalid { message, .. }) =>
-                (crate::StructuralSeverity::Error, "UML_STRING_EXPRESSION_SUBEXPRESSIONS", message),
-            Err(super::classifiers::QueryError::Unsupported { message, .. }) =>
-                (crate::StructuralSeverity::Warning, "MDE_STRING_EXPRESSION_SUBEXPRESSIONS_UNVERIFIED", message),
-        };
-        issues.push(crate::StructuralDiagnostic { severity, code, subject_id: expression.id().into(), message: format!("StringExpression-subexpressions: {message}") });
+    for expression in references
+        .model()
+        .elements()
+        .filter(|element| element.conforms_to("StringExpression"))
+    {
+        let (severity, code, message) =
+            match string_expression_subexpressions(references, expression) {
+                Ok(true) => continue,
+                Ok(false) => (
+                    crate::StructuralSeverity::Error,
+                    "UML_STRING_EXPRESSION_SUBEXPRESSIONS",
+                    "exactly one of operand and subExpression must be nonempty".to_owned(),
+                ),
+                Err(super::classifiers::QueryError::Invalid { message, .. }) => (
+                    crate::StructuralSeverity::Error,
+                    "UML_STRING_EXPRESSION_SUBEXPRESSIONS",
+                    message,
+                ),
+                Err(super::classifiers::QueryError::Unsupported { message, .. }) => (
+                    crate::StructuralSeverity::Warning,
+                    "MDE_STRING_EXPRESSION_SUBEXPRESSIONS_UNVERIFIED",
+                    message,
+                ),
+            };
+        issues.push(crate::StructuralDiagnostic {
+            severity,
+            code,
+            subject_id: expression.id().into(),
+            message: format!("StringExpression-subexpressions: {message}"),
+        });
     }
     issues
 }

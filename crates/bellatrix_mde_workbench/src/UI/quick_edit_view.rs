@@ -38,7 +38,9 @@ impl ParameterAction {
     }
 }
 
-pub(crate) fn parameter_actions(actions: &[QuickEditAction]) -> Vec<(QuickEditAction, ParameterAction)> {
+pub(crate) fn parameter_actions(
+    actions: &[QuickEditAction],
+) -> Vec<(QuickEditAction, ParameterAction)> {
     actions
         .iter()
         .copied()
@@ -210,8 +212,16 @@ pub(crate) fn quick_edit_for_relationship(
     let palette = WorkbenchPalette::current(cx);
     let mut controls = Vec::new();
     for (id, role, icon) in [
-        (&relation.from, relation.source_role.as_str(), IconName::ArrowLeft),
-        (&relation.to, relation.target_role.as_str(), IconName::ArrowRight),
+        (
+            &relation.from,
+            relation.source_role.as_str(),
+            IconName::ArrowLeft,
+        ),
+        (
+            &relation.to,
+            relation.target_role.as_str(),
+            IconName::ArrowRight,
+        ),
     ] {
         let endpoint = section.elements.iter().find(|element| element.id == *id);
         let name = endpoint
@@ -242,9 +252,7 @@ pub(crate) fn quick_edit_for_relationship(
             let options: Vec<(String, serde_json::Value)> = match &property.editor {
                 PropertyEditor::Choice(options) => options
                     .iter()
-                    .map(|option| {
-                        (option.clone(), serde_json::Value::String(option.clone()))
-                    })
+                    .map(|option| (option.clone(), serde_json::Value::String(option.clone())))
                     .collect(),
                 PropertyEditor::Boolean => [false, true]
                     .into_iter()
@@ -281,7 +289,9 @@ pub(crate) fn quick_edit_for_relationship(
                             if item.project_id() != &project
                                 || item.selected_element() != Some(element_id.as_str())
                             {
-                                item.feedback = "Relationship edit not sent: the active selection changed".into();
+                                item.feedback =
+                                    "Relationship edit not sent: the active selection changed"
+                                        .into();
                                 cx.notify();
                                 return;
                             }
@@ -301,7 +311,10 @@ pub(crate) fn quick_edit_for_relationship(
                     })
                 })
             });
-            let current = property.value.as_str().map(str::to_owned)
+            let current = property
+                .value
+                .as_str()
+                .map(str::to_owned)
                 .unwrap_or_else(|| property.value.to_string());
             let tooltip = format!("{}: {current}", property.label);
             controls.push(
@@ -341,14 +354,24 @@ pub(crate) fn quick_edit_for_relationship(
                     .gap_2()
                     .child(
                         svg()
-                            .data(glyph(element_glyph(&inspection.presentation_kind, &inspection.type_label)))
+                            .data(glyph(element_glyph(
+                                &inspection.presentation_kind,
+                                &inspection.type_label,
+                            )))
                             .size(px(16.0))
                             .flex_none()
                             .text_color(palette.muted),
                     )
                     .child(Label::new(type_label.to_owned()).truncate()),
             )
-            .child(div().flex().flex_wrap().items_center().gap_2().children(controls))
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap_2()
+                    .children(controls),
+            )
             .into_any_element(),
     )
 }

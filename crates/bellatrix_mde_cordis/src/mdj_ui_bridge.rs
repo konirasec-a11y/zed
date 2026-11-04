@@ -1,9 +1,9 @@
 //! Restricted native MDJ transport. Generic mutation and save events are never dispatched here.
+use crate::MdjEditCommand as Command;
 use crate::{
     DiagramValidationFailure, DiagramValidationResult, MdeUiCommand, ModelingApplyMdjEditRequested,
     mdj_interchange::ModelingApplyMdjEditSnapshot,
 };
-use crate::MdjEditCommand as Command;
 use bellatrix_project::{ProjectDocument, ProjectId};
 use cordis::{Context, Routing, event::QueryOutcome};
 use std::sync::{

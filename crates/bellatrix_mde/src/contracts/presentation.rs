@@ -149,37 +149,60 @@ fn deserialize_authored_coordinate<'de, D: serde::Deserializer<'de>>(
 #[derive(Clone, Debug, PartialEq)]
 pub enum LayoutExtent {
     Resolved(f64),
-    Unresolved { original: f64, reason: UnresolvedExtentReason },
+    Unresolved {
+        original: f64,
+        reason: UnresolvedExtentReason,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum UnresolvedExtentReason { NegativeExtent }
+pub enum UnresolvedExtentReason {
+    NegativeExtent,
+}
 
 impl LayoutExtent {
     pub fn original(&self) -> f64 {
-        match self { Self::Resolved(value) => *value, Self::Unresolved { original, .. } => *original }
+        match self {
+            Self::Resolved(value) => *value,
+            Self::Unresolved { original, .. } => *original,
+        }
     }
     pub fn resolved(&self) -> Option<f64> {
-        match self { Self::Resolved(value) if value.is_finite() && *value >= 0.0 => Some(*value), _ => None }
+        match self {
+            Self::Resolved(value) if value.is_finite() && *value >= 0.0 => Some(*value),
+            _ => None,
+        }
     }
     pub fn is_valid(&self) -> bool {
         match self {
             Self::Resolved(value) => value.is_finite() && *value >= 0.0,
-            Self::Unresolved { original, reason: UnresolvedExtentReason::NegativeExtent } => original.is_finite() && *original < 0.0,
+            Self::Unresolved {
+                original,
+                reason: UnresolvedExtentReason::NegativeExtent,
+            } => original.is_finite() && *original < 0.0,
         }
     }
 }
 
 impl Serialize for LayoutExtent {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        if !self.is_valid() { return Err(serde::ser::Error::custom("invalid authored layout extent")); }
+        if !self.is_valid() {
+            return Err(serde::ser::Error::custom("invalid authored layout extent"));
+        }
         match self {
             Self::Resolved(value) => value.serialize(serializer),
             Self::Unresolved { original, reason } => {
                 #[derive(Serialize)]
-                struct Pending<'a> { original: f64, reason: &'a UnresolvedExtentReason }
-                Pending { original: *original, reason }.serialize(serializer)
+                struct Pending<'a> {
+                    original: f64,
+                    reason: &'a UnresolvedExtentReason,
+                }
+                Pending {
+                    original: *original,
+                    reason,
+                }
+                .serialize(serializer)
             }
         }
     }
@@ -196,12 +219,20 @@ impl<'de> Deserialize<'de> for LayoutExtent {
         }
         #[derive(Deserialize)]
         #[serde(untagged)]
-        enum Encoded { Resolved(serde_json::Number), Unresolved(Pending) }
+        enum Encoded {
+            Resolved(serde_json::Number),
+            Unresolved(Pending),
+        }
         let extent = match Encoded::deserialize(deserializer)? {
             Encoded::Resolved(number) => Self::Resolved(coordinate_from_number(number)?),
-            Encoded::Unresolved(value) => Self::Unresolved { original: value.original, reason: value.reason },
+            Encoded::Unresolved(value) => Self::Unresolved {
+                original: value.original,
+                reason: value.reason,
+            },
         };
-        if !extent.is_valid() { return Err(serde::de::Error::custom("invalid authored layout extent")); }
+        if !extent.is_valid() {
+            return Err(serde::de::Error::custom("invalid authored layout extent"));
+        }
         Ok(extent)
     }
 }
@@ -221,15 +252,9 @@ pub struct LayoutBounds {
         deserialize_with = "deserialize_authored_coordinate"
     )]
     pub y: Authored<f64>,
-    #[serde(
-        default,
-        skip_serializing_if = "Authored::is_missing"
-    )]
+    #[serde(default, skip_serializing_if = "Authored::is_missing")]
     pub width: Authored<LayoutExtent>,
-    #[serde(
-        default,
-        skip_serializing_if = "Authored::is_missing"
-    )]
+    #[serde(default, skip_serializing_if = "Authored::is_missing")]
     pub height: Authored<LayoutExtent>,
 }
 
@@ -291,12 +316,17 @@ pub struct ViewStyleDefaults {
 
 impl ViewStyleDefaults {
     pub(crate) fn is_valid(&self) -> bool {
-        self.stroke_width.is_none_or(|width| width.is_finite() && (0.0..=100.0).contains(&width))
-            && [&self.fill, &self.stroke, &self.text_color].into_iter().flatten().all(|color| {
-                color.strip_prefix('#').is_some_and(|digits| {
-                    matches!(digits.len(), 6 | 8) && digits.bytes().all(|byte| byte.is_ascii_hexdigit())
+        self.stroke_width
+            .is_none_or(|width| width.is_finite() && (0.0..=100.0).contains(&width))
+            && [&self.fill, &self.stroke, &self.text_color]
+                .into_iter()
+                .flatten()
+                .all(|color| {
+                    color.strip_prefix('#').is_some_and(|digits| {
+                        matches!(digits.len(), 6 | 8)
+                            && digits.bytes().all(|byte| byte.is_ascii_hexdigit())
+                    })
                 })
-            })
     }
 }
 

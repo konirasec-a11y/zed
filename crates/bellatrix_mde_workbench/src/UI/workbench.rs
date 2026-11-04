@@ -6,14 +6,14 @@ use workbench_state::{PendingRelationEndpoint, SelectionChange, WorkbenchState};
 
 #[path = "diagram_canvas.rs"]
 mod diagram_canvas;
-#[path = "../view-model/imported_preview.rs"]
-mod imported_preview;
 #[path = "execution_dashboard.rs"]
 mod execution_dashboard;
 #[path = "../view-model/explorer.rs"]
 mod explorer;
 #[path = "hierarchy.rs"]
 mod hierarchy;
+#[path = "../view-model/imported_preview.rs"]
+mod imported_preview;
 #[path = "../view-model/inspector_drafts.rs"]
 mod inspector_drafts;
 #[path = "integration.rs"]
@@ -44,16 +44,16 @@ mod status_entry;
 mod style_drafts;
 #[path = "style_editor.rs"]
 mod style_editor;
-#[path = "timing_editor.rs"]
-mod timing_editor;
 #[path = "symbol_library.rs"]
 mod symbol_library;
 #[path = "theme.rs"]
 mod theme;
-#[path = "visual_draft_canvas.rs"]
-mod visual_draft_canvas;
+#[path = "timing_editor.rs"]
+mod timing_editor;
 #[path = "validation.rs"]
 mod validation;
+#[path = "visual_draft_canvas.rs"]
+mod visual_draft_canvas;
 pub use bellatrix_mde_cordis::MODELING_NAMESPACE;
 pub use integration::register_mde_workspace;
 pub use native_document::{NativeDocumentImporter, NativeDocumentLease};
@@ -62,17 +62,14 @@ pub use source::MdeUiSource;
 pub use symbol_library::MdeSymbolLibraryItem;
 pub use theme::WorkbenchPalette;
 
-use bellatrix_mde_cordis::{ModelingElementKind, ModelingMemberKind, ModelingTool};
-use bellatrix_mde_cordis::{
-    Geometry, ModelingRelationKind, PathSegment, UmlQuickCreate,
-};
+use bellatrix_mde_cordis::{Geometry, ModelingRelationKind, PathSegment, UmlQuickCreate};
 use bellatrix_mde_cordis::{
     MdeUiCommand, ModelingAddMemberRequested, ModelingCreateElementRequested,
-    ModelingDeleteElementRequested,
-    ModelingMoveParameterRequested, ModelingMoveViewRequested, ModelingQuickEditRequested,
-    ModelingResizeViewRequested, ModelingSetNameExpressionRequested,
+    ModelingDeleteElementRequested, ModelingMoveParameterRequested, ModelingMoveViewRequested,
+    ModelingQuickEditRequested, ModelingResizeViewRequested, ModelingSetNameExpressionRequested,
     ModelingSetPropertyRequested,
 };
+use bellatrix_mde_cordis::{ModelingElementKind, ModelingMemberKind, ModelingTool};
 use bellatrix_project::ProjectId;
 use bellatrix_ui_uml::{UmlClassifier, UmlFigure, UmlLineSegment, UmlRelationGlyph};
 use gpui::{
@@ -143,7 +140,9 @@ pub struct MdeWorkbenchItem {
     validation_status: String,
     _watch_task: Task<()>,
 }
-pub(crate) fn diagram_kind_label(kind: bellatrix_mde_cordis::StructuralDiagramKind) -> &'static str {
+pub(crate) fn diagram_kind_label(
+    kind: bellatrix_mde_cordis::StructuralDiagramKind,
+) -> &'static str {
     use bellatrix_mde_cordis::StructuralDiagramKind::*;
     match kind {
         Class => "Class",
@@ -169,7 +168,9 @@ fn diagram_creation_context(
     selected: Option<&str>,
 ) -> Vec<String> {
     if kind == bellatrix_mde_cordis::StructuralDiagramKind::CompositeStructure
-        || catalog.diagram(kind).is_some_and(|metadata| metadata.context_metaclass.is_some())
+        || catalog
+            .diagram(kind)
+            .is_some_and(|metadata| metadata.context_metaclass.is_some())
     {
         selected.map(str::to_owned).into_iter().collect()
     } else {
@@ -235,13 +236,20 @@ fn canvas_model_position(
 
 impl MdeWorkbenchItem {
     pub(crate) fn tool_label(&self, tool: ModelingTool) -> String {
-        self.source.snapshot().ok().and_then(|snapshot| snapshot.section.tools.label(tool).map(str::to_owned))
+        self.source
+            .snapshot()
+            .ok()
+            .and_then(|snapshot| snapshot.section.tools.label(tool).map(str::to_owned))
             .unwrap_or_else(|| "Tool".into())
     }
 
     pub fn new(source: MdeUiSource, cx: &mut Context<Self>) -> Self {
         let validation_mode = validation::ValidationMode::load(source.project_id.as_str());
-        let initial_validation_feedback = validation_mode.as_ref().err().map(|error| format!("Could not load validation preference: {error}")).unwrap_or_default();
+        let initial_validation_feedback = validation_mode
+            .as_ref()
+            .err()
+            .map(|error| format!("Could not load validation preference: {error}"))
+            .unwrap_or_default();
         let initial_diagram = source.snapshot().ok().and_then(|snapshot| {
             snapshot
                 .section
@@ -332,17 +340,30 @@ impl MdeWorkbenchItem {
         self.presentation.active_diagram()
     }
     pub fn select_element(&mut self, id: String, cx: &mut Context<Self>) {
-        self.source.record_interaction("selection.element", Some(&id), bellatrix_mde_cordis::TraceOutcome::Success);
+        self.source.record_interaction(
+            "selection.element",
+            Some(&id),
+            bellatrix_mde_cordis::TraceOutcome::Success,
+        );
         let change = self.presentation.select_element(id);
         self.apply_selection_change(change, cx);
     }
 
     pub fn select_explorer_element(
-        &mut self, id: String, key: String, occurrence: Option<bellatrix_mde_cordis::ViewOccurrence>,
+        &mut self,
+        id: String,
+        key: String,
+        occurrence: Option<bellatrix_mde_cordis::ViewOccurrence>,
         cx: &mut Context<Self>,
     ) {
-        self.source.record_interaction("selection.explorer_member", Some(&key), bellatrix_mde_cordis::TraceOutcome::Success);
-        let change = self.presentation.select_explorer_element(id, key, occurrence);
+        self.source.record_interaction(
+            "selection.explorer_member",
+            Some(&key),
+            bellatrix_mde_cordis::TraceOutcome::Success,
+        );
+        let change = self
+            .presentation
+            .select_explorer_element(id, key, occurrence);
         self.apply_selection_change(change, cx);
     }
 
@@ -358,19 +379,36 @@ impl MdeWorkbenchItem {
     }
 
     fn select_view(&mut self, subject: String, view_id: String, cx: &mut Context<Self>) {
-        self.source.record_interaction("selection.view", Some(&view_id), bellatrix_mde_cordis::TraceOutcome::Success);
+        self.source.record_interaction(
+            "selection.view",
+            Some(&view_id),
+            bellatrix_mde_cordis::TraceOutcome::Success,
+        );
         let change = self.presentation.select_view(Some(subject), view_id);
         self.apply_selection_change(change, cx);
         cx.notify();
     }
 
-    pub fn select_diagram_view(&mut self, diagram_id: String, view_id: String, cx: &mut Context<Self>) {
+    pub fn select_diagram_view(
+        &mut self,
+        diagram_id: String,
+        view_id: String,
+        cx: &mut Context<Self>,
+    ) {
         if self.source.is_presentation_suspended() {
-            self.source.record_interaction("selection.view.suspended", Some(&view_id), bellatrix_mde_cordis::TraceOutcome::Invalid);
+            self.source.record_interaction(
+                "selection.view.suspended",
+                Some(&view_id),
+                bellatrix_mde_cordis::TraceOutcome::Invalid,
+            );
             return;
         }
         let selection = self.source.snapshot().and_then(|snapshot| {
-            snapshot.section.diagrams.iter().find(|diagram| diagram.id == diagram_id)
+            snapshot
+                .section
+                .diagrams
+                .iter()
+                .find(|diagram| diagram.id == diagram_id)
                 .and_then(|diagram| diagram.all_views().find(|view| view.id == view_id))
                 .map(|view| view.subject.clone())
                 .ok_or_else(|| "The original diagram View no longer exists".to_owned())
@@ -378,17 +416,29 @@ impl MdeWorkbenchItem {
         let subject = match selection {
             Ok(subject) => subject,
             Err(error) => {
-                self.source.record_interaction("selection.view.missing", Some(&view_id), bellatrix_mde_cordis::TraceOutcome::Invalid);
-                self.feedback = error; cx.notify(); return;
+                self.source.record_interaction(
+                    "selection.view.missing",
+                    Some(&view_id),
+                    bellatrix_mde_cordis::TraceOutcome::Invalid,
+                );
+                self.feedback = error;
+                cx.notify();
+                return;
             }
         };
-        self.source.record_interaction("selection.view", Some(&view_id), bellatrix_mde_cordis::TraceOutcome::Success);
+        self.source.record_interaction(
+            "selection.view",
+            Some(&view_id),
+            bellatrix_mde_cordis::TraceOutcome::Success,
+        );
         self.select_diagram(diagram_id, cx);
         let change = self.presentation.select_view(subject, view_id);
         self.apply_selection_change(change, cx);
         self.feedback = if self.presentation.selected_element().is_none() {
             "Visual View selected; no semantic subject is required".into()
-        } else { "Diagram View selected".into() };
+        } else {
+            "Diagram View selected".into()
+        };
         cx.notify();
     }
 
@@ -397,11 +447,17 @@ impl MdeWorkbenchItem {
             return false;
         };
         self.source.snapshot().ok().is_none_or(|snapshot| {
-            snapshot.section.diagrams.iter()
+            snapshot
+                .section
+                .diagrams
+                .iter()
                 .find(|diagram| Some(diagram.id.as_str()) == self.presentation.active_diagram())
                 .is_none_or(|diagram| {
                     if self.source.is_mdj() {
-                        !diagram.views.iter().any(|view| view.id == view_id && view.presentation.has_source)
+                        !diagram
+                            .views
+                            .iter()
+                            .any(|view| view.id == view_id && view.presentation.has_source)
                     } else {
                         !selection::supports_view_editing(diagram, view_id)
                     }
@@ -525,13 +581,18 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         }
-        let Some(diagram_id) = self.presentation.active_diagram().map(str::to_owned).or_else(|| {
-            snapshot
-                .section
-                .diagrams
-                .first()
-                .map(|diagram| diagram.id.clone())
-        }) else {
+        let Some(diagram_id) = self
+            .presentation
+            .active_diagram()
+            .map(str::to_owned)
+            .or_else(|| {
+                snapshot
+                    .section
+                    .diagrams
+                    .first()
+                    .map(|diagram| diagram.id.clone())
+            })
+        else {
             self.feedback = "No active UML diagram".into();
             cx.notify();
             return;
@@ -589,7 +650,16 @@ impl MdeWorkbenchItem {
         } else if classifier {
             Self::name_expression_text(target)
         } else {
-            target.template_parametered_id.as_ref().and_then(|id| snapshot.section.elements.iter().find(|element| &element.id == id))
+            target
+                .template_parametered_id
+                .as_ref()
+                .and_then(|id| {
+                    snapshot
+                        .section
+                        .elements
+                        .iter()
+                        .find(|element| &element.id == id)
+                })
                 .unwrap_or(target)
                 .name
                 .clone()
@@ -600,7 +670,10 @@ impl MdeWorkbenchItem {
         }
         self.presentation.begin_element_edit(id);
         self.inline_editor = Some(field.clone());
-        self.inline_draft = Some(inspector_drafts::DraftState::new(display, snapshot.revision));
+        self.inline_draft = Some(inspector_drafts::DraftState::new(
+            display,
+            snapshot.revision,
+        ));
         self.gesture = None;
         field.read(cx).focus_handle(cx).focus(window, cx);
         let text_editor = field.read(cx).editor().clone();
@@ -611,8 +684,10 @@ impl MdeWorkbenchItem {
         if self.source.is_read_only() {
             return;
         }
-        let (Some(id), Some(field)) = (self.presentation.editing_element().map(str::to_owned), self.inline_editor.clone())
-        else {
+        let (Some(id), Some(field)) = (
+            self.presentation.editing_element().map(str::to_owned),
+            self.inline_editor.clone(),
+        ) else {
             return;
         };
         let text = field.read(cx).text(cx);
@@ -637,7 +712,16 @@ impl MdeWorkbenchItem {
         } else if classifier {
             Self::name_expression_text(element)
         } else {
-            element.template_parametered_id.as_ref().and_then(|id| snapshot.section.elements.iter().find(|element| &element.id == id))
+            element
+                .template_parametered_id
+                .as_ref()
+                .and_then(|id| {
+                    snapshot
+                        .section
+                        .elements
+                        .iter()
+                        .find(|element| &element.id == id)
+                })
                 .unwrap_or(element)
                 .name
                 .clone()
@@ -701,7 +785,9 @@ impl MdeWorkbenchItem {
     pub fn feedback(&self) -> &str {
         &self.feedback
     }
-    pub fn validation_status(&self) -> &str { &self.validation_status }
+    pub fn validation_status(&self) -> &str {
+        &self.validation_status
+    }
 
     pub fn create_diagram(
         &mut self,
@@ -723,7 +809,11 @@ impl MdeWorkbenchItem {
             diagram_kind_label(kind),
             snapshot.section.diagrams.len().saturating_add(1)
         );
-        let model_elements = diagram_creation_context(&snapshot.section.tools, kind, self.presentation.selected_element());
+        let model_elements = diagram_creation_context(
+            &snapshot.section.tools,
+            kind,
+            self.presentation.selected_element(),
+        );
         self.submit(
             MdeUiCommand::CreateDiagram(bellatrix_mde_cordis::ModelingCreateDiagramRequested {
                 project_id: self.project_id().clone(),
@@ -737,7 +827,11 @@ impl MdeWorkbenchItem {
     }
 
     pub fn select_diagram(&mut self, id: String, cx: &mut Context<Self>) {
-        self.source.record_interaction("selection.diagram", Some(&id), bellatrix_mde_cordis::TraceOutcome::Success);
+        self.source.record_interaction(
+            "selection.diagram",
+            Some(&id),
+            bellatrix_mde_cordis::TraceOutcome::Success,
+        );
         if self.presentation.select_diagram(id) {
             self.validation_status = "Not yet validated for this diagram".into();
         }
@@ -748,7 +842,11 @@ impl MdeWorkbenchItem {
     }
     pub fn select_tool(&mut self, kind: ModelingTool, cx: &mut Context<Self>) {
         if self.source.is_read_only() {
-            self.source.record_interaction("tool.select.read_only", Some(&self.tool_label(kind)), bellatrix_mde_cordis::TraceOutcome::Invalid);
+            self.source.record_interaction(
+                "tool.select.read_only",
+                Some(&self.tool_label(kind)),
+                bellatrix_mde_cordis::TraceOutcome::Invalid,
+            );
             return;
         }
         if self.presentation.selected_tool() == Some(kind) {
@@ -758,12 +856,20 @@ impl MdeWorkbenchItem {
         }
     }
     pub fn cancel_tool(&mut self, cx: &mut Context<Self>) {
-        self.source.record_interaction("tool.cancel", None, bellatrix_mde_cordis::TraceOutcome::Success);
+        self.source.record_interaction(
+            "tool.cancel",
+            None,
+            bellatrix_mde_cordis::TraceOutcome::Success,
+        );
         self.presentation.cancel_tool();
         self.feedback = "Selection tool active".into();
         cx.notify();
     }
-    pub(super) fn allows_modeling_tool(&mut self, tool: ModelingTool, cx: &mut Context<Self>) -> bool {
+    pub(super) fn allows_modeling_tool(
+        &mut self,
+        tool: ModelingTool,
+        cx: &mut Context<Self>,
+    ) -> bool {
         if !self.source.allows_creation() {
             self.presentation.cancel_tool();
             self.feedback = "Creation tools are not available for this document".into();
@@ -775,7 +881,11 @@ impl MdeWorkbenchItem {
             cx.notify();
             return false;
         };
-        if !snapshot.section.tools.allows_tool(self.presentation.active_diagram(), tool) {
+        if !snapshot
+            .section
+            .tools
+            .allows_tool(self.presentation.active_diagram(), tool)
+        {
             self.presentation.cancel_tool();
             self.feedback = "This tool is not available for the active diagram's domain.".into();
             cx.notify();
@@ -785,27 +895,49 @@ impl MdeWorkbenchItem {
     }
     pub fn arm_drag_tool(&mut self, tool: ModelingTool, cx: &mut Context<Self>) {
         if self.source.is_read_only() {
-            self.source.record_interaction("tool.arm.read_only", Some(&self.tool_label(tool)), bellatrix_mde_cordis::TraceOutcome::Invalid);
+            self.source.record_interaction(
+                "tool.arm.read_only",
+                Some(&self.tool_label(tool)),
+                bellatrix_mde_cordis::TraceOutcome::Invalid,
+            );
             return;
         }
-        if !self.allows_modeling_tool(tool, cx) { return; }
-        self.source.record_interaction("tool.arm", Some(&self.tool_label(tool)), bellatrix_mde_cordis::TraceOutcome::Success);
+        if !self.allows_modeling_tool(tool, cx) {
+            return;
+        }
+        self.source.record_interaction(
+            "tool.arm",
+            Some(&self.tool_label(tool)),
+            bellatrix_mde_cordis::TraceOutcome::Success,
+        );
         self.gesture = None;
         self.inline_editor = None;
         self.inline_draft = None;
         self.presentation.arm_tool(tool);
-        let catalog = self.source.snapshot().map(|snapshot| snapshot.section.tools).unwrap_or_default();
+        let catalog = self
+            .source
+            .snapshot()
+            .map(|snapshot| snapshot.section.tools)
+            .unwrap_or_default();
         let label = catalog.label(tool).unwrap_or("Tool");
         self.feedback = match tool {
-            ModelingTool::Relation(kind) => catalog.relation(kind).map(|metadata|
-                format!("{}: {}", label, metadata.endpoint_instruction)).unwrap_or_else(|| "Tool metadata unavailable".into()),
+            ModelingTool::Relation(kind) => catalog
+                .relation(kind)
+                .map(|metadata| format!("{}: {}", label, metadata.endpoint_instruction))
+                .unwrap_or_else(|| "Tool metadata unavailable".into()),
             ModelingTool::Element(kind) => match catalog.element(kind) {
-                Some(metadata) if metadata.requires_nested_owner => format!("{label}: click to place; unsupported semantic ownership is preserved as a visual draft"),
-                Some(metadata) if metadata.requires_owner => format!("{label}: click to place; select an owner to create a semantic element"),
+                Some(metadata) if metadata.requires_nested_owner => format!(
+                    "{label}: click to place; unsupported semantic ownership is preserved as a visual draft"
+                ),
+                Some(metadata) if metadata.requires_owner => {
+                    format!("{label}: click to place; select an owner to create a semantic element")
+                }
                 Some(_) => format!("{label}: click canvas to place"),
                 None => "Tool metadata unavailable".into(),
             },
-            ModelingTool::ProvidedInterface | ModelingTool::RequiredInterface => format!("{label}: click canvas to place"),
+            ModelingTool::ProvidedInterface | ModelingTool::RequiredInterface => {
+                format!("{label}: click canvas to place")
+            }
         };
         cx.notify();
     }
@@ -909,16 +1041,32 @@ impl MdeWorkbenchItem {
             return;
         };
         let (start, dx, dy, began, view_id, action) = match gesture {
-            CanvasGesture::Move { start, dx, dy, began, view_id, .. } =>
-                (start, dx, dy, began, view_id, "canvas.move.start"),
-            CanvasGesture::Resize { start, dx, dy, began, view_id, .. } =>
-                (start, dx, dy, began, view_id, "canvas.resize.start"),
+            CanvasGesture::Move {
+                start,
+                dx,
+                dy,
+                began,
+                view_id,
+                ..
+            } => (start, dx, dy, began, view_id, "canvas.move.start"),
+            CanvasGesture::Resize {
+                start,
+                dx,
+                dy,
+                began,
+                view_id,
+                ..
+            } => (start, dx, dy, began, view_id, "canvas.resize.start"),
         };
         *dx = f64::from(event.position.x - start.x) / f64::from(self.zoom);
         *dy = f64::from(event.position.y - start.y) / f64::from(self.zoom);
         if !*began && (dx.abs() >= 1.0 || dy.abs() >= 1.0) {
             *began = true;
-            self.source.record_interaction(action, Some(view_id), bellatrix_mde_cordis::TraceOutcome::Success);
+            self.source.record_interaction(
+                action,
+                Some(view_id),
+                bellatrix_mde_cordis::TraceOutcome::Success,
+            );
         }
         cx.notify();
     }
@@ -927,14 +1075,19 @@ impl MdeWorkbenchItem {
             return;
         };
         let (view_id, began) = match &gesture {
-            CanvasGesture::Move { view_id, began, .. } | CanvasGesture::Resize { view_id, began, .. } => (view_id, *began),
+            CanvasGesture::Move { view_id, began, .. }
+            | CanvasGesture::Resize { view_id, began, .. } => (view_id, *began),
         };
         if !began {
             cx.notify();
             return;
         }
         if self.source.is_read_only() || self.source.is_mdj() {
-            self.source.record_interaction("canvas.gesture.read_only", Some(view_id), bellatrix_mde_cordis::TraceOutcome::Invalid);
+            self.source.record_interaction(
+                "canvas.gesture.read_only",
+                Some(view_id),
+                bellatrix_mde_cordis::TraceOutcome::Invalid,
+            );
             cx.notify();
             return;
         }
@@ -951,9 +1104,15 @@ impl MdeWorkbenchItem {
             != Some(expected_revision)
         {
             let view_id = match &gesture {
-                CanvasGesture::Move { view_id, .. } | CanvasGesture::Resize { view_id, .. } => view_id,
+                CanvasGesture::Move { view_id, .. } | CanvasGesture::Resize { view_id, .. } => {
+                    view_id
+                }
             };
-            self.source.record_interaction("canvas.gesture.stale_revision", Some(view_id), bellatrix_mde_cordis::TraceOutcome::Invalid);
+            self.source.record_interaction(
+                "canvas.gesture.stale_revision",
+                Some(view_id),
+                bellatrix_mde_cordis::TraceOutcome::Invalid,
+            );
             self.feedback = "Project changed during drag; retry".into();
             cx.notify();
             return;
@@ -963,7 +1122,11 @@ impl MdeWorkbenchItem {
                 view_id, dx, dy, ..
             } => {
                 if dx.abs() < 1.0 && dy.abs() < 1.0 {
-                    self.source.record_interaction("canvas.gesture.no_change", Some(&view_id), bellatrix_mde_cordis::TraceOutcome::Success);
+                    self.source.record_interaction(
+                        "canvas.gesture.no_change",
+                        Some(&view_id),
+                        bellatrix_mde_cordis::TraceOutcome::Success,
+                    );
                     cx.notify();
                     return;
                 }
@@ -984,7 +1147,11 @@ impl MdeWorkbenchItem {
                 ..
             } => {
                 if dx.abs() < 1.0 && dy.abs() < 1.0 {
-                    self.source.record_interaction("canvas.gesture.no_change", Some(&view_id), bellatrix_mde_cordis::TraceOutcome::Success);
+                    self.source.record_interaction(
+                        "canvas.gesture.no_change",
+                        Some(&view_id),
+                        bellatrix_mde_cordis::TraceOutcome::Success,
+                    );
                     cx.notify();
                     return;
                 }

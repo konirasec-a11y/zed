@@ -1,6 +1,5 @@
 #[path = "support/events.rs"]
 mod events;
-use serde_json::Value;
 use bellatrix_mde_cordis::Geometry;
 use bellatrix_mde_cordis::{
     MdePlugin, ModelingAddMember, ModelingAddMemberRequested, ModelingCreateElement,
@@ -9,11 +8,11 @@ use bellatrix_mde_cordis::{
     UmlQuickCreate,
 };
 use bellatrix_project::{
-    ProjectCreate, ProjectCreateRequested, ProjectId, ProjectPlugin,
-    ProjectService,
+    ProjectCreate, ProjectCreateRequested, ProjectId, ProjectPlugin, ProjectService,
 };
 use cordis::event::QueryOutcome;
 use cordis::{Context, Plugin, PreparedPlugin, Routing};
+use serde_json::Value;
 use std::sync::Arc;
 
 #[tokio::test]
@@ -65,7 +64,10 @@ async fn interface_quick_edit_commands_create_real_objects_and_names() {
         QueryOutcome::Answer(Ok(1))
     ));
     let snapshot = service.snapshot(&id).unwrap();
-    let section = events::projection(&ctx, &service, &id).await.unwrap().section;
+    let section = events::projection(&ctx, &service, &id)
+        .await
+        .unwrap()
+        .section;
     let interface_id = section
         .elements
         .iter()
@@ -93,7 +95,10 @@ async fn interface_quick_edit_commands_create_real_objects_and_names() {
     }
     let snapshot = service.snapshot(&id).unwrap();
     assert_eq!(snapshot.revision(), 7);
-    let section = events::projection(&ctx, &service, &id).await.unwrap().section;
+    let section = events::projection(&ctx, &service, &id)
+        .await
+        .unwrap()
+        .section;
     for kind in [
         "uml.note",
         "uml.constraint",
@@ -179,7 +184,10 @@ async fn interface_quick_edit_commands_create_real_objects_and_names() {
     }
     let snapshot = service.snapshot(&id).unwrap();
     assert_eq!(snapshot.revision(), 10);
-    let section = events::projection(&ctx, &service, &id).await.unwrap().section;
+    let section = events::projection(&ctx, &service, &id)
+        .await
+        .unwrap()
+        .section;
     let interface = section
         .elements
         .iter()
@@ -187,8 +195,12 @@ async fn interface_quick_edit_commands_create_real_objects_and_names() {
         .unwrap();
     assert_eq!(interface.name, "CloudIface");
     let persisted = events::section(&service, &id).unwrap();
-    let properties = &persisted["elements"].as_array().unwrap().iter()
-        .find(|element| element["id"] == interface_id).unwrap()["properties"];
+    let properties = &persisted["elements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|element| element["id"] == interface_id)
+        .unwrap()["properties"];
     assert_eq!(properties.get("stereotype").unwrap(), "service");
     assert_eq!(properties.get("visibility").unwrap(), "private");
     let view = section

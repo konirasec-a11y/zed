@@ -7,10 +7,10 @@ use crate::{
     timing::TimingLifeline,
 };
 use bellatrix_design_system::Palette;
-use bellatrix_mde_cordis::{LineMode, TimingPresentation};
 use bellatrix_mde_cordis::presentation_contract::{
     FigurePresentation, InterfacePresentation, RenderStyle, UmlHeader, UmlNotation,
 };
+use bellatrix_mde_cordis::{LineMode, TimingPresentation};
 use gpui::{
     App, Entity, InteractiveElement, IntoElement, MouseButton, PathBuilder, RenderOnce,
     SharedString, Window, canvas, div, point, prelude::*, px,
@@ -241,7 +241,8 @@ impl RenderOnce for UmlFigure {
         let appearance = self.appearance;
         let alignment = appearance.clone();
         let applied_stereotype = self
-            .header.applied_stereotype
+            .header
+            .applied_stereotype
             .filter(|_| alignment.0.show_stereotype)
             .map(SharedString::from);
         let font_family = appearance.0.font_family.clone();
@@ -272,10 +273,7 @@ impl RenderOnce for UmlFigure {
                     cx.stop_propagation();
                 }
             })
-            .when(
-                self.title_underlined,
-                |element| element.underline(),
-            )
+            .when(self.title_underlined, |element| element.underline())
             .child(title);
         if let Some(presentation) = self.interface_presentation {
             return InterfaceFigure {
@@ -516,10 +514,8 @@ impl RenderOnce for UmlFigure {
                                             }
                                         }
                                     }
-                                    let dashes = appearance.resolve_stroke_pattern(
-                                        LineMode::Solid,
-                                        scale,
-                                    );
+                                    let dashes =
+                                        appearance.resolve_stroke_pattern(LineMode::Solid, scale);
                                     let mut outline = PathBuilder::stroke(px(
                                         appearance.width(1.0, scale, selected)
                                     ));

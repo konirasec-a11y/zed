@@ -58,11 +58,7 @@ impl RenderOnce for TreePane {
                     .px_2()
                     .flex()
                     .items_center()
-                    .bg(gpui::rgb(if row.selected {
-                        p.selected
-                    } else {
-                        p.panel
-                    }))
+                    .bg(gpui::rgb(if row.selected { p.selected } else { p.panel }))
                     .text_xs()
                     .text_color(gpui::rgb(if row.selected { p.text } else { p.muted }))
                     .child(row.title)

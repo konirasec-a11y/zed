@@ -9,7 +9,10 @@ fn kernel_contract_flow_validates_rooted_and_rootless_drafts_without_views()
         Ok(response["model"].take())
     };
     let encode = |model: &Value, format: &str| {
-        encode_model_document(&json!({"api_version": 1, "model": model}).to_string(), format)
+        encode_model_document(
+            &json!({"api_version": 1, "model": model}).to_string(),
+            format,
+        )
     };
 
     // KB-10: omitted root designation cannot bypass namespace, relationship
@@ -38,19 +41,28 @@ fn kernel_contract_flow_validates_rooted_and_rootless_drafts_without_views()
         ]
     });
     let validate = |model: &Value| -> Result<Value, Box<dyn std::error::Error>> {
-        Ok(serde_json::from_str(&validate_uml_model(
-            &json!({"api_version":1,"model":model}).to_string(),
-        ).map_err(std::io::Error::other)?)?)
+        Ok(serde_json::from_str(
+            &validate_uml_model(&json!({"api_version":1,"model":model}).to_string())
+                .map_err(std::io::Error::other)?,
+        )?)
     };
     let has = |response: &Value, code: &str, subject: &str, severity: &str| {
-        response["diagnostics"].as_array().is_some_and(|diagnostics|
-            diagnostics.iter().any(|diagnostic| diagnostic["code"] == code
-                && diagnostic["subject_id"] == subject && diagnostic["severity"] == severity))
+        response["diagnostics"]
+            .as_array()
+            .is_some_and(|diagnostics| {
+                diagnostics.iter().any(|diagnostic| {
+                    diagnostic["code"] == code
+                        && diagnostic["subject_id"] == subject
+                        && diagnostic["severity"] == severity
+                })
+            })
     };
     let mut rootless_responses = None;
     for rooted in [false, true] {
         let mut authored = model.clone();
-        if rooted { authored["root_model"] = json!("root"); }
+        if rooted {
+            authored["root_model"] = json!("root");
+        }
         let valid = validate(&authored)?;
         assert_eq!(valid["has_errors"], false, "{valid}");
         assert_eq!(valid["diagnostics"], json!([]), "{valid}");
@@ -65,7 +77,10 @@ fn kernel_contract_flow_validates_rooted_and_rootless_drafts_without_views()
             ("UML_PROPERTY_SUBSETTING", "specific"),
             ("UML_RELATIONSHIP_ENDPOINTS", "dependency"),
         ] {
-            assert!(has(&invalid, code, subject, "error"), "rooted={rooted}: {invalid}");
+            assert!(
+                has(&invalid, code, subject, "error"),
+                "rooted={rooted}: {invalid}"
+            );
         }
         assert_eq!(invalid["coverage"], "implemented_rules_only");
         let project = decode(&serde_json::to_vec(&draft)?, "json")?;
@@ -82,23 +97,43 @@ fn kernel_contract_flow_validates_rooted_and_rootless_drafts_without_views()
         draft["elements"][5]["properties"]["subsettedProperty"] =
             json!([{"href":"external.xmi#Property"}]);
         let unresolved = validate(&draft)?;
-        assert!(has(&unresolved, "UML_PROPERTY_SUBSETTING_UNSUPPORTED", "specific", "warning"),
-            "{unresolved}");
+        assert!(
+            has(
+                &unresolved,
+                "UML_PROPERTY_SUBSETTING_UNSUPPORTED",
+                "specific",
+                "warning"
+            ),
+            "{unresolved}"
+        );
         assert_eq!(unresolved["has_errors"], false, "{unresolved}");
         let mut malformed_scalar = authored.clone();
         malformed_scalar["elements"][1]["properties"] = json!({"isAbstract":"yes"});
         let scalar_response = validate(&malformed_scalar)?;
-        assert!(has(&scalar_response, "UML_PROPERTY_VALUE", "owner", "error"),
-            "rooted={rooted}: {scalar_response}");
+        assert!(
+            has(&scalar_response, "UML_PROPERTY_VALUE", "owner", "error"),
+            "rooted={rooted}: {scalar_response}"
+        );
         let responses = vec![valid.clone(), invalid, unresolved, scalar_response];
         for response in &responses {
-            let diagnostics = response["diagnostics"].as_array().ok_or("missing diagnostics")?;
-            let unique = diagnostics.iter().map(Value::to_string)
+            let diagnostics = response["diagnostics"]
+                .as_array()
+                .ok_or("missing diagnostics")?;
+            let unique = diagnostics
+                .iter()
+                .map(Value::to_string)
                 .collect::<std::collections::HashSet<_>>();
-            assert_eq!(unique.len(), diagnostics.len(), "duplicate diagnostics: {response}");
+            assert_eq!(
+                unique.len(),
+                diagnostics.len(),
+                "duplicate diagnostics: {response}"
+            );
         }
         if let Some(expected) = &rootless_responses {
-            assert_eq!(&responses, expected, "root designation changed semantic diagnostics");
+            assert_eq!(
+                &responses, expected,
+                "root designation changed semantic diagnostics"
+            );
         } else {
             rootless_responses = Some(responses);
         }

@@ -3,7 +3,7 @@ use bellatrix_mde::{
     prepare_model_document, validate_uml_model,
 };
 use bellatrix_mde_protocol::Command;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 fn envelope(model: &Value) -> String {
@@ -59,8 +59,25 @@ fn document() -> Result<Value> {
         ],"relations":[{"id":"specialization","kind":"uml.generalization","from":"leaf","to":"middle"},
             {"id":"middle-specialization","kind":"uml.generalization","from":"middle","to":"left"}]
     });
-    for (owner, child) in [("root","owner"),("root","left"),("root","right"),("root","leaf"),("root","middle"),("root","association"),("association","a1"),("association","a2"),("owner","r1"),("owner","r2"),("owner","connector"),("connector","e1"),("connector","e2")] {
-        value["relations"].as_array_mut().ok_or("relations")?.push(json!({"id":format!("owns-{child}"),"kind":"owns","from":owner,"to":child}));
+    for (owner, child) in [
+        ("root", "owner"),
+        ("root", "left"),
+        ("root", "right"),
+        ("root", "leaf"),
+        ("root", "middle"),
+        ("root", "association"),
+        ("association", "a1"),
+        ("association", "a2"),
+        ("owner", "r1"),
+        ("owner", "r2"),
+        ("owner", "connector"),
+        ("connector", "e1"),
+        ("connector", "e2"),
+    ] {
+        value["relations"]
+            .as_array_mut()
+            .ok_or("relations")?
+            .push(json!({"id":format!("owns-{child}"),"kind":"owns","from":owner,"to":child}));
     }
     import_document(&value)
 }
@@ -73,26 +90,60 @@ fn author(model: &mut Value, id: &str, key: &str, value: Value) {
         .expect("element")["properties"][key] = value;
 }
 fn diagnostics(model: &Value) -> Result<Vec<Value>> {
-    let response: Value = serde_json::from_str(&validate_uml_model(&json!({"api_version":1,"model":model}).to_string())?)?;
-    Ok(response["diagnostics"].as_array().ok_or("diagnostics")?.clone())
+    let response: Value = serde_json::from_str(&validate_uml_model(
+        &json!({"api_version":1,"model":model}).to_string(),
+    )?)?;
+    Ok(response["diagnostics"]
+        .as_array()
+        .ok_or("diagnostics")?
+        .clone())
 }
-fn has(issues: &[Value], code: &str) -> bool { issues.iter().any(|d| d["subject_id"] == "connector" && d["code"] == code) }
+fn has(issues: &[Value], code: &str) -> bool {
+    issues
+        .iter()
+        .any(|d| d["subject_id"] == "connector" && d["code"] == code)
+}
 
 #[test]
 fn connector_type_flow_checks_position_conformance_rollback_and_reopening() -> Result {
     let model = document()?;
-    assert!(!diagnostics(&model)?.iter().any(|d| d["severity"] == "error"), "{:?}", diagnostics(&model)?);
+    assert!(
+        !diagnostics(&model)?
+            .iter()
+            .any(|d| d["severity"] == "error"),
+        "{:?}",
+        diagnostics(&model)?
+    );
     let before = model.clone();
-    let error = apply(&model, &Command::SetProperty { element_id:"r1".into(), path:"properties.type".into(), value:json!({"$ref":"right"}) }, 1).expect_err("wrong role Type must reject");
+    let error = apply(
+        &model,
+        &Command::SetProperty {
+            element_id: "r1".into(),
+            path: "properties.type".into(),
+            value: json!({"$ref":"right"}),
+        },
+        1,
+    )
+    .expect_err("wrong role Type must reject");
     assert!(error.contains("Connector-types"), "{error}");
     assert_eq!(model, before);
     let mut invalid = model;
-    author(&mut invalid, "connector", "end", json!([{"$ref":"e2"},{"$ref":"e1"}]));
+    author(
+        &mut invalid,
+        "connector",
+        "end",
+        json!([{"$ref":"e2"},{"$ref":"e1"}]),
+    );
     for format in ["json", "protobuf"] {
         let reopened = decode(&encode(&invalid, format)?, format)?;
         assert!(has(&diagnostics(&reopened)?, ERROR));
         let mut repaired = reopened;
-        author(&mut repaired, "connector", "end", json!([{"$ref":"e1"},{"$ref":"e2"}]));
+        author(
+            &mut repaired,
+            "connector",
+            "end",
+            json!([{"$ref":"e1"},{"$ref":"e2"}]),
+        );
         assert!(!has(&diagnostics(&repaired)?, ERROR));
     }
     Ok(())

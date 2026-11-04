@@ -1,6 +1,12 @@
 //! Tracks which files Bellatrix may replace without deleting unrelated user data.
-use crate::{Plan, ownership_manifest::{self, MARKER}};
-use std::{fs, io, path::{Path, PathBuf}};
+use crate::{
+    Plan,
+    ownership_manifest::{self, MARKER},
+};
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 pub(crate) fn write(root: &Path, plan: &Plan) -> io::Result<()> {
     let bytes = ownership_manifest::encode(plan).map_err(io::Error::other)?;
@@ -31,10 +37,7 @@ pub(crate) fn verify(root: &Path) -> io::Result<()> {
             }
             if ft.is_dir() {
                 pending.push(rel);
-            } else if ft.is_file()
-                && rel != Path::new(MARKER)
-                && !ownership.owns_file(&rel)
-            {
+            } else if ft.is_file() && rel != Path::new(MARKER) && !ownership.owns_file(&rel) {
                 return Err(io::Error::other(format!(
                     "unknown file in generated output: {}",
                     rel.display()

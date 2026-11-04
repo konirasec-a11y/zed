@@ -24,8 +24,11 @@ fn encode(model: &Value, format: &str) -> Result<Vec<u8>, String> {
 }
 
 fn import_document(model: &Value) -> Value {
-    decode(&serde_json::to_vec(model).expect("canonical document bytes"), "json")
-        .expect("import canonical document with codec defaults")
+    decode(
+        &serde_json::to_vec(model).expect("canonical document bytes"),
+        "json",
+    )
+    .expect("import canonical document with codec defaults")
 }
 
 fn apply(model: &Value, command: &Command, revision: u64) -> Result<Value, String> {
@@ -60,19 +63,31 @@ fn inspected_property(model: &Value, id: &str, path: &str) -> Value {
 }
 
 fn model_diagnostics(model: &Value) -> Vec<Value> {
-    let response = validate_uml_model(&envelope(model)).expect("validate through the kernel facade");
+    let response =
+        validate_uml_model(&envelope(model)).expect("validate through the kernel facade");
     let mut response: Value = serde_json::from_str(&response).expect("validation response");
-    response["diagnostics"].as_array_mut().expect("public diagnostics").to_owned()
+    response["diagnostics"]
+        .as_array_mut()
+        .expect("public diagnostics")
+        .to_owned()
 }
 
 fn element<'a>(model: &'a Value, id: &str) -> &'a Value {
-    model["elements"].as_array().expect("canonical elements").iter()
-        .find(|element| element["id"] == id).expect("authored Element")
+    model["elements"]
+        .as_array()
+        .expect("canonical elements")
+        .iter()
+        .find(|element| element["id"] == id)
+        .expect("authored Element")
 }
 
 fn element_mut<'a>(model: &'a mut Value, id: &str) -> &'a mut Value {
-    model["elements"].as_array_mut().expect("canonical elements").iter_mut()
-        .find(|element| element["id"] == id).expect("authored Element")
+    model["elements"]
+        .as_array_mut()
+        .expect("canonical elements")
+        .iter_mut()
+        .find(|element| element["id"] == id)
+        .expect("authored Element")
 }
 
 fn document() -> Value {
@@ -106,7 +121,9 @@ fn has_error(project: &Value, subject: &str, rule: &str) -> bool {
     model_diagnostics(project).iter().any(|issue| {
         issue["severity"] == "error"
             && issue["subject_id"] == subject
-            && issue["message"].as_str().is_some_and(|message| message.contains(rule))
+            && issue["message"]
+                .as_str()
+                .is_some_and(|message| message.contains(rule))
     })
 }
 
@@ -127,13 +144,19 @@ fn edit(project: &Value, subject: &str, property: &str, value: Value) -> Result<
 }
 
 fn add_qualifier(project: &mut Value, owner: &str, explicit: bool) {
-    project["elements"].as_array_mut().expect("canonical elements").push(json!({
-        "id":"qualifier","kind":"uml.attribute","name":"key",
-        "properties":{"type":{"$ref":"a"},"visibility":null}
-    }));
-    project["relations"].as_array_mut().expect("canonical relations").push(json!({
-        "id":"owns-qualifier","kind":"owns","from":owner,"to":"qualifier"
-    }));
+    project["elements"]
+        .as_array_mut()
+        .expect("canonical elements")
+        .push(json!({
+            "id":"qualifier","kind":"uml.attribute","name":"key",
+            "properties":{"type":{"$ref":"a"},"visibility":null}
+        }));
+    project["relations"]
+        .as_array_mut()
+        .expect("canonical relations")
+        .push(json!({
+            "id":"owns-qualifier","kind":"owns","from":owner,"to":"qualifier"
+        }));
     if explicit {
         author(project, owner, "qualifier", json!([{"$ref":"qualifier"}]));
     }
@@ -167,8 +190,7 @@ fn derived_union_flow_uses_defaults_rejects_inconsistent_edits_and_reopens() {
     for property in ["isReadOnly", "isDerived", "isDerivedUnion"] {
         project = edit(&project, "attribute", property, json!(true)).expect("author valid flags");
     }
-    let inspector = inspect_element(&project, "attribute")
-        .expect("inspect the same Property");
+    let inspector = inspect_element(&project, "attribute").expect("inspect the same Property");
     for property in ["isReadOnly", "isDerived", "isDerivedUnion"] {
         assert!(
             inspector
@@ -185,10 +207,7 @@ fn derived_union_flow_uses_defaults_rejects_inconsistent_edits_and_reopens() {
                 .expect_err("inconsistent union flag")
                 .contains(rule)
         );
-        assert_eq!(
-            encode(&project, "json").expect("atomic rejection"),
-            before
-        );
+        assert_eq!(encode(&project, "json").expect("atomic rejection"), before);
     }
     for format in ["json", "protobuf"] {
         let reopened = decode(&encode(&project, format).expect("save"), format).expect("reopen");
@@ -230,11 +249,13 @@ fn imported_union_drafts_keep_both_diagnostics_and_can_be_repaired_in_place() {
                 assert!(edit(&project, "attribute", property, invalid.clone()).is_err());
                 let mut draft = project.clone();
                 author(&mut draft, "attribute", property, invalid);
-                assert!(model_diagnostics(&draft).iter().any(
-                    |issue| issue["subject_id"] == "attribute"
+                assert!(model_diagnostics(&draft).iter().any(|issue| {
+                    issue["subject_id"] == "attribute"
                         && issue["code"] == "UML_PROPERTY_VALUE"
-                        && issue["message"].as_str().is_some_and(|message| message.contains(property))
-                ));
+                        && issue["message"]
+                            .as_str()
+                            .is_some_and(|message| message.contains(property))
+                }));
             }
         }
     }
@@ -250,7 +271,11 @@ fn qualifier_flow_uses_canonical_association_and_ownership_instead_of_stored_inv
             inspected_property(&valid, "left", "uml.association"),
             json!({"$ref":"association"})
         );
-        assert!(element(&valid, "left")["properties"].get("association").is_none());
+        assert!(
+            element(&valid, "left")["properties"]
+                .get("association")
+                .is_none()
+        );
 
         let mut invalid = document();
         add_qualifier(&mut invalid, "attribute", explicit);
@@ -295,7 +320,10 @@ fn qualifier_flow_uses_canonical_association_and_ownership_instead_of_stored_inv
             .expect("move qualifier to an Association end without changing its identity");
             assert!(!has_error(&repaired, "attribute", QUALIFIER_RULE));
             assert!(!has_error(&repaired, "left", QUALIFIER_RULE));
-            assert_eq!(element(&repaired, "qualifier"), element(&invalid, "qualifier"));
+            assert_eq!(
+                element(&repaired, "qualifier"),
+                element(&invalid, "qualifier")
+            );
         }
     }
     let mut empty = document();
@@ -344,10 +372,7 @@ fn classifier_feature_rules_reject_edits_preserve_drafts_and_reopen() {
         let error =
             edit(&project, subject, property, value.clone()).expect_err("invalid semantic edit");
         assert!(error.contains(rule), "{error}");
-        assert_eq!(
-            encode(&project, "json").expect("after rejection"),
-            snapshot
-        );
+        assert_eq!(encode(&project, "json").expect("after rejection"), snapshot);
         let mut draft = project.clone();
         author(&mut draft, subject, property, value);
         let diagnostic_subject = if rule == "Interface-visibility" {
@@ -365,15 +390,21 @@ fn classifier_feature_rules_reject_edits_preserve_drafts_and_reopen() {
     }
     // The default false value has the same semantics as an explicit false.
     element_mut(&mut project, "class")["properties"]
-        .as_object_mut().expect("Class properties").remove("isActive");
+        .as_object_mut()
+        .expect("Class properties")
+        .remove("isActive");
     assert!(has_error(&project, "class", "Class-passive_class"));
     project = edit(&project, "class", "isActive", json!(true)).expect("repair passive draft");
     assert!(!has_error(&project, "class", "Class-passive_class"));
 
     let mut behavior_only = project.clone();
-    behavior_only["relations"].as_array_mut().expect("canonical relations")
+    behavior_only["relations"]
+        .as_array_mut()
+        .expect("canonical relations")
         .retain(|relation| relation["to"] != "reception");
-    behavior_only["elements"].as_array_mut().expect("canonical elements")
+    behavior_only["elements"]
+        .as_array_mut()
+        .expect("canonical elements")
         .retain(|element| element["id"] != "reception");
     author(
         &mut behavior_only,
@@ -396,7 +427,9 @@ fn classifier_feature_rules_reject_edits_preserve_drafts_and_reopen() {
     // No behavioral execution is needed to enforce the references. A method
     // stored on the Operation and the inverse specification both count.
     element_mut(&mut project, "behavior")["properties"]
-        .as_object_mut().expect("Behavior properties").remove("specification");
+        .as_object_mut()
+        .expect("Behavior properties")
+        .remove("specification");
     author(
         &mut project,
         "operation",
@@ -463,16 +496,24 @@ fn classifier_feature_rules_reject_edits_preserve_drafts_and_reopen() {
     ] {
         let mut draft = project.clone();
         if subject == "class" {
-            draft["relations"].as_array_mut().expect("canonical relations")
+            draft["relations"]
+                .as_array_mut()
+                .expect("canonical relations")
                 .retain(|relation| relation["to"] != "reception");
-            draft["elements"].as_array_mut().expect("canonical elements")
+            draft["elements"]
+                .as_array_mut()
+                .expect("canonical elements")
                 .retain(|element| element["id"] != "reception");
             author(&mut draft, "class", "isActive", json!(false));
         }
         if subject == "interface" {
-            draft["relations"].as_array_mut().expect("canonical relations")
+            draft["relations"]
+                .as_array_mut()
+                .expect("canonical relations")
                 .retain(|relation| relation["to"] != "operation");
-            draft["elements"].as_array_mut().expect("canonical elements")
+            draft["elements"]
+                .as_array_mut()
+                .expect("canonical elements")
                 .retain(|element| element["id"] != "operation");
         }
         author(&mut draft, subject, property, value);
@@ -480,7 +521,9 @@ fn classifier_feature_rules_reject_edits_preserve_drafts_and_reopen() {
         assert!(
             issues.iter().any(|issue| issue["subject_id"] == subject
                 && issue["severity"] == "warning"
-                && issue["message"].as_str().is_some_and(|message| message.contains(rule))),
+                && issue["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains(rule))),
             "{issues:?}"
         );
         assert!(!has_error(&draft, subject, rule));

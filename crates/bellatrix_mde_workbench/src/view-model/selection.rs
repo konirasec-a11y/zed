@@ -1,6 +1,6 @@
-use bellatrix_mde_cordis::{Geometry};
-use bellatrix_mde_cordis::projection::{Diagram, ModelingProjection as ModelingSection};
+use bellatrix_mde_cordis::Geometry;
 use bellatrix_mde_cordis::presentation_contract::UmlNotation;
+use bellatrix_mde_cordis::projection::{Diagram, ModelingProjection as ModelingSection};
 
 pub(super) struct ReconciledSelection {
     pub active_diagram: Option<String>,
@@ -89,7 +89,10 @@ fn has_inline_representation(section: &ModelingSection, diagram: &Diagram, targe
         if matches!(
             notation,
             UmlNotation::ClassifierRectangle | UmlNotation::PackageTab
-        ) && owner.template_parameters.iter().any(|parameter| parameter == target)
+        ) && owner
+            .template_parameters
+            .iter()
+            .any(|parameter| parameter == target)
         {
             return true;
         }

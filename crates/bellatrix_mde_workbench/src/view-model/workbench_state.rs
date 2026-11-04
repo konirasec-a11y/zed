@@ -70,12 +70,19 @@ impl WorkbenchState {
     }
 
     pub fn selected_canvas_view(&self) -> Option<&str> {
-        self.selected_view().or_else(|| self.selected_explorer.as_ref()
-            .and_then(|(_, occurrence)| occurrence.as_ref()).map(|occurrence| occurrence.view_id.as_str()))
+        self.selected_view().or_else(|| {
+            self.selected_explorer
+                .as_ref()
+                .and_then(|(_, occurrence)| occurrence.as_ref())
+                .map(|occurrence| occurrence.view_id.as_str())
+        })
     }
 
     pub fn select_explorer_element(
-        &mut self, id: String, key: String, occurrence: Option<bellatrix_mde_cordis::ViewOccurrence>,
+        &mut self,
+        id: String,
+        key: String,
+        occurrence: Option<bellatrix_mde_cordis::ViewOccurrence>,
     ) -> SelectionChange {
         let mut change = self.select_element(id);
         self.selected_explorer = Some((key, occurrence));
@@ -83,13 +90,21 @@ impl WorkbenchState {
         change
     }
 
-    pub fn reconcile_explorer_selection(&mut self, section: &bellatrix_mde_cordis::projection::ModelingProjection) {
-        let Some((key, _)) = &self.selected_explorer else { return; };
-        let rows = super::explorer::project_explorer(section, super::explorer::ExplorerSortOrder::Added);
-        if !rows.iter().any(|row| &row.key == key
-            && Some(row.element_id.as_str()) == self.selected_element()
-            && (row.diagram_context.is_none() || row.diagram_context.as_deref() == self.active_diagram()))
-        {
+    pub fn reconcile_explorer_selection(
+        &mut self,
+        section: &bellatrix_mde_cordis::projection::ModelingProjection,
+    ) {
+        let Some((key, _)) = &self.selected_explorer else {
+            return;
+        };
+        let rows =
+            super::explorer::project_explorer(section, super::explorer::ExplorerSortOrder::Added);
+        if !rows.iter().any(|row| {
+            &row.key == key
+                && Some(row.element_id.as_str()) == self.selected_element()
+                && (row.diagram_context.is_none()
+                    || row.diagram_context.as_deref() == self.active_diagram())
+        }) {
             self.selected_explorer = None;
         }
     }
@@ -119,7 +134,8 @@ impl WorkbenchState {
     }
 
     fn select_target(&mut self, subject: Option<String>, view: Option<String>) -> SelectionChange {
-        let selection_changed = self.selected_element != subject || self.selected_view != view
+        let selection_changed = self.selected_element != subject
+            || self.selected_view != view
             || self.selected_explorer.is_some();
         self.selected_explorer = None;
         let preserve_editor = self.edit_matches(subject.as_deref(), view.as_deref());

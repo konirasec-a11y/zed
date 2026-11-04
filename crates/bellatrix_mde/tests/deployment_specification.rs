@@ -109,12 +109,14 @@ fn given_configured_deployment_then_only_execution_environment_location_is_valid
 fn when_configured_deployment_moves_to_wrong_target_then_reparent_rolls_back_and_draft_can_be_repaired()
 -> Result {
     let mut valid = document("uml.execution_environment", true)?;
-    valid["elements"].as_array_mut().ok_or("elements")?.push(
-        json!({"id":"other", "kind":"uml.node", "name":"Node"}),
-    );
-    valid["relations"].as_array_mut().ok_or("relations")?.push(
-        json!({"id":"root-other", "kind":"owns", "from":"root", "to":"other"}),
-    );
+    valid["elements"]
+        .as_array_mut()
+        .ok_or("elements")?
+        .push(json!({"id":"other", "kind":"uml.node", "name":"Node"}));
+    valid["relations"]
+        .as_array_mut()
+        .ok_or("relations")?
+        .push(json!({"id":"root-other", "kind":"owns", "from":"root", "to":"other"}));
     valid = import_document(&valid)?;
     let before = encode(&valid, "json")?;
     let error = apply(
@@ -129,12 +131,14 @@ fn when_configured_deployment_moves_to_wrong_target_then_reparent_rolls_back_and
     assert!(error.contains(RULE), "{error}");
     assert_eq!(encode(&valid, "json")?, before);
     let mut invalid = document("uml.node", true)?;
-    invalid["elements"].as_array_mut().ok_or("elements")?.push(
-        json!({"id":"other", "kind":"uml.execution_environment", "name":"Environment"}),
-    );
-    invalid["relations"].as_array_mut().ok_or("relations")?.push(
-        json!({"id":"root-other", "kind":"owns", "from":"root", "to":"other"}),
-    );
+    invalid["elements"]
+        .as_array_mut()
+        .ok_or("elements")?
+        .push(json!({"id":"other", "kind":"uml.execution_environment", "name":"Environment"}));
+    invalid["relations"]
+        .as_array_mut()
+        .ok_or("relations")?
+        .push(json!({"id":"root-other", "kind":"owns", "from":"root", "to":"other"}));
     invalid = import_document(&invalid)?;
     let repaired = apply(
         &invalid,
@@ -232,12 +236,14 @@ fn given_external_inverse_when_reparented_to_node_then_command_rejects_atomicall
                 .any(|issue| relevant(issue) && issue["severity"] == "error"),
             "{issues:#?}"
         );
-        project["elements"].as_array_mut().ok_or("elements")?.push(
-            json!({"id":"other", "kind":"uml.node", "name":"Node"}),
-        );
-        project["relations"].as_array_mut().ok_or("relations")?.push(
-            json!({"id":"root-other", "kind":"owns", "from":"root", "to":"other"}),
-        );
+        project["elements"]
+            .as_array_mut()
+            .ok_or("elements")?
+            .push(json!({"id":"other", "kind":"uml.node", "name":"Node"}));
+        project["relations"]
+            .as_array_mut()
+            .ok_or("relations")?
+            .push(json!({"id":"root-other", "kind":"owns", "from":"root", "to":"other"}));
         project = import_document(&project)?;
         let before = encode(&project, "json")?;
         let error = apply(

@@ -77,8 +77,8 @@ impl TimingLifeline {
                     move |bounds, (), window, _| {
                         let horizontal_scale = f32::from(bounds.size.width) / width;
                         let vertical_scale = f32::from(bounds.size.height) / height;
-                        let dashes = stroke_appearance
-                            .resolve_stroke_pattern(LineMode::Solid, scale);
+                        let dashes =
+                            stroke_appearance.resolve_stroke_pattern(LineMode::Solid, scale);
                         let mut path =
                             PathBuilder::stroke(px(stroke_appearance.width(1.0, scale, selected)));
                         if !dashes.is_empty() {

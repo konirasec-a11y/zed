@@ -215,7 +215,8 @@ impl<'a> ReferenceIndex<'a> {
             );
         }
         self.validate_target(Self::required_type(property)?, target_id)?;
-        let owner = schema::classifier(property.owner).ok_or("unresolved reference owner metaclass")?;
+        let owner =
+            schema::classifier(property.owner).ok_or("unresolved reference owner metaclass")?;
         let mut unresolved = None;
         for source in self
             .model
@@ -228,7 +229,10 @@ impl<'a> ReferenceIndex<'a> {
                     return self
                         .validate(
                             property,
-                            source.properties().get(property.name).unwrap_or(&Value::Null),
+                            source
+                                .properties()
+                                .get(property.name)
+                                .unwrap_or(&Value::Null),
                         )
                         .map(|target| target.is_some_and(|target| target.id() == target_id));
                 }

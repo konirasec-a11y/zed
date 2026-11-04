@@ -115,17 +115,29 @@ fn expression_guarantee_issues(project: &Project) -> Result<Vec<Value>> {
     let response: Value = serde_json::from_str(&validate_uml_model(
         &json!({"api_version":1,"model":project}).to_string(),
     )?)?;
-    Ok(response["diagnostics"].as_array().ok_or("diagnostics")?.iter()
-        .filter(|issue| issue["subject_id"] == "property" && issue["message"].as_str()
-            .is_some_and(|message| message.starts_with("MultiplicityElement-value_specification_")))
-        .cloned().collect())
+    Ok(response["diagnostics"]
+        .as_array()
+        .ok_or("diagnostics")?
+        .iter()
+        .filter(|issue| {
+            issue["subject_id"] == "property"
+                && issue["message"].as_str().is_some_and(|message| {
+                    message.starts_with("MultiplicityElement-value_specification_")
+                })
+        })
+        .cloned()
+        .collect())
 }
 
 #[test]
 fn nonliteral_multiplicity_never_claims_constancy_or_purity_from_expression_text() -> Result {
     for rooted in [false, true] {
         for bound in ["lower", "upper"] {
-            for expression_kind in ["uml.opaque_expression", "uml.expression", "uml.future_value"] {
+            for expression_kind in [
+                "uml.opaque_expression",
+                "uml.expression",
+                "uml.future_value",
+            ] {
                 let mut project = document(rooted)?;
                 kind(&mut project, bound, expression_kind)?;
                 author(&mut project, bound, "body", json!(["1"]))?;
@@ -140,7 +152,10 @@ fn nonliteral_multiplicity_never_claims_constancy_or_purity_from_expression_text
                     assert_eq!(issue["severity"], "warning", "{found:#?}");
                 }
                 for format in [Format::Json, Format::Protobuf] {
-                    assert_eq!(expression_guarantee_issues(&decode(&encode(&project, format)?, format)?)?, found);
+                    assert_eq!(
+                        expression_guarantee_issues(&decode(&encode(&project, format)?, format)?)?,
+                        found
+                    );
                 }
             }
         }
@@ -159,7 +174,9 @@ fn multiplicity_expression_guarantees_recover_after_draft_repair() -> Result {
     kind(&mut project, "upper", "uml.literal_unlimited_natural")?;
     assert!(expression_guarantee_issues(&project)?.is_empty());
     for format in [Format::Json, Format::Protobuf] {
-        assert!(expression_guarantee_issues(&decode(&encode(&project, format)?, format)?)?.is_empty());
+        assert!(
+            expression_guarantee_issues(&decode(&encode(&project, format)?, format)?)?.is_empty()
+        );
     }
     Ok(())
 }

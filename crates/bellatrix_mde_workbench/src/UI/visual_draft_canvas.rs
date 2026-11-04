@@ -63,9 +63,14 @@ impl MdeWorkbenchItem {
                         .view_size(*width, *height, zoom)
                         .into_any_element()
                 } else {
-                    div().size_full().border_1()
+                    div()
+                        .size_full()
+                        .border_1()
                         .border_color(WorkbenchPalette::current(cx).border)
-                        .child(Label::new(format!("Unsupported notation: {}", draft.notation_kind)))
+                        .child(Label::new(format!(
+                            "Unsupported notation: {}",
+                            draft.notation_kind
+                        )))
                         .into_any_element()
                 };
                 (*x, *y, *width, *height, figure)
@@ -75,7 +80,11 @@ impl MdeWorkbenchItem {
                 for segment in segments {
                     match segment {
                         PathSegment::Line { to } => points.push(*to),
-                        PathSegment::Cubic { control1, control2, to } => points.extend([*control1, *control2, *to]),
+                        PathSegment::Cubic {
+                            control1,
+                            control2,
+                            to,
+                        } => points.extend([*control1, *control2, *to]),
                     }
                 }
                 let padding = 24.0_f64.max(5.0 / f64::from(zoom));
@@ -166,7 +175,8 @@ impl MdeWorkbenchItem {
                 height as f32 * zoom,
             ]);
         }
-        let hit_geometry = matches!(&view.geometry, Geometry::Path { .. }).then(|| view.geometry.clone());
+        let hit_geometry =
+            matches!(&view.geometry, Geometry::Path { .. }).then(|| view.geometry.clone());
         let hit_nodes = node_bounds.clone();
         let hit_pan = (
             self.pan.0 + (x - original_position.0) as f32 * zoom,
@@ -226,16 +236,24 @@ impl MdeWorkbenchItem {
                     move |event: &MouseDownEvent, window, cx| {
                         if hit_geometry.as_ref().is_some_and(|geometry| {
                             !super::diagram_canvas::relationship_hit_test(
-                                geometry, event.position, click_origin.get(), hit_pan, zoom, &hit_nodes.borrow(),
+                                geometry,
+                                event.position,
+                                click_origin.get(),
+                                hit_pan,
+                                zoom,
+                                &hit_nodes.borrow(),
                             )
                         }) {
                             return;
                         }
                         if let Err(error) = owner.update(cx, |item, cx| {
-                            if event.click_count >= 2 && item.presentation.selected_tool().is_none() {
-                                item.begin_draft_label_edit(id.clone(), window, cx);
-                            } else if matches!(item.presentation.selected_tool(), Some(ModelingTool::Relation(_)))
+                            if event.click_count >= 2 && item.presentation.selected_tool().is_none()
                             {
+                                item.begin_draft_label_edit(id.clone(), window, cx);
+                            } else if matches!(
+                                item.presentation.selected_tool(),
+                                Some(ModelingTool::Relation(_))
+                            ) {
                                 item.connect_view_at_pointer(
                                     id.clone(),
                                     event.position,
@@ -328,7 +346,8 @@ impl MdeWorkbenchItem {
         else {
             return;
         };
-        if self.presentation.editing_view() == Some(view_id.as_str()) && self.inline_editor.is_some()
+        if self.presentation.editing_view() == Some(view_id.as_str())
+            && self.inline_editor.is_some()
         {
             return;
         }
@@ -336,7 +355,8 @@ impl MdeWorkbenchItem {
         field.update(cx, |field, cx| {
             field.set_text(view.label.as_deref().unwrap_or(""), window, cx)
         });
-        self.presentation.begin_view_edit(view_id, snapshot.revision);
+        self.presentation
+            .begin_view_edit(view_id, snapshot.revision);
         self.inline_editor = Some(field.clone());
         self.inline_draft = None;
         self.gesture = None;
@@ -479,7 +499,9 @@ pub(super) fn resolve_message_anchor(
     if width <= 0.0 || height <= 0.0 {
         return None;
     }
-    let anchor_x = view.figure.fixed_message_anchor_x
+    let anchor_x = view
+        .figure
+        .fixed_message_anchor_x
         .unwrap_or_else(|| ((point.x - x) / width).clamp(0.0, 1.0));
     Some(bellatrix_mde_cordis::Point {
         x: anchor_x,
@@ -491,7 +513,12 @@ pub(super) fn resolve_visual_center(geometry: &Geometry) -> Option<bellatrix_mde
     use bellatrix_mde_cordis::Point as ModelPoint;
     match geometry {
         Geometry::Layout { .. } => None,
-        Geometry::Rect { x, y, width, height } => Some(ModelPoint {
+        Geometry::Rect {
+            x,
+            y,
+            width,
+            height,
+        } => Some(ModelPoint {
             x: x + width / 2.0,
             y: y + height / 2.0,
         }),
@@ -507,16 +534,23 @@ pub(super) fn resolve_visual_center(geometry: &Geometry) -> Option<bellatrix_mde
         }
         Geometry::Path { start, segments } => {
             let index = segments.len() / 2;
-            let from = index.checked_sub(1).and_then(|index| segments.get(index))
+            let from = index
+                .checked_sub(1)
+                .and_then(|index| segments.get(index))
                 .map(|segment| match segment {
                     PathSegment::Line { to } | PathSegment::Cubic { to, .. } => *to,
-                }).unwrap_or(*start);
+                })
+                .unwrap_or(*start);
             Some(match segments.get(index) {
                 Some(PathSegment::Line { to }) => ModelPoint {
                     x: (from.x + to.x) / 2.0,
                     y: (from.y + to.y) / 2.0,
                 },
-                Some(PathSegment::Cubic { control1, control2, to }) => ModelPoint {
+                Some(PathSegment::Cubic {
+                    control1,
+                    control2,
+                    to,
+                }) => ModelPoint {
                     x: (from.x + 3.0 * control1.x + 3.0 * control2.x + to.x) / 8.0,
                     y: (from.y + 3.0 * control1.y + 3.0 * control2.y + to.y) / 8.0,
                 },

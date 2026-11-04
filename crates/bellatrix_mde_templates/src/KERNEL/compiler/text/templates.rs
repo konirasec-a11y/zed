@@ -24,18 +24,14 @@ impl TemplatePack {
         Ok(Self { tera })
     }
 
-    pub fn render<T: Serialize>(
-        &self, template: &str, data: &T,
-    ) -> Result<String, tera::Error> {
+    pub fn render<T: Serialize>(&self, template: &str, data: &T) -> Result<String, tera::Error> {
         let context = Context::from_serialize(data)?;
         self.tera.render(template, &context)
     }
 
     /// Replaces a registered target template, e.g. an SDK/plugin-specific
     /// C#, TypeScript, JavaScript or Rust style. Does not alter model rules.
-    pub fn override_template(
-        &mut self, name: &str, body: &str,
-    ) -> Result<(), tera::Error> {
+    pub fn override_template(&mut self, name: &str, body: &str) -> Result<(), tera::Error> {
         self.tera.add_raw_template(name, body)
     }
 

@@ -115,8 +115,13 @@ pub(crate) enum Geometry {
         #[serde(deserialize_with = "deserialize_coordinate")]
         ry: f64,
     },
-    Polygon { points: Vec<Point> },
-    Path { start: Point, segments: Vec<PathSegment> },
+    Polygon {
+        points: Vec<Point>,
+    },
+    Path {
+        start: Point,
+        segments: Vec<PathSegment>,
+    },
 }
 
 #[derive(Deserialize)]
@@ -130,23 +135,41 @@ pub(crate) struct Point {
 
 // Feature unification can enable arbitrary_precision in the caller. Tagged
 // enums then buffer decimal numbers as serde_json's private number map.
-fn deserialize_coordinate<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<f64, D::Error> {
+fn deserialize_coordinate<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<f64, D::Error> {
     let number = serde_json::Number::deserialize(deserializer)?;
-    number.as_f64().filter(|coordinate| coordinate.is_finite())
+    number
+        .as_f64()
+        .filter(|coordinate| coordinate.is_finite())
         .ok_or_else(|| serde::de::Error::custom("diagram coordinates must be finite numbers"))
 }
 
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum PathSegment {
-    Line { to: Point },
-    Cubic { control1: Point, control2: Point, to: Point },
+    Line {
+        to: Point,
+    },
+    Cubic {
+        control1: Point,
+        control2: Point,
+        to: Point,
+    },
 }
 
 #[derive(Clone, Copy, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum TextAlignment { Left, Center, Right }
+pub(crate) enum TextAlignment {
+    Left,
+    Center,
+    Right,
+}
 
 #[derive(Clone, Copy, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum TextVerticalAlignment { Top, Center, Bottom }
+pub(crate) enum TextVerticalAlignment {
+    Top,
+    Center,
+    Bottom,
+}

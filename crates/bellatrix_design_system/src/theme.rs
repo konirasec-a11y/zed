@@ -54,11 +54,7 @@ impl Palette {
 
     /// Diagram silhouettes need foreground contrast, unlike subtle UI separators.
     pub const fn diagram_outline(self, selected: bool) -> u32 {
-        if selected {
-            self.selection
-        } else {
-            self.text
-        }
+        if selected { self.selection } else { self.text }
     }
 
     pub const fn for_mode(mode: ThemeMode) -> Self {

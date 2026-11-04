@@ -1,5 +1,5 @@
-use serde::de::{MapAccess, Visitor};
 use serde::Deserializer;
+use serde::de::{MapAccess, Visitor};
 use serde_json::{Map, Value, value::RawValue};
 use std::collections::BTreeMap;
 use std::fmt;
@@ -21,11 +21,7 @@ fn invalid(path: &str, message: impl Into<String>) -> MdjError {
 }
 
 fn display_path(path: &str) -> &str {
-    if path.is_empty() {
-        "/"
-    } else {
-        path
-    }
+    if path.is_empty() { "/" } else { path }
 }
 
 fn property_path(path: &str, property: &str) -> String {
@@ -65,7 +61,9 @@ fn read_value(raw: &RawValue, path: &str, depth: usize) -> Result<Value, MdjErro
             values
                 .iter()
                 .enumerate()
-                .map(|(position, value)| read_value(value, &format!("{path}/{position}"), depth + 1))
+                .map(|(position, value)| {
+                    read_value(value, &format!("{path}/{position}"), depth + 1)
+                })
                 .collect::<Result<Vec<_>, _>>()
                 .map(Value::Array)
         }
@@ -165,12 +163,7 @@ impl<'document> Index<'document> {
             .filter(|reference| !self.objects.contains_key(reference.target_id))
     }
 
-    fn visit(
-        &mut self,
-        value: &'document Value,
-        path: &str,
-        depth: usize,
-    ) -> Result<(), MdjError> {
+    fn visit(&mut self, value: &'document Value, path: &str, depth: usize) -> Result<(), MdjError> {
         check_depth(path, depth)?;
         match value {
             Value::Object(properties) => {

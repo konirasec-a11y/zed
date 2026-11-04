@@ -149,8 +149,10 @@ pub(crate) fn owned_parameter_evidence<'a>(
         .and_then(Value::as_array)
     {
         if parameters.len() > values.len() {
-            return Err(QueryError::invalid(owner_id,
-                "ownedParameter projection must match canonical owns order and membership; too few entries for the known Parameters"));
+            return Err(QueryError::invalid(
+                owner_id,
+                "ownedParameter projection must match canonical owns order and membership; too few entries for the known Parameters",
+            ));
         }
         let local_ids = values
             .iter()
@@ -172,7 +174,9 @@ pub(crate) fn owned_parameter_evidence<'a>(
             .iter()
             .filter(|element| {
                 local_ids.contains(&element.id())
-                    || parameters.iter().any(|parameter| parameter.id == element.id())
+                    || parameters
+                        .iter()
+                        .any(|parameter| parameter.id == element.id())
             })
             .map(|element| element.id())
             .collect::<Vec<_>>();
@@ -185,16 +189,20 @@ pub(crate) fn owned_parameter_evidence<'a>(
                 .and_then(|id| required_ids.iter().position(|required| *required == id))
             {
                 if parameter_index - consumed_parameters > entry_index - consumed_entries {
-                    return Err(QueryError::invalid(owner_id,
-                        "ownedParameter projection has too few entries between known local anchors"));
+                    return Err(QueryError::invalid(
+                        owner_id,
+                        "ownedParameter projection has too few entries between known local anchors",
+                    ));
                 }
                 consumed_parameters = parameter_index + 1;
                 consumed_entries = entry_index + 1;
             }
         }
         if required_ids.len() - consumed_parameters > values.len() - consumed_entries {
-            return Err(QueryError::invalid(owner_id,
-                "ownedParameter projection has too few entries after the last known local anchor"));
+            return Err(QueryError::invalid(
+                owner_id,
+                "ownedParameter projection has too few entries after the last known local anchor",
+            ));
         }
     }
     if let Some(explicit) = explicit {
@@ -548,19 +556,28 @@ fn reception_reference<'a>(
     property_name: &str,
 ) -> Result<Option<ElementRef<'a>>, QueryError> {
     let descriptor = schema::uml_property(
-        owner.metaclass().ok_or_else(|| QueryError::unsupported(owner.id(), "unresolved metaclass"))?,
+        owner
+            .metaclass()
+            .ok_or_else(|| QueryError::unsupported(owner.id(), "unresolved metaclass"))?,
         property_name,
-    ).map_err(|error| QueryError::unsupported(owner.id(), error.to_string()))?
-        .ok_or_else(|| QueryError::unsupported(owner.id(), "missing reference contract"))?;
-    let value = owner.properties().get(property_name).unwrap_or(&Value::Null);
+    )
+    .map_err(|error| QueryError::unsupported(owner.id(), error.to_string()))?
+    .ok_or_else(|| QueryError::unsupported(owner.id(), "missing reference contract"))?;
+    let value = owner
+        .properties()
+        .get(property_name)
+        .unwrap_or(&Value::Null);
     match super::property_contracts::check_value(references, owner, descriptor, value) {
         super::property_contracts::PropertyOutcome::Satisfied => {}
-        super::property_contracts::PropertyOutcome::Violation(message) =>
-            return Err(QueryError::invalid(owner.id(), message)),
-        super::property_contracts::PropertyOutcome::Unverified(message) =>
-            return Err(QueryError::unsupported(owner.id(), message)),
+        super::property_contracts::PropertyOutcome::Violation(message) => {
+            return Err(QueryError::invalid(owner.id(), message));
+        }
+        super::property_contracts::PropertyOutcome::Unverified(message) => {
+            return Err(QueryError::unsupported(owner.id(), message));
+        }
     }
-    references.validate(descriptor, value)
+    references
+        .validate(descriptor, value)
         .map_err(|error| QueryError::invalid(owner.id(), error))
 }
 
@@ -571,19 +588,29 @@ fn signal_owned_attributes<'a>(
     let explicit = if let Some(value) = signal.properties().get("ownedAttribute") {
         let descriptor = schema::uml_property("Signal", "ownedAttribute")
             .map_err(|error| QueryError::unsupported(signal.id(), error.to_string()))?
-            .ok_or_else(|| QueryError::unsupported(signal.id(), "missing Signal::ownedAttribute contract"))?;
+            .ok_or_else(|| {
+                QueryError::unsupported(signal.id(), "missing Signal::ownedAttribute contract")
+            })?;
         match super::property_contracts::check_value(references, signal, descriptor, value) {
             super::property_contracts::PropertyOutcome::Satisfied => {}
-            super::property_contracts::PropertyOutcome::Violation(message) =>
-                return Err(QueryError::invalid(signal.id(), message)),
-            super::property_contracts::PropertyOutcome::Unverified(message) =>
-                return Err(QueryError::unsupported(signal.id(), message)),
+            super::property_contracts::PropertyOutcome::Violation(message) => {
+                return Err(QueryError::invalid(signal.id(), message));
+            }
+            super::property_contracts::PropertyOutcome::Unverified(message) => {
+                return Err(QueryError::unsupported(signal.id(), message));
+            }
         }
-        Some(references.validate_many(descriptor, value)
-            .map_err(|error| QueryError::invalid(signal.id(), error))?)
-    } else { None };
+        Some(
+            references
+                .validate_many(descriptor, value)
+                .map_err(|error| QueryError::invalid(signal.id(), error))?,
+        )
+    } else {
+        None
+    };
     let mut attributes = Vec::new();
-    for child in references.explicit_owned_elements(signal.id())
+    for child in references
+        .explicit_owned_elements(signal.id())
         .map_err(|error| QueryError::invalid(signal.id(), error))?
     {
         if classifiers::contributes_to_owned_union(signal, child, "Signal-ownedAttribute")? {
@@ -592,10 +619,14 @@ fn signal_owned_attributes<'a>(
     }
     if let Some(explicit) = explicit {
         if explicit.len() != attributes.len()
-            || attributes.iter().any(|attribute| !explicit.iter().any(|item| item.id() == attribute.id()))
+            || attributes
+                .iter()
+                .any(|attribute| !explicit.iter().any(|item| item.id() == attribute.id()))
         {
-            return Err(QueryError::invalid(signal.id(),
-                "Signal::ownedAttribute must match its canonically owned attributes"));
+            return Err(QueryError::invalid(
+                signal.id(),
+                "Signal::ownedAttribute must match its canonically owned attributes",
+            ));
         }
         return Ok(explicit);
     }
@@ -609,17 +640,21 @@ fn reception_bounds_match(
     upper: bool,
 ) -> Result<bool, QueryError> {
     let result = if upper {
-        value_specifications::upper_bound(references, parameter).and_then(|parameter_bound|
+        value_specifications::upper_bound(references, parameter).and_then(|parameter_bound| {
             value_specifications::upper_bound(references, attribute)
-                .map(|attribute_bound| parameter_bound == attribute_bound))
+                .map(|attribute_bound| parameter_bound == attribute_bound)
+        })
     } else {
-        value_specifications::lower_bound(references, parameter).and_then(|parameter_bound|
+        value_specifications::lower_bound(references, parameter).and_then(|parameter_bound| {
             value_specifications::lower_bound(references, attribute)
-                .map(|attribute_bound| parameter_bound == attribute_bound))
+                .map(|attribute_bound| parameter_bound == attribute_bound)
+        })
     };
     result.map_err(|error| match error {
         EvaluationError::Invalid { message, .. } => QueryError::invalid(parameter.id(), message),
-        EvaluationError::Unsupported { message, .. } => QueryError::unsupported(parameter.id(), message),
+        EvaluationError::Unsupported { message, .. } => {
+            QueryError::unsupported(parameter.id(), message)
+        }
     })
 }
 
@@ -630,7 +665,9 @@ fn reception_structure(
 ) -> Result<bool, QueryError> {
     let parameters = checked_owned_parameters(references, reception.id())?;
     let attributes = signal_owned_attributes(references, signal)?;
-    if parameters.len() != attributes.len() { return Ok(false); }
+    if parameters.len() != attributes.len() {
+        return Ok(false);
+    }
     super::feature_compatibility::require_all(parameters.into_iter().zip(attributes).map(
         |(parameter, attribute)| {
             let parameter = ElementRef::Object(parameter);
@@ -640,9 +677,11 @@ fn reception_structure(
                     .map_err(|error| QueryError::invalid(parameter.id(), error)),
                 Ok(parameter.named().and_then(|named| named.name())
                     == attribute.named().and_then(|named| named.name())),
-                reception_reference(references, parameter, "type").and_then(|parameter_type|
-                    reception_reference(references, attribute, "type")
-                        .map(|attribute_type| parameter_type.map(ElementRef::id) == attribute_type.map(ElementRef::id))),
+                reception_reference(references, parameter, "type").and_then(|parameter_type| {
+                    reception_reference(references, attribute, "type").map(|attribute_type| {
+                        parameter_type.map(ElementRef::id) == attribute_type.map(ElementRef::id)
+                    })
+                }),
                 reception_bounds_match(references, parameter, attribute, false),
                 reception_bounds_match(references, parameter, attribute, true),
             ])
@@ -666,24 +705,45 @@ fn validate_reception(
         });
         return;
     }
-    let signal = reception_reference(references, reception, "signal")
-        .and_then(|signal| signal.ok_or_else(|| QueryError::invalid(reception.id(), "Reception requires a Signal")));
+    let signal = reception_reference(references, reception, "signal").and_then(|signal| {
+        signal.ok_or_else(|| QueryError::invalid(reception.id(), "Reception requires a Signal"))
+    });
     for (rule, result) in [
-        ("Reception-same_name_as_signal", signal.clone().map(|signal|
-            reception.named().and_then(|named| named.name()) == signal.named().and_then(|named| named.name()))),
-        ("Reception-same_structure_as_signal", signal.and_then(|signal|
-            reception_structure(references, reception, signal))),
+        (
+            "Reception-same_name_as_signal",
+            signal.clone().map(|signal| {
+                reception.named().and_then(|named| named.name())
+                    == signal.named().and_then(|named| named.name())
+            }),
+        ),
+        (
+            "Reception-same_structure_as_signal",
+            signal.and_then(|signal| reception_structure(references, reception, signal)),
+        ),
     ] {
         let (severity, code, message) = match result {
             Ok(true) => continue,
-            Ok(false) => (StructuralSeverity::Error, "UML_RECEPTION_CONSTRAINT", rule.to_owned()),
-            Err(QueryError::Invalid { message, .. }) =>
-                (StructuralSeverity::Error, "UML_RECEPTION_CONSTRAINT", format!("{rule}: {message}")),
-            Err(QueryError::Unsupported { message, .. }) =>
-                (StructuralSeverity::Warning, "MDE_RECEPTION_CONSTRAINT_UNVERIFIED", format!("{rule}: {message}")),
+            Ok(false) => (
+                StructuralSeverity::Error,
+                "UML_RECEPTION_CONSTRAINT",
+                rule.to_owned(),
+            ),
+            Err(QueryError::Invalid { message, .. }) => (
+                StructuralSeverity::Error,
+                "UML_RECEPTION_CONSTRAINT",
+                format!("{rule}: {message}"),
+            ),
+            Err(QueryError::Unsupported { message, .. }) => (
+                StructuralSeverity::Warning,
+                "MDE_RECEPTION_CONSTRAINT_UNVERIFIED",
+                format!("{rule}: {message}"),
+            ),
         };
         issues.push(StructuralDiagnostic {
-            severity, code, subject_id: reception.id().into(), message,
+            severity,
+            code,
+            subject_id: reception.id().into(),
+            message,
         });
     }
 }
@@ -701,15 +761,24 @@ fn validate_parameter_scalars(
         .map_err(|message| QueryError::invalid(parameter.id(), message));
     let stream = schema::read_effective_boolean(parameter, "isStream")
         .map_err(|message| QueryError::invalid(parameter.id(), message));
-    let in_and_out = parameter_effect(references, parameter).and_then(|effect|
+    let in_and_out = parameter_effect(references, parameter).and_then(|effect| {
         direction.as_ref().map_err(Clone::clone).map(|direction| {
             (effect != Some("delete") || matches!(direction.as_str(), Some("in" | "inout")))
-                && (effect != Some("create") || matches!(direction.as_str(), Some("out" | "inout" | "return")))
-        }));
-    let not_exception = exception.as_ref().map_err(Clone::clone).and_then(|exception|
-        direction.as_ref().map_err(Clone::clone).map(|direction|
-            !exception || !matches!(direction.as_str(), Some("in" | "inout"))));
-    let stream_and_exception = exception.and_then(|exception| stream.map(|stream| !(exception && stream)));
+                && (effect != Some("create")
+                    || matches!(direction.as_str(), Some("out" | "inout" | "return")))
+        })
+    });
+    let not_exception = exception
+        .as_ref()
+        .map_err(Clone::clone)
+        .and_then(|exception| {
+            direction
+                .as_ref()
+                .map_err(Clone::clone)
+                .map(|direction| !exception || !matches!(direction.as_str(), Some("in" | "inout")))
+        });
+    let stream_and_exception =
+        exception.and_then(|exception| stream.map(|stream| !(exception && stream)));
     for (rule, result) in [
         ("in_and_out", in_and_out),
         ("not_exception", not_exception),
@@ -717,25 +786,48 @@ fn validate_parameter_scalars(
     ] {
         let (severity, code, message) = match result {
             Ok(true) => continue,
-            Ok(false) => (StructuralSeverity::Error, "UML_PARAMETER_CONSTRAINT", "scalar constraint violated".to_owned()),
-            Err(QueryError::Invalid { message, .. }) => (StructuralSeverity::Error, "MDE_PARAMETER_SCALAR_INVALID", message),
-            Err(QueryError::Unsupported { message, .. }) => (StructuralSeverity::Warning, "MDE_PARAMETER_SCALAR_UNVERIFIED", message),
+            Ok(false) => (
+                StructuralSeverity::Error,
+                "UML_PARAMETER_CONSTRAINT",
+                "scalar constraint violated".to_owned(),
+            ),
+            Err(QueryError::Invalid { message, .. }) => (
+                StructuralSeverity::Error,
+                "MDE_PARAMETER_SCALAR_INVALID",
+                message,
+            ),
+            Err(QueryError::Unsupported { message, .. }) => (
+                StructuralSeverity::Warning,
+                "MDE_PARAMETER_SCALAR_UNVERIFIED",
+                message,
+            ),
         };
-        issues.push(StructuralDiagnostic { severity, code, subject_id: parameter.id().into(),
-            message: format!("Parameter::{rule}: {message}") });
+        issues.push(StructuralDiagnostic {
+            severity,
+            code,
+            subject_id: parameter.id().into(),
+            message: format!("Parameter::{rule}: {message}"),
+        });
     }
 }
 
-fn parameter_effect<'a>(references: &ReferenceIndex<'a>, parameter: ElementRef<'a>) -> Result<Option<&'a str>, QueryError> {
-    use super::property_contracts::{check_value, PropertyOutcome};
+fn parameter_effect<'a>(
+    references: &ReferenceIndex<'a>,
+    parameter: ElementRef<'a>,
+) -> Result<Option<&'a str>, QueryError> {
+    use super::property_contracts::{PropertyOutcome, check_value};
     let descriptor = schema::uml_property("Parameter", "effect")
         .map_err(|error| QueryError::unsupported(parameter.id(), error.to_string()))?
-        .ok_or_else(|| QueryError::unsupported(parameter.id(), "missing Parameter::effect contract"))?;
+        .ok_or_else(|| {
+            QueryError::unsupported(parameter.id(), "missing Parameter::effect contract")
+        })?;
     let effect = parameter.properties().get("effect").unwrap_or(&Value::Null);
     match check_value(references, parameter, descriptor, effect) {
         PropertyOutcome::Satisfied => Ok(effect.as_str()),
         PropertyOutcome::Violation(message) => Err(QueryError::invalid(parameter.id(), message)),
-        PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(parameter.id(), message)),
+        PropertyOutcome::Unverified(message) => {
+            Err(QueryError::unsupported(parameter.id(), message))
+        }
     }
 }
 
@@ -875,28 +967,53 @@ fn parameter_set_same_entity(
     references: &ReferenceIndex<'_>,
     parameter_set: ElementRef<'_>,
 ) -> Result<bool, QueryError> {
-    use super::property_contracts::{check_value, PropertyOutcome};
+    use super::property_contracts::{PropertyOutcome, check_value};
     let descriptor = schema::uml_property("ParameterSet", "parameter")
         .map_err(|error| QueryError::unsupported(parameter_set.id(), error.to_string()))?
-        .ok_or_else(|| QueryError::unsupported(parameter_set.id(), "missing ParameterSet::parameter contract"))?;
-    let value = parameter_set.properties().get("parameter")
-        .ok_or_else(|| QueryError::unsupported(parameter_set.id(), "ParameterSet::parameter identities are not materialized"))?;
+        .ok_or_else(|| {
+            QueryError::unsupported(
+                parameter_set.id(),
+                "missing ParameterSet::parameter contract",
+            )
+        })?;
+    let value = parameter_set.properties().get("parameter").ok_or_else(|| {
+        QueryError::unsupported(
+            parameter_set.id(),
+            "ParameterSet::parameter identities are not materialized",
+        )
+    })?;
     let mut checks = Vec::new();
     match check_value(references, parameter_set, descriptor, value) {
         PropertyOutcome::Satisfied => {}
-        PropertyOutcome::Violation(message) => return Err(QueryError::invalid(parameter_set.id(), message)),
-        PropertyOutcome::Unverified(message) => checks.push(Err(QueryError::unsupported(parameter_set.id(), message))),
+        PropertyOutcome::Violation(message) => {
+            return Err(QueryError::invalid(parameter_set.id(), message));
+        }
+        PropertyOutcome::Unverified(message) => {
+            checks.push(Err(QueryError::unsupported(parameter_set.id(), message)))
+        }
     }
-    let values = value.as_array().ok_or_else(|| QueryError::invalid(parameter_set.id(), "parameter must be a collection"))?;
+    let values = value
+        .as_array()
+        .ok_or_else(|| QueryError::invalid(parameter_set.id(), "parameter must be a collection"))?;
     let owner_id = |element| -> Result<Option<&str>, QueryError> {
-        references.model().owner(element)
+        references
+            .model()
+            .owner(element)
             .map_err(|error| QueryError::invalid(parameter_set.id(), error))?
-            .map(|owner| references.element(owner.id()).map(ElementRef::id)
-                .map_err(|error| QueryError::invalid(parameter_set.id(), error)))
+            .map(|owner| {
+                references
+                    .element(owner.id())
+                    .map(ElementRef::id)
+                    .map_err(|error| QueryError::invalid(parameter_set.id(), error))
+            })
             .transpose()
     };
     let owner = owner_id(parameter_set)?;
-    let single = schema::PropertyDescriptor { lower: "1", upper: "1", ..*descriptor };
+    let single = schema::PropertyDescriptor {
+        lower: "1",
+        upper: "1",
+        ..*descriptor
+    };
     let mut known_direction = None;
     for value in values {
         match check_value(references, parameter_set, &single, value) {
@@ -911,23 +1028,44 @@ fn parameter_set_same_entity(
         }
         // An unresolved metaclass does not erase a local identity or its
         // canonical owner. Only a genuinely external member lacks that evidence.
-        if matches!(super::references::external_reference_href(value), Ok(Some(_))) { continue; }
+        if matches!(
+            super::references::external_reference_href(value),
+            Ok(Some(_))
+        ) {
+            continue;
+        }
         let parameter = super::references::reference_id(value)
             .map_err(|error| QueryError::invalid(parameter_set.id(), error))
-            .and_then(|id| id.ok_or_else(|| QueryError::invalid(parameter_set.id(), "parameter cannot be absent")))
-            .and_then(|id| references.element(id).map_err(|error| QueryError::invalid(parameter_set.id(), error)));
+            .and_then(|id| {
+                id.ok_or_else(|| {
+                    QueryError::invalid(parameter_set.id(), "parameter cannot be absent")
+                })
+            })
+            .and_then(|id| {
+                references
+                    .element(id)
+                    .map_err(|error| QueryError::invalid(parameter_set.id(), error))
+            });
         let parameter = match parameter {
             Ok(parameter) => parameter,
-            Err(error) => { checks.push(Err(error)); continue; }
+            Err(error) => {
+                checks.push(Err(error));
+                continue;
+            }
         };
         checks.push(owner_id(parameter).map(|parameter_owner| parameter_owner == owner));
-        if !parameter.conforms_to("Parameter") { continue; }
+        if !parameter.conforms_to("Parameter") {
+            continue;
+        }
         let parameter_direction = schema::read_effective_scalar(parameter, "direction")
             .map_err(|error| QueryError::invalid(parameter.id(), error));
         match parameter_direction {
             Ok(direction) => {
-                if let Some(known) = &known_direction { checks.push(Ok(known == &direction)); }
-                else { known_direction = Some(direction); }
+                if let Some(known) = &known_direction {
+                    checks.push(Ok(known == &direction));
+                } else {
+                    known_direction = Some(direction);
+                }
             }
             Err(error) => checks.push(Err(error)),
         }
@@ -952,23 +1090,43 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
                     "MDE_OPERATION_TEMPLATE_DEFAULT_SIGNATURE_UNVERIFIED", message)),
             };
             if let Some((severity, code, message)) = outcome {
-                issues.push(StructuralDiagnostic { severity, code, subject_id: element.id().into(),
-                    message: format!("OperationTemplateParameter-match_default_signature: {message}") });
+                issues.push(StructuralDiagnostic {
+                    severity,
+                    code,
+                    subject_id: element.id().into(),
+                    message: format!(
+                        "OperationTemplateParameter-match_default_signature: {message}"
+                    ),
+                });
             }
         }
         if element.conforms_to("ParameterSet") {
             let outcome = match parameter_set_same_entity(references, element) {
                 Ok(true) => None,
-                Ok(false) => Some((StructuralSeverity::Error, "UML_PARAMETER_SET_SAME_PARAMETERIZED_ENTITY",
-                    "Parameters must share their ParameterSet's canonical owner and direction".to_owned())),
-                Err(QueryError::Invalid { message, .. }) => Some((StructuralSeverity::Error,
-                    "MDE_PARAMETER_SET_SAME_PARAMETERIZED_ENTITY_INVALID", message)),
-                Err(QueryError::Unsupported { message, .. }) => Some((StructuralSeverity::Warning,
-                    "MDE_PARAMETER_SET_SAME_PARAMETERIZED_ENTITY_UNVERIFIED", message)),
+                Ok(false) => Some((
+                    StructuralSeverity::Error,
+                    "UML_PARAMETER_SET_SAME_PARAMETERIZED_ENTITY",
+                    "Parameters must share their ParameterSet's canonical owner and direction"
+                        .to_owned(),
+                )),
+                Err(QueryError::Invalid { message, .. }) => Some((
+                    StructuralSeverity::Error,
+                    "MDE_PARAMETER_SET_SAME_PARAMETERIZED_ENTITY_INVALID",
+                    message,
+                )),
+                Err(QueryError::Unsupported { message, .. }) => Some((
+                    StructuralSeverity::Warning,
+                    "MDE_PARAMETER_SET_SAME_PARAMETERIZED_ENTITY_UNVERIFIED",
+                    message,
+                )),
             };
             if let Some((severity, code, message)) = outcome {
-                issues.push(StructuralDiagnostic { severity, code, subject_id: element.id().into(),
-                    message: format!("ParameterSet-same_parameterized_entity: {message}") });
+                issues.push(StructuralDiagnostic {
+                    severity,
+                    code,
+                    subject_id: element.id().into(),
+                    message: format!("ParameterSet-same_parameterized_entity: {message}"),
+                });
             }
         }
         if element.conforms_to("Reception") {
@@ -1026,8 +1184,16 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
             if let Err(error) = validate_body_condition(references, element) {
                 let unknown = matches!(error, QueryError::Unsupported { .. });
                 issues.push(StructuralDiagnostic {
-                    severity: if unknown { StructuralSeverity::Warning } else { StructuralSeverity::Error },
-                    code: if unknown { "MDE_OPERATION_BODY_CONDITION_UNVERIFIED" } else { "UML_OPERATION_BODY_CONDITION" },
+                    severity: if unknown {
+                        StructuralSeverity::Warning
+                    } else {
+                        StructuralSeverity::Error
+                    },
+                    code: if unknown {
+                        "MDE_OPERATION_BODY_CONDITION_UNVERIFIED"
+                    } else {
+                        "UML_OPERATION_BODY_CONDITION"
+                    },
                     subject_id: element.id().into(),
                     message: error.to_string(),
                 });
@@ -1042,36 +1208,83 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
             }
             let return_count = match at_most_one_return(references, element) {
                 Ok(true) => None,
-                Ok(false) => Some((StructuralSeverity::Error, "UML_OPERATION_AT_MOST_ONE_RETURN", "at most one owned Parameter may have return direction".to_owned())),
-                Err(QueryError::Invalid { message, .. }) => Some((StructuralSeverity::Error, "MDE_OPERATION_AT_MOST_ONE_RETURN_INVALID", message)),
-                Err(QueryError::Unsupported { message, .. }) => Some((StructuralSeverity::Warning, "MDE_OPERATION_AT_MOST_ONE_RETURN_UNVERIFIED", message)),
+                Ok(false) => Some((
+                    StructuralSeverity::Error,
+                    "UML_OPERATION_AT_MOST_ONE_RETURN",
+                    "at most one owned Parameter may have return direction".to_owned(),
+                )),
+                Err(QueryError::Invalid { message, .. }) => Some((
+                    StructuralSeverity::Error,
+                    "MDE_OPERATION_AT_MOST_ONE_RETURN_INVALID",
+                    message,
+                )),
+                Err(QueryError::Unsupported { message, .. }) => Some((
+                    StructuralSeverity::Warning,
+                    "MDE_OPERATION_AT_MOST_ONE_RETURN_UNVERIFIED",
+                    message,
+                )),
             };
             if let Some((severity, code, message)) = return_count {
-                issues.push(StructuralDiagnostic { severity, code, subject_id:element.id().into(), message:format!("Operation-at_most_one_return: {message}") });
+                issues.push(StructuralDiagnostic {
+                    severity,
+                    code,
+                    subject_id: element.id().into(),
+                    message: format!("Operation-at_most_one_return: {message}"),
+                });
             }
             let outcome = match only_body_for_query(references, element) {
                 Ok(true) => None,
-                Ok(false) => Some((StructuralSeverity::Error, "UML_OPERATION_ONLY_BODY_FOR_QUERY", "a bodyCondition requires a query Operation".to_owned())),
-                Err(QueryError::Invalid { message, .. }) => Some((StructuralSeverity::Error, "MDE_OPERATION_ONLY_BODY_FOR_QUERY_INVALID", message)),
-                Err(QueryError::Unsupported { message, .. }) => Some((StructuralSeverity::Warning, "MDE_OPERATION_ONLY_BODY_FOR_QUERY_UNVERIFIED", message)),
+                Ok(false) => Some((
+                    StructuralSeverity::Error,
+                    "UML_OPERATION_ONLY_BODY_FOR_QUERY",
+                    "a bodyCondition requires a query Operation".to_owned(),
+                )),
+                Err(QueryError::Invalid { message, .. }) => Some((
+                    StructuralSeverity::Error,
+                    "MDE_OPERATION_ONLY_BODY_FOR_QUERY_INVALID",
+                    message,
+                )),
+                Err(QueryError::Unsupported { message, .. }) => Some((
+                    StructuralSeverity::Warning,
+                    "MDE_OPERATION_ONLY_BODY_FOR_QUERY_UNVERIFIED",
+                    message,
+                )),
             };
             if let Some((severity, code, message)) = outcome {
-                issues.push(StructuralDiagnostic { severity, code, subject_id:element.id().into(), message:format!("Operation-only_body_for_query: {message}") });
+                issues.push(StructuralDiagnostic {
+                    severity,
+                    code,
+                    subject_id: element.id().into(),
+                    message: format!("Operation-only_body_for_query: {message}"),
+                });
             }
         } else if element.conforms_to("Parameter") {
             validate_parameter_relations(references, element, &mut issues);
             let outcome = match parameter_object_effect(references, element) {
                 Ok(true) => None,
-                Ok(false) => Some((StructuralSeverity::Error, "UML_PARAMETER_OBJECT_EFFECT",
-                    "DataType-typed Parameters cannot have an effect".to_owned())),
-                Err(QueryError::Invalid { message, .. }) => Some((StructuralSeverity::Error,
-                    "MDE_PARAMETER_OBJECT_EFFECT_INVALID", message)),
-                Err(QueryError::Unsupported { message, .. }) => Some((StructuralSeverity::Warning,
-                    "MDE_PARAMETER_OBJECT_EFFECT_UNVERIFIED", message)),
+                Ok(false) => Some((
+                    StructuralSeverity::Error,
+                    "UML_PARAMETER_OBJECT_EFFECT",
+                    "DataType-typed Parameters cannot have an effect".to_owned(),
+                )),
+                Err(QueryError::Invalid { message, .. }) => Some((
+                    StructuralSeverity::Error,
+                    "MDE_PARAMETER_OBJECT_EFFECT_INVALID",
+                    message,
+                )),
+                Err(QueryError::Unsupported { message, .. }) => Some((
+                    StructuralSeverity::Warning,
+                    "MDE_PARAMETER_OBJECT_EFFECT_UNVERIFIED",
+                    message,
+                )),
             };
             if let Some((severity, code, message)) = outcome {
-                issues.push(StructuralDiagnostic { severity, code, subject_id: element.id().into(),
-                    message: format!("Parameter-object_effect: {message}") });
+                issues.push(StructuralDiagnostic {
+                    severity,
+                    code,
+                    subject_id: element.id().into(),
+                    message: format!("Parameter-object_effect: {message}"),
+                });
             }
             validate_parameter_scalars(references, element, &mut issues);
         }

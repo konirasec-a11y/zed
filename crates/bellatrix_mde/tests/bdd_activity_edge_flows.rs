@@ -96,8 +96,10 @@ fn rule_diagnostic(response: &Value, severity: Option<&str>) -> FlowResult<()> {
 }
 
 fn reopen(name: &str, envelope: &Value, expected: &Value) -> FlowResult<()> {
-    let canonical: Value = serde_json::from_str(&decode_model_document(
-        &serde_json::to_vec(&envelope["model"])?, "json").map_err(std::io::Error::other)?)?;
+    let canonical: Value = serde_json::from_str(
+        &decode_model_document(&serde_json::to_vec(&envelope["model"])?, "json")
+            .map_err(std::io::Error::other)?,
+    )?;
     let directory = std::env::temp_dir().join(format!(
         "bellatrix-activity-edge-{}-{name}",
         std::process::id()
@@ -107,7 +109,10 @@ fn reopen(name: &str, envelope: &Value, expected: &Value) -> FlowResult<()> {
     for name in ["json", "protobuf"] {
         println!("And I save, close and reopen {name}, preserving authored data and findings");
         let path = saved.0.join(name);
-        fs::write(&path, encode_model_document(&canonical.to_string(), name).map_err(std::io::Error::other)?)?;
+        fs::write(
+            &path,
+            encode_model_document(&canonical.to_string(), name).map_err(std::io::Error::other)?,
+        )?;
         let reopened: Value = serde_json::from_str(
             &decode_model_document(&fs::read(path)?, name).map_err(std::io::Error::other)?,
         )?;

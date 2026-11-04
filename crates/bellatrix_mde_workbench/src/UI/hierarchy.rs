@@ -12,8 +12,15 @@ pub(crate) struct ExplorerDiagramDrag {
     pub diagram_id: String,
     pub revision: u64,
     pub label: String,
-    pub parent_checks:
-        std::rc::Rc<std::cell::RefCell<Vec<(Option<String>, Option<bellatrix_mde_cordis::ViewOccurrence>, Result<(), String>)>>>,
+    pub parent_checks: std::rc::Rc<
+        std::cell::RefCell<
+            Vec<(
+                Option<String>,
+                Option<bellatrix_mde_cordis::ViewOccurrence>,
+                Result<(), String>,
+            )>,
+        >,
+    >,
 }
 
 impl gpui::Render for ExplorerDiagramDrag {
@@ -24,7 +31,11 @@ impl gpui::Render for ExplorerDiagramDrag {
     ) -> impl gpui::IntoElement {
         use gpui::prelude::*;
         let palette = crate::workbench_ui::WorkbenchPalette::current(cx);
-        gpui::div().px_2().py_1().bg(palette.surface).text_color(palette.text)
+        gpui::div()
+            .px_2()
+            .py_1()
+            .bg(palette.surface)
+            .text_color(palette.text)
             .child(format!("Move diagram: {}", self.label))
     }
 }
@@ -146,7 +157,10 @@ pub(crate) fn explorer_element_icon(
         "rust.enum" => "Enumeration",
         "rust.trait" => "Interface",
         "rust.function" | "rust.method" => "Operation",
-        _ => identity.metaclass.as_deref().unwrap_or(&identity.type_label),
+        _ => identity
+            .metaclass
+            .as_deref()
+            .unwrap_or(&identity.type_label),
     };
     let (data, category) = explorer_glyph(name).unwrap_or_else(|| {
         let category = if identity.relationship {
@@ -154,7 +168,10 @@ pub(crate) fn explorer_element_icon(
         } else {
             ExplorerIconCategory::Element
         };
-        (bellatrix_ui_symbols::glyph(element_glyph(kind, &identity.type_label)), category)
+        (
+            bellatrix_ui_symbols::glyph(element_glyph(kind, &identity.type_label)),
+            category,
+        )
     });
     explorer_colored_icon(data, category, palette)
 }

@@ -46,12 +46,7 @@ impl RenderOnce for FlowNode {
             .flex_col()
             .items_center()
             .gap_1()
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(gpui::rgb(p.muted))
-                    .child(label),
-            )
+            .child(div().text_xs().text_color(gpui::rgb(p.muted)).child(label))
             .child(
                 div()
                     .text_sm()

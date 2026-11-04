@@ -16,12 +16,16 @@ impl Render for MdeWorkbenchItem {
         let pan = self.pan;
         let canvas_origin = std::rc::Rc::new(std::cell::Cell::new(None::<(f64, f64)>));
         let relation_hint = match self.presentation.selected_tool() {
-            Some(ModelingTool::Relation(kind)) => snapshot.as_ref().ok()
+            Some(ModelingTool::Relation(kind)) => snapshot
+                .as_ref()
+                .ok()
                 .and_then(|snapshot| snapshot.section.tools.relation(kind))
-                .map(|metadata| if self.presentation.pending_relation_source().is_some() {
-                    format!("{}: click second element (target)", metadata.label)
-                } else {
-                    format!("{}: {}", metadata.label, metadata.endpoint_instruction)
+                .map(|metadata| {
+                    if self.presentation.pending_relation_source().is_some() {
+                        format!("{}: click second element (target)", metadata.label)
+                    } else {
+                        format!("{}: {}", metadata.label, metadata.endpoint_instruction)
+                    }
                 }),
             _ => None,
         };
@@ -34,14 +38,13 @@ impl Render for MdeWorkbenchItem {
         let mut marker_diagnostics = Vec::new();
         match snapshot {
             Ok(snapshot) => {
-                let diagram = self.presentation.active_diagram()
-                    .and_then(|id| {
-                        snapshot
-                            .section
-                            .diagrams
-                            .iter()
-                            .find(|diagram| diagram.id == id)
-                    });
+                let diagram = self.presentation.active_diagram().and_then(|id| {
+                    snapshot
+                        .section
+                        .diagrams
+                        .iter()
+                        .find(|diagram| diagram.id == id)
+                });
                 details = format!(
                     "{} elements · {} relations · rev {}",
                     snapshot.section.elements.len(),
@@ -70,10 +73,16 @@ impl Render for MdeWorkbenchItem {
                         }
                         if !view.rendered_label.diagnostics.is_empty() {
                             incomplete_preview = true;
-                            marker_diagnostics.extend(view.rendered_label.diagnostics.iter().cloned());
+                            marker_diagnostics
+                                .extend(view.rendered_label.diagnostics.iter().cloned());
                         }
                         if matches!(&view.geometry, Geometry::Layout { .. }) {
-                            if let Some(card) = self.render_imported_preview(&diagram.id, view, &mut node_bounds.borrow_mut(), cx) {
+                            if let Some(card) = self.render_imported_preview(
+                                &diagram.id,
+                                view,
+                                &mut node_bounds.borrow_mut(),
+                                cx,
+                            ) {
                                 cards.push(card);
                             }
                             continue;
@@ -99,7 +108,11 @@ impl Render for MdeWorkbenchItem {
                         let Some(subject) = view.subject.as_deref() else {
                             continue;
                         };
-                        let relation = snapshot.section.relations.iter().find(|relation| relation.id == subject);
+                        let relation = snapshot
+                            .section
+                            .relations
+                            .iter()
+                            .find(|relation| relation.id == subject);
                         if let Some(resolved) = &view.relationship {
                             if !resolved.diagnostics.is_empty() {
                                 incomplete_preview = true;
@@ -159,10 +172,18 @@ impl Render for MdeWorkbenchItem {
                                     )
                                 };
                                 // Imported coordinates may be finite f64 values outside GPUI's f32 range.
-                                if ![min_x, min_y, max_x, max_y, width, height,
+                                if ![
+                                    min_x,
+                                    min_y,
+                                    max_x,
+                                    max_y,
+                                    width,
+                                    height,
                                     (min_x - padding) * zoom + pan.0,
-                                    (min_y - padding) * zoom + pan.1]
-                                    .iter().all(|value| value.is_finite())
+                                    (min_y - padding) * zoom + pan.1,
+                                ]
+                                .iter()
+                                .all(|value| value.is_finite())
                                     || points.iter().any(|point| {
                                         let (x, y) = place(*point);
                                         !x.is_finite() || !y.is_finite()
@@ -172,24 +193,32 @@ impl Render for MdeWorkbenchItem {
                                 }
                                 if self.presentation.selected_element() == Some(subject)
                                     && self.presentation.selected_canvas_view().map_or_else(
-                                        || diagram.views.iter()
-                                            .find(|candidate| candidate.subject.as_deref() == Some(subject))
-                                            .is_some_and(|candidate| candidate.id == view.id),
+                                        || {
+                                            diagram
+                                                .views
+                                                .iter()
+                                                .find(|candidate| {
+                                                    candidate.subject.as_deref() == Some(subject)
+                                                })
+                                                .is_some_and(|candidate| candidate.id == view.id)
+                                        },
                                         |selected| selected == view.id,
                                     )
                                     && self.presentation.selected_tool().is_none()
                                     && let Some(relation) = relation
                                 {
-                                    if let Some(controls) = quick_edit_view::quick_edit_for_relationship(
-                                        &snapshot.section,
-                                        relation,
-                                        cx.entity(),
-                                        self.project_id().clone(),
-                                        snapshot.revision,
-                                        self.source.is_read_only(),
-                                        window,
-                                        cx,
-                                    ) {
+                                    if let Some(controls) =
+                                        quick_edit_view::quick_edit_for_relationship(
+                                            &snapshot.section,
+                                            relation,
+                                            cx.entity(),
+                                            self.project_id().clone(),
+                                            snapshot.revision,
+                                            self.source.is_read_only(),
+                                            window,
+                                            cx,
+                                        )
+                                    {
                                         relationship_controls.push(
                                             // Anchor to the canvas viewport, not the path bounds:
                                             // pan/zoom must not put editing controls outside its clip.
@@ -238,9 +267,18 @@ impl Render for MdeWorkbenchItem {
                                 .communication_message(resolved.communication_message)
                                 .labels(presentation)
                                 .view_scale(zoom)
-                                .selected(self.presentation.selected_element() == Some(subject)
-                                    && self.presentation.selected_canvas_view().is_none_or(|selected| selected == view.id));
-                                let glyph = if let Some((source, target)) = &resolved.markers { glyph.endpoint_markers(source.clone(), target.clone()) } else { glyph };
+                                .selected(
+                                    self.presentation.selected_element() == Some(subject)
+                                        && self
+                                            .presentation
+                                            .selected_canvas_view()
+                                            .is_none_or(|selected| selected == view.id),
+                                );
+                                let glyph = if let Some((source, target)) = &resolved.markers {
+                                    glyph.endpoint_markers(source.clone(), target.clone())
+                                } else {
+                                    glyph
+                                };
                                 let edge_owner = cx.weak_entity();
                                 let edge_id = subject.to_owned();
                                 let edge_view_id = view.id.clone();
@@ -342,8 +380,7 @@ impl Render for MdeWorkbenchItem {
                             Some(CanvasGesture::Resize {
                                 view_id, dx, dy, ..
                             }) if view_id == &view.id => {
-                                let (minimum_width, minimum_height) =
-                                    element.minimum_size;
+                                let (minimum_width, minimum_height) = element.minimum_size;
                                 local_width = (width + dx).max(minimum_width) as f32;
                                 local_height = (height + dy).max(minimum_height) as f32;
                             }
@@ -359,8 +396,16 @@ impl Render for MdeWorkbenchItem {
                         if let Some(minimum_height) = element.minimum_interface_height {
                             local_height = local_height.max(minimum_height as f32);
                         }
-                        let template_parameters = element.template_parameters.iter()
-                            .filter_map(|identifier| snapshot.section.elements.iter().find(|candidate| candidate.id == *identifier))
+                        let template_parameters = element
+                            .template_parameters
+                            .iter()
+                            .filter_map(|identifier| {
+                                snapshot
+                                    .section
+                                    .elements
+                                    .iter()
+                                    .find(|candidate| candidate.id == *identifier)
+                            })
                             .collect::<Vec<_>>();
                         let signature_layout = matches!(
                             notation,
@@ -381,27 +426,35 @@ impl Render for MdeWorkbenchItem {
                         let signature_top = signature_top as f32 * zoom;
                         let signature_right = signature_right as f32 * zoom;
                         let signature_bottom = signature_bottom as f32 * zoom;
-                        let selected_target = self.presentation.selected_element().and_then(|id| {
-                            if id == subject {
-                                Some(element)
-                            } else if template_parameters
-                                .iter()
-                                .any(|parameter| parameter.id == id)
-                            {
-                                template_parameters
+                        let selected_target = self
+                            .presentation
+                            .selected_element()
+                            .and_then(|id| {
+                                if id == subject {
+                                    Some(element)
+                                } else if template_parameters
                                     .iter()
-                                    .find(|parameter| parameter.id == id)
-                                    .copied()
-                            } else if view.member_labels.contains_key(id) {
-                                snapshot
-                                    .section
-                                    .elements
-                                    .iter()
-                                    .find(|element| element.id == id)
-                            } else {
-                                None
-                            }
-                        }).filter(|_| self.presentation.selected_canvas_view().is_none_or(|selected| selected == view.id));
+                                    .any(|parameter| parameter.id == id)
+                                {
+                                    template_parameters
+                                        .iter()
+                                        .find(|parameter| parameter.id == id)
+                                        .copied()
+                                } else if view.member_labels.contains_key(id) {
+                                    snapshot
+                                        .section
+                                        .elements
+                                        .iter()
+                                        .find(|element| element.id == id)
+                                } else {
+                                    None
+                                }
+                            })
+                            .filter(|_| {
+                                self.presentation
+                                    .selected_canvas_view()
+                                    .is_none_or(|selected| selected == view.id)
+                            });
                         let is_selected = selected_target.is_some();
                         let editing = selected_target.filter(|selected| {
                             self.presentation.editing_element() == Some(selected.id.as_str())
@@ -409,7 +462,8 @@ impl Render for MdeWorkbenchItem {
                         });
                         let (quick_actions, left_actions, visibility_picker) =
                             if let Some(selected) = selected_target.filter(|_| {
-                                !self.source.is_read_only() && self.presentation.selected_tool().is_none()
+                                !self.source.is_read_only()
+                                    && self.presentation.selected_tool().is_none()
                             }) {
                                 quick_edit_for_element(
                                     selected,
@@ -447,18 +501,24 @@ impl Render for MdeWorkbenchItem {
                             .selected(is_selected)
                             .on_title_edit(move |window, cx| {
                                 let id = title_id.clone();
-                                let _ = title_owner
-                                    .update(cx, |item, cx| {
-                                        item.select_diagram_view(title_diagram.clone(), title_view.clone(), cx);
-                                        item.begin_inline_edit(id, window, cx);
-                                    });
+                                let _ = title_owner.update(cx, |item, cx| {
+                                    item.select_diagram_view(
+                                        title_diagram.clone(),
+                                        title_view.clone(),
+                                        cx,
+                                    );
+                                    item.begin_inline_edit(id, window, cx);
+                                });
                             })
                             .on_member_click(move |member_id, window, cx| {
                                 let id = member_id.to_owned();
                                 let _ = select_owner.update(cx, |item, cx| {
-                                    let key = format!("view:{member_diagram}:{member_view}/member:{id}");
+                                    let key =
+                                        format!("view:{member_diagram}:{member_view}/member:{id}");
                                     let occurrence = bellatrix_mde_cordis::ViewOccurrence {
-                                        diagram_id: member_diagram.clone(), view_id: member_view.clone(), member_path: vec![id.clone()],
+                                        diagram_id: member_diagram.clone(),
+                                        view_id: member_view.clone(),
+                                        member_path: vec![id.clone()],
                                     };
                                     item.select_explorer_element(id, key, Some(occurrence), cx);
                                     cx.focus_self(window);
@@ -466,15 +526,23 @@ impl Render for MdeWorkbenchItem {
                             })
                             .on_member_edit(move |member_id, window, cx| {
                                 let id = member_id.to_owned();
-                                let _ = edit_owner
-                                    .update(cx, |item, cx| {
-                                        let key = format!("view:{edit_member_diagram}:{edit_member_view}/member:{id}");
-                                        let occurrence = bellatrix_mde_cordis::ViewOccurrence {
-                                            diagram_id: edit_member_diagram.clone(), view_id: edit_member_view.clone(), member_path: vec![id.clone()],
-                                        };
-                                        item.select_explorer_element(id.clone(), key, Some(occurrence), cx);
-                                        item.begin_inline_edit(id, window, cx);
-                                    });
+                                let _ = edit_owner.update(cx, |item, cx| {
+                                    let key = format!(
+                                        "view:{edit_member_diagram}:{edit_member_view}/member:{id}"
+                                    );
+                                    let occurrence = bellatrix_mde_cordis::ViewOccurrence {
+                                        diagram_id: edit_member_diagram.clone(),
+                                        view_id: edit_member_view.clone(),
+                                        member_path: vec![id.clone()],
+                                    };
+                                    item.select_explorer_element(
+                                        id.clone(),
+                                        key,
+                                        Some(occurrence),
+                                        cx,
+                                    );
+                                    item.begin_inline_edit(id, window, cx);
+                                });
                             });
                         for identifier in &element.members {
                             let Some(member) = snapshot
@@ -503,10 +571,7 @@ impl Render for MdeWorkbenchItem {
                                 }
                                 _ => {}
                             }
-                            classifier = classifier.member_presentation(
-                                &member.id,
-                                member.member,
-                            );
+                            classifier = classifier.member_presentation(&member.id, member.member);
                         }
                         for parameter in template_parameters {
                             classifier = classifier.template_parameter_with_id(
@@ -515,9 +580,10 @@ impl Render for MdeWorkbenchItem {
                             );
                         }
                         if editing.is_some() {
-                            if let (Some(id), Some(field)) =
-                                (self.presentation.editing_element().map(str::to_owned), self.inline_editor.clone())
-                            {
+                            if let (Some(id), Some(field)) = (
+                                self.presentation.editing_element().map(str::to_owned),
+                                self.inline_editor.clone(),
+                            ) {
                                 let accept = cx.weak_entity();
                                 let cancel = cx.weak_entity();
                                 classifier = classifier.inline_edit(
@@ -541,19 +607,28 @@ impl Render for MdeWorkbenchItem {
                             let edit_id = element.id.clone();
                             let edit_diagram = diagram.id.clone();
                             let edit_view = view.id.clone();
-                            let mut figure = UmlFigure::new(view.figure.clone(), view.display_label.clone())
-                                .nested_views(has_nested_views)
-                                .with_template_parameters_from(&classifier)
-                                .view_style(&view.render_style)
-                                .selected(is_selected)
-                                .view_size(f64::from(local_width), f64::from(local_height), zoom)
-                                .on_title_edit(move |window, cx| {
-                                    let id = edit_id.clone();
-                                    let _ = edit_owner.update(cx, |item, cx| {
-                                        item.select_diagram_view(edit_diagram.clone(), edit_view.clone(), cx);
-                                        item.begin_inline_edit(id, window, cx)
+                            let mut figure =
+                                UmlFigure::new(view.figure.clone(), view.display_label.clone())
+                                    .nested_views(has_nested_views)
+                                    .with_template_parameters_from(&classifier)
+                                    .view_style(&view.render_style)
+                                    .selected(is_selected)
+                                    .view_size(
+                                        f64::from(local_width),
+                                        f64::from(local_height),
+                                        zoom,
+                                    )
+                                    .on_title_edit(move |window, cx| {
+                                        let id = edit_id.clone();
+                                        let _ = edit_owner.update(cx, |item, cx| {
+                                            item.select_diagram_view(
+                                                edit_diagram.clone(),
+                                                edit_view.clone(),
+                                                cx,
+                                            );
+                                            item.begin_inline_edit(id, window, cx)
+                                        });
                                     });
-                                });
                             if editing.is_some_and(|target| target.id == element.id) {
                                 if let Some(field) = self.inline_editor.clone() {
                                     let confirm = cx.weak_entity();
@@ -574,10 +649,7 @@ impl Render for MdeWorkbenchItem {
                                 }
                             }
                             figure.into_any_element()
-                        } else if matches!(
-                            notation,
-                            UmlNotation::ClassifierRectangle
-                        ) {
+                        } else if matches!(notation, UmlNotation::ClassifierRectangle) {
                             classifier.into_any_element()
                         } else {
                             div()
@@ -597,8 +669,10 @@ impl Render for MdeWorkbenchItem {
                         let drag_owner = cx.weak_entity();
                         let drag_id = view.id.clone();
                         let drag_diagram = diagram.id.clone();
-                        let connection_mode =
-                            matches!(self.presentation.selected_tool(), Some(ModelingTool::Relation(_)));
+                        let connection_mode = matches!(
+                            self.presentation.selected_tool(),
+                            Some(ModelingTool::Relation(_))
+                        );
                         let connect_owner = cx.weak_entity();
                         let connect_view = view.id.clone();
                         let connection_origin = canvas_origin.clone();
@@ -625,10 +699,17 @@ impl Render for MdeWorkbenchItem {
                                     move |event: &MouseDownEvent, window, cx| {
                                         let _ = drag_owner.update(cx, |item, cx| {
                                             item.source.record_interaction(
-                                                if event.click_count >= 2 { "canvas.view.double_click" } else { "canvas.view.click" },
-                                                Some(&drag_id), bellatrix_mde_cordis::TraceOutcome::Success,
+                                                if event.click_count >= 2 {
+                                                    "canvas.view.double_click"
+                                                } else {
+                                                    "canvas.view.click"
+                                                },
+                                                Some(&drag_id),
+                                                bellatrix_mde_cordis::TraceOutcome::Success,
                                             );
-                                            if is_selected && item.presentation.selected_tool().is_none() {
+                                            if is_selected
+                                                && item.presentation.selected_tool().is_none()
+                                            {
                                                 if let Some(field) = &item.inline_editor {
                                                     field
                                                         .read(cx)
@@ -641,7 +722,11 @@ impl Render for MdeWorkbenchItem {
                                             if event.click_count >= 2
                                                 && item.presentation.selected_tool().is_none()
                                             {
-                                                item.select_diagram_view(drag_diagram.clone(), drag_id.clone(), cx);
+                                                item.select_diagram_view(
+                                                    drag_diagram.clone(),
+                                                    drag_id.clone(),
+                                                    cx,
+                                                );
                                                 item.begin_inline_edit(
                                                     element_id.clone(),
                                                     window,
@@ -724,9 +809,7 @@ impl Render for MdeWorkbenchItem {
                                     )
                                 })
                                 .when(
-                                    is_selected
-                                        && !connection_mode
-                                        && view.figure.resizable,
+                                    is_selected && !connection_mode && view.figure.resizable,
                                     |card| {
                                         card.child(
                                             div()
@@ -1174,7 +1257,12 @@ impl MdeWorkbenchItem {
                 );
             }
             imported_preview::ImportedShape::Label => {
-                card = card.overflow_hidden().line_height(px(view.render_style.font_size.unwrap_or(12.0) as f32 * self.zoom));
+                card = card.overflow_hidden().line_height(px(view
+                    .render_style
+                    .font_size
+                    .unwrap_or(12.0)
+                    as f32
+                    * self.zoom));
                 if selected {
                     card = card.border_1().border_color(gpui::rgb(palette.selection));
                 }
@@ -1182,7 +1270,11 @@ impl MdeWorkbenchItem {
             imported_preview::ImportedShape::InterfaceIcon => {
                 if let Some(icon) = &view.interface_icon {
                     card = card.child(bellatrix_ui_uml::render_interface_icon(
-                        icon.glyphs.clone(), appearance.clone(), palette, selected, self.zoom,
+                        icon.glyphs.clone(),
+                        appearance.clone(),
+                        palette,
+                        selected,
+                        self.zoom,
                     ));
                 }
             }
@@ -1331,9 +1423,11 @@ fn relationship_cubic_hit(
     {
         return relationship_segment_distance(position, start, end) <= tolerance;
     }
-    let midpoint = |left: bellatrix_mde_cordis::Point, right: bellatrix_mde_cordis::Point| bellatrix_mde_cordis::Point {
-        x: left.x + (right.x - left.x) / 2.0,
-        y: left.y + (right.y - left.y) / 2.0,
+    let midpoint = |left: bellatrix_mde_cordis::Point, right: bellatrix_mde_cordis::Point| {
+        bellatrix_mde_cordis::Point {
+            x: left.x + (right.x - left.x) / 2.0,
+            y: left.y + (right.y - left.y) / 2.0,
+        }
     };
     let first = midpoint(start, control1);
     let middle = midpoint(control1, control2);

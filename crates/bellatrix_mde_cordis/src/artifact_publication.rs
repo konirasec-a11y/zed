@@ -12,15 +12,23 @@ pub(crate) struct PreparedArtifacts {
 }
 
 impl PreparedArtifacts {
-    pub(crate) fn publish(&self, destination: &Path, replace_generated: bool) -> Result<(), String> {
-        bellatrix_mde::publish_artifact_manifest(self.manifest.get(), destination, replace_generated)
+    pub(crate) fn publish(
+        &self,
+        destination: &Path,
+        replace_generated: bool,
+    ) -> Result<(), String> {
+        bellatrix_mde::publish_artifact_manifest(
+            self.manifest.get(),
+            destination,
+            replace_generated,
+        )
     }
 }
 
 pub(crate) fn prepare(manifest: &str) -> Result<PreparedArtifacts, String> {
     let response = bellatrix_mde::prepare_artifact_publication(manifest)?;
-    let prepared: PreparedArtifacts = serde_json::from_str(&response)
-        .map_err(|error| error.to_string())?;
+    let prepared: PreparedArtifacts =
+        serde_json::from_str(&response).map_err(|error| error.to_string())?;
     if prepared.api_version != 1 {
         return Err("unsupported artifact preparation response version".into());
     }

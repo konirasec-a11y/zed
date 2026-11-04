@@ -25,7 +25,11 @@ pub struct Project {
         deserialize_with = "deserialize_hierarchy"
     )]
     pub hierarchy: std::collections::BTreeMap<String, crate::HierarchyPlacement>,
-    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty", deserialize_with = "super::composition::deserialize_composition")]
+    #[serde(
+        default,
+        skip_serializing_if = "std::collections::BTreeMap::is_empty",
+        deserialize_with = "super::composition::deserialize_composition"
+    )]
     pub composition: std::collections::BTreeMap<String, crate::CompositionPlacement>,
     #[serde(default)]
     pub elements: Vec<Element>,
@@ -60,11 +64,18 @@ impl Project {
             if let Some(occurrence) = &placement.occurrence {
                 // Pending semantic references are persisted for later kernel diagnostics.
                 // Only the occurrence graph itself must remain safe to traverse here.
-                let anchor = diagrams.get(occurrence.diagram_id.as_str())
-                    .and_then(|diagram| diagram.all_views().find(|view| view.id == occurrence.view_id))
+                let anchor = diagrams
+                    .get(occurrence.diagram_id.as_str())
+                    .and_then(|diagram| {
+                        diagram
+                            .all_views()
+                            .find(|view| view.id == occurrence.view_id)
+                    })
                     .and_then(|view| view.subject.as_deref());
                 let mut members = HashSet::new();
-                if let Some(anchor) = anchor { members.insert(anchor); }
+                if let Some(anchor) = anchor {
+                    members.insert(anchor);
+                }
                 for member in &occurrence.member_path {
                     if !members.insert(member.as_str()) {
                         return Err("View occurrence member path contains a cycle".into());

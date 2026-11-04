@@ -1,5 +1,5 @@
-use crate::Command;
 use crate::AssociationEndEdit;
+use crate::Command;
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::{Context, Event};
 

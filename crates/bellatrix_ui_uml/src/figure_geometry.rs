@@ -69,15 +69,33 @@ fn folded_note_layout(width: f64, height: f64) -> FoldedNoteLayout {
     FoldedNoteLayout {
         outline: [
             FigurePoint { x: left, y: top },
-            FigurePoint { x: right - fold_size, y: top },
-            FigurePoint { x: right, y: top + fold_size },
-            FigurePoint { x: right, y: bottom },
+            FigurePoint {
+                x: right - fold_size,
+                y: top,
+            },
+            FigurePoint {
+                x: right,
+                y: top + fold_size,
+            },
+            FigurePoint {
+                x: right,
+                y: bottom,
+            },
             FigurePoint { x: left, y: bottom },
         ],
         fold: [
-            FigurePoint { x: right - fold_size, y: top },
-            FigurePoint { x: right - fold_size, y: top + fold_size },
-            FigurePoint { x: right, y: top + fold_size },
+            FigurePoint {
+                x: right - fold_size,
+                y: top,
+            },
+            FigurePoint {
+                x: right - fold_size,
+                y: top + fold_size,
+            },
+            FigurePoint {
+                x: right,
+                y: top + fold_size,
+            },
         ],
     }
 }

@@ -439,7 +439,8 @@ impl StatusBar {
         if position < left_len {
             self.left_items.insert(position + 1, Box::new(item));
         } else if position < left_len + center_len {
-            self.center_items.insert(position + 1 - left_len, Box::new(item));
+            self.center_items
+                .insert(position + 1 - left_len, Box::new(item));
         } else {
             self.right_items
                 .insert(position + 1 - left_len - center_len, Box::new(item));
@@ -507,7 +508,12 @@ impl StatusBar {
 
     fn update_active_pane_item(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let active_pane_item = self.active_pane.read(cx).active_item();
-        for item in self.left_items.iter().chain(&self.center_items).chain(&self.right_items) {
+        for item in self
+            .left_items
+            .iter()
+            .chain(&self.center_items)
+            .chain(&self.right_items)
+        {
             item.set_active_pane_item(active_pane_item.as_deref(), window, cx);
         }
     }

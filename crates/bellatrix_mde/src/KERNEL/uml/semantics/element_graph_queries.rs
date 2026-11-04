@@ -109,16 +109,25 @@ pub(crate) fn ensure_canonical_ownership(
     // Raw legacy composites (for example textual defaultValue) must not be
     // reparsed as canonical references by ownership_roles. All explicit value
     // contracts above have already been inspected for independent violations.
-    if let Some(error) = unresolved { return Err(error); }
-    for child in index.model().owned_elements(element)
+    if let Some(error) = unresolved {
+        return Err(error);
+    }
+    for child in index
+        .model()
+        .owned_elements(element)
         .map_err(|error| ElementGraphError::invalid(element.id(), error))?
     {
-        let result = super::classifiers::ownership_roles(element, child).map_err(|error| match error {
-            super::classifiers::QueryError::Invalid { subject_id, message } =>
-                ElementGraphError::invalid(&subject_id, message),
-            super::classifiers::QueryError::Unsupported { subject_id, message } =>
-                ElementGraphError::unsupported(&subject_id, message),
-        });
+        let result =
+            super::classifiers::ownership_roles(element, child).map_err(|error| match error {
+                super::classifiers::QueryError::Invalid {
+                    subject_id,
+                    message,
+                } => ElementGraphError::invalid(&subject_id, message),
+                super::classifiers::QueryError::Unsupported {
+                    subject_id,
+                    message,
+                } => ElementGraphError::unsupported(&subject_id, message),
+            });
         match result {
             Ok(_) => {}
             Err(error @ ElementGraphError::Invalid { .. }) => return Err(error),
@@ -312,7 +321,8 @@ pub fn client_dependencies<'a>(
         .filter(|element| element.conforms_to("Dependency"))
     {
         if super::relationship_endpoints::clients(index, dependency.id())?
-            .iter().any(|client| client.id() == id)
+            .iter()
+            .any(|client| client.id() == id)
         {
             result.push(dependency);
         }

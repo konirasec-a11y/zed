@@ -17,7 +17,19 @@ impl MdeWorkbenchItem {
         point: bellatrix_mde_cordis::Point,
         cx: &mut Context<Self>,
     ) {
-        if self.source.snapshot().ok().and_then(|snapshot| snapshot.section.tools.relation(kind).map(|metadata| metadata.message_kind.is_some())).unwrap_or(false) {
+        if self
+            .source
+            .snapshot()
+            .ok()
+            .and_then(|snapshot| {
+                snapshot
+                    .section
+                    .tools
+                    .relation(kind)
+                    .map(|metadata| metadata.message_kind.is_some())
+            })
+            .unwrap_or(false)
+        {
             self.connect_relation_endpoint(kind, None, Some(point), cx);
         }
     }
@@ -41,7 +53,9 @@ impl MdeWorkbenchItem {
             }
         };
         let Some(metadata) = snapshot.section.tools.relation(kind) else {
-            self.feedback = "Relationship tool metadata unavailable".into(); cx.notify(); return;
+            self.feedback = "Relationship tool metadata unavailable".into();
+            cx.notify();
+            return;
         };
         let Some(diagram) = snapshot
             .section
@@ -85,8 +99,7 @@ impl MdeWorkbenchItem {
             self.apply_selection_change(change, cx);
             self.feedback = format!(
                 "{}: source selected. {}",
-                metadata.label,
-                metadata.endpoint_instruction
+                metadata.label, metadata.endpoint_instruction
             );
             cx.notify();
             return;
@@ -127,7 +140,9 @@ impl MdeWorkbenchItem {
             return;
         }
         let from = source.view_id.clone();
-        let change = self.presentation.select_relation_target(target_subject.clone(), target.clone());
+        let change = self
+            .presentation
+            .select_relation_target(target_subject.clone(), target.clone());
         self.apply_selection_change(change, cx);
         if !self.presentation.visual_draft_mode() && !metadata.is_visual_only {
             let (Some(source_view_id), Some(target_view_id)) = (from.clone(), target.clone())
@@ -135,11 +150,16 @@ impl MdeWorkbenchItem {
                 return;
             };
             let owner_id = match kind {
-                ModelingRelationKind::Generalization | ModelingRelationKind::InterfaceRealization
-                | ModelingRelationKind::TemplateBinding | ModelingRelationKind::Include
-                | ModelingRelationKind::Extend | ModelingRelationKind::ElementImport
-                | ModelingRelationKind::PackageImport | ModelingRelationKind::PackageMerge
-                | ModelingRelationKind::Manifestation | ModelingRelationKind::Deployment => source.subject_id.clone(),
+                ModelingRelationKind::Generalization
+                | ModelingRelationKind::InterfaceRealization
+                | ModelingRelationKind::TemplateBinding
+                | ModelingRelationKind::Include
+                | ModelingRelationKind::Extend
+                | ModelingRelationKind::ElementImport
+                | ModelingRelationKind::PackageImport
+                | ModelingRelationKind::PackageMerge
+                | ModelingRelationKind::Manifestation
+                | ModelingRelationKind::Deployment => source.subject_id.clone(),
                 // Diagram context and project root are not a choice of semantic owner.
                 // Other relationship tools remain incomplete until an owner is selected.
                 _ => None,
@@ -190,7 +210,12 @@ impl MdeWorkbenchItem {
                 if diagram.interaction_kind.as_deref() != Some("communication")
                     && let Some(view_id) = view_id
                     && let Some(anchor) = point.and_then(|point| {
-                        crate::workbench_ui::visual_draft_canvas::resolve_message_anchor(&snapshot.section, diagram, view_id, point)
+                        crate::workbench_ui::visual_draft_canvas::resolve_message_anchor(
+                            &snapshot.section,
+                            diagram,
+                            view_id,
+                            point,
+                        )
                     })
                 {
                     properties.insert(key.into(), serde_json::json!({"x":anchor.x,"y":anchor.y}));

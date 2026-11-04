@@ -11,9 +11,15 @@ pub enum BellatrixIcon {
 }
 
 impl BellatrixIcon {
-    pub fn zed(name: IconName) -> Self { Self::Zed(name) }
-    pub fn asset(path: impl Into<String>) -> Self { Self::Asset(path.into()) }
-    pub fn svg(bytes: impl Into<Arc<[u8]>>) -> Self { Self::Svg(bytes.into()) }
+    pub fn zed(name: IconName) -> Self {
+        Self::Zed(name)
+    }
+    pub fn asset(path: impl Into<String>) -> Self {
+        Self::Asset(path.into())
+    }
+    pub fn svg(bytes: impl Into<Arc<[u8]>>) -> Self {
+        Self::Svg(bytes.into())
+    }
 
     /// Zed's Icon renders named and asset icons; GPUI handles user supplied SVG bytes.
     pub fn view(&self) -> AnyElement {

@@ -148,19 +148,25 @@ fn given_artifact_manifestations_then_only_components_are_deployed_elements() ->
 fn when_manifestation_moves_to_deployed_artifact_then_reparent_rejects_atomically_and_repair_succeeds()
 -> Result {
     let mut project = document(true)?;
-    project["elements"].as_array_mut().ok_or("elements")?.push(
-        json!({"id":"unused", "kind":"uml.artifact", "name":"Unused"}),
-    );
-    project["relations"].as_array_mut().ok_or("relations")?.push(
-        json!({"id":"owns-unused", "kind":"owns", "from":"root", "to":"unused"}),
-    );
-    project["relations"].as_array_mut().ok_or("relations")?.push(
-        json!({"id":"bad", "kind":"uml.manifestation", "from":"unused", "to":"class",
+    project["elements"]
+        .as_array_mut()
+        .ok_or("elements")?
+        .push(json!({"id":"unused", "kind":"uml.artifact", "name":"Unused"}));
+    project["relations"]
+        .as_array_mut()
+        .ok_or("relations")?
+        .push(json!({"id":"owns-unused", "kind":"owns", "from":"root", "to":"unused"}));
+    project["relations"]
+        .as_array_mut()
+        .ok_or("relations")?
+        .push(
+            json!({"id":"bad", "kind":"uml.manifestation", "from":"unused", "to":"class",
         "properties":{"utilizedElement":{"$ref":"class"}}}),
-    );
-    project["relations"].as_array_mut().ok_or("relations")?.push(
-        json!({"id":"owns-bad", "kind":"owns", "from":"unused", "to":"bad"}),
-    );
+        );
+    project["relations"]
+        .as_array_mut()
+        .ok_or("relations")?
+        .push(json!({"id":"owns-bad", "kind":"owns", "from":"unused", "to":"bad"}));
     project = import_document(&project)?;
     assert!(issues(&project)?.is_empty());
     let before = encode(&project, "json")?;

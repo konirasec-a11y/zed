@@ -153,8 +153,11 @@ fn check_outcome(case: &Case, response: &Value) -> FlowResult<()> {
                 && actual["subject_id"] == forbidden.subject_id
                 && actual["severity"] == forbidden.severity
         }) {
-            return Err(format!("{}: forbidden diagnostic {}/{}/{}", case.id,
-                forbidden.code, forbidden.subject_id, forbidden.severity).into());
+            return Err(format!(
+                "{}: forbidden diagnostic {}/{}/{}",
+                case.id, forbidden.code, forbidden.subject_id, forbidden.severity
+            )
+            .into());
         }
     }
     let mut expected_errors: Vec<_> = case
@@ -274,14 +277,23 @@ fn run_flow(group: &str, id: &str) -> FlowResult<()> {
     if envelope["api_version"] != 1 {
         return Err(format!("{id}: unexpected document API version").into());
     }
-    let diagrams = envelope.get("model").and_then(|model| model.get("diagrams"))
-        .and_then(Value::as_array).ok_or("decoded envelope missing diagrams")?;
+    let diagrams = envelope
+        .get("model")
+        .and_then(|model| model.get("diagrams"))
+        .and_then(Value::as_array)
+        .ok_or("decoded envelope missing diagrams")?;
     if group != "todolist" && diagrams.len() != 1 {
         return Err("Isolated diagram cases must contain exactly one diagram".into());
     }
     if group == "todolist" {
-        let actual_ids = diagrams.iter()
-            .map(|diagram| diagram.get("id").and_then(Value::as_str).ok_or("diagram id missing"))
+        let actual_ids = diagrams
+            .iter()
+            .map(|diagram| {
+                diagram
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .ok_or("diagram id missing")
+            })
             .collect::<Result<BTreeSet<_>, _>>()?;
         let expected_ids: BTreeSet<_> = case
             .diagrams
@@ -338,7 +350,10 @@ fn run_flow(group: &str, id: &str) -> FlowResult<()> {
     for (name, extension) in [("json", "json"), ("protobuf", "blx")] {
         println!("And I persist, close and reopen the {name} project");
         let destination = saved.0.join(format!("project.{extension}"));
-        fs::write(&destination, encode_model_document(&envelope.to_string(), name).map_err(std::io::Error::other)?)?;
+        fs::write(
+            &destination,
+            encode_model_document(&envelope.to_string(), name).map_err(std::io::Error::other)?,
+        )?;
         let reopened: Value = serde_json::from_str(
             &decode_model_document(&fs::read(destination)?, name).map_err(std::io::Error::other)?,
         )?;

@@ -81,7 +81,10 @@ impl<'index, 'model> HierarchyQueries<'index, 'model> {
             .element(id)
             .map_err(|error| QueryError::invalid(id, error))?;
         if classifier.metaclass().is_none() {
-            return Err(QueryError::unsupported(id, "Classifier metaclass is unresolved"));
+            return Err(QueryError::unsupported(
+                id,
+                "Classifier metaclass is unresolved",
+            ));
         }
         if !classifier.conforms_to("Classifier") {
             return Err(QueryError::invalid(
@@ -94,13 +97,25 @@ impl<'index, 'model> HierarchyQueries<'index, 'model> {
             if let Some(value) = classifier.properties().get(key) {
                 let descriptor = schema::uml_property("Classifier", key)
                     .map_err(|error| QueryError::unsupported(id, error.to_string()))?
-                    .ok_or_else(|| QueryError::unsupported(id, "missing ancestry property contract"))?;
-                let descriptor = schema::PropertyDescriptor { is_derived: false, ..*descriptor };
-                match super::property_contracts::check_value(self.references, classifier, &descriptor, value) {
-                    super::property_contracts::PropertyOutcome::Violation(message) =>
-                        return Err(QueryError::invalid(id, message)),
-                    super::property_contracts::PropertyOutcome::Unverified(message) =>
-                        unresolved = Some(QueryError::unsupported(id, message)),
+                    .ok_or_else(|| {
+                        QueryError::unsupported(id, "missing ancestry property contract")
+                    })?;
+                let descriptor = schema::PropertyDescriptor {
+                    is_derived: false,
+                    ..*descriptor
+                };
+                match super::property_contracts::check_value(
+                    self.references,
+                    classifier,
+                    &descriptor,
+                    value,
+                ) {
+                    super::property_contracts::PropertyOutcome::Violation(message) => {
+                        return Err(QueryError::invalid(id, message));
+                    }
+                    super::property_contracts::PropertyOutcome::Unverified(message) => {
+                        unresolved = Some(QueryError::unsupported(id, message))
+                    }
                     super::property_contracts::PropertyOutcome::Satisfied => {}
                 }
             }
@@ -176,7 +191,10 @@ impl<'index, 'model> HierarchyQueries<'index, 'model> {
                 other => Some(other),
             })
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(ParentEvidence { parents, unresolved })
+        Ok(ParentEvidence {
+            parents,
+            unresolved,
+        })
     }
 
     fn read_parents(&self, id: &str) -> Result<Vec<ElementRef<'model>>, QueryError> {
@@ -314,12 +332,18 @@ pub fn has_ancestor(
     classifier_id: &str,
     ancestor_id: &str,
 ) -> Result<bool, QueryError> {
-    let ancestor = references.element(ancestor_id)
+    let ancestor = references
+        .element(ancestor_id)
         .map_err(|error| QueryError::invalid(ancestor_id, error))?;
     if !ancestor.conforms_to("Classifier") {
-        return Err(QueryError::invalid(ancestor_id, "ancestor must be a Classifier"));
+        return Err(QueryError::invalid(
+            ancestor_id,
+            "ancestor must be a Classifier",
+        ));
     }
-    has_ancestor_matching(references, classifier_id, |parent| parent.id() == ancestor_id)
+    has_ancestor_matching(references, classifier_id, |parent| {
+        parent.id() == ancestor_id
+    })
 }
 
 pub(crate) fn has_ancestor_matching(
@@ -339,19 +363,27 @@ pub(crate) fn has_ancestor_matching(
             completed.insert(id);
             continue;
         }
-        if completed.contains(&id) { continue; }
+        if completed.contains(&id) {
+            continue;
+        }
         if !active.insert(id.clone()) {
             return Err(QueryError::invalid(&id, "cycle in UML generalization"));
         }
         let evidence = queries.parent_evidence(&id)?;
-        if let Some(error) = evidence.unresolved { unknown = Some(error); }
+        if let Some(error) = evidence.unresolved {
+            unknown = Some(error);
+        }
         pending.push((id, true));
         for parent in evidence.parents {
             found |= predicate(parent);
             pending.push((parent.id().to_owned(), false));
         }
     }
-    if found { Ok(true) } else { unknown.map_or(Ok(false), Err) }
+    if found {
+        Ok(true)
+    } else {
+        unknown.map_or(Ok(false), Err)
+    }
 }
 
 fn substitution_reference<'a>(
@@ -362,17 +394,27 @@ fn substitution_reference<'a>(
 ) -> Result<ElementRef<'a>, QueryError> {
     let property = schema::uml_property("Substitution", name)
         .map_err(|error| QueryError::unsupported(substitution.id(), error.to_string()))?
-        .ok_or_else(|| QueryError::unsupported(substitution.id(), "missing Substitution property contract"))?;
+        .ok_or_else(|| {
+            QueryError::unsupported(substitution.id(), "missing Substitution property contract")
+        })?;
     match super::property_contracts::check_value(references, substitution, property, value) {
         super::property_contracts::PropertyOutcome::Satisfied => {}
-        super::property_contracts::PropertyOutcome::Violation(message) =>
-            return Err(QueryError::invalid(substitution.id(), message)),
-        super::property_contracts::PropertyOutcome::Unverified(message) =>
-            return Err(QueryError::unsupported(substitution.id(), message)),
+        super::property_contracts::PropertyOutcome::Violation(message) => {
+            return Err(QueryError::invalid(substitution.id(), message));
+        }
+        super::property_contracts::PropertyOutcome::Unverified(message) => {
+            return Err(QueryError::unsupported(substitution.id(), message));
+        }
     }
-    references.validate(property, value)
+    references
+        .validate(property, value)
         .map_err(|error| QueryError::invalid(substitution.id(), error))?
-        .ok_or_else(|| QueryError::invalid(substitution.id(), "Substitution requires a Classifier reference"))
+        .ok_or_else(|| {
+            QueryError::invalid(
+                substitution.id(),
+                "Substitution requires a Classifier reference",
+            )
+        })
 }
 
 /// Resolve a Substitution's contract while checking its canonical owner/client.
@@ -381,36 +423,63 @@ pub(crate) fn substituting_classifier<'a>(
     references: &ReferenceIndex<'a>,
     substitution: ElementRef<'a>,
 ) -> Result<ElementRef<'a>, QueryError> {
-    let owner = references.model().owner(substitution)
+    let owner = references
+        .model()
+        .owner(substitution)
         .map_err(|error| QueryError::invalid(substitution.id(), error))?
-        .ok_or_else(|| QueryError::invalid(substitution.id(), "Substitution requires a substituting Classifier owner"))?;
+        .ok_or_else(|| {
+            QueryError::invalid(
+                substitution.id(),
+                "Substitution requires a substituting Classifier owner",
+            )
+        })?;
     if !owner.conforms_to("Classifier") {
-        return Err(QueryError::invalid(substitution.id(), "Substitution owner must be a Classifier"));
+        return Err(QueryError::invalid(
+            substitution.id(),
+            "Substitution owner must be a Classifier",
+        ));
     }
     if let Some(value) = owner.properties().get("substitution") {
         let property = schema::uml_property("Classifier", "substitution")
             .map_err(|error| QueryError::unsupported(owner.id(), error.to_string()))?
             .ok_or_else(|| QueryError::unsupported(owner.id(), "missing substitution contract"))?;
-        let unknown = match super::property_contracts::check_value(references, owner, property, value) {
-            super::property_contracts::PropertyOutcome::Satisfied => None,
-            super::property_contracts::PropertyOutcome::Violation(message) =>
-                return Err(QueryError::invalid(owner.id(), message)),
-            super::property_contracts::PropertyOutcome::Unverified(message) => Some(message),
-        };
+        let unknown =
+            match super::property_contracts::check_value(references, owner, property, value) {
+                super::property_contracts::PropertyOutcome::Satisfied => None,
+                super::property_contracts::PropertyOutcome::Violation(message) => {
+                    return Err(QueryError::invalid(owner.id(), message));
+                }
+                super::property_contracts::PropertyOutcome::Unverified(message) => Some(message),
+            };
         let contains = value.as_array().is_some_and(|values| values.iter().any(|value|
             matches!(super::references::reference_id(value), Ok(Some(id)) if id == substitution.id())));
         if !contains {
             return Err(unknown.map_or_else(
-                || QueryError::invalid(substitution.id(), "canonical ownership contradicts Classifier::substitution"),
+                || {
+                    QueryError::invalid(
+                        substitution.id(),
+                        "canonical ownership contradicts Classifier::substitution",
+                    )
+                },
                 |message| QueryError::unsupported(substitution.id(), message),
             ));
         }
     }
     let derived_owner = serde_json::json!({"$ref": owner.id()});
-    let client = substitution_reference(references, substitution, "substitutingClassifier",
-        substitution.properties().get("substitutingClassifier").unwrap_or(&derived_owner))?;
+    let client = substitution_reference(
+        references,
+        substitution,
+        "substitutingClassifier",
+        substitution
+            .properties()
+            .get("substitutingClassifier")
+            .unwrap_or(&derived_owner),
+    )?;
     if client.id() != owner.id() {
-        return Err(QueryError::invalid(substitution.id(), "Substitution::substitutingClassifier must equal its canonical owner"));
+        return Err(QueryError::invalid(
+            substitution.id(),
+            "Substitution::substitutingClassifier must equal its canonical owner",
+        ));
     }
     Ok(owner)
 }
@@ -420,16 +489,27 @@ fn substitution_contract<'a>(
     substitution: ElementRef<'a>,
 ) -> Result<ElementRef<'a>, QueryError> {
     substituting_classifier(references, substitution)?;
-    let contract = substitution_reference(references, substitution, "contract",
-        substitution.properties().get("contract").unwrap_or(&serde_json::Value::Null))?;
+    let contract = substitution_reference(
+        references,
+        substitution,
+        "contract",
+        substitution
+            .properties()
+            .get("contract")
+            .unwrap_or(&serde_json::Value::Null),
+    )?;
     // Keep the specialized roles consistent with the existing Dependency
     // projections; do not maintain another client/supplier interpretation.
     super::relationship_endpoints::validate_dependency_subsets(references, substitution.id())
         .map_err(|error| match error {
-            super::element_graph_queries::ElementGraphError::Invalid { subject_id, message } =>
-                QueryError::invalid(&subject_id, message),
-            super::element_graph_queries::ElementGraphError::Unsupported { subject_id, message } =>
-                QueryError::unsupported(&subject_id, message),
+            super::element_graph_queries::ElementGraphError::Invalid {
+                subject_id,
+                message,
+            } => QueryError::invalid(&subject_id, message),
+            super::element_graph_queries::ElementGraphError::Unsupported {
+                subject_id,
+                message,
+            } => QueryError::unsupported(&subject_id, message),
         })?;
     Ok(contract)
 }
@@ -442,14 +522,21 @@ pub fn is_substitutable_for(
     classifier_id: &str,
     contract_id: &str,
 ) -> Result<bool, QueryError> {
-    let classifier = references.element(classifier_id)
+    let classifier = references
+        .element(classifier_id)
         .map_err(|error| QueryError::invalid(classifier_id, error))?;
-    let contract = references.element(contract_id)
+    let contract = references
+        .element(contract_id)
         .map_err(|error| QueryError::invalid(contract_id, error))?;
     if !classifier.conforms_to("Classifier") || !contract.conforms_to("Classifier") {
-        return Err(QueryError::invalid(classifier_id, "isSubstitutableFor requires two Classifiers"));
+        return Err(QueryError::invalid(
+            classifier_id,
+            "isSubstitutableFor requires two Classifiers",
+        ));
     }
-    let owned = references.model().owned_elements(classifier)
+    let owned = references
+        .model()
+        .owned_elements(classifier)
         .map_err(|error| QueryError::invalid(classifier_id, error))?;
     // An authored collection is a projection of the same ownership graph, not
     // an independent source of relationships. Validate it using its descriptor.
@@ -457,42 +544,84 @@ pub fn is_substitutable_for(
     if let Some(value) = classifier.properties().get("substitution") {
         let property = schema::uml_property("Classifier", "substitution")
             .map_err(|error| QueryError::unsupported(classifier_id, error.to_string()))?
-            .ok_or_else(|| QueryError::unsupported(classifier_id, "missing Classifier::substitution contract"))?;
+            .ok_or_else(|| {
+                QueryError::unsupported(classifier_id, "missing Classifier::substitution contract")
+            })?;
         match super::property_contracts::check_value(references, classifier, property, value) {
             super::property_contracts::PropertyOutcome::Satisfied => {}
-            super::property_contracts::PropertyOutcome::Violation(message) =>
-                return Err(QueryError::invalid(classifier_id, message)),
-            super::property_contracts::PropertyOutcome::Unverified(message) =>
-                unresolved_collection = Some(Err(QueryError::unsupported(classifier_id, message))),
+            super::property_contracts::PropertyOutcome::Violation(message) => {
+                return Err(QueryError::invalid(classifier_id, message));
+            }
+            super::property_contracts::PropertyOutcome::Unverified(message) => {
+                unresolved_collection = Some(Err(QueryError::unsupported(classifier_id, message)))
+            }
         }
     }
-    let unresolved_binary = references.model().relationship_records().any(|relation| {
-        relation.kind == "uml.substitution" && (relation.from == classifier_id
-            || references.model().ownership_links().any(|owner|
-                owner.from == classifier_id && owner.to == relation.id))
-    }).then(|| Err(QueryError::unsupported(classifier_id,
-        "binary Substitution records require a canonical ownership/role adapter")));
-    super::feature_compatibility::accept_any(owned.into_iter()
-        .filter(|element| element.conforms_to("Substitution"))
-        .map(|substitution| {
-            substitution_contract(references, substitution)
-                .map(|target| target.id() == contract.id())
-        }).chain(unresolved_collection).chain(unresolved_binary))
+    let unresolved_binary = references
+        .model()
+        .relationship_records()
+        .any(|relation| {
+            relation.kind == "uml.substitution"
+                && (relation.from == classifier_id
+                    || references
+                        .model()
+                        .ownership_links()
+                        .any(|owner| owner.from == classifier_id && owner.to == relation.id))
+        })
+        .then(|| {
+            Err(QueryError::unsupported(
+                classifier_id,
+                "binary Substitution records require a canonical ownership/role adapter",
+            ))
+        });
+    super::feature_compatibility::accept_any(
+        owned
+            .into_iter()
+            .filter(|element| element.conforms_to("Substitution"))
+            .map(|substitution| {
+                substitution_contract(references, substitution)
+                    .map(|target| target.id() == contract.id())
+            })
+            .chain(unresolved_collection)
+            .chain(unresolved_binary),
+    )
 }
 
 pub(crate) fn validate_substitutions(
     references: &ReferenceIndex<'_>,
 ) -> Vec<crate::StructuralDiagnostic> {
-    references.model().elements()
+    references
+        .model()
+        .elements()
         .filter(|element| element.conforms_to("Substitution"))
         .filter_map(|element| substitution_contract(references, element).err())
         .map(|error| {
             let (severity, code, subject_id, message) = match error {
-                QueryError::Invalid { subject_id, message } =>
-                    (crate::StructuralSeverity::Error, "UML_SUBSTITUTION_CONTRACT", subject_id, message),
-                QueryError::Unsupported { subject_id, message } =>
-                    (crate::StructuralSeverity::Warning, "MDE_SUBSTITUTION_UNVERIFIED", subject_id, message),
+                QueryError::Invalid {
+                    subject_id,
+                    message,
+                } => (
+                    crate::StructuralSeverity::Error,
+                    "UML_SUBSTITUTION_CONTRACT",
+                    subject_id,
+                    message,
+                ),
+                QueryError::Unsupported {
+                    subject_id,
+                    message,
+                } => (
+                    crate::StructuralSeverity::Warning,
+                    "MDE_SUBSTITUTION_UNVERIFIED",
+                    subject_id,
+                    message,
+                ),
             };
-            crate::StructuralDiagnostic { severity, code, subject_id, message }
-        }).collect()
+            crate::StructuralDiagnostic {
+                severity,
+                code,
+                subject_id,
+                message,
+            }
+        })
+        .collect()
 }

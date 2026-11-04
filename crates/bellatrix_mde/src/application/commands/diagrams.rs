@@ -22,7 +22,13 @@ pub(super) fn create(
         model_elements: model_elements.to_vec(),
         views: Vec::new(),
     });
-    section.hierarchy.insert(identifier, crate::HierarchyPlacement { parent_id: None, occurrence: None });
+    section.hierarchy.insert(
+        identifier,
+        crate::HierarchyPlacement {
+            parent_id: None,
+            occurrence: None,
+        },
+    );
     Ok(())
 }
 
@@ -57,8 +63,15 @@ pub(super) fn delete(section: &mut ModelingSection, identifier: &str) -> Result<
         if placement.parent_id.as_deref() == Some(identifier) {
             placement.parent_id = None;
             placement.occurrence = None;
-        } else if placement.occurrence.as_ref().is_some_and(|occurrence| occurrence.diagram_id == identifier) {
-            return Err("Diagram contains an occurrence used by another diagram; move that diagram first".into());
+        } else if placement
+            .occurrence
+            .as_ref()
+            .is_some_and(|occurrence| occurrence.diagram_id == identifier)
+        {
+            return Err(
+                "Diagram contains an occurrence used by another diagram; move that diagram first"
+                    .into(),
+            );
         }
     }
     Ok(())

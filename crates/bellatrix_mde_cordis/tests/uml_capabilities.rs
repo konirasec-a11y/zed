@@ -1,15 +1,14 @@
 #[path = "support/events.rs"]
 mod events;
-use serde_json::Value;
 use bellatrix_mde_cordis::{
     MdePlugin, ModelingQuickEdit, ModelingQuickEditRequested, UmlQuickCreate,
 };
 use bellatrix_project::{
-    ProjectCreate, ProjectCreateRequested, ProjectId, ProjectPlugin,
-    ProjectService,
+    ProjectCreate, ProjectCreateRequested, ProjectId, ProjectPlugin, ProjectService,
 };
 use cordis::event::QueryOutcome;
 use cordis::{Context, Plugin, PreparedPlugin, Routing};
+use serde_json::Value;
 use std::sync::Arc;
 
 #[tokio::test]
@@ -34,8 +33,12 @@ async fn common_quick_edit_is_revisioned_project_scoped_and_disposed() {
             serde_json::from_str(include_str!("../../bellatrix_mde/fixtures/todo.json")).unwrap();
         model["id"] = name.into();
         model["name"] = name.into();
-        model["elements"].as_array_mut().unwrap().iter_mut()
-            .find(|element| element["id"] == "type-task").expect("classifier")["properties"]["isActive"] = true.into();
+        model["elements"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|element| element["id"] == "type-task")
+            .expect("classifier")["properties"]["isActive"] = true.into();
         active_diagram = model["diagrams"][0]["id"].as_str().unwrap().to_owned();
         let document = events::prepare(&context, &model).await.unwrap();
         assert!(matches!(
@@ -84,7 +87,10 @@ async fn common_quick_edit_is_revisioned_project_scoped_and_disposed() {
     let document = projects.snapshot(&project_id).unwrap();
     assert_eq!(document.revision(), 5);
     assert_eq!(projects.snapshot(&untouched_id).unwrap().revision(), 0);
-    let section = events::projection(&context, &projects, &project_id).await.unwrap().section;
+    let section = events::projection(&context, &projects, &project_id)
+        .await
+        .unwrap()
+        .section;
     for kind in ["uml.note", "uml.constraint", "uml.reception"] {
         assert!(section.elements.iter().any(|element| element.kind == kind));
     }

@@ -32,16 +32,27 @@ pub fn stereotype_presentation<'a>(
         StereotypeValue::Text(text) => StereotypePresentation::Text(text),
         StereotypeValue::Reference(target_id) => {
             // Name lookup is presentation only, not verification of the UML application.
-            let mut targets = section.elements.iter()
+            let mut targets = section
+                .elements
+                .iter()
                 .map(|target| (target.id.as_str(), target.name.as_str()))
-                .chain(section.relations.iter().map(|target| (
-                    target.id.as_str(),
-                    target.properties.get("name").and_then(serde_json::Value::as_str)
-                        .unwrap_or(&target.id),
-                )))
+                .chain(section.relations.iter().map(|target| {
+                    (
+                        target.id.as_str(),
+                        target
+                            .properties
+                            .get("name")
+                            .and_then(serde_json::Value::as_str)
+                            .unwrap_or(&target.id),
+                    )
+                }))
                 .filter(|(id, _)| *id == target_id);
             let label = targets.next().map(|(_, name)| name);
-            let label = if targets.next().is_none() { label } else { None };
+            let label = if targets.next().is_none() {
+                label
+            } else {
+                None
+            };
             StereotypePresentation::UnverifiedReference { target_id, label }
         }
         StereotypeValue::Unsupported(value) => StereotypePresentation::Unsupported(value),

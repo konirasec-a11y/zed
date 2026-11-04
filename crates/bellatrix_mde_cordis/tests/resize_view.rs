@@ -1,16 +1,13 @@
 #[path = "support/events.rs"]
 mod events;
-use serde_json::Value;
 use bellatrix_mde_cordis::Geometry;
-use bellatrix_mde_cordis::{
-    MdePlugin, ModelingResizeView, ModelingResizeViewRequested,
-};
+use bellatrix_mde_cordis::{MdePlugin, ModelingResizeView, ModelingResizeViewRequested};
 use bellatrix_project::{
-    ProjectCreate, ProjectCreateRequested, ProjectId, ProjectPlugin,
-    ProjectService,
+    ProjectCreate, ProjectCreateRequested, ProjectId, ProjectPlugin, ProjectService,
 };
 use cordis::event::QueryOutcome;
 use cordis::{Context, Plugin, PreparedPlugin, Routing};
+use serde_json::Value;
 use std::sync::Arc;
 
 async fn admit<P: Plugin>(ctx: &Context, plugin: P) -> cordis::FiberHandle
@@ -65,7 +62,10 @@ async fn rectangle_resize_is_versioned_and_persisted() {
 
     let persisted = service.snapshot(&id).unwrap();
     assert_eq!(persisted.revision(), 1);
-    let section = events::projection(&ctx, &service, &id).await.unwrap().section;
+    let section = events::projection(&ctx, &service, &id)
+        .await
+        .unwrap()
+        .section;
     let view = section
         .diagrams
         .iter()

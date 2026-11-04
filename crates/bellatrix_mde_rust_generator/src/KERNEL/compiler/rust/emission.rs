@@ -79,12 +79,18 @@ impl Rendered {
     // This only collects renderer output. The integration handler reconstructs
     // the kernel Plan, which remains the path and collision publication gate.
     pub fn file(&mut self, path: String, contents: Vec<u8>, origin: &str) {
-        self.artifacts.push(Artifact { path, contents: Some(contents), origin: origin.to_owned() });
+        self.artifacts.push(Artifact {
+            path,
+            contents: Some(contents),
+            origin: origin.to_owned(),
+        });
     }
 
     pub fn warn(&mut self, code: &str, message: &str, element: Option<&str>) {
         self.diagnostics.push(Diagnostic {
-            code: code.to_owned(), message: message.to_owned(), element: element.map(str::to_owned),
+            code: code.to_owned(),
+            message: message.to_owned(),
+            element: element.map(str::to_owned),
         });
     }
 }

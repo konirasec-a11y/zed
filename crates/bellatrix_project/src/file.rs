@@ -38,10 +38,14 @@ pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), ProjectError
 }
 
 pub(crate) fn publish_new(path: &Path, bytes: &[u8]) -> Result<Option<String>, ProjectError> {
-    let parent = path.parent().filter(|parent| !parent.as_os_str().is_empty())
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
     let parent = parent.canonicalize()?;
-    let name = path.file_name().ok_or_else(|| ProjectError::Io(std::io::Error::other("new file requires a filename")))?;
+    let name = path
+        .file_name()
+        .ok_or_else(|| ProjectError::Io(std::io::Error::other("new file requires a filename")))?;
     let destination = parent.join(name);
     let (temporary, mut file) = create_temporary(&parent)?;
     let written = file.write_all(bytes).and_then(|()| file.sync_all());
@@ -53,12 +57,18 @@ pub(crate) fn publish_new(path: &Path, bytes: &[u8]) -> Result<Option<String>, P
     });
     let cleanup = fs::remove_file(&temporary);
     match published {
-        Ok(()) => Ok(cleanup.err().map(|error| format!(
-            "File published, but its staging link {} could not be removed: {error}", temporary.display()
-        ))),
+        Ok(()) => Ok(cleanup.err().map(|error| {
+            format!(
+                "File published, but its staging link {} could not be removed: {error}",
+                temporary.display()
+            )
+        })),
         Err(error) => {
             if let Err(cleanup) = cleanup {
-                eprintln!("Could not remove failed save staging file {}: {cleanup}", temporary.display());
+                eprintln!(
+                    "Could not remove failed save staging file {}: {cleanup}",
+                    temporary.display()
+                );
             }
             if error.kind() == std::io::ErrorKind::AlreadyExists {
                 Err(ProjectError::DestinationExists(path.display().to_string()))

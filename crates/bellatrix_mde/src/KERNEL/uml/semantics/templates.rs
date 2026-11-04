@@ -1007,19 +1007,24 @@ fn signature_redefines_parents(
     signature: crate::uml::root::ElementRef<'_>,
 ) -> Result<bool, crate::uml::classifiers::QueryError> {
     use crate::uml::{classifiers::QueryError, feature_compatibility::require_all};
-    let signature = references.element(signature.id())
+    let signature = references
+        .element(signature.id())
         .map_err(|error| QueryError::invalid(signature.id(), error))?;
     let mut extended = HashSet::new();
     let mut pending = vec![signature];
     let mut visited = HashSet::new();
     let mut unknown_extension = false;
     while let Some(current) = pending.pop() {
-        if !visited.insert(current.id().to_owned()) { continue; }
+        if !visited.insert(current.id().to_owned()) {
+            continue;
+        }
         if current.metaclass().is_none() {
             unknown_extension = true;
             continue;
         }
-        if !current.properties().contains_key("extendedSignature") { continue; }
+        if !current.properties().contains_key("extendedSignature") {
+            continue;
+        }
         let evidence = template_reference_evidence(references, current, "extendedSignature")?;
         unknown_extension |= evidence.unknown;
         for target in evidence.known {
@@ -1027,73 +1032,144 @@ fn signature_redefines_parents(
             pending.push(target);
         }
     }
-    let owner = references.model().owner(signature)
+    let owner = references
+        .model()
+        .owner(signature)
         .map_err(|error| QueryError::invalid(signature.id(), error))?
-        .ok_or_else(|| QueryError::invalid(signature.id(), "RedefinableTemplateSignature requires a Classifier owner"))?;
-    let owner = references.element(owner.id()).map_err(|error| QueryError::invalid(signature.id(), error))?;
+        .ok_or_else(|| {
+            QueryError::invalid(
+                signature.id(),
+                "RedefinableTemplateSignature requires a Classifier owner",
+            )
+        })?;
+    let owner = references
+        .element(owner.id())
+        .map_err(|error| QueryError::invalid(signature.id(), error))?;
     let mut checks = Vec::new();
     for property in ["classifier", "template"] {
         if let Some(value) = signature.properties().get(property) {
             // classifier redefines TemplateSignature::template, so resolving
             // template on the specialized metaclass intentionally omits it.
-            let metaclass = if property == "classifier" { "RedefinableTemplateSignature" } else { "TemplateSignature" };
+            let metaclass = if property == "classifier" {
+                "RedefinableTemplateSignature"
+            } else {
+                "TemplateSignature"
+            };
             let descriptor = crate::uml::schema::uml_property(metaclass, property)
                 .map_err(|error| QueryError::unsupported(signature.id(), error.to_string()))?
-                .ok_or_else(|| QueryError::unsupported(signature.id(), "signature owner contract is unavailable"))?;
-            match crate::uml::property_contracts::check_value(references, signature, descriptor, value) {
+                .ok_or_else(|| {
+                    QueryError::unsupported(
+                        signature.id(),
+                        "signature owner contract is unavailable",
+                    )
+                })?;
+            match crate::uml::property_contracts::check_value(
+                references, signature, descriptor, value,
+            ) {
                 crate::uml::property_contracts::PropertyOutcome::Satisfied => {}
-                crate::uml::property_contracts::PropertyOutcome::Violation(message) => return Err(QueryError::invalid(signature.id(), message)),
-                crate::uml::property_contracts::PropertyOutcome::Unverified(message) => checks.push(Err(QueryError::unsupported(signature.id(), message))),
+                crate::uml::property_contracts::PropertyOutcome::Violation(message) => {
+                    return Err(QueryError::invalid(signature.id(), message));
+                }
+                crate::uml::property_contracts::PropertyOutcome::Unverified(message) => {
+                    checks.push(Err(QueryError::unsupported(signature.id(), message)))
+                }
             }
             if crate::uml::references::external_reference_href(value)
-                .map_err(|error| QueryError::invalid(signature.id(), error))?.is_none()
+                .map_err(|error| QueryError::invalid(signature.id(), error))?
+                .is_none()
                 && crate::uml::references::reference_id(value)
-                    .map_err(|error| QueryError::invalid(signature.id(), error))? != Some(owner.id())
+                    .map_err(|error| QueryError::invalid(signature.id(), error))?
+                    != Some(owner.id())
             {
-                return Err(QueryError::invalid(signature.id(), "signature owner projection contradicts canonical ownership"));
+                return Err(QueryError::invalid(
+                    signature.id(),
+                    "signature owner projection contradicts canonical ownership",
+                ));
             }
         }
     }
     if owner.metaclass().is_none() {
-        return Err(QueryError::unsupported(signature.id(), "signature Classifier owner is unresolved"));
+        return Err(QueryError::unsupported(
+            signature.id(),
+            "signature Classifier owner is unresolved",
+        ));
     }
     if !owner.conforms_to("Classifier") {
-        return Err(QueryError::invalid(signature.id(), "signature owner must be a Classifier"));
+        return Err(QueryError::invalid(
+            signature.id(),
+            "signature owner must be a Classifier",
+        ));
     }
     // Retain known ancestors even when another hierarchy branch is external.
     // Returning false keeps the hierarchy query's unresolved evidence visible.
     let ancestors = std::cell::RefCell::new(std::collections::BTreeSet::new());
-    checks.push(crate::uml::classifier_hierarchy::has_ancestor_matching(
-        references, owner.id(), |ancestor| {
-            ancestors.borrow_mut().insert(ancestor.id().to_owned());
-            false
-        },
-    ).map(|_| true));
+    checks.push(
+        crate::uml::classifier_hierarchy::has_ancestor_matching(
+            references,
+            owner.id(),
+            |ancestor| {
+                ancestors.borrow_mut().insert(ancestor.id().to_owned());
+                false
+            },
+        )
+        .map(|_| true),
+    );
     for ancestor_id in ancestors.into_inner() {
-        let ancestor = references.element(&ancestor_id)
+        let ancestor = references
+            .element(&ancestor_id)
             .map_err(|error| QueryError::invalid(signature.id(), error))?;
-        let children = references.explicit_owned_elements(ancestor.id())
+        let children = references
+            .explicit_owned_elements(ancestor.id())
             .map_err(|error| QueryError::invalid(ancestor.id(), error))?;
-        let owned = children.iter().copied().filter(|child| child.conforms_to("TemplateSignature")).collect::<Vec<_>>();
+        let owned = children
+            .iter()
+            .copied()
+            .filter(|child| child.conforms_to("TemplateSignature"))
+            .collect::<Vec<_>>();
         if owned.len() > 1 {
-            return Err(QueryError::invalid(ancestor.id(), "Classifier may own at most one template signature"));
+            return Err(QueryError::invalid(
+                ancestor.id(),
+                "Classifier may own at most one template signature",
+            ));
         }
         if children.iter().any(|child| child.metaclass().is_none()) {
-            checks.push(Err(QueryError::unsupported(ancestor.id(), "unknown owned metaclass may be a template signature")));
+            checks.push(Err(QueryError::unsupported(
+                ancestor.id(),
+                "unknown owned metaclass may be a template signature",
+            )));
         }
         let mut required = owned.clone();
         if ancestor.properties().contains_key("ownedTemplateSignature") {
-            let evidence = template_reference_evidence(references, ancestor, "ownedTemplateSignature")?;
-            let authored = evidence.known.iter().map(|target| target.id()).collect::<HashSet<_>>();
-            let known_owned = owned.iter().map(|target| target.id()).collect::<HashSet<_>>();
-            let candidates = children.iter().map(|target| target.id()).collect::<HashSet<_>>();
+            let evidence =
+                template_reference_evidence(references, ancestor, "ownedTemplateSignature")?;
+            let authored = evidence
+                .known
+                .iter()
+                .map(|target| target.id())
+                .collect::<HashSet<_>>();
+            let known_owned = owned
+                .iter()
+                .map(|target| target.id())
+                .collect::<HashSet<_>>();
+            let candidates = children
+                .iter()
+                .map(|target| target.id())
+                .collect::<HashSet<_>>();
             // Unknown owned metaclasses remain candidates, not evidence that
             // the canonical ownedTemplateSignature collection is empty.
-            if !evidence.unknown && (!known_owned.is_subset(&authored) || !authored.is_subset(&candidates)) {
-                return Err(QueryError::invalid(ancestor.id(), "ownedTemplateSignature contradicts canonical ownership"));
+            if !evidence.unknown
+                && (!known_owned.is_subset(&authored) || !authored.is_subset(&candidates))
+            {
+                return Err(QueryError::invalid(
+                    ancestor.id(),
+                    "ownedTemplateSignature contradicts canonical ownership",
+                ));
             }
             if evidence.unknown {
-                checks.push(Err(QueryError::unsupported(ancestor.id(), "ownedTemplateSignature is external")));
+                checks.push(Err(QueryError::unsupported(
+                    ancestor.id(),
+                    "ownedTemplateSignature is external",
+                )));
             }
             for target in evidence.known {
                 if !required.iter().any(|known| known.id() == target.id()) {
@@ -1105,7 +1181,10 @@ fn signature_redefines_parents(
             if extended.contains(required.id()) {
                 checks.push(Ok(true));
             } else if unknown_extension {
-                checks.push(Err(QueryError::unsupported(signature.id(), "external extendedSignature may supply required ancestor signature")));
+                checks.push(Err(QueryError::unsupported(
+                    signature.id(),
+                    "external extendedSignature may supply required ancestor signature",
+                )));
             } else {
                 checks.push(Ok(false));
             }
@@ -1128,8 +1207,12 @@ pub(crate) fn validate_bindings(
                 Err(QueryError::Unsupported { message, .. }) => Some((StructuralSeverity::Warning, "MDE_TEMPLATE_SIGNATURE_REDEFINES_PARENTS_UNVERIFIED", message)),
             };
             if let Some((severity, code, message)) = outcome {
-                issues.push(StructuralDiagnostic { severity, code, subject_id: binding.id().into(),
-                    message: format!("RedefinableTemplateSignature-redefines_parents: {message}") });
+                issues.push(StructuralDiagnostic {
+                    severity,
+                    code,
+                    subject_id: binding.id().into(),
+                    message: format!("RedefinableTemplateSignature-redefines_parents: {message}"),
+                });
             }
         }
         if binding.conforms_to("TemplateSignature") {
@@ -1153,7 +1236,9 @@ pub(crate) fn validate_bindings(
             };
             if let Some((severity, code, message)) = unique {
                 issues.push(StructuralDiagnostic {
-                    severity, code, subject_id: binding.id().into(),
+                    severity,
+                    code,
+                    subject_id: binding.id().into(),
                     message: format!("TemplateSignature-unique_parameters: {message}"),
                 });
             }
@@ -1584,7 +1669,8 @@ pub(crate) fn validate(project: &Project) -> Vec<StructuralDiagnostic> {
                     crate::uml::root::Model::from_project(project),
                 );
                 let allow_substitutable = crate::uml::schema::read_effective_boolean(
-                    crate::uml::root::ElementRef::Object(element), "allowSubstitutable",
+                    crate::uml::root::ElementRef::Object(element),
+                    "allowSubstitutable",
                 );
                 for constraint in project.relations.iter().filter(|relation| {
                     relation.kind == "uml.constraining_classifier" && relation.from == element.id
@@ -1592,12 +1678,20 @@ pub(crate) fn validate(project: &Project) -> Vec<StructuralDiagnostic> {
                     // Existing endpoint validation reports missing/wrong targets.
                     let Some(target) = project.elements.iter().find(|candidate| {
                         candidate.id == constraint.to && conforms(candidate, "Classifier")
-                    }) else { continue; };
-                    if !conforms(exposed, "Classifier") { continue; }
+                    }) else {
+                        continue;
+                    };
+                    if !conforms(exposed, "Classifier") {
+                        continue;
+                    }
                     let conformance = if exposed.id == target.id {
                         Ok(true)
                     } else {
-                        crate::uml::classifier_hierarchy::conforms_to(&index, &exposed.id, &target.id)
+                        crate::uml::classifier_hierarchy::conforms_to(
+                            &index,
+                            &exposed.id,
+                            &target.id,
+                        )
                     };
                     let decision = match conformance {
                         Ok(true) => continue,
@@ -1606,16 +1700,22 @@ pub(crate) fn validate(project: &Project) -> Vec<StructuralDiagnostic> {
                             Ok(true) => crate::uml::feature_compatibility::accept_any([
                                 result,
                                 crate::uml::classifier_hierarchy::is_substitutable_for(
-                                    &index, &exposed.id, &target.id,
+                                    &index,
+                                    &exposed.id,
+                                    &target.id,
                                 ),
                             ]),
                             Err(error) => crate::uml::feature_compatibility::accept_any([
-                                result, crate::uml::feature_compatibility::require_all([
+                                result,
+                                crate::uml::feature_compatibility::require_all([
                                     Err(crate::uml::classifiers::QueryError::unsupported(
-                                        &element.id, error.to_string(),
+                                        &element.id,
+                                        error.to_string(),
                                     )),
                                     crate::uml::classifier_hierarchy::is_substitutable_for(
-                                        &index, &exposed.id, &target.id,
+                                        &index,
+                                        &exposed.id,
+                                        &target.id,
                                     ),
                                 ]),
                             ]),

@@ -1,4 +1,6 @@
-use crate::api_contract::{API_VERSION, decode_model, error_response, invalid_model, invalid_request};
+use crate::api_contract::{
+    API_VERSION, decode_model, error_response, invalid_model, invalid_request,
+};
 use crate::{Format, Project, decode, encode};
 use serde::Deserialize;
 
@@ -13,7 +15,10 @@ fn document_format(format: &str) -> Result<Format, String> {
     match format {
         "json" => Ok(Format::Json),
         "protobuf" => Ok(Format::Protobuf),
-        _ => Err(error_response("UNSUPPORTED_FORMAT", "format must be json or protobuf")),
+        _ => Err(error_response(
+            "UNSUPPORTED_FORMAT",
+            "format must be json or protobuf",
+        )),
     }
 }
 
@@ -90,34 +95,58 @@ pub fn convert_model_document(
 fn ensure_json_model(model: &Project) -> Result<(), String> {
     // Protobuf can carry non-finite dimensions, while JSON would silently turn
     // them into null. Reject that representation loss instead of changing data.
-    if model.diagrams.iter().any(|diagram| !diagram.width.is_finite() || !diagram.height.is_finite()) {
-        return Err(error_response("RESPONSE_SERIALIZATION_FAILED", "non-finite diagram dimensions cannot be represented in JSON"));
+    if model
+        .diagrams
+        .iter()
+        .any(|diagram| !diagram.width.is_finite() || !diagram.height.is_finite())
+    {
+        return Err(error_response(
+            "RESPONSE_SERIALIZATION_FAILED",
+            "non-finite diagram dimensions cannot be represented in JSON",
+        ));
     }
     Ok(())
 }
 
 pub(super) fn model_value(model: Project) -> Result<serde_json::Value, String> {
     ensure_json_model(&model)?;
-    serde_json::to_value(model)
-        .map_err(|_| error_response("RESPONSE_SERIALIZATION_FAILED", "decoded model cannot be encoded as JSON"))
+    serde_json::to_value(model).map_err(|_| {
+        error_response(
+            "RESPONSE_SERIALIZATION_FAILED",
+            "decoded model cannot be encoded as JSON",
+        )
+    })
 }
 
 /// Prepare a decoded model envelope for a platform document without leaking domain types.
 /// The section is the same canonical contract, encoded as opaque JSON, not a read projection.
 /// Checks presentation integrity, but does not assert full UML validity or retain state.
-pub fn prepare_model_document(input_json: &str) -> Result<bellatrix_mde_protocol::ModelDocumentParts, String> {
+pub fn prepare_model_document(
+    input_json: &str,
+) -> Result<bellatrix_mde_protocol::ModelDocumentParts, String> {
     let model = decode_model_request(input_json)?;
     ensure_json_model(&model)?;
-    crate::Graph::new(&model).validate_presentation().map_err(|error| error.to_string())?;
+    crate::Graph::new(&model)
+        .validate_presentation()
+        .map_err(|error| error.to_string())?;
     let section_json = serde_json::to_string(&crate::ModelingSection::from_model(&model))
         .map_err(|error| error.to_string())?;
-    Ok(bellatrix_mde_protocol::ModelDocumentParts { id: model.id, name: model.name, section_json })
+    Ok(bellatrix_mde_protocol::ModelDocumentParts {
+        id: model.id,
+        name: model.name,
+        section_json,
+    })
 }
 
 /// Check a canonical section before a platform document is opened. No UML validation or I/O.
-pub fn validate_model_section(project_id: &str, name: &str, section_json: &str) -> Result<(), String> {
+pub fn validate_model_section(
+    project_id: &str,
+    name: &str,
+    section_json: &str,
+) -> Result<(), String> {
     let section = crate::mde_api_projection::decode_section(project_id, name, section_json)?;
-    crate::Graph::new(&section.to_model(project_id, name)).validate_presentation()
+    crate::Graph::new(&section.to_model(project_id, name))
+        .validate_presentation()
         .map_err(|error| error.to_string())
 }
 
@@ -125,10 +154,17 @@ pub fn validate_model_section(project_id: &str, name: &str, section_json: &str) 
 /// Preserves authoring knowledge, composition and original MDJ bytes in provenance.
 /// JSON output rejects non-finite dimensions; binary output uses the unchanged BLX1 codec.
 /// No persistence, publication or UML validation occurs here.
-pub fn encode_model_section(project_id: &str, name: &str, section_json: &str, format: &str) -> Result<Vec<u8>, String> {
+pub fn encode_model_section(
+    project_id: &str,
+    name: &str,
+    section_json: &str,
+    format: &str,
+) -> Result<Vec<u8>, String> {
     let format = document_format(format)?;
     let section = crate::mde_api_projection::decode_section(project_id, name, section_json)?;
     let model = section.to_model(project_id, name);
-    if matches!(format, Format::Json) { ensure_json_model(&model)?; }
+    if matches!(format, Format::Json) {
+        ensure_json_model(&model)?;
+    }
     encode(&model, format).map_err(invalid_model)
 }

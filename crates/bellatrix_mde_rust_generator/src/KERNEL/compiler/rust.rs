@@ -9,12 +9,30 @@ use bellatrix_mde_templates::TemplatePack;
 
 pub fn default_templates() -> Result<TemplatePack, Box<dyn std::error::Error>> {
     Ok(TemplatePack::embedded([
-        ("rust/struct.rs.tera", include_str!("rust/templates/struct.rs.tera")),
-        ("rust/trait.rs.tera", include_str!("rust/templates/trait.rs.tera")),
-        ("rust/function.rs.tera", include_str!("rust/templates/function.rs.tera")),
-        ("rust/signature.rs.tera", include_str!("rust/templates/signature.rs.tera")),
-        ("rust/raw_item.rs.tera", include_str!("rust/templates/raw_item.rs.tera")),
-        ("rust/Cargo.toml.tera", include_str!("rust/templates/Cargo.toml.tera")),
+        (
+            "rust/struct.rs.tera",
+            include_str!("rust/templates/struct.rs.tera"),
+        ),
+        (
+            "rust/trait.rs.tera",
+            include_str!("rust/templates/trait.rs.tera"),
+        ),
+        (
+            "rust/function.rs.tera",
+            include_str!("rust/templates/function.rs.tera"),
+        ),
+        (
+            "rust/signature.rs.tera",
+            include_str!("rust/templates/signature.rs.tera"),
+        ),
+        (
+            "rust/raw_item.rs.tera",
+            include_str!("rust/templates/raw_item.rs.tera"),
+        ),
+        (
+            "rust/Cargo.toml.tera",
+            include_str!("rust/templates/Cargo.toml.tera"),
+        ),
     ])?)
 }
 
@@ -29,13 +47,16 @@ pub fn render(input_json: &str) -> Result<String, String> {
 
 /// Render prepared tasks with caller-supplied templates and no source model.
 pub fn render_with_templates(input_json: &str, templates: &TemplatePack) -> Result<String, String> {
-    let request: emission::Request = serde_json::from_str(input_json).map_err(|error| error.to_string())?;
+    let request: emission::Request =
+        serde_json::from_str(input_json).map_err(|error| error.to_string())?;
     if request.api_version != 1 {
         return Err("unsupported Rust emission projection version".into());
     }
     let emission = request.emission;
     let mut rendered = emission::Rendered {
-        api_version: 1, artifacts: emission.files, diagnostics: Vec::new(),
+        api_version: 1,
+        artifacts: emission.files,
+        diagnostics: Vec::new(),
     };
     cargo::render_manifests(&emission.manifests, &mut rendered, templates)
         .map_err(|error| error.to_string())?;

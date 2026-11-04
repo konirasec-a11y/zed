@@ -45,8 +45,12 @@ pub(crate) fn prepare(model_envelope: &str) -> Result<PreparedArtifacts, String>
 pub(crate) fn register(context: &Context) -> Result<(), ListenerRegistrationError> {
     let _render = context.on::<ModelingRenderHtml, _>(responder(
         move |_: Context, request: ModelingRenderHtmlRequested| async move {
-            let result = tokio::task::spawn_blocking(move || render_document(&request.bytes, &request.format))
-                .await.map_err(|error| error.to_string()).and_then(|result| result);
+            let result = tokio::task::spawn_blocking(move || {
+                render_document(&request.bytes, &request.format)
+            })
+            .await
+            .map_err(|error| error.to_string())
+            .and_then(|result| result);
             Ok::<_, Infallible>(Some(result))
         },
     ))?;
@@ -57,7 +61,10 @@ pub(crate) fn register(context: &Context) -> Result<(), ListenerRegistrationErro
                 let prepared = artifact_publication::prepare(&rendered)?;
                 prepared.publish(&request.destination, request.replace_generated)?;
                 Ok::<usize, String>(prepared.artifact_count)
-            }).await.map_err(|error| error.to_string()).and_then(|result| result);
+            })
+            .await
+            .map_err(|error| error.to_string())
+            .and_then(|result| result);
             Ok::<_, Infallible>(Some(result))
         },
     ))?;

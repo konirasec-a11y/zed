@@ -212,8 +212,7 @@ fn object_flow_behavior_parameters(
     edge: ElementRef<'_>,
     property: &str,
 ) -> Result<bool, QueryError> {
-    let Some(identifier) =
-        optional_activity_reference(references, edge, "ObjectFlow", property)?
+    let Some(identifier) = optional_activity_reference(references, edge, "ObjectFlow", property)?
     else {
         return Ok(true);
     };
@@ -299,20 +298,29 @@ fn decision_input_parameters(
         DecisionInputRule::ObjectOneInput => (false, false, 1),
         DecisionInputRule::TwoInputs => (true, false, 2),
     };
-    let incoming = activity_edge_candidates(references).into_iter().map(|edge| {
-        let family = if edge.metaclass().is_some() {
-            Ok(edge.conforms_to(if require_control { "ControlFlow" } else { "ObjectFlow" }))
-        } else {
-            Err(QueryError::unsupported(edge.id(), "ActivityEdge metaclass is unresolved"))
-        };
-        let incident = activity_endpoint(references, edge, "target")
-            .map(|target| target.id() == node.id());
-        if require_control {
-            require_all([incident, family])
-        } else {
-            accept_any([incident.map(|incident| !incident), family])
-        }
-    });
+    let incoming = activity_edge_candidates(references)
+        .into_iter()
+        .map(|edge| {
+            let family = if edge.metaclass().is_some() {
+                Ok(edge.conforms_to(if require_control {
+                    "ControlFlow"
+                } else {
+                    "ObjectFlow"
+                }))
+            } else {
+                Err(QueryError::unsupported(
+                    edge.id(),
+                    "ActivityEdge metaclass is unresolved",
+                ))
+            };
+            let incident = activity_endpoint(references, edge, "target")
+                .map(|target| target.id() == node.id());
+            if require_control {
+                require_all([incident, family])
+            } else {
+                accept_any([incident.map(|incident| !incident), family])
+            }
+        });
     let incoming_family = if require_control {
         accept_any(incoming)
     } else {
@@ -361,7 +369,6 @@ fn decision_input_parameters(
     })();
     accept_any([guard.map(|applies| !applies), input_count])
 }
-
 
 // ActivityPartition::superPartition is an authored inverse of the composite
 // subpartition role. Resolve the canonical role before treating omission as
@@ -1188,8 +1195,10 @@ fn value_pin_compatible_type(
 ) -> Result<bool, QueryError> {
     // ValuePin::value is required and composite. The property contract checks
     // its metaclass and canonical owner before it can supply type evidence.
-    let value_id = optional_activity_reference(references, pin, "ValuePin", "value")?
-        .ok_or_else(|| QueryError::unsupported(pin.id(), "required ValuePin value is unresolved"))?;
+    let value_id =
+        optional_activity_reference(references, pin, "ValuePin", "value")?.ok_or_else(|| {
+            QueryError::unsupported(pin.id(), "required ValuePin value is unresolved")
+        })?;
     let value = references
         .element(&value_id)
         .map_err(|error| QueryError::unsupported(pin.id(), error))?;
@@ -1612,13 +1621,15 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
         }
         for (metaclass, source_property, code, unverified, rule) in [
             (
-                "ReadStructuralFeatureAction", "structuralFeature",
+                "ReadStructuralFeatureAction",
+                "structuralFeature",
                 "UML_READ_STRUCTURAL_FEATURE_ACTION_MULTIPLICITY",
                 "MDE_READ_STRUCTURAL_FEATURE_ACTION_MULTIPLICITY_UNVERIFIED",
                 "ReadStructuralFeatureAction-multiplicity",
             ),
             (
-                "ReadVariableAction", "variable",
+                "ReadVariableAction",
+                "variable",
                 "UML_READ_VARIABLE_ACTION_COMPATIBLE_MULTIPLICITY",
                 "MDE_READ_VARIABLE_ACTION_COMPATIBLE_MULTIPLICITY_UNVERIFIED",
                 "ReadVariableAction-compatible_multiplicity",
@@ -1626,7 +1637,12 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
         ] {
             if node.conforms_to(metaclass) {
                 checks.push((
-                    action_read_multiplicity_compatible(references, node, metaclass, source_property),
+                    action_read_multiplicity_compatible(
+                        references,
+                        node,
+                        metaclass,
+                        source_property,
+                    ),
                     code,
                     unverified,
                     rule,
@@ -1687,31 +1703,41 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
         }
         for (metaclass, destination_property, optional_value, code, unverified, rule) in [
             (
-                "LinkEndData", "end", true,
+                "LinkEndData",
+                "end",
+                true,
                 "UML_LINK_END_DATA_SAME_TYPE",
                 "MDE_LINK_END_DATA_SAME_TYPE_UNVERIFIED",
                 "LinkEndData-same_type",
             ),
             (
-                "QualifierValue", "qualifier", false,
+                "QualifierValue",
+                "qualifier",
+                false,
                 "UML_QUALIFIER_VALUE_TYPE_OF_QUALIFIER",
                 "MDE_QUALIFIER_VALUE_TYPE_OF_QUALIFIER_UNVERIFIED",
                 "QualifierValue-type_of_qualifier",
             ),
             (
-                "ValueSpecificationAction", "result", false,
+                "ValueSpecificationAction",
+                "result",
+                false,
                 "UML_VALUE_SPECIFICATION_ACTION_COMPATIBLE_TYPE",
                 "MDE_VALUE_SPECIFICATION_ACTION_COMPATIBLE_TYPE_UNVERIFIED",
                 "ValueSpecificationAction-compatible_type",
             ),
             (
-                "WriteStructuralFeatureAction", "structuralFeature", true,
+                "WriteStructuralFeatureAction",
+                "structuralFeature",
+                true,
                 "UML_WRITE_STRUCTURAL_FEATURE_ACTION_TYPE_OF_VALUE",
                 "MDE_WRITE_STRUCTURAL_FEATURE_ACTION_TYPE_OF_VALUE_UNVERIFIED",
                 "WriteStructuralFeatureAction-type_of_value",
             ),
             (
-                "WriteVariableAction", "variable", true,
+                "WriteVariableAction",
+                "variable",
+                true,
                 "UML_WRITE_VARIABLE_ACTION_VALUE_TYPE",
                 "MDE_WRITE_VARIABLE_ACTION_VALUE_TYPE_UNVERIFIED",
                 "WriteVariableAction-value_type",
@@ -1720,7 +1746,11 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             if node.conforms_to(metaclass) {
                 checks.push((
                     action_value_type_conformance(
-                        references, node, metaclass, destination_property, optional_value,
+                        references,
+                        node,
+                        metaclass,
+                        destination_property,
+                        optional_value,
                     ),
                     code,
                     unverified,
@@ -1745,39 +1775,65 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "the result OutputPin type must be identical to the requested Classifier",
             ));
         }
-        for (metaclass, other_property, optional_result, compare_ordering, code, unverified, rule) in [
+        for (
+            metaclass,
+            other_property,
+            optional_result,
+            compare_ordering,
+            code,
+            unverified,
+            rule,
+        ) in [
             (
-                "WriteStructuralFeatureAction", "object", true, false,
+                "WriteStructuralFeatureAction",
+                "object",
+                true,
+                false,
                 "UML_WRITE_STRUCTURAL_FEATURE_ACTION_TYPE_OF_RESULT",
                 "MDE_WRITE_STRUCTURAL_FEATURE_ACTION_TYPE_OF_RESULT_UNVERIFIED",
                 "WriteStructuralFeatureAction-type_of_result",
             ),
             (
-                "ClearStructuralFeatureAction", "object", true, false,
+                "ClearStructuralFeatureAction",
+                "object",
+                true,
+                false,
                 "UML_CLEAR_STRUCTURAL_FEATURE_ACTION_TYPE_OF_RESULT",
                 "MDE_CLEAR_STRUCTURAL_FEATURE_ACTION_TYPE_OF_RESULT_UNVERIFIED",
                 "ClearStructuralFeatureAction-type_of_result",
             ),
             (
-                "ReadLinkObjectEndAction", "end", false, false,
+                "ReadLinkObjectEndAction",
+                "end",
+                false,
+                false,
                 "UML_READ_LINK_OBJECT_END_ACTION_TYPE_OF_RESULT",
                 "MDE_READ_LINK_OBJECT_END_ACTION_TYPE_OF_RESULT_UNVERIFIED",
                 "ReadLinkObjectEndAction-type_of_result",
             ),
             (
-                "ReadLinkObjectEndQualifierAction", "qualifier", false, false,
+                "ReadLinkObjectEndQualifierAction",
+                "qualifier",
+                false,
+                false,
                 "UML_READ_LINK_OBJECT_END_QUALIFIER_ACTION_SAME_TYPE",
                 "MDE_READ_LINK_OBJECT_END_QUALIFIER_ACTION_SAME_TYPE_UNVERIFIED",
                 "ReadLinkObjectEndQualifierAction-same_type",
             ),
             (
-                "ReadStructuralFeatureAction", "structuralFeature", false, true,
+                "ReadStructuralFeatureAction",
+                "structuralFeature",
+                false,
+                true,
                 "UML_READ_STRUCTURAL_FEATURE_ACTION_TYPE_AND_ORDERING",
                 "MDE_READ_STRUCTURAL_FEATURE_ACTION_TYPE_AND_ORDERING_UNVERIFIED",
                 "ReadStructuralFeatureAction-type_and_ordering",
             ),
             (
-                "ReadVariableAction", "variable", false, true,
+                "ReadVariableAction",
+                "variable",
+                false,
+                true,
                 "UML_READ_VARIABLE_ACTION_TYPE_AND_ORDERING",
                 "MDE_READ_VARIABLE_ACTION_TYPE_AND_ORDERING_UNVERIFIED",
                 "ReadVariableAction-type_and_ordering",
@@ -1786,7 +1842,12 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             if node.conforms_to(metaclass) {
                 checks.push((
                     action_result_matching_type(
-                        references, node, metaclass, other_property, optional_result, compare_ordering,
+                        references,
+                        node,
+                        metaclass,
+                        other_property,
+                        optional_result,
+                        compare_ordering,
                     ),
                     code,
                     unverified,
@@ -1802,8 +1863,13 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
         if node.conforms_to("ReadLinkObjectEndQualifierAction") {
             // The normative qualifier reference targets a Property, not a Pin.
             checks.push((
-                required_action_element(references, node, "ReadLinkObjectEndQualifierAction", "qualifier")
-                    .and_then(|qualifier| multiplicity_is_one(references, qualifier)),
+                required_action_element(
+                    references,
+                    node,
+                    "ReadLinkObjectEndQualifierAction",
+                    "qualifier",
+                )
+                .and_then(|qualifier| multiplicity_is_one(references, qualifier)),
                 "UML_READ_LINK_OBJECT_END_QUALIFIER_ACTION_MULTIPLICITY_OF_QUALIFIER",
                 "MDE_READ_LINK_OBJECT_END_QUALIFIER_ACTION_MULTIPLICITY_OF_QUALIFIER_UNVERIFIED",
                 "ReadLinkObjectEndQualifierAction-multiplicity_of_qualifier",
@@ -1971,7 +2037,8 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
         }
         for (metaclass, property, code, unverified, rule) in [
             (
-                "LinkEndData", "value",
+                "LinkEndData",
+                "value",
                 "UML_LINK_END_DATA_MULTIPLICITY",
                 "MDE_LINK_END_DATA_MULTIPLICITY_UNVERIFIED",
                 "LinkEndData-multiplicity",

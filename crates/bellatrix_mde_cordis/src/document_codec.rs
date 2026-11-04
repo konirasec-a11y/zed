@@ -25,7 +25,10 @@ pub(crate) fn register(context: &Context) -> Result<(), ListenerRegistrationErro
                     &request.source_format,
                     &request.destination_format,
                 )
-            }).await.map_err(|error| error.to_string()).and_then(|result| result);
+            })
+            .await
+            .map_err(|error| error.to_string())
+            .and_then(|result| result);
             Ok::<_, Infallible>(Some(result))
         },
     ))?;

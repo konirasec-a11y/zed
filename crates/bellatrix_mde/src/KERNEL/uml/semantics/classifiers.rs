@@ -128,7 +128,12 @@ pub(crate) fn properties(
     let descriptor = element
         .metaclass()
         .and_then(schema::uml_classifier)
-        .ok_or_else(|| QueryError::unsupported(element.id(), "normative metaclass properties are unavailable"))?;
+        .ok_or_else(|| {
+            QueryError::unsupported(
+                element.id(),
+                "normative metaclass properties are unavailable",
+            )
+        })?;
     let inherited = schema::inherited_properties(descriptor.id)
         .map_err(|error| QueryError::unsupported(element.id(), error.to_string()))?;
     if !inherited.unresolved.is_empty() {
@@ -161,8 +166,12 @@ fn contains_reference(
 ) -> Result<bool, QueryError> {
     let collection = !matches!(property.upper, "0" | "1");
     let values = if collection {
-        value.as_array().map(Vec::as_slice).ok_or_else(||
-            QueryError::invalid(subject, format!("{} requires a reference collection", property.id.fragment)))?
+        value.as_array().map(Vec::as_slice).ok_or_else(|| {
+            QueryError::invalid(
+                subject,
+                format!("{} requires a reference collection", property.id.fragment),
+            )
+        })?
     } else {
         std::slice::from_ref(value)
     };
@@ -175,11 +184,14 @@ fn contains_reference(
             unknown = Some("text declaration is not a resolved UML reference");
             continue;
         }
-        if let Some(href) = external_reference_href(value)
-            .map_err(|error| QueryError::invalid(subject, error))?
+        if let Some(href) =
+            external_reference_href(value).map_err(|error| QueryError::invalid(subject, error))?
         {
             if property.is_unique && !external.insert(href) {
-                return Err(QueryError::invalid(subject, "duplicate external composite reference"));
+                return Err(QueryError::invalid(
+                    subject,
+                    "duplicate external composite reference",
+                ));
             }
             unknown = Some("external composite reference has no loaded resolver");
             continue;
@@ -188,18 +200,31 @@ fn contains_reference(
         match target {
             Some(target) => {
                 if property.is_unique && !seen.insert(target) {
-                    return Err(QueryError::invalid(subject, "duplicate composite reference"));
+                    return Err(QueryError::invalid(
+                        subject,
+                        "duplicate composite reference",
+                    ));
                 }
                 contains |= target == id;
             }
             None if !collection && property.lower == "0" => {}
-            None => return Err(QueryError::invalid(subject, "composite reference cannot be null")),
+            None => {
+                return Err(QueryError::invalid(
+                    subject,
+                    "composite reference cannot be null",
+                ));
+            }
         }
     }
     // Existential membership can be proved without resolving every neighbor;
     // malformed/duplicate entries were still inspected before accepting it.
-    if contains { Ok(true) }
-    else { unknown.map_or(Ok(false), |message| Err(QueryError::unsupported(subject, message))) }
+    if contains {
+        Ok(true)
+    } else {
+        unknown.map_or(Ok(false), |message| {
+            Err(QueryError::unsupported(subject, message))
+        })
+    }
 }
 
 pub(crate) fn ownership_roles(
@@ -215,8 +240,13 @@ pub(crate) fn ownership_roles(
         if property.aggregation != Aggregation::Composite || property.is_derived {
             continue;
         }
-        let type_is_resolved = property.property_type.resolution == schema::ReferenceResolution::Exact
-            && property.property_type.target.and_then(schema::classifier).is_some()
+        let type_is_resolved = property.property_type.resolution
+            == schema::ReferenceResolution::Exact
+            && property
+                .property_type
+                .target
+                .and_then(schema::classifier)
+                .is_some()
             && child.metaclass().is_some();
         let compatible = matches_type(child, property);
         unresolved_type |= !type_is_resolved;
@@ -225,14 +255,21 @@ pub(crate) fn ownership_roles(
                 // An unrelated malformed composite cannot prevent resolving this
                 // child's role. A local reference to this child still proves a
                 // type violation, even beside another malformed collection item.
-                let values = value.as_array().map(Vec::as_slice)
+                let values = value
+                    .as_array()
+                    .map(Vec::as_slice)
                     .unwrap_or_else(|| std::slice::from_ref(value));
-                if values.iter().any(|value|
-                    matches!(reference_id(value), Ok(Some(id)) if id == child.id()))
+                if values
+                    .iter()
+                    .any(|value| matches!(reference_id(value), Ok(Some(id)) if id == child.id()))
                 {
-                    return Err(QueryError::invalid(child.id(), format!(
-                        "{} has an incompatible composite target", property.id.fragment,
-                    )));
+                    return Err(QueryError::invalid(
+                        child.id(),
+                        format!(
+                            "{} has an incompatible composite target",
+                            property.id.fragment,
+                        ),
+                    ));
                 }
                 continue;
             }
@@ -246,8 +283,12 @@ pub(crate) fn ownership_roles(
             };
             if contains {
                 if !type_is_resolved {
-                    unresolved_role.get_or_insert_with(|| QueryError::unsupported(owner.id(),
-                        "composite ownership role has an unresolved target type"));
+                    unresolved_role.get_or_insert_with(|| {
+                        QueryError::unsupported(
+                            owner.id(),
+                            "composite ownership role has an unresolved target type",
+                        )
+                    });
                     continue;
                 }
                 explicit.push(property);
@@ -261,24 +302,31 @@ pub(crate) fn ownership_roles(
     // A known role proves membership, but only after all relevant stored roles
     // have been inspected: unresolved evidence must not mask a proven violation.
     if !explicit.is_empty() {
-        return Ok(OwnershipRoles { properties: explicit, is_resolved: true });
+        return Ok(OwnershipRoles {
+            properties: explicit,
+            is_resolved: true,
+        });
     }
     if let Some(error) = unresolved_role {
         return Err(error);
     }
     // A canonical Association memberEnd plus ownership identifies ownedEnd,
     // including AssociationClass, whose ownedAttribute has the same target type.
-    if owner.conforms_to("Association") && child.conforms_to("Property")
+    if owner.conforms_to("Association")
+        && child.conforms_to("Property")
         && let Some(member_ends) = owner.properties().get("memberEnd")
     {
         let member_end = schema::uml_property("Association", "memberEnd")
             .map_err(|error| QueryError::unsupported(owner.id(), error.to_string()))?
-            .ok_or_else(|| QueryError::unsupported(owner.id(), "missing Association::memberEnd contract"))?;
+            .ok_or_else(|| {
+                QueryError::unsupported(owner.id(), "missing Association::memberEnd contract")
+            })?;
         let is_end = contains_reference(member_ends, child.id(), owner.id(), member_end)?;
         let mut filtered = Vec::new();
         for property in candidates {
             if contributes(property, "Association-ownedEnd")
-                .map_err(|error| QueryError::unsupported(owner.id(), error))? == is_end
+                .map_err(|error| QueryError::unsupported(owner.id(), error))?
+                == is_end
             {
                 filtered.push(property);
             }
@@ -286,10 +334,13 @@ pub(crate) fn ownership_roles(
         candidates = filtered;
     }
     if candidates.is_empty() && excluded_by_explicit_role && !unresolved_type {
-        return Err(QueryError::invalid(child.id(), format!(
-            "canonical ownership by {} contradicts its explicit composite role references",
-            owner.id(),
-        )));
+        return Err(QueryError::invalid(
+            child.id(),
+            format!(
+                "canonical ownership by {} contradicts its explicit composite role references",
+                owner.id(),
+            ),
+        ));
     }
     Ok(OwnershipRoles {
         is_resolved: candidates.len() == 1,
@@ -331,8 +382,7 @@ pub(crate) fn contributes_to_owned_union(
         ));
     }
     if roles.is_empty() {
-        return Err(
-        QueryError::unsupported(
+        return Err(QueryError::unsupported(
             child.id(),
             format!(
                 "cannot determine a composite membership role under {}",
@@ -388,10 +438,14 @@ impl<'index, 'model> Queries<'index, 'model> {
         }
         super::element_graph_queries::ensure_canonical_ownership(self.references, element)
             .map_err(|error| match error {
-                super::element_graph_queries::ElementGraphError::Invalid { subject_id, message } =>
-                    QueryError::invalid(&subject_id, message),
-                super::element_graph_queries::ElementGraphError::Unsupported { subject_id, message } =>
-                    QueryError::unsupported(&subject_id, message),
+                super::element_graph_queries::ElementGraphError::Invalid {
+                    subject_id,
+                    message,
+                } => QueryError::invalid(&subject_id, message),
+                super::element_graph_queries::ElementGraphError::Unsupported {
+                    subject_id,
+                    message,
+                } => QueryError::unsupported(&subject_id, message),
             })?;
         for key in [
             "member",
@@ -448,8 +502,12 @@ impl<'index, 'model> Queries<'index, 'model> {
             .map_err(|error| QueryError::invalid(id, error))?;
         let descriptors = properties(element)?;
         for property in descriptors {
-            if element.conforms_to("Association") && property.name == "navigableOwnedEnd"
-                && element.properties().get(property.name).is_some_and(populated)
+            if element.conforms_to("Association")
+                && property.name == "navigableOwnedEnd"
+                && element
+                    .properties()
+                    .get(property.name)
+                    .is_some_and(populated)
             {
                 // This subset selects existing owned ends; it contributes no
                 // additional members beyond the canonical ownership projection.
@@ -484,13 +542,21 @@ impl<'index, 'model> Queries<'index, 'model> {
         let mut attributes = Vec::new();
         for child in owned {
             let ownership = ownership_roles(element, child)?;
-            let roles = ownership.properties.into_iter().map(|property| {
-                let contribution = |target| contributes(property, target)
-                    .map_err(|error| QueryError::unsupported(id, error));
-                Ok((contribution("Namespace-ownedMember")?,
-                    complete && contribution("Classifier-feature")?,
-                    complete && contribution("Classifier-attribute")?))
-            }).collect::<Result<HashSet<_>, QueryError>>()?;
+            let roles = ownership
+                .properties
+                .into_iter()
+                .map(|property| {
+                    let contribution = |target| {
+                        contributes(property, target)
+                            .map_err(|error| QueryError::unsupported(id, error))
+                    };
+                    Ok((
+                        contribution("Namespace-ownedMember")?,
+                        complete && contribution("Classifier-feature")?,
+                        complete && contribution("Classifier-attribute")?,
+                    ))
+                })
+                .collect::<Result<HashSet<_>, QueryError>>()?;
             if !ownership.is_resolved && roles.len() > 1 {
                 return Err(QueryError::unsupported(
                     child.id(),
@@ -501,10 +567,11 @@ impl<'index, 'model> Queries<'index, 'model> {
                 ));
             }
             if !roles.is_empty() {
-                let (member, feature, attribute) = roles.into_iter().fold(
-                    (false, false, false),
-                    |left, right| (left.0 || right.0, left.1 || right.1, left.2 || right.2),
-                );
+                let (member, feature, attribute) = roles
+                    .into_iter()
+                    .fold((false, false, false), |left, right| {
+                        (left.0 || right.0, left.1 || right.1, left.2 || right.2)
+                    });
                 if member {
                     owned_members.push(child);
                 }
@@ -649,11 +716,8 @@ impl<'index, 'model> Queries<'index, 'model> {
                     .ok_or_else(|| QueryError::invalid(ancestor.id(), "missing parent query"))?;
                 all_attributes.extend(query.attributes.iter().copied());
             }
-            let all_slottable_features = self.collect_slottable_features(
-                &members,
-                &ancestors,
-                &redefined,
-            );
+            let all_slottable_features =
+                self.collect_slottable_features(&members, &ancestors, &redefined);
             Some(ClassifierQuery {
                 parents: direct.parents,
                 all_parents: ancestors,
@@ -804,9 +868,13 @@ fn redefinitions<'a>(
             std::slice::from_ref(value)
         } else {
             value.as_array().map(Vec::as_slice).ok_or_else(|| {
-                QueryError::invalid(element.id(), format!(
-                    "{} must be an array of local Element references", property.name,
-                ))
+                QueryError::invalid(
+                    element.id(),
+                    format!(
+                        "{} must be an array of local Element references",
+                        property.name,
+                    ),
+                )
             })?
         };
         let mut seen = HashSet::new();
@@ -838,7 +906,8 @@ fn redefinitions<'a>(
                 ));
             }
             if schema::read_effective_boolean(target, "isLeaf")
-                .map_err(|error| QueryError::invalid(target.id(), error))? {
+                .map_err(|error| QueryError::invalid(target.id(), error))?
+            {
                 return Err(QueryError::invalid(
                     element.id(),
                     format!("{id} isLeaf prohibits redefinition"),
@@ -901,16 +970,24 @@ pub fn all_roles<'a>(
     references: &ReferenceIndex<'a>,
     classifier_id: &str,
 ) -> Result<Vec<ElementRef<'a>>, QueryError> {
-    let classifier = references.element(classifier_id)
+    let classifier = references
+        .element(classifier_id)
         .map_err(|error| QueryError::invalid(classifier_id, error))?;
     if !classifier.conforms_to("StructuredClassifier") {
-        return Err(QueryError::invalid(classifier_id, "allRoles requires a StructuredClassifier"));
+        return Err(QueryError::invalid(
+            classifier_id,
+            "allRoles requires a StructuredClassifier",
+        ));
     }
     let namespace = query(references, classifier_id)?;
-    let features = namespace.classifier
+    let features = namespace
+        .classifier
         .ok_or_else(|| QueryError::invalid(classifier_id, "missing Classifier query"))?;
-    Ok(features.all_features.into_iter()
-        .filter(|feature| feature.conforms_to("ConnectableElement")).collect())
+    Ok(features
+        .all_features
+        .into_iter()
+        .filter(|feature| feature.conforms_to("ConnectableElement"))
+        .collect())
 }
 
 /// Boolean membership may be proved by an owned member even when the complete
@@ -928,67 +1005,104 @@ pub fn has_role(
         Err(error @ QueryError::Invalid { .. }) => return Err(error.clone()),
         Err(_) => {}
     }
-    let classifier = references.element(classifier_id)
+    let classifier = references
+        .element(classifier_id)
         .map_err(|error| QueryError::invalid(classifier_id, error))?;
-    let role = references.element(role_id)
+    let role = references
+        .element(role_id)
         .map_err(|error| QueryError::invalid(role_id, error))?;
     // Visit all canonical ownership contracts and all known ancestry branches
     // before accepting direct evidence; malformed siblings/cycles dominate.
-    let ownership = super::element_graph_queries::ensure_canonical_ownership(references, classifier);
-    if let Err(super::element_graph_queries::ElementGraphError::Invalid { subject_id, message }) = ownership {
+    let ownership =
+        super::element_graph_queries::ensure_canonical_ownership(references, classifier);
+    if let Err(super::element_graph_queries::ElementGraphError::Invalid {
+        subject_id,
+        message,
+    }) = ownership
+    {
         return Err(QueryError::invalid(&subject_id, message));
     }
     if let Err(error @ QueryError::Invalid { .. }) =
         super::classifier_hierarchy::has_ancestor(references, classifier_id, classifier_id)
-    { return Err(error); }
+    {
+        return Err(error);
+    }
     let mut found = false;
-    for child in references.explicit_owned_elements(classifier_id)
+    for child in references
+        .explicit_owned_elements(classifier_id)
         .map_err(|error| QueryError::invalid(classifier_id, error))?
     {
         match is_owned_member(classifier, child) {
-            Ok(true) if child.id() == role_id && role.conforms_to("Feature")
-                && role.conforms_to("ConnectableElement") => found = true,
+            Ok(true)
+                if child.id() == role_id
+                    && role.conforms_to("Feature")
+                    && role.conforms_to("ConnectableElement") =>
+            {
+                found = true
+            }
             Err(error @ QueryError::Invalid { .. }) => return Err(error),
             _ => {}
         }
     }
-    if found { Ok(true) } else { complete.map(|_| false) }
+    if found {
+        Ok(true)
+    } else {
+        complete.map(|_| false)
+    }
 }
 
 /// Partial allFeatures membership: a direct canonical Feature remains known
 /// when an unrelated inheritance/import branch cannot be enumerated completely.
 pub(crate) fn has_feature(
-    references: &ReferenceIndex<'_>, classifier_id: &str, feature_id: &str,
+    references: &ReferenceIndex<'_>,
+    classifier_id: &str,
+    feature_id: &str,
 ) -> Result<bool, QueryError> {
     let complete = query(references, classifier_id).and_then(|query| {
-        query.classifier.map(|classifier| classifier.all_features)
+        query
+            .classifier
+            .map(|classifier| classifier.all_features)
             .ok_or_else(|| QueryError::invalid(classifier_id, "allFeatures requires a Classifier"))
     });
     match &complete {
         Ok(features) => return Ok(features.iter().any(|feature| feature.id() == feature_id)),
         Err(error @ QueryError::Invalid { .. }) => return Err(error.clone()),
-        Err(_) => {},
+        Err(_) => {}
     }
-    let classifier = references.element(classifier_id)
+    let classifier = references
+        .element(classifier_id)
         .map_err(|error| QueryError::invalid(classifier_id, error))?;
-    let feature = references.element(feature_id)
+    let feature = references
+        .element(feature_id)
         .map_err(|error| QueryError::invalid(feature_id, error))?;
-    if let Err(super::element_graph_queries::ElementGraphError::Invalid { subject_id, message }) =
-        super::element_graph_queries::ensure_canonical_ownership(references, classifier) {
+    if let Err(super::element_graph_queries::ElementGraphError::Invalid {
+        subject_id,
+        message,
+    }) = super::element_graph_queries::ensure_canonical_ownership(references, classifier)
+    {
         return Err(QueryError::invalid(&subject_id, message));
     }
     if let Err(error @ QueryError::Invalid { .. }) =
-        super::classifier_hierarchy::has_ancestor(references, classifier_id, classifier_id) { return Err(error); }
+        super::classifier_hierarchy::has_ancestor(references, classifier_id, classifier_id)
+    {
+        return Err(error);
+    }
     let mut found = false;
-    for child in references.explicit_owned_elements(classifier_id)
-        .map_err(|error| QueryError::invalid(classifier_id, error))? {
+    for child in references
+        .explicit_owned_elements(classifier_id)
+        .map_err(|error| QueryError::invalid(classifier_id, error))?
+    {
         match contributes_to_owned_union(classifier, child, "Classifier-feature") {
             Ok(true) if child.id() == feature_id && feature.conforms_to("Feature") => found = true,
             Err(error @ QueryError::Invalid { .. }) => return Err(error),
-            _ => {},
+            _ => {}
         }
     }
-    if found { Ok(true) } else { complete.map(|_| false) }
+    if found {
+        Ok(true)
+    } else {
+        complete.map(|_| false)
+    }
 }
 
 fn compare_redefinition_consistency(
@@ -1000,50 +1114,77 @@ fn compare_redefinition_consistency(
     // Resolve the effective override from normative metaclass inheritance so a
     // newly supported metaclass cannot silently fall through to Operation or
     // the base false body when it actually declares a specialized predicate.
-    let descriptor = target.metaclass().and_then(schema::uml_classifier)
+    let descriptor = target
+        .metaclass()
+        .and_then(schema::uml_classifier)
         .ok_or_else(|| QueryError::unsupported(target.id(), "missing redefinition metaclass"))?;
     let mut pending = vec![descriptor];
     let mut visited = HashSet::new();
     let mut operations = Vec::new();
     while let Some(descriptor) = pending.pop() {
-        if !visited.insert(descriptor.id) { continue; }
+        if !visited.insert(descriptor.id) {
+            continue;
+        }
         for reference in descriptor.owned_operations {
-            let operation = reference.target.and_then(schema::operation_by_id)
-                .ok_or_else(|| QueryError::unsupported(target.id(), "unresolved metaclass operation"))?;
-            if operation.name == "isConsistentWith" { operations.push(operation); }
+            let operation = reference
+                .target
+                .and_then(schema::operation_by_id)
+                .ok_or_else(|| {
+                    QueryError::unsupported(target.id(), "unresolved metaclass operation")
+                })?;
+            if operation.name == "isConsistentWith" {
+                operations.push(operation);
+            }
         }
         for reference in descriptor.generals {
-            pending.push(reference.target.and_then(schema::classifier)
-                .ok_or_else(|| QueryError::unsupported(target.id(), "unresolved metaclass generalization"))?);
+            pending.push(
+                reference
+                    .target
+                    .and_then(schema::classifier)
+                    .ok_or_else(|| {
+                        QueryError::unsupported(target.id(), "unresolved metaclass generalization")
+                    })?,
+            );
         }
     }
     let mut effective = Vec::new();
     for operation in &operations {
         let mut overridden = false;
         for other in &operations {
-            if other.owner != operation.owner && schema::conforms_to(other.owner, operation.owner)
-                .map_err(|error| QueryError::unsupported(target.id(), error.to_string()))? {
+            if other.owner != operation.owner
+                && schema::conforms_to(other.owner, operation.owner)
+                    .map_err(|error| QueryError::unsupported(target.id(), error.to_string()))?
+            {
                 overridden = true;
             }
         }
-        if !overridden { effective.push(*operation); }
+        if !overridden {
+            effective.push(*operation);
+        }
     }
     let [operation] = effective.as_slice() else {
-        return Err(QueryError::unsupported(target.id(), "ambiguous or missing isConsistentWith override"));
+        return Err(QueryError::unsupported(
+            target.id(),
+            "ambiguous or missing isConsistentWith override",
+        ));
     };
     match operation.id.fragment {
-        "Property-isConsistentWith" =>
-            super::feature_compatibility::compare_property_consistency(references, source, target),
-        "Operation-isConsistentWith" =>
-            super::operation_signatures::compare_operation_consistency(references, source, target),
+        "Property-isConsistentWith" => {
+            super::feature_compatibility::compare_property_consistency(references, source, target)
+        }
+        "Operation-isConsistentWith" => {
+            super::operation_signatures::compare_operation_consistency(references, source, target)
+        }
         "RedefinableElement-isConsistentWith" => Ok(false),
         "ActivityEdge-isConsistentWith" => Ok(source.conforms_to("ActivityEdge")),
         "ActivityNode-isConsistentWith" => Ok(source.conforms_to("ActivityNode")),
-        "RedefinableTemplateSignature-isConsistentWith" =>
-            Ok(source.conforms_to("RedefinableTemplateSignature")),
-        operation => Err(QueryError::unsupported(target.id(), format!(
-            "{operation} consistency predicate is not implemented",
-        ))),
+        "RedefinableTemplateSignature-isConsistentWith" => {
+            Ok(source.conforms_to("RedefinableTemplateSignature"))
+        }
+        operation => Err(QueryError::unsupported(
+            target.id(),
+            format!("{operation} consistency predicate is not implemented",),
+        )),
     }
 }
 
@@ -1051,7 +1192,9 @@ pub(crate) fn redefinition_consistency_diagnostic(
     references: &ReferenceIndex<'_>,
     element: ElementRef<'_>,
 ) -> Option<StructuralDiagnostic> {
-    if !element.conforms_to("RedefinableElement") { return None; }
+    if !element.conforms_to("RedefinableElement") {
+        return None;
+    }
     let targets = match redefinitions(references, element) {
         Ok(targets) => targets,
         Err(error) => return Some(error.diagnostic()),
@@ -1075,25 +1218,41 @@ fn role_present(
     element: ElementRef<'_>,
     name: &str,
 ) -> Result<bool, QueryError> {
-    let Some(value) = element.properties().get(name) else { return Ok(false); };
-    let descriptor = schema::uml_property(element.metaclass().ok_or_else(||
-        QueryError::unsupported(element.id(), "missing metaclass"))?, name)
-        .map_err(|error| QueryError::unsupported(element.id(), error.to_string()))?
-        .ok_or_else(|| QueryError::unsupported(element.id(), "missing role contract"))?;
+    let Some(value) = element.properties().get(name) else {
+        return Ok(false);
+    };
+    let descriptor = schema::uml_property(
+        element
+            .metaclass()
+            .ok_or_else(|| QueryError::unsupported(element.id(), "missing metaclass"))?,
+        name,
+    )
+    .map_err(|error| QueryError::unsupported(element.id(), error.to_string()))?
+    .ok_or_else(|| QueryError::unsupported(element.id(), "missing role contract"))?;
     match super::property_contracts::check_value(references, element, descriptor, value) {
         super::property_contracts::PropertyOutcome::Satisfied => Ok(populated(value)),
-        super::property_contracts::PropertyOutcome::Violation(error) =>
-            Err(QueryError::invalid(element.id(), error)),
+        super::property_contracts::PropertyOutcome::Violation(error) => {
+            Err(QueryError::invalid(element.id(), error))
+        }
         super::property_contracts::PropertyOutcome::Unverified(error) => {
             // Existence needs only one checked member, unlike verification of
             // the whole collection. An unresolved neighbor cannot erase it.
-            let member = PropertyDescriptor { lower: "1", upper: "1", ..*descriptor };
-            if value.as_array().is_some_and(|values| values.iter().any(|value|
-                reference_id(value).ok().flatten().is_some()
-                    && matches!(super::property_contracts::check_value(
-                        references, element, &member, value,
-                    ), super::property_contracts::PropertyOutcome::Satisfied)))
-            {
+            let member = PropertyDescriptor {
+                lower: "1",
+                upper: "1",
+                ..*descriptor
+            };
+            if value.as_array().is_some_and(|values| {
+                values.iter().any(|value| {
+                    reference_id(value).ok().flatten().is_some()
+                        && matches!(
+                            super::property_contracts::check_value(
+                                references, element, &member, value,
+                            ),
+                            super::property_contracts::PropertyOutcome::Satisfied
+                        )
+                })
+            }) {
                 Ok(true)
             } else {
                 Err(QueryError::unsupported(element.id(), error))
@@ -1102,15 +1261,17 @@ fn role_present(
     }
 }
 
-fn any_present(results: impl IntoIterator<Item = Result<bool, QueryError>>)
-    -> Result<bool, QueryError>
-{
+fn any_present(
+    results: impl IntoIterator<Item = Result<bool, QueryError>>,
+) -> Result<bool, QueryError> {
     let mut unresolved = None;
     for result in results {
         match result {
             Ok(true) => return Ok(true),
             Ok(false) => {}
-            Err(error) => { unresolved.get_or_insert(error); }
+            Err(error) => {
+                unresolved.get_or_insert(error);
+            }
         }
     }
     unresolved.map_or(Ok(false), Err)
@@ -1125,117 +1286,182 @@ fn validate_feature_rules(
         let (severity, message) = match result {
             Ok(false) => return,
             Ok(true) => (StructuralSeverity::Error, format!("{rule}: violated")),
-            Err(QueryError::Invalid { message, .. }) =>
-                (StructuralSeverity::Error, format!("{rule}: {message}")),
-            Err(QueryError::Unsupported { message, .. }) =>
-                (StructuralSeverity::Warning, format!("{rule}: {message}")),
+            Err(QueryError::Invalid { message, .. }) => {
+                (StructuralSeverity::Error, format!("{rule}: {message}"))
+            }
+            Err(QueryError::Unsupported { message, .. }) => {
+                (StructuralSeverity::Warning, format!("{rule}: {message}"))
+            }
         };
         issues.push(StructuralDiagnostic {
             severity,
             code: if severity == StructuralSeverity::Error {
                 "UML_FEATURE_CONSTRAINT"
-            } else { "MDE_FEATURE_CONSTRAINT_UNVERIFIED" },
-            subject_id: element.id().into(), message,
+            } else {
+                "MDE_FEATURE_CONSTRAINT_UNVERIFIED"
+            },
+            subject_id: element.id().into(),
+            message,
         });
     };
     if element.conforms_to("Port") {
-        report("Port-encapsulated_owner", (|| {
-            // UML.xmi ownedPort.1 derives ownedPort from ownedAttribute Ports;
-            // its opposite encapsulatedClassifier is therefore the canonical
-            // owner only when that owner/role satisfies this projection.
-            // No diagram placement or stored inverse establishes ownership.
-            let Some(owner) = references.model().owner(element)
-                .map_err(|error| QueryError::invalid(element.id(), error))?
-            else {
-                // The equality is null = null; Element::mustBeOwned diagnoses
-                // an ownerless Port independently, not by inventing this rule.
-                return Ok(false);
-            };
-            if owner.metaclass().is_none() {
-                return Err(QueryError::unsupported(element.id(),
-                    "Port owner has no resolved normative metaclass"));
-            }
-            if !owner.conforms_to("EncapsulatedClassifier") { return Ok(true); }
-            contributes_to_owned_union(owner, element, "StructuredClassifier-ownedAttribute")
-                .map(|owned_attribute| !owned_attribute)
-        })());
+        report(
+            "Port-encapsulated_owner",
+            (|| {
+                // UML.xmi ownedPort.1 derives ownedPort from ownedAttribute Ports;
+                // its opposite encapsulatedClassifier is therefore the canonical
+                // owner only when that owner/role satisfies this projection.
+                // No diagram placement or stored inverse establishes ownership.
+                let Some(owner) = references
+                    .model()
+                    .owner(element)
+                    .map_err(|error| QueryError::invalid(element.id(), error))?
+                else {
+                    // The equality is null = null; Element::mustBeOwned diagnoses
+                    // an ownerless Port independently, not by inventing this rule.
+                    return Ok(false);
+                };
+                if owner.metaclass().is_none() {
+                    return Err(QueryError::unsupported(
+                        element.id(),
+                        "Port owner has no resolved normative metaclass",
+                    ));
+                }
+                if !owner.conforms_to("EncapsulatedClassifier") {
+                    return Ok(true);
+                }
+                contributes_to_owned_union(owner, element, "StructuredClassifier-ownedAttribute")
+                    .map(|owned_attribute| !owned_attribute)
+            })(),
+        );
     }
     if element.conforms_to("BehavioredClassifier") {
-        report("BehavioredClassifier-class_behavior", (|| {
-            let Some(value) = element.properties().get("classifierBehavior") else {
-                return Ok(false);
-            };
-            if !role_present(references, element, "classifierBehavior")? { return Ok(false); }
-            let Some(id) = reference_id(value)
-                .map_err(|error| QueryError::invalid(element.id(), error))? else {
-                return Ok(false);
-            };
-            let behavior = references.element(id)
-                .map_err(|error| QueryError::invalid(element.id(), error))?;
-            role_present(references, behavior, "specification")
-        })());
+        report(
+            "BehavioredClassifier-class_behavior",
+            (|| {
+                let Some(value) = element.properties().get("classifierBehavior") else {
+                    return Ok(false);
+                };
+                if !role_present(references, element, "classifierBehavior")? {
+                    return Ok(false);
+                }
+                let Some(id) = reference_id(value)
+                    .map_err(|error| QueryError::invalid(element.id(), error))?
+                else {
+                    return Ok(false);
+                };
+                let behavior = references
+                    .element(id)
+                    .map_err(|error| QueryError::invalid(element.id(), error))?;
+                role_present(references, behavior, "specification")
+            })(),
+        );
     }
     if element.conforms_to("Class") {
-        report("Class-passive_class", (|| {
-            if schema::read_effective_boolean(element, "isActive")
-                .map_err(|error| QueryError::invalid(element.id(), error))? { return Ok(false); }
-            let receptions = references.explicit_owned_elements(element.id())
-                .map_err(|error| QueryError::invalid(element.id(), error))?
-                .into_iter().filter(|child| child.conforms_to("Reception"))
-                .map(|child| contributes_to_owned_union(element, child, "Class-ownedReception"));
-            any_present(receptions.chain([
-                role_present(references, element, "ownedReception"),
-                role_present(references, element, "classifierBehavior"),
-            ]))
-        })());
+        report(
+            "Class-passive_class",
+            (|| {
+                if schema::read_effective_boolean(element, "isActive")
+                    .map_err(|error| QueryError::invalid(element.id(), error))?
+                {
+                    return Ok(false);
+                }
+                let receptions = references
+                    .explicit_owned_elements(element.id())
+                    .map_err(|error| QueryError::invalid(element.id(), error))?
+                    .into_iter()
+                    .filter(|child| child.conforms_to("Reception"))
+                    .map(|child| {
+                        contributes_to_owned_union(element, child, "Class-ownedReception")
+                    });
+                any_present(receptions.chain([
+                    role_present(references, element, "ownedReception"),
+                    role_present(references, element, "classifierBehavior"),
+                ]))
+            })(),
+        );
     }
     if element.conforms_to("BehavioralFeature") {
-        report("BehavioralFeature-abstract_no_method", (|| {
-            if !schema::read_effective_boolean(element, "isAbstract")
-                .map_err(|error| QueryError::invalid(element.id(), error))? { return Ok(false); }
-            let specification = schema::uml_property("Behavior", "specification")
-                .map_err(|error| QueryError::unsupported(element.id(), error.to_string()))?
-                .ok_or_else(|| QueryError::unsupported(element.id(), "missing Behavior specification"))?;
-            any_present([
-                role_present(references, element, "method"),
-                references.has_reference_source(specification, element.id())
-                    .map_err(|error| QueryError::unsupported(element.id(), error)),
-            ])
-        })());
+        report(
+            "BehavioralFeature-abstract_no_method",
+            (|| {
+                if !schema::read_effective_boolean(element, "isAbstract")
+                    .map_err(|error| QueryError::invalid(element.id(), error))?
+                {
+                    return Ok(false);
+                }
+                let specification = schema::uml_property("Behavior", "specification")
+                    .map_err(|error| QueryError::unsupported(element.id(), error.to_string()))?
+                    .ok_or_else(|| {
+                        QueryError::unsupported(element.id(), "missing Behavior specification")
+                    })?;
+                any_present([
+                    role_present(references, element, "method"),
+                    references
+                        .has_reference_source(specification, element.id())
+                        .map_err(|error| QueryError::unsupported(element.id(), error)),
+                ])
+            })(),
+        );
     }
     if element.conforms_to("Interface") {
-        report("Interface-visibility", (|| {
-            let owned = references.explicit_owned_elements(element.id())
-                .map_err(|error| QueryError::invalid(element.id(), error))?;
-            let mut checks = Vec::new();
-            for child in owned.into_iter().filter(|child| child.conforms_to("Feature")) {
-                checks.push(contributes_to_owned_union(element, child, "Classifier-feature")
-                    .and_then(|feature| if feature {
-                        visibility(child).map(|visibility| visibility != Some(VisibilityKind::Public))
-                    } else { Ok(false) }));
-            }
-            // A stored feature union or external composite role is not evidence
-            // that the complete set of Interface Features has been inspected.
-            for property in properties(element)? {
-                if contributes(property, "Classifier-feature")
-                    .map_err(|error| QueryError::unsupported(element.id(), error))?
-                    && element.properties().get(property.name).is_some_and(populated)
+        report(
+            "Interface-visibility",
+            (|| {
+                let owned = references
+                    .explicit_owned_elements(element.id())
+                    .map_err(|error| QueryError::invalid(element.id(), error))?;
+                let mut checks = Vec::new();
+                for child in owned
+                    .into_iter()
+                    .filter(|child| child.conforms_to("Feature"))
                 {
-                    if let Some(value) = element.properties().get(property.name) {
-                        checks.push(match super::property_contracts::check_value(
-                            references, element, property, value,
-                        ) {
-                            super::property_contracts::PropertyOutcome::Satisfied => Ok(false),
-                            super::property_contracts::PropertyOutcome::Violation(error) =>
-                                Err(QueryError::invalid(element.id(), error)),
-                            super::property_contracts::PropertyOutcome::Unverified(error) =>
-                                Err(QueryError::unsupported(element.id(), error)),
-                        });
+                    checks.push(
+                        contributes_to_owned_union(element, child, "Classifier-feature").and_then(
+                            |feature| {
+                                if feature {
+                                    visibility(child).map(|visibility| {
+                                        visibility != Some(VisibilityKind::Public)
+                                    })
+                                } else {
+                                    Ok(false)
+                                }
+                            },
+                        ),
+                    );
+                }
+                // A stored feature union or external composite role is not evidence
+                // that the complete set of Interface Features has been inspected.
+                for property in properties(element)? {
+                    if contributes(property, "Classifier-feature")
+                        .map_err(|error| QueryError::unsupported(element.id(), error))?
+                        && element
+                            .properties()
+                            .get(property.name)
+                            .is_some_and(populated)
+                    {
+                        if let Some(value) = element.properties().get(property.name) {
+                            checks.push(
+                                match super::property_contracts::check_value(
+                                    references, element, property, value,
+                                ) {
+                                    super::property_contracts::PropertyOutcome::Satisfied => {
+                                        Ok(false)
+                                    }
+                                    super::property_contracts::PropertyOutcome::Violation(
+                                        error,
+                                    ) => Err(QueryError::invalid(element.id(), error)),
+                                    super::property_contracts::PropertyOutcome::Unverified(
+                                        error,
+                                    ) => Err(QueryError::unsupported(element.id(), error)),
+                                },
+                            );
+                        }
                     }
                 }
-            }
-            any_present(checks)
-        })());
+                any_present(checks)
+            })(),
+        );
     }
 }
 
@@ -1482,9 +1708,17 @@ fn classifier_powertype_extent(
     let mut checks = Vec::new();
     let mut canonical = HashSet::new();
     let mut unresolved = false;
-    for set in references.model().elements().filter(|element| element.conforms_to("GeneralizationSet")) {
-        let Some(value) = set.properties().get("powertype") else { continue; };
-        if value.is_null() { continue; }
+    for set in references
+        .model()
+        .elements()
+        .filter(|element| element.conforms_to("GeneralizationSet"))
+    {
+        let Some(value) = set.properties().get("powertype") else {
+            continue;
+        };
+        if value.is_null() {
+            continue;
+        }
         match reference_id(value) {
             Ok(Some(id)) if id == classifier.id() => {
                 canonical.insert(set.id());
@@ -1504,16 +1738,25 @@ fn classifier_powertype_extent(
         }
     }
     if unresolved {
-        checks.push(Err(QueryError::unsupported(classifier.id(), "unresolved GeneralizationSet powertype prevents complete powertypeExtent membership")));
+        checks.push(Err(QueryError::unsupported(
+            classifier.id(),
+            "unresolved GeneralizationSet powertype prevents complete powertypeExtent membership",
+        )));
     }
     if let Some(value) = classifier.properties().get("powertypeExtent") {
         let descriptor = schema::uml_property("Classifier", "powertypeExtent")
             .map_err(|error| QueryError::unsupported(classifier.id(), error.to_string()))?
-            .ok_or_else(|| QueryError::unsupported(classifier.id(), "missing powertypeExtent contract"))?;
+            .ok_or_else(|| {
+                QueryError::unsupported(classifier.id(), "missing powertypeExtent contract")
+            })?;
         match check_value(references, classifier, descriptor, value) {
             PropertyOutcome::Satisfied => {}
-            PropertyOutcome::Violation(message) => checks.push(Err(QueryError::invalid(classifier.id(), message))),
-            PropertyOutcome::Unverified(message) => checks.push(Err(QueryError::unsupported(classifier.id(), message))),
+            PropertyOutcome::Violation(message) => {
+                checks.push(Err(QueryError::invalid(classifier.id(), message)))
+            }
+            PropertyOutcome::Unverified(message) => {
+                checks.push(Err(QueryError::unsupported(classifier.id(), message)))
+            }
         }
         if let Some(values) = value.as_array() {
             let mut authored = HashSet::new();
@@ -1523,23 +1766,50 @@ fn classifier_powertype_extent(
                     Ok(Some(id)) => {
                         authored.insert(id);
                         if let Ok(set) = references.element(id) {
-                            if set.metaclass().is_none() { continue; }
-                            if !set.conforms_to("GeneralizationSet") { continue; }
+                            if set.metaclass().is_none() {
+                                continue;
+                            }
+                            if !set.conforms_to("GeneralizationSet") {
+                                continue;
+                            }
                             // Both association ends are authored in UML. An
                             // omitted opposite is not an explicit null: local
                             // extent membership still supplies the powertype.
-                            for other in references.model().elements().filter(|other| other.id() != classifier.id() && other.conforms_to("Classifier")) {
-                                if other.properties().get("powertypeExtent").and_then(Value::as_array).is_some_and(|values| values.iter().any(|value| reference_id(value).ok().flatten() == Some(id))) {
+                            for other in references.model().elements().filter(|other| {
+                                other.id() != classifier.id() && other.conforms_to("Classifier")
+                            }) {
+                                if other
+                                    .properties()
+                                    .get("powertypeExtent")
+                                    .and_then(Value::as_array)
+                                    .is_some_and(|values| {
+                                        values.iter().any(|value| {
+                                            reference_id(value).ok().flatten() == Some(id)
+                                        })
+                                    })
+                                {
                                     checks.push(Err(QueryError::invalid(classifier.id(), "GeneralizationSet has multiple authored powertype Classifiers")));
                                 }
                             }
                             if let Some(opposite) = set.properties().get("powertype") {
-                                let descriptor = schema::uml_property("GeneralizationSet", "powertype")
-                                    .map_err(|error| QueryError::unsupported(set.id(), error.to_string()))?
-                                    .ok_or_else(|| QueryError::unsupported(set.id(), "missing powertype contract"))?;
+                                let descriptor =
+                                    schema::uml_property("GeneralizationSet", "powertype")
+                                        .map_err(|error| {
+                                            QueryError::unsupported(set.id(), error.to_string())
+                                        })?
+                                        .ok_or_else(|| {
+                                            QueryError::unsupported(
+                                                set.id(),
+                                                "missing powertype contract",
+                                            )
+                                        })?;
                                 match check_value(references, set, descriptor, opposite) {
-                                    PropertyOutcome::Violation(message) => checks.push(Err(QueryError::invalid(set.id(), message))),
-                                    PropertyOutcome::Unverified(message) => checks.push(Err(QueryError::unsupported(set.id(), message))),
+                                    PropertyOutcome::Violation(message) => {
+                                        checks.push(Err(QueryError::invalid(set.id(), message)))
+                                    }
+                                    PropertyOutcome::Unverified(message) => {
+                                        checks.push(Err(QueryError::unsupported(set.id(), message)))
+                                    }
                                     PropertyOutcome::Satisfied => {}
                                 }
                                 match reference_id(opposite) {
@@ -1549,7 +1819,12 @@ fn classifier_powertype_extent(
                                 }
                             }
                             if !canonical.contains(id) {
-                                checks.push(powertype_constraints(references, set, Some(classifier), Vec::new()));
+                                checks.push(powertype_constraints(
+                                    references,
+                                    set,
+                                    Some(classifier),
+                                    Vec::new(),
+                                ));
                             }
                         }
                     }
@@ -1557,9 +1832,15 @@ fn classifier_powertype_extent(
                 }
             }
             if !external && !canonical.is_subset(&authored) {
-                checks.push(Err(QueryError::invalid(classifier.id(), "powertypeExtent omits a canonical GeneralizationSet")));
+                checks.push(Err(QueryError::invalid(
+                    classifier.id(),
+                    "powertypeExtent omits a canonical GeneralizationSet",
+                )));
             } else if external && !canonical.is_subset(&authored) {
-                checks.push(Err(QueryError::unsupported(classifier.id(), "external extent entries cannot establish canonical inverse coverage")));
+                checks.push(Err(QueryError::unsupported(
+                    classifier.id(),
+                    "external extent entries cannot establish canonical inverse coverage",
+                )));
             }
         }
     }
@@ -1573,25 +1854,60 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
         if element.conforms_to("Classifier") {
             let outcome = match classifier_powertype_extent(references, element) {
                 Ok(true) => None,
-                Ok(false) => Some((StructuralSeverity::Error, "UML_CLASSIFIER_POWERTYPE_EXTENT", "powertypeExtent violates the published endpoint or ancestry exclusions".to_owned())),
-                Err(QueryError::Invalid { message, .. }) => Some((StructuralSeverity::Error, "MDE_CLASSIFIER_POWERTYPE_EXTENT_INVALID", message)),
-                Err(QueryError::Unsupported { message, .. }) => Some((StructuralSeverity::Warning, "MDE_CLASSIFIER_POWERTYPE_EXTENT_UNVERIFIED", message)),
+                Ok(false) => Some((
+                    StructuralSeverity::Error,
+                    "UML_CLASSIFIER_POWERTYPE_EXTENT",
+                    "powertypeExtent violates the published endpoint or ancestry exclusions"
+                        .to_owned(),
+                )),
+                Err(QueryError::Invalid { message, .. }) => Some((
+                    StructuralSeverity::Error,
+                    "MDE_CLASSIFIER_POWERTYPE_EXTENT_INVALID",
+                    message,
+                )),
+                Err(QueryError::Unsupported { message, .. }) => Some((
+                    StructuralSeverity::Warning,
+                    "MDE_CLASSIFIER_POWERTYPE_EXTENT_UNVERIFIED",
+                    message,
+                )),
             };
             if let Some((severity, code, message)) = outcome {
-                issues.push(StructuralDiagnostic { severity, code, subject_id: element.id().into(),
-                    message: format!("Classifier-maps_to_generalization_set: {message}") });
+                issues.push(StructuralDiagnostic {
+                    severity,
+                    code,
+                    subject_id: element.id().into(),
+                    message: format!("Classifier-maps_to_generalization_set: {message}"),
+                });
             }
         }
         if element.conforms_to("Property") {
-            let outcome = match super::redefinition_contexts::property_redefined_inherited(references, element) {
+            let outcome = match super::redefinition_contexts::property_redefined_inherited(
+                references, element,
+            ) {
                 Ok(true) => None,
-                Ok(false) => Some((StructuralSeverity::Error, "UML_PROPERTY_REDEFINED_PROPERTY_INHERITED", "redefined Properties must be ancestral allFeatures members".to_owned())),
-                Err(QueryError::Invalid { message, .. }) => Some((StructuralSeverity::Error, "UML_PROPERTY_REDEFINED_PROPERTY_INHERITED", message)),
-                Err(QueryError::Unsupported { message, .. }) => Some((StructuralSeverity::Warning, "MDE_PROPERTY_REDEFINED_PROPERTY_INHERITED_UNVERIFIED", message)),
+                Ok(false) => Some((
+                    StructuralSeverity::Error,
+                    "UML_PROPERTY_REDEFINED_PROPERTY_INHERITED",
+                    "redefined Properties must be ancestral allFeatures members".to_owned(),
+                )),
+                Err(QueryError::Invalid { message, .. }) => Some((
+                    StructuralSeverity::Error,
+                    "UML_PROPERTY_REDEFINED_PROPERTY_INHERITED",
+                    message,
+                )),
+                Err(QueryError::Unsupported { message, .. }) => Some((
+                    StructuralSeverity::Warning,
+                    "MDE_PROPERTY_REDEFINED_PROPERTY_INHERITED_UNVERIFIED",
+                    message,
+                )),
             };
             if let Some((severity, code, message)) = outcome {
-                issues.push(StructuralDiagnostic { severity, code, subject_id: element.id().into(),
-                    message: format!("Property-redefined_property_inherited: {message}") });
+                issues.push(StructuralDiagnostic {
+                    severity,
+                    code,
+                    subject_id: element.id().into(),
+                    message: format!("Property-redefined_property_inherited: {message}"),
+                });
             }
         }
         if element.conforms_to("GeneralizationSet") {
@@ -1605,21 +1921,39 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
                     "MDE_GENERALIZATION_SET_POWERTYPE_UNVERIFIED", message)),
             };
             if let Some((severity, code, message)) = power_outcome {
-                issues.push(StructuralDiagnostic { severity, code, subject_id: element.id().into(),
-                    message: format!("GeneralizationSet-maps_to_generalization_set: {message}") });
+                issues.push(StructuralDiagnostic {
+                    severity,
+                    code,
+                    subject_id: element.id().into(),
+                    message: format!("GeneralizationSet-maps_to_generalization_set: {message}"),
+                });
             }
             let outcome = match generalization_set_same_classifier(references, element) {
                 Ok(true) => None,
-                Ok(false) => Some((StructuralSeverity::Error, "UML_GENERALIZATION_SET_SAME_CLASSIFIER",
-                    "Generalizations in a GeneralizationSet must share one general Classifier".to_owned())),
-                Err(QueryError::Invalid { message, .. }) => Some((StructuralSeverity::Error,
-                    "MDE_GENERALIZATION_SET_SAME_CLASSIFIER_INVALID", message)),
-                Err(QueryError::Unsupported { message, .. }) => Some((StructuralSeverity::Warning,
-                    "MDE_GENERALIZATION_SET_SAME_CLASSIFIER_UNVERIFIED", message)),
+                Ok(false) => Some((
+                    StructuralSeverity::Error,
+                    "UML_GENERALIZATION_SET_SAME_CLASSIFIER",
+                    "Generalizations in a GeneralizationSet must share one general Classifier"
+                        .to_owned(),
+                )),
+                Err(QueryError::Invalid { message, .. }) => Some((
+                    StructuralSeverity::Error,
+                    "MDE_GENERALIZATION_SET_SAME_CLASSIFIER_INVALID",
+                    message,
+                )),
+                Err(QueryError::Unsupported { message, .. }) => Some((
+                    StructuralSeverity::Warning,
+                    "MDE_GENERALIZATION_SET_SAME_CLASSIFIER_UNVERIFIED",
+                    message,
+                )),
             };
             if let Some((severity, code, message)) = outcome {
-                issues.push(StructuralDiagnostic { severity, code, subject_id: element.id().into(),
-                    message: format!("GeneralizationSet-generalization_same_classifier: {message}") });
+                issues.push(StructuralDiagnostic {
+                    severity,
+                    code,
+                    subject_id: element.id().into(),
+                    message: format!("GeneralizationSet-generalization_same_classifier: {message}"),
+                });
             }
         }
         validate_feature_rules(references, element, &mut issues);
@@ -1675,7 +2009,9 @@ pub(crate) fn set_redefined_elements(
 ) -> Result<(), String> {
     let targets = {
         let references = ReferenceIndex::new(super::root::Model::from_section(section));
-        redefined_ids.iter().map(|id| references.element(id))
+        redefined_ids
+            .iter()
+            .map(|id| references.element(id))
             .collect::<Result<Vec<_>, _>>()?
     };
     let mut candidate = section.clone();
@@ -1697,16 +2033,22 @@ pub(crate) fn set_redefined_elements(
     // A narrower subset is usable only when its type admits every target.
     // For example, Port::redefinedPort must not hide the inherited Property
     // role when a Port redefines a non-Port Property or a mixed collection.
-    let compatible: Vec<_> = roles.iter().copied()
+    let compatible: Vec<_> = roles
+        .iter()
+        .copied()
         .filter(|role| targets.iter().all(|target| matches_type(*target, role)))
         .collect();
     let mut effective = Vec::new();
     for role in &compatible {
         let mut subsetted = false;
         for other in &compatible {
-            if role.id != other.id && contributes(other, role.id.fragment)? { subsetted = true; }
+            if role.id != other.id && contributes(other, role.id.fragment)? {
+                subsetted = true;
+            }
         }
-        if !subsetted { effective.push(*role); }
+        if !subsetted {
+            effective.push(*role);
+        }
     }
     let [role] = effective.as_slice() else {
         return Err("ambiguous or missing writable redefinition role".into());
@@ -1722,7 +2064,9 @@ pub(crate) fn set_redefined_elements(
     };
     // This command replaces the derived union, including authored values in
     // broader subsetted roles, rather than leaving stale targets in the union.
-    for property in roles { element.properties.remove(property.name); }
+    for property in roles {
+        element.properties.remove(property.name);
+    }
     element.properties.insert(role.name.into(), value);
     let references = ReferenceIndex::new(super::root::Model::from_section(&candidate));
     let element = references.element(element_id)?;

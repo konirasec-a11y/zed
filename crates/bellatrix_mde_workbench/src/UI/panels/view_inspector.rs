@@ -114,10 +114,20 @@ impl MdeRightPanel {
                     view.presentation.kind.as_deref().unwrap_or("Native view"),
                 ),
                 presentation_row("Subject", view.subject.as_deref().unwrap_or("None")),
-                presentation_row(if view.rendered_label.bound { "Stored label" } else { "Label" }, view.label.as_deref().unwrap_or("Absent")),
+                presentation_row(
+                    if view.rendered_label.bound {
+                        "Stored label"
+                    } else {
+                        "Label"
+                    },
+                    view.label.as_deref().unwrap_or("Absent"),
+                ),
             ];
             if view.rendered_label.bound {
-                presentation_rows.push(presentation_row("Rendered label", view.rendered_label.text.as_deref().unwrap_or("Absent")));
+                presentation_rows.push(presentation_row(
+                    "Rendered label",
+                    view.rendered_label.text.as_deref().unwrap_or("Absent"),
+                ));
             }
             for diagnostic in &view.rendered_label.diagnostics {
                 presentation_rows.push(presentation_row("Label projection", diagnostic));
@@ -140,10 +150,7 @@ impl MdeRightPanel {
             match &view.geometry {
                 Geometry::Layout { bounds } => {
                     presentation_rows.push(presentation_row("Geometry", "Authored layout"));
-                    for (name, value) in [
-                        ("X", &bounds.x),
-                        ("Y", &bounds.y),
-                    ] {
+                    for (name, value) in [("X", &bounds.x), ("Y", &bounds.y)] {
                         let value = match value {
                             bellatrix_mde_cordis::Authored::Missing => "Absent".to_owned(),
                             bellatrix_mde_cordis::Authored::Null => "Null".to_owned(),
@@ -156,9 +163,14 @@ impl MdeRightPanel {
                             bellatrix_mde_cordis::Authored::Missing => "Absent".to_owned(),
                             bellatrix_mde_cordis::Authored::Null => "Null".to_owned(),
                             bellatrix_mde_cordis::Authored::Value(extent) => match extent {
-                                bellatrix_mde_cordis::LayoutExtent::Resolved(value) => value.to_string(),
-                                bellatrix_mde_cordis::LayoutExtent::Unresolved { original, .. } =>
-                                    format!("Unresolved negative extent ({original}); layout required"),
+                                bellatrix_mde_cordis::LayoutExtent::Resolved(value) => {
+                                    value.to_string()
+                                }
+                                bellatrix_mde_cordis::LayoutExtent::Unresolved {
+                                    original, ..
+                                } => format!(
+                                    "Unresolved negative extent ({original}); layout required"
+                                ),
                             },
                         };
                         presentation_rows.push(presentation_row(name, &value));
@@ -231,7 +243,8 @@ impl MdeRightPanel {
             presentation_rows.append(&mut inspector_rows);
             inspector_rows = presentation_rows;
         }
-        if !read_only && !item.read(cx).source().is_mdj()
+        if !read_only
+            && !item.read(cx).source().is_mdj()
             && let Some((diagram_id, view, _)) = style_target
         {
             let is_timing_lifeline = snapshot.as_ref().is_some_and(|snapshot| {
@@ -242,7 +255,9 @@ impl MdeRightPanel {
                     .find(|diagram| diagram.id == diagram_id)
                     .is_some_and(|diagram| {
                         diagram.interaction_kind.as_deref() == Some("timing")
-                            && crate::workbench_ui::selection::supports_view_editing(diagram, &view.id)
+                            && crate::workbench_ui::selection::supports_view_editing(
+                                diagram, &view.id,
+                            )
                     });
                 let kind = view
                     .draft

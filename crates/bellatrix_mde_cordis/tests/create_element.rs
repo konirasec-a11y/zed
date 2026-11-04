@@ -1,6 +1,5 @@
 #[path = "support/events.rs"]
 mod events;
-use serde_json::{Value, json};
 use bellatrix_mde_cordis::Geometry;
 use bellatrix_mde_cordis::{
     MdePlugin, ModelingCreateElement, ModelingCreateElementRequested, ModelingElementKind,
@@ -11,6 +10,7 @@ use bellatrix_project::{
 };
 use cordis::event::QueryOutcome;
 use cordis::{Context, Plugin, PreparedPlugin, Routing};
+use serde_json::{Value, json};
 use std::sync::Arc;
 
 async fn admit<P: Plugin>(ctx: &Context, plugin: P) -> cordis::FiberHandle
@@ -64,7 +64,10 @@ async fn class_creation_changes_one_project_and_rejects_stale_revision() {
         ));
     }
     let current = projects.snapshot(&a).unwrap();
-    let section = events::projection(&ctx, &projects, &a).await.unwrap().section;
+    let section = events::projection(&ctx, &projects, &a)
+        .await
+        .unwrap()
+        .section;
     let mut first_request = request(&a, 0);
     first_request.diagram_id = section.diagrams.first().unwrap().id.clone();
     assert!(matches!(
@@ -82,7 +85,10 @@ async fn class_creation_changes_one_project_and_rejects_stale_revision() {
     assert_eq!(projects.snapshot(&b).unwrap().revision(), 0);
     let updated = projects.snapshot(&a).unwrap();
     assert_eq!(updated.revision(), 1);
-    let section = events::projection(&ctx, &projects, &a).await.unwrap().section;
+    let section = events::projection(&ctx, &projects, &a)
+        .await
+        .unwrap()
+        .section;
     let created = section
         .elements
         .iter()
@@ -157,15 +163,22 @@ async fn component_and_artifact_creation_require_explicit_owner_and_commit_atomi
         ("package-owner", "uml.package"),
         ("model-owner", "uml.model"),
     ] {
-        model["elements"].as_array_mut().ok_or("elements missing")?
+        model["elements"]
+            .as_array_mut()
+            .ok_or("elements missing")?
             .push(json!({"id": id, "kind": kind, "name": id}));
     }
     // Context must never silently select semantic ownership.
-    model["diagrams"].as_array_mut().and_then(|diagrams| diagrams.first_mut())
+    model["diagrams"]
+        .as_array_mut()
+        .and_then(|diagrams| diagrams.first_mut())
         .ok_or("diagram missing")?["model_elements"] = json!(["package-owner"]);
     let id = ProjectId::new(model["id"].as_str().ok_or("id missing")?)?;
     let document = events::prepare(&context, &model).await?;
-    let baseline = document.section(bellatrix_mde_cordis::MODELING_NAMESPACE).ok_or("section missing")?.clone();
+    let baseline = document
+        .section(bellatrix_mde_cordis::MODELING_NAMESPACE)
+        .ok_or("section missing")?
+        .clone();
     assert!(matches!(
         context
             .query::<ProjectCreate>(Routing::Unscoped, ProjectCreateRequested { document })
@@ -221,8 +234,24 @@ async fn component_and_artifact_creation_require_explicit_owner_and_commit_atomi
             .ok_or("section missing")?
             .clone();
         let section = events::projection(&context, &projects, &id).await?.section;
-        assert_eq!(section.elements.len(), baseline["elements"].as_array().ok_or("elements missing")?.len() + index + 1);
-        assert_eq!(section.relations.len(), baseline["relations"].as_array().ok_or("relations missing")?.len() + index + 1);
+        assert_eq!(
+            section.elements.len(),
+            baseline["elements"]
+                .as_array()
+                .ok_or("elements missing")?
+                .len()
+                + index
+                + 1
+        );
+        assert_eq!(
+            section.relations.len(),
+            baseline["relations"]
+                .as_array()
+                .ok_or("relations missing")?
+                .len()
+                + index
+                + 1
+        );
         let created = section
             .elements
             .iter()
@@ -240,7 +269,12 @@ async fn component_and_artifact_creation_require_explicit_owner_and_commit_atomi
         assert_eq!(diagram.model_elements, vec!["package-owner"]);
         assert_eq!(
             diagram.views.len(),
-            baseline["diagrams"][0]["views"].as_array().ok_or("views missing")?.len() + index + 1
+            baseline["diagrams"][0]["views"]
+                .as_array()
+                .ok_or("views missing")?
+                .len()
+                + index
+                + 1
         );
         assert!(
             diagram

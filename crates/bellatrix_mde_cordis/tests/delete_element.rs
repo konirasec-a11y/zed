@@ -1,15 +1,12 @@
 #[path = "support/events.rs"]
 mod events;
-use serde_json::Value;
-use bellatrix_mde_cordis::{
-    MdePlugin, ModelingDeleteElement, ModelingDeleteElementRequested,
-};
+use bellatrix_mde_cordis::{MdePlugin, ModelingDeleteElement, ModelingDeleteElementRequested};
 use bellatrix_project::{
-    ProjectCreate, ProjectCreateRequested, ProjectId, ProjectPlugin,
-    ProjectService,
+    ProjectCreate, ProjectCreateRequested, ProjectId, ProjectPlugin, ProjectService,
 };
 use cordis::event::QueryOutcome;
 use cordis::{Context, PreparedPlugin, Routing};
+use serde_json::Value;
 use std::sync::Arc;
 
 #[tokio::test]
@@ -62,7 +59,10 @@ async fn deleting_a_diagram_class_preserves_other_projects_and_revisions() {
     let document = projects.snapshot(&a).unwrap();
     assert_eq!(document.revision(), 1);
     assert_eq!(projects.snapshot(&b).unwrap().revision(), 0);
-    let section = events::projection(&ctx, &projects, &a).await.unwrap().section;
+    let section = events::projection(&ctx, &projects, &a)
+        .await
+        .unwrap()
+        .section;
     for id in ["type-task", "field-title", "field-completed"] {
         assert!(!section.elements.iter().any(|element| element.id == id));
     }

@@ -1,13 +1,13 @@
 #[path = "mdj_associations.rs"]
 mod associations;
-#[path = "mdj_members.rs"]
-mod members;
-#[path = "mdj_label_projection.rs"]
-mod label_projection;
-#[path = "mdj_interface_projection.rs"]
-mod interface_projection;
 #[path = "mdj_erd_projection.rs"]
 mod erd_projection;
+#[path = "mdj_interface_projection.rs"]
+mod interface_projection;
+#[path = "mdj_label_projection.rs"]
+mod label_projection;
+#[path = "mdj_members.rs"]
+mod members;
 #[path = "mdj_style_projection.rs"]
 mod style_projection;
 #[path = "mdj_view_projection.rs"]
@@ -244,7 +244,9 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
         for view in diagram.all_views() {
             if let Geometry::Layout { bounds } = &view.geometry {
                 for (field, extent) in [("width", &bounds.width), ("height", &bounds.height)] {
-                    if let Authored::Value(crate::LayoutExtent::Unresolved { original, .. }) = extent {
+                    if let Authored::Value(crate::LayoutExtent::Unresolved { original, .. }) =
+                        extent
+                    {
                         diagnostics.push(Diagnostic {
                             path: format!("{}/{field}", paths.get(&view.id).map(String::as_str).unwrap_or_default()),
                             message: format!("authored negative extent {original} retained as an unresolved layout dimension; it is not a rendered size and requires layout resolution"),
@@ -328,7 +330,8 @@ fn read_views(value: Option<&Value>, ids: &mut BTreeSet<String>) -> Result<Vec<V
             let style = style_projection::take_style(&mut residual);
             let default_style = Some(style_projection::default_style(&type_name, &residual));
             let mut field_presence = BTreeMap::new();
-            let style_inheritance = style_projection::take_inheritance(&type_name, &mut residual, &mut field_presence);
+            let style_inheritance =
+                style_projection::take_inheritance(&type_name, &mut residual, &mut field_presence);
             let children = read_views(object.get("subViews"), ids)?;
             Ok(View {
                 id,
@@ -419,8 +422,13 @@ fn take_extent(residue: &mut BTreeMap<String, Value>, key: &str) -> Authored<cra
         Authored::Missing => Authored::Missing,
         Authored::Null => Authored::Null,
         Authored::Value(value) => Authored::Value(if value < 0.0 {
-            crate::LayoutExtent::Unresolved { original: value, reason: crate::UnresolvedExtentReason::NegativeExtent }
-        } else { crate::LayoutExtent::Resolved(value) }),
+            crate::LayoutExtent::Unresolved {
+                original: value,
+                reason: crate::UnresolvedExtentReason::NegativeExtent,
+            }
+        } else {
+            crate::LayoutExtent::Resolved(value)
+        }),
     }
 }
 
@@ -603,8 +611,14 @@ fn export_document(project: &Project, original: &mdj::Index<'_>) -> Result<Value
         };
         if canonical {
             if let Some(documentation) = &element.description {
-                if residual.insert("documentation".into(), Value::String(documentation.clone())).is_some() {
-                    return Err(failure("", "mapped documentation conflicts with source residue"));
+                if residual
+                    .insert("documentation".into(), Value::String(documentation.clone()))
+                    .is_some()
+                {
+                    return Err(failure(
+                        "",
+                        "mapped documentation conflicts with source residue",
+                    ));
                 }
             }
             for (field, value) in &element.properties {
@@ -640,7 +654,11 @@ fn export_document(project: &Project, original: &mdj::Index<'_>) -> Result<Value
                     parent.id == ownership.from
                         && matches!(
                             parent.kind.as_str(),
-                            "uml.model" | "uml.package" | "uml.class" | "uml.interface" | "uml.operation"
+                            "uml.model"
+                                | "uml.package"
+                                | "uml.class"
+                                | "uml.interface"
+                                | "uml.operation"
                         )
                 })
             {
@@ -690,7 +708,10 @@ fn export_document(project: &Project, original: &mdj::Index<'_>) -> Result<Value
             )?,
         );
         for view in diagram.all_views() {
-            objects.insert(view.id.clone(), export_view(view, original.object(&view.id))?);
+            objects.insert(
+                view.id.clone(),
+                export_view(view, original.object(&view.id))?,
+            );
         }
     }
     if objects.len() != provenance.object_paths.len()
@@ -789,10 +810,7 @@ fn export_view(view: &View, original: Option<&mdj::Object<'_>>) -> Result<Value,
             "MDJ geometry export only supports authored Layout bounds",
         ));
     };
-    for (key, number) in [
-        ("left", &bounds.x),
-        ("top", &bounds.y),
-    ] {
+    for (key, number) in [("left", &bounds.x), ("top", &bounds.y)] {
         match number {
             Authored::Missing => {}
             Authored::Null => insert_mapped(&mut object, key, Value::Null)?,
@@ -807,11 +825,17 @@ fn export_view(view: &View, original: Option<&mdj::Object<'_>>) -> Result<Value,
     }
     for (key, extent) in [("width", &bounds.width), ("height", &bounds.height)] {
         match extent {
-            Authored::Missing => {},
+            Authored::Missing => {}
             Authored::Null => insert_mapped(&mut object, key, Value::Null)?,
             Authored::Value(extent) => {
-                if !extent.is_valid() { return Err(failure("", "invalid authored MDJ extent")); }
-                insert_mapped(&mut object, key, serde_json::from_str(&extent.original().to_string())?)?;
+                if !extent.is_valid() {
+                    return Err(failure("", "invalid authored MDJ extent"));
+                }
+                insert_mapped(
+                    &mut object,
+                    key,
+                    serde_json::from_str(&extent.original().to_string())?,
+                )?;
             }
         }
     }

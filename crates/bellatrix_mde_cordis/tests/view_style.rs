@@ -1,9 +1,9 @@
 #[path = "support/events.rs"]
 mod events;
-use serde_json::Value;
 use bellatrix_mde_cordis::*;
 use bellatrix_project::*;
 use cordis::{Context, Plugin, PreparedPlugin, Routing, event::QueryOutcome};
+use serde_json::Value;
 use std::sync::Arc;
 
 #[tokio::test]
@@ -98,7 +98,11 @@ async fn styles_and_routes_use_revision_boundary_and_rollback()
     }
     let snapshot = service.snapshot(&id)?;
     let section = events::projection(&context, &service, &id).await?.section;
-    let class_kind = &section.tools.element(ModelingElementKind::Class).ok_or("class tool missing")?.model_kind;
+    let class_kind = &section
+        .tools
+        .element(ModelingElementKind::Class)
+        .ok_or("class tool missing")?
+        .model_kind;
     let classes = section
         .elements
         .iter()
@@ -110,7 +114,8 @@ async fn styles_and_routes_use_revision_boundary_and_rollback()
         context
             .query::<ModelingCreateRelation>(
                 Routing::Unscoped,
-                ModelingCreateRelationRequested { owner_id: None,
+                ModelingCreateRelationRequested {
+                    owner_id: None,
                     project_id: id.clone(),
                     diagram_id: diagram.id.clone(),
                     kind: ModelingRelationKind::Association,
@@ -331,28 +336,52 @@ async fn styles_and_routes_use_revision_boundary_and_rollback()
     let snapshot = service.snapshot(&id)?;
     let timed = events::section(&service, &id)?;
     let mut expected = routed_state.clone();
-    expected["diagrams"].as_array_mut().ok_or("diagrams missing")?.iter_mut()
+    expected["diagrams"]
+        .as_array_mut()
+        .ok_or("diagrams missing")?
+        .iter_mut()
         .flat_map(|diagram| diagram["views"].as_array_mut().unwrap())
-        .find(|item| item["id"] == view.id).ok_or("view missing")?["timing"] = serde_json::to_value(timing)?;
+        .find(|item| item["id"] == view.id)
+        .ok_or("view missing")?["timing"] = serde_json::to_value(timing)?;
     assert_eq!(
         timed, expected,
         "only the selected View presentation may change"
     );
     for mode in [TimingMode::State, TimingMode::Value] {
         let mut persisted = events::model_document(&snapshot)?;
-        persisted["diagrams"].as_array_mut().ok_or("diagrams missing")?.iter_mut()
+        persisted["diagrams"]
+            .as_array_mut()
+            .ok_or("diagrams missing")?
+            .iter_mut()
             .flat_map(|diagram| diagram["views"].as_array_mut().unwrap())
-            .find(|item| item["id"] == view.id).ok_or("timing missing")?["timing"]["mode"] = serde_json::to_value(mode)?;
+            .find(|item| item["id"] == view.id)
+            .ok_or("timing missing")?["timing"]["mode"] = serde_json::to_value(mode)?;
         for format in ["json", "protobuf"] {
-            let encoded = match context.query::<ModelingConvertDocument>(Routing::Unscoped,
-                ModelingConvertDocumentRequested { bytes: serde_json::to_vec(&persisted)?,
-                    source_format: "json".into(), destination_format: format.into() }).await? {
+            let encoded = match context
+                .query::<ModelingConvertDocument>(
+                    Routing::Unscoped,
+                    ModelingConvertDocumentRequested {
+                        bytes: serde_json::to_vec(&persisted)?,
+                        source_format: "json".into(),
+                        destination_format: format.into(),
+                    },
+                )
+                .await?
+            {
                 QueryOutcome::Answer(Ok(bytes)) => bytes,
                 other => return Err(format!("unexpected encode response: {other:?}").into()),
             };
-            let decoded = match context.query::<ModelingConvertDocument>(Routing::Unscoped,
-                ModelingConvertDocumentRequested { bytes: encoded,
-                    source_format: format.into(), destination_format: "json".into() }).await? {
+            let decoded = match context
+                .query::<ModelingConvertDocument>(
+                    Routing::Unscoped,
+                    ModelingConvertDocumentRequested {
+                        bytes: encoded,
+                        source_format: format.into(),
+                        destination_format: "json".into(),
+                    },
+                )
+                .await?
+            {
                 QueryOutcome::Answer(Ok(bytes)) => serde_json::from_slice::<Value>(&bytes)?,
                 other => return Err(format!("unexpected decode response: {other:?}").into()),
             };

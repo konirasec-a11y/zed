@@ -16,7 +16,11 @@ pub(crate) fn project_inspector(
         name: inspector.name,
         display_label: inspector.display_label,
         quick_actions,
-        properties: inspector.properties.into_iter().map(project_property).collect(),
+        properties: inspector
+            .properties
+            .into_iter()
+            .map(project_property)
+            .collect(),
         reference_choices_by_path: inspector
             .reference_choices_by_path
             .into_iter()
@@ -31,10 +35,26 @@ pub(crate) fn project_inspector(
                 (path, choices)
             })
             .collect(),
-        attributes: inspector.attributes.into_iter().map(project_member).collect(),
-        operations: inspector.operations.into_iter().map(project_member).collect(),
-        parameters: inspector.parameters.into_iter().map(project_member).collect(),
-        receptions: inspector.receptions.into_iter().map(project_member).collect(),
+        attributes: inspector
+            .attributes
+            .into_iter()
+            .map(project_member)
+            .collect(),
+        operations: inspector
+            .operations
+            .into_iter()
+            .map(project_member)
+            .collect(),
+        parameters: inspector
+            .parameters
+            .into_iter()
+            .map(project_member)
+            .collect(),
+        receptions: inspector
+            .receptions
+            .into_iter()
+            .map(project_member)
+            .collect(),
         template_parameters: inspector
             .template_parameters
             .into_iter()
@@ -79,9 +99,9 @@ fn project_property(property: crate::InspectorProperty) -> InspectorProperty {
         crate::PropertyEditor::Multiline => PropertyEditor::Multiline,
         crate::PropertyEditor::Boolean => PropertyEditor::Boolean,
         crate::PropertyEditor::Number => PropertyEditor::Number,
-        crate::PropertyEditor::Choice(options) => PropertyEditor::Choice(
-            options.iter().map(|option| (*option).to_owned()).collect(),
-        ),
+        crate::PropertyEditor::Choice(options) => {
+            PropertyEditor::Choice(options.iter().map(|option| (*option).to_owned()).collect())
+        }
         crate::PropertyEditor::Reference => PropertyEditor::Reference,
         crate::PropertyEditor::Stereotype => PropertyEditor::Stereotype,
         crate::PropertyEditor::ReadOnly => PropertyEditor::ReadOnly,

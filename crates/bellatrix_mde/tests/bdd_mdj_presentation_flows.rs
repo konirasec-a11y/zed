@@ -249,7 +249,10 @@ fn authored_style_survives_command_save_reopen_and_mdj_export() -> FlowResult<()
     let assert_inherited_label =
         |project: &Value, fill: &str, size: f64, weight: u16, italic: bool| -> FlowResult<()> {
             let label = view(project, "name-label")?;
-            let inheritance = label.presentation.style_inheritance.as_ref()
+            let inheritance = label
+                .presentation
+                .style_inheritance
+                .as_ref()
                 .ok_or("missing projected style inheritance")?;
             assert_eq!(inheritance.status, StyleInheritanceStatus::Resolved);
             assert_eq!(

@@ -34,7 +34,10 @@ pub(crate) fn style_value(style: &Style, key: &str) -> String {
         "show_type" => style.uml.show_type.map(|value| value.to_string()),
         "show_property" => style.uml.show_property.map(|value| value.to_string()),
         "show_multiplicity" => style.uml.show_multiplicity.map(|value| value.to_string()),
-        "show_operation_signature" => style.uml.show_operation_signature.map(|value| value.to_string()),
+        "show_operation_signature" => style
+            .uml
+            .show_operation_signature
+            .map(|value| value.to_string()),
         "stereotype_display" => style.uml.stereotype_display.map(|value| {
             match value {
                 StereotypeDisplay::Hidden => "none",
@@ -114,9 +117,8 @@ pub(crate) fn field_error(key: &str, text: &str) -> Option<&'static str> {
         return None;
     }
     match key {
-        "stereotype_display" => {
-            (!matches!(text, "none" | "label" | "icon" | "icon_label")).then_some("Choose a supported stereotype display")
-        }
+        "stereotype_display" => (!matches!(text, "none" | "label" | "icon" | "icon_label"))
+            .then_some("Choose a supported stereotype display"),
         "show_visibility"
         | "show_type"
         | "show_property"
@@ -322,7 +324,9 @@ impl StyleEditState {
                     "show_type" => style.uml.show_type = text.parse().ok(),
                     "show_property" => style.uml.show_property = text.parse().ok(),
                     "show_multiplicity" => style.uml.show_multiplicity = text.parse().ok(),
-                    "show_operation_signature" => style.uml.show_operation_signature = text.parse().ok(),
+                    "show_operation_signature" => {
+                        style.uml.show_operation_signature = text.parse().ok()
+                    }
                     "stereotype_display" => {
                         style.uml.stereotype_display = match text {
                             "none" => Some(StereotypeDisplay::Hidden),

@@ -5,8 +5,8 @@ use bellatrix_mde_workbench::{
     MdeUiSource, NativeDocumentImporter, NativeDocumentLease, register_mde_workspace,
 };
 use bellatrix_project::{
-    ProjectCreate, ProjectCreateRequested, ProjectId, ProjectOpen,
-    ProjectOpenRequested, ProjectPlugin, ProjectService,
+    ProjectCreate, ProjectCreateRequested, ProjectId, ProjectOpen, ProjectOpenRequested,
+    ProjectPlugin, ProjectService,
 };
 use cordis::event::QueryOutcome;
 use cordis::{Context as CordisContext, FiberHandle, Plugin, PreparedPlugin, Routing};
@@ -39,35 +39,51 @@ impl BellatrixZedHost {
         let prepare_runtime = runtime.clone();
         let prepare_context = context.clone();
         let projects = Arc::clone(&self._projects);
-        NativeDocumentImporter::new(move |bytes, is_mdj| {
-            let runtime = prepare_runtime.clone();
-            let context = prepare_context.clone();
-            Box::pin(async move {
-                runtime.spawn(async move {
-                    let format = if is_mdj {
-                        bellatrix_mde_cordis::ModelingDocumentFormat::StarUml
-                    } else {
-                        bellatrix_mde_cordis::ModelingDocumentFormat::ProjectJson
-                    };
-                    match context.query::<bellatrix_mde_cordis::ModelingPrepareDocument>(
-                        Routing::Unscoped,
-                        bellatrix_mde_cordis::ModelingPrepareDocumentRequested { bytes, format },
-                    ).await.map_err(|error| error.to_string())? {
-                        QueryOutcome::Answer(Ok(prepared)) => Ok((prepared.document, prepared.diagnostics)),
-                        QueryOutcome::Answer(Err(error)) => Err(error),
-                        QueryOutcome::Miss => Err("MDE document preparation service unavailable".into()),
-                    }
-                }).await.map_err(|error| error.to_string())?
-            })
-        }, move |document, is_saved, editable_mdj| {
-            let runtime = runtime.clone();
-            let context = context.clone();
-            let projects = Arc::clone(&projects);
-            Box::pin(async move {
-                let cleanup_runtime = runtime.clone();
-                // The Tokio task owns a successfully imported lease even when
-                // its GPUI receiver disappears while the request is in flight.
-                runtime.spawn(async move {
+        NativeDocumentImporter::new(
+            move |bytes, is_mdj| {
+                let runtime = prepare_runtime.clone();
+                let context = prepare_context.clone();
+                Box::pin(async move {
+                    runtime
+                        .spawn(async move {
+                            let format = if is_mdj {
+                                bellatrix_mde_cordis::ModelingDocumentFormat::StarUml
+                            } else {
+                                bellatrix_mde_cordis::ModelingDocumentFormat::ProjectJson
+                            };
+                            match context
+                                .query::<bellatrix_mde_cordis::ModelingPrepareDocument>(
+                                    Routing::Unscoped,
+                                    bellatrix_mde_cordis::ModelingPrepareDocumentRequested {
+                                        bytes,
+                                        format,
+                                    },
+                                )
+                                .await
+                                .map_err(|error| error.to_string())?
+                            {
+                                QueryOutcome::Answer(Ok(prepared)) => {
+                                    Ok((prepared.document, prepared.diagnostics))
+                                }
+                                QueryOutcome::Answer(Err(error)) => Err(error),
+                                QueryOutcome::Miss => {
+                                    Err("MDE document preparation service unavailable".into())
+                                }
+                            }
+                        })
+                        .await
+                        .map_err(|error| error.to_string())?
+                })
+            },
+            move |document, is_saved, editable_mdj| {
+                let runtime = runtime.clone();
+                let context = context.clone();
+                let projects = Arc::clone(&projects);
+                Box::pin(async move {
+                    let cleanup_runtime = runtime.clone();
+                    // The Tokio task owns a successfully imported lease even when
+                    // its GPUI receiver disappears while the request is in flight.
+                    runtime.spawn(async move {
                     let watched_id = document.id().clone();
                     let closed_id = watched_id.clone();
                     let (revision_tx, revisions) = tokio::sync::watch::channel(document.revision());
@@ -217,8 +233,9 @@ impl BellatrixZedHost {
                         });
                     }))
                 }).await.map_err(|error| error.to_string())?
-            })
-        })
+                })
+            },
+        )
     }
 
     fn start() -> Result<(Self, MdeUiSource), Box<dyn Error>> {
@@ -259,24 +276,34 @@ impl BellatrixZedHost {
                     None => {
                         let bytes = match std::env::var_os("BELLATRIX_MODEL_FILE") {
                             Some(path) => std::fs::read(path)?,
-                            None => include_bytes!(
-                                "../../bellatrix_mde/fixtures/todo.json"
-                            ).to_vec(),
+                            None => {
+                                include_bytes!("../../bellatrix_mde/fixtures/todo.json").to_vec()
+                            }
                         };
-                        let prepared = match context.query::<bellatrix_mde_cordis::ModelingPrepareDocument>(
-                            Routing::Unscoped,
-                            bellatrix_mde_cordis::ModelingPrepareDocumentRequested {
-                                bytes,
-                                format: bellatrix_mde_cordis::ModelingDocumentFormat::ModelJson,
-                            },
-                        ).await? {
+                        let prepared = match context
+                            .query::<bellatrix_mde_cordis::ModelingPrepareDocument>(
+                                Routing::Unscoped,
+                                bellatrix_mde_cordis::ModelingPrepareDocumentRequested {
+                                    bytes,
+                                    format: bellatrix_mde_cordis::ModelingDocumentFormat::ModelJson,
+                                },
+                            )
+                            .await?
+                        {
                             QueryOutcome::Answer(result) => result.map_err(io::Error::other)?,
-                            QueryOutcome::Miss => return Err(io::Error::other("MDE document preparation service unavailable").into()),
+                            QueryOutcome::Miss => {
+                                return Err(io::Error::other(
+                                    "MDE document preparation service unavailable",
+                                )
+                                .into());
+                            }
                         };
                         context
                             .query::<ProjectCreate>(
                                 Routing::Unscoped,
-                                ProjectCreateRequested { document: prepared.document },
+                                ProjectCreateRequested {
+                                    document: prepared.document,
+                                },
                             )
                             .await
                             .map_err(Box::<dyn Error>::from)

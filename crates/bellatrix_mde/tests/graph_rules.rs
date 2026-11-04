@@ -530,13 +530,19 @@ fn slot_owner_transition_uses_one_canonical_edge_through_commands_and_roundtrips
     assert_eq!(owner_of(&descendant)?, "first");
     let references = ReferenceIndex::new(Model::from_project(&descendant));
     let slottable = classifiers::query(&references, "descendant")?
-        .classifier.ok_or("descendant Classifier")?.all_slottable_features?;
+        .classifier
+        .ok_or("descendant Classifier")?
+        .all_slottable_features?;
     for feature in ["feature", "other-feature"] {
         assert!(slottable.iter().any(|candidate| candidate.id() == feature));
     }
-    assert!(validate_structural_model(&descendant).iter().all(|issue|
-        issue.severity != StructuralSeverity::Error
-            && !(issue.subject_id == "descendant" && issue.code == "UML_NAMESPACE_QUERY_UNSUPPORTED")));
+    assert!(
+        validate_structural_model(&descendant)
+            .iter()
+            .all(|issue| issue.severity != StructuralSeverity::Error
+                && !(issue.subject_id == "descendant"
+                    && issue.code == "UML_NAMESPACE_QUERY_UNSUPPORTED"))
+    );
 
     inherited.relations.push(Relation {
         id: "cycle-back".into(),

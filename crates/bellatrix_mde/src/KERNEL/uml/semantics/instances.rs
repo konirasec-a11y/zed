@@ -11,7 +11,7 @@ use super::{
     references::{ReferenceIndex, reference_id},
     root::{Element, ElementRef, Model},
     schema,
-    value_specifications::{self, ResolvedValue, EvaluationError, LiteralValue},
+    value_specifications::{self, EvaluationError, LiteralValue, ResolvedValue},
 };
 use crate::{StructuralDiagnostic, StructuralSeverity};
 use serde_json::Value;
@@ -54,32 +54,54 @@ impl<'a> InstanceSpecificationRef<'a> {
     /// Evaluate the optional owned specification without executing expression text.
     pub fn specification(self, model: Model<'a>) -> Result<Option<LiteralValue>, QueryError> {
         Ok(evaluate_owned_values(
-            &ReferenceIndex::new(model), self.0, "InstanceSpecification", "specification",
+            &ReferenceIndex::new(model),
+            self.0,
+            "InstanceSpecification",
+            "specification",
             "InstanceSpecification-specification",
-        )?.into_iter().next())
+        )?
+        .into_iter()
+        .next())
     }
 
-    pub fn specification_value(self, model: Model<'a>) -> Result<Option<ResolvedValue>, QueryError> {
+    pub fn specification_value(
+        self,
+        model: Model<'a>,
+    ) -> Result<Option<ResolvedValue>, QueryError> {
         Ok(evaluated_owned_values(
-            &ReferenceIndex::new(model), self.0, "InstanceSpecification", "specification",
+            &ReferenceIndex::new(model),
+            self.0,
+            "InstanceSpecification",
+            "specification",
             "InstanceSpecification-specification",
-        )?.into_iter().map(|(_, value)| value).next())
+        )?
+        .into_iter()
+        .map(|(_, value)| value)
+        .next())
     }
 
     pub(crate) fn has_structured_classifier(self, model: Model<'a>) -> Result<bool, QueryError> {
         let references = ReferenceIndex::new(model);
         let empty = Value::Array(Vec::new());
         let (classifiers, unknown) = instance_reference_evidence(
-            &references, self.0, "InstanceSpecification", "classifier",
+            &references,
+            self.0,
+            "InstanceSpecification",
+            "classifier",
             self.0.properties().get("classifier").unwrap_or(&empty),
         )?;
         // UMLDI's context constraint is existential. A known witness suffices,
         // but malformed neighbors must be rejected before examining witnesses.
-        if classifiers.iter().any(|classifier| classifier.conforms_to("StructuredClassifier")) {
+        if classifiers
+            .iter()
+            .any(|classifier| classifier.conforms_to("StructuredClassifier"))
+        {
             Ok(true)
         } else if unknown {
-            Err(QueryError::unsupported(self.0.id(),
-                "unresolved classifier may establish StructuredClassifier context"))
+            Err(QueryError::unsupported(
+                self.0.id(),
+                "unresolved classifier may establish StructuredClassifier context",
+            ))
         } else {
             Ok(false)
         }
@@ -135,14 +157,25 @@ impl<'a> SlotRef<'a> {
     /// Preserve the authored UML value order, rather than inventing one from ownership edges.
     pub fn values(self, model: Model<'a>) -> Result<Vec<LiteralValue>, QueryError> {
         evaluate_owned_values(
-            &ReferenceIndex::new(model), self.0, "Slot", "value", "Slot-value",
+            &ReferenceIndex::new(model),
+            self.0,
+            "Slot",
+            "value",
+            "Slot-value",
         )
     }
 
     pub fn resolved_values(self, model: Model<'a>) -> Result<Vec<ResolvedValue>, QueryError> {
         Ok(evaluated_owned_values(
-            &ReferenceIndex::new(model), self.0, "Slot", "value", "Slot-value",
-        )?.into_iter().map(|(_, value)| value).collect())
+            &ReferenceIndex::new(model),
+            self.0,
+            "Slot",
+            "value",
+            "Slot-value",
+        )?
+        .into_iter()
+        .map(|(_, value)| value)
+        .collect())
     }
 
     pub fn owning_instance(self, model: Model<'a>) -> Result<InstanceSpecificationRef<'a>, String> {
@@ -250,32 +283,48 @@ fn owned_value_evidence<'a>(
     let mut values = Vec::new();
     if let Some(authored) = authored {
         match property_contracts::check_value(references, owner, descriptor, authored) {
-            PropertyOutcome::Violation(message) => return Err(QueryError::invalid(owner.id(), message)),
-            PropertyOutcome::Unverified(message) => unknown = Some(QueryError::unsupported(owner.id(), message)),
+            PropertyOutcome::Violation(message) => {
+                return Err(QueryError::invalid(owner.id(), message));
+            }
+            PropertyOutcome::Unverified(message) => {
+                unknown = Some(QueryError::unsupported(owner.id(), message))
+            }
             PropertyOutcome::Satisfied => {}
         }
         let members = if matches!(descriptor.upper, "0" | "1") {
             std::slice::from_ref(authored)
         } else {
-            authored.as_array().ok_or_else(|| QueryError::invalid(owner.id(), "value requires a reference collection"))?
+            authored.as_array().ok_or_else(|| {
+                QueryError::invalid(owner.id(), "value requires a reference collection")
+            })?
         };
         for member in members {
             if super::references::external_reference_href(member)
-                .map_err(|error| QueryError::invalid(owner.id(), error))?.is_some()
+                .map_err(|error| QueryError::invalid(owner.id(), error))?
+                .is_some()
             {
                 continue;
             }
-            if let Some(id) = reference_id(member).map_err(|error| QueryError::invalid(owner.id(), error))? {
-                values.push(references.element(id).map_err(|error| QueryError::invalid(owner.id(), error))?);
+            if let Some(id) =
+                reference_id(member).map_err(|error| QueryError::invalid(owner.id(), error))?
+            {
+                values.push(
+                    references
+                        .element(id)
+                        .map_err(|error| QueryError::invalid(owner.id(), error))?,
+                );
             }
         }
     }
     let mut specifications = values.clone();
     let mut owned_values = Vec::new();
-    for child in references.explicit_owned_elements(owner.id())
+    for child in references
+        .explicit_owned_elements(owner.id())
         .map_err(|error| QueryError::invalid(owner.id(), error))?
     {
-        if child.conforms_to("ValueSpecification") && !specifications.iter().any(|value| value.id() == child.id()) {
+        if child.conforms_to("ValueSpecification")
+            && !specifications.iter().any(|value| value.id() == child.id())
+        {
             specifications.push(child);
         }
         match classifiers::contributes_to_owned_union(owner, child, role) {
@@ -288,7 +337,10 @@ fn owned_value_evidence<'a>(
                 // assigning the child to this property or inventing its order.
                 if child.conforms_to("ValueSpecification") {
                     match value_specifications::evaluate(references, child.id()) {
-                        Err(EvaluationError::Invalid { subject_id, message }) => {
+                        Err(EvaluationError::Invalid {
+                            subject_id,
+                            message,
+                        }) => {
                             return Err(QueryError::invalid(&subject_id, message));
                         }
                         Ok(_) | Err(EvaluationError::Unsupported { .. }) => {}
@@ -299,19 +351,28 @@ fn owned_value_evidence<'a>(
         }
     }
     if matches!(descriptor.upper, "0" | "1") && owned_values.len() > 1 {
-        return Err(QueryError::invalid(owner.id(), format!("{property} permits at most one owned ValueSpecification")));
+        return Err(QueryError::invalid(
+            owner.id(),
+            format!("{property} permits at most one owned ValueSpecification"),
+        ));
     }
     if authored.is_none() {
         values = owned_values;
         // Canonical ownership establishes membership, not the order of UML's
         // ordered Slot::value. A singleton needs no separate ordering witness.
         if descriptor.is_ordered && values.len() > 1 {
-            unknown = Some(QueryError::unsupported(owner.id(), "ordered Slot values require an explicit value reference collection"));
+            unknown = Some(QueryError::unsupported(
+                owner.id(),
+                "ordered Slot values require an explicit value reference collection",
+            ));
         }
     } else {
         for child in owned_values {
             if !values.iter().any(|value| value.id() == child.id()) {
-                return Err(QueryError::invalid(owner.id(), format!("{property} omits a canonical owned value")));
+                return Err(QueryError::invalid(
+                    owner.id(),
+                    format!("{property} omits a canonical owned value"),
+                ));
             }
         }
     }
@@ -319,13 +380,23 @@ fn owned_value_evidence<'a>(
     for value in values {
         match value_specifications::resolve_value(references, value.id()) {
             Ok(literal) => evaluated.push((value, literal)),
-            Err(EvaluationError::Invalid { subject_id, message }) => return Err(QueryError::invalid(&subject_id, message)),
-            Err(EvaluationError::Unsupported { subject_id, message }) => {
+            Err(EvaluationError::Invalid {
+                subject_id,
+                message,
+            }) => return Err(QueryError::invalid(&subject_id, message)),
+            Err(EvaluationError::Unsupported {
+                subject_id,
+                message,
+            }) => {
                 unknown = Some(QueryError::unsupported(&subject_id, message));
             }
         }
     }
-    Ok(OwnedValueEvidence { specifications, values: evaluated, unknown })
+    Ok(OwnedValueEvidence {
+        specifications,
+        values: evaluated,
+        unknown,
+    })
 }
 
 fn slot_values_conform(
@@ -370,7 +441,9 @@ fn slot_values_conform(
             let values = evidence.values;
             // LiteralNull denotes absence, whereas a LiteralString without its
             // scalar value leaves both cardinality and equality unresolved.
-            let present = values.iter().filter(|(_, value)| !matches!(value, ResolvedValue::Literal(LiteralValue::Null)))
+            let present = values
+                .iter()
+                .filter(|(_, value)| !matches!(value, ResolvedValue::Literal(LiteralValue::Null)))
                 .collect::<Vec<_>>();
             let mut unspecified = false;
             let mut known_count = 0usize;
@@ -382,28 +455,51 @@ fn slot_values_conform(
                         match instance_has_no_specification(references, instance_id) {
                             Ok(true) => known_count += 1,
                             Ok(false) => unspecified = true,
-                            Err(error) => { unspecified = true; checks.push(Err(error)); }
+                            Err(error) => {
+                                unspecified = true;
+                                checks.push(Err(error));
+                            }
                         }
                     }
                 }
             }
             if let Ok(multiplicity) = multiplicity {
-                let known_count = known_count.to_string().parse::<super::types::Integer>()
+                let known_count = known_count
+                    .to_string()
+                    .parse::<super::types::Integer>()
                     .map_err(|error| QueryError::invalid(slot.id(), error.to_string()))?;
-                checks.push(if multiplicity.upper_bound().finite_value().is_some_and(|upper| &known_count > upper) {
-                    // Unknown expressions can add values, never remove these
-                    // already established members exceeding the upper bound.
-                    Ok(false)
-                } else if !complete || unspecified {
-                    Err(QueryError::unsupported(slot.id(), "Slot cardinality includes unresolved values"))
-                } else {
-                    Ok(multiplicity.includes_cardinality(&known_count))
-                });
+                checks.push(
+                    if multiplicity
+                        .upper_bound()
+                        .finite_value()
+                        .is_some_and(|upper| &known_count > upper)
+                    {
+                        // Unknown expressions can add values, never remove these
+                        // already established members exceeding the upper bound.
+                        Ok(false)
+                    } else if !complete || unspecified {
+                        Err(QueryError::unsupported(
+                            slot.id(),
+                            "Slot cardinality includes unresolved values",
+                        ))
+                    } else {
+                        Ok(multiplicity.includes_cardinality(&known_count))
+                    },
+                );
             }
             for (specification, value) in &present {
                 checks.push(match value {
-                    ResolvedValue::Literal(value) => literal_type_conformance(references, *specification, value, feature),
-                    ResolvedValue::InstanceSpecification(instance_id) => instance_value_type_conformance(references, *specification, instance_id, feature),
+                    ResolvedValue::Literal(value) => {
+                        literal_type_conformance(references, *specification, value, feature)
+                    }
+                    ResolvedValue::InstanceSpecification(instance_id) => {
+                        instance_value_type_conformance(
+                            references,
+                            *specification,
+                            instance_id,
+                            feature,
+                        )
+                    }
                 });
             }
             if matches!(unique, Ok(true)) {
@@ -422,12 +518,18 @@ fn declared_value_type_contract(
     references: &ReferenceIndex<'_>,
     specification: ElementRef<'_>,
 ) -> Result<bool, QueryError> {
-    let Some(declared) = specification.properties().get("type").filter(|value| !value.is_null())
-    else { return Ok(true); };
+    let Some(declared) = specification
+        .properties()
+        .get("type")
+        .filter(|value| !value.is_null())
+    else {
+        return Ok(true);
+    };
     match value_specifications::standard_primitive_reference(declared) {
         Ok(Some(_)) => Ok(true),
         Err(error) => Err(QueryError::invalid(specification.id(), error)),
-        Ok(None) => super::feature_compatibility::resolve_feature_type(references, specification).map(|_| true),
+        Ok(None) => super::feature_compatibility::resolve_feature_type(references, specification)
+            .map(|_| true),
     }
 }
 
@@ -441,25 +543,41 @@ fn literal_type_conformance(
     let intrinsic = value.primitive_type();
     let required = value_specifications::standard_primitive_reference(
         feature.properties().get("type").unwrap_or(&Value::Null),
-    ).map_err(|error| QueryError::invalid(feature.id(), error));
+    )
+    .map_err(|error| QueryError::invalid(feature.id(), error));
     let mut checks = Vec::new();
     match required {
         Ok(Some(required)) => checks.push(Ok(intrinsic == Some(required))),
         Err(error) => checks.push(Err(error)),
         Ok(None) => {
-            checks.push(feature_compatibility::compare_type_conformance(references, specification, feature));
-            checks.push(Err(QueryError::unsupported(specification.id(),
-                "literal conformance requires a source-qualified normative PrimitiveType identity")));
+            checks.push(feature_compatibility::compare_type_conformance(
+                references,
+                specification,
+                feature,
+            ));
+            checks.push(Err(QueryError::unsupported(
+                specification.id(),
+                "literal conformance requires a source-qualified normative PrimitiveType identity",
+            )));
         }
     }
-    if let Some(declared) = specification.properties().get("type").filter(|value| !value.is_null()) {
+    if let Some(declared) = specification
+        .properties()
+        .get("type")
+        .filter(|value| !value.is_null())
+    {
         match value_specifications::standard_primitive_reference(declared) {
             Ok(Some(declared)) => checks.push(Ok(intrinsic == Some(declared))),
             Err(error) => checks.push(Err(QueryError::invalid(specification.id(), error))),
             Ok(None) => {
-                checks.push(feature_compatibility::resolve_feature_type(references, specification).map(|_| true));
-                checks.push(Err(QueryError::unsupported(specification.id(),
-                    "declared literal Type has no proven link to its normative primitive domain")));
+                checks.push(
+                    feature_compatibility::resolve_feature_type(references, specification)
+                        .map(|_| true),
+                );
+                checks.push(Err(QueryError::unsupported(
+                    specification.id(),
+                    "declared literal Type has no proven link to its normative primitive domain",
+                )));
             }
         }
     }
@@ -471,23 +589,40 @@ fn instance_has_no_specification(
     instance_id: &str,
 ) -> Result<bool, QueryError> {
     use super::feature_compatibility::accept_any;
-    let instance = references.element(instance_id)
+    let instance = references
+        .element(instance_id)
         .map_err(|error| QueryError::invalid(instance_id, error))?;
     let mut presence = Vec::new();
     if let Some(value) = instance.properties().get("specification") {
-        instance_reference_evidence(references, instance, "InstanceSpecification", "specification", value)?;
+        instance_reference_evidence(
+            references,
+            instance,
+            "InstanceSpecification",
+            "specification",
+            value,
+        )?;
         presence.push(Ok(!value.is_null()));
     }
     let mut owned_specifications = 0usize;
-    for child in references.explicit_owned_elements(instance_id)
+    for child in references
+        .explicit_owned_elements(instance_id)
         .map_err(|error| QueryError::invalid(instance_id, error))?
     {
-        let membership = classifiers::contributes_to_owned_union(instance, child, "InstanceSpecification-specification");
-        if matches!(membership, Ok(true)) { owned_specifications += 1; }
+        let membership = classifiers::contributes_to_owned_union(
+            instance,
+            child,
+            "InstanceSpecification-specification",
+        );
+        if matches!(membership, Ok(true)) {
+            owned_specifications += 1;
+        }
         presence.push(membership);
     }
     if owned_specifications > 1 {
-        presence.push(Err(QueryError::invalid(instance_id, "specification permits at most one owned ValueSpecification")));
+        presence.push(Err(QueryError::invalid(
+            instance_id,
+            "specification permits at most one owned ValueSpecification",
+        )));
     }
     // A referenced specification can determine the result of InstanceValue;
     // only its proven absence permits treating the descriptor as one allocation.
@@ -501,24 +636,47 @@ fn instance_value_type_conformance(
     feature: ElementRef<'_>,
 ) -> Result<bool, QueryError> {
     use super::feature_compatibility::{self, require_all};
-    let instance = references.element(instance_id)
+    let instance = references
+        .element(instance_id)
         .map_err(|error| QueryError::invalid(specification.id(), error))?;
     let no_specification = instance_has_no_specification(references, instance_id);
     let empty = Value::Array(Vec::new());
-    let mut checks = vec![instance_reference_evidence(
-        references, instance, "InstanceSpecification", "classifier",
-        instance.properties().get("classifier").unwrap_or(&empty),
-    ).map(|_| true)];
+    let mut checks = vec![
+        instance_reference_evidence(
+            references,
+            instance,
+            "InstanceSpecification",
+            "classifier",
+            instance.properties().get("classifier").unwrap_or(&empty),
+        )
+        .map(|_| true),
+    ];
     let classifier_witness = |required| match &no_specification {
         Ok(true) => instance_type_witness(references, instance, required),
-        Ok(false) => Err(QueryError::unsupported(instance_id,
-            "represented value Type depends on InstanceSpecification.specification")),
+        Ok(false) => Err(QueryError::unsupported(
+            instance_id,
+            "represented value Type depends on InstanceSpecification.specification",
+        )),
         Err(error) => Err(error.clone()),
     };
-    checks.push(feature_compatibility::resolve_feature_type(references, feature).and_then(|required| classifier_witness(required)));
-    if specification.properties().get("type").is_some_and(|value| !value.is_null()) {
-        checks.push(feature_compatibility::compare_type_conformance(references, specification, feature));
-        checks.push(feature_compatibility::resolve_feature_type(references, specification).and_then(|required| classifier_witness(required)));
+    checks.push(
+        feature_compatibility::resolve_feature_type(references, feature)
+            .and_then(|required| classifier_witness(required)),
+    );
+    if specification
+        .properties()
+        .get("type")
+        .is_some_and(|value| !value.is_null())
+    {
+        checks.push(feature_compatibility::compare_type_conformance(
+            references,
+            specification,
+            feature,
+        ));
+        checks.push(
+            feature_compatibility::resolve_feature_type(references, specification)
+                .and_then(|required| classifier_witness(required)),
+        );
     }
     require_all(checks)
 }
@@ -531,18 +689,26 @@ fn instance_type_witness<'a>(
     use super::feature_compatibility::{self, accept_any};
     let empty = Value::Array(Vec::new());
     let (classifiers, _) = instance_reference_evidence(
-        references, instance, "InstanceSpecification", "classifier",
+        references,
+        instance,
+        "InstanceSpecification",
+        "classifier",
         instance.properties().get("classifier").unwrap_or(&empty),
     )?;
     let mut candidates = Vec::new();
     for classifier in classifiers {
-        candidates.push(feature_compatibility::compare_resolved_types(references, classifier, required));
+        candidates.push(feature_compatibility::compare_resolved_types(
+            references, classifier, required,
+        ));
     }
     // Classifier declarations can prove membership. Failure to find a witness
     // does not prove exclusion from a type in a partial InstanceSpecification.
     match accept_any(candidates)? {
         true => Ok(true),
-        false => Err(QueryError::unsupported(instance.id(), "no classifier witness establishes represented instance Type conformance")),
+        false => Err(QueryError::unsupported(
+            instance.id(),
+            "no classifier witness establishes represented instance Type conformance",
+        )),
     }
 }
 
@@ -552,11 +718,16 @@ fn resolved_values_distinct(
     other: &ResolvedValue,
 ) -> Result<bool, QueryError> {
     match (value, other) {
-        (ResolvedValue::Literal(value), ResolvedValue::Literal(other)) => literal_values_distinct(slot_id, value, other),
+        (ResolvedValue::Literal(value), ResolvedValue::Literal(other)) => {
+            literal_values_distinct(slot_id, value, other)
+        }
         // These IDs denote specifications, not allocated runtime instances.
         // Even repeated references to one specification do not prove equality
         // of the values produced by separate InstanceValue evaluations.
-        _ => Err(QueryError::unsupported(slot_id, "runtime equality of InstanceValue results is unresolved")),
+        _ => Err(QueryError::unsupported(
+            slot_id,
+            "runtime equality of InstanceValue results is unresolved",
+        )),
     }
 }
 
@@ -565,12 +736,22 @@ fn literal_values_distinct(
     value: &LiteralValue,
     other: &LiteralValue,
 ) -> Result<bool, QueryError> {
-    let numeric = |value: &LiteralValue| matches!(value,
-        LiteralValue::Integer(_) | LiteralValue::UnlimitedNatural(_) | LiteralValue::Real(_));
-    if matches!(value, LiteralValue::String(None)) || matches!(other, LiteralValue::String(None))
-        || numeric(value) && numeric(other) && std::mem::discriminant(value) != std::mem::discriminant(other)
+    let numeric = |value: &LiteralValue| {
+        matches!(
+            value,
+            LiteralValue::Integer(_) | LiteralValue::UnlimitedNatural(_) | LiteralValue::Real(_)
+        )
+    };
+    if matches!(value, LiteralValue::String(None))
+        || matches!(other, LiteralValue::String(None))
+        || numeric(value)
+            && numeric(other)
+            && std::mem::discriminant(value) != std::mem::discriminant(other)
     {
-        return Err(QueryError::unsupported(slot_id, "Slot value equality requires unavailable cross-type or unspecified-value semantics"));
+        return Err(QueryError::unsupported(
+            slot_id,
+            "Slot value equality requires unavailable cross-type or unspecified-value semantics",
+        ));
     }
     Ok(value != other)
 }
@@ -581,13 +762,19 @@ fn validate_instance<'a>(
 ) -> Result<Vec<ElementRef<'a>>, AssignmentError> {
     let empty = Value::Array(Vec::new());
     let (classifiers, unknown) = instance_reference_evidence(
-        references, instance.0, "InstanceSpecification", "classifier",
+        references,
+        instance.0,
+        "InstanceSpecification",
+        "classifier",
         instance.0.properties().get("classifier").unwrap_or(&empty),
     )?;
     // Value errors are independent of whether every classifier identity is
     // resolved. A missing local target remains Invalid, an external one Unknown.
     evaluated_owned_values(
-        references, instance.0, "InstanceSpecification", "specification",
+        references,
+        instance.0,
+        "InstanceSpecification",
+        "specification",
         "InstanceSpecification-specification",
     )?;
     if instance.0.properties().contains_key("slot") {
@@ -596,7 +783,9 @@ fn validate_instance<'a>(
         ));
     }
     if unknown {
-        return Err(AssignmentError::Unsupported("InstanceSpecification classifier identity is unresolved".into()));
+        return Err(AssignmentError::Unsupported(
+            "InstanceSpecification classifier identity is unresolved".into(),
+        ));
     }
     Ok(classifiers)
 }
@@ -621,28 +810,50 @@ fn validate_assignment_with<'a>(
     let mut checks = Vec::new();
     if slot.0.properties().contains_key("owningInstance")
         || owner.0.properties().contains_key("slot")
-        || model.owner(slot)?.is_some_and(|previous| previous.properties().contains_key("slot"))
+        || model
+            .owner(slot)?
+            .is_some_and(|previous| previous.properties().contains_key("slot"))
     {
-        checks.push(Err(QueryError::unsupported(slot.id(),
-            "slot and owningInstance must be projected from the canonical ownership edge")));
+        checks.push(Err(QueryError::unsupported(
+            slot.id(),
+            "slot and owningInstance must be projected from the canonical ownership edge",
+        )));
     }
     let (features, unknown_feature) = instance_reference_evidence(
-        references, slot.0, "Slot", "definingFeature",
-        slot.0.properties().get("definingFeature").unwrap_or(&Value::Null),
+        references,
+        slot.0,
+        "Slot",
+        "definingFeature",
+        slot.0
+            .properties()
+            .get("definingFeature")
+            .unwrap_or(&Value::Null),
     )?;
     let feature = features.first().copied();
     if unknown_feature {
-        checks.push(Err(QueryError::unsupported(slot.id(), "definingFeature Type or identity is unresolved")));
+        checks.push(Err(QueryError::unsupported(
+            slot.id(),
+            "definingFeature Type or identity is unresolved",
+        )));
     }
     let empty = Value::Array(Vec::new());
     let (classifiers, unknown_classifier) = instance_reference_evidence(
-        references, owner.0, "InstanceSpecification", "classifier",
+        references,
+        owner.0,
+        "InstanceSpecification",
+        "classifier",
         owner.0.properties().get("classifier").unwrap_or(&empty),
     )?;
-    checks.push(evaluated_owned_values(
-        references, owner.0, "InstanceSpecification", "specification",
-        "InstanceSpecification-specification",
-    ).map(|_| true));
+    checks.push(
+        evaluated_owned_values(
+            references,
+            owner.0,
+            "InstanceSpecification",
+            "specification",
+            "InstanceSpecification-specification",
+        )
+        .map(|_| true),
+    );
     if let Some(feature) = feature.filter(|feature| feature.conforms_to("StructuralFeature")) {
         checks.push(slot_values_conform(references, slot.0, feature));
     } else {
@@ -654,21 +865,35 @@ fn validate_assignment_with<'a>(
                 for specification in evidence.specifications {
                     checks.push(declared_value_type_contract(references, specification));
                 }
-                if let Some(error) = evidence.unknown { checks.push(Err(error)); }
+                if let Some(error) = evidence.unknown {
+                    checks.push(Err(error));
+                }
             }
         }
-        checks.push(Err(QueryError::unsupported(slot.id(), "value compatibility needs a resolved definingFeature")));
+        checks.push(Err(QueryError::unsupported(
+            slot.id(),
+            "value compatibility needs a resolved definingFeature",
+        )));
     }
     let mut membership = Vec::new();
     if unknown_classifier {
-        membership.push(Err(QueryError::unsupported(owner.id(), "unresolved classifier may supply definingFeature")));
+        membership.push(Err(QueryError::unsupported(
+            owner.id(),
+            "unresolved classifier may supply definingFeature",
+        )));
     }
     for classifier in classifiers {
         membership.push(match feature {
             Some(feature) => slottable_membership(references, classifier, feature.id()),
             None => slottable_features(references, classifier).and_then(|features| {
-                if features.is_empty() { Ok(false) }
-                else { Err(QueryError::unsupported(slot.id(), "external definingFeature identity is unresolved")) }
+                if features.is_empty() {
+                    Ok(false)
+                } else {
+                    Err(QueryError::unsupported(
+                        slot.id(),
+                        "external definingFeature identity is unresolved",
+                    ))
+                }
             }),
         });
     }
@@ -677,17 +902,29 @@ fn validate_assignment_with<'a>(
     checks.push(accept_any(membership));
     let (slots, unknown_slot) = instance_slots_evidence(references, owner.0)?;
     if unknown_slot {
-        checks.push(Err(QueryError::unsupported(owner.id(), "unresolved owned Slot may duplicate definingFeature")));
+        checks.push(Err(QueryError::unsupported(
+            owner.id(),
+            "unresolved owned Slot may duplicate definingFeature",
+        )));
     }
     for other in slots.into_iter().filter(|other| other.id() != slot.id()) {
         let (other_features, unknown) = instance_reference_evidence(
-            references, other, "Slot", "definingFeature",
-            other.properties().get("definingFeature").unwrap_or(&Value::Null),
+            references,
+            other,
+            "Slot",
+            "definingFeature",
+            other
+                .properties()
+                .get("definingFeature")
+                .unwrap_or(&Value::Null),
         )?;
         if let (Some(feature), Some(other_feature)) = (feature, other_features.first()) {
             checks.push(Ok(feature.id() != other_feature.id()));
         } else if unknown || unknown_feature {
-            checks.push(Err(QueryError::unsupported(other.id(), "Slot definingFeature equality is unresolved")));
+            checks.push(Err(QueryError::unsupported(
+                other.id(),
+                "Slot definingFeature equality is unresolved",
+            )));
         }
     }
     match require_all(checks)? {
@@ -707,25 +944,36 @@ fn instance_reference_evidence<'a>(
 ) -> Result<(Vec<ElementRef<'a>>, bool), QueryError> {
     let descriptor = schema::uml_property(metaclass, property)
         .map_err(|error| QueryError::unsupported(owner.id(), error.to_string()))?
-        .ok_or_else(|| QueryError::unsupported(owner.id(), "instance property contract is unavailable"))?;
+        .ok_or_else(|| {
+            QueryError::unsupported(owner.id(), "instance property contract is unavailable")
+        })?;
     match super::property_contracts::check_value(references, owner, descriptor, value) {
-        super::property_contracts::PropertyOutcome::Violation(message) => return Err(QueryError::invalid(owner.id(), message)),
+        super::property_contracts::PropertyOutcome::Violation(message) => {
+            return Err(QueryError::invalid(owner.id(), message));
+        }
         _ => {}
     }
     let values = if matches!(descriptor.upper, "0" | "1") {
         std::slice::from_ref(value)
     } else {
-        value.as_array().ok_or_else(|| QueryError::invalid(owner.id(), "reference collection must be an array"))?
+        value.as_array().ok_or_else(|| {
+            QueryError::invalid(owner.id(), "reference collection must be an array")
+        })?
     };
     let mut known = Vec::new();
     let mut unknown = false;
     for value in values {
         if super::references::external_reference_href(value)
-            .map_err(|error| QueryError::invalid(owner.id(), error))?.is_some()
+            .map_err(|error| QueryError::invalid(owner.id(), error))?
+            .is_some()
         {
             unknown = true;
-        } else if let Some(id) = reference_id(value).map_err(|error| QueryError::invalid(owner.id(), error))? {
-            let target = references.element(id).map_err(|error| QueryError::invalid(owner.id(), error))?;
+        } else if let Some(id) =
+            reference_id(value).map_err(|error| QueryError::invalid(owner.id(), error))?
+        {
+            let target = references
+                .element(id)
+                .map_err(|error| QueryError::invalid(owner.id(), error))?;
             unknown |= target.metaclass().is_none();
             known.push(target);
         }
@@ -734,19 +982,29 @@ fn instance_reference_evidence<'a>(
 }
 
 fn slottable_features<'a>(
-    references: &ReferenceIndex<'a>, classifier: ElementRef<'_>,
+    references: &ReferenceIndex<'a>,
+    classifier: ElementRef<'_>,
 ) -> Result<Vec<ElementRef<'a>>, QueryError> {
     if classifier.metaclass().is_none() {
-        return Err(QueryError::unsupported(classifier.id(), "classifier metaclass is unresolved"));
+        return Err(QueryError::unsupported(
+            classifier.id(),
+            "classifier metaclass is unresolved",
+        ));
     }
     classifiers::query(references, classifier.id()).and_then(|query| {
-        query.classifier.ok_or_else(|| QueryError::unsupported(classifier.id(), "Classifier query is unresolved"))?
+        query
+            .classifier
+            .ok_or_else(|| {
+                QueryError::unsupported(classifier.id(), "Classifier query is unresolved")
+            })?
             .all_slottable_features
     })
 }
 
 fn slottable_membership(
-    references: &ReferenceIndex<'_>, classifier: ElementRef<'_>, feature_id: &str,
+    references: &ReferenceIndex<'_>,
+    classifier: ElementRef<'_>,
+    feature_id: &str,
 ) -> Result<bool, QueryError> {
     let complete = slottable_features(references, classifier);
     match complete {
@@ -766,36 +1024,70 @@ fn slottable_membership(
 }
 
 fn instance_slots_evidence<'a>(
-    references: &ReferenceIndex<'a>, instance: ElementRef<'a>,
+    references: &ReferenceIndex<'a>,
+    instance: ElementRef<'a>,
 ) -> Result<(Vec<ElementRef<'a>>, bool), QueryError> {
-    let children = references.explicit_owned_elements(instance.id())
+    let children = references
+        .explicit_owned_elements(instance.id())
         .map_err(|error| QueryError::invalid(instance.id(), error))?;
-    let slots = children.iter().copied().filter(|child| child.conforms_to("Slot")).collect::<Vec<_>>();
+    let slots = children
+        .iter()
+        .copied()
+        .filter(|child| child.conforms_to("Slot"))
+        .collect::<Vec<_>>();
     let mut unknown_slot = children.iter().any(|child| child.metaclass().is_none());
     if let Some(value) = instance.properties().get("slot") {
-        let (authored, unknown) = instance_reference_evidence(references, instance, "InstanceSpecification", "slot", value)?;
+        let (authored, unknown) = instance_reference_evidence(
+            references,
+            instance,
+            "InstanceSpecification",
+            "slot",
+            value,
+        )?;
         unknown_slot |= unknown;
-        let authored_ids = authored.iter().map(|slot| slot.id()).collect::<HashSet<_>>();
+        let authored_ids = authored
+            .iter()
+            .map(|slot| slot.id())
+            .collect::<HashSet<_>>();
         if !unknown && slots.iter().any(|slot| !authored_ids.contains(slot.id())) {
-            return Err(QueryError::invalid(instance.id(), "slot projection omits canonical owned Slots"));
+            return Err(QueryError::invalid(
+                instance.id(),
+                "slot projection omits canonical owned Slots",
+            ));
         }
     }
     Ok((slots, unknown_slot))
 }
 
 fn instance_structural_feature(
-    references: &ReferenceIndex<'_>, instance: ElementRef<'_>,
+    references: &ReferenceIndex<'_>,
+    instance: ElementRef<'_>,
 ) -> Result<bool, QueryError> {
-    let instance = references.element(instance.id())
+    let instance = references
+        .element(instance.id())
         .map_err(|error| QueryError::invalid(instance.id(), error))?;
-    let classifier_value = instance.properties().get("classifier").cloned().unwrap_or_else(|| serde_json::json!([]));
-    let (classifiers, unknown_classifier) = instance_reference_evidence(references, instance, "InstanceSpecification", "classifier", &classifier_value)?;
+    let classifier_value = instance
+        .properties()
+        .get("classifier")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!([]));
+    let (classifiers, unknown_classifier) = instance_reference_evidence(
+        references,
+        instance,
+        "InstanceSpecification",
+        "classifier",
+        &classifier_value,
+    )?;
     let (slots, unknown_slot) = instance_slots_evidence(references, instance)?;
     let mut counts = std::collections::BTreeMap::<String, usize>::new();
     let mut unknown_feature = false;
     for slot in &slots {
-        let value = slot.properties().get("definingFeature").unwrap_or(&Value::Null);
-        let (features, unknown) = instance_reference_evidence(references, *slot, "Slot", "definingFeature", value)?;
+        let value = slot
+            .properties()
+            .get("definingFeature")
+            .unwrap_or(&Value::Null);
+        let (features, unknown) =
+            instance_reference_evidence(references, *slot, "Slot", "definingFeature", value)?;
         unknown_feature |= unknown;
         for feature in features {
             *counts.entry(feature.id().to_owned()).or_default() += 1;
@@ -811,36 +1103,65 @@ fn instance_structural_feature(
     }
     let mut checks = Vec::new();
     if unknown_slot || unknown_feature || unknown_classifier {
-        checks.push(Err(QueryError::unsupported(instance.id(), "unresolved Slot, definingFeature or classifier may affect duplicate feature counts")));
+        checks.push(Err(QueryError::unsupported(
+            instance.id(),
+            "unresolved Slot, definingFeature or classifier may affect duplicate feature counts",
+        )));
     }
     for (feature_id, count) in counts {
-        if count <= 1 { continue; }
+        if count <= 1 {
+            continue;
+        }
         for classifier in &classifiers {
-            checks.push(slottable_membership(references, *classifier, &feature_id).map(|member| !member));
+            checks.push(
+                slottable_membership(references, *classifier, &feature_id).map(|member| !member),
+            );
         }
     }
     super::feature_compatibility::require_all(checks)
 }
 
 fn instance_defining_feature(
-    references: &ReferenceIndex<'_>, instance: ElementRef<'_>,
+    references: &ReferenceIndex<'_>,
+    instance: ElementRef<'_>,
 ) -> Result<bool, QueryError> {
     use super::feature_compatibility::{accept_any, require_all};
-    let instance = references.element(instance.id())
+    let instance = references
+        .element(instance.id())
         .map_err(|error| QueryError::invalid(instance.id(), error))?;
-    let classifier_value = instance.properties().get("classifier").cloned().unwrap_or_else(|| serde_json::json!([]));
-    let (classifiers, unknown_classifier) = instance_reference_evidence(references, instance, "InstanceSpecification", "classifier", &classifier_value)?;
+    let classifier_value = instance
+        .properties()
+        .get("classifier")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!([]));
+    let (classifiers, unknown_classifier) = instance_reference_evidence(
+        references,
+        instance,
+        "InstanceSpecification",
+        "classifier",
+        &classifier_value,
+    )?;
     let (slots, unknown_slot) = instance_slots_evidence(references, instance)?;
     let mut checks = Vec::new();
     if unknown_slot {
-        checks.push(Err(QueryError::unsupported(instance.id(), "unresolved owned Slot membership")));
+        checks.push(Err(QueryError::unsupported(
+            instance.id(),
+            "unresolved owned Slot membership",
+        )));
     }
     for slot in slots {
-        let value = slot.properties().get("definingFeature").unwrap_or(&Value::Null);
-        let (features, _) = instance_reference_evidence(references, slot, "Slot", "definingFeature", value)?;
+        let value = slot
+            .properties()
+            .get("definingFeature")
+            .unwrap_or(&Value::Null);
+        let (features, _) =
+            instance_reference_evidence(references, slot, "Slot", "definingFeature", value)?;
         let mut candidates = Vec::new();
         if unknown_classifier {
-            candidates.push(Err(QueryError::unsupported(instance.id(), "external or unresolved classifier may supply the definingFeature")));
+            candidates.push(Err(QueryError::unsupported(
+                instance.id(),
+                "external or unresolved classifier may supply the definingFeature",
+            )));
         }
         for classifier in &classifiers {
             let membership = if let Some(feature) = features.first() {
@@ -849,8 +1170,14 @@ fn instance_defining_feature(
                 // An unresolved feature cannot belong to a proven empty set.
                 // Otherwise its identity is needed to decide membership.
                 slottable_features(references, *classifier).and_then(|features| {
-                    if features.is_empty() { Ok(false) }
-                    else { Err(QueryError::unsupported(slot.id(), "external definingFeature identity is unresolved")) }
+                    if features.is_empty() {
+                        Ok(false)
+                    } else {
+                        Err(QueryError::unsupported(
+                            slot.id(),
+                            "external definingFeature identity is unresolved",
+                        ))
+                    }
                 })
             };
             candidates.push(membership);
@@ -884,7 +1211,10 @@ pub(crate) fn validate<'a>(
                 })
         })
         .collect();
-    for instance in model.elements().filter_map(InstanceSpecificationRef::from_element) {
+    for instance in model
+        .elements()
+        .filter_map(InstanceSpecificationRef::from_element)
+    {
         let defining = match instance_defining_feature(references, instance.0) {
             Ok(true) => None,
             Ok(false) => Some((StructuralSeverity::Error, "UML_INSTANCE_DEFINING_FEATURE", "each owned Slot must refer to a slottable feature of at least one instance Classifier".to_owned())),
@@ -892,18 +1222,38 @@ pub(crate) fn validate<'a>(
             Err(QueryError::Unsupported { message, .. }) => Some((StructuralSeverity::Warning, "MDE_INSTANCE_DEFINING_FEATURE_UNVERIFIED", message)),
         };
         if let Some((severity, code, message)) = defining {
-            issues.push(StructuralDiagnostic { severity, code, subject_id: instance.id().into(),
-                message: format!("InstanceSpecification-defining_feature: {message}") });
+            issues.push(StructuralDiagnostic {
+                severity,
+                code,
+                subject_id: instance.id().into(),
+                message: format!("InstanceSpecification-defining_feature: {message}"),
+            });
         }
         let outcome = match instance_structural_feature(references, instance.0) {
             Ok(true) => None,
-            Ok(false) => Some((StructuralSeverity::Error, "UML_INSTANCE_STRUCTURAL_FEATURE", "each slottable feature may define at most one owned Slot".to_owned())),
-            Err(QueryError::Invalid { message, .. }) => Some((StructuralSeverity::Error, "MDE_INSTANCE_STRUCTURAL_FEATURE_INVALID", message)),
-            Err(QueryError::Unsupported { message, .. }) => Some((StructuralSeverity::Warning, "MDE_INSTANCE_STRUCTURAL_FEATURE_UNVERIFIED", message)),
+            Ok(false) => Some((
+                StructuralSeverity::Error,
+                "UML_INSTANCE_STRUCTURAL_FEATURE",
+                "each slottable feature may define at most one owned Slot".to_owned(),
+            )),
+            Err(QueryError::Invalid { message, .. }) => Some((
+                StructuralSeverity::Error,
+                "MDE_INSTANCE_STRUCTURAL_FEATURE_INVALID",
+                message,
+            )),
+            Err(QueryError::Unsupported { message, .. }) => Some((
+                StructuralSeverity::Warning,
+                "MDE_INSTANCE_STRUCTURAL_FEATURE_UNVERIFIED",
+                message,
+            )),
         };
         if let Some((severity, code, message)) = outcome {
-            issues.push(StructuralDiagnostic { severity, code, subject_id: instance.id().into(),
-                message: format!("InstanceSpecification-structural_feature: {message}") });
+            issues.push(StructuralDiagnostic {
+                severity,
+                code,
+                subject_id: instance.id().into(),
+                message: format!("InstanceSpecification-structural_feature: {message}"),
+            });
         }
     }
     issues.extend(

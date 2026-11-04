@@ -201,7 +201,10 @@ impl MdeWorkbenchItem {
         cx.notify();
     }
 
-    pub(super) fn reconcile_selection(&mut self, section: &bellatrix_mde_cordis::projection::ModelingProjection) {
+    pub(super) fn reconcile_selection(
+        &mut self,
+        section: &bellatrix_mde_cordis::projection::ModelingProjection,
+    ) {
         let selection = selection::reconcile_selection(
             section,
             self.presentation.active_diagram(),
@@ -239,7 +242,9 @@ impl MdeWorkbenchItem {
         y: f64,
         cx: &mut Context<Self>,
     ) {
-        if !self.allows_modeling_tool(tool, cx) { return; }
+        if !self.allows_modeling_tool(tool, cx) {
+            return;
+        }
         if let ModelingTool::Relation(kind) = tool {
             self.connect_free_message_endpoint(kind, bellatrix_mde_cordis::Point { x, y }, cx);
         } else {
@@ -253,7 +258,9 @@ impl MdeWorkbenchItem {
         y: f64,
         cx: &mut Context<Self>,
     ) {
-        if !self.allows_modeling_tool(tool, cx) { return; }
+        if !self.allows_modeling_tool(tool, cx) {
+            return;
+        }
         match tool {
             ModelingTool::Element(kind) => self.create_element(kind, x, y, cx),
             ModelingTool::Relation(_) => self.arm_drag_tool(tool, cx),
@@ -280,8 +287,14 @@ impl MdeWorkbenchItem {
                 return;
             }
         };
-        let Some(presentation) = snapshot.section.tools.interface_forms.iter()
-            .find(|metadata| metadata.tool == tool).map(|metadata| metadata.presentation.as_str()) else {
+        let Some(presentation) = snapshot
+            .section
+            .tools
+            .interface_forms
+            .iter()
+            .find(|metadata| metadata.tool == tool)
+            .map(|metadata| metadata.presentation.as_str())
+        else {
             return;
         };
         let Some(diagram) = snapshot
@@ -340,7 +353,9 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
-        let diagram_id = self.presentation.active_diagram()
+        let diagram_id = self
+            .presentation
+            .active_diagram()
             .and_then(|id| {
                 snapshot
                     .section
@@ -355,17 +370,30 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
-        if !snapshot.section.tools.allows_tool(Some(&diagram_id), ModelingTool::Element(kind)) {
+        if !snapshot
+            .section
+            .tools
+            .allows_tool(Some(&diagram_id), ModelingTool::Element(kind))
+        {
             self.feedback = "This tool is not available for the target diagram's domain".into();
             cx.notify();
             return;
         }
         let Some(metadata) = snapshot.section.tools.element(kind) else {
-            self.feedback = "Element tool metadata unavailable".into(); cx.notify(); return;
+            self.feedback = "Element tool metadata unavailable".into();
+            cx.notify();
+            return;
         };
-        let owner_id = creation_owner(metadata.requires_owner, self.presentation.selected_element());
+        let owner_id = creation_owner(
+            metadata.requires_owner,
+            self.presentation.selected_element(),
+        );
         if self.presentation.visual_draft_mode() {
-            let (width, height) = metadata.sizes_by_diagram.get(&diagram_id).copied().unwrap_or(metadata.initial_size);
+            let (width, height) = metadata
+                .sizes_by_diagram
+                .get(&diagram_id)
+                .copied()
+                .unwrap_or(metadata.initial_size);
             let mut properties = std::collections::BTreeMap::new();
             if kind == ModelingElementKind::Part {
                 properties.insert("aggregation".into(), serde_json::json!("composite"));
@@ -413,30 +441,47 @@ impl MdeWorkbenchItem {
         );
         self.presentation.cancel_tool();
     }
-    pub(super) fn validate_explorer_drop(&self, drag: &hierarchy::ExplorerElementDrag) -> Result<(), String> {
+    pub(super) fn validate_explorer_drop(
+        &self,
+        drag: &hierarchy::ExplorerElementDrag,
+    ) -> Result<(), String> {
         if self.source.is_read_only() || self.source.is_presentation_suspended() {
             return Err("The active document is not editable".into());
         }
         if self.project_id() != &drag.project_id {
             return Err("The dragged element belongs to another project".into());
         }
-        let target_diagram_id = drag.target_diagram_id.as_deref()
+        let target_diagram_id = drag
+            .target_diagram_id
+            .as_deref()
             .ok_or("No active diagram was captured for this drag")?;
         if self.active_diagram() != Some(target_diagram_id) {
-            return Err("The active diagram changed during the drag; drag the element again".into());
+            return Err(
+                "The active diagram changed during the drag; drag the element again".into(),
+            );
         }
         let snapshot = self.source.snapshot()?;
         if snapshot.revision != drag.revision {
             return Err("The model changed during the drag; drag the element again".into());
         }
-        if !snapshot.section.elements.iter().any(|element| element.id == drag.element_id) {
+        if !snapshot
+            .section
+            .elements
+            .iter()
+            .any(|element| element.id == drag.element_id)
+        {
             return Err("The dragged model element no longer exists".into());
         }
-        let diagram = snapshot.section.diagrams.iter()
+        let diagram = snapshot
+            .section
+            .diagrams
+            .iter()
             .find(|diagram| diagram.id == target_diagram_id)
             .ok_or_else(|| "The target diagram no longer exists".to_owned())?;
         if let Some(view_id) = &drag.source_view_id
-            && !diagram.all_views().any(|view| &view.id == view_id && view.subject.as_deref() == Some(drag.element_id.as_str()))
+            && !diagram.all_views().any(|view| {
+                &view.id == view_id && view.subject.as_deref() == Some(drag.element_id.as_str())
+            })
         {
             return Err("The dragged occurrence no longer matches its element".into());
         }
@@ -444,8 +489,11 @@ impl MdeWorkbenchItem {
     }
 
     pub(super) fn submit_explorer_command(
-        &mut self, command: MdeUiCommand, project_id: &ProjectId,
-        expected_revision: u64, cx: &mut Context<Self>,
+        &mut self,
+        command: MdeUiCommand,
+        project_id: &ProjectId,
+        expected_revision: u64,
+        cx: &mut Context<Self>,
     ) -> bool {
         let allowed = if self.source.is_read_only() || self.source.is_presentation_suspended() {
             Err("The active document is not editable".to_owned())
@@ -453,12 +501,19 @@ impl MdeWorkbenchItem {
             Err("The active project changed; reopen the Explorer menu".to_owned())
         } else {
             self.source.snapshot().and_then(|snapshot| {
-                if snapshot.revision == expected_revision { Ok(()) }
-                else { Err("The model changed; reopen the Explorer menu".to_owned()) }
+                if snapshot.revision == expected_revision {
+                    Ok(())
+                } else {
+                    Err("The model changed; reopen the Explorer menu".to_owned())
+                }
             })
         };
         if let Err(error) = allowed {
-            self.source.record_interaction("explorer.command.rejected", None, bellatrix_mde_cordis::TraceOutcome::Invalid);
+            self.source.record_interaction(
+                "explorer.command.rejected",
+                None,
+                bellatrix_mde_cordis::TraceOutcome::Invalid,
+            );
             self.feedback = error;
             cx.notify();
             return false;
@@ -478,8 +533,11 @@ impl MdeWorkbenchItem {
     }
 
     pub(super) fn validate_explorer_move(
-        &self, project_id: &ProjectId, revision: u64,
-        target: &hierarchy::ExplorerMoveTarget, parent_id: Option<&str>,
+        &self,
+        project_id: &ProjectId,
+        revision: u64,
+        target: &hierarchy::ExplorerMoveTarget,
+        parent_id: Option<&str>,
         parent_occurrence: Option<&bellatrix_mde_cordis::ViewOccurrence>,
     ) -> Result<(), String> {
         if self.source.is_read_only() || self.source.is_presentation_suspended() {
@@ -493,31 +551,46 @@ impl MdeWorkbenchItem {
             return Err("The model changed; reopen the menu or drag the item again".into());
         }
         let subject = match target {
-            hierarchy::ExplorerMoveTarget::Element(id) | hierarchy::ExplorerMoveTarget::Diagram(id) => id,
+            hierarchy::ExplorerMoveTarget::Element(id)
+            | hierarchy::ExplorerMoveTarget::Diagram(id) => id,
         };
         if snapshot.section.composed_subjects.contains(subject) {
             return Err("Document composition moves are not yet supported losslessly".into());
         }
-        self.source.preview_move(
-            &snapshot,
-            subject,
-            parent_id,
-            parent_occurrence,
-            matches!(target, hierarchy::ExplorerMoveTarget::Diagram(_)),
-        ).unwrap_or_else(|| Err(bellatrix_mde_cordis::MOVE_PREVIEW_PENDING.into()))
+        self.source
+            .preview_move(
+                &snapshot,
+                subject,
+                parent_id,
+                parent_occurrence,
+                matches!(target, hierarchy::ExplorerMoveTarget::Diagram(_)),
+            )
+            .unwrap_or_else(|| Err(bellatrix_mde_cordis::MOVE_PREVIEW_PENDING.into()))
     }
 
     pub(super) fn move_explorer_item(
-        &mut self, project_id: &ProjectId, revision: u64,
-        target: &hierarchy::ExplorerMoveTarget, parent_id: Option<String>,
+        &mut self,
+        project_id: &ProjectId,
+        revision: u64,
+        target: &hierarchy::ExplorerMoveTarget,
+        parent_id: Option<String>,
         parent_occurrence: Option<bellatrix_mde_cordis::ViewOccurrence>,
         cx: &mut Context<Self>,
     ) -> bool {
         let subject = match target {
-            hierarchy::ExplorerMoveTarget::Element(id) | hierarchy::ExplorerMoveTarget::Diagram(id) => id,
+            hierarchy::ExplorerMoveTarget::Element(id)
+            | hierarchy::ExplorerMoveTarget::Diagram(id) => id,
         };
-        if self.source.snapshot().is_ok_and(|snapshot| snapshot.section.composed_subjects.contains(subject)) {
-            self.source.record_interaction("explorer.move.rejected", Some(subject), bellatrix_mde_cordis::TraceOutcome::Unsupported);
+        if self
+            .source
+            .snapshot()
+            .is_ok_and(|snapshot| snapshot.section.composed_subjects.contains(subject))
+        {
+            self.source.record_interaction(
+                "explorer.move.rejected",
+                Some(subject),
+                bellatrix_mde_cordis::TraceOutcome::Unsupported,
+            );
             self.feedback = "Document composition moves are not yet supported losslessly".into();
             cx.notify();
             return false;
@@ -525,36 +598,53 @@ impl MdeWorkbenchItem {
         // Preview validation is advisory. Dispatch the captured intent so Cordis
         // reports the authoritative kernel rejection as well as successful moves.
         let command = match target {
-            hierarchy::ExplorerMoveTarget::Element(element_id) => MdeUiCommand::SetOwner(
-                bellatrix_mde_cordis::ModelingSetOwnerRequested {
-                    project_id: project_id.clone(), element_id: element_id.clone(),
-                    owner_id: parent_id, expected_revision: revision,
-                }),
+            hierarchy::ExplorerMoveTarget::Element(element_id) => {
+                MdeUiCommand::SetOwner(bellatrix_mde_cordis::ModelingSetOwnerRequested {
+                    project_id: project_id.clone(),
+                    element_id: element_id.clone(),
+                    owner_id: parent_id,
+                    expected_revision: revision,
+                })
+            }
             hierarchy::ExplorerMoveTarget::Diagram(diagram_id) => MdeUiCommand::SetExplorerParent(
                 bellatrix_mde_cordis::ModelingSetExplorerParentRequested {
-                    project_id: project_id.clone(), subject_id: diagram_id.clone(),
-                    parent_id, parent_occurrence, expected_revision: revision,
-                }),
+                    project_id: project_id.clone(),
+                    subject_id: diagram_id.clone(),
+                    parent_id,
+                    parent_occurrence,
+                    expected_revision: revision,
+                },
+            ),
         };
         self.submit_explorer_command(command, project_id, revision, cx)
     }
 
     pub(super) fn validate_explorer_diagram_reparent(
-        &self, drag: &hierarchy::ExplorerDiagramDrag, parent_id: Option<&str>,
+        &self,
+        drag: &hierarchy::ExplorerDiagramDrag,
+        parent_id: Option<&str>,
         parent_occurrence: Option<&bellatrix_mde_cordis::ViewOccurrence>,
     ) -> Result<(), String> {
-        if self.source.is_read_only() || self.source.is_presentation_suspended()
+        if self.source.is_read_only()
+            || self.source.is_presentation_suspended()
             || self.project_id() != &drag.project_id
             || self.source.snapshot()?.revision != drag.revision
         {
             return Err("The document changed or is not editable; drag the diagram again".into());
         }
-        self.validate_explorer_move(&drag.project_id, drag.revision,
-            &hierarchy::ExplorerMoveTarget::Diagram(drag.diagram_id.clone()), parent_id, parent_occurrence)
+        self.validate_explorer_move(
+            &drag.project_id,
+            drag.revision,
+            &hierarchy::ExplorerMoveTarget::Diagram(drag.diagram_id.clone()),
+            parent_id,
+            parent_occurrence,
+        )
     }
 
     pub(super) fn validate_explorer_reparent(
-        &self, drag: &hierarchy::ExplorerElementDrag, owner_id: &str,
+        &self,
+        drag: &hierarchy::ExplorerElementDrag,
+        owner_id: &str,
     ) -> Result<(), String> {
         if self.source.is_read_only() || self.source.is_presentation_suspended() {
             return Err("The active document is not editable".into());
@@ -566,32 +656,49 @@ impl MdeWorkbenchItem {
         if snapshot.revision != drag.revision {
             return Err("The model changed during the drag; drag the element again".into());
         }
-        if snapshot.section.composed_subjects.contains(&drag.element_id) {
+        if snapshot
+            .section
+            .composed_subjects
+            .contains(&drag.element_id)
+        {
             return Err("Document composition moves are not yet supported losslessly".into());
         }
         self.validate_explorer_move(
-            &drag.project_id, drag.revision,
+            &drag.project_id,
+            drag.revision,
             &hierarchy::ExplorerMoveTarget::Element(drag.element_id.clone()),
-            Some(owner_id), None,
+            Some(owner_id),
+            None,
         )
     }
 
     pub(super) fn reparent_explorer_element(
-        &mut self, drag: &hierarchy::ExplorerElementDrag, owner_id: String,
+        &mut self,
+        drag: &hierarchy::ExplorerElementDrag,
+        owner_id: String,
         cx: &mut Context<Self>,
     ) -> bool {
         self.move_explorer_item(
-            &drag.project_id, drag.revision,
+            &drag.project_id,
+            drag.revision,
             &hierarchy::ExplorerMoveTarget::Element(drag.element_id.clone()),
-            Some(owner_id), None, cx,
+            Some(owner_id),
+            None,
+            cx,
         )
     }
 
     pub(super) fn drop_explorer_element_on_diagram(
-        &mut self, drag: &hierarchy::ExplorerElementDrag, diagram_id: &str,
+        &mut self,
+        drag: &hierarchy::ExplorerElementDrag,
+        diagram_id: &str,
         cx: &mut Context<Self>,
     ) {
-        self.source.record_interaction("explorer.diagram_drop.received", Some(&drag.element_id), bellatrix_mde_cordis::TraceOutcome::Success);
+        self.source.record_interaction(
+            "explorer.diagram_drop.received",
+            Some(&drag.element_id),
+            bellatrix_mde_cordis::TraceOutcome::Success,
+        );
         let placement = (|| {
             if self.source.is_read_only() || self.source.is_presentation_suspended() {
                 return Err("The active document is not editable".to_owned());
@@ -603,11 +710,16 @@ impl MdeWorkbenchItem {
             if snapshot.revision != drag.revision {
                 return Err("The model changed during the drag; drag the element again".to_owned());
             }
-            let diagram = snapshot.section.diagrams.iter().find(|diagram| diagram.id == diagram_id)
+            let diagram = snapshot
+                .section
+                .diagrams
+                .iter()
+                .find(|diagram| diagram.id == diagram_id)
                 .ok_or_else(|| "The target diagram no longer exists".to_owned())?;
             let placement = element_view_placement(diagram, &drag.element_id);
             if matches!(placement, ElementViewPlacement::NewAt(..))
-                && (!self.source.allows_creation() || !snapshot.section.tools.allows_new_views(diagram_id))
+                && (!self.source.allows_creation()
+                    || !snapshot.section.tools.allows_new_views(diagram_id))
             {
                 return Err("This diagram supports selecting existing views, but not creating a new occurrence yet".into());
             }
@@ -615,20 +727,37 @@ impl MdeWorkbenchItem {
         })();
         match placement {
             Err(error) => {
-                self.source.record_interaction("explorer.diagram_drop.rejected", Some(&drag.element_id), bellatrix_mde_cordis::TraceOutcome::Invalid);
+                self.source.record_interaction(
+                    "explorer.diagram_drop.rejected",
+                    Some(&drag.element_id),
+                    bellatrix_mde_cordis::TraceOutcome::Invalid,
+                );
                 self.feedback = error;
             }
             Ok(ElementViewPlacement::Existing(view_id)) => {
-                self.source.record_interaction("explorer.diagram_drop.existing_view", Some(&view_id), bellatrix_mde_cordis::TraceOutcome::Success);
+                self.source.record_interaction(
+                    "explorer.diagram_drop.existing_view",
+                    Some(&view_id),
+                    bellatrix_mde_cordis::TraceOutcome::Success,
+                );
                 self.select_diagram_view(diagram_id.to_owned(), view_id, cx);
                 self.feedback = "Selected existing view; model ownership is unchanged".into();
             }
             Ok(ElementViewPlacement::NewAt(x, y)) => {
                 self.submit_explorer_command(
-                    MdeUiCommand::PlaceElementView(bellatrix_mde_cordis::ModelingPlaceElementViewRequested {
-                        project_id: drag.project_id.clone(), diagram_id: diagram_id.to_owned(),
-                        element_id: drag.element_id.clone(), x, y, expected_revision: drag.revision,
-                    }), &drag.project_id, drag.revision, cx,
+                    MdeUiCommand::PlaceElementView(
+                        bellatrix_mde_cordis::ModelingPlaceElementViewRequested {
+                            project_id: drag.project_id.clone(),
+                            diagram_id: diagram_id.to_owned(),
+                            element_id: drag.element_id.clone(),
+                            x,
+                            y,
+                            expected_revision: drag.revision,
+                        },
+                    ),
+                    &drag.project_id,
+                    drag.revision,
+                    cx,
                 );
             }
         }
@@ -636,24 +765,39 @@ impl MdeWorkbenchItem {
     }
 
     pub(super) fn drop_explorer_element(
-        &mut self, drag: &hierarchy::ExplorerElementDrag, position: (f64, f64),
-        window: &mut Window, cx: &mut Context<Self>,
+        &mut self,
+        drag: &hierarchy::ExplorerElementDrag,
+        position: (f64, f64),
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
         if let Err(error) = self.validate_explorer_drop(drag) {
-            self.source.record_interaction("explorer.canvas_drop.rejected", Some(&drag.element_id), bellatrix_mde_cordis::TraceOutcome::Invalid);
+            self.source.record_interaction(
+                "explorer.canvas_drop.rejected",
+                Some(&drag.element_id),
+                bellatrix_mde_cordis::TraceOutcome::Invalid,
+            );
             self.feedback = error;
             cx.notify();
             return;
         }
         if !position.0.is_finite() || !position.1.is_finite() {
-            self.source.record_interaction("explorer.canvas_drop.rejected", Some(&drag.element_id), bellatrix_mde_cordis::TraceOutcome::Invalid);
+            self.source.record_interaction(
+                "explorer.canvas_drop.rejected",
+                Some(&drag.element_id),
+                bellatrix_mde_cordis::TraceOutcome::Invalid,
+            );
             self.feedback = "The canvas drop position is unavailable".into();
             cx.notify();
             return;
         }
         self.show_element_in_active_diagram_at(
-            drag.element_id.clone(), Some(position),
-            Some(drag.revision), drag.source_view_id.clone(), window, cx,
+            drag.element_id.clone(),
+            Some(position),
+            Some(drag.revision),
+            drag.source_view_id.clone(),
+            window,
+            cx,
         );
     }
 
@@ -700,7 +844,9 @@ impl MdeWorkbenchItem {
             return;
         };
         let placement = if let Some(view_id) = preferred_view_id {
-            if !diagram.all_views().any(|view| view.id == view_id && view.subject.as_deref() == Some(element_id.as_str())) {
+            if !diagram.all_views().any(|view| {
+                view.id == view_id && view.subject.as_deref() == Some(element_id.as_str())
+            }) {
                 self.feedback = "The dragged occurrence no longer matches its element".into();
                 cx.notify();
                 return;
@@ -712,16 +858,22 @@ impl MdeWorkbenchItem {
         match placement {
             ElementViewPlacement::Existing(view_id) => {
                 if let Some(position) = position
-                    && let Some(center) = diagram.all_views().find(|view| view.id == view_id)
-                        .and_then(|view| super::visual_draft_canvas::resolve_visual_center(&view.geometry))
+                    && let Some(center) = diagram
+                        .all_views()
+                        .find(|view| view.id == view_id)
+                        .and_then(|view| {
+                            super::visual_draft_canvas::resolve_visual_center(&view.geometry)
+                        })
                 {
                     // Reveal the existing occurrence at the drop point without moving its geometry.
                     let pan = (
                         f64::from(self.pan.0) + (position.0 - center.x) * f64::from(self.zoom),
                         f64::from(self.pan.1) + (position.1 - center.y) * f64::from(self.zoom),
                     );
-                    if pan.0.is_finite() && pan.1.is_finite()
-                        && pan.0.abs() <= f64::from(f32::MAX) && pan.1.abs() <= f64::from(f32::MAX)
+                    if pan.0.is_finite()
+                        && pan.1.is_finite()
+                        && pan.0.abs() <= f64::from(f32::MAX)
+                        && pan.1.abs() <= f64::from(f32::MAX)
                     {
                         self.pan = (pan.0 as f32, pan.1 as f32);
                     }
@@ -731,7 +883,9 @@ impl MdeWorkbenchItem {
                 cx.notify();
             }
             ElementViewPlacement::NewAt(x, y) => {
-                if !self.source.allows_creation() || !snapshot.section.tools.allows_new_views(&diagram.id) {
+                if !self.source.allows_creation()
+                    || !snapshot.section.tools.allows_new_views(&diagram.id)
+                {
                     self.feedback = "No existing view in this diagram; creating a new occurrence is not available yet".into();
                     cx.notify();
                     return;

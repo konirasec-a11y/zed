@@ -41,7 +41,8 @@ fn project() -> Project {
 fn create(project: &Project, to: &str) -> Project {
     apply(
         project,
-        &Command::CreateRelation { owner_id: None,
+        &Command::CreateRelation {
+            owner_id: None,
             diagram_id: "diagram".into(),
             kind: ModelingRelationKind::Association,
             from: "a".into(),
@@ -92,14 +93,30 @@ fn public_association_flow_creates_edits_reparents_navigates_rejects_and_reopens
     let association = association_id(&model);
     let ends = end_ids(&model, &association);
     assert_eq!(ends.len(), 2);
-    let names = ends.iter().map(|id| model.element(id).expect("materialized Property").name.clone())
+    let names = ends
+        .iter()
+        .map(|id| {
+            model
+                .element(id)
+                .expect("materialized Property")
+                .name
+                .clone()
+        })
         .collect::<Vec<_>>();
     assert!(names.iter().all(|name| !name.is_empty()));
     assert_ne!(names[0], names[1]);
     let reflexive = create(&project(), "a");
     let reflexive_ends = end_ids(&reflexive, &association_id(&reflexive));
-    assert_ne!(reflexive.element(&reflexive_ends[0]).expect("first reflexive end").name,
-        reflexive.element(&reflexive_ends[1]).expect("second reflexive end").name);
+    assert_ne!(
+        reflexive
+            .element(&reflexive_ends[0])
+            .expect("first reflexive end")
+            .name,
+        reflexive
+            .element(&reflexive_ends[1])
+            .expect("second reflexive end")
+            .name
+    );
     model = edit(
         &model,
         &association,
@@ -245,14 +262,25 @@ fn public_association_flow_creates_edits_reparents_navigates_rejects_and_reopens
     ];
     let assert_projection_warnings = |project: &Project| {
         let diagnostics = Model::from_project(project).validate();
-        assert_eq!(diagnostics.len(), expected_warnings.len(), "{diagnostics:?}");
+        assert_eq!(
+            diagnostics.len(),
+            expected_warnings.len(),
+            "{diagnostics:?}"
+        );
         for (subject, property) in expected_warnings {
-            let expected_message = format!("{property}: no normative property or registered extension contract");
-            assert_eq!(diagnostics.iter().filter(|diagnostic|
-                diagnostic.subject_id == subject
-                    && diagnostic.severity == bellatrix_mde::StructuralSeverity::Warning
-                    && diagnostic.code == "MDE_PROPERTY_CONTRACT_UNVERIFIED"
-                    && diagnostic.message == expected_message).count(), 1, "{diagnostics:?}");
+            let expected_message =
+                format!("{property}: no normative property or registered extension contract");
+            assert_eq!(
+                diagnostics
+                    .iter()
+                    .filter(|diagnostic| diagnostic.subject_id == subject
+                        && diagnostic.severity == bellatrix_mde::StructuralSeverity::Warning
+                        && diagnostic.code == "MDE_PROPERTY_CONTRACT_UNVERIFIED"
+                        && diagnostic.message == expected_message)
+                    .count(),
+                1,
+                "{diagnostics:?}"
+            );
         }
     };
     assert_projection_warnings(&model);
@@ -716,25 +744,44 @@ fn public_association_flow_creates_edits_reparents_navigates_rejects_and_reopens
         .id
         .clone();
     let draft_diagnostics = Model::from_project(&nary).validate();
-    assert!(draft_diagnostics.iter().any(|diagnostic| diagnostic.subject_id == nary_id
-        && diagnostic.code == "MDE_RELATIONSHIP_ENDPOINTS_UNVERIFIED"
-        && diagnostic.severity == bellatrix_mde::StructuralSeverity::Warning));
-    assert!(!draft_diagnostics.iter().any(|diagnostic| diagnostic.subject_id == nary_id
-        && diagnostic.severity == bellatrix_mde::StructuralSeverity::Error));
+    assert!(
+        draft_diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.subject_id == nary_id
+                && diagnostic.code == "MDE_RELATIONSHIP_ENDPOINTS_UNVERIFIED"
+                && diagnostic.severity == bellatrix_mde::StructuralSeverity::Warning)
+    );
+    assert!(
+        !draft_diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.subject_id == nary_id
+                && diagnostic.severity == bellatrix_mde::StructuralSeverity::Error)
+    );
     for value in [
-        json!(null), json!([]), json!(false),
+        json!(null),
+        json!([]),
+        json!(false),
         json!([{"$ref":"missing"}, {"$ref":"a"}]),
         json!([{"$ref":"a"}, {"$ref":"b"}]),
     ] {
         let mut invalid_ends = nary.clone();
-        invalid_ends.elements.iter_mut().find(|element| element.id == nary_id)
-            .expect("Association draft").properties.insert("memberEnd".into(), value.clone());
+        invalid_ends
+            .elements
+            .iter_mut()
+            .find(|element| element.id == nary_id)
+            .expect("Association draft")
+            .properties
+            .insert("memberEnd".into(), value.clone());
         let diagnostics = Model::from_project(&invalid_ends).validate();
         for code in ["UML_PROPERTY_CONTRACT", "UML_RELATIONSHIP_ENDPOINTS"] {
-            assert!(diagnostics.iter().any(|diagnostic|
-                diagnostic.subject_id == nary_id && diagnostic.code == code
-                    && diagnostic.severity == bellatrix_mde::StructuralSeverity::Error),
-                "explicit invalid memberEnd {value} must retain {code}: {diagnostics:?}");
+            assert!(
+                diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.subject_id == nary_id
+                        && diagnostic.code == code
+                        && diagnostic.severity == bellatrix_mde::StructuralSeverity::Error),
+                "explicit invalid memberEnd {value} must retain {code}: {diagnostics:?}"
+            );
         }
     }
     nary = apply(
@@ -789,12 +836,15 @@ fn public_association_flow_creates_edits_reparents_navigates_rejects_and_reopens
     let diagnostics = Model::from_project(&nary).validate();
     // The detached classifier-owned Property retains its legacy multiplicity
     // declaration; it must not hide any diagnostics from the new Association.
-    assert_eq!(diagnostics, vec![bellatrix_mde::StructuralDiagnostic {
-        severity: bellatrix_mde::StructuralSeverity::Warning,
-        code: "MDE_PROPERTY_CONTRACT_UNVERIFIED",
-        subject_id: ends[1].clone(),
-        message: "multiplicity: no normative property or registered extension contract".into(),
-    }]);
+    assert_eq!(
+        diagnostics,
+        vec![bellatrix_mde::StructuralDiagnostic {
+            severity: bellatrix_mde::StructuralSeverity::Warning,
+            code: "MDE_PROPERTY_CONTRACT_UNVERIFIED",
+            subject_id: ends[1].clone(),
+            message: "multiplicity: no normative property or registered extension contract".into(),
+        }]
+    );
     for format in [Format::Json, Format::Protobuf] {
         let reopened = decode(&encode(&nary, format).expect("save n-ary edit"), format)
             .expect("reopen n-ary edit");
@@ -913,7 +963,8 @@ fn public_association_flow_creates_edits_reparents_navigates_rejects_and_reopens
                 .iter()
                 .all(|element| !element.properties.contains_key("redefinitionContext"))
         );
-    }}
+    }
+}
 
 #[test]
 fn legacy_migration_preserves_authored_data_and_uses_the_opposite_composite_bound() {
@@ -933,24 +984,61 @@ fn legacy_migration_preserves_authored_data_and_uses_the_opposite_composite_boun
     // for a new relation. Reject the indistinguishable migration atomically;
     // explicitly naming one end repairs it without silently naming the other.
     let mut unnamed = legacy.clone();
-    let relation = unnamed.relations.iter_mut().find(|relation| relation.id == "legacy")
+    let relation = unnamed
+        .relations
+        .iter_mut()
+        .find(|relation| relation.id == "legacy")
         .expect("existing legacy relation");
     relation.properties.remove("sourceRole");
     relation.properties.remove("targetRole");
     let unnamed_snapshot = unnamed.clone();
-    let error = apply(&unnamed, &Command::MigrateAssociation { association_id: "legacy".into() }, 0)
-        .expect_err("migration cannot silently rename absent roles");
-    assert!(error.contains("UML_NAMESPACE_MEMBERS_DISTINGUISHABLE"), "{error}");
+    let error = apply(
+        &unnamed,
+        &Command::MigrateAssociation {
+            association_id: "legacy".into(),
+        },
+        0,
+    )
+    .expect_err("migration cannot silently rename absent roles");
+    assert!(
+        error.contains("UML_NAMESPACE_MEMBERS_DISTINGUISHABLE"),
+        "{error}"
+    );
     assert_eq!(unnamed, unnamed_snapshot);
-    let repaired = apply(&unnamed, &Command::SetProperty {
-        element_id: "legacy".into(), path: "properties.targetRole".into(), value: json!("authoredTarget"),
-    }, 1).expect("author one distinguishing role while materializing");
+    let repaired = apply(
+        &unnamed,
+        &Command::SetProperty {
+            element_id: "legacy".into(),
+            path: "properties.targetRole".into(),
+            value: json!("authoredTarget"),
+        },
+        1,
+    )
+    .expect("author one distinguishing role while materializing");
     let repaired_ends = end_ids(&repaired, "legacy");
-    assert_eq!(repaired.element(&repaired_ends[0]).expect("unnamed source").name, "");
-    assert_eq!(repaired.element(&repaired_ends[1]).expect("authored target").name, "authoredTarget");
+    assert_eq!(
+        repaired
+            .element(&repaired_ends[0])
+            .expect("unnamed source")
+            .name,
+        ""
+    );
+    assert_eq!(
+        repaired
+            .element(&repaired_ends[1])
+            .expect("authored target")
+            .name,
+        "authoredTarget"
+    );
     for format in [Format::Json, Format::Protobuf] {
-        assert_eq!(decode(&encode(&repaired, format).expect("save repaired roles"), format)
-            .expect("reopen repaired roles"), repaired);
+        assert_eq!(
+            decode(
+                &encode(&repaired, format).expect("save repaired roles"),
+                format
+            )
+            .expect("reopen repaired roles"),
+            repaired
+        );
     }
     let before = legacy.clone();
     let model = apply(

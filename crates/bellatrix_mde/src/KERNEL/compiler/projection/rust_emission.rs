@@ -56,14 +56,18 @@ pub(crate) fn project(
     }
     let mut units = Vec::new();
     for unit in &generation.units {
-        let element = model.element(&unit.id).ok_or("missing generation element")?;
+        let element = model
+            .element(&unit.id)
+            .ok_or("missing generation element")?;
         if !matches!(
             element.kind.as_str(),
             "rust.struct" | "rust.trait" | "rust.function" | "rust.item"
         ) {
             continue;
         }
-        let parent = model.relations.iter()
+        let parent = model
+            .relations
+            .iter()
             .find(|relation| relation.to == element.id && relation.kind == "owns")
             .and_then(|relation| model.element(&relation.from))
             .filter(|parent| matches!(parent.kind.as_str(), "rust.struct" | "rust.trait"));
@@ -71,11 +75,17 @@ pub(crate) fn project(
         if detached && parent.is_some_and(|parent| selected.contains(&parent.id)) {
             continue;
         }
-        let children = model.relations.iter()
-            .filter(|relation| relation.kind == "owns" && relation.from == element.id
-                && selected.contains(&relation.to))
+        let children = model
+            .relations
+            .iter()
+            .filter(|relation| {
+                relation.kind == "owns"
+                    && relation.from == element.id
+                    && selected.contains(&relation.to)
+            })
             .filter_map(|relation| model.element(&relation.to))
-            .map(target_element).collect::<Vec<_>>();
+            .map(target_element)
+            .collect::<Vec<_>>();
         units.push(json!({
             "element": target_element(element), "children": children,
             "requires": unit.requires, "detached": detached,
@@ -94,27 +104,37 @@ fn target_element(element: &Element) -> Value {
 }
 
 fn declaration_file(model: &Project, element: &Element) -> Result<PathBuf, Box<dyn Error>> {
-    if let Some(relation) = model.relations.iter()
+    if let Some(relation) = model
+        .relations
+        .iter()
         .find(|relation| relation.kind == "declares" && relation.to == element.id)
     {
-        let file = model.element(&relation.from).ok_or("missing declaration file")?;
+        let file = model
+            .element(&relation.from)
+            .ok_or("missing declaration file")?;
         if file.kind != "fs.file" {
             return Err("declaration parent must be fs.file".into());
         }
         return Ok(physical_path(model, &file.id)?);
     }
-    let fallback: String = element.name.chars().map(|character| {
-        if character.is_ascii_alphanumeric() || character == '_' {
-            character.to_ascii_lowercase()
-        } else {
-            '_'
-        }
-    }).collect();
+    let fallback: String = element
+        .name
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || character == '_' {
+                character.to_ascii_lowercase()
+            } else {
+                '_'
+            }
+        })
+        .collect();
     let filename = format!("{fallback}.rs");
     validate_segment(&filename)?;
     Ok(PathBuf::from(filename))
 }
 
 fn path_text(path: PathBuf) -> Result<String, Box<dyn Error>> {
-    path.into_os_string().into_string().map_err(|_| "artifact path is not UTF-8".into())
+    path.into_os_string()
+        .into_string()
+        .map_err(|_| "artifact path is not UTF-8".into())
 }

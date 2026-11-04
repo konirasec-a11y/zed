@@ -56,12 +56,7 @@ impl RenderOnce for C4Node {
             .border_1()
             .border_color(gpui::rgb(p.border))
             .bg(gpui::rgb(p.panel))
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(gpui::rgb(p.muted))
-                    .child(label),
-            )
+            .child(div().text_xs().text_color(gpui::rgb(p.muted)).child(label))
             .child(
                 div()
                     .text_sm()

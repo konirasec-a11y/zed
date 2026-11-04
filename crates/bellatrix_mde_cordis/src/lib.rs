@@ -1,30 +1,37 @@
 //! Cordis transport and project-revision integration for the single MDE domain.
 use bellatrix_mde_protocol::trace as trace_contract;
-pub use trace_contract::{DiagnosticSeverity, ModelingDiagnostic, ExecutionEvent, TraceOutcome, TracePhase};
+pub use trace_contract::{
+    DiagnosticSeverity, ExecutionEvent, ModelingDiagnostic, TraceOutcome, TracePhase,
+};
 mod execution_journal;
-pub use execution_journal::{ExecutionJournal, ExecutionJournalSnapshot};
 pub use bellatrix_mde_protocol::MODELING_NAMESPACE;
 use bellatrix_mde_protocol::command as command_contract;
 use bellatrix_mde_protocol::tools as tool_catalog;
-pub use tool_catalog::{ToolCatalog, ToolGroup, ElementToolMetadata, RelationToolMetadata, DiagramToolMetadata, InterfaceToolMetadata};
 pub use command_contract::*;
+pub use execution_journal::{ExecutionJournal, ExecutionJournalSnapshot};
+pub use tool_catalog::{
+    DiagramToolMetadata, ElementToolMetadata, InterfaceToolMetadata, RelationToolMetadata,
+    ToolCatalog, ToolGroup,
+};
 mod diagrams;
-mod trace_output;
-mod mutation;
 mod document_codec;
+mod mutation;
+mod trace_output;
 pub use document_codec::{ModelingConvertDocument, ModelingConvertDocumentRequested};
 mod mdj_interchange;
-pub use mdj_interchange::{
-    MdjExportReceipt, ModelingApplyMdjEdit, ModelingApplyMdjEditRequested,
-    ModelingDocumentFormat, ModelingExportMdj, ModelingExportMdjRequested,
-    ModelingPrepareDocument, ModelingPrepareDocumentRequested, PreparedModelingDocument,
-};
 pub use diagrams::{
-    ModelingCreateExplorerDiagram, ModelingCreateExplorerDiagramRequested,
-    DiagramValidationResult, ModelingExecutionTrace, ModelingExecutionTraceEvent, ModelingCreateDiagram, ModelingCreateDiagramRequested, ModelingDeleteDiagram,
-    ModelingDeleteDiagramRequested, ModelingRenameDiagram, ModelingRenameDiagramRequested,
-    ModelingValidateDiagram, ModelingValidateDiagramRequested, ModelingValidateSnapshot, ModelingValidateSnapshotRequested, ModelingValidateDiagramTraced,
-    ModelingValidateDiagramTracedRequested, TracedDiagramValidationResult,
+    DiagramValidationResult, ModelingCreateDiagram, ModelingCreateDiagramRequested,
+    ModelingCreateExplorerDiagram, ModelingCreateExplorerDiagramRequested, ModelingDeleteDiagram,
+    ModelingDeleteDiagramRequested, ModelingExecutionTrace, ModelingExecutionTraceEvent,
+    ModelingRenameDiagram, ModelingRenameDiagramRequested, ModelingValidateDiagram,
+    ModelingValidateDiagramRequested, ModelingValidateDiagramTraced,
+    ModelingValidateDiagramTracedRequested, ModelingValidateSnapshot,
+    ModelingValidateSnapshotRequested, TracedDiagramValidationResult,
+};
+pub use mdj_interchange::{
+    MdjExportReceipt, ModelingApplyMdjEdit, ModelingApplyMdjEditRequested, ModelingDocumentFormat,
+    ModelingExportMdj, ModelingExportMdjRequested, ModelingPrepareDocument,
+    ModelingPrepareDocumentRequested, PreparedModelingDocument,
 };
 mod artifact_publication;
 mod headless_operations;
@@ -47,8 +54,9 @@ mod quick_edit_commands;
 pub use quick_edit_commands::{ModelingQuickEdit, ModelingQuickEditRequested};
 mod create_relation;
 pub use create_relation::{
-    ModelingCreateRelation, ModelingCreateRelationOrVisualDraft, ModelingCreateRelationRequested,
-    ModelingCreateRelationAtViewsOrVisualDraft, ModelingCreateRelationAtViewsRequested,
+    ModelingCreateRelation, ModelingCreateRelationAtViewsOrVisualDraft,
+    ModelingCreateRelationAtViewsRequested, ModelingCreateRelationOrVisualDraft,
+    ModelingCreateRelationRequested,
 };
 mod association_ends;
 pub use association_ends::{ModelingEditAssociationEnds, ModelingEditAssociationEndsRequested};
@@ -64,26 +72,28 @@ mod set_property;
 mod view_edits;
 mod view_style;
 pub use view_style::{
-    ModelingReorderView, ModelingReorderViewRequested, ModelingSetViewRouting,
-    ModelingSetViewRoutingRequested, ModelingSetViewStyle, ModelingSetViewStyleRequested,
-    ModelingSetViewLabel, ModelingSetViewLabelRequested,
-    ModelingSetViewTiming, ModelingSetViewTimingRequested,
+    ModelingReorderView, ModelingReorderViewRequested, ModelingSetViewLabel,
+    ModelingSetViewLabelRequested, ModelingSetViewRouting, ModelingSetViewRoutingRequested,
+    ModelingSetViewStyle, ModelingSetViewStyleRequested, ModelingSetViewTiming,
+    ModelingSetViewTimingRequested,
 };
 mod views;
 pub use delete_element::{ModelingDeleteElement, ModelingDeleteElementRequested};
 pub use resize_view::{ModelingResizeView, ModelingResizeViewRequested};
 pub use set_property::{ModelingSetProperty, ModelingSetPropertyRequested};
 pub use views::{
-    ModelingCreateVisualDraft, ModelingCreateVisualDraftRequested,
-    ModelingPlaceElementView, ModelingPlaceElementViewRequested, ModelingRemoveView,
-    ModelingRemoveViewRequested,
+    ModelingCreateVisualDraft, ModelingCreateVisualDraftRequested, ModelingPlaceElementView,
+    ModelingPlaceElementViewRequested, ModelingRemoveView, ModelingRemoveViewRequested,
 };
 mod mdj_ui_bridge;
 pub use mdj_ui_bridge::MdjSession;
 mod ui_bridge;
 use cordis::event::{ListenerRegistrationError, observer_sync};
 use cordis::{Context, Event, Plugin};
-pub use create_element::{ModelingCreateModelElement, ModelingCreateModelElementRequested, ModelingCreateElement, ModelingCreateElementOrVisualDraft, ModelingCreateElementRequested};
+pub use create_element::{
+    ModelingCreateElement, ModelingCreateElementOrVisualDraft, ModelingCreateElementRequested,
+    ModelingCreateModelElement, ModelingCreateModelElementRequested,
+};
 pub use project_integration::{
     MdePlugin, ModelingRename, ModelingRenameRequested, ModelingSetExplorerParent,
     ModelingSetExplorerParentRequested, ModelingSetOwner, ModelingSetOwnerRequested,
@@ -208,14 +218,19 @@ impl Plugin for ModelingPlugin {
     }
 }
 
-use bellatrix_mde_protocol::inspector as inspector_contract;
-pub use inspector_contract::{ElementInspector, InspectorMember, InspectorProperty, InspectorReferenceChoice, PropertyEditor, QuickEditAction, QuickEditAvailability, QuickEditControl, QuickEditSide};
-pub use bellatrix_mde_protocol::presentation as presentation_contract;
 use bellatrix_mde_protocol::explorer as explorer_projection;
+use bellatrix_mde_protocol::inspector as inspector_contract;
+pub use bellatrix_mde_protocol::presentation as presentation_contract;
 pub use explorer_projection::{ExplorerProjection, ExplorerRow, VisualComponent};
+pub use inspector_contract::{
+    ElementInspector, InspectorMember, InspectorProperty, InspectorReferenceChoice, PropertyEditor,
+    QuickEditAction, QuickEditAvailability, QuickEditControl, QuickEditSide,
+};
 #[path = "read_projection.rs"]
 pub mod projection;
 pub use projection::{ModelingReadProjection, ModelingReadProjectionRequested, ModelingSnapshot};
 
 mod move_preview;
-pub use move_preview::{ModelingPreviewMove, ModelingPreviewMoveRequested, MovePreviewClient, MOVE_PREVIEW_PENDING};
+pub use move_preview::{
+    MOVE_PREVIEW_PENDING, ModelingPreviewMove, ModelingPreviewMoveRequested, MovePreviewClient,
+};

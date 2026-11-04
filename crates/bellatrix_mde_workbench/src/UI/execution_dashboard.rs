@@ -141,8 +141,12 @@ impl Render for MdeExecutionDashboard {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = WorkbenchPalette::current(cx);
         let item = self.item.as_ref().and_then(WeakEntity::upgrade);
-        let validation_status = item.as_ref().map(|item| item.read(cx).validation_status().to_owned());
-        let feedback = item.as_ref().map(|item| item.read(cx).feedback().to_owned());
+        let validation_status = item
+            .as_ref()
+            .map(|item| item.read(cx).validation_status().to_owned());
+        let feedback = item
+            .as_ref()
+            .map(|item| item.read(cx).feedback().to_owned());
         let query = self.search.read(cx).text(cx).trim().to_lowercase();
         let matching: Vec<_> = self
             .snapshot
@@ -191,7 +195,11 @@ impl Render for MdeExecutionDashboard {
             .map(|event| {
                 let max_sequence = run_maxima.get(event.run_id.as_str()).copied().unwrap_or(0);
                 let fraction = ((event.sequence as f64 + 1.0) / (max_sequence as f64 + 1.0)) as f32;
-                let max_elapsed = run_elapsed_maxima.get(event.run_id.as_str()).copied().unwrap_or(0).max(1);
+                let max_elapsed = run_elapsed_maxima
+                    .get(event.run_id.as_str())
+                    .copied()
+                    .unwrap_or(0)
+                    .max(1);
                 let time_fraction = (event.elapsed_ns as f64 / max_elapsed as f64) as f32;
                 let line = Self::event_line(event);
                 div()
@@ -206,13 +214,31 @@ impl Render for MdeExecutionDashboard {
                             .bg(palette.surface)
                             .child(div().h_full().w(relative(fraction)).bg(palette.accent)),
                     )
-                    .child(div().w(px(100.0)).h(px(6.0)).bg(palette.surface)
-                        .child(div().h_full().w(relative(time_fraction)).bg(palette.selection)))
-                    .child(div().flex_1().min_w_0().whitespace_normal().child(line.clone()))
-                    .child(CopyButton::new(
-                        SharedString::from(format!("mde-execution-copy-{}-{}", event.run_id, event.sequence)),
-                        line,
-                    ).tooltip_label("Copy log line"))
+                    .child(
+                        div().w(px(100.0)).h(px(6.0)).bg(palette.surface).child(
+                            div()
+                                .h_full()
+                                .w(relative(time_fraction))
+                                .bg(palette.selection),
+                        ),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .whitespace_normal()
+                            .child(line.clone()),
+                    )
+                    .child(
+                        CopyButton::new(
+                            SharedString::from(format!(
+                                "mde-execution-copy-{}-{}",
+                                event.run_id, event.sequence
+                            )),
+                            line,
+                        )
+                        .tooltip_label("Copy log line"),
+                    )
             })
             .collect();
         let producer_loss = self
@@ -225,7 +251,9 @@ impl Render for MdeExecutionDashboard {
             && producer_loss.is_empty()
             && validation_status.is_none()
             && feedback.as_deref().is_none_or(str::is_empty);
-        let copied_lines = producer_loss.iter().cloned()
+        let copied_lines = producer_loss
+            .iter()
+            .cloned()
             .chain(self.snapshot.events.iter().map(Self::event_line))
             .collect::<Vec<_>>()
             .join("\n");
@@ -237,8 +265,13 @@ impl Render for MdeExecutionDashboard {
             self.snapshot.evicted_events,
             self.snapshot.producer_dropped_events,
             self.snapshot.events.len(),
-            validation_status.as_deref().unwrap_or("No active MDE document"),
-            feedback.as_deref().filter(|text| !text.is_empty()).unwrap_or("No operation feedback"),
+            validation_status
+                .as_deref()
+                .unwrap_or("No active MDE document"),
+            feedback
+                .as_deref()
+                .filter(|text| !text.is_empty())
+                .unwrap_or("No operation feedback"),
             copied_lines,
         );
         div().id("mde-execution-dashboard").track_focus(&self.focus).size_full().flex().flex_col()

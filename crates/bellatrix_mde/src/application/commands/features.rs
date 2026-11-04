@@ -30,8 +30,14 @@ fn resolve_boundary_side(element: &Element) -> Option<bool> {
     match element.kind.as_str() {
         "uml.input_pin" | "uml.value_pin" => Some(true),
         "uml.port" | "uml.output_pin" => Some(false),
-        "uml.pseudostate" => match element.properties.get("kind").and_then(serde_json::Value::as_str) {
-            Some("entryPoint") => Some(true), Some("exitPoint") => Some(false), _ => None,
+        "uml.pseudostate" => match element
+            .properties
+            .get("kind")
+            .and_then(serde_json::Value::as_str)
+        {
+            Some("entryPoint") => Some(true),
+            Some("exitPoint") => Some(false),
+            _ => None,
         },
         _ => None,
     }
@@ -48,7 +54,13 @@ fn contained_ids(section: &ModelingSection, owner_id: &str) -> HashSet<String> {
                 .iter()
                 .find(|element| element.id == relation.to)
         })
-        .filter(|element| resolve_boundary_side(element).is_some() || matches!(element.kind.as_str(), "uml.part" | "uml.interaction_operand"))
+        .filter(|element| {
+            resolve_boundary_side(element).is_some()
+                || matches!(
+                    element.kind.as_str(),
+                    "uml.part" | "uml.interaction_operand"
+                )
+        })
         .map(|element| element.id.clone())
         .collect()
 }
@@ -78,7 +90,11 @@ pub(super) fn translate_contained_views(
     }
 }
 
-pub(super) fn reposition_boundary_nodes(section: &mut ModelingSection, diagram_id: &str, owner_id: &str) {
+pub(super) fn reposition_boundary_nodes(
+    section: &mut ModelingSection,
+    diagram_id: &str,
+    owner_id: &str,
+) {
     let boundary_nodes: HashMap<_, _> = section
         .relations
         .iter()
@@ -125,7 +141,12 @@ pub(super) fn reposition_boundary_nodes(section: &mut ModelingSection, diagram_i
                     height: child_height,
                 } = &mut view.geometry
                 {
-                    let on_left = view.subject.as_ref().and_then(|id| boundary_nodes.get(id)).copied().unwrap_or(false);
+                    let on_left = view
+                        .subject
+                        .as_ref()
+                        .and_then(|id| boundary_nodes.get(id))
+                        .copied()
+                        .unwrap_or(false);
                     *child_x = x + if on_left { 0.0 } else { width } - *child_width / 2.0;
                     *child_y =
                         (*child_y).clamp(y - *child_height / 2.0, y + height - *child_height / 2.0);
@@ -135,20 +156,65 @@ pub(super) fn reposition_boundary_nodes(section: &mut ModelingSection, diagram_i
     }
 }
 
-pub(super) fn layout_interaction_operands(section: &mut ModelingSection, diagram_id: &str, owner_id: &str) {
-    let operands = section.relations.iter().filter(|relation| relation.kind == "owns" && relation.from == owner_id)
-        .filter_map(|relation| section.elements.iter().find(|element| element.id == relation.to && element.kind == "uml.interaction_operand").map(|element| element.id.clone()))
+pub(super) fn layout_interaction_operands(
+    section: &mut ModelingSection,
+    diagram_id: &str,
+    owner_id: &str,
+) {
+    let operands = section
+        .relations
+        .iter()
+        .filter(|relation| relation.kind == "owns" && relation.from == owner_id)
+        .filter_map(|relation| {
+            section
+                .elements
+                .iter()
+                .find(|element| {
+                    element.id == relation.to && element.kind == "uml.interaction_operand"
+                })
+                .map(|element| element.id.clone())
+        })
         .collect::<Vec<_>>();
-    if operands.is_empty() { return; }
-    let Some(diagram) = section.diagrams.iter_mut().find(|diagram| diagram.id == diagram_id) else { return; };
-    let bounds = diagram.views.iter().find(|view| view.subject.as_deref() == Some(owner_id))
-        .and_then(|view| match view.geometry { Geometry::Rect { x, y, width, height } => Some((x,y,width,height)), _ => None });
-    let Some((x,y,width,height)) = bounds else { return; };
+    if operands.is_empty() {
+        return;
+    }
+    let Some(diagram) = section
+        .diagrams
+        .iter_mut()
+        .find(|diagram| diagram.id == diagram_id)
+    else {
+        return;
+    };
+    let bounds = diagram
+        .views
+        .iter()
+        .find(|view| view.subject.as_deref() == Some(owner_id))
+        .and_then(|view| match view.geometry {
+            Geometry::Rect {
+                x,
+                y,
+                width,
+                height,
+            } => Some((x, y, width, height)),
+            _ => None,
+        });
+    let Some((x, y, width, height)) = bounds else {
+        return;
+    };
     let heading = 32.0_f64.min(height / 3.0);
     let operand_height = (height - heading) / operands.len() as f64;
     for view in &mut diagram.views {
-        if let Some(index) = view.subject.as_ref().and_then(|id| operands.iter().position(|operand| operand == id)) {
-            view.geometry = Geometry::Rect { x, y: y + heading + index as f64 * operand_height, width, height: operand_height };
+        if let Some(index) = view
+            .subject
+            .as_ref()
+            .and_then(|id| operands.iter().position(|operand| operand == id))
+        {
+            view.geometry = Geometry::Rect {
+                x,
+                y: y + heading + index as f64 * operand_height,
+                width,
+                height: operand_height,
+            };
         }
     }
 }
@@ -450,11 +516,11 @@ pub(super) fn insert_feature(
             .ok_or("diagram missing")?
             .views
             .push(View {
-            children: Vec::new(),
-            presentation: Default::default(),
+                children: Vec::new(),
+                presentation: Default::default(),
                 endpoints: None,
                 timing: None,
-            draft: None,
+                draft: None,
                 id: view_id,
                 subject: Some(node_id),
                 label: None,
@@ -506,19 +572,40 @@ mod tests {
     fn created_port_is_composite_and_noncomposite_edits_are_atomic() {
         let original = fixture().to_model("port-project", "Ports");
         let diagram_id = original.diagrams.first().expect("diagram").id.clone();
-        let updated = crate::commands::apply(&original, &crate::commands::Command::QuickEdit {
-            diagram_id,
-            element_id: "type-task".into(),
-            action: UmlQuickCreate::Port,
-        }, 0).expect("create normative Port");
-        let port = updated.elements.iter().find(|element| element.kind == "uml.port").expect("created Port");
-        assert_eq!(port.properties.get("aggregation"), Some(&serde_json::json!("composite")));
+        let updated = crate::commands::apply(
+            &original,
+            &crate::commands::Command::QuickEdit {
+                diagram_id,
+                element_id: "type-task".into(),
+                action: UmlQuickCreate::Port,
+            },
+            0,
+        )
+        .expect("create normative Port");
+        let port = updated
+            .elements
+            .iter()
+            .find(|element| element.kind == "uml.port")
+            .expect("created Port");
+        assert_eq!(
+            port.properties.get("aggregation"),
+            Some(&serde_json::json!("composite"))
+        );
         let before = updated.clone();
         for value in [serde_json::json!("none"), serde_json::json!("shared")] {
-            let result = crate::commands::apply(&updated, &crate::commands::Command::SetProperty {
-                element_id: port.id.clone(), path: "properties.aggregation".into(), value,
-            }, 1);
-            assert!(matches!(result, Err(ref error) if error.contains("UML_PORT_AGGREGATION")), "{result:?}");
+            let result = crate::commands::apply(
+                &updated,
+                &crate::commands::Command::SetProperty {
+                    element_id: port.id.clone(),
+                    path: "properties.aggregation".into(),
+                    value,
+                },
+                1,
+            );
+            assert!(
+                matches!(result, Err(ref error) if error.contains("UML_PORT_AGGREGATION")),
+                "{result:?}"
+            );
             assert_eq!(updated, before);
         }
     }

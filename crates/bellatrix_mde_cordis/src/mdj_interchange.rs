@@ -1,6 +1,6 @@
+use crate::MODELING_NAMESPACE;
 use crate::MdjEditCommand;
 use crate::project_integration::section_json;
-use crate::MODELING_NAMESPACE;
 use bellatrix_project::{ProjectDocument, ProjectPrepareEncodedSaveRequested, ProjectService};
 use cordis::{Context, Event, event::responder};
 use std::{convert::Infallible, io, sync::Arc};
@@ -49,8 +49,15 @@ struct MdjImportDiagnostic {
 }
 
 fn api_error_message(error: String) -> String {
-    serde_json::from_str::<serde_json::Value>(&error).ok()
-        .and_then(|response| response.get("error")?.get("message")?.as_str().map(str::to_owned))
+    serde_json::from_str::<serde_json::Value>(&error)
+        .ok()
+        .and_then(|response| {
+            response
+                .get("error")?
+                .get("message")?
+                .as_str()
+                .map(str::to_owned)
+        })
         .unwrap_or(error)
 }
 
@@ -61,19 +68,38 @@ fn document_from_response(response: &str) -> Result<PreparedModelingDocument, St
         return Err("Unsupported model document API version".into());
     }
     #[derive(serde::Serialize)]
-    struct ModelRequest<'a> { api_version: u32, model: &'a serde_json::value::RawValue }
-    let request = serde_json::to_string(&ModelRequest { api_version: imported.api_version, model: &imported.model })
-        .map_err(|error| error.to_string())?;
+    struct ModelRequest<'a> {
+        api_version: u32,
+        model: &'a serde_json::value::RawValue,
+    }
+    let request = serde_json::to_string(&ModelRequest {
+        api_version: imported.api_version,
+        model: &imported.model,
+    })
+    .map_err(|error| error.to_string())?;
     let parts = bellatrix_mde::prepare_model_document(&request).map_err(api_error_message)?;
     let id = bellatrix_project::ProjectId::new(parts.id).map_err(|error| error.to_string())?;
     let state = serde_json::from_str(&parts.section_json).map_err(|error| error.to_string())?;
-    let document = ProjectDocument::new(id, parts.name).map_err(|error| error.to_string())?
-        .with_section(MODELING_NAMESPACE, state).map_err(|error| error.to_string())?;
-    let diagnostics = imported.diagnostics.into_iter().map(|diagnostic| {
-        let path = if diagnostic.path.is_empty() { "/" } else { &diagnostic.path };
-        format!("{path}: {}", diagnostic.message)
-    }).collect();
-    Ok(PreparedModelingDocument { document, diagnostics })
+    let document = ProjectDocument::new(id, parts.name)
+        .map_err(|error| error.to_string())?
+        .with_section(MODELING_NAMESPACE, state)
+        .map_err(|error| error.to_string())?;
+    let diagnostics = imported
+        .diagnostics
+        .into_iter()
+        .map(|diagnostic| {
+            let path = if diagnostic.path.is_empty() {
+                "/"
+            } else {
+                &diagnostic.path
+            };
+            format!("{path}: {}", diagnostic.message)
+        })
+        .collect();
+    Ok(PreparedModelingDocument {
+        document,
+        diagnostics,
+    })
 }
 
 #[derive(serde::Deserialize)]
@@ -109,7 +135,10 @@ where
                         "duplicate project namespace: {namespace}"
                     )));
                 }
-                sections.insert(namespace, access.next_value::<Box<serde_json::value::RawValue>>()?);
+                sections.insert(
+                    namespace,
+                    access.next_value::<Box<serde_json::value::RawValue>>()?,
+                );
             }
             Ok(sections)
         }
@@ -117,11 +146,14 @@ where
     deserializer.deserialize_map(SectionsVisitor)
 }
 
-fn prepare_document(request: ModelingPrepareDocumentRequested) -> Result<PreparedModelingDocument, String> {
+fn prepare_document(
+    request: ModelingPrepareDocumentRequested,
+) -> Result<PreparedModelingDocument, String> {
     match request.format {
         ModelingDocumentFormat::StarUml => {
-            let response = bellatrix_mde::import_mdj_document(&request.bytes)
-                .map_err(|error| format!("Invalid StarUML MDJ document: {}", api_error_message(error)))?;
+            let response = bellatrix_mde::import_mdj_document(&request.bytes).map_err(|error| {
+                format!("Invalid StarUML MDJ document: {}", api_error_message(error))
+            })?;
             document_from_response(&response)
         }
         ModelingDocumentFormat::ModelJson | ModelingDocumentFormat::ModelProtobuf => {
@@ -143,7 +175,10 @@ fn prepare_document(request: ModelingPrepareDocumentRequested) -> Result<Prepare
             bellatrix_mde::validate_model_section(raw.id.as_str(), &raw.name, section.get())?;
             let document: ProjectDocument = serde_json::from_slice(&request.bytes)
                 .map_err(|error| format!("Invalid Bellatrix project document: {error}"))?;
-            Ok(PreparedModelingDocument { document, diagnostics: Vec::new() })
+            Ok(PreparedModelingDocument {
+                document,
+                diagnostics: Vec::new(),
+            })
         }
     }
 }
@@ -213,7 +248,11 @@ impl MdjExportReceipt {
 }
 
 fn ensure_mdj_sections(document: &ProjectDocument) -> Result<(), String> {
-    if document.sections().keys().any(|namespace| namespace != MODELING_NAMESPACE) {
+    if document
+        .sections()
+        .keys()
+        .any(|namespace| namespace != MODELING_NAMESPACE)
+    {
         return Err("MDJ interchange cannot represent other platform sections; save the complete native project instead".into());
     }
     Ok(())
@@ -233,9 +272,11 @@ async fn export_snapshot(
     let section = section_json(&document)?;
     let id = document.id().as_str().to_owned();
     let name = document.name().to_owned();
-    let bytes = tokio::task::spawn_blocking(move || bellatrix_mde::export_mdj_section(&id, &name, &section).map_err(api_error_message))
-        .await
-        .map_err(|error| error.to_string())??;
+    let bytes = tokio::task::spawn_blocking(move || {
+        bellatrix_mde::export_mdj_section(&id, &name, &section).map_err(api_error_message)
+    })
+    .await
+    .map_err(|error| error.to_string())??;
     let current = projects
         .snapshot(document.id())
         .map_err(|error| error.to_string())?;
@@ -253,7 +294,9 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
         .on::<ModelingPrepareDocument, _>(responder(
             move |_: Context, request: ModelingPrepareDocumentRequested| async move {
                 let result = tokio::task::spawn_blocking(move || prepare_document(request))
-                    .await.map_err(|error| error.to_string()).and_then(|result| result);
+                    .await
+                    .map_err(|error| error.to_string())
+                    .and_then(|result| result);
                 Ok::<_, Infallible>(Some(result))
             },
         ))

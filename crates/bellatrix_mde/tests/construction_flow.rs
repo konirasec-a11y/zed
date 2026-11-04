@@ -1,7 +1,6 @@
 use bellatrix_mde::{
-    InputPort, Operation, OperationDefinition, OperationGraph, OperationGraphError, OperationValue,
-    OperationValues, Plan, PortType, python_construction_script,
-    Graph, Project,
+    Graph, InputPort, Operation, OperationDefinition, OperationGraph, OperationGraphError,
+    OperationValue, OperationValues, Plan, PortType, Project, python_construction_script,
 };
 use std::{
     fs,

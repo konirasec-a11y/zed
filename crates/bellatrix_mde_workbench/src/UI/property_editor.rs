@@ -44,7 +44,11 @@ fn reference_label(value: &Value, choices: &[InspectorReferenceChoice]) -> Strin
     reference_label_with_kind(value, choices, "type")
 }
 
-fn reference_label_with_kind(value: &Value, choices: &[InspectorReferenceChoice], kind: &str) -> String {
+fn reference_label_with_kind(
+    value: &Value,
+    choices: &[InspectorReferenceChoice],
+    kind: &str,
+) -> String {
     if value.is_null() {
         return format!("No {kind}");
     }
@@ -71,7 +75,10 @@ fn reference_options(
 fn property_label(property: &InspectorProperty, choices: &[InspectorReferenceChoice]) -> String {
     if property.path == "properties.type" {
         reference_label(&property.value, choices)
-    } else if matches!(&property.editor, PropertyEditor::Reference | PropertyEditor::Stereotype) {
+    } else if matches!(
+        &property.editor,
+        PropertyEditor::Reference | PropertyEditor::Stereotype
+    ) {
         reference_label_with_kind(&property.value, choices, "reference")
     } else {
         property_text(property)
@@ -82,7 +89,10 @@ fn same_value(editor: &PropertyEditor, left: &str, right: &str) -> bool {
     if left == right {
         return true;
     }
-    if !matches!(editor, PropertyEditor::Number | PropertyEditor::Reference | PropertyEditor::Stereotype) {
+    if !matches!(
+        editor,
+        PropertyEditor::Number | PropertyEditor::Reference | PropertyEditor::Stereotype
+    ) {
         return false;
     }
     matches!((serde_json::from_str::<Value>(left), serde_json::from_str::<Value>(right)),
@@ -186,7 +196,11 @@ pub(crate) fn reconcile_inputs(
         let draft = drafts.entry(key.clone()).or_insert_with(|| {
             let input = matches!(
                 &property.editor,
-                PropertyEditor::Text | PropertyEditor::Multiline | PropertyEditor::Number | PropertyEditor::Reference | PropertyEditor::Stereotype
+                PropertyEditor::Text
+                    | PropertyEditor::Multiline
+                    | PropertyEditor::Number
+                    | PropertyEditor::Reference
+                    | PropertyEditor::Stereotype
             )
             .then(|| {
                 cx.new(|cx| {
@@ -215,7 +229,10 @@ pub(crate) fn reconcile_inputs(
                                     let admitted =
                                         property_admission_allowed(panel, &item, &key, cx);
                                     if let Some(draft) = panel.property_drafts.get_mut(&key) {
-                                        let text = draft.input.as_ref().map(|input| input.read(cx).text(cx))
+                                        let text = draft
+                                            .input
+                                            .as_ref()
+                                            .map(|input| input.read(cx).text(cx))
                                             .unwrap_or_else(|| draft.text(cx));
                                         // Editor notifications are deferred, so a transient suppression flag cannot distinguish projection from typing.
                                         if text == draft.last_observed {
@@ -343,7 +360,9 @@ pub(crate) fn flush_property_edits(
     item: &Entity<MdeWorkbenchItem>,
     cx: &mut Context<MdeRightPanel>,
 ) {
-    if property_command_pending(panel) || crate::workbench_ui::style_editor::style_command_pending(panel) {
+    if property_command_pending(panel)
+        || crate::workbench_ui::style_editor::style_command_pending(panel)
+    {
         return;
     }
     let project = item.read(cx).project_id().clone();
@@ -397,8 +416,7 @@ pub(crate) fn flush_property_edits(
         let Some(text) = draft.admitted_text.clone() else {
             continue;
         };
-        let Some(inspection) = snapshot.section.inspect_element(&key.element)
-        else {
+        let Some(inspection) = snapshot.section.inspect_element(&key.element) else {
             draft.state.error = Some("Element no longer exists".into());
             continue;
         };
@@ -422,13 +440,21 @@ pub(crate) fn flush_property_edits(
         draft.state.revision = snapshot.revision;
         let value = if let Some(value) = &draft.discrete {
             value.clone()
-        } else if matches!(&property.editor, PropertyEditor::Reference | PropertyEditor::Stereotype) {
+        } else if matches!(
+            &property.editor,
+            PropertyEditor::Reference | PropertyEditor::Stereotype
+        ) {
             match serde_json::from_str::<Value>(&text) {
                 Ok(value) => value,
                 Err(_) => {
-                    draft.state.error = Some(if property.editor == PropertyEditor::Stereotype {
-                        "Enter a JSON string, reference object, or null"
-                    } else { "Enter a JSON reference object or null" }.into());
+                    draft.state.error = Some(
+                        if property.editor == PropertyEditor::Stereotype {
+                            "Enter a JSON string, reference object, or null"
+                        } else {
+                            "Enter a JSON reference object or null"
+                        }
+                        .into(),
+                    );
                     continue;
                 }
             }
@@ -587,9 +613,8 @@ fn property_row(
                                 {
                                     return;
                                 }
-                                let Some(inspection) = snapshot
-                                    .section
-                                    .inspect_element(&reload_key.element)
+                                let Some(inspection) =
+                                    snapshot.section.inspect_element(&reload_key.element)
                                 else {
                                     return;
                                 };
@@ -683,32 +708,47 @@ fn property_row(
         PropertyEditor::Reference | PropertyEditor::Stereotype if property.editable => {
             let stereotype = property.editor == PropertyEditor::Stereotype;
             let text_value = property.value.as_str().unwrap_or_default().to_owned();
-            let reference_kind = if stereotype { "stereotype" } else if property.path == "properties.type" { "type" } else { "reference" };
+            let reference_kind = if stereotype {
+                "stereotype"
+            } else if property.path == "properties.type" {
+                "type"
+            } else {
+                "reference"
+            };
             let target = item.clone();
             let panel = cx.weak_entity();
             let choice_key = key.clone();
             let menu = ContextMenu::build(window, cx, move |menu, _, _| {
-                stereotype.then(|| ("Text".into(), Value::String(text_value.clone()))).into_iter()
-                    .chain(reference_options(reference_choices)).fold(menu, |menu, (label, value)| {
-                    let label = if value.is_null() { format!("No {reference_kind}") } else { label };
-                    let target = target.clone();
-                    let key = choice_key.clone();
-                    let panel = panel.clone();
-                    menu.entry(label, None, move |window, cx| {
-                        if let Err(error) = panel.update(cx, |panel, cx| {
-                            if let Some(draft) = panel.property_drafts.get_mut(&key) {
-                                let text = draft_value_text(&key.path, &value);
-                                draft.last_observed = text.clone();
-                                if let Some(input) = &draft.input {
-                                    input.update(cx, |input, cx| input.set_text(&text, window, cx));
+                stereotype
+                    .then(|| ("Text".into(), Value::String(text_value.clone())))
+                    .into_iter()
+                    .chain(reference_options(reference_choices))
+                    .fold(menu, |menu, (label, value)| {
+                        let label = if value.is_null() {
+                            format!("No {reference_kind}")
+                        } else {
+                            label
+                        };
+                        let target = target.clone();
+                        let key = choice_key.clone();
+                        let panel = panel.clone();
+                        menu.entry(label, None, move |window, cx| {
+                            if let Err(error) = panel.update(cx, |panel, cx| {
+                                if let Some(draft) = panel.property_drafts.get_mut(&key) {
+                                    let text = draft_value_text(&key.path, &value);
+                                    draft.last_observed = text.clone();
+                                    if let Some(input) = &draft.input {
+                                        input.update(cx, |input, cx| {
+                                            input.set_text(&text, window, cx)
+                                        });
+                                    }
                                 }
+                                queue_discrete_property(panel, &target, &key, value.clone(), cx)
+                            }) {
+                                eprintln!("MDE property reference update failed: {error}");
                             }
-                            queue_discrete_property(panel, &target, &key, value.clone(), cx)
-                        }) {
-                            eprintln!("MDE property reference update failed: {error}");
-                        }
+                        })
                     })
-                })
             });
             let value = drafts
                 .get(&key)
@@ -718,7 +758,8 @@ fn property_row(
                 format!("mde-inspector-reference-{path}"),
                 reference_label_with_kind(value, reference_choices, reference_kind),
                 menu,
-            ).full_width(true);
+            )
+            .full_width(true);
             div().id(format!("mde-inspector-reference-control-{path}"))
                 .flex().flex_col().gap_1().w_full()
                 .when(stereotype, |control| control.tooltip(Tooltip::text(
@@ -737,7 +778,10 @@ fn property_row(
     };
     if matches!(
         &property.editor,
-        PropertyEditor::Boolean | PropertyEditor::Choice(_) | PropertyEditor::Reference | PropertyEditor::Stereotype
+        PropertyEditor::Boolean
+            | PropertyEditor::Choice(_)
+            | PropertyEditor::Reference
+            | PropertyEditor::Stereotype
     ) {
         let key = DraftKey {
             project: project.as_str().into(),
@@ -779,44 +823,46 @@ fn property_row(
                             format!("mde-inspector-reload-{}", key.path),
                             "Reload model value",
                         )
-                        .on_click(cx.listener(move |panel, _, window, cx| {
-                            let Ok(snapshot) = reload_item.read(cx).source().snapshot() else {
-                                return;
-                            };
-                            if reload_item.read(cx).project_id().as_str() != key.project {
-                                return;
-                            }
-                            let Some(inspection) =
-                                snapshot.section.inspect_element(&key.element)
-                            else {
-                                return;
-                            };
-                            let Some(property) = inspection
-                                .properties
-                                .iter()
-                                .find(|property| property.path == key.path)
-                            else {
-                                return;
-                            };
-                            let Some(draft) = panel.property_drafts.get_mut(&key) else {
-                                return;
-                            };
-                            if draft.pending.is_some() {
-                                return;
-                            }
-                            let canonical = property_text(property);
-                            draft.state.reload(&canonical, snapshot.revision);
-                            draft.state.queued = false;
-                            draft.admitted_text = None;
-                            draft.discrete = None;
-                            draft.last_observed = canonical.clone();
-                            if let Some(input) = &draft.input {
-                                input.update(cx, |input, cx| {
-                                    input.set_text(&canonical, window, cx)
-                                });
-                            }
-                            cx.notify();
-                        })),
+                        .on_click(cx.listener(
+                            move |panel, _, window, cx| {
+                                let Ok(snapshot) = reload_item.read(cx).source().snapshot() else {
+                                    return;
+                                };
+                                if reload_item.read(cx).project_id().as_str() != key.project {
+                                    return;
+                                }
+                                let Some(inspection) =
+                                    snapshot.section.inspect_element(&key.element)
+                                else {
+                                    return;
+                                };
+                                let Some(property) = inspection
+                                    .properties
+                                    .iter()
+                                    .find(|property| property.path == key.path)
+                                else {
+                                    return;
+                                };
+                                let Some(draft) = panel.property_drafts.get_mut(&key) else {
+                                    return;
+                                };
+                                if draft.pending.is_some() {
+                                    return;
+                                }
+                                let canonical = property_text(property);
+                                draft.state.reload(&canonical, snapshot.revision);
+                                draft.state.queued = false;
+                                draft.admitted_text = None;
+                                draft.discrete = None;
+                                draft.last_observed = canonical.clone();
+                                if let Some(input) = &draft.input {
+                                    input.update(cx, |input, cx| {
+                                        input.set_text(&canonical, window, cx)
+                                    });
+                                }
+                                cx.notify();
+                            },
+                        )),
                     )
                 }),
         );
@@ -896,7 +942,10 @@ pub(crate) fn render_inspector(
             .border_color(palette.border)
             .child(
                 svg()
-                    .data(glyph(element_glyph(&inspector.presentation_kind, &inspector.type_label)))
+                    .data(glyph(element_glyph(
+                        &inspector.presentation_kind,
+                        &inspector.type_label,
+                    )))
                     .size(px(20.0))
                     .flex_none()
                     .text_color(palette.muted),
@@ -913,12 +962,9 @@ pub(crate) fn render_inspector(
                             .weight(gpui::FontWeight::SEMIBOLD),
                     )
                     .child(
-                        Label::new(format!(
-                            "{} · {selection_status}",
-                            inspector.type_label
-                        ))
-                        .size(LabelSize::XSmall)
-                        .color(Color::Muted),
+                        Label::new(format!("{} · {selection_status}", inspector.type_label))
+                            .size(LabelSize::XSmall)
+                            .color(Color::Muted),
                     ),
             )
             .into_any_element(),
@@ -968,7 +1014,9 @@ pub(crate) fn render_inspector(
                                     return;
                                 }
                                 if property_command_pending(panel)
-                                    || crate::workbench_ui::style_editor::style_command_pending(panel)
+                                    || crate::workbench_ui::style_editor::style_command_pending(
+                                        panel,
+                                    )
                                     || panel.property_drafts.iter().any(|(key, draft)| {
                                         key.project == project.as_str() && draft.state.queued
                                     })

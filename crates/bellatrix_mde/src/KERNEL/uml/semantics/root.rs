@@ -62,11 +62,13 @@ pub trait NamedElement<'a>: Element<'a> {
 pub trait Namespace<'a>: NamedElement<'a> {
     fn owned_members(self, model: Model<'a>) -> Result<Vec<NamedElementRef<'a>>, String> {
         Ok(super::classifiers::owned_members(
-            &super::references::ReferenceIndex::new(model), self.id(),
-        ).map_err(|error| error.to_string())?
-            .into_iter()
-            .filter_map(ElementRef::named)
-            .collect())
+            &super::references::ReferenceIndex::new(model),
+            self.id(),
+        )
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .filter_map(ElementRef::named)
+        .collect())
     }
 }
 
@@ -136,8 +138,10 @@ impl<'a> Namespace<'a> for NamespaceRef<'a> {}
 impl<'a> Relationship<'a> for RelationshipRef<'a> {
     fn related_elements(self, model: Model<'a>) -> Result<Vec<ElementRef<'a>>, String> {
         super::relationship_endpoints::related_elements(
-            &super::references::ReferenceIndex::new(model), self.id(),
-        ).map_err(|error| error.to_string())
+            &super::references::ReferenceIndex::new(model),
+            self.id(),
+        )
+        .map_err(|error| error.to_string())
     }
 }
 impl<'a> Relationship<'a> for DirectedRelationshipRef<'a> {
@@ -148,13 +152,17 @@ impl<'a> Relationship<'a> for DirectedRelationshipRef<'a> {
 impl<'a> DirectedRelationship<'a> for DirectedRelationshipRef<'a> {
     fn sources(self, model: Model<'a>) -> Result<Vec<ElementRef<'a>>, String> {
         super::relationship_endpoints::sources(
-            &super::references::ReferenceIndex::new(model), self.id(),
-        ).map_err(|error| error.to_string())
+            &super::references::ReferenceIndex::new(model),
+            self.id(),
+        )
+        .map_err(|error| error.to_string())
     }
     fn targets(self, model: Model<'a>) -> Result<Vec<ElementRef<'a>>, String> {
         super::relationship_endpoints::targets(
-            &super::references::ReferenceIndex::new(model), self.id(),
-        ).map_err(|error| error.to_string())
+            &super::references::ReferenceIndex::new(model),
+            self.id(),
+        )
+        .map_err(|error| error.to_string())
     }
 }
 impl<'a> CommentRef<'a> {
@@ -258,7 +266,8 @@ impl<'a> ElementRef<'a> {
             .is_some_and(|actual| super::metamodel::conforms_to(actual, metaclass))
     }
     pub fn relationship(self) -> Option<RelationshipRef<'a>> {
-        self.conforms_to("Relationship").then_some(RelationshipRef(self))
+        self.conforms_to("Relationship")
+            .then_some(RelationshipRef(self))
     }
     pub fn directed_relationship(self) -> Option<DirectedRelationshipRef<'a>> {
         self.conforms_to("DirectedRelationship")
@@ -317,11 +326,19 @@ impl<'a> NamedElementRef<'a> {
     }
     pub fn visibility(self) -> Option<VisibilityKind> {
         match self.0.properties().get("visibility") {
-            None => self.0.metaclass()
-                .and_then(|metaclass| super::schema::uml_property(metaclass, "visibility").ok().flatten())
+            None => self
+                .0
+                .metaclass()
+                .and_then(|metaclass| {
+                    super::schema::uml_property(metaclass, "visibility")
+                        .ok()
+                        .flatten()
+                })
                 .and_then(|property| super::schema::effective_default(property).ok().flatten())
                 .and_then(|default| match default {
-                    super::schema::DefaultValue::Enumeration { name, .. } => VisibilityKind::from_name(name),
+                    super::schema::DefaultValue::Enumeration { name, .. } => {
+                        VisibilityKind::from_name(name)
+                    }
                     _ => None,
                 }),
             value => value
@@ -384,7 +401,9 @@ impl<'a> Model<'a> {
         self.relationships.iter()
     }
     pub(crate) fn ownership_links(self) -> impl Iterator<Item = &'a Relation> {
-        self.relationships.iter().filter(|relation| relation.kind == "owns")
+        self.relationships
+            .iter()
+            .filter(|relation| relation.kind == "owns")
     }
     pub fn root(self) -> Result<Option<NamespaceRef<'a>>, String> {
         self.root_model
@@ -408,7 +427,11 @@ impl<'a> Model<'a> {
         if let ElementRef::Relationship(relation) = element
             && matches!(
                 relation.kind.as_str(),
-                "uml.generalization" | "uml.interface_realization" | "uml.template_binding" | "uml.element_import" | "uml.package_import"
+                "uml.generalization"
+                    | "uml.interface_realization"
+                    | "uml.template_binding"
+                    | "uml.element_import"
+                    | "uml.package_import"
             )
         {
             owners.insert(&relation.from);
@@ -443,10 +466,15 @@ impl<'a> Model<'a> {
         named: impl NamedElement<'a>,
     ) -> Result<Option<NamespaceRef<'a>>, String> {
         let element = named.as_element();
-        let Some(owner) = self.owner(element)? else { return Ok(None); };
-        let Some(namespace) = owner.namespace() else { return Ok(None); };
+        let Some(owner) = self.owner(element)? else {
+            return Ok(None);
+        };
+        let Some(namespace) = owner.namespace() else {
+            return Ok(None);
+        };
         Ok(super::classifiers::is_owned_member(owner, element)
-            .map_err(|error| error.to_string())?.then_some(namespace))
+            .map_err(|error| error.to_string())?
+            .then_some(namespace))
     }
     pub fn qualified_name(self, named: impl NamedElement<'a>) -> Result<Option<String>, String> {
         let references = super::references::ReferenceIndex::new(self);
@@ -538,7 +566,8 @@ impl<'a> Model<'a> {
                     error(
                         "UML_VISIBILITY_NEEDS_OWNERSHIP",
                         element.id(),
-                        "An owned NamedElement without a derived namespace cannot have visibility".into(),
+                        "An owned NamedElement without a derived namespace cannot have visibility"
+                            .into(),
                     );
                 }
                 if element.conforms_to("PackageableElement")
@@ -551,7 +580,9 @@ impl<'a> Model<'a> {
                         "A PackageableElement in a Namespace must have visibility".into(),
                     );
                 }
-                if namespace.flatten().is_some_and(|namespace| namespace.element().conforms_to("Package"))
+                if namespace
+                    .flatten()
+                    .is_some_and(|namespace| namespace.element().conforms_to("Package"))
                     && element.conforms_to("PackageableElement")
                     && !matches!(
                         named.visibility(),
@@ -584,7 +615,10 @@ impl<'a> Model<'a> {
                 message,
             })
         };
-        for element in self.elements().filter(|element| element.metaclass().is_some()) {
+        for element in self
+            .elements()
+            .filter(|element| element.metaclass().is_some())
+        {
             let owner = match self.owner(element) {
                 Ok(owner) => owner,
                 Err(message) => {
@@ -593,14 +627,21 @@ impl<'a> Model<'a> {
                 }
             };
             if let Some(owner) = owner {
-                match super::classifiers::contributes_to_owned_union(owner, element, "Element-ownedElement") {
+                match super::classifiers::contributes_to_owned_union(
+                    owner,
+                    element,
+                    "Element-ownedElement",
+                ) {
                     Ok(true) => {}
                     Ok(false) => error(
-                        "UML_ELEMENT_OWNERSHIP_ROLE", element.id(),
-                        "The canonical ownership role must contribute to Element::ownedElement".into(),
+                        "UML_ELEMENT_OWNERSHIP_ROLE",
+                        element.id(),
+                        "The canonical ownership role must contribute to Element::ownedElement"
+                            .into(),
                     ),
-                    Err(super::classifiers::QueryError::Invalid { message, .. }) =>
-                        error("UML_ELEMENT_OWNERSHIP_ROLE", element.id(), message),
+                    Err(super::classifiers::QueryError::Invalid { message, .. }) => {
+                        error("UML_ELEMENT_OWNERSHIP_ROLE", element.id(), message)
+                    }
                     Err(super::classifiers::QueryError::Unsupported { message, .. }) => {
                         unresolved_ownership.push(StructuralDiagnostic {
                             severity: StructuralSeverity::Warning,
@@ -643,7 +684,9 @@ impl<'a> Model<'a> {
             issues.extend(super::schema::validate_element(element));
         }
         let references = super::references::ReferenceIndex::new(self);
-        issues.extend(super::element_graph_queries::validate_qualified_names(&references));
+        issues.extend(super::element_graph_queries::validate_qualified_names(
+            &references,
+        ));
         issues.extend(super::namespace_imports::validate(&references));
         issues.extend(super::instances::validate(self, &references));
         issues.extend(super::operations::validate(&references));
@@ -669,7 +712,9 @@ impl<'a> Model<'a> {
 pub(crate) fn validate_changes(before: &Project, after: &Project) -> Result<(), String> {
     let existing = Model::from_project(before).validate();
     for issue in Model::from_project(after).validate() {
-        if issue.severity != StructuralSeverity::Error { continue; }
+        if issue.severity != StructuralSeverity::Error {
+            continue;
+        }
         if !existing.iter().any(|previous| {
             previous.code == issue.code
                 && previous.subject_id == issue.subject_id
@@ -704,7 +749,10 @@ fn ownership_property(owner: ElementRef<'_>, child: ElementRef<'_>) -> Option<&'
     // StateMachine::connection_points and State::entry_or_exit require these kinds.
     if child.conforms_to("Pseudostate")
         && (owner.conforms_to("State") || owner.conforms_to("StateMachine"))
-        && !child.properties().get("kind").and_then(Value::as_str)
+        && !child
+            .properties()
+            .get("kind")
+            .and_then(Value::as_str)
             .is_some_and(|kind| matches!(kind, "entryPoint" | "exitPoint"))
     {
         return None;
@@ -715,16 +763,24 @@ fn ownership_property(owner: ElementRef<'_>, child: ElementRef<'_>) -> Option<&'
     if child.conforms_to("InteractionOperand") && !owner.conforms_to("CombinedFragment") {
         return None;
     }
-    if child.conforms_to("Pseudostate") && child.properties().get("kind").and_then(Value::as_str)
-        .is_some_and(|kind| matches!(kind, "entryPoint" | "exitPoint"))
+    if child.conforms_to("Pseudostate")
+        && child
+            .properties()
+            .get("kind")
+            .and_then(Value::as_str)
+            .is_some_and(|kind| matches!(kind, "entryPoint" | "exitPoint"))
         && !(owner.conforms_to("State") || owner.conforms_to("StateMachine"))
     {
         return None;
     }
-    if roles.is_resolved && let Some(property) = roles.properties.first() {
+    if roles.is_resolved
+        && let Some(property) = roles.properties.first()
+    {
         return Some(property.name);
     }
-    if let Some(role) = super::value_specifications::bound_role(owner, child) { return Some(role); }
+    if let Some(role) = super::value_specifications::bound_role(owner, child) {
+        return Some(role);
+    }
     let has = |property| {
         owner
             .metaclass()
@@ -736,14 +792,26 @@ fn ownership_property(owner: ElementRef<'_>, child: ElementRef<'_>) -> Option<&'
     if owner.instance_specification().is_some() && child.slot().is_some() {
         return Some("slot");
     }
-    if child.conforms_to("Pseudostate") && child.properties().get("kind").and_then(Value::as_str)
-        .is_some_and(|kind| matches!(kind, "entryPoint" | "exitPoint")) {
-        return (owner.conforms_to("State") || owner.conforms_to("StateMachine")).then_some("connectionPoint");
+    if child.conforms_to("Pseudostate")
+        && child
+            .properties()
+            .get("kind")
+            .and_then(Value::as_str)
+            .is_some_and(|kind| matches!(kind, "entryPoint" | "exitPoint"))
+    {
+        return (owner.conforms_to("State") || owner.conforms_to("StateMachine"))
+            .then_some("connectionPoint");
     }
     if child.conforms_to("Pin") {
         return if owner.conforms_to("OpaqueAction") {
-            Some(if child.conforms_to("OutputPin") { "outputValue" } else { "inputValue" })
-        } else { None };
+            Some(if child.conforms_to("OutputPin") {
+                "outputValue"
+            } else {
+                "inputValue"
+            })
+        } else {
+            None
+        };
     }
     if child.conforms_to("InteractionOperand") {
         return owner.conforms_to("CombinedFragment").then_some("operand");
@@ -816,7 +884,11 @@ pub(crate) fn set_owner(
     if let ElementRef::Relationship(relation) = element
         && matches!(
             relation.kind.as_str(),
-            "uml.generalization" | "uml.interface_realization" | "uml.template_binding" | "uml.element_import" | "uml.package_import"
+            "uml.generalization"
+                | "uml.interface_realization"
+                | "uml.template_binding"
+                | "uml.element_import"
+                | "uml.package_import"
         )
     {
         return if relation.from == owner_id {
@@ -936,7 +1008,11 @@ pub(crate) fn reparent(
     if let ElementRef::Relationship(relation) = element
         && matches!(
             relation.kind.as_str(),
-            "uml.generalization" | "uml.interface_realization" | "uml.template_binding" | "uml.element_import" | "uml.package_import"
+            "uml.generalization"
+                | "uml.interface_realization"
+                | "uml.template_binding"
+                | "uml.element_import"
+                | "uml.package_import"
         )
     {
         return Err(

@@ -35,12 +35,7 @@ fn apply(model: &Value, command: &Command, revision: u64) -> std::result::Result
     decode(&bytes, "json")
 }
 
-fn document(
-    owner_kind: &str,
-    child_kind: &str,
-    role: Option<&str>,
-    rooted: bool,
-) -> Result<Value> {
+fn document(owner_kind: &str, child_kind: &str, role: Option<&str>, rooted: bool) -> Result<Value> {
     let mut value = json!({
         "id":"project", "name":"Components", "root_model":"root",
         "elements":[
@@ -124,12 +119,14 @@ fn given_component_then_only_nested_classifier_role_is_forbidden_in_rooted_and_r
 fn when_packaging_component_is_nested_in_class_then_command_rolls_back_and_invalid_draft_can_be_repaired()
 -> Result {
     let mut valid = document("uml.package", "uml.package", Some("packagedElement"), true)?;
-    valid["elements"].as_array_mut().ok_or("elements")?.push(
-        json!({"id":"class", "kind":"uml.class", "name":"Class"}),
-    );
-    valid["relations"].as_array_mut().ok_or("relations")?.push(
-        json!({"id":"root-class", "kind":"owns", "from":"root", "to":"class"}),
-    );
+    valid["elements"]
+        .as_array_mut()
+        .ok_or("elements")?
+        .push(json!({"id":"class", "kind":"uml.class", "name":"Class"}));
+    valid["relations"]
+        .as_array_mut()
+        .ok_or("relations")?
+        .push(json!({"id":"root-class", "kind":"owns", "from":"root", "to":"class"}));
     let valid = decode(&serde_json::to_vec(&valid)?, "json")?;
     let before = encode(&valid, "json")?;
     let error = apply(

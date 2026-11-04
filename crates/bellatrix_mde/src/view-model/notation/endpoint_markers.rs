@@ -142,7 +142,9 @@ pub fn resolve_relationship_view(
     section: &ModelingSection,
     view: &View,
 ) -> Option<ResolvedRelationshipView> {
-    if view.presentation.relationship_notation == Some(crate::RelationshipNotation::EntityRelationship) {
+    if view.presentation.relationship_notation
+        == Some(crate::RelationshipNotation::EntityRelationship)
+    {
         return Some(entity_relationship::resolve(section, view));
     }
     let subject = view.subject.as_deref()?;

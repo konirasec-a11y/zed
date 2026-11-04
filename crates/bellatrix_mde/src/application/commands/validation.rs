@@ -79,7 +79,8 @@ mod tests {
     }
 
     fn create(from: &str, to: &str) -> Command {
-        Command::CreateRelation { owner_id: None,
+        Command::CreateRelation {
+            owner_id: None,
             diagram_id: "diagram".into(),
             kind: ModelingRelationKind::Generalization,
             from: from.into(),
@@ -251,7 +252,8 @@ mod tests {
             ),
         ] {
             let model = project([source, target, "uml.class", "uml.class"])?;
-            let command = Command::CreateRelation { owner_id: None,
+            let command = Command::CreateRelation {
+                owner_id: None,
                 diagram_id: "diagram".into(),
                 kind,
                 from: "a".into(),
@@ -269,7 +271,8 @@ mod tests {
     #[test]
     fn new_relationship_warnings_do_not_become_errors() -> serde_json::Result<()> {
         let model = project(["uml.template", "uml.interface", "uml.class", "uml.class"])?;
-        let command = Command::CreateRelation { owner_id: None,
+        let command = Command::CreateRelation {
+            owner_id: None,
             diagram_id: "diagram".into(),
             kind: ModelingRelationKind::InterfaceRealization,
             from: "a".into(),
@@ -289,7 +292,8 @@ mod tests {
     #[test]
     fn interface_realization_has_no_visibility_without_namespace() -> serde_json::Result<()> {
         let model = project(["uml.class", "uml.interface", "uml.class", "uml.class"])?;
-        let command = Command::CreateRelation { owner_id: None,
+        let command = Command::CreateRelation {
+            owner_id: None,
             diagram_id: "diagram".into(),
             kind: ModelingRelationKind::InterfaceRealization,
             from: "a".into(),
@@ -298,15 +302,27 @@ mod tests {
         let result = apply(&model, &command, 0);
         assert!(result.is_ok(), "{result:?}");
         let mut updated = result.unwrap();
-        let relation = updated.relations.iter_mut()
-            .find(|relation| relation.kind == "uml.interface_realization").unwrap();
-        assert_eq!(relation.properties.get("visibility"), Some(&serde_json::Value::Null));
+        let relation = updated
+            .relations
+            .iter_mut()
+            .find(|relation| relation.kind == "uml.interface_realization")
+            .unwrap();
+        assert_eq!(
+            relation.properties.get("visibility"),
+            Some(&serde_json::Value::Null)
+        );
         let relation_id = relation.id.clone();
-        relation.properties.insert("visibility".into(), serde_json::json!("public"));
-        assert!(crate::uml::root::Model::from_project(&updated).validate().iter().any(|issue|
-            issue.code == "UML_VISIBILITY_NEEDS_OWNERSHIP"
-                && issue.subject_id == relation_id
-                && issue.severity == StructuralSeverity::Error));
+        relation
+            .properties
+            .insert("visibility".into(), serde_json::json!("public"));
+        assert!(
+            crate::uml::root::Model::from_project(&updated)
+                .validate()
+                .iter()
+                .any(|issue| issue.code == "UML_VISIBILITY_NEEDS_OWNERSHIP"
+                    && issue.subject_id == relation_id
+                    && issue.severity == StructuralSeverity::Error)
+        );
         Ok(())
     }
 
@@ -322,7 +338,8 @@ mod tests {
             properties: Default::default(),
         });
         for command in [
-            Command::CreateRelation { owner_id: None,
+            Command::CreateRelation {
+                owner_id: None,
                 diagram_id: "diagram".into(),
                 kind: ModelingRelationKind::InterfaceRealization,
                 from: "c".into(),

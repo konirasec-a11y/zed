@@ -9,10 +9,11 @@ use std::sync::{
 use std::{future::Future, pin::Pin};
 use tokio::sync::{mpsc, watch};
 
-type SnapshotValidationFuture = Pin<Box<dyn Future<
-    Output = Result<bellatrix_mde_cordis::DiagramValidationResult, String>,
-> + Send>>;
-type SnapshotValidator = Arc<dyn Fn(Arc<ProjectDocument>, String) -> SnapshotValidationFuture + Send + Sync>;
+type SnapshotValidationFuture = Pin<
+    Box<dyn Future<Output = Result<bellatrix_mde_cordis::DiagramValidationResult, String>> + Send>,
+>;
+type SnapshotValidator =
+    Arc<dyn Fn(Arc<ProjectDocument>, String) -> SnapshotValidationFuture + Send + Sync>;
 
 #[derive(Clone)]
 pub struct MdeUiSource {
@@ -99,7 +100,10 @@ impl MdeUiSource {
 
     pub fn with_read_only_validation(
         mut self,
-        validate: impl Fn(Arc<ProjectDocument>, String) -> SnapshotValidationFuture + Send + Sync + 'static,
+        validate: impl Fn(Arc<ProjectDocument>, String) -> SnapshotValidationFuture
+        + Send
+        + Sync
+        + 'static,
     ) -> Self {
         self.read_only_validator = Some(Arc::new(validate));
         self
@@ -110,12 +114,16 @@ impl MdeUiSource {
         snapshot: &MdeSnapshot,
         diagram_id: String,
     ) -> Result<SnapshotValidationFuture, String> {
-        let document = self.read_only_document.as_ref()
+        let document = self
+            .read_only_document
+            .as_ref()
             .ok_or("Snapshot validation is unavailable for this source")?;
         if !snapshot.matches_document(document) || !self.snapshot_is_current() {
             return Err("The preview snapshot is no longer current".into());
         }
-        let validate = self.read_only_validator.as_ref()
+        let validate = self
+            .read_only_validator
+            .as_ref()
             .ok_or("Snapshot validation service is unavailable")?;
         Ok(validate(Arc::clone(document), diagram_id))
     }
@@ -211,7 +219,9 @@ impl MdeUiSource {
         let document = if let Some(session) = &self.mdj_session {
             session.snapshot()
         } else {
-            self.projects.snapshot(&self.project_id).map_err(|error| error.to_string())
+            self.projects
+                .snapshot(&self.project_id)
+                .map_err(|error| error.to_string())
         };
         let document = match document {
             Ok(document) => document,

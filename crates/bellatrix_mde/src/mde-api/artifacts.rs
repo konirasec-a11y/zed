@@ -1,5 +1,5 @@
-use crate::api_contract::{API_VERSION, check_version, error_response, invalid_request};
 use crate::Plan;
+use crate::api_contract::{API_VERSION, check_version, error_response, invalid_request};
 use serde::Deserialize;
 use serde_json::json;
 use std::path::Path;
@@ -49,7 +49,11 @@ fn decode_plan(input_json: &str) -> Result<Plan, String> {
             .map_err(|error| error_response("INVALID_ARTIFACT_PLAN", error.to_string()))?;
     }
     for diagnostic in manifest.diagnostics {
-        plan.warn(&diagnostic.code, diagnostic.message, diagnostic.element.as_deref());
+        plan.warn(
+            &diagnostic.code,
+            diagnostic.message,
+            diagnostic.element.as_deref(),
+        );
     }
     Ok(plan)
 }
@@ -65,12 +69,17 @@ fn decode_plan(input_json: &str) -> Result<Plan, String> {
 /// `INVALID_REQUEST`, `UNSUPPORTED_API_VERSION` or `INVALID_ARTIFACT_PLAN`.
 pub fn prepare_artifact_publication(input_json: &str) -> Result<String, String> {
     let plan = decode_plan(input_json)?;
-    let artifacts = plan.artifacts().map(|artifact| {
-        let path = artifact.path.to_str()
-            .ok_or_else(|| error_response("INVALID_ARTIFACT_PLAN", "artifact path is not UTF-8"))?;
-        Ok(json!({"path": path, "contents": artifact.contents, "origin": artifact.origin}))
-    }).collect::<Result<Vec<_>, String>>()?;
-    let mut report = plan.artifacts()
+    let artifacts = plan
+        .artifacts()
+        .map(|artifact| {
+            let path = artifact.path.to_str().ok_or_else(|| {
+                error_response("INVALID_ARTIFACT_PLAN", "artifact path is not UTF-8")
+            })?;
+            Ok(json!({"path": path, "contents": artifact.contents, "origin": artifact.origin}))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    let mut report = plan
+        .artifacts()
         .map(|artifact| format!("{} [{}]", artifact.path.display(), artifact.origin))
         .collect::<Vec<_>>();
     for diagnostic in &plan.diagnostics {

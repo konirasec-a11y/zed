@@ -1,8 +1,8 @@
 //! Authored timing samples are View presentation, not evaluated UML occurrences.
 use crate::workbench_ui::{MdeWorkbenchItem, inspector_drafts::DraftState, panels::MdeRightPanel};
-use bellatrix_mde_cordis::{TimingMode, TimingPoint, TimingPresentation};
 use bellatrix_mde_cordis::projection::View;
 use bellatrix_mde_cordis::{MdeUiCommand, ModelingSetViewTimingRequested};
+use bellatrix_mde_cordis::{TimingMode, TimingPoint, TimingPresentation};
 use gpui::{
     AnyElement, Context, Entity, EntityId, Focusable, IntoElement, Subscription, Window, div,
     prelude::*, px,
@@ -336,7 +336,10 @@ fn flush_timing_edits(
     if !snapshot.section.diagrams.iter().any(|diagram| {
         diagram.id == key.1 && super::selection::supports_view_editing(diagram, &key.2)
     }) {
-        let error = format!("Timing View {} is unavailable or inspection-only; admitted edits are preserved", key.2);
+        let error = format!(
+            "Timing View {} is unavailable or inspection-only; admitted edits are preserved",
+            key.2
+        );
         draft.state.error = Some(error.clone());
         item.update(cx, |item, cx| {
             item.feedback = error;

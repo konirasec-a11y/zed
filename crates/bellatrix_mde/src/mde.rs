@@ -4,12 +4,12 @@ pub(crate) const MODELING_NAMESPACE: &str = "bellatrix.mde";
 
 pub(crate) mod contracts;
 pub(crate) use contracts::*;
+#[path = "persistence/io.rs"]
+mod io;
 #[path = "persistence/mdj.rs"]
 mod mdj;
 #[path = "persistence/mdj_conversion.rs"]
 mod mdj_conversion;
-#[path = "persistence/io.rs"]
-mod io;
 #[path = "persistence/wire.rs"]
 pub(crate) mod wire;
 pub(crate) use io::{Format, ModelIoError, decode, encode};
@@ -18,56 +18,59 @@ pub(crate) use io::{Format, ModelIoError, decode, encode};
 mod command_executor;
 #[path = "application/commands.rs"]
 pub(crate) mod commands;
-#[path = "application/diagram/operations.rs"]
-mod diagram_operations;
-#[path = "view-model/diagram/diagram_operations.rs"]
-mod diagram_operation_policy;
 #[path = "KERNEL/compiler/emission/construction_script.rs"]
 mod construction_script;
+#[path = "view-model/diagram/diagram_operations.rs"]
+mod diagram_operation_policy;
+#[path = "application/diagram/operations.rs"]
+mod diagram_operations;
 #[path = "observability/execution_trace.rs"]
 mod execution_trace;
-pub(crate) use execution_trace::{ExecutionEvent, ExecutionTrace, TraceOutcome, TracePhase, execution_trace_jsonl, validate_structural_diagram_traced, validate_structural_model_traced};
+pub(crate) use execution_trace::{
+    ExecutionEvent, ExecutionTrace, TraceOutcome, TracePhase, execution_trace_jsonl,
+    validate_structural_diagram_traced, validate_structural_model_traced,
+};
 #[path = "KERNEL/compiler/analysis/generation_graph.rs"]
 mod generation;
-#[path = "KERNEL/compiler/projection/rust_emission.rs"]
-mod kernel_rust_emission;
 #[path = "KERNEL/graph/graph.rs"]
 mod graph;
 #[path = "view-model/hierarchy/hierarchy.rs"]
 mod hierarchy;
+#[path = "KERNEL/compiler/projection/rust_emission.rs"]
+mod kernel_rust_emission;
 #[path = "view-model/hierarchy/visual_consistency.rs"]
 mod visual_consistency;
 pub(crate) use visual_consistency::{VisualComponent, visual_components};
+#[path = "KERNEL/I_O/generated_files.rs"]
+mod generated_files;
 #[path = "KERNEL/graph/index.rs"]
 mod index;
 #[path = "view-model/inspector/inspector.rs"]
 mod inspector;
+#[path = "view-model/notation/instance_presentation.rs"]
+mod instance_presentation;
+#[path = "view-model/notation/interaction_presentation.rs"]
+mod interaction_presentation;
 #[path = "KERNEL/compiler/operations/operation_graph.rs"]
 mod operation_graph;
-#[path = "KERNEL/I_O/generated_files.rs"]
-mod generated_files;
 #[path = "KERNEL/compiler/artifacts/path.rs"]
 mod path;
 #[path = "KERNEL/compiler/artifacts/plan.rs"]
 mod plan;
 #[path = "view-model/notation/presentation.rs"]
 mod presentation;
-#[path = "view-model/notation/instance_presentation.rs"]
-mod instance_presentation;
-#[path = "view-model/notation/interaction_presentation.rs"]
-mod interaction_presentation;
+pub(crate) use instance_presentation::{collect_instance_slot_labels, format_instance_heading};
 pub(crate) use interaction_presentation::format_operand_guard;
-pub(crate) use instance_presentation::{format_instance_heading, collect_instance_slot_labels};
+#[path = "view-model/notation/endpoint_markers.rs"]
+mod endpoint_markers;
 #[path = "KERNEL/I_O/publish.rs"]
 mod publish;
 #[path = "view-model/authoring/quick_edit.rs"]
 mod quick_edit;
-#[path = "view-model/diagram/relationships.rs"]
-mod relationships;
 #[path = "view-model/authoring/relationship_tools.rs"]
 mod relationship_tools;
-#[path = "view-model/notation/endpoint_markers.rs"]
-mod endpoint_markers;
+#[path = "view-model/diagram/relationships.rs"]
+mod relationships;
 pub(crate) use endpoint_markers::{ResolvedRelationshipView, resolve_relationship_view};
 #[path = "view-model/notation/relationship_notation.rs"]
 mod relationship_notation;
@@ -88,9 +91,7 @@ mod uml_geometry;
 mod uml_notation;
 #[path = "KERNEL/uml/capabilities.rs"]
 mod uml_types;
-pub(crate) use templates::{
-    template_parametered_element, template_parameters,
-};
+pub(crate) use templates::{template_parametered_element, template_parameters};
 
 pub(crate) use construction_script::{ConstructionScriptError, python_construction_script};
 pub(crate) use generation::{
@@ -104,7 +105,10 @@ pub(crate) use inspector::{
     ElementInspector, InspectorMember, InspectorProperty, InspectorReferenceChoice, PropertyEditor,
     inspect_element,
 };
-pub(crate) use operation_graph::{InputPort, Operation, OperationDefinition, OperationGraph, OperationGraphError, OperationImplementation, OperationValue, OperationValues, PortType};
+pub(crate) use operation_graph::{
+    InputPort, Operation, OperationDefinition, OperationGraph, OperationGraphError,
+    OperationImplementation, OperationValue, OperationValues, PortType,
+};
 pub(crate) use path::{PathError, physical_path, validate_segment};
 pub(crate) use plan::{Artifact, Diagnostic, Plan, PlanError};
 pub(crate) use presentation::{
@@ -135,7 +139,10 @@ pub(crate) use uml_geometry::{
 };
 pub(crate) use uml_types::{UmlCapability, UmlQuickCreate, UmlType};
 
-pub(crate) use uml_notation::{StereotypePresentation, stereotype_presentation, UmlHeader, UmlNotation, resolve_element_notation, resolve_pseudostate_notation, uml_header, uml_notation};
+pub(crate) use uml_notation::{
+    StereotypePresentation, UmlHeader, UmlNotation, resolve_element_notation,
+    resolve_pseudostate_notation, stereotype_presentation, uml_header, uml_notation,
+};
 
 #[path = "view-model/diagram/visual_draft_routing.rs"]
 mod visual_draft_routing;
@@ -149,7 +156,9 @@ mod template_presentation;
 
 #[path = "application/edits/property_edit.rs"]
 mod property_edit;
-pub(crate) use template_presentation::{template_parameter_label, template_parameter_label_with_references};
+pub(crate) use template_presentation::{
+    template_parameter_label, template_parameter_label_with_references,
+};
 
 #[path = "application/edits/hierarchy_placement.rs"]
 mod hierarchy_placement;
@@ -176,11 +185,14 @@ pub use kernel_api_generation::analyze_generation_dependencies;
 
 #[path = "mde-api/document.rs"]
 mod mde_api_document;
-pub use mde_api_document::{convert_model_document, decode_model_document, encode_model_document, prepare_model_document, validate_model_section, encode_model_section};
+pub use mde_api_document::{
+    convert_model_document, decode_model_document, encode_model_document, encode_model_section,
+    prepare_model_document, validate_model_section,
+};
 
 #[path = "mde-api/interchange.rs"]
 mod mde_api_interchange;
-pub use mde_api_interchange::{export_mdj_document, import_mdj_document, export_mdj_section};
+pub use mde_api_interchange::{export_mdj_document, export_mdj_section, import_mdj_document};
 
 #[path = "mde-api/presentation.rs"]
 mod mde_api_presentation;
@@ -200,21 +212,21 @@ pub use mde_api_headless::report_model_document;
 
 #[path = "mde-api/commands.rs"]
 mod mde_api_commands;
-pub use mde_api_commands::{reparent_uml_element, apply_model_command};
+pub use mde_api_commands::{apply_model_command, reparent_uml_element};
 
 #[path = "mde-api/projection.rs"]
 mod mde_api_projection;
 pub use mde_api_projection::project_model_section;
-#[path = "mde-api/projection_inspector.rs"]
-mod mde_api_projection_inspector;
+#[path = "mde-api/command_conversion.rs"]
+mod mde_api_command_conversion;
 #[path = "mde-api/projection_explorer.rs"]
 mod mde_api_projection_explorer;
+#[path = "mde-api/projection_inspector.rs"]
+mod mde_api_projection_inspector;
 #[path = "mde-api/projection_notation.rs"]
 mod mde_api_projection_notation;
 #[path = "mde-api/projection_tools.rs"]
 mod mde_api_projection_tools;
-#[path = "mde-api/command_conversion.rs"]
-mod mde_api_command_conversion;
 
 #[path = "mde-api/observability.rs"]
 mod mde_api_observability;

@@ -1,6 +1,9 @@
 //! One relationship contract for model operations and diagram projections.
 //! GPUI paints and hit-tests; it does not define relationship semantics.
-pub use crate::relationship_notation::{RelationshipMarker, RelationshipStyle, RelationshipEndpointLabels, RelationshipPresentation, relationship_style_for_notation, relationship_presentation};
+pub use crate::relationship_notation::{
+    RelationshipEndpointLabels, RelationshipMarker, RelationshipPresentation, RelationshipStyle,
+    relationship_presentation, relationship_style_for_notation,
+};
 use crate::{Geometry, ModelingSection, PathSegment, Point, Relation, RelationshipRouting, View};
 use crate::{UmlType, classifier_contents};
 
@@ -55,12 +58,19 @@ pub(crate) fn resolve_view_endpoints(
     from: &str,
     to: &str,
 ) -> Result<crate::ViewEndpoints, String> {
-    let diagram = section.diagrams.iter().find(|diagram| diagram.id == diagram_id)
+    let diagram = section
+        .diagrams
+        .iter()
+        .find(|diagram| diagram.id == diagram_id)
         .ok_or("diagram not found")?;
-    let view_id = |subject: &str| diagram.views.iter()
-        .find(|view| view.subject.as_deref() == Some(subject))
-        .map(|view| view.id.clone())
-        .ok_or_else(|| format!("endpoint {subject} has no View in this diagram"));
+    let view_id = |subject: &str| {
+        diagram
+            .views
+            .iter()
+            .find(|view| view.subject.as_deref() == Some(subject))
+            .map(|view| view.id.clone())
+            .ok_or_else(|| format!("endpoint {subject} has no View in this diagram"))
+    };
     Ok(crate::ViewEndpoints {
         source_view_id: Some(view_id(from)?),
         target_view_id: Some(view_id(to)?),
@@ -93,14 +103,22 @@ fn route_with_lane(
     let endpoint = |subject: &str, view_id: Option<&str>| -> Result<Endpoint, String> {
         let view = if endpoints.is_some() {
             let view_id = view_id.ok_or("relationship View has an unattached endpoint")?;
-            diagram.views.iter().find(|view| view.id == view_id)
+            diagram
+                .views
+                .iter()
+                .find(|view| view.id == view_id)
                 .ok_or_else(|| format!("endpoint View {view_id} is missing from this diagram"))?
         } else {
-            diagram.views.iter().find(|view| view.subject.as_deref() == Some(subject))
+            diagram
+                .views
+                .iter()
+                .find(|view| view.subject.as_deref() == Some(subject))
                 .ok_or_else(|| format!("endpoint {subject} has no View in this diagram"))?
         };
         if view.subject.as_deref() != Some(subject) {
-            return Err("relationship endpoint View no longer represents its semantic endpoint".into());
+            return Err(
+                "relationship endpoint View no longer represents its semantic endpoint".into(),
+            );
         }
         let (left, top, width, height) = match &view.geometry {
             Geometry::Rect {
@@ -311,11 +329,23 @@ fn projected_relationship_view_path(
     match view.style.routing {
         Some(RelationshipRouting::Manual) => Some(view.geometry.clone()),
         Some(routing @ (RelationshipRouting::Automatic | RelationshipRouting::Straight)) => {
-            route_for_routing(section, diagram_id, relation, view.endpoints.as_ref(), routing).ok()
+            route_for_routing(
+                section,
+                diagram_id,
+                relation,
+                view.endpoints.as_ref(),
+                routing,
+            )
+            .ok()
         }
-        Some(RelationshipRouting::Curve) | None => {
-            reanchor_path(section, diagram_id, relation, view.endpoints.as_ref(), &view.geometry).ok()
-        }
+        Some(RelationshipRouting::Curve) | None => reanchor_path(
+            section,
+            diagram_id,
+            relation,
+            view.endpoints.as_ref(),
+            &view.geometry,
+        )
+        .ok(),
     }
 }
 
@@ -327,12 +357,23 @@ pub(crate) fn route_for_routing(
     routing: RelationshipRouting,
 ) -> Result<Geometry, String> {
     let lane = match routing {
-        RelationshipRouting::Manual => return Err("Manual routing preserves the authored path; edit its points directly".into()),
+        RelationshipRouting::Manual => {
+            return Err(
+                "Manual routing preserves the authored path; edit its points directly".into(),
+            );
+        }
         RelationshipRouting::Straight => 0.0,
         RelationshipRouting::Automatic => lane_for_relation(section, diagram_id, relation),
         RelationshipRouting::Curve => 48.0,
     };
-    let mut geometry = route_with_lane(section, diagram_id, &relation.from, &relation.to, endpoints, lane)?;
+    let mut geometry = route_with_lane(
+        section,
+        diagram_id,
+        &relation.from,
+        &relation.to,
+        endpoints,
+        lane,
+    )?;
     if routing == RelationshipRouting::Curve
         && let Geometry::Path { start, segments } = &mut geometry
         && let [PathSegment::Line { to }] = segments.as_slice()
@@ -366,7 +407,14 @@ fn reanchor_path(
     if segments.is_empty() {
         return Err("relationship path has no segments".into());
     }
-    let new_route = route_with_lane(section, diagram_id, &relation.from, &relation.to, endpoints, 0.0)?;
+    let new_route = route_with_lane(
+        section,
+        diagram_id,
+        &relation.from,
+        &relation.to,
+        endpoints,
+        0.0,
+    )?;
     let Geometry::Path {
         start: fresh_start,
         segments: fresh_segments,
@@ -447,21 +495,43 @@ fn reroute_matching_relationships(
     else {
         return;
     };
-    let attachments: Vec<_> = diagram.views.iter().filter_map(|view| {
-        if view.endpoints.is_some() { return None; }
-        let relation = section.relations.iter().find(|relation| Some(relation.id.as_str()) == view.subject.as_deref())?;
-        if !matches(relation) || !matches!(view.geometry, Geometry::Path { .. }) { return None; }
-        let endpoints = resolve_view_endpoints(section, diagram_id, &relation.from, &relation.to).ok()?;
-        Some((view.id.clone(), endpoints))
-    }).collect();
-    if let Some(diagram) = section.diagrams.iter_mut().find(|diagram| diagram.id == diagram_id) {
+    let attachments: Vec<_> = diagram
+        .views
+        .iter()
+        .filter_map(|view| {
+            if view.endpoints.is_some() {
+                return None;
+            }
+            let relation = section
+                .relations
+                .iter()
+                .find(|relation| Some(relation.id.as_str()) == view.subject.as_deref())?;
+            if !matches(relation) || !matches!(view.geometry, Geometry::Path { .. }) {
+                return None;
+            }
+            let endpoints =
+                resolve_view_endpoints(section, diagram_id, &relation.from, &relation.to).ok()?;
+            Some((view.id.clone(), endpoints))
+        })
+        .collect();
+    if let Some(diagram) = section
+        .diagrams
+        .iter_mut()
+        .find(|diagram| diagram.id == diagram_id)
+    {
         for (view_id, endpoints) in attachments {
             if let Some(view) = diagram.views.iter_mut().find(|view| view.id == view_id) {
                 view.endpoints = Some(endpoints);
             }
         }
     }
-    let Some(diagram) = section.diagrams.iter().find(|diagram| diagram.id == diagram_id) else { return };
+    let Some(diagram) = section
+        .diagrams
+        .iter()
+        .find(|diagram| diagram.id == diagram_id)
+    else {
+        return;
+    };
     let routes: std::collections::BTreeMap<_, _> = diagram
         .views
         .iter()

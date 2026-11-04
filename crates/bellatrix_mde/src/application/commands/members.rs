@@ -11,7 +11,10 @@ pub enum ModelingMemberKind {
     Reception,
 }
 
-pub(super) fn grow_classifier_views(section: &mut ModelingSection, owner_id: &str) -> Result<(), String> {
+pub(super) fn grow_classifier_views(
+    section: &mut ModelingSection,
+    owner_id: &str,
+) -> Result<(), String> {
     let Some(kind) = section
         .elements
         .iter()
@@ -33,9 +36,11 @@ pub(super) fn grow_classifier_views(section: &mut ModelingSection, owner_id: &st
             view.subject.as_deref() == Some(owner_id)
                 && matches!(view.geometry, Geometry::Rect { height, .. } if height < minimum)
         });
-        if needs_growth && diagram.all_views().any(|view| {
-            !view.children.is_empty() || matches!(view.geometry, Geometry::Layout { .. })
-        }) {
+        if needs_growth
+            && diagram.all_views().any(|view| {
+                !view.children.is_empty() || matches!(view.geometry, Geometry::Layout { .. })
+            })
+        {
             return Err(format!(
                 "adding this member requires resizing classifier {} in diagram {}, which needs hierarchy-aware layout; the command was not applied",
                 owner_id, diagram.id

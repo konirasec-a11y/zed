@@ -52,37 +52,48 @@ pub fn owned_ends<'a>(
     let association = references.element(association_id)?;
     let members = member_ends(references, association_id)?;
     let children = references.explicit_owned_elements(association_id)?;
-    let explicit = association.properties().get("ownedEnd")
+    let explicit = association
+        .properties()
+        .get("ownedEnd")
         .map(|value| -> Result<Vec<ElementRef<'a>>, String> {
             let descriptor = schema::uml_property(
-                association.metaclass().ok_or("Association metaclass is missing")?,
+                association
+                    .metaclass()
+                    .ok_or("Association metaclass is missing")?,
                 "ownedEnd",
             )
             .map_err(|error| error.to_string())?
             .ok_or("Association::ownedEnd contract is missing")?;
             let explicit = if matches!(descriptor.upper, "0" | "1") {
-                references.validate(descriptor, value)?.into_iter().collect()
+                references
+                    .validate(descriptor, value)?
+                    .into_iter()
+                    .collect()
             } else {
                 references.validate_many(descriptor, value)?
             };
-            let expected = children.iter()
+            let expected = children
+                .iter()
                 .filter(|child| members.iter().any(|member| member.id == child.id()))
                 .map(|child| child.id())
                 .collect::<HashSet<_>>();
             if explicit.iter().map(|end| end.id()).collect::<HashSet<_>>() != expected {
-                return Err("Association::ownedEnd must match its canonically owned member ends".into());
+                return Err(
+                    "Association::ownedEnd must match its canonically owned member ends".into(),
+                );
             }
             Ok(explicit)
         })
         .transpose()?;
     let mut owned = Vec::new();
-    for child in children.into_iter().filter(|child| child.conforms_to("Property")) {
+    for child in children
+        .into_iter()
+        .filter(|child| child.conforms_to("Property"))
+    {
         let is_end = members.iter().any(|member| member.id == child.id());
-        let is_owned_end = classifiers::contributes_to_owned_union(
-            association,
-            child,
-            "Association-ownedEnd",
-        ).map_err(|error| error.to_string())?;
+        let is_owned_end =
+            classifiers::contributes_to_owned_union(association, child, "Association-ownedEnd")
+                .map_err(|error| error.to_string())?;
         if is_end
             && (!is_owned_end
                 || classifiers::is_owned_attribute(association, child)
@@ -101,7 +112,8 @@ pub fn owned_ends<'a>(
         }
     }
     if let Some(explicit) = explicit {
-        return explicit.into_iter()
+        return explicit
+            .into_iter()
             .map(|end| match end {
                 ElementRef::Object(property) => Ok(property),
                 _ => Err("Association::ownedEnd requires a Property object identity".into()),
@@ -149,7 +161,12 @@ pub(crate) fn validate_navigation_declarations(
         return Err("navigation knowledge owner must be an Association".into());
     }
     let navigable = declared_navigable_owned_ends(references, association_id)?;
-    let Some(knowledge) = references.model().authoring_knowledge().associations.get(association_id) else {
+    let Some(knowledge) = references
+        .model()
+        .authoring_knowledge()
+        .associations
+        .get(association_id)
+    else {
         return Ok(());
     };
     let owned = owned_ends(references, association_id)?;
@@ -159,10 +176,14 @@ pub(crate) fn validate_navigation_declarations(
             return Err("unverified navigation references must be unique".into());
         }
         if !owned.iter().any(|end| end.id == *id) {
-            return Err(format!("unverified navigation {id} must reference an Association-owned memberEnd"));
+            return Err(format!(
+                "unverified navigation {id} must reference an Association-owned memberEnd"
+            ));
         }
         if navigable.iter().any(|end| end.id == *id) {
-            return Err(format!("unverified navigation {id} conflicts with navigableOwnedEnd"));
+            return Err(format!(
+                "unverified navigation {id} conflicts with navigableOwnedEnd"
+            ));
         }
     }
     Ok(())
@@ -173,10 +194,17 @@ pub fn navigable_owned_ends<'a>(
     association_id: &str,
 ) -> Result<Vec<&'a Element>, String> {
     validate_navigation_declarations(references, association_id)?;
-    if references.model().authoring_knowledge().associations.get(association_id)
+    if references
+        .model()
+        .authoring_knowledge()
+        .associations
+        .get(association_id)
         .is_some_and(|knowledge| !knowledge.navigation_unverified.is_empty())
     {
-        return Err("Unsupported complete navigableOwnedEnd query: authored navigation is unverified".into());
+        return Err(
+            "Unsupported complete navigableOwnedEnd query: authored navigation is unverified"
+                .into(),
+        );
     }
     declared_navigable_owned_ends(references, association_id)
 }
@@ -192,8 +220,17 @@ pub fn navigation_knowledge(
     let association = association_of(references, property_id)?;
     if let Some(association) = association {
         validate_navigation_declarations(references, association.id())?;
-        if references.model().authoring_knowledge().associations.get(association.id())
-            .is_some_and(|knowledge| knowledge.navigation_unverified.iter().any(|id| id == property_id))
+        if references
+            .model()
+            .authoring_knowledge()
+            .associations
+            .get(association.id())
+            .is_some_and(|knowledge| {
+                knowledge
+                    .navigation_unverified
+                    .iter()
+                    .any(|id| id == property_id)
+            })
         {
             return Ok(crate::NavigationKnowledge::Unverified);
         }
@@ -209,17 +246,17 @@ pub fn navigation_knowledge(
     };
     Ok(crate::NavigationKnowledge::Known(
         declared_navigable_owned_ends(references, association.id())?
-            .iter().any(|end| end.id == property_id)
+            .iter()
+            .any(|end| end.id == property_id),
     ))
 }
 
-pub fn is_navigable(
-    references: &ReferenceIndex<'_>,
-    property_id: &str,
-) -> Result<bool, String> {
+pub fn is_navigable(references: &ReferenceIndex<'_>, property_id: &str) -> Result<bool, String> {
     match navigation_knowledge(references, property_id)? {
         crate::NavigationKnowledge::Known(value) => Ok(value),
-        crate::NavigationKnowledge::Unverified => Err("Unsupported Property::isNavigable query: authored navigation is unverified".into()),
+        crate::NavigationKnowledge::Unverified => {
+            Err("Unsupported Property::isNavigable query: authored navigation is unverified".into())
+        }
     }
 }
 
@@ -231,43 +268,86 @@ pub(crate) fn set_navigation_knowledge(
 ) -> Result<(), String> {
     let references = ReferenceIndex::new(Model::from_section(section));
     validate_navigation_declarations(&references, association_id)?;
-    if !owned_ends(&references, association_id)?.iter().any(|end| end.id == property_id) {
+    if !owned_ends(&references, association_id)?
+        .iter()
+        .any(|end| end.id == property_id)
+    {
         return Err("navigation declaration requires an Association-owned memberEnd".into());
     }
-    let member_ids = member_ends(&references, association_id)?.iter().map(|end| end.id.clone()).collect::<Vec<_>>();
+    let member_ids = member_ends(&references, association_id)?
+        .iter()
+        .map(|end| end.id.clone())
+        .collect::<Vec<_>>();
     let mut navigable_ids = declared_navigable_owned_ends(&references, association_id)?
-        .iter().filter(|end| end.id != property_id).map(|end| end.id.clone()).collect::<HashSet<_>>();
+        .iter()
+        .filter(|end| end.id != property_id)
+        .map(|end| end.id.clone())
+        .collect::<HashSet<_>>();
     if navigation == crate::NavigationKnowledge::Known(true) {
         navigable_ids.insert(property_id.into());
     }
-    let navigable = member_ids.iter().filter(|id| navigable_ids.contains(*id))
-        .map(|id| json!({"$ref":id})).collect::<Vec<_>>();
-    if let Some(association) = section.relations.iter_mut().find(|relation| relation.id == association_id) {
-        association.properties.insert("navigableOwnedEnd".into(), Value::Array(navigable));
+    let navigable = member_ids
+        .iter()
+        .filter(|id| navigable_ids.contains(*id))
+        .map(|id| json!({"$ref":id}))
+        .collect::<Vec<_>>();
+    if let Some(association) = section
+        .relations
+        .iter_mut()
+        .find(|relation| relation.id == association_id)
+    {
+        association
+            .properties
+            .insert("navigableOwnedEnd".into(), Value::Array(navigable));
     } else {
-        section.elements.iter_mut().find(|element| element.id == association_id)
-            .ok_or("Association not found")?.properties.insert("navigableOwnedEnd".into(), Value::Array(navigable));
+        section
+            .elements
+            .iter_mut()
+            .find(|element| element.id == association_id)
+            .ok_or("Association not found")?
+            .properties
+            .insert("navigableOwnedEnd".into(), Value::Array(navigable));
     }
-    let knowledge = section.authoring_knowledge.associations.entry(association_id.into()).or_default();
-    knowledge.navigation_unverified.retain(|id| id != property_id);
+    let knowledge = section
+        .authoring_knowledge
+        .associations
+        .entry(association_id.into())
+        .or_default();
+    knowledge
+        .navigation_unverified
+        .retain(|id| id != property_id);
     if navigation == crate::NavigationKnowledge::Unverified {
         knowledge.navigation_unverified.push(property_id.into());
     }
-    knowledge.navigation_unverified.sort_by_key(|id| member_ids.iter().position(|member| member == id));
+    knowledge
+        .navigation_unverified
+        .sort_by_key(|id| member_ids.iter().position(|member| member == id));
     if knowledge.navigation_unverified.is_empty() {
-        section.authoring_knowledge.associations.remove(association_id);
+        section
+            .authoring_knowledge
+            .associations
+            .remove(association_id);
     }
-    validate_navigation_declarations(&ReferenceIndex::new(Model::from_section(section)), association_id)
+    validate_navigation_declarations(
+        &ReferenceIndex::new(Model::from_section(section)),
+        association_id,
+    )
 }
 
-pub(crate) fn validate_authoring_changes(before: &ModelingSection, after: &ModelingSection) -> Result<(), String> {
+pub(crate) fn validate_authoring_changes(
+    before: &ModelingSection,
+    after: &ModelingSection,
+) -> Result<(), String> {
     let previous = ReferenceIndex::new(Model::from_section(before));
     let current = ReferenceIndex::new(Model::from_section(after));
     for association_id in after.authoring_knowledge.associations.keys() {
         if let Err(error) = validate_navigation_declarations(&current, association_id)
             && (before.authoring_knowledge.associations.get(association_id)
                 != after.authoring_knowledge.associations.get(association_id)
-                || validate_navigation_declarations(&previous, association_id).as_ref().err() != Some(&error))
+                || validate_navigation_declarations(&previous, association_id)
+                    .as_ref()
+                    .err()
+                    != Some(&error))
         {
             return Err(format!("MDE_NAVIGATION_KNOWLEDGE_INVALID: {error}"));
         }
@@ -300,7 +380,9 @@ pub fn owning_association<'a>(
     if !property.conforms_to("Property") {
         return Err("owningAssociation requires a Property".into());
     }
-    let Some(owner) = references.model().owner(property)?
+    let Some(owner) = references
+        .model()
+        .owner(property)?
         .filter(|owner| owner.conforms_to("Association"))
     else {
         return Ok(None);
@@ -512,9 +594,20 @@ fn validate_association(
     if association.conforms_to("CommunicationPath") {
         match communication_path_association_ends(references, association) {
             Ok(true) => {}
-            Ok(false) => return Err("CommunicationPath-association_ends: end Types must be DeploymentTargets".into()),
-            Err(classifiers::QueryError::Invalid { message, .. }) => return Err(format!("CommunicationPath-association_ends: {message}")),
-            Err(error) => return Err(format!("Unsupported CommunicationPath-association_ends: {error}")),
+            Ok(false) => {
+                return Err(
+                    "CommunicationPath-association_ends: end Types must be DeploymentTargets"
+                        .into(),
+                );
+            }
+            Err(classifiers::QueryError::Invalid { message, .. }) => {
+                return Err(format!("CommunicationPath-association_ends: {message}"));
+            }
+            Err(error) => {
+                return Err(format!(
+                    "Unsupported CommunicationPath-association_ends: {error}"
+                ));
+            }
         }
     }
     // UML 2.5.1 §12.4.1.6 and UML.xmi both cast every memberEnd to
@@ -525,7 +618,10 @@ fn validate_association(
     }
     // CommunicationPath has one own constraint and no own properties/operations
     // in UML.xmi; all inherited Association checks have already run above.
-    if !matches!(association.metaclass(), Some("Association" | "CommunicationPath")) {
+    if !matches!(
+        association.metaclass(),
+        Some("Association" | "CommunicationPath")
+    ) {
         return Err(format!(
             "Unsupported {} constraints: inherited Association rules were checked, but specialized metaclass contracts are not implemented",
             association.metaclass().unwrap_or("Association subtype"),
@@ -542,7 +638,9 @@ fn validate_specialization(
     let ancestry = classifier_hierarchy::resolve_ancestry(references, association.id())
         .map_err(|error| error.to_string())?;
     let mut unsupported = None;
-    for general in ancestry.parents.iter()
+    for general in ancestry
+        .parents
+        .iter()
         .filter(|parent| parent.conforms_to("Association"))
     {
         if !general.properties().contains_key("memberEnd") {
@@ -556,7 +654,9 @@ fn validate_specialization(
         if ends.len() != general_ends.len() {
             return Err(format!(
                 "Association::specialized_end_number requires the same number of member ends as general {} ({} instead of {})",
-                general.id(), ends.len(), general_ends.len(),
+                general.id(),
+                ends.len(),
+                general_ends.len(),
             ));
         }
         for (position, (specific, general_end)) in ends.iter().zip(general_ends).enumerate() {
@@ -566,10 +666,15 @@ fn validate_specialization(
                 ElementRef::Object(general_end),
             ) {
                 Ok(true) => {}
-                Ok(false) => return Err(format!(
-                    "Association::specialized_end_types requires end {} ({}) to conform to the corresponding end {} of general {}",
-                    position + 1, specific.id, general_end.id, general.id(),
-                )),
+                Ok(false) => {
+                    return Err(format!(
+                        "Association::specialized_end_types requires end {} ({}) to conform to the corresponding end {} of general {}",
+                        position + 1,
+                        specific.id,
+                        general_end.id,
+                        general.id(),
+                    ));
+                }
                 Err(error @ classifiers::QueryError::Unsupported { .. }) => {
                     unsupported = Some(error.to_string());
                 }
@@ -587,36 +692,61 @@ fn association_class_cannot_be_defined(
     references: &ReferenceIndex<'_>,
     association: ElementRef<'_>,
 ) -> Result<bool, classifiers::QueryError> {
-    use classifiers::QueryError;
     use super::property_contracts::PropertyOutcome;
+    use classifiers::QueryError;
     let property = schema::uml_property("Association", "memberEnd")
         .map_err(|error| QueryError::unsupported(association.id(), error.to_string()))?
         .ok_or_else(|| QueryError::unsupported(association.id(), "missing memberEnd contract"))?;
-    let value = association.properties().get("memberEnd")
-        .ok_or_else(|| QueryError::unsupported(association.id(), "memberEnd identities are not materialized"))?;
+    let value = association.properties().get("memberEnd").ok_or_else(|| {
+        QueryError::unsupported(
+            association.id(),
+            "memberEnd identities are not materialized",
+        )
+    })?;
     let mut checks = Vec::new();
     match super::property_contracts::check_value(references, association, property, value) {
         PropertyOutcome::Satisfied => {}
-        PropertyOutcome::Violation(message) => return Err(QueryError::invalid(association.id(), message)),
-        PropertyOutcome::Unverified(message) => checks.push(Err(QueryError::unsupported(association.id(), message))),
+        PropertyOutcome::Violation(message) => {
+            return Err(QueryError::invalid(association.id(), message));
+        }
+        PropertyOutcome::Unverified(message) => {
+            checks.push(Err(QueryError::unsupported(association.id(), message)))
+        }
     }
-    let values = value.as_array().ok_or_else(|| QueryError::invalid(association.id(), "memberEnd must be a collection"))?;
-    let member = schema::PropertyDescriptor { lower: "1", upper: "1", ..*property };
+    let values = value
+        .as_array()
+        .ok_or_else(|| QueryError::invalid(association.id(), "memberEnd must be a collection"))?;
+    let member = schema::PropertyDescriptor {
+        lower: "1",
+        upper: "1",
+        ..*property
+    };
     for value in values {
         checks.push((|| {
             match super::property_contracts::check_value(references, association, &member, value) {
                 PropertyOutcome::Satisfied => {}
-                PropertyOutcome::Violation(message) => return Err(QueryError::invalid(association.id(), message)),
-                PropertyOutcome::Unverified(message) => return Err(QueryError::unsupported(association.id(), message)),
+                PropertyOutcome::Violation(message) => {
+                    return Err(QueryError::invalid(association.id(), message));
+                }
+                PropertyOutcome::Unverified(message) => {
+                    return Err(QueryError::unsupported(association.id(), message));
+                }
             }
-            let end = references.validate(&member, value)
+            let end = references
+                .validate(&member, value)
                 .map_err(|error| QueryError::invalid(association.id(), error))?
-                .ok_or_else(|| QueryError::invalid(association.id(), "memberEnd cannot be absent"))?;
+                .ok_or_else(|| {
+                    QueryError::invalid(association.id(), "memberEnd cannot be absent")
+                })?;
             // Optional absent Types do not contribute to the derived endType
             // collection; Association-ends_must_be_typed diagnoses them separately.
-            if end.properties().get("type").is_none_or(Value::is_null) { return Ok(true); }
+            if end.properties().get("type").is_none_or(Value::is_null) {
+                return Ok(true);
+            }
             let endpoint = super::feature_compatibility::resolve_feature_type(references, end)?;
-            if endpoint.id() == association.id() { return Ok(false); }
+            if endpoint.id() == association.id() {
+                return Ok(false);
+            }
             classifier_hierarchy::has_ancestor(references, endpoint.id(), association.id())
                 .map(|contains_self| !contains_self)
         })());
@@ -630,46 +760,78 @@ fn communication_path_association_ends(
     references: &ReferenceIndex<'_>,
     association: ElementRef<'_>,
 ) -> Result<bool, classifiers::QueryError> {
+    use super::property_contracts::{PropertyOutcome, check_value};
     use classifiers::QueryError;
-    use super::property_contracts::{check_value, PropertyOutcome};
     let property = schema::uml_property("Association", "memberEnd")
         .map_err(|error| QueryError::unsupported(association.id(), error.to_string()))?
         .ok_or_else(|| QueryError::unsupported(association.id(), "missing memberEnd contract"))?;
-    let value = association.properties().get("memberEnd")
-        .ok_or_else(|| QueryError::unsupported(association.id(), "memberEnd identities are not materialized"))?;
+    let value = association.properties().get("memberEnd").ok_or_else(|| {
+        QueryError::unsupported(
+            association.id(),
+            "memberEnd identities are not materialized",
+        )
+    })?;
     let mut checks = Vec::new();
     match check_value(references, association, property, value) {
         PropertyOutcome::Satisfied => {}
-        PropertyOutcome::Violation(message) => return Err(QueryError::invalid(association.id(), message)),
-        PropertyOutcome::Unverified(message) => checks.push(Err(QueryError::unsupported(association.id(), message))),
+        PropertyOutcome::Violation(message) => {
+            return Err(QueryError::invalid(association.id(), message));
+        }
+        PropertyOutcome::Unverified(message) => {
+            checks.push(Err(QueryError::unsupported(association.id(), message)))
+        }
     }
-    let values = value.as_array().ok_or_else(|| QueryError::invalid(association.id(), "memberEnd must be a collection"))?;
-    let member = schema::PropertyDescriptor { lower: "1", upper: "1", ..*property };
+    let values = value
+        .as_array()
+        .ok_or_else(|| QueryError::invalid(association.id(), "memberEnd must be a collection"))?;
+    let member = schema::PropertyDescriptor {
+        lower: "1",
+        upper: "1",
+        ..*property
+    };
     for value in values {
         checks.push((|| {
             match check_value(references, association, &member, value) {
                 PropertyOutcome::Satisfied => {}
-                PropertyOutcome::Violation(message) => return Err(QueryError::invalid(association.id(), message)),
-                PropertyOutcome::Unverified(message) => return Err(QueryError::unsupported(association.id(), message)),
+                PropertyOutcome::Violation(message) => {
+                    return Err(QueryError::invalid(association.id(), message));
+                }
+                PropertyOutcome::Unverified(message) => {
+                    return Err(QueryError::unsupported(association.id(), message));
+                }
             }
-            let end = references.validate(&member, value)
+            let end = references
+                .validate(&member, value)
                 .map_err(|error| QueryError::invalid(association.id(), error))?
-                .ok_or_else(|| QueryError::invalid(association.id(), "memberEnd cannot be absent"))?;
+                .ok_or_else(|| {
+                    QueryError::invalid(association.id(), "memberEnd cannot be absent")
+                })?;
             // endType excludes absent optional Types. The inherited rule
             // Association-ends_must_be_typed independently rejects untyped ends.
-            let Some(value) = end.properties().get("type").filter(|value| !value.is_null()) else {
+            let Some(value) = end
+                .properties()
+                .get("type")
+                .filter(|value| !value.is_null())
+            else {
                 return Ok(true);
             };
-            let metaclass = end.metaclass().ok_or_else(|| QueryError::unsupported(end.id(), "memberEnd metaclass is unresolved"))?;
+            let metaclass = end.metaclass().ok_or_else(|| {
+                QueryError::unsupported(end.id(), "memberEnd metaclass is unresolved")
+            })?;
             let property = schema::uml_property(metaclass, "type")
                 .map_err(|error| QueryError::unsupported(end.id(), error.to_string()))?
                 .ok_or_else(|| QueryError::unsupported(end.id(), "missing Type contract"))?;
             match check_value(references, end, property, value) {
                 PropertyOutcome::Satisfied => {}
-                PropertyOutcome::Violation(message) => return Err(QueryError::invalid(end.id(), message)),
-                PropertyOutcome::Unverified(message) => return Err(QueryError::unsupported(end.id(), message)),
+                PropertyOutcome::Violation(message) => {
+                    return Err(QueryError::invalid(end.id(), message));
+                }
+                PropertyOutcome::Unverified(message) => {
+                    return Err(QueryError::unsupported(end.id(), message));
+                }
             }
-            let target = references.validate(property, value)
+            let target = references
+                .validate(property, value)
                 .map_err(|error| QueryError::invalid(end.id(), error))?
                 .ok_or_else(|| QueryError::invalid(end.id(), "nonempty Type did not resolve"))?;
             Ok(target.conforms_to("DeploymentTarget"))
@@ -682,7 +844,11 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     for (association_id, knowledge) in &references.model().authoring_knowledge().associations {
         match validate_navigation_declarations(references, association_id) {
-            Err(message) => issues.push(issue("MDE_NAVIGATION_KNOWLEDGE_INVALID", association_id, message)),
+            Err(message) => issues.push(issue(
+                "MDE_NAVIGATION_KNOWLEDGE_INVALID",
+                association_id,
+                message,
+            )),
             Ok(()) if !knowledge.navigation_unverified.is_empty() => {
                 issues.push(StructuralDiagnostic {
                     severity: StructuralSeverity::Warning,
@@ -692,7 +858,7 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
                 });
                 issues.push(issue("UML_MODEL_SEMANTICS_UNVERIFIED", association_id,
                     "Association navigation is authored as unverified; known UML rules still run, but this model cannot be reported as semantically verified"));
-            },
+            }
             Ok(()) => {}
         }
     }
@@ -705,32 +871,57 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
         if association.conforms_to("AssociationClass") {
             let outcome = match association_class_cannot_be_defined(references, association) {
                 Ok(true) => None,
-                Ok(false) => Some((StructuralSeverity::Error,
+                Ok(false) => Some((
+                    StructuralSeverity::Error,
                     "UML_ASSOCIATION_CLASS_CANNOT_BE_DEFINED",
-                    "endType or an end Type's allParents contains this AssociationClass".to_owned())),
-                Err(classifiers::QueryError::Invalid { message, .. }) => Some((StructuralSeverity::Error,
-                    "UML_ASSOCIATION_CLASS_CANNOT_BE_DEFINED", message)),
-                Err(classifiers::QueryError::Unsupported { message, .. }) => Some((StructuralSeverity::Warning,
-                    "MDE_ASSOCIATION_CLASS_UNVERIFIED", message)),
+                    "endType or an end Type's allParents contains this AssociationClass".to_owned(),
+                )),
+                Err(classifiers::QueryError::Invalid { message, .. }) => Some((
+                    StructuralSeverity::Error,
+                    "UML_ASSOCIATION_CLASS_CANNOT_BE_DEFINED",
+                    message,
+                )),
+                Err(classifiers::QueryError::Unsupported { message, .. }) => Some((
+                    StructuralSeverity::Warning,
+                    "MDE_ASSOCIATION_CLASS_UNVERIFIED",
+                    message,
+                )),
             };
             if let Some((severity, code, message)) = outcome {
-                issues.push(StructuralDiagnostic { severity, code, subject_id:association.id().into(),
-                    message:format!("AssociationClass-cannot_be_defined: {message}") });
+                issues.push(StructuralDiagnostic {
+                    severity,
+                    code,
+                    subject_id: association.id().into(),
+                    message: format!("AssociationClass-cannot_be_defined: {message}"),
+                });
             }
         }
         if association.conforms_to("CommunicationPath") {
             let outcome = match communication_path_association_ends(references, association) {
                 Ok(true) => None,
-                Ok(false) => Some((StructuralSeverity::Error, "UML_COMMUNICATION_PATH_ASSOCIATION_ENDS",
-                    "end Types must be DeploymentTargets".to_owned())),
-                Err(classifiers::QueryError::Invalid { message, .. }) => Some((StructuralSeverity::Error,
-                    "MDE_COMMUNICATION_PATH_ASSOCIATION_ENDS_INVALID", message)),
-                Err(classifiers::QueryError::Unsupported { message, .. }) => Some((StructuralSeverity::Warning,
-                    "MDE_COMMUNICATION_PATH_ASSOCIATION_ENDS_UNVERIFIED", message)),
+                Ok(false) => Some((
+                    StructuralSeverity::Error,
+                    "UML_COMMUNICATION_PATH_ASSOCIATION_ENDS",
+                    "end Types must be DeploymentTargets".to_owned(),
+                )),
+                Err(classifiers::QueryError::Invalid { message, .. }) => Some((
+                    StructuralSeverity::Error,
+                    "MDE_COMMUNICATION_PATH_ASSOCIATION_ENDS_INVALID",
+                    message,
+                )),
+                Err(classifiers::QueryError::Unsupported { message, .. }) => Some((
+                    StructuralSeverity::Warning,
+                    "MDE_COMMUNICATION_PATH_ASSOCIATION_ENDS_UNVERIFIED",
+                    message,
+                )),
             };
             if let Some((severity, code, message)) = outcome {
-                issues.push(StructuralDiagnostic { severity, code, subject_id: association.id().into(),
-                    message: format!("CommunicationPath-association_ends: {message}") });
+                issues.push(StructuralDiagnostic {
+                    severity,
+                    code,
+                    subject_id: association.id().into(),
+                    message: format!("CommunicationPath-association_ends: {message}"),
+                });
             }
         }
         if !association.properties().contains_key("memberEnd") {
@@ -1128,15 +1319,18 @@ fn canonical_inputs_changed(
 ) -> bool {
     let previous_model = Model::from_section(before);
     let previous = previous_model.element(association.id());
-    if before.authoring_knowledge.associations.get(association.id())
+    if before
+        .authoring_knowledge
+        .associations
+        .get(association.id())
         != after.authoring_knowledge.associations.get(association.id())
     {
         return true;
     }
     if previous.is_none_or(|previous| {
-        ["memberEnd", "ownedEnd", "navigableOwnedEnd"].iter().any(|key| {
-            previous.properties().get(*key) != association.properties().get(*key)
-        })
+        ["memberEnd", "ownedEnd", "navigableOwnedEnd"]
+            .iter()
+            .any(|key| previous.properties().get(*key) != association.properties().get(*key))
     }) {
         return true;
     }
@@ -1234,23 +1428,31 @@ pub(crate) fn materialize_new(before: &Project, after: &mut ModelingSection) -> 
         .map(|relation| relation.id.clone())
         .collect::<Vec<_>>();
     for id in added {
-        let relation = after.relations.iter_mut().find(|relation| relation.id == id)
+        let relation = after
+            .relations
+            .iter_mut()
+            .find(|relation| relation.id == id)
             .ok_or("new Association disappeared")?;
         if !relation.properties.contains_key("memberEnd") {
             // Newly authored ends need distinguishable names in their Namespace.
             // Migration of existing authored records deliberately does not invent names.
             for role in ["sourceRole", "targetRole"] {
-                if relation.properties.contains_key(role) { continue; }
+                if relation.properties.contains_key(role) {
+                    continue;
+                }
                 let mut sequence = 1_u64;
                 loop {
                     let name = format!("end{sequence}");
-                    if !["sourceRole", "targetRole"].iter().any(|role|
-                        relation.properties.get(*role).and_then(Value::as_str) == Some(name.as_str()))
-                    {
+                    if !["sourceRole", "targetRole"].iter().any(|role| {
+                        relation.properties.get(*role).and_then(Value::as_str)
+                            == Some(name.as_str())
+                    }) {
                         relation.properties.insert(role.into(), json!(name));
                         break;
                     }
-                    sequence = sequence.checked_add(1).ok_or("Association role name overflow")?;
+                    sequence = sequence
+                        .checked_add(1)
+                        .ok_or("Association role name overflow")?;
                 }
             }
         }
@@ -1290,7 +1492,9 @@ pub(crate) fn validate_changes(
         {
             return Err(format!("{}: {}", issue.code, issue.message));
         }
-        if issue.severity != StructuralSeverity::Error || issue.code == "UML_MODEL_SEMANTICS_UNVERIFIED" {
+        if issue.severity != StructuralSeverity::Error
+            || issue.code == "UML_MODEL_SEMANTICS_UNVERIFIED"
+        {
             continue;
         }
         if !existing.iter().any(|previous| {

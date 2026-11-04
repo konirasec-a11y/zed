@@ -88,7 +88,16 @@ pub(crate) async fn create_model_element(
     projects: &ProjectService,
     request: ModelingCreateModelElementRequested,
 ) -> Result<u64, String> {
-    crate::mutation::execute(context, projects, request.project_id, request.expected_revision,
-        Command::CreateModelElement { owner_id: request.owner_id, kind: request.kind, name: request.name },
-    ).await
+    crate::mutation::execute(
+        context,
+        projects,
+        request.project_id,
+        request.expected_revision,
+        Command::CreateModelElement {
+            owner_id: request.owner_id,
+            kind: request.kind,
+            name: request.name,
+        },
+    )
+    .await
 }

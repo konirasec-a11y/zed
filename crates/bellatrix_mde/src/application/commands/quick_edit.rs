@@ -59,8 +59,12 @@ pub(super) fn apply(
     }
     if !matches!(action, UmlQuickCreate::Note | UmlQuickCreate::Constraint) {
         let model = crate::uml::root::Model::from_section(section);
-        let subject = model.element(element_id).ok_or("Quick Edit subject not found")?;
-        if model.owner(subject)?.is_none() { crate::uml::root::adopt_root_model(section, project_id, "Model")?; }
+        let subject = model
+            .element(element_id)
+            .ok_or("Quick Edit subject not found")?;
+        if model.owner(subject)?.is_none() {
+            crate::uml::root::adopt_root_model(section, project_id, "Model")?;
+        }
     }
     let diagram = section
         .diagrams
@@ -103,7 +107,9 @@ pub(super) fn apply(
             };
             (
                 kind.as_str(),
-                subject_type.and_then(UmlType::metaclass).unwrap_or("Element"),
+                subject_type
+                    .and_then(UmlType::metaclass)
+                    .unwrap_or("Element"),
                 offset,
                 size,
             )
@@ -260,9 +266,17 @@ pub(super) fn apply(
         crate::uml::root::set_owner(section, project_id, &new_id, element_id)?;
     } else {
         let model = crate::uml::root::Model::from_section(section);
-        let subject = model.element(element_id).ok_or("Quick Edit subject not found")?;
-        let namespace = model.owner(subject)?.filter(|owner| owner.conforms_to("Namespace")).map(|owner| owner.id().to_owned());
-        let owner_id = match namespace { Some(id) => id, None => crate::uml::root::adopt_root_model(section, project_id, "Model")? };
+        let subject = model
+            .element(element_id)
+            .ok_or("Quick Edit subject not found")?;
+        let namespace = model
+            .owner(subject)?
+            .filter(|owner| owner.conforms_to("Namespace"))
+            .map(|owner| owner.id().to_owned());
+        let owner_id = match namespace {
+            Some(id) => id,
+            None => crate::uml::root::adopt_root_model(section, project_id, "Model")?,
+        };
         crate::uml::root::set_owner(section, project_id, &new_id, &owner_id)?;
         if matches!(rule.kind, "uml.association" | "uml.usage") {
             crate::uml::root::set_owner(section, project_id, &relation_id, &owner_id)?;
@@ -304,13 +318,25 @@ mod tests {
                     .unwrap()
                     .kind = subject_kind.into();
                 if matches!(subject_kind, "rust.struct" | "uml.class") {
-                    original.elements.iter_mut().find(|element| element.id == "type-task")
-                        .unwrap().properties.insert("isActive".into(), true.into());
+                    original
+                        .elements
+                        .iter_mut()
+                        .find(|element| element.id == "type-task")
+                        .unwrap()
+                        .properties
+                        .insert("isActive".into(), true.into());
                 }
                 let result = crate::commands::apply(&original, &command(action), 0);
                 assert!(result.is_ok(), "{action:?}: {result:?}");
                 let project = result.unwrap();
-                assert_eq!(project.elements.len(), original.elements.len() + 1 + usize::from(project.root_model.is_some() && original.root_model.is_none()));
+                assert_eq!(
+                    project.elements.len(),
+                    original.elements.len()
+                        + 1
+                        + usize::from(
+                            project.root_model.is_some() && original.root_model.is_none()
+                        )
+                );
                 Graph::new(&project).validate().unwrap();
                 if matches!(action, UmlQuickCreate::Subtype | UmlQuickCreate::Supertype) {
                     let child = project.elements.last().unwrap();
@@ -335,8 +361,12 @@ mod tests {
     fn required_interface_rejects_anonymous_dependency_name_collision_atomically() {
         let original = fixture();
         let before = original.clone();
-        let result = crate::commands::apply(&original, &command(UmlQuickCreate::RequiredInterface), 0);
-        assert!(matches!(result, Err(ref error) if error.contains("UML_NAMESPACE_MEMBERS_DISTINGUISHABLE")), "{result:?}");
+        let result =
+            crate::commands::apply(&original, &command(UmlQuickCreate::RequiredInterface), 0);
+        assert!(
+            matches!(result, Err(ref error) if error.contains("UML_NAMESPACE_MEMBERS_DISTINGUISHABLE")),
+            "{result:?}"
+        );
         assert_eq!(original, before);
     }
 
@@ -379,8 +409,13 @@ mod tests {
             let mut original = fixture();
             // The positive fixture must not create an anonymous Usage/Dependency
             // name collision in the Model adopted by this command.
-            original.relations.iter_mut().find(|relation| relation.id == "ref-task")
-                .unwrap().properties.insert("name".into(), serde_json::json!("Task reference"));
+            original
+                .relations
+                .iter_mut()
+                .find(|relation| relation.id == "ref-task")
+                .unwrap()
+                .properties
+                .insert("name".into(), serde_json::json!("Task reference"));
             let result = crate::commands::apply(&original, &command(action), 0);
             assert!(result.is_ok(), "{action:?}: {result:?}");
             let project = result.unwrap();
@@ -391,7 +426,12 @@ mod tests {
                         3
                     } else {
                         1
-                    } + if relation_kind == Some("uml.association") { 2 } else { 0 }
+                    }
+                    + if relation_kind == Some("uml.association") {
+                        2
+                    } else {
+                        0
+                    }
                     + usize::from(project.root_model.is_some() && original.root_model.is_none()),
                 "{action:?}"
             );

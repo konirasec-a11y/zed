@@ -59,6 +59,9 @@ impl UmlStyle {
         self.show_property != Some(false)
     }
     pub fn should_show_stereotype(&self) -> bool {
-        !matches!(self.stereotype_display, Some(StereotypeDisplay::Hidden | StereotypeDisplay::Icon))
+        !matches!(
+            self.stereotype_display,
+            Some(StereotypeDisplay::Hidden | StereotypeDisplay::Icon)
+        )
     }
 }

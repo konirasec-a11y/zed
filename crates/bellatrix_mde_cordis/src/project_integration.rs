@@ -1,6 +1,6 @@
 use crate::Command;
-use crate::view_edits::{ModelingMoveView, move_view};
 use crate::MODELING_NAMESPACE;
+use crate::view_edits::{ModelingMoveView, move_view};
 use bellatrix_project::{ProjectDocument, ProjectId, ProjectService};
 use cordis::event::responder;
 use cordis::{Context, Event, InjectSpec, Plugin, Service};
@@ -68,9 +68,11 @@ impl Plugin for MdePlugin {
         let projects = ctx
             .try_service::<ProjectService>()
             .map_err(|error| io::Error::other(error.to_string()))?;
-        crate::headless_operations::register(&ctx).map_err(|error| io::Error::other(error.to_string()))?;
+        crate::headless_operations::register(&ctx)
+            .map_err(|error| io::Error::other(error.to_string()))?;
         crate::html_export::register(&ctx).map_err(|error| io::Error::other(error.to_string()))?;
-        crate::document_codec::register(&ctx).map_err(|error| io::Error::other(error.to_string()))?;
+        crate::document_codec::register(&ctx)
+            .map_err(|error| io::Error::other(error.to_string()))?;
         crate::projection::register(&ctx, Arc::clone(&projects))?;
         crate::move_preview::register(&ctx, Arc::clone(&projects))?;
         crate::task_events::register(&ctx, Arc::clone(&projects))?;
@@ -102,12 +104,21 @@ impl Plugin for MdePlugin {
             },
         )).map_err(|error| io::Error::other(error.to_string()))?;
         let exact_relation_projects = Arc::clone(&projects);
-        let _exact_visual_relation = ctx.on::<crate::ModelingCreateRelationAtViewsOrVisualDraft, _>(responder(
-            move |ctx: Context, request: crate::ModelingCreateRelationAtViewsRequested| {
-                let projects = Arc::clone(&exact_relation_projects);
-                async move { Ok::<_, Infallible>(Some(crate::create_relation::create_relation_at_views_or_visual_draft(&ctx, &projects, request).await)) }
-            },
-        )).map_err(|error| io::Error::other(error.to_string()))?;
+        let _exact_visual_relation = ctx
+            .on::<crate::ModelingCreateRelationAtViewsOrVisualDraft, _>(responder(
+                move |ctx: Context, request: crate::ModelingCreateRelationAtViewsRequested| {
+                    let projects = Arc::clone(&exact_relation_projects);
+                    async move {
+                        Ok::<_, Infallible>(Some(
+                            crate::create_relation::create_relation_at_views_or_visual_draft(
+                                &ctx, &projects, request,
+                            )
+                            .await,
+                        ))
+                    }
+                },
+            ))
+            .map_err(|error| io::Error::other(error.to_string()))?;
         let draft_relation_projects = Arc::clone(&projects);
         let _visual_relation = ctx.on::<crate::create_relation::ModelingCreateRelationOrVisualDraft, _>(responder(
             move |ctx: Context, request: crate::create_relation::ModelingCreateRelationRequested| {
@@ -116,12 +127,19 @@ impl Plugin for MdePlugin {
             },
         )).map_err(|error| io::Error::other(error.to_string()))?;
         let model_creation_projects = Arc::clone(&projects);
-        let _model_creation = ctx.on::<crate::ModelingCreateModelElement, _>(responder(
-            move |ctx: Context, request: crate::ModelingCreateModelElementRequested| {
-                let projects = Arc::clone(&model_creation_projects);
-                async move { Ok::<_, Infallible>(Some(crate::create_element::create_model_element(&ctx, &projects, request).await)) }
-            },
-        )).map_err(|error| io::Error::other(error.to_string()))?;
+        let _model_creation = ctx
+            .on::<crate::ModelingCreateModelElement, _>(responder(
+                move |ctx: Context, request: crate::ModelingCreateModelElementRequested| {
+                    let projects = Arc::clone(&model_creation_projects);
+                    async move {
+                        Ok::<_, Infallible>(Some(
+                            crate::create_element::create_model_element(&ctx, &projects, request)
+                                .await,
+                        ))
+                    }
+                },
+            ))
+            .map_err(|error| io::Error::other(error.to_string()))?;
         let _creation = ctx.on::<crate::create_element::ModelingCreateElement, _>(responder(
             move |ctx: Context, request: crate::create_element::ModelingCreateElementRequested| {
                 let projects = Arc::clone(&creation_projects);

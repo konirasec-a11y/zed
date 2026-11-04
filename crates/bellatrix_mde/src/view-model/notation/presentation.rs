@@ -143,13 +143,20 @@ fn display_label(
     {
         return body.to_owned();
     }
-    if element.kind == "uml.instance_specification" && let Some(references) = references {
+    if element.kind == "uml.instance_specification"
+        && let Some(references) = references
+    {
         return crate::format_instance_heading(element, references, style);
     }
     if element.kind == "uml.collaboration_use" {
         return if style.uml.should_show_type() {
-            type_label(element, references).map_or_else(|| element.name.clone(), |value_type| format!("{} : {value_type}", element.name))
-        } else { element.name.clone() };
+            type_label(element, references).map_or_else(
+                || element.name.clone(),
+                |value_type| format!("{} : {value_type}", element.name),
+            )
+        } else {
+            element.name.clone()
+        };
     }
     let kind = UmlType::from_kind(&element.kind);
     if kind == Some(UmlType::Parameter) {
@@ -290,7 +297,9 @@ fn operation_label(
     };
     let mut label = format!("{prefix}{}(", operation.name);
     let mut result_type = None;
-    if style.uml.show_operation_signature != Some(false) && let Some(references) = references {
+    if style.uml.show_operation_signature != Some(false)
+        && let Some(references) = references
+    {
         match crate::uml::operations::owned_parameters(references, &operation.id) {
             Ok(parameters) => {
                 let parameters = parameters
@@ -322,7 +331,10 @@ fn operation_label(
     if style.uml.should_show_property()
         && operation.properties.get("isQuery").and_then(Value::as_bool) == Some(true)
     {
-        if style.uml.show_operation_signature != Some(false) && style.uml.should_show_type() && result_type.is_none() {
+        if style.uml.show_operation_signature != Some(false)
+            && style.uml.should_show_type()
+            && result_type.is_none()
+        {
             label.push(':');
         }
         label.push_str(" {query}");
@@ -337,7 +349,8 @@ mod tests {
 
     #[test]
     fn inspector_changes_immediately_drive_classifier_presentation() {
-        let project = serde_json::from_str(include_str!("../../../fixtures/todo.json")).expect("fixture");
+        let project =
+            serde_json::from_str(include_str!("../../../fixtures/todo.json")).expect("fixture");
         let mut section = crate::ModelingSection::from_model(&project);
         let options = ClassifierPresentationOptions {
             show_active_class_sides: true,
@@ -377,7 +390,8 @@ mod tests {
 
     #[test]
     fn hierarchy_and_inspector_share_identity_after_rename() {
-        let project = serde_json::from_str(include_str!("../../../fixtures/todo.json")).expect("fixture");
+        let project =
+            serde_json::from_str(include_str!("../../../fixtures/todo.json")).expect("fixture");
         let mut section = crate::ModelingSection::from_model(&project);
         let member = section
             .elements
@@ -414,5 +428,4 @@ mod tests {
             Some("Property")
         );
     }
-
 }

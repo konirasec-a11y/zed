@@ -1,7 +1,7 @@
 use super::{failure, insert_mapped};
 use crate::{
-    Authored, InheritedStyleProperty, SourceFieldPresence, Style, StyleInheritance,
-    TextAlignment, TextVerticalAlignment, View,
+    Authored, InheritedStyleProperty, SourceFieldPresence, Style, StyleInheritance, TextAlignment,
+    TextVerticalAlignment, View,
     mdj::{Diagnostic, MdjError},
 };
 use serde_json::{Map, Value};
@@ -61,7 +61,11 @@ pub(super) fn take_inheritance(
     }
     Some(StyleInheritance {
         source,
-        properties: if enabled { PARENT_STYLE_PROPERTIES.into_iter().collect() } else { Default::default() },
+        properties: if enabled {
+            PARENT_STYLE_PROPERTIES.into_iter().collect()
+        } else {
+            Default::default()
+        },
     })
 }
 
@@ -69,31 +73,56 @@ fn default_parent_style(type_name: &str) -> bool {
     // Vendored constructors, not naming conventions: EdgeLabelView and
     // NodeLabelView do not inherit LabelView's default. Omission keeps the
     // constructor value; explicit null does not (core.js View.setup/load).
-    matches!(type_name,
+    matches!(
+        type_name,
         "LabelView"
-        | "ERDColumnView" | "ERDColumnCompartmentView"
-        | "UMLCompartmentView" | "UMLNameCompartmentView" | "UMLListCompartmentView"
-        | "UMLAttributeView" | "UMLAttributeCompartmentView"
-        | "UMLOperationView" | "UMLOperationCompartmentView"
-        | "UMLReceptionView" | "UMLReceptionCompartmentView"
-        | "UMLTemplateParameterView" | "UMLTemplateParameterCompartmentView"
-        | "UMLEnumerationLiteralView" | "UMLEnumerationLiteralCompartmentView"
-        | "UMLQualifierCompartmentView" | "UMLSlotView" | "UMLSlotCompartmentView"
-        | "UMLExtensionPointView" | "UMLExtensionPointCompartmentView"
-        | "UMLInternalActivityView" | "UMLInternalActivityCompartmentView"
-        | "UMLInternalTransitionView" | "UMLInternalTransitionCompartmentView"
-        | "UMLRegionView" | "UMLDecompositionCompartmentView"
-        | "UMLInteractionOperandView" | "UMLInteractionOperandCompartmentView"
-        | "UMLTimeConstraintView"
-        | "SysMLConstraintCompartmentItemView" | "SysMLConstraintCompartmentView"
-        | "SysMLFlowPropertyCompartmentItemView" | "SysMLFlowPropertyCompartmentView"
-        | "SysMLParameterCompartmentItemView" | "SysMLParameterCompartmentView"
-        | "SysMLPartCompartmentItemView" | "SysMLPartCompartmentView"
-        | "SysMLPortCompartmentItemView" | "SysMLPortCompartmentView"
-        | "SysMLPropertyCompartmentItemView" | "SysMLPropertyCompartmentView"
-        | "SysMLPropertyValueCompartmentItemView" | "SysMLPropertyValueCompartmentView"
-        | "SysMLReferenceCompartmentItemView" | "SysMLReferenceCompartmentView"
-        | "SysMLValueCompartmentItemView" | "SysMLValueCompartmentView"
+            | "ERDColumnView"
+            | "ERDColumnCompartmentView"
+            | "UMLCompartmentView"
+            | "UMLNameCompartmentView"
+            | "UMLListCompartmentView"
+            | "UMLAttributeView"
+            | "UMLAttributeCompartmentView"
+            | "UMLOperationView"
+            | "UMLOperationCompartmentView"
+            | "UMLReceptionView"
+            | "UMLReceptionCompartmentView"
+            | "UMLTemplateParameterView"
+            | "UMLTemplateParameterCompartmentView"
+            | "UMLEnumerationLiteralView"
+            | "UMLEnumerationLiteralCompartmentView"
+            | "UMLQualifierCompartmentView"
+            | "UMLSlotView"
+            | "UMLSlotCompartmentView"
+            | "UMLExtensionPointView"
+            | "UMLExtensionPointCompartmentView"
+            | "UMLInternalActivityView"
+            | "UMLInternalActivityCompartmentView"
+            | "UMLInternalTransitionView"
+            | "UMLInternalTransitionCompartmentView"
+            | "UMLRegionView"
+            | "UMLDecompositionCompartmentView"
+            | "UMLInteractionOperandView"
+            | "UMLInteractionOperandCompartmentView"
+            | "UMLTimeConstraintView"
+            | "SysMLConstraintCompartmentItemView"
+            | "SysMLConstraintCompartmentView"
+            | "SysMLFlowPropertyCompartmentItemView"
+            | "SysMLFlowPropertyCompartmentView"
+            | "SysMLParameterCompartmentItemView"
+            | "SysMLParameterCompartmentView"
+            | "SysMLPartCompartmentItemView"
+            | "SysMLPartCompartmentView"
+            | "SysMLPortCompartmentItemView"
+            | "SysMLPortCompartmentView"
+            | "SysMLPropertyCompartmentItemView"
+            | "SysMLPropertyCompartmentView"
+            | "SysMLPropertyValueCompartmentItemView"
+            | "SysMLPropertyValueCompartmentView"
+            | "SysMLReferenceCompartmentItemView"
+            | "SysMLReferenceCompartmentView"
+            | "SysMLValueCompartmentItemView"
+            | "SysMLValueCompartmentView"
     )
 }
 
@@ -104,7 +133,9 @@ fn inheritance_presence(view: &View) -> Option<SourceFieldPresence> {
     match source.field_presence.get("parentStyle").copied() {
         Some(SourceFieldPresence::Null) if !enabled => Some(SourceFieldPresence::Null),
         Some(_) => Some(SourceFieldPresence::Value),
-        None if enabled != default_parent_style(&source.type_name) => Some(SourceFieldPresence::Value),
+        None if enabled != default_parent_style(&source.type_name) => {
+            Some(SourceFieldPresence::Value)
+        }
         None => None,
     }
 }
@@ -129,8 +160,17 @@ fn export_inheritance(view: &View, object: &mut Map<String, Value>) -> Result<()
     let Some(inheritance) = &view.presentation.style_inheritance else {
         return Ok(());
     };
-    if !inheritance.properties.is_empty() && !inheritance.properties.iter().copied().eq(PARENT_STYLE_PROPERTIES) {
-        return Err(failure(&view.id, "MDJ parentStyle requires exactly the supported color and font inheritance properties"));
+    if !inheritance.properties.is_empty()
+        && !inheritance
+            .properties
+            .iter()
+            .copied()
+            .eq(PARENT_STYLE_PROPERTIES)
+    {
+        return Err(failure(
+            &view.id,
+            "MDJ parentStyle requires exactly the supported color and font inheritance properties",
+        ));
     }
     match &inheritance.source {
         Authored::Missing => {}
@@ -139,13 +179,20 @@ fn export_inheritance(view: &View, object: &mut Map<String, Value>) -> Result<()
     }
     match inheritance_presence(view) {
         Some(SourceFieldPresence::Null) => insert_mapped(object, "parentStyle", Value::Null)?,
-        Some(SourceFieldPresence::Value) => insert_mapped(object, "parentStyle", Value::Bool(!inheritance.properties.is_empty()))?,
+        Some(SourceFieldPresence::Value) => insert_mapped(
+            object,
+            "parentStyle",
+            Value::Bool(!inheritance.properties.is_empty()),
+        )?,
         None => {}
     }
     Ok(())
 }
 
-pub(super) fn default_style(type_name: &str, residual: &BTreeMap<String, Value>) -> crate::ViewStyleDefaults {
+pub(super) fn default_style(
+    type_name: &str,
+    residual: &BTreeMap<String, Value>,
+) -> crate::ViewStyleDefaults {
     // Element.load applies metamodel defaults only to missing fields. Mapped
     // fields are absent here too, but authored Style takes precedence. A null
     // or unsupported value remains residual and must not acquire a fallback.
@@ -155,9 +202,12 @@ pub(super) fn default_style(type_name: &str, residual: &BTreeMap<String, Value>)
         stroke: (!residual.contains_key("lineColor")).then(|| "#000000".into()),
         text_color: (!residual.contains_key("fontColor")).then(|| "#000000".into()),
         stroke_width: Some(1.0),
-        text_align: (label && !residual.contains_key("horizontalAlignment")).then_some(TextAlignment::Center),
-        text_vertical_align: (label && !residual.contains_key("verticalAlignment")).then_some(TextVerticalAlignment::Center),
-        show_shadow: (type_name == "ERDEntityView" && !residual.contains_key("showShadow")).then_some(true),
+        text_align: (label && !residual.contains_key("horizontalAlignment"))
+            .then_some(TextAlignment::Center),
+        text_vertical_align: (label && !residual.contains_key("verticalAlignment"))
+            .then_some(TextVerticalAlignment::Center),
+        show_shadow: (type_name == "ERDEntityView" && !residual.contains_key("showShadow"))
+            .then_some(true),
     }
 }
 

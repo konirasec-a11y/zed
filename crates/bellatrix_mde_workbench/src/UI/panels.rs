@@ -6,14 +6,12 @@ mod view_inspector;
 pub(crate) use crate::workbench_ui::hierarchy::element_glyph;
 use crate::workbench_ui::{
     MdeToolDrag, MdeWorkbenchItem, WorkbenchPalette,
-    hierarchy::{project_explorer, filter_explorer, ExplorerSortOrder},
+    hierarchy::{ExplorerSortOrder, filter_explorer, project_explorer},
     integration::{OpenMdeSymbols, OpenMdeWorkbench},
     property_editor::render_inspector,
 };
+use bellatrix_mde_cordis::ModelingRelationKind;
 use bellatrix_mde_cordis::{ModelingElementKind, ModelingTool};
-use bellatrix_mde_cordis::{
-    ModelingRelationKind,
-};
 use bellatrix_ui_panels::PaneHeader;
 use bellatrix_ui_symbols::{ShapeKind, glyph};
 use gpui::{
@@ -45,7 +43,6 @@ const MDE_LEFT_PRIORITY: u32 = 10_000;
 const MDE_RIGHT_PRIORITY: u32 = 10_001;
 const MDE_BOTTOM_PRIORITY: u32 = 10_002;
 
-
 fn explorer_move_menu(
     menu: ui::ContextMenu,
     owner: &Entity<MdeWorkbenchItem>,
@@ -55,23 +52,56 @@ fn explorer_move_menu(
 ) -> ui::ContextMenu {
     use crate::workbench_ui::hierarchy::ExplorerMoveTarget;
     let current_parent = match &target {
-        ExplorerMoveTarget::Element(id) => snapshot.section.relations.iter()
+        ExplorerMoveTarget::Element(id) => snapshot
+            .section
+            .relations
+            .iter()
             .find(|relation| relation.kind == "owns" && relation.to == *id)
             .map(|relation| relation.from.clone()),
-        ExplorerMoveTarget::Diagram(id) => snapshot.section.hierarchy.get(id)
+        ExplorerMoveTarget::Diagram(id) => snapshot
+            .section
+            .hierarchy
+            .get(id)
             .and_then(|placement| placement.parent_id.clone()),
     };
     let project_parent = match &target {
         ExplorerMoveTarget::Element(_) => snapshot.section.root_model.clone(),
         ExplorerMoveTarget::Diagram(_) => None,
     };
-    let mut destinations = vec![(project_parent.clone(), format!("Project: {}", snapshot.name))];
-    destinations.extend(snapshot.section.hierarchy_rows.clone().into_iter()
-        .filter(|row| project_parent.as_deref() != Some(row.element_id.as_str())
-            && snapshot.section.elements.iter().any(|element| element.id == row.element_id))
-        .map(|row| (Some(row.element_id), format!("{}{} · {}", "  ".repeat(row.depth.min(8)), row.label, row.kind))));
+    let mut destinations = vec![(
+        project_parent.clone(),
+        format!("Project: {}", snapshot.name),
+    )];
+    destinations.extend(
+        snapshot
+            .section
+            .hierarchy_rows
+            .clone()
+            .into_iter()
+            .filter(|row| {
+                project_parent.as_deref() != Some(row.element_id.as_str())
+                    && snapshot
+                        .section
+                        .elements
+                        .iter()
+                        .any(|element| element.id == row.element_id)
+            })
+            .map(|row| {
+                (
+                    Some(row.element_id),
+                    format!(
+                        "{}{} · {}",
+                        "  ".repeat(row.depth.min(8)),
+                        row.label,
+                        row.kind
+                    ),
+                )
+            }),
+    );
     destinations.retain(|(parent, _)| parent != &current_parent);
-    if destinations.is_empty() { return menu; }
+    if destinations.is_empty() {
+        return menu;
+    }
     let owner = owner.clone();
     let project_id = snapshot.project_id.clone();
     let revision = snapshot.revision;
@@ -87,8 +117,16 @@ fn explorer_move_menu(
             let target = target.clone();
             let parent = parent.clone();
             menu = menu.entry(label.clone(), None, move |_, cx| {
-                owner.update(cx, |workbench, cx| workbench.move_explorer_item(
-                    &project_id, revision, &target, parent.clone(), None, cx));
+                owner.update(cx, |workbench, cx| {
+                    workbench.move_explorer_item(
+                        &project_id,
+                        revision,
+                        &target,
+                        parent.clone(),
+                        None,
+                        cx,
+                    )
+                });
             });
         }
         menu
@@ -96,9 +134,12 @@ fn explorer_move_menu(
 }
 
 fn explorer_menu(
-    owner: &Entity<MdeWorkbenchItem>, subject: &str,
-    panel: gpui::WeakEntity<MdeRightPanel>, row_key: String,
-    window: &mut Window, cx: &mut App,
+    owner: &Entity<MdeWorkbenchItem>,
+    subject: &str,
+    panel: gpui::WeakEntity<MdeRightPanel>,
+    row_key: String,
+    window: &mut Window,
+    cx: &mut App,
 ) -> Entity<ui::ContextMenu> {
     let read_only = owner.read(cx).source().is_read_only()
         || owner.read(cx).source().is_presentation_suspended();
@@ -108,8 +149,11 @@ fn explorer_menu(
         for diagram in &snapshot.section.diagrams {
             for (index, view) in diagram.views.iter().enumerate() {
                 if view.subject.as_deref() == Some(subject) {
-                    occurrences.push((diagram.id.clone(), view.id.clone(),
-                        format!("Select in {} · view {}", diagram.name, index + 1)));
+                    occurrences.push((
+                        diagram.id.clone(),
+                        view.id.clone(),
+                        format!("Select in {} · view {}", diagram.name, index + 1),
+                    ));
                 }
             }
         }
@@ -117,56 +161,108 @@ fn explorer_menu(
     let owner = owner.clone();
     let subject = subject.to_owned();
     ui::ContextMenu::build(window, cx, move |mut menu, _, cx| {
-        if !occurrences.is_empty() { menu = menu.header("Diagram occurrences"); }
+        if !occurrences.is_empty() {
+            menu = menu.header("Diagram occurrences");
+        }
         for (diagram, view, label) in occurrences {
             let owner = owner.clone();
             menu = menu.entry(label, None, move |_, cx| {
-                owner.update(cx, |workbench, cx| workbench.select_diagram_view(diagram.clone(), view.clone(), cx));
+                owner.update(cx, |workbench, cx| {
+                    workbench.select_diagram_view(diagram.clone(), view.clone(), cx)
+                });
             });
         }
-        if read_only { return menu.header("Read-only preview"); }
-        if let Some(snapshot) = &snapshot {
-            menu = explorer_creation_menus(menu, &owner, snapshot, Some(&subject), panel.clone(), &row_key, cx);
-            menu = explorer_move_menu(menu, &owner, snapshot,
-                crate::workbench_ui::hierarchy::ExplorerMoveTarget::Element(subject.clone()), panel.clone());
+        if read_only {
+            return menu.header("Read-only preview");
         }
         if let Some(snapshot) = &snapshot {
-            if let Some(element) = snapshot.section.elements.iter().find(|element| element.id == subject) {
+            menu = explorer_creation_menus(
+                menu,
+                &owner,
+                snapshot,
+                Some(&subject),
+                panel.clone(),
+                &row_key,
+                cx,
+            );
+            menu = explorer_move_menu(
+                menu,
+                &owner,
+                snapshot,
+                crate::workbench_ui::hierarchy::ExplorerMoveTarget::Element(subject.clone()),
+                panel.clone(),
+            );
+        }
+        if let Some(snapshot) = &snapshot {
+            if let Some(element) = snapshot
+                .section
+                .elements
+                .iter()
+                .find(|element| element.id == subject)
+            {
                 let rename_owner = owner.clone();
                 let rename_panel = panel.clone();
                 let project_id = snapshot.project_id.clone();
                 let element_id = subject.clone();
                 let revision = snapshot.revision;
-                let name = element.template_parametered_id.as_ref().and_then(|id| snapshot.section.elements.iter().find(|element| &element.id == id))
-                    .unwrap_or(element).name.clone();
+                let name = element
+                    .template_parametered_id
+                    .as_ref()
+                    .and_then(|id| {
+                        snapshot
+                            .section
+                            .elements
+                            .iter()
+                            .find(|element| &element.id == id)
+                    })
+                    .unwrap_or(element)
+                    .name
+                    .clone();
                 menu = menu.entry("Rename element", None, move |window, cx| {
                     if let Err(error) = rename_panel.update(cx, |panel, cx| {
-                        if !panel.is_bound_to(&rename_owner) || rename_owner.read(cx).source().is_read_only() { return; }
+                        if !panel.is_bound_to(&rename_owner)
+                            || rename_owner.read(cx).source().is_read_only()
+                        {
+                            return;
+                        }
                         let input = cx.new(|cx| {
-                            let input = InputField::new(window, cx, "Element name").label_min_width(px(0.0));
+                            let input = InputField::new(window, cx, "Element name")
+                                .label_min_width(px(0.0));
                             input.set_text(&name, window, cx);
                             input
                         });
                         window.focus(&input.read(cx).focus_handle(cx), cx);
                         panel.explorer_action = Some(ExplorerActionDraft {
-                            item_id: rename_owner.entity_id(), project_id: project_id.clone(),
-                            target: ExplorerActionTarget::Element(element_id.clone()), revision,
-                            name: name.clone(), rename: Some(input),
+                            item_id: rename_owner.entity_id(),
+                            project_id: project_id.clone(),
+                            target: ExplorerActionTarget::Element(element_id.clone()),
+                            revision,
+                            name: name.clone(),
+                            rename: Some(input),
                         });
                         panel.explorer_open = true;
                         cx.notify();
-                    }) { eprintln!("MDE element rename failed: {error}"); }
+                    }) {
+                        eprintln!("MDE element rename failed: {error}");
+                    }
                 });
             }
         }
         let show_owner = owner.clone();
         let show_subject = subject.clone();
         menu.entry("Show in active diagram", None, move |window, cx| {
-            if show_owner.read(cx).source().is_read_only() { return; }
-            show_owner.update(cx, |item, cx| item.show_element_in_active_diagram(show_subject.clone(), window, cx));
+            if show_owner.read(cx).source().is_read_only() {
+                return;
+            }
+            show_owner.update(cx, |item, cx| {
+                item.show_element_in_active_diagram(show_subject.clone(), window, cx)
+            });
             window.dispatch_action(Box::new(OpenMdeWorkbench), cx);
-        }).entry("Delete from model", None, move |window, cx| {
-            if owner.read(cx).source().is_read_only() { return; }
+        })
+        .entry("Delete from model", None, move |window, cx| {
+            if owner.read(cx).source().is_read_only() {
+                return;
+            }
             owner.update(cx, |item, cx| {
                 item.select_element(subject.clone(), cx);
                 item.delete_selected_from_model(cx);
@@ -203,7 +299,8 @@ fn explorer_creation_menus(
     if !owner.read(cx).source().allows_creation() {
         return menu.header("Creation is not available for this document");
     }
-    let diagram_kinds = subject.map(|id| explorer::contextual_diagram_kinds(&snapshot.section, id))
+    let diagram_kinds = subject
+        .map(|id| explorer::contextual_diagram_kinds(&snapshot.section, id))
         .unwrap_or_else(|| explorer::project_diagram_kinds(&snapshot.section));
     if !diagram_kinds.is_empty() {
         let owner = owner.clone();
@@ -217,36 +314,60 @@ fn explorer_creation_menus(
                 let owner = owner.clone();
                 let project_id = snapshot.project_id.clone();
                 let revision = snapshot.revision;
-                let model_elements = if snapshot.section.tools.diagram(kind).is_some_and(|metadata| metadata.context_metaclass.is_some())
-                    || kind == bellatrix_mde_cordis::StructuralDiagramKind::CompositeStructure {
+                let model_elements = if snapshot
+                    .section
+                    .tools
+                    .diagram(kind)
+                    .is_some_and(|metadata| metadata.context_metaclass.is_some())
+                    || kind == bellatrix_mde_cordis::StructuralDiagramKind::CompositeStructure
+                {
                     subject.iter().cloned().collect::<Vec<_>>()
-                } else { Vec::new() };
+                } else {
+                    Vec::new()
+                };
                 let parent_id = subject.clone();
                 let parent_occurrence = parent_occurrence.clone();
                 let label = crate::workbench_ui::diagram_kind_label(kind).to_owned();
-                let name = format!("{} diagram {}", label, snapshot.section.diagrams.len().saturating_add(1));
+                let name = format!(
+                    "{} diagram {}",
+                    label,
+                    snapshot.section.diagrams.len().saturating_add(1)
+                );
                 let panel = panel.clone();
                 let row_key = row_key.clone();
                 menu = menu.entry(label, None, move |_, cx| {
                     let sent = owner.update(cx, |workbench, cx| {
                         workbench.submit_explorer_command(
-                            bellatrix_mde_cordis::MdeUiCommand::CreateExplorerDiagram(bellatrix_mde_cordis::ModelingCreateExplorerDiagramRequested {
-                                diagram: bellatrix_mde_cordis::ModelingCreateDiagramRequested {
-                                    project_id: project_id.clone(), kind, name: name.clone(),
-                                    model_elements: model_elements.clone(), expected_revision: revision,
+                            bellatrix_mde_cordis::MdeUiCommand::CreateExplorerDiagram(
+                                bellatrix_mde_cordis::ModelingCreateExplorerDiagramRequested {
+                                    diagram: bellatrix_mde_cordis::ModelingCreateDiagramRequested {
+                                        project_id: project_id.clone(),
+                                        kind,
+                                        name: name.clone(),
+                                        model_elements: model_elements.clone(),
+                                        expected_revision: revision,
+                                    },
+                                    parent_id: parent_id.clone(),
+                                    parent_occurrence: parent_occurrence.clone(),
                                 },
-                                parent_id: parent_id.clone(),
-                                parent_occurrence: parent_occurrence.clone(),
-                            }), &project_id, revision, cx)
+                            ),
+                            &project_id,
+                            revision,
+                            cx,
+                        )
                     });
-                    if sent { reveal_explorer_owner(&panel, &owner, &row_key, cx); }
+                    if sent {
+                        reveal_explorer_owner(&panel, &owner, &row_key, cx);
+                    }
                 });
             }
             menu
         });
     }
     let element_kinds = explorer::model_creation_kinds(&snapshot.section, subject);
-    let member_kinds = subject.map(|id| explorer::member_creation_kinds(&snapshot.section, id)).unwrap_or_default();
+    let member_kinds = subject
+        .map(|id| explorer::member_creation_kinds(&snapshot.section, id))
+        .unwrap_or_default();
     if !element_kinds.is_empty() || !member_kinds.is_empty() {
         let owner = owner.clone();
         let snapshot = snapshot.clone();
@@ -260,16 +381,36 @@ fn explorer_creation_menus(
                 let owner_id = subject.clone();
                 let panel = panel.clone();
                 let row_key = row_key.clone();
-                menu = menu.entry(snapshot.section.tools.element(kind).map(|metadata| metadata.label.clone()).unwrap_or_else(|| "Element".into()), None, move |_, cx| {
-                    let sent = owner.update(cx, |workbench, cx| {
-                        workbench.submit_explorer_command(
-                            bellatrix_mde_cordis::MdeUiCommand::CreateModelElement(bellatrix_mde_cordis::ModelingCreateModelElementRequested {
-                                project_id: project_id.clone(), kind, name: None,
-                                owner_id: owner_id.clone(), expected_revision: revision,
-                            }), &project_id, revision, cx)
-                    });
-                    if sent { reveal_explorer_owner(&panel, &owner, &row_key, cx); }
-                });
+                menu = menu.entry(
+                    snapshot
+                        .section
+                        .tools
+                        .element(kind)
+                        .map(|metadata| metadata.label.clone())
+                        .unwrap_or_else(|| "Element".into()),
+                    None,
+                    move |_, cx| {
+                        let sent = owner.update(cx, |workbench, cx| {
+                            workbench.submit_explorer_command(
+                                bellatrix_mde_cordis::MdeUiCommand::CreateModelElement(
+                                    bellatrix_mde_cordis::ModelingCreateModelElementRequested {
+                                        project_id: project_id.clone(),
+                                        kind,
+                                        name: None,
+                                        owner_id: owner_id.clone(),
+                                        expected_revision: revision,
+                                    },
+                                ),
+                                &project_id,
+                                revision,
+                                cx,
+                            )
+                        });
+                        if sent {
+                            reveal_explorer_owner(&panel, &owner, &row_key, cx);
+                        }
+                    },
+                );
             }
             if let Some(subject) = &subject {
                 for (kind, label) in member_kinds.iter().copied() {
@@ -282,12 +423,22 @@ fn explorer_creation_menus(
                     menu = menu.entry(label, None, move |_, cx| {
                         let sent = owner.update(cx, |workbench, cx| {
                             workbench.submit_explorer_command(
-                                bellatrix_mde_cordis::MdeUiCommand::AddMember(bellatrix_mde_cordis::ModelingAddMemberRequested {
-                                    project_id: project_id.clone(), owner_id: owner_id.clone(), kind,
-                                    expected_revision: revision,
-                                }), &project_id, revision, cx)
+                                bellatrix_mde_cordis::MdeUiCommand::AddMember(
+                                    bellatrix_mde_cordis::ModelingAddMemberRequested {
+                                        project_id: project_id.clone(),
+                                        owner_id: owner_id.clone(),
+                                        kind,
+                                        expected_revision: revision,
+                                    },
+                                ),
+                                &project_id,
+                                revision,
+                                cx,
+                            )
                         });
-                        if sent { reveal_explorer_owner(&panel, &owner, &row_key, cx); }
+                        if sent {
+                            reveal_explorer_owner(&panel, &owner, &row_key, cx);
+                        }
                     });
                 }
             }
@@ -298,19 +449,27 @@ fn explorer_creation_menus(
 }
 
 fn reveal_explorer_owner(
-    panel: &gpui::WeakEntity<MdeRightPanel>, owner: &Entity<MdeWorkbenchItem>, row_key: &str, cx: &mut App,
+    panel: &gpui::WeakEntity<MdeRightPanel>,
+    owner: &Entity<MdeWorkbenchItem>,
+    row_key: &str,
+    cx: &mut App,
 ) {
     if let Err(error) = panel.update(cx, |panel, cx| {
         if panel.is_bound_to(owner) {
             panel.collapsed_elements.remove(row_key);
             cx.notify();
         }
-    }) { eprintln!("MDE element owner reveal failed: {error}"); }
+    }) {
+        eprintln!("MDE element owner reveal failed: {error}");
+    }
 }
 
 fn explorer_project_menu(
-    owner: &Entity<MdeWorkbenchItem>, panel: gpui::WeakEntity<MdeRightPanel>, row_key: &str,
-    window: &mut Window, cx: &mut App,
+    owner: &Entity<MdeWorkbenchItem>,
+    panel: gpui::WeakEntity<MdeRightPanel>,
+    row_key: &str,
+    window: &mut Window,
+    cx: &mut App,
 ) -> Entity<ui::ContextMenu> {
     let snapshot = owner.read(cx).source().snapshot();
     let editable = !owner.read(cx).source().is_read_only()
@@ -318,44 +477,83 @@ fn explorer_project_menu(
     let owner = owner.clone();
     let row_key = row_key.to_owned();
     ui::ContextMenu::build(window, cx, move |menu, _, cx| {
-        if !editable { return menu.header("Read-only preview"); }
-        let Ok(snapshot) = snapshot else { return menu.header("Project snapshot unavailable"); };
+        if !editable {
+            return menu.header("Read-only preview");
+        }
+        let Ok(snapshot) = snapshot else {
+            return menu.header("Project snapshot unavailable");
+        };
         explorer_creation_menus(menu, &owner, &snapshot, None, panel, &row_key, cx)
     })
 }
 
 /// Navigation only: unbound visual objects are not model-tree children.
 fn explorer_unbound_views_menu(
-    owner: &Entity<MdeWorkbenchItem>, diagram_id: &str, window: &mut Window, cx: &mut App,
+    owner: &Entity<MdeWorkbenchItem>,
+    diagram_id: &str,
+    window: &mut Window,
+    cx: &mut App,
 ) -> Entity<ui::ContextMenu> {
     let snapshot = owner.read(cx).source().snapshot().ok();
-    let diagram = snapshot.as_ref().and_then(|snapshot|
-        snapshot.section.diagrams.iter().find(|diagram| diagram.id == diagram_id));
+    let diagram = snapshot.as_ref().and_then(|snapshot| {
+        snapshot
+            .section
+            .diagrams
+            .iter()
+            .find(|diagram| diagram.id == diagram_id)
+    });
     let mut entries = Vec::new();
     let mut nested_count = 0usize;
     if let Some(diagram) = diagram {
         for view in diagram.all_views().filter(|view| view.subject.is_none()) {
-            if !diagram.views.iter().any(|top_level| top_level.id == view.id) {
+            if !diagram
+                .views
+                .iter()
+                .any(|top_level| top_level.id == view.id)
+            {
                 nested_count += 1;
                 continue;
             }
-            let kind = view.draft.as_ref().map(|draft| draft.notation_kind.as_str())
-                .or(view.presentation.kind.as_deref()).unwrap_or("Visual View");
-            let label = view.label.as_deref().filter(|label| !label.trim().is_empty()).unwrap_or(kind);
-            entries.push((view.id.clone(), format!("{} · {} · {}", entries.len() + 1,
-                if view.draft.is_some() { "Draft" } else { "Unbound View" }, label)));
+            let kind = view
+                .draft
+                .as_ref()
+                .map(|draft| draft.notation_kind.as_str())
+                .or(view.presentation.kind.as_deref())
+                .unwrap_or("Visual View");
+            let label = view
+                .label
+                .as_deref()
+                .filter(|label| !label.trim().is_empty())
+                .unwrap_or(kind);
+            entries.push((
+                view.id.clone(),
+                format!(
+                    "{} · {} · {}",
+                    entries.len() + 1,
+                    if view.draft.is_some() {
+                        "Draft"
+                    } else {
+                        "Unbound View"
+                    },
+                    label
+                ),
+            ));
         }
     }
     let owner = owner.clone();
     let diagram_id = diagram_id.to_owned();
     ui::ContextMenu::build(window, cx, move |mut menu, _, _| {
         menu = menu.header("Visual objects without a model subject");
-        if entries.is_empty() { menu = menu.header("No selectable top-level views"); }
+        if entries.is_empty() {
+            menu = menu.header("No selectable top-level views");
+        }
         for (view_id, label) in entries {
             let owner = owner.clone();
             let diagram_id = diagram_id.clone();
             menu = menu.entry(label, None, move |_, cx| {
-                owner.update(cx, |workbench, cx| workbench.select_diagram_view(diagram_id.clone(), view_id.clone(), cx));
+                owner.update(cx, |workbench, cx| {
+                    workbench.select_diagram_view(diagram_id.clone(), view_id.clone(), cx)
+                });
             });
         }
         if nested_count > 0 {
@@ -366,8 +564,11 @@ fn explorer_unbound_views_menu(
 }
 
 fn explorer_diagram_menu(
-    owner: &Entity<MdeWorkbenchItem>, panel: gpui::WeakEntity<MdeRightPanel>,
-    diagram_id: &str, window: &mut Window, cx: &mut App,
+    owner: &Entity<MdeWorkbenchItem>,
+    panel: gpui::WeakEntity<MdeRightPanel>,
+    diagram_id: &str,
+    window: &mut Window,
+    cx: &mut App,
 ) -> Entity<ui::ContextMenu> {
     owner.update(cx, |workbench, cx| {
         workbench.select_diagram(diagram_id.to_owned(), cx);
@@ -377,8 +578,16 @@ fn explorer_diagram_menu(
     let editable = !owner.read(cx).source().is_read_only()
         && !owner.read(cx).source().is_presentation_suspended();
     let snapshot = owner.read(cx).source().snapshot().ok();
-    let diagram = snapshot.as_ref().and_then(|snapshot|
-        snapshot.section.diagrams.iter().find(|diagram| diagram.id == diagram_id)).cloned();
+    let diagram = snapshot
+        .as_ref()
+        .and_then(|snapshot| {
+            snapshot
+                .section
+                .diagrams
+                .iter()
+                .find(|diagram| diagram.id == diagram_id)
+        })
+        .cloned();
     let owner = owner.clone();
     let diagram_id = diagram_id.to_owned();
     ui::ContextMenu::build(window, cx, move |menu, _, _| {
@@ -391,12 +600,19 @@ fn explorer_diagram_menu(
                 workbench.apply_selection_change(change, cx);
             });
         });
-        if !editable { return menu.header("Read-only preview"); }
+        if !editable {
+            return menu.header("Read-only preview");
+        }
         let (Some(snapshot), Some(diagram)) = (snapshot, diagram) else {
             return menu.header("Diagram unavailable");
         };
-        let menu = explorer_move_menu(menu, &owner, &snapshot,
-            crate::workbench_ui::hierarchy::ExplorerMoveTarget::Diagram(diagram_id.clone()), panel.clone());
+        let menu = explorer_move_menu(
+            menu,
+            &owner,
+            &snapshot,
+            crate::workbench_ui::hierarchy::ExplorerMoveTarget::Diagram(diagram_id.clone()),
+            panel.clone(),
+        );
         [true, false].into_iter().fold(menu, |menu, rename| {
             let panel = panel.clone();
             let owner = owner.clone();
@@ -404,23 +620,44 @@ fn explorer_diagram_menu(
             let diagram_id = diagram_id.clone();
             let name = diagram.name.clone();
             let revision = snapshot.revision;
-            menu.entry(if rename { "Rename diagram" } else { "Delete diagram…" }, None, move |window, cx| {
-                if let Err(error) = panel.update(cx, |panel, cx| {
-                    if !panel.is_bound_to(&owner) { return; }
-                    let input = rename.then(|| cx.new(|cx| {
-                        let input = InputField::new(window, cx, "Diagram name").label_min_width(px(0.0));
-                        input.set_text(&name, window, cx);
-                        input
-                    }));
-                    if let Some(input) = &input { window.focus(&input.read(cx).focus_handle(cx), cx); }
-                    panel.explorer_action = Some(ExplorerActionDraft {
-                        item_id: owner.entity_id(), project_id: project_id.clone(),
-                        target: ExplorerActionTarget::Diagram(diagram_id.clone()), revision, name: name.clone(), rename: input,
-                    });
-                    panel.explorer_open = true;
-                    cx.notify();
-                }) { eprintln!("MDE diagram action failed: {error}"); }
-            })
+            menu.entry(
+                if rename {
+                    "Rename diagram"
+                } else {
+                    "Delete diagram…"
+                },
+                None,
+                move |window, cx| {
+                    if let Err(error) = panel.update(cx, |panel, cx| {
+                        if !panel.is_bound_to(&owner) {
+                            return;
+                        }
+                        let input = rename.then(|| {
+                            cx.new(|cx| {
+                                let input = InputField::new(window, cx, "Diagram name")
+                                    .label_min_width(px(0.0));
+                                input.set_text(&name, window, cx);
+                                input
+                            })
+                        });
+                        if let Some(input) = &input {
+                            window.focus(&input.read(cx).focus_handle(cx), cx);
+                        }
+                        panel.explorer_action = Some(ExplorerActionDraft {
+                            item_id: owner.entity_id(),
+                            project_id: project_id.clone(),
+                            target: ExplorerActionTarget::Diagram(diagram_id.clone()),
+                            revision,
+                            name: name.clone(),
+                            rename: input,
+                        });
+                        panel.explorer_open = true;
+                        cx.notify();
+                    }) {
+                        eprintln!("MDE diagram action failed: {error}");
+                    }
+                },
+            )
         })
     })
 }
@@ -482,13 +719,18 @@ pub struct MdeRightPanel {
     state: PanelState,
     editing_id: Option<String>,
     explorer_action: Option<ExplorerActionDraft>,
-    pub(crate) property_drafts:
-        HashMap<crate::workbench_ui::inspector_drafts::DraftKey, crate::workbench_ui::property_editor::InspectorDraft>,
+    pub(crate) property_drafts: HashMap<
+        crate::workbench_ui::inspector_drafts::DraftKey,
+        crate::workbench_ui::property_editor::InspectorDraft,
+    >,
     style_target_id: Option<crate::workbench_ui::style_editor::StyleKey>,
-    pub(crate) style_drafts:
-        HashMap<crate::workbench_ui::style_editor::StyleKey, crate::workbench_ui::style_editor::StyleDraft>,
+    pub(crate) style_drafts: HashMap<
+        crate::workbench_ui::style_editor::StyleKey,
+        crate::workbench_ui::style_editor::StyleDraft,
+    >,
     pub(crate) inspector_styles_open: bool,
-    pub(crate) timing_drafts: HashMap<(String, String, String), crate::workbench_ui::timing_editor::TimingDraft>,
+    pub(crate) timing_drafts:
+        HashMap<(String, String, String), crate::workbench_ui::timing_editor::TimingDraft>,
     collapsed_elements: HashSet<String>,
     last_revealed_row: Option<(gpui::EntityId, Vec<String>)>,
     explorer_scroll: gpui::ScrollHandle,
@@ -512,9 +754,16 @@ impl MdeRightPanel {
     }
 
     fn commit_explorer_action(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(draft) = self.explorer_action.as_ref() else { return; };
-        let Some(owner) = self.state.item.as_ref().and_then(gpui::WeakEntity::upgrade) else { return; };
-        if owner.entity_id() != draft.item_id { self.explorer_action = None; return; }
+        let Some(draft) = self.explorer_action.as_ref() else {
+            return;
+        };
+        let Some(owner) = self.state.item.as_ref().and_then(gpui::WeakEntity::upgrade) else {
+            return;
+        };
+        if owner.entity_id() != draft.item_id {
+            self.explorer_action = None;
+            return;
+        }
         let command = if let Some(input) = &draft.rename {
             let name = input.read(cx).text(cx).trim().to_owned();
             if name.is_empty() {
@@ -525,22 +774,39 @@ impl MdeRightPanel {
                 return;
             }
             match &draft.target {
-                ExplorerActionTarget::Diagram(id) => bellatrix_mde_cordis::MdeUiCommand::RenameDiagram(bellatrix_mde_cordis::ModelingRenameDiagramRequested {
-                    project_id: draft.project_id.clone(), diagram_id: id.clone(), name, expected_revision: draft.revision,
-                }),
-                ExplorerActionTarget::Element(id) => bellatrix_mde_cordis::MdeUiCommand::Rename(bellatrix_mde_cordis::ModelingRenameRequested {
-                    project_id: draft.project_id.clone(), element_id: id.clone(), new_name: name, expected_revision: draft.revision,
-                }),
+                ExplorerActionTarget::Diagram(id) => {
+                    bellatrix_mde_cordis::MdeUiCommand::RenameDiagram(
+                        bellatrix_mde_cordis::ModelingRenameDiagramRequested {
+                            project_id: draft.project_id.clone(),
+                            diagram_id: id.clone(),
+                            name,
+                            expected_revision: draft.revision,
+                        },
+                    )
+                }
+                ExplorerActionTarget::Element(id) => bellatrix_mde_cordis::MdeUiCommand::Rename(
+                    bellatrix_mde_cordis::ModelingRenameRequested {
+                        project_id: draft.project_id.clone(),
+                        element_id: id.clone(),
+                        new_name: name,
+                        expected_revision: draft.revision,
+                    },
+                ),
             }
         } else if let ExplorerActionTarget::Diagram(id) = &draft.target {
-            bellatrix_mde_cordis::MdeUiCommand::DeleteDiagram(bellatrix_mde_cordis::ModelingDeleteDiagramRequested {
-                project_id: draft.project_id.clone(), diagram_id: id.clone(), expected_revision: draft.revision,
-            })
+            bellatrix_mde_cordis::MdeUiCommand::DeleteDiagram(
+                bellatrix_mde_cordis::ModelingDeleteDiagramRequested {
+                    project_id: draft.project_id.clone(),
+                    diagram_id: id.clone(),
+                    expected_revision: draft.revision,
+                },
+            )
         } else {
             return;
         };
-        if owner.update(cx, |workbench, cx| workbench.submit_explorer_command(
-            command, &draft.project_id, draft.revision, cx)) {
+        if owner.update(cx, |workbench, cx| {
+            workbench.submit_explorer_command(command, &draft.project_id, draft.revision, cx)
+        }) {
             self.explorer_action = None;
             window.focus(&self.state.focus, cx);
         }
@@ -552,18 +818,27 @@ impl MdeRightPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let explorer_search = cx.new(|cx| InputField::new(window, cx, "Search model elements…")
-            .start_icon(IconName::MagnifyingGlass).label_min_width(px(0.0)));
+        let explorer_search = cx.new(|cx| {
+            InputField::new(window, cx, "Search model elements…")
+                .start_icon(IconName::MagnifyingGlass)
+                .label_min_width(px(0.0))
+        });
         let owner = cx.weak_entity();
         let editor = explorer_search.read(cx).editor().clone();
-        let explorer_search_listener = editor.subscribe(Box::new(move |event, _, cx| {
-            if event == ErasedEditorEvent::BufferEdited {
-                if let Err(error) = owner.update(cx, |panel, cx| {
-                    panel.explorer_scroll.scroll_to_item(0);
-                    cx.notify();
-                }) { eprintln!("MDE Explorer search failed: {error}"); }
-            }
-        }), window, cx);
+        let explorer_search_listener = editor.subscribe(
+            Box::new(move |event, _, cx| {
+                if event == ErasedEditorEvent::BufferEdited {
+                    if let Err(error) = owner.update(cx, |panel, cx| {
+                        panel.explorer_scroll.scroll_to_item(0);
+                        cx.notify();
+                    }) {
+                        eprintln!("MDE Explorer search failed: {error}");
+                    }
+                }
+            }),
+            window,
+            cx,
+        );
         Self {
             state: PanelState::new(item, DockPosition::Right, 230.0, cx),
             editing_id: None,
@@ -643,7 +918,11 @@ impl Render for MdeRightPanel {
                 .child(Label::new("Select an MDE document to inspect its model."))
                 .into_any_element();
         };
-        if self.explorer_action.as_ref().is_some_and(|draft| draft.item_id != item.entity_id()) {
+        if self
+            .explorer_action
+            .as_ref()
+            .is_some_and(|draft| draft.item_id != item.entity_id())
+        {
             self.explorer_action = None;
         }
         let read_only = item.read(cx).source().is_read_only();
@@ -652,8 +931,16 @@ impl Render for MdeRightPanel {
         let panel_border = palette.border;
         let selected_id = item.read(cx).selected_element().map(str::to_owned);
         let active_diagram = item.read(cx).active_diagram().map(str::to_owned);
-        let selected_view = item.read(cx).presentation.selected_view().map(str::to_owned);
-        let selected_explorer_key = item.read(cx).presentation.selected_explorer_key().map(str::to_owned);
+        let selected_view = item
+            .read(cx)
+            .presentation
+            .selected_view()
+            .map(str::to_owned);
+        let selected_explorer_key = item
+            .read(cx)
+            .presentation
+            .selected_explorer_key()
+            .map(str::to_owned);
         let snapshot = item.read(cx).source().snapshot().ok();
         let inspection = snapshot.as_ref().and_then(|snapshot| {
             selected_id
@@ -673,25 +960,66 @@ impl Render for MdeRightPanel {
             explorer_has_rows = !tree.is_empty();
             let root_key = format!("project:{}", snapshot.project_id.as_str());
             explorer_branch_keys.push(root_key.clone());
-            explorer_branch_keys.extend(tree.windows(2)
-                .filter(|rows| rows[1].depth > rows[0].depth)
-                .map(|rows| rows[0].key.clone()));
-            let selected_row = selected_explorer_key.as_ref()
+            explorer_branch_keys.extend(
+                tree.windows(2)
+                    .filter(|rows| rows[1].depth > rows[0].depth)
+                    .map(|rows| rows[0].key.clone()),
+            );
+            let selected_row = selected_explorer_key
+                .as_ref()
                 .and_then(|key| tree.iter().find(|row| &row.key == key))
-                .or_else(|| selected_view.as_ref()
-                    .and_then(|id| tree.iter().find(|row| row.view.as_ref().is_some_and(|view|
-                        &view.view_id == id && active_diagram.as_deref() == Some(view.diagram_id.as_str())))))
-                .or_else(|| selected_id.as_ref().and_then(|id| {
-                    tree.iter().find(|row| row.view.is_none() && !row.diagram && &row.element_id == id
-                        && (row.diagram_context.is_none() || row.diagram_context.as_deref() == active_diagram.as_deref()))
-                        .or_else(|| tree.iter().find(|row| row.view.as_ref().is_some_and(|view|
-                            view.subject_id.as_ref() == Some(id) && active_diagram.as_deref() == Some(view.diagram_id.as_str()))))
-                        .or_else(|| tree.iter().find(|row| row.view.is_none() && !row.diagram && &row.element_id == id))
-                        .or_else(|| tree.iter().find(|row| row.view.as_ref().is_some_and(|view| view.subject_id.as_ref() == Some(id))))
-                }))
-                .or_else(|| active_diagram.as_ref().and_then(|id| tree.iter().find(|row| row.diagram && &row.element_id == id)));
+                .or_else(|| {
+                    selected_view.as_ref().and_then(|id| {
+                        tree.iter().find(|row| {
+                            row.view.as_ref().is_some_and(|view| {
+                                &view.view_id == id
+                                    && active_diagram.as_deref() == Some(view.diagram_id.as_str())
+                            })
+                        })
+                    })
+                })
+                .or_else(|| {
+                    selected_id.as_ref().and_then(|id| {
+                        tree.iter()
+                            .find(|row| {
+                                row.view.is_none()
+                                    && !row.diagram
+                                    && &row.element_id == id
+                                    && (row.diagram_context.is_none()
+                                        || row.diagram_context.as_deref()
+                                            == active_diagram.as_deref())
+                            })
+                            .or_else(|| {
+                                tree.iter().find(|row| {
+                                    row.view.as_ref().is_some_and(|view| {
+                                        view.subject_id.as_ref() == Some(id)
+                                            && active_diagram.as_deref()
+                                                == Some(view.diagram_id.as_str())
+                                    })
+                                })
+                            })
+                            .or_else(|| {
+                                tree.iter().find(|row| {
+                                    row.view.is_none() && !row.diagram && &row.element_id == id
+                                })
+                            })
+                            .or_else(|| {
+                                tree.iter().find(|row| {
+                                    row.view
+                                        .as_ref()
+                                        .is_some_and(|view| view.subject_id.as_ref() == Some(id))
+                                })
+                            })
+                    })
+                })
+                .or_else(|| {
+                    active_diagram
+                        .as_ref()
+                        .and_then(|id| tree.iter().find(|row| row.diagram && &row.element_id == id))
+                });
             can_reveal_selection = selected_id.is_some() || active_diagram.is_some();
-            let selected_index = selected_row.and_then(|selected| tree.iter().position(|row| row.key == selected.key));
+            let selected_index = selected_row
+                .and_then(|selected| tree.iter().position(|row| row.key == selected.key));
             let reveal = selected_index.map(|index| {
                 let mut path = vec![tree[index].key.clone()];
                 let mut depth = tree[index].depth;
@@ -700,7 +1028,9 @@ impl Render for MdeRightPanel {
                         path.push(ancestor.key.clone());
                         depth = ancestor.depth;
                     }
-                    if depth == 0 { break; }
+                    if depth == 0 {
+                        break;
+                    }
                 }
                 path.push(root_key.clone());
                 (item.entity_id(), path)
@@ -719,7 +1049,9 @@ impl Render for MdeRightPanel {
                             self.collapsed_elements.remove(&ancestor.key);
                             depth = ancestor.depth;
                         }
-                        if depth == 0 { break; }
+                        if depth == 0 {
+                            break;
+                        }
                     }
                 }
             }
@@ -774,7 +1106,9 @@ impl Render for MdeRightPanel {
                     .menu(move |window, cx| explorer_project_menu(&project_menu_owner, project_menu_panel.clone(), &project_menu_key, window, cx))));
             let mut hidden_by_depth: Option<usize> = None;
             for (index, row) in tree.iter().enumerate() {
-                if !root_expanded { break; }
+                if !root_expanded {
+                    break;
+                }
                 if let Some(ancestor_depth) = hidden_by_depth {
                     if row.depth > ancestor_depth {
                         continue;
@@ -785,31 +1119,72 @@ impl Render for MdeRightPanel {
                     .get(index + 1)
                     .is_some_and(|next| next.depth > row.depth);
                 let type_label = crate::workbench_ui::hierarchy::explorer_type_label(
-                    &snapshot.section, &row.kind,
-                    snapshot.section.relations.iter().any(|relation| row.view.as_ref().and_then(|view| view.subject_id.as_deref()).unwrap_or(&row.element_id) == relation.id),
+                    &snapshot.section,
+                    &row.kind,
+                    snapshot.section.relations.iter().any(|relation| {
+                        row.view
+                            .as_ref()
+                            .and_then(|view| view.subject_id.as_deref())
+                            .unwrap_or(&row.element_id)
+                            == relation.id
+                    }),
                 );
-                let drag_subject = row.view.as_ref().and_then(|view| view.subject_id.as_deref())
-                    .or_else(|| (!row.diagram && row.view.is_none()).then_some(row.element_id.as_str()));
-                let element_drag = if read_only { None } else {
-                    drag_subject.filter(|id| snapshot.section.elements.iter().any(|element| element.id == *id))
-                        .map(|element_id| crate::workbench_ui::hierarchy::ExplorerElementDrag {
-                            project_id: snapshot.project_id.clone(),
-                            element_id: element_id.to_owned(),
-                            target_diagram_id: active_diagram.clone(),
-                            source_view_id: row.view.as_ref()
-                                .filter(|view| active_diagram.as_deref() == Some(view.diagram_id.as_str()))
-                                .map(|view| view.view_id.clone()),
-                            revision: snapshot.revision,
-                            label: row.label.clone(),
-                            ownership_checks: Default::default(),
+                let drag_subject = row
+                    .view
+                    .as_ref()
+                    .and_then(|view| view.subject_id.as_deref())
+                    .or_else(|| {
+                        (!row.diagram && row.view.is_none()).then_some(row.element_id.as_str())
+                    });
+                let element_drag = if read_only {
+                    None
+                } else {
+                    drag_subject
+                        .filter(|id| {
+                            snapshot
+                                .section
+                                .elements
+                                .iter()
+                                .any(|element| element.id == *id)
                         })
+                        .map(
+                            |element_id| crate::workbench_ui::hierarchy::ExplorerElementDrag {
+                                project_id: snapshot.project_id.clone(),
+                                element_id: element_id.to_owned(),
+                                target_diagram_id: active_diagram.clone(),
+                                source_view_id: row
+                                    .view
+                                    .as_ref()
+                                    .filter(|view| {
+                                        active_diagram.as_deref() == Some(view.diagram_id.as_str())
+                                    })
+                                    .map(|view| view.view_id.clone()),
+                                revision: snapshot.revision,
+                                label: row.label.clone(),
+                                ownership_checks: Default::default(),
+                            },
+                        )
                 };
-                let ownership_target = if read_only { None } else {
-                    drag_subject.filter(|id| snapshot.section.elements.iter().any(|element| element.id == *id))
+                let ownership_target = if read_only {
+                    None
+                } else {
+                    drag_subject
+                        .filter(|id| {
+                            snapshot
+                                .section
+                                .elements
+                                .iter()
+                                .any(|element| element.id == *id)
+                        })
                         .map(str::to_owned)
                 };
-                let ownership_occurrence = crate::workbench_ui::explorer::parent_occurrence_from_rows(
-                    &snapshot.section, ownership_target.as_deref(), &row.key, &tree);
+                let ownership_occurrence =
+                    crate::workbench_ui::explorer::parent_occurrence_from_rows(
+                        &snapshot.section,
+                        ownership_target.as_deref(),
+                        &row.key,
+                        &tree,
+                    );
                 let ownership_filter_owner = item.clone();
                 let ownership_drop_owner = item.clone();
                 if let Some(view) = &row.view {
@@ -817,7 +1192,9 @@ impl Render for MdeRightPanel {
                     let view_id = view.view_id.clone();
                     let owner = item.clone();
                     let selected = selected_row.is_some_and(|selected| selected.key == row.key);
-                    if selected && reveal_selected { self.explorer_scroll.scroll_to_item(rows.len()); }
+                    if selected && reveal_selected {
+                        self.explorer_scroll.scroll_to_item(rows.len());
+                    }
                     let expanded = searching || !self.collapsed_elements.contains(&row.key);
                     let disclosure_id = row.key.clone();
                     let disclosure_panel = cx.weak_entity();
@@ -910,14 +1287,20 @@ impl Render for MdeRightPanel {
                                 }
                             })
                         )));
-                    if has_children && !expanded { hidden_by_depth = Some(row.depth); }
+                    if has_children && !expanded {
+                        hidden_by_depth = Some(row.depth);
+                    }
                     continue;
                 }
                 if row.diagram {
-                    let diagram_drag = (!read_only).then(|| crate::workbench_ui::hierarchy::ExplorerDiagramDrag {
-                        project_id: snapshot.project_id.clone(), diagram_id: row.element_id.clone(),
-                        revision: snapshot.revision, label: row.label.clone(), parent_checks: Default::default(),
-                    });
+                    let diagram_drag =
+                        (!read_only).then(|| crate::workbench_ui::hierarchy::ExplorerDiagramDrag {
+                            project_id: snapshot.project_id.clone(),
+                            diagram_id: row.element_id.clone(),
+                            revision: snapshot.revision,
+                            label: row.label.clone(),
+                            parent_checks: Default::default(),
+                        });
                     let id = row.element_id.clone();
                     let owner = item.clone();
                     let selected = selected_row.is_some_and(|selected| selected.key == row.key);
@@ -939,10 +1322,17 @@ impl Render for MdeRightPanel {
                     let visual_menu_owner = item.clone();
                     let visual_menu_diagram = id.clone();
                     let visual_menu_id = format!("mde-unbound-views-{id}");
-                    let has_unbound_views = snapshot.section.diagrams.iter()
+                    let has_unbound_views = snapshot
+                        .section
+                        .diagrams
+                        .iter()
                         .find(|diagram| diagram.id == id)
-                        .is_some_and(|diagram| diagram.all_views().any(|view| view.subject.is_none()));
-                    if reveal_selected && selected_row.is_some_and(|selected| selected.key == row.key) {
+                        .is_some_and(|diagram| {
+                            diagram.all_views().any(|view| view.subject.is_none())
+                        });
+                    if reveal_selected
+                        && selected_row.is_some_and(|selected| selected.key == row.key)
+                    {
                         self.explorer_scroll.scroll_to_item(rows.len());
                     }
                     rows.push(
@@ -1010,7 +1400,9 @@ impl Render for MdeRightPanel {
                                     )))
                             )),
                     );
-                    if has_children && !expanded { hidden_by_depth = Some(row.depth); }
+                    if has_children && !expanded {
+                        hidden_by_depth = Some(row.depth);
+                    }
                     continue;
                 }
                 let expanded = searching || !self.collapsed_elements.contains(&row.key);
@@ -1029,14 +1421,19 @@ impl Render for MdeRightPanel {
                 let member_menu_key = row.key.clone();
                 let menu_diagram_context = row.diagram_context.clone();
                 let selected = selected_row.is_some_and(|selected| selected.key == row.key);
-                if selected && reveal_selected { self.explorer_scroll.scroll_to_item(rows.len()); }
+                if selected && reveal_selected {
+                    self.explorer_scroll.scroll_to_item(rows.len());
+                }
                 let tree_item = TreeViewItem::new(row.key.clone(), row.label.clone())
                     .aria_label(format!("{}: {}", type_label, row.label))
                     .root_item(has_children)
                     .expanded(expanded)
                     .toggle_state(selected)
                     .on_toggle(move |_, _, cx| {
-                        if searching { cx.stop_propagation(); return; }
+                        if searching {
+                            cx.stop_propagation();
+                            return;
+                        }
                         cx.stop_propagation();
                         if let Err(error) = disclosure_panel.update(cx, |panel, cx| {
                             if !panel.collapsed_elements.insert(disclosure_id.clone()) {
@@ -1049,8 +1446,15 @@ impl Render for MdeRightPanel {
                     })
                     .on_click(move |_, _, cx| {
                         owner.update(cx, |workbench, cx| {
-                            if let Some(diagram) = &diagram_context { workbench.select_diagram(diagram.clone(), cx); }
-                            workbench.select_explorer_element(id.clone(), selection_key.clone(), selection_occurrence.clone(), cx);
+                            if let Some(diagram) = &diagram_context {
+                                workbench.select_diagram(diagram.clone(), cx);
+                            }
+                            workbench.select_explorer_element(
+                                id.clone(),
+                                selection_key.clone(),
+                                selection_occurrence.clone(),
+                                cx,
+                            );
                         });
                     });
                 rows.push(
@@ -1136,7 +1540,6 @@ impl Render for MdeRightPanel {
                     hidden_by_depth = Some(row.depth);
                 }
             }
-
         }
         if !read_only && self.editing_id != selected_id {
             if self.property_drafts.values().any(|draft| {
@@ -1161,7 +1564,12 @@ impl Render for MdeRightPanel {
             );
         }
         let mut inspector_rows = self.render_view_presentation(
-            item.clone(), &snapshot, &active_diagram, read_only, window, cx,
+            item.clone(),
+            &snapshot,
+            &active_diagram,
+            read_only,
+            window,
+            cx,
         );
         inspector_rows.extend(render_inspector(
             inspection.as_ref(),
@@ -1441,7 +1849,6 @@ impl Render for MdeRightPanel {
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum BottomTab {
     Diagnostics,
@@ -1455,8 +1862,18 @@ pub struct MdeBottomPanel {
     execution: Entity<crate::workbench_ui::execution_dashboard::MdeExecutionDashboard>,
 }
 impl MdeBottomPanel {
-    pub fn new(item: Entity<MdeWorkbenchItem>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let execution = cx.new(|cx| crate::workbench_ui::execution_dashboard::MdeExecutionDashboard::new(item.clone(), window, cx));
+    pub fn new(
+        item: Entity<MdeWorkbenchItem>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let execution = cx.new(|cx| {
+            crate::workbench_ui::execution_dashboard::MdeExecutionDashboard::new(
+                item.clone(),
+                window,
+                cx,
+            )
+        });
         Self {
             state: PanelState::new(item, DockPosition::Bottom, 0.0, cx),
             active: BottomTab::Diagnostics,
@@ -1466,7 +1883,8 @@ impl MdeBottomPanel {
 
     fn bind(&mut self, item: Option<&Entity<MdeWorkbenchItem>>, cx: &mut Context<Self>) {
         self.state.bind(item, cx);
-        self.execution.update(cx, |execution, cx| execution.bind(item, cx));
+        self.execution
+            .update(cx, |execution, cx| execution.bind(item, cx));
     }
 }
 impl EventEmitter<PanelEvent> for MdeBottomPanel {}
@@ -1527,7 +1945,11 @@ impl Render for MdeBottomPanel {
         let handle = cx.weak_entity();
         let mut tabs = Vec::new();
         for (index, (kind, label, icon)) in [
-            (BottomTab::Diagnostics, "Logs & diagnostics", IconName::ListTree),
+            (
+                BottomTab::Diagnostics,
+                "Logs & diagnostics",
+                IconName::ListTree,
+            ),
             (BottomTab::Relationships, "Relationships", IconName::Link),
             (BottomTab::Documentation, "Markdown", IconName::FileMarkdown),
             (BottomTab::Thumbnails, "Thumbnails", IconName::Image),
@@ -1542,16 +1964,16 @@ impl Render for MdeBottomPanel {
                     .tooltip(ui::Tooltip::text(label))
                     .toggle_state(active == kind)
                     .on_click(move |_, window, cx| {
-                    if let Err(error) = owner.update(cx, |panel, cx| {
-                        if panel.active != kind {
-                            window.focus(&panel.state.focus, cx);
+                        if let Err(error) = owner.update(cx, |panel, cx| {
+                            if panel.active != kind {
+                                window.focus(&panel.state.focus, cx);
+                            }
+                            panel.active = kind;
+                            cx.notify();
+                        }) {
+                            eprintln!("MDE details tab selection failed: {error}");
                         }
-                        panel.active = kind;
-                        cx.notify();
-                    }) {
-                        eprintln!("MDE details tab selection failed: {error}");
-                    }
-                }),
+                    }),
             );
         }
         let description = match active {
@@ -1570,25 +1992,44 @@ impl Render for MdeBottomPanel {
             .when(read_only, |panel| {
                 panel.child(Label::new("Read-only preview"))
             })
-            .child(div().h(px(36.0)).flex_none().flex().items_center().gap_2()
-                .children(tabs)
-                .child(div().flex_1())
-                .child(IconButton::new("mde-bottom-close", IconName::Close)
-                    .aria_label("Hide MDE logs and details")
-                    .tooltip(ui::Tooltip::text("Hide panel; execution events continue to be recorded"))
-                    .on_click(cx.listener(|_, _, _, cx| cx.emit(PanelEvent::Close)))))
-            .when(active == BottomTab::Diagnostics, |panel| panel.child(
-                div().flex_1().min_h_0().overflow_hidden().child(self.execution.clone()),
-            ))
-            .when(active != BottomTab::Diagnostics, |panel| panel.child(
+            .child(
                 div()
-                    .id("mde-bottom-output")
-                    .flex_1()
-                    .min_h_0()
-                    .overflow_y_scroll()
-                    .p_3()
-                    .child(div().whitespace_normal().child(description)),
-            ))
+                    .h(px(36.0))
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .children(tabs)
+                    .child(div().flex_1())
+                    .child(
+                        IconButton::new("mde-bottom-close", IconName::Close)
+                            .aria_label("Hide MDE logs and details")
+                            .tooltip(ui::Tooltip::text(
+                                "Hide panel; execution events continue to be recorded",
+                            ))
+                            .on_click(cx.listener(|_, _, _, cx| cx.emit(PanelEvent::Close))),
+                    ),
+            )
+            .when(active == BottomTab::Diagnostics, |panel| {
+                panel.child(
+                    div()
+                        .flex_1()
+                        .min_h_0()
+                        .overflow_hidden()
+                        .child(self.execution.clone()),
+                )
+            })
+            .when(active != BottomTab::Diagnostics, |panel| {
+                panel.child(
+                    div()
+                        .id("mde-bottom-output")
+                        .flex_1()
+                        .min_h_0()
+                        .overflow_y_scroll()
+                        .p_3()
+                        .child(div().whitespace_normal().child(description)),
+                )
+            })
             .into_any_element()
     }
 }
@@ -1631,9 +2072,17 @@ pub(crate) fn bind_panels(
                         .inputs
                         .values()
                         .any(|input| input.read(cx).focus_handle(cx).contains_focused(window, cx))
-                }) || panel.timing_drafts.values().any(|draft| draft.has_focused_input(window, cx))
-                    || panel.explorer_action.as_ref().and_then(|draft| draft.rename.as_ref())
-                        .is_some_and(|input| input.read(cx).focus_handle(cx).contains_focused(window, cx));
+                }) || panel
+                    .timing_drafts
+                    .values()
+                    .any(|draft| draft.has_focused_input(window, cx))
+                    || panel
+                        .explorer_action
+                        .as_ref()
+                        .and_then(|draft| draft.rename.as_ref())
+                        .is_some_and(|input| {
+                            input.read(cx).focus_handle(cx).contains_focused(window, cx)
+                        });
                 if hidden_input_focused {
                     window.focus(&panel.state.focus, cx);
                 }
@@ -1660,7 +2109,9 @@ pub(crate) fn bind_panels(
                     };
                     if let Err(error) = owner.update(cx, |panel, cx| {
                         if panel.is_bound_to(&item) && !item.read(cx).source().is_read_only() {
-                            crate::workbench_ui::property_editor::flush_property_edits(panel, &item, cx);
+                            crate::workbench_ui::property_editor::flush_property_edits(
+                                panel, &item, cx,
+                            );
                             crate::workbench_ui::style_editor::flush_style_edits(panel, &item, cx);
                         }
                     }) {
@@ -1675,7 +2126,11 @@ pub(crate) fn bind_panels(
     }
 }
 
-fn show_logs_and_diagnostics(workspace: &mut Workspace, window: &mut Window, cx: &mut Context<Workspace>) {
+fn show_logs_and_diagnostics(
+    workspace: &mut Workspace,
+    window: &mut Window,
+    cx: &mut Context<Workspace>,
+) {
     if let Some(panel) = workspace.panel::<MdeBottomPanel>(cx) {
         panel.update(cx, |panel, cx| {
             panel.active = BottomTab::Diagnostics;
@@ -1695,9 +2150,14 @@ pub fn attach_panels(
         bind_panels(workspace, Some(item), window, cx);
         return;
     }
-    workspace.register_action(|workspace, _: &crate::workbench_ui::execution_dashboard::ToggleMdeExecutionDashboard, window, cx| {
-        show_logs_and_diagnostics(workspace, window, cx);
-    });
+    workspace.register_action(
+        |workspace,
+         _: &crate::workbench_ui::execution_dashboard::ToggleMdeExecutionDashboard,
+         window,
+         cx| {
+            show_logs_and_diagnostics(workspace, window, cx);
+        },
+    );
     workspace.register_action(|workspace, _: &ToggleMdeLeft, window, cx| {
         workspace.toggle_panel_focus::<MdeLeftPanel>(window, cx);
     });

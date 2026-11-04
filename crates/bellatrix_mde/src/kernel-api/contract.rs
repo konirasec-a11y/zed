@@ -31,7 +31,10 @@ fn model_schema_version() -> u32 {
     1
 }
 
-pub(super) fn decode_uml_model(api_version: u32, model: &serde_json::value::RawValue) -> Result<Project, String> {
+pub(super) fn decode_uml_model(
+    api_version: u32,
+    model: &serde_json::value::RawValue,
+) -> Result<Project, String> {
     check_version(api_version)?;
     let document: UmlValidationDocument = serde_json::from_str(model.get())
         .map_err(|error| invalid_model(ModelIoError::Json(error)))?;

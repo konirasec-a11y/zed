@@ -1,10 +1,10 @@
 //! Shared classifier labels, compartments and editing. The notation selects the silhouette.
 use crate::inline_edit::UmlInlineNameEditor;
 use bellatrix_design_system::Palette;
-use bellatrix_mde_cordis::{LineMode, TextAlignment, TextVerticalAlignment};
 use bellatrix_mde_cordis::presentation_contract::{
     ClassifierPresentation, MemberPresentation, RenderStyle, UmlHeader,
 };
+use bellatrix_mde_cordis::{LineMode, TextAlignment, TextVerticalAlignment};
 use gpui::{
     App, Entity, InteractiveElement, IntoElement, MouseButton, PathBuilder, RenderOnce,
     SharedString, Window, canvas, div, point, prelude::*, px, rgb,
@@ -47,11 +47,14 @@ impl ViewAppearance {
         notation_mode: LineMode,
         scale: f32,
     ) -> Vec<gpui::Pixels> {
-        self.0.stroke_pattern.as_deref().unwrap_or(match notation_mode {
-            LineMode::Solid => &[],
-            LineMode::Dotted => &[1.0, 3.0],
-            LineMode::Dashed => &[6.0, 5.0],
-        })
+        self.0
+            .stroke_pattern
+            .as_deref()
+            .unwrap_or(match notation_mode {
+                LineMode::Solid => &[],
+                LineMode::Dotted => &[1.0, 3.0],
+                LineMode::Dashed => &[6.0, 5.0],
+            })
             .iter()
             .map(|value| px(*value as f32 * scale))
             .collect()
@@ -148,12 +151,17 @@ impl ViewAppearance {
         }
     }
     pub fn apply_surface<T: gpui::Styled>(&self, element: T, scale: f32) -> T {
-        if self.0.show_shadow == Some(true) && let Some(shadow) = &self.0.shadow {
-            return element.shadow(vec![gpui::BoxShadow::new(
-                px(shadow.offset_x as f32 * scale),
-                px(shadow.offset_y as f32 * scale),
-                self.color(Some(&shadow.color), 0).into(),
-            ).blur_radius(px(shadow.blur_radius as f32 * scale))]);
+        if self.0.show_shadow == Some(true)
+            && let Some(shadow) = &self.0.shadow
+        {
+            return element.shadow(vec![
+                gpui::BoxShadow::new(
+                    px(shadow.offset_x as f32 * scale),
+                    px(shadow.offset_y as f32 * scale),
+                    self.color(Some(&shadow.color), 0).into(),
+                )
+                .blur_radius(px(shadow.blur_radius as f32 * scale)),
+            ]);
         }
         match self.0.show_shadow {
             Some(true) => element.shadow(vec![

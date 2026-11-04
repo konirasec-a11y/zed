@@ -163,7 +163,9 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
-        let diagram = self.presentation.active_diagram()
+        let diagram = self
+            .presentation
+            .active_diagram()
             .and_then(|id| {
                 snapshot
                     .section
@@ -177,14 +179,12 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
-        if let Err(error) =
-            diagram.kind.ok_or_else(|| {
-                format!(
-                    "Unsupported diagram presentation: {} {:?}",
-                    diagram.uml_di_type, diagram.interaction_kind
-                )
-            })
-        {
+        if let Err(error) = diagram.kind.ok_or_else(|| {
+            format!(
+                "Unsupported diagram presentation: {} {:?}",
+                diagram.uml_di_type, diagram.interaction_kind
+            )
+        }) {
             self.validation_status = error;
             cx.notify();
             return;
@@ -204,10 +204,12 @@ impl MdeWorkbenchItem {
             };
             self.validation_status = format!("Validation pending for revision {revision}");
             cx.spawn(async move |this, cx| {
-                let result = validation.await.map_err(|message| bellatrix_mde_cordis::DiagramValidationFailure {
-                    diagram_id: diagram_id.clone(),
-                    revision,
-                    message,
+                let result = validation.await.map_err(|message| {
+                    bellatrix_mde_cordis::DiagramValidationFailure {
+                        diagram_id: diagram_id.clone(),
+                        revision,
+                        message,
+                    }
                 });
                 if let Err(error) = this.update(cx, |item, cx| {
                     if item.project_id() != &project_id
@@ -221,7 +223,8 @@ impl MdeWorkbenchItem {
                 }) {
                     eprintln!("MDE snapshot validation update failed: {error}");
                 }
-            }).detach();
+            })
+            .detach();
             cx.notify();
             return;
         }

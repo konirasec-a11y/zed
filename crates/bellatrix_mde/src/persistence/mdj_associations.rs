@@ -56,7 +56,8 @@ fn ends<'a, 'document>(
 // This is an encoding boundary, not UML validation: dangling type references and
 // invalid multiplicity strings stay available to the kernel unchanged.
 pub(super) fn supported_structure(object: &mdj::Object<'_>, index: &mdj::Index<'_>) -> bool {
-    if object.type_name != "UMLAssociation" || in_view_composition(&object.path)
+    if object.type_name != "UMLAssociation"
+        || in_view_composition(&object.path)
         || object
             .properties
             .iter()

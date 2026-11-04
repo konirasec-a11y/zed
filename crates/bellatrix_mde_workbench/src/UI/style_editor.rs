@@ -443,12 +443,15 @@ fn render_style_inheritance(view: &View) -> Vec<AnyElement> {
             .into_any_element(),
     ];
     if inheritance.status == StyleInheritanceStatus::Inactive {
-        if let Some(source_id) = inheritance.diagnostics.values().find_map(|diagnostic| {
-            match diagnostic {
-                StyleInheritanceDiagnostic::NonViewSource { source_id } => Some(source_id),
-                _ => None,
-            }
-        }) {
+        if let Some(source_id) =
+            inheritance
+                .diagnostics
+                .values()
+                .find_map(|diagnostic| match diagnostic {
+                    StyleInheritanceDiagnostic::NonViewSource { source_id } => Some(source_id),
+                    _ => None,
+                })
+        {
             rows.push(
                 div()
                     .px_3()
@@ -466,7 +469,10 @@ fn render_style_inheritance(view: &View) -> Vec<AnyElement> {
     for property in &inheritance.properties {
         let value = inherited_render_value(view, *property);
         let (detail, color) = if let Some(origin) = inheritance.origins.get(property) {
-            (format!("{value} · inherited from view {origin}"), Color::Muted)
+            (
+                format!("{value} · inherited from view {origin}"),
+                Color::Muted,
+            )
         } else {
             let diagnostic = match inheritance.diagnostics.get(property) {
                 Some(StyleInheritanceDiagnostic::MissingSource { source_id }) => {
@@ -587,12 +593,17 @@ pub(crate) fn render_styles(
     }
     let Some(draft) = draft else { return rows };
     let layout_editable = !item.read(cx).source().is_mdj()
-        && item.read(cx).source().snapshot().ok().is_some_and(|snapshot| {
-            snapshot.section.diagrams.iter().any(|diagram| {
-                diagram.id == diagram_id
-                    && super::selection::supports_view_layout_editing(diagram, &view.id)
-            })
-        });
+        && item
+            .read(cx)
+            .source()
+            .snapshot()
+            .ok()
+            .is_some_and(|snapshot| {
+                snapshot.section.diagrams.iter().any(|diagram| {
+                    diagram.id == diagram_id
+                        && super::selection::supports_view_layout_editing(diagram, &view.id)
+                })
+            });
     let key = (
         item.read(cx).project_id().as_str().to_owned(),
         diagram_id.to_owned(),
@@ -1251,7 +1262,9 @@ impl MdeWorkbenchItem {
                         && super::selection::supports_view_layout_editing(diagram, &key.2)
                 }))
         {
-            return Err("Routing and stacking changes require a supported flat editable diagram".into());
+            return Err(
+                "Routing and stacking changes require a supported flat editable diagram".into(),
+            );
         }
         let command = if let Some(order) = submission.order {
             MdeUiCommand::ReorderViewTracked {

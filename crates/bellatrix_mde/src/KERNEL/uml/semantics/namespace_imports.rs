@@ -336,8 +336,10 @@ fn parameter_type<'a>(
             QueryError::unsupported(parameter.id(), "Parameter::type contract missing")
         })?;
     let value = parameter.properties().get("type").unwrap_or(&Value::Null);
-    if value.is_string() || external_reference_href(value)
-        .map_err(|error| QueryError::invalid(parameter.id(), error))?.is_some()
+    if value.is_string()
+        || external_reference_href(value)
+            .map_err(|error| QueryError::invalid(parameter.id(), error))?
+            .is_some()
     {
         return Err(QueryError::unsupported(
             parameter.id(),
@@ -351,7 +353,11 @@ fn parameter_type<'a>(
 }
 
 fn parameter_effect(parameter: ElementRef<'_>) -> Result<Value, QueryError> {
-    if parameter.properties().get("effect").is_none_or(Value::is_null) {
+    if parameter
+        .properties()
+        .get("effect")
+        .is_none_or(Value::is_null)
+    {
         return Ok(Value::Null);
     }
     schema::read_effective_scalar(parameter, "effect")
@@ -377,7 +383,13 @@ fn same_parameter(
                 .map(|right_range| left_range == right_range)
         }),
     ];
-    for key in ["direction", "isException", "isStream", "isOrdered", "isUnique"] {
+    for key in [
+        "direction",
+        "isException",
+        "isStream",
+        "isOrdered",
+        "isUnique",
+    ] {
         checks.push((|| {
             let left_value = schema::read_effective_scalar(left, key)
                 .map_err(|error| QueryError::invalid(left.id(), error))?;
@@ -425,12 +437,10 @@ fn distinguishable_with_names(
         ))
         .map(|same_signature| !same_signature);
     }
-    Ok(!(left
-        .metaclass()
-        .is_some_and(|kind| right.conforms_to(kind))
-        || right
-            .metaclass()
-            .is_some_and(|kind| left.conforms_to(kind))))
+    Ok(
+        !(left.metaclass().is_some_and(|kind| right.conforms_to(kind))
+            || right.metaclass().is_some_and(|kind| left.conforms_to(kind))),
+    )
 }
 
 fn member_names(
@@ -443,9 +453,10 @@ fn member_names(
         .iter()
         .any(|owned| owned.id() == member.id())
     {
-        return Ok(BTreeSet::from([
-            member.named().and_then(|named| named.name()).map(str::to_owned),
-        ]));
+        return Ok(BTreeSet::from([member
+            .named()
+            .and_then(|named| named.name())
+            .map(str::to_owned)]));
     }
     if let Some(names) = namespace.imported_names.get(member.id()) {
         return Ok(names.iter().cloned().collect());
@@ -474,9 +485,10 @@ fn member_names(
         .iter()
         .any(|candidate| candidate.id() == member.id())
     {
-        return Ok(BTreeSet::from([
-            member.named().and_then(|named| named.name()).map(str::to_owned),
-        ]));
+        return Ok(BTreeSet::from([member
+            .named()
+            .and_then(|named| named.name())
+            .map(str::to_owned)]));
     }
     Ok(BTreeSet::new())
 }
@@ -565,9 +577,7 @@ fn member_distinctions<'a>(
                 results.push((
                     left.id(),
                     right.id(),
-                    distinguishable_with_names(
-                        references, *left, left_names, *right, right_names,
-                    ),
+                    distinguishable_with_names(references, *left, left_names, *right, right_names),
                 ));
             }
         }
@@ -606,7 +616,10 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
                         "UML_NAMESPACE_DISTINGUISHABILITY_UNSUPPORTED",
                     )
                 } else {
-                    (StructuralSeverity::Error, "UML_NAMESPACE_DISTINGUISHABILITY")
+                    (
+                        StructuralSeverity::Error,
+                        "UML_NAMESPACE_DISTINGUISHABILITY",
+                    )
                 };
                 issues.push(StructuralDiagnostic {
                     severity,

@@ -17,7 +17,8 @@ use workspace::{
 };
 
 type ImportFuture = Pin<Box<dyn Future<Output = Result<NativeDocumentLease, String>> + Send>>;
-type PrepareFuture = Pin<Box<dyn Future<Output = Result<(ProjectDocument, Vec<String>), String>> + Send>>;
+type PrepareFuture =
+    Pin<Box<dyn Future<Output = Result<(ProjectDocument, Vec<String>), String>> + Send>>;
 
 #[derive(Clone)]
 pub struct NativeDocumentImporter {
@@ -30,7 +31,10 @@ impl NativeDocumentImporter {
         prepare: impl Fn(Vec<u8>, bool) -> PrepareFuture + Send + Sync + 'static,
         import: impl Fn(ProjectDocument, bool, bool) -> ImportFuture + Send + Sync + 'static,
     ) -> Self {
-        Self { prepare: Arc::new(prepare), import: Arc::new(import) }
+        Self {
+            prepare: Arc::new(prepare),
+            import: Arc::new(import),
+        }
     }
 }
 

@@ -43,7 +43,9 @@ pub fn encode(project: &Project, format: Format) -> Result<Vec<u8>, ModelIoError
             .validate_residual_ownership(&project)
             .map_err(ModelIoError::Provenance)?;
     }
-    crate::Graph::new(&project).validate_identifiers().map_err(|error| ModelIoError::Presentation(error.to_string()))?;
+    crate::Graph::new(&project)
+        .validate_identifiers()
+        .map_err(|error| ModelIoError::Presentation(error.to_string()))?;
     match format {
         Format::Json => Ok(serde_json::to_vec_pretty(project)?),
         Format::Protobuf => {
@@ -69,7 +71,9 @@ pub fn decode(bytes: &[u8], format: Format) -> Result<Project, ModelIoError> {
             .validate_residual_ownership(&project)
             .map_err(ModelIoError::Provenance)?;
     }
-    crate::Graph::new(&project).validate_identifiers().map_err(|error| ModelIoError::Presentation(error.to_string()))?;
+    crate::Graph::new(&project)
+        .validate_identifiers()
+        .map_err(|error| ModelIoError::Presentation(error.to_string()))?;
     Ok(project)
 }
 

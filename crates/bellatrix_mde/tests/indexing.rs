@@ -72,7 +72,8 @@ fn uml_root_namespace_edit_and_reopen_flow_preserves_canonical_identity() {
     let other_id = project.elements.last().expect("second class").id.clone();
     project = apply(
         &project,
-        Command::CreateRelation { owner_id: None,
+        Command::CreateRelation {
+            owner_id: None,
             diagram_id: "diagram".into(),
             kind: ModelingRelationKind::Association,
             from: class_id.clone(),
@@ -88,7 +89,8 @@ fn uml_root_namespace_edit_and_reopen_flow_preserves_canonical_identity() {
         .clone();
     project = apply(
         &project,
-        Command::CreateRelation { owner_id: None,
+        Command::CreateRelation {
+            owner_id: None,
             diagram_id: "diagram".into(),
             kind: ModelingRelationKind::Dependency,
             from: class_id.clone(),
@@ -233,12 +235,43 @@ fn uml_root_namespace_edit_and_reopen_flow_preserves_canonical_identity() {
     assert_eq!(dependency.targets(model).expect("target")[0].id(), other_id);
     // Legacy extension payloads remain unverified, rather than silently valid.
     let diagnostics = model.validate();
-    assert_eq!(diagnostics.iter().map(|issue| (issue.severity, issue.code, issue.subject_id.as_str(), issue.message.as_str())).collect::<Vec<_>>(), vec![
-        (bellatrix_mde::StructuralSeverity::Warning, "MDE_PROPERTY_CONTRACT_UNVERIFIED", "frame", "uml.frame: unknown UML metaclass"),
-        (bellatrix_mde::StructuralSeverity::Warning, "MDE_PROPERTY_CONTRACT_UNVERIFIED", attribute_id.as_str(), "declaration: no normative property or registered extension contract"),
-        (bellatrix_mde::StructuralSeverity::Warning, "MDE_PROPERTY_CONTRACT_UNVERIFIED", association_id.as_str(), "sourceRole: no normative property or registered extension contract"),
-        (bellatrix_mde::StructuralSeverity::Warning, "MDE_PROPERTY_CONTRACT_UNVERIFIED", association_id.as_str(), "targetRole: no normative property or registered extension contract"),
-    ]);
+    assert_eq!(
+        diagnostics
+            .iter()
+            .map(|issue| (
+                issue.severity,
+                issue.code,
+                issue.subject_id.as_str(),
+                issue.message.as_str()
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                bellatrix_mde::StructuralSeverity::Warning,
+                "MDE_PROPERTY_CONTRACT_UNVERIFIED",
+                "frame",
+                "uml.frame: unknown UML metaclass"
+            ),
+            (
+                bellatrix_mde::StructuralSeverity::Warning,
+                "MDE_PROPERTY_CONTRACT_UNVERIFIED",
+                attribute_id.as_str(),
+                "declaration: no normative property or registered extension contract"
+            ),
+            (
+                bellatrix_mde::StructuralSeverity::Warning,
+                "MDE_PROPERTY_CONTRACT_UNVERIFIED",
+                association_id.as_str(),
+                "sourceRole: no normative property or registered extension contract"
+            ),
+            (
+                bellatrix_mde::StructuralSeverity::Warning,
+                "MDE_PROPERTY_CONTRACT_UNVERIFIED",
+                association_id.as_str(),
+                "targetRole: no normative property or registered extension contract"
+            ),
+        ]
+    );
     assert!(
         commands::apply(
             &project,

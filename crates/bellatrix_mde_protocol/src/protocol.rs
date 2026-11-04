@@ -1,10 +1,10 @@
 pub mod command;
-pub mod presentation;
-pub mod trace;
-pub mod inspector;
-pub mod tools;
 pub mod explorer;
+pub mod inspector;
+pub mod presentation;
 pub mod projection;
+pub mod tools;
+pub mod trace;
 
 pub use command::*;
 pub use tools::ToolCatalog;

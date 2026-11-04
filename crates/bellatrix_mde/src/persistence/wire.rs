@@ -303,11 +303,15 @@ pub(super) fn encode(project: &Project) -> Result<Vec<u8>, ModelIoError> {
         .collect::<Result<Vec<_>, _>>()?;
     Ok(WireProject {
         version: project.schema_version,
-        association_knowledge: project.authoring_knowledge.associations.iter()
+        association_knowledge: project
+            .authoring_knowledge
+            .associations
+            .iter()
             .map(|(association_id, knowledge)| WireAssociationKnowledge {
                 association_id: association_id.clone(),
                 navigation_unverified: knowledge.navigation_unverified.clone(),
-            }).collect(),
+            })
+            .collect(),
         composition_json: Some(serde_json::to_vec(&project.composition)?),
         root_model: project.root_model.clone(),
         mdj_provenance_json: project
@@ -447,10 +451,19 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Project, ModelIoError> {
         .collect::<Result<Vec<_>, _>>()?;
     let mut authoring_knowledge = crate::AuthoringKnowledge::default();
     for knowledge in data.association_knowledge {
-        if authoring_knowledge.associations.insert(knowledge.association_id, crate::AssociationKnowledge {
-            navigation_unverified: knowledge.navigation_unverified,
-        }).is_some() {
-            return Err(ModelIoError::AuthoringKnowledge("duplicate Association knowledge identity".into()));
+        if authoring_knowledge
+            .associations
+            .insert(
+                knowledge.association_id,
+                crate::AssociationKnowledge {
+                    navigation_unverified: knowledge.navigation_unverified,
+                },
+            )
+            .is_some()
+        {
+            return Err(ModelIoError::AuthoringKnowledge(
+                "duplicate Association knowledge identity".into(),
+            ));
         }
     }
     Ok(Project {

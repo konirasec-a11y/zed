@@ -22,9 +22,14 @@ impl ModelingProjection {
         self.inspections.get(id).cloned()
     }
     pub fn identity(&self, kind: &str) -> SemanticIdentity {
-        self.identities.get(kind).cloned().unwrap_or_else(|| SemanticIdentity {
-            type_label: kind.to_owned(), metaclass: None, relationship: false,
-        })
+        self.identities
+            .get(kind)
+            .cloned()
+            .unwrap_or_else(|| SemanticIdentity {
+                type_label: kind.to_owned(),
+                metaclass: None,
+                relationship: false,
+            })
     }
 }
 #[derive(Clone, Debug)]
@@ -159,8 +164,16 @@ pub struct InterfaceIconProjection {
 
 #[derive(Clone, Debug)]
 pub enum InterfaceIconGlyph {
-    Ball { center: crate::command::Point, radius: f64 },
-    Socket { center: crate::command::Point, radius: f64, start_angle: f64, sweep_angle: f64 },
+    Ball {
+        center: crate::command::Point,
+        radius: f64,
+    },
+    Socket {
+        center: crate::command::Point,
+        radius: f64,
+        start_angle: f64,
+        sweep_angle: f64,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

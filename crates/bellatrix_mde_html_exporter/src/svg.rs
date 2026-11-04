@@ -1,6 +1,9 @@
 //! Headless SVG rendering; geometry uses domain coordinates, never GPUI pixels.
+use crate::document::{
+    DiagramPage, Documentation, Geometry, PathSegment, RenderedView, TextAlignment,
+    TextVerticalAlignment,
+};
 use crate::pages::{esc, safe_id};
-use crate::document::{DiagramPage, Documentation, Geometry, PathSegment, RenderedView, TextAlignment, TextVerticalAlignment};
 
 fn color(input: Option<&str>, fallback: &str) -> String {
     let Some(input) = input else {
@@ -15,11 +18,7 @@ fn color(input: Option<&str>, fallback: &str) -> String {
         fallback.into()
     }
 }
-fn render_view(
-    project: &Documentation,
-    view: &RenderedView,
-    name: &str,
-) -> String {
+fn render_view(project: &Documentation, view: &RenderedView, name: &str) -> String {
     let fill = color(view.style.fill.as_deref(), "#303641");
     let stroke = color(view.style.stroke.as_deref(), "#788397");
     let text_fill = color(view.style.text_color.as_deref(), "#f2f5f9");
@@ -27,8 +26,13 @@ fn render_view(
     let opacity = view.style.opacity.unwrap_or(1.0);
     let font_size = view.style.font_size.unwrap_or(13.0);
     let radius = view.style.corner_radius.unwrap_or(3.0);
-    let dashes = view.style.dash_pattern.iter().map(ToString::to_string)
-        .collect::<Vec<_>>().join(",");
+    let dashes = view
+        .style
+        .dash_pattern
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
     let dash_attr = if dashes.is_empty() {
         String::new()
     } else {

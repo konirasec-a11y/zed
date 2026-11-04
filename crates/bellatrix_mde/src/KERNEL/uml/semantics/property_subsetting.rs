@@ -65,7 +65,10 @@ fn resolve_subsetted_properties<'a>(
         match super::property_contracts::check_value(references, property, descriptor, value) {
             super::property_contracts::PropertyOutcome::Satisfied => false,
             super::property_contracts::PropertyOutcome::Violation(message) => {
-                return Err(QueryError::invalid(property.id(), format!("subsettedProperty requires unique Property identities: {message}")));
+                return Err(QueryError::invalid(
+                    property.id(),
+                    format!("subsettedProperty requires unique Property identities: {message}"),
+                ));
             }
             super::property_contracts::PropertyOutcome::Unverified(_) => true,
         };

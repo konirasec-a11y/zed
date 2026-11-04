@@ -73,9 +73,12 @@ fn document(type_id: &str, default: bool) -> Result<Value> {
         project["elements"].as_array_mut().ok_or("elements")?.push(json!({
             "id":"value", "kind":"uml.literal_integer", "name":"", "properties":{"value":0, "visibility":null}
         }));
-        project["relations"].as_array_mut().ok_or("relations")?.push(json!({
-            "id":"owns-value", "kind":"owns", "from":"port", "to":"value"
-        }));
+        project["relations"]
+            .as_array_mut()
+            .ok_or("relations")?
+            .push(json!({
+                "id":"owns-value", "kind":"owns", "from":"port", "to":"value"
+            }));
         author(&mut project, "defaultValue", json!({"$ref":"value"}))?;
     }
     import_document(&project)

@@ -38,8 +38,7 @@ struct ReparentRequest {
 /// No revision supplied by a client can replace that application-level check.
 /// Internal model and command types do not appear in the public signature.
 pub fn reparent_uml_element(input_json: &str) -> Result<String, String> {
-    let request: ReparentRequest =
-        serde_json::from_str(input_json).map_err(invalid_request)?;
+    let request: ReparentRequest = serde_json::from_str(input_json).map_err(invalid_request)?;
     let model = decode_model(request.api_version, &request.model)?;
     Graph::new(&model)
         .validate()

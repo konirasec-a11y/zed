@@ -23,7 +23,10 @@ pub struct UnavailableToolMetadata {
     pub reason: String,
 }
 #[derive(Clone, Debug)]
-pub struct ToolGroup { pub name: String, pub tools: Vec<ModelingTool> }
+pub struct ToolGroup {
+    pub name: String,
+    pub tools: Vec<ModelingTool>,
+}
 #[derive(Clone, Debug)]
 pub struct ElementToolMetadata {
     pub kind: ModelingElementKind,
@@ -62,11 +65,14 @@ pub struct InterfaceToolMetadata {
 }
 impl ToolCatalog {
     pub fn allows_new_views(&self, diagram_id: &str) -> bool {
-        self.profiles.get(diagram_id).is_none_or(|profile| profile.allows_new_views)
+        self.profiles
+            .get(diagram_id)
+            .is_none_or(|profile| profile.allows_new_views)
     }
     pub fn allows_tool(&self, diagram_id: Option<&str>, tool: ModelingTool) -> bool {
         self.label(tool).is_some()
-            && diagram_id.and_then(|id| self.profiles.get(id))
+            && diagram_id
+                .and_then(|id| self.profiles.get(id))
                 .is_none_or(|profile| profile.available_tools.contains(&tool))
     }
     pub fn element(&self, kind: ModelingElementKind) -> Option<&ElementToolMetadata> {
@@ -82,7 +88,11 @@ impl ToolCatalog {
         match tool {
             ModelingTool::Element(kind) => self.element(kind).map(|entry| entry.label.as_str()),
             ModelingTool::Relation(kind) => self.relation(kind).map(|entry| entry.label.as_str()),
-            _ => self.interface_forms.iter().find(|entry| entry.tool == tool).map(|entry| entry.label.as_str()),
+            _ => self
+                .interface_forms
+                .iter()
+                .find(|entry| entry.tool == tool)
+                .map(|entry| entry.label.as_str()),
         }
     }
 }

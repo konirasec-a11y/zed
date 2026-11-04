@@ -1,6 +1,5 @@
 #[path = "support/events.rs"]
 mod events;
-use serde_json::Value;
 use bellatrix_mde_cordis::Geometry;
 use bellatrix_mde_cordis::{MdePlugin, ModelingMoveView, ModelingMoveViewRequested};
 use bellatrix_project::{
@@ -10,6 +9,7 @@ use bellatrix_project::{
 };
 use cordis::event::{QueryOutcome, observer_sync};
 use cordis::{Context, Plugin, PreparedPlugin, Routing};
+use serde_json::Value;
 use std::sync::{Arc, Mutex};
 
 async fn admit<P: Plugin>(ctx: &Context, plugin: P) -> cordis::FiberHandle
@@ -87,7 +87,10 @@ async fn view_movement_is_public_versioned_and_isolated() {
         .unwrap();
     assert!(matches!(invalid, QueryOutcome::Answer(Err(_))));
     let document = service.snapshot(&a).unwrap();
-    let section = events::projection(&ctx, &service, &a).await.unwrap().section;
+    let section = events::projection(&ctx, &service, &a)
+        .await
+        .unwrap()
+        .section;
     let view = section
         .diagrams
         .iter()
@@ -168,7 +171,10 @@ async fn translated_view_roundtrips_through_public_project_save_and_open() {
     assert!(matches!(reopened, QueryOutcome::Answer(Ok(_))));
     let doc = service.snapshot(&id).unwrap();
     assert_eq!(doc.revision(), 1);
-    let section = events::projection(&ctx, &service, &id).await.unwrap().section;
+    let section = events::projection(&ctx, &service, &id)
+        .await
+        .unwrap()
+        .section;
     let view = section
         .diagrams
         .iter()

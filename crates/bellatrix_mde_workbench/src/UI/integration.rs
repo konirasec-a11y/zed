@@ -4,7 +4,9 @@
 //! to focus or reopen the MDE tab without creating a parallel window.
 
 use crate::workbench_ui::status_entry::{MdeStatusEntry, status_button_enabled};
-use crate::workbench_ui::{MdeSymbolLibraryItem, MdeUiSource, MdeWorkbenchItem, open_in_workspace, panels};
+use crate::workbench_ui::{
+    MdeSymbolLibraryItem, MdeUiSource, MdeWorkbenchItem, open_in_workspace, panels,
+};
 use bellatrix_mde_cordis::MdeUiCommand;
 use bellatrix_project::ProjectSaveRequested;
 use gpui::{App, AppContext, Entity, Window, actions};

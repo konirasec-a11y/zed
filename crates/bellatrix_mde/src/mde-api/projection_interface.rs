@@ -132,8 +132,16 @@ fn bounds(view: &View) -> Result<(f64, f64, f64, f64), String> {
         Geometry::Layout { bounds } => (
             *bounds.x.value().ok_or("layout left is unresolved")?,
             *bounds.y.value().ok_or("layout top is unresolved")?,
-            bounds.width.value().and_then(crate::LayoutExtent::resolved).ok_or("layout width is unresolved")?,
-            bounds.height.value().and_then(crate::LayoutExtent::resolved).ok_or("layout height is unresolved")?,
+            bounds
+                .width
+                .value()
+                .and_then(crate::LayoutExtent::resolved)
+                .ok_or("layout width is unresolved")?,
+            bounds
+                .height
+                .value()
+                .and_then(crate::LayoutExtent::resolved)
+                .ok_or("layout height is unresolved")?,
         ),
         Geometry::Rect {
             x,

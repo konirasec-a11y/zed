@@ -7,13 +7,12 @@
 //! constraints of its metaclass were evaluated.
 
 use super::{
-    associations,
+    associations, operations,
     references::{ReferenceIndex, external_reference_href, reference_id},
-    operations,
-    value_specifications::{self, LiteralValue},
     root::ElementRef,
     schema::{self, Aggregation, PropertyDescriptor, ScalarKind, UnsupportedContract},
     types::{Integer, MultiplicityRange, StandardPrimitiveType, UnlimitedNatural},
+    value_specifications::{self, LiteralValue},
 };
 use crate::{StructuralDiagnostic, StructuralSeverity};
 use serde_json::{Value, json};
@@ -27,17 +26,27 @@ pub enum PropertyOutcome {
 }
 
 impl PropertyOutcome {
-    fn diagnostic(self, element: ElementRef<'_>, property: &str, code: &'static str)
-        -> Option<StructuralDiagnostic>
-    {
+    fn diagnostic(
+        self,
+        element: ElementRef<'_>,
+        property: &str,
+        code: &'static str,
+    ) -> Option<StructuralDiagnostic> {
         let (severity, code, message) = match self {
             Self::Satisfied => return None,
-            Self::Violation(message) => (StructuralSeverity::Error,
+            Self::Violation(message) => (
+                StructuralSeverity::Error,
                 if property == "InterfaceRealization-implementingClassifier" {
                     "UML_INTERFACE_REALIZATION_SOURCE"
-                } else { code }, message),
+                } else {
+                    code
+                },
+                message,
+            ),
             Self::Unverified(message) => (
-                StructuralSeverity::Warning, "MDE_PROPERTY_CONTRACT_UNVERIFIED", message,
+                StructuralSeverity::Warning,
+                "MDE_PROPERTY_CONTRACT_UNVERIFIED",
+                message,
             ),
         };
         Some(StructuralDiagnostic {
@@ -64,8 +73,7 @@ pub fn check_value(
     if property.property_type.resolution != schema::ReferenceResolution::Exact {
         return Unverified("normative property Type is unresolved or ambiguous".into());
     }
-    let range = match format!("{}..{}", property.lower, property.upper)
-        .parse::<MultiplicityRange>()
+    let range = match format!("{}..{}", property.lower, property.upper).parse::<MultiplicityRange>()
     {
         Ok(range) => range,
         Err(error) => return Unverified(format!("unresolved normative multiplicity: {error}")),
@@ -74,7 +82,11 @@ pub fn check_value(
     let values: &[Value] = if many {
         match value.as_array() {
             Some(values) => values,
-            None => return Violation("expected a collection, including [] for an empty collection".into()),
+            None => {
+                return Violation(
+                    "expected a collection, including [] for an empty collection".into(),
+                );
+            }
         }
     } else if value.is_null() {
         &[]
@@ -87,13 +99,18 @@ pub fn check_value(
     };
     if !range.includes_cardinality(&cardinality) {
         return Violation(format!(
-            "requires {}..{} values; received {cardinality}", property.lower, property.upper,
+            "requires {}..{} values; received {cardinality}",
+            property.lower, property.upper,
         ));
     }
     // Scalar checking of each member is independent of the collection's bounds.
     // Do not alter the generated descriptor or replace ordered/bag collections
     // with sets: uniqueness is checked only when the descriptor requires it.
-    let member = PropertyDescriptor { lower: "1", upper: "1", ..*property };
+    let member = PropertyDescriptor {
+        lower: "1",
+        upper: "1",
+        ..*property
+    };
     let scalar_kind = match schema::scalar_kind(&member) {
         Ok(kind) => Some(kind),
         Err(UnsupportedContract::Reference) => None,
@@ -121,7 +138,9 @@ pub fn check_value(
             // Historical free-form declarations must remain editable as drafts,
             // but they are not resolved to Type identities by matching names.
             if schema::uses_legacy_text_adapter(&member, value) {
-                unverified.get_or_insert_with(|| "text declaration is not a resolved UML reference".into());
+                unverified.get_or_insert_with(|| {
+                    "text declaration is not a resolved UML reference".into()
+                });
                 continue;
             }
             let external = match external_reference_href(value) {
@@ -130,9 +149,13 @@ pub fn check_value(
             };
             if let Some(href) = external {
                 if property.is_unique && !external_references.insert(href) {
-                    return Violation(format!("duplicate external reference at index {position}; isUnique is true"));
+                    return Violation(format!(
+                        "duplicate external reference at index {position}; isUnique is true"
+                    ));
                 }
-                unverified.get_or_insert_with(|| "external model reference has no loaded document resolver".into());
+                unverified.get_or_insert_with(|| {
+                    "external model reference has no loaded document resolver".into()
+                });
                 continue;
             }
             let id = match reference_id(value) {
@@ -148,45 +171,71 @@ pub fn check_value(
                 property.property_type.target.and_then(schema::classifier),
                 target.metaclass().and_then(schema::uml_classifier),
             ) {
-                (Some(required), Some(actual)) => match schema::conforms_to(actual.id, required.id) {
+                (Some(required), Some(actual)) => match schema::conforms_to(actual.id, required.id)
+                {
                     Ok(true) => {}
-                    Ok(false) => return Violation(format!("{id} must conform to UML {}", required.name)),
-                    Err(error) => { unverified.get_or_insert_with(|| error.to_string()); }
+                    Ok(false) => {
+                        return Violation(format!("{id} must conform to UML {}", required.name));
+                    }
+                    Err(error) => {
+                        unverified.get_or_insert_with(|| error.to_string());
+                    }
                 },
                 (None, _) => {
-                    unverified.get_or_insert_with(|| "normative reference Type is unresolved".into());
+                    unverified
+                        .get_or_insert_with(|| "normative reference Type is unresolved".into());
                 }
                 (_, None) => {
-                    unverified.get_or_insert_with(|| format!("{id} has no supported UML metaclass"));
+                    unverified
+                        .get_or_insert_with(|| format!("{id} has no supported UML metaclass"));
                 }
             }
             if property.aggregation == Aggregation::Composite {
                 match references.model().owner(target) {
                     Ok(Some(actual_owner)) if actual_owner.id() == owner.id() => {}
-                    Ok(_) => return Violation(format!(
-                        "composite target {id} must be owned by {} in canonical ownership", owner.id(),
-                    )),
+                    Ok(_) => {
+                        return Violation(format!(
+                            "composite target {id} must be owned by {} in canonical ownership",
+                            owner.id(),
+                        ));
+                    }
                     Err(error) => return Violation(error),
                 }
             }
             id.to_owned()
         };
         if property.is_unique && !seen.insert(key) {
-            return Violation(format!("duplicate value at index {position}; isUnique is true"));
+            return Violation(format!(
+                "duplicate value at index {position}; isUnique is true"
+            ));
         }
     }
     unverified.map_or(Satisfied, Unverified)
 }
 
 fn scalar_identity(kind: ScalarKind, value: &Value) -> String {
-    let decimal = value.as_str().map(str::to_owned).unwrap_or_else(|| value.to_string());
+    let decimal = value
+        .as_str()
+        .map(str::to_owned)
+        .unwrap_or_else(|| value.to_string());
     match kind {
-        ScalarKind::Primitive(StandardPrimitiveType::Integer) => decimal.parse::<Integer>()
-            .map(|value| value.to_string()).unwrap_or(decimal),
-        ScalarKind::Primitive(StandardPrimitiveType::UnlimitedNatural) => decimal.parse::<UnlimitedNatural>()
-            .map(|value| value.to_string()).unwrap_or(decimal),
-        ScalarKind::Primitive(StandardPrimitiveType::Real) => value.as_f64()
-            .map(|value| if value == 0.0 { "0".into() } else { value.to_string() })
+        ScalarKind::Primitive(StandardPrimitiveType::Integer) => decimal
+            .parse::<Integer>()
+            .map(|value| value.to_string())
+            .unwrap_or(decimal),
+        ScalarKind::Primitive(StandardPrimitiveType::UnlimitedNatural) => decimal
+            .parse::<UnlimitedNatural>()
+            .map(|value| value.to_string())
+            .unwrap_or(decimal),
+        ScalarKind::Primitive(StandardPrimitiveType::Real) => value
+            .as_f64()
+            .map(|value| {
+                if value == 0.0 {
+                    "0".into()
+                } else {
+                    value.to_string()
+                }
+            })
             .unwrap_or_else(|| value.to_string()),
         _ => value.to_string(),
     }
@@ -195,41 +244,67 @@ fn scalar_identity(kind: ScalarKind, value: &Value) -> String {
 // Binary relationship endpoints supply canonical roles without creating stored copies.
 // The returned values are borrowed-state projections, never persisted copies.
 fn endpoint_value(element: ElementRef<'_>, property: &PropertyDescriptor) -> Option<Value> {
-    let ElementRef::Relationship(relation) = element else { return None; };
+    let ElementRef::Relationship(relation) = element else {
+        return None;
+    };
     let target = match property.id.fragment {
-        "Generalization-specific" | "ElementImport-importingNamespace"
-        | "PackageImport-importingNamespace" | "InterfaceRealization-implementingClassifier"
-        | "Include-includingCase" | "Extend-extension" | "PackageMerge-receivingPackage"
-        | "ActivityEdge-source" | "Transition-source" | "Deployment-location"
+        "Generalization-specific"
+        | "ElementImport-importingNamespace"
+        | "PackageImport-importingNamespace"
+        | "InterfaceRealization-implementingClassifier"
+        | "Include-includingCase"
+        | "Extend-extension"
+        | "PackageMerge-receivingPackage"
+        | "ActivityEdge-source"
+        | "Transition-source"
+        | "Deployment-location"
         | "TemplateBinding-boundElement" => &relation.from,
-        "Generalization-general" | "ElementImport-importedElement"
-        | "PackageImport-importedPackage" | "InterfaceRealization-contract"
-        | "Include-addition" | "Extend-extendedCase" | "PackageMerge-mergedPackage"
-        | "ActivityEdge-target" | "Transition-target" | "Deployment-deployedArtifact"
-        | "Manifestation-utilizedElement" | "TemplateBinding-signature" => &relation.to,
+        "Generalization-general"
+        | "ElementImport-importedElement"
+        | "PackageImport-importedPackage"
+        | "InterfaceRealization-contract"
+        | "Include-addition"
+        | "Extend-extendedCase"
+        | "PackageMerge-mergedPackage"
+        | "ActivityEdge-target"
+        | "Transition-target"
+        | "Deployment-deployedArtifact"
+        | "Manifestation-utilizedElement"
+        | "TemplateBinding-signature" => &relation.to,
         _ => return None,
     };
-    Some(if matches!(property.upper, "0" | "1") { json!({"$ref": target}) }
-        else { json!([{"$ref": target}]) })
+    Some(if matches!(property.upper, "0" | "1") {
+        json!({"$ref": target})
+    } else {
+        json!([{"$ref": target}])
+    })
 }
 
 fn constraint_specification<'a>(
     references: &ReferenceIndex<'a>,
     constraint: ElementRef<'a>,
 ) -> Result<Option<ElementRef<'a>>, String> {
-    let specifications = references.explicit_owned_elements(constraint.id())?
-        .into_iter().filter(|child| child.conforms_to("ValueSpecification")).collect::<Vec<_>>();
+    let specifications = references
+        .explicit_owned_elements(constraint.id())?
+        .into_iter()
+        .filter(|child| child.conforms_to("ValueSpecification"))
+        .collect::<Vec<_>>();
     if specifications.is_empty() && !constraint.properties().contains_key("specification") {
         // The editor can retain an unfinished Constraint without inventing an
         // expression. An explicit null or malformed reference is still invalid.
         return Ok(None);
     }
     let [specification] = specifications.as_slice() else {
-        return Err("Constraint::specification requires exactly one owned ValueSpecification".into());
+        return Err(
+            "Constraint::specification requires exactly one owned ValueSpecification".into(),
+        );
     };
     if let Some(value) = constraint.properties().get("specification") {
         if reference_id(value)? != Some(specification.id()) {
-            return Err("Constraint::specification must identify its canonical owned ValueSpecification".into());
+            return Err(
+                "Constraint::specification must identify its canonical owned ValueSpecification"
+                    .into(),
+            );
         }
     }
     Ok(Some(*specification))
@@ -240,7 +315,9 @@ fn required_role<'a>(
     element: ElementRef<'a>,
     property: &PropertyDescriptor,
 ) -> Result<Option<Value>, String> {
-    if let Some(value) = endpoint_value(element, property) { return Ok(Some(value)); }
+    if let Some(value) = endpoint_value(element, property) {
+        return Ok(Some(value));
+    }
     match property.id.fragment {
         "Dependency-client" | "Dependency-supplier" => {
             let result = if property.name == "client" {
@@ -250,20 +327,32 @@ fn required_role<'a>(
             };
             let values = match result {
                 Ok(values) => values,
-                Err(super::element_graph_queries::ElementGraphError::Unsupported { .. }) =>
-                    return Ok(None),
+                Err(super::element_graph_queries::ElementGraphError::Unsupported { .. }) => {
+                    return Ok(None);
+                }
                 Err(error) => return Err(error.to_string()),
             };
-            Ok(Some(Value::Array(values.into_iter()
-                .map(|element| json!({"$ref": element.id()})).collect())))
+            Ok(Some(Value::Array(
+                values
+                    .into_iter()
+                    .map(|element| json!({"$ref": element.id()}))
+                    .collect(),
+            )))
         }
-        "Constraint-specification" => constraint_specification(references, element)
-            .map(|specification| specification.map(|specification| json!({"$ref": specification.id()}))),
-        "Slot-owningInstance" => references.model().owner(element)
+        "Constraint-specification" => {
+            constraint_specification(references, element).map(|specification| {
+                specification.map(|specification| json!({"$ref": specification.id()}))
+            })
+        }
+        "Slot-owningInstance" => references
+            .model()
+            .owner(element)
             .map(|owner| Some(owner.map_or(Value::Null, |owner| json!({"$ref": owner.id()})))),
         "Association-memberEnd" => Ok(None),
-        "Slot-definingFeature" =>
-            Err(format!("{} requires explicit canonical reference identities", property.id.fragment)),
+        "Slot-definingFeature" => Err(format!(
+            "{} requires explicit canonical reference identities",
+            property.id.fragment
+        )),
         _ => Ok(None),
     }
 }
@@ -276,8 +365,11 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
     for element in references.model().elements() {
         let Some(metaclass) = element.metaclass() else {
             if element.kind().starts_with("uml.") {
-                issues.extend(Unverified("unknown UML metaclass".into())
-                    .diagnostic(element, element.kind(), "UML_METACLASS"));
+                issues.extend(Unverified("unknown UML metaclass".into()).diagnostic(
+                    element,
+                    element.kind(),
+                    "UML_METACLASS",
+                ));
             }
             continue;
         };
@@ -289,21 +381,38 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             let role = "A_manifestation_artifact-artifact";
             match schema::property_by_id(schema::XmiId::new(schema::Document::Uml, role)) {
                 Some(property) => issues.extend(
-                    check_value(references, element, property, &json!({"$ref": relation.from}))
-                        .diagnostic(element, role, "UML_PROPERTY_CONTRACT"),
+                    check_value(
+                        references,
+                        element,
+                        property,
+                        &json!({"$ref": relation.from}),
+                    )
+                    .diagnostic(element, role, "UML_PROPERTY_CONTRACT"),
                 ),
-                None => issues.extend(Unverified("missing normative artifact role".into())
-                    .diagnostic(element, role, "UML_PROPERTY_CONTRACT")),
+                None => issues.extend(
+                    Unverified("missing normative artifact role".into()).diagnostic(
+                        element,
+                        role,
+                        "UML_PROPERTY_CONTRACT",
+                    ),
+                ),
             }
         }
         let Some(classifier) = schema::uml_classifier(metaclass) else {
-            issues.extend(Unverified("missing normative classifier".into())
-                .diagnostic(element, metaclass, "UML_METACLASS"));
+            issues.extend(
+                Unverified("missing normative classifier".into()).diagnostic(
+                    element,
+                    metaclass,
+                    "UML_METACLASS",
+                ),
+            );
             continue;
         };
         if classifier.is_abstract {
-            issues.extend(Violation("an abstract metaclass cannot be instantiated directly".into())
-                .diagnostic(element, metaclass, "UML_ABSTRACT_METACLASS"));
+            issues.extend(
+                Violation("an abstract metaclass cannot be instantiated directly".into())
+                    .diagnostic(element, metaclass, "UML_ABSTRACT_METACLASS"),
+            );
         }
         if let Err(error) = references.element(element.id()) {
             issues.extend(Violation(error).diagnostic(element, metaclass, "UML_ELEMENT_IDENTITY"));
@@ -311,13 +420,21 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
         let inherited = match schema::inherited_properties(classifier.id) {
             Ok(properties) if properties.unresolved.is_empty() => properties,
             Ok(_) => {
-                issues.extend(Unverified("unresolved normative inheritance".into())
-                    .diagnostic(element, metaclass, "UML_PROPERTY_CONTRACT"));
+                issues.extend(
+                    Unverified("unresolved normative inheritance".into()).diagnostic(
+                        element,
+                        metaclass,
+                        "UML_PROPERTY_CONTRACT",
+                    ),
+                );
                 continue;
             }
             Err(error) => {
-                issues.extend(Unverified(error.to_string())
-                    .diagnostic(element, metaclass, "UML_PROPERTY_CONTRACT"));
+                issues.extend(Unverified(error.to_string()).diagnostic(
+                    element,
+                    metaclass,
+                    "UML_PROPERTY_CONTRACT",
+                ));
                 continue;
             }
         };
@@ -327,27 +444,43 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 Ok(None) => {
                     // Editor/target extension fields are retained. They are not
                     // silently promoted into normative UML properties.
-                    issues.extend(Unverified("no normative property or registered extension contract".into())
-                        .diagnostic(element, name, "UML_PROPERTY_CONTRACT"));
+                    issues.extend(
+                        Unverified("no normative property or registered extension contract".into())
+                            .diagnostic(element, name, "UML_PROPERTY_CONTRACT"),
+                    );
                     continue;
                 }
                 Err(error) => {
-                    issues.extend(Unverified(error.to_string())
-                        .diagnostic(element, name, "UML_PROPERTY_CONTRACT"));
+                    issues.extend(Unverified(error.to_string()).diagnostic(
+                        element,
+                        name,
+                        "UML_PROPERTY_CONTRACT",
+                    ));
                     continue;
                 }
             };
             if !property.is_derived && schema::validate_scalar(property, value).is_ok() {
                 continue;
             }
-            let code = if name == "type" { "UML_TYPED_ELEMENT_TYPE" } else { "UML_PROPERTY_CONTRACT" };
+            let code = if name == "type" {
+                "UML_TYPED_ELEMENT_TYPE"
+            } else {
+                "UML_PROPERTY_CONTRACT"
+            };
             if let Some(canonical) = endpoint_value(element, property)
                 && canonical != *value
             {
-                issues.extend(check_value(references, element, property, &canonical)
-                    .diagnostic(element, property.id.fragment, code));
+                issues.extend(
+                    check_value(references, element, property, &canonical).diagnostic(
+                        element,
+                        property.id.fragment,
+                        code,
+                    ),
+                );
                 let includes_endpoint = match (canonical.as_array(), value.as_array()) {
-                    (Some(endpoints), Some(values)) => endpoints.iter().all(|endpoint| values.contains(endpoint)),
+                    (Some(endpoints), Some(values)) => {
+                        endpoints.iter().all(|endpoint| values.contains(endpoint))
+                    }
                     _ => false,
                 };
                 if !includes_endpoint {
@@ -355,8 +488,13 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                         .diagnostic(element, property.id.fragment, code));
                 }
             }
-            issues.extend(check_value(references, element, property, value)
-                .diagnostic(element, property.id.fragment, code));
+            issues.extend(
+                check_value(references, element, property, value).diagnostic(
+                    element,
+                    property.id.fragment,
+                    code,
+                ),
+            );
         }
         validate_property_rules(references, element, &mut issues);
         validate_value_rules(references, element, &mut issues);
@@ -367,31 +505,49 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             let default = match schema::effective_default(property) {
                 Ok(default) => default,
                 Err(error) => {
-                    issues.extend(Unverified(error.to_string())
-                        .diagnostic(element, property.id.fragment, "UML_PROPERTY_CONTRACT"));
+                    issues.extend(Unverified(error.to_string()).diagnostic(
+                        element,
+                        property.id.fragment,
+                        "UML_PROPERTY_CONTRACT",
+                    ));
                     continue;
                 }
             };
             if let Some(default) = default {
                 match default.scalar_json() {
-                    Some(value) => issues.extend(check_value(references, element, property, &value)
-                        .diagnostic(element, property.id.fragment, "UML_PROPERTY_CONTRACT")),
-                    None => issues.extend(Unverified("normative default has no supported value adapter".into())
-                        .diagnostic(element, property.id.fragment, "UML_PROPERTY_CONTRACT")),
+                    Some(value) => issues.extend(
+                        check_value(references, element, property, &value).diagnostic(
+                            element,
+                            property.id.fragment,
+                            "UML_PROPERTY_CONTRACT",
+                        ),
+                    ),
+                    None => issues.extend(
+                        Unverified("normative default has no supported value adapter".into())
+                            .diagnostic(element, property.id.fragment, "UML_PROPERTY_CONTRACT"),
+                    ),
                 }
                 continue;
             }
             let role = match required_role(references, element, property) {
                 Ok(role) => role,
                 Err(error) => {
-                    issues.extend(Violation(error)
-                        .diagnostic(element, property.id.fragment, "UML_PROPERTY_CONTRACT"));
+                    issues.extend(Violation(error).diagnostic(
+                        element,
+                        property.id.fragment,
+                        "UML_PROPERTY_CONTRACT",
+                    ));
                     continue;
                 }
             };
             if let Some(value) = role {
-                issues.extend(check_value(references, element, property, &value)
-                    .diagnostic(element, property.id.fragment, "UML_PROPERTY_CONTRACT"));
+                issues.extend(
+                    check_value(references, element, property, &value).diagnostic(
+                        element,
+                        property.id.fragment,
+                        "UML_PROPERTY_CONTRACT",
+                    ),
+                );
             } else if property.lower != "0" {
                 // Missing primitive values are unambiguously absent. Reference
                 // roles may instead be projected from canonical ownership by a
@@ -399,9 +555,15 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 let outcome = if schema::scalar_kind(property).is_ok() {
                     Violation("required value is absent and has no normative default".into())
                 } else {
-                    Unverified("required reference/collection needs its canonical role projection".into())
+                    Unverified(
+                        "required reference/collection needs its canonical role projection".into(),
+                    )
                 };
-                issues.extend(outcome.diagnostic(element, property.id.fragment, "UML_PROPERTY_CONTRACT"));
+                issues.extend(outcome.diagnostic(
+                    element,
+                    property.id.fragment,
+                    "UML_PROPERTY_CONTRACT",
+                ));
             }
         }
     }
@@ -414,7 +576,9 @@ fn validate_property_rules(
     issues: &mut Vec<StructuralDiagnostic>,
 ) {
     use PropertyOutcome::{Satisfied, Unverified, Violation};
-    if !element.conforms_to("Property") { return; }
+    if !element.conforms_to("Property") {
+        return;
+    }
     if element.conforms_to("Port") {
         // UML 2.5.1 Port-port_aggregation constrains the inherited default too.
         let outcome = match schema::read_effective_scalar(element, "aggregation") {
@@ -425,13 +589,24 @@ fn validate_property_rules(
             Err(error) => Unverified(error),
         };
         issues.extend(outcome.diagnostic(element, "Port-port_aggregation", "UML_PORT_AGGREGATION"));
-        issues.extend(port_default_value(references, element)
-            .diagnostic(element, "Port-default_value", "UML_PORT_DEFAULT_VALUE"));
+        issues.extend(port_default_value(references, element).diagnostic(
+            element,
+            "Port-default_value",
+            "UML_PORT_DEFAULT_VALUE",
+        ));
     }
     let derived_union = schema::read_effective_boolean(element, "isDerivedUnion");
     for (property, rule, code) in [
-        ("isReadOnly", "Property-derived_union_is_read_only", "UML_PROPERTY_DERIVED_UNION_READ_ONLY"),
-        ("isDerived", "Property-derived_union_is_derived", "UML_PROPERTY_DERIVED_UNION_DERIVED"),
+        (
+            "isReadOnly",
+            "Property-derived_union_is_read_only",
+            "UML_PROPERTY_DERIVED_UNION_READ_ONLY",
+        ),
+        (
+            "isDerived",
+            "Property-derived_union_is_derived",
+            "UML_PROPERTY_DERIVED_UNION_DERIVED",
+        ),
     ] {
         let outcome = match &derived_union {
             Ok(false) => Satisfied,
@@ -444,34 +619,50 @@ fn validate_property_rules(
         };
         issues.extend(outcome.diagnostic(element, rule, code));
     }
-    let explicit_qualifiers = element.properties().get("qualifier")
-        .and_then(Value::as_array).is_some_and(|values| !values.is_empty());
+    let explicit_qualifiers = element
+        .properties()
+        .get("qualifier")
+        .and_then(Value::as_array)
+        .is_some_and(|values| !values.is_empty());
     let owned_qualifiers = match references.explicit_owned_elements(element.id()) {
         Ok(owned) => owned.into_iter().any(|child| child.conforms_to("Property")),
         Err(error) => {
-            issues.extend(Violation(error).diagnostic(element,
-                "Property-qualified_is_association_end", "UML_PROPERTY_QUALIFIED_ASSOCIATION_END"));
+            issues.extend(Violation(error).diagnostic(
+                element,
+                "Property-qualified_is_association_end",
+                "UML_PROPERTY_QUALIFIED_ASSOCIATION_END",
+            ));
             return;
         }
     };
-    if !explicit_qualifiers && !owned_qualifiers { return; }
+    if !explicit_qualifiers && !owned_qualifiers {
+        return;
+    }
     // association is the inverse of canonical memberEnd, never a stored copy.
     let outcome = match associations::association_of(references, element.id()) {
         Ok(Some(_)) => Satisfied,
         Ok(None) => Violation("a Property with qualifiers must be an Association memberEnd".into()),
         Err(error) => Violation(error),
     };
-    issues.extend(outcome.diagnostic(element, "Property-qualified_is_association_end",
-        "UML_PROPERTY_QUALIFIED_ASSOCIATION_END"));
+    issues.extend(outcome.diagnostic(
+        element,
+        "Property-qualified_is_association_end",
+        "UML_PROPERTY_QUALIFIED_ASSOCIATION_END",
+    ));
 }
 
 fn port_default_value(references: &ReferenceIndex<'_>, port: ElementRef<'_>) -> PropertyOutcome {
     use PropertyOutcome::{Satisfied, Unverified, Violation};
     let interface_type = (|| -> Result<bool, String> {
-        let Some(value) = port.properties().get("type").filter(|value| !value.is_null()) else {
+        let Some(value) = port
+            .properties()
+            .get("type")
+            .filter(|value| !value.is_null())
+        else {
             return Ok(false);
         };
-        let property = schema::uml_property("Port", "type").map_err(|error| error.to_string())?
+        let property = schema::uml_property("Port", "type")
+            .map_err(|error| error.to_string())?
             .ok_or("Port type contract is unavailable")?;
         match check_value(references, port, property, value) {
             Satisfied => {}
@@ -480,11 +671,16 @@ fn port_default_value(references: &ReferenceIndex<'_>, port: ElementRef<'_>) -> 
         let identifier = reference_id(value)?.ok_or("Port type identity is absent")?;
         Ok(references.element(identifier)?.conforms_to("Interface"))
     })();
-    if matches!(interface_type, Ok(false)) { return Satisfied; }
+    if matches!(interface_type, Ok(false)) {
+        return Satisfied;
+    }
     let default_present = (|| -> Result<bool, String> {
         if let Some(value) = port.properties().get("defaultValue") {
-            if value.is_null() { return Ok(false); }
-            let property = schema::uml_property("Port", "defaultValue").map_err(|error| error.to_string())?
+            if value.is_null() {
+                return Ok(false);
+            }
+            let property = schema::uml_property("Port", "defaultValue")
+                .map_err(|error| error.to_string())?
                 .ok_or("Port defaultValue contract is unavailable")?;
             return match check_value(references, port, property, value) {
                 Satisfied => Ok(true),
@@ -495,21 +691,38 @@ fn port_default_value(references: &ReferenceIndex<'_>, port: ElementRef<'_>) -> 
         // invent a defaultValue role from containment alone.
         let mut unresolved = false;
         for child in references.explicit_owned_elements(port.id())? {
-            if !child.conforms_to("ValueSpecification") { continue; }
-            let roles = super::classifiers::ownership_roles(port, child).map_err(|error| error.to_string())?;
-            if roles.properties.iter().any(|property| property.id.fragment == "Property-defaultValue") {
-                if roles.is_resolved { return Ok(true); }
+            if !child.conforms_to("ValueSpecification") {
+                continue;
+            }
+            let roles = super::classifiers::ownership_roles(port, child)
+                .map_err(|error| error.to_string())?;
+            if roles
+                .properties
+                .iter()
+                .any(|property| property.id.fragment == "Property-defaultValue")
+            {
+                if roles.is_resolved {
+                    return Ok(true);
+                }
                 unresolved = true;
             }
         }
-        if unresolved { Err("owned ValueSpecification has no resolved defaultValue or multiplicity-bound role".into()) }
-        else { Ok(false) }
+        if unresolved {
+            Err(
+                "owned ValueSpecification has no resolved defaultValue or multiplicity-bound role"
+                    .into(),
+            )
+        } else {
+            Ok(false)
+        }
     })();
     // The consequent being true establishes the implication even if the type
     // cannot be resolved. Otherwise both operands must be known to prove a violation.
     match (interface_type, default_present) {
         (_, Ok(false)) => Satisfied,
-        (Ok(true), Ok(true)) => Violation("a Port typed by an Interface cannot specify a defaultValue".into()),
+        (Ok(true), Ok(true)) => {
+            Violation("a Port typed by an Interface cannot specify a defaultValue".into())
+        }
         (Err(error), _) | (_, Err(error)) => Unverified(error),
         (Ok(false), _) => Satisfied,
     }
@@ -524,12 +737,23 @@ fn validate_value_rules<'a>(
 ) {
     use PropertyOutcome::{Unverified, Violation};
     if element.conforms_to("Constraint") {
-        if element.properties().get("constrainedElement")
-            .and_then(Value::as_array).is_some_and(|values| values.iter().any(|value|
-                reference_id(value).ok().flatten() == Some(element.id())))
+        if element
+            .properties()
+            .get("constrainedElement")
+            .and_then(Value::as_array)
+            .is_some_and(|values| {
+                values
+                    .iter()
+                    .any(|value| reference_id(value).ok().flatten() == Some(element.id()))
+            })
         {
-            issues.extend(Violation("a Constraint must not constrain itself".into())
-                .diagnostic(element, "Constraint-not_apply_to_self", "UML_CONSTRAINT_NOT_SELF"));
+            issues.extend(
+                Violation("a Constraint must not constrain itself".into()).diagnostic(
+                    element,
+                    "Constraint-not_apply_to_self",
+                    "UML_CONSTRAINT_NOT_SELF",
+                ),
+            );
         }
         match constraint_specification(references, element) {
             Ok(None) => issues.extend(Unverified("Constraint draft has no authored specification; Boolean semantics and side effects are unverified".into())
@@ -549,7 +773,9 @@ fn validate_value_rules<'a>(
                 .diagnostic(element, "Constraint-specification", "UML_CONSTRAINT_SPECIFICATION")),
         }
     }
-    if !element.conforms_to("OpaqueExpression") { return; }
+    if !element.conforms_to("OpaqueExpression") {
+        return;
+    }
     let length = |key: &str| -> Option<usize> {
         match element.properties().get(key) {
             None => Some(0),
@@ -559,14 +785,28 @@ fn validate_value_rules<'a>(
     };
     if let (Some(language), Some(body)) = (length("language"), length("body")) {
         if language > 0 && language != body {
-            issues.extend(Violation("nonempty language and body collections must have equal size".into())
-                .diagnostic(element, "OpaqueExpression-language_body_size", "UML_OPAQUE_EXPRESSION_LANGUAGES"));
+            issues.extend(
+                Violation("nonempty language and body collections must have equal size".into())
+                    .diagnostic(
+                        element,
+                        "OpaqueExpression-language_body_size",
+                        "UML_OPAQUE_EXPRESSION_LANGUAGES",
+                    ),
+            );
         }
     }
     let (returns, permitted) = opaque_expression_parameters(references, element);
     for (result, rule, message) in [
-        (returns, "OpaqueExpression-one_return_result_parameter", "referenced Behavior must have exactly one return Parameter"),
-        (permitted, "OpaqueExpression-only_in_or_return_parameters", "referenced Behavior allows only non-stream in/return Parameters"),
+        (
+            returns,
+            "OpaqueExpression-one_return_result_parameter",
+            "referenced Behavior must have exactly one return Parameter",
+        ),
+        (
+            permitted,
+            "OpaqueExpression-only_in_or_return_parameters",
+            "referenced Behavior allows only non-stream in/return Parameters",
+        ),
     ] {
         let outcome = match result {
             Ok(true) => PropertyOutcome::Satisfied,
@@ -581,18 +821,34 @@ fn validate_value_rules<'a>(
 fn opaque_expression_parameters(
     references: &ReferenceIndex<'_>,
     expression: ElementRef<'_>,
-) -> (Result<bool, super::classifiers::QueryError>, Result<bool, super::classifiers::QueryError>) {
+) -> (
+    Result<bool, super::classifiers::QueryError>,
+    Result<bool, super::classifiers::QueryError>,
+) {
     use super::{classifiers::QueryError, feature_compatibility::require_all};
     let evidence = || {
-        let Some(value) = expression.properties().get("behavior").filter(|value| !value.is_null()) else {
+        let Some(value) = expression
+            .properties()
+            .get("behavior")
+            .filter(|value| !value.is_null())
+        else {
             return Ok(None);
         };
         let descriptor = schema::uml_property("OpaqueExpression", "behavior")
             .map_err(|error| QueryError::unsupported(expression.id(), error.to_string()))?
-            .ok_or_else(|| QueryError::unsupported(expression.id(), "missing OpaqueExpression behavior contract"))?;
+            .ok_or_else(|| {
+                QueryError::unsupported(
+                    expression.id(),
+                    "missing OpaqueExpression behavior contract",
+                )
+            })?;
         match check_value(references, expression, descriptor, value) {
-            PropertyOutcome::Violation(message) => return Err(QueryError::invalid(expression.id(), message)),
-            PropertyOutcome::Unverified(message) => return Err(QueryError::unsupported(expression.id(), message)),
+            PropertyOutcome::Violation(message) => {
+                return Err(QueryError::invalid(expression.id(), message));
+            }
+            PropertyOutcome::Unverified(message) => {
+                return Err(QueryError::unsupported(expression.id(), message));
+            }
             PropertyOutcome::Satisfied => {}
         }
         let behavior_id = reference_id(value)
@@ -613,7 +869,9 @@ fn opaque_expression_parameters(
             .map_err(|error| QueryError::invalid(&parameter.id, error));
         match direction {
             Ok(direction) => {
-                if direction == "return" { returns += 1; }
+                if direction == "return" {
+                    returns += 1;
+                }
                 permitted_checks.push(Ok(matches!(direction.as_str(), "in" | "return")));
             }
             Err(error) => {
@@ -621,14 +879,18 @@ fn opaque_expression_parameters(
                 permitted_checks.push(Err(error));
             }
         }
-        permitted_checks.push(schema::read_effective_boolean(ElementRef::Object(parameter), "isStream")
-            .map(|stream| !stream)
-            .map_err(|error| QueryError::invalid(&parameter.id, error)));
+        permitted_checks.push(
+            schema::read_effective_boolean(ElementRef::Object(parameter), "isStream")
+                .map(|stream| !stream)
+                .map_err(|error| QueryError::invalid(&parameter.id, error)),
+        );
     }
     // Unresolved members can add return Parameters but cannot remove two
     // already established ones. Likewise a known out/stream member refutes
     // the universal constraint even when other members are unavailable.
-    return_checks.push(if returns > 1 { Ok(false) } else {
+    return_checks.push(if returns > 1 {
+        Ok(false)
+    } else {
         completeness.map(|_| returns == 1)
     });
     (require_all(return_checks), require_all(permitted_checks))

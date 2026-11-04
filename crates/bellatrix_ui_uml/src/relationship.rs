@@ -537,7 +537,15 @@ fn paint_marker_composition(
                             offset(22.0 + 7.0 * angle.cos(), 7.0 * angle.sin())
                         })
                         .collect::<Vec<_>>();
-                    polygon(window, &vertices, bounds, stroke, rgb(0xffffff), false, width);
+                    polygon(
+                        window,
+                        &vertices,
+                        bounds,
+                        stroke,
+                        rgb(0xffffff),
+                        false,
+                        width,
+                    );
                 }
                 if matches!(part.glyph, CrowfootOne | CrowfootZeroOne) {
                     stroke_line(

@@ -1,5 +1,5 @@
-use crate::{GenerationGraphError, Graph, analyze_generation_graph};
 use crate::api_contract::{API_VERSION, decode_model, error_response, invalid_request};
+use crate::{GenerationGraphError, Graph, analyze_generation_graph};
 use serde::Deserialize;
 use serde_json::json;
 use std::collections::HashSet;
@@ -37,11 +37,15 @@ struct AnalysisRequest {
 pub fn analyze_generation_dependencies(input_json: &str) -> Result<String, String> {
     let request: AnalysisRequest = serde_json::from_str(input_json).map_err(invalid_request)?;
     let model = decode_model(request.api_version, &request.model)?;
-    Graph::new(&model).validate_integrity()
+    Graph::new(&model)
+        .validate_integrity()
         .map_err(|error| error_response("GRAPH_INTEGRITY", error.to_string()))?;
     for id in &request.selected_ids {
         if model.element(id).is_none() {
-            return Err(error_response("UNKNOWN_SELECTION", format!("unknown source element: {id}")));
+            return Err(error_response(
+                "UNKNOWN_SELECTION",
+                format!("unknown source element: {id}"),
+            ));
         }
     }
     let selected: HashSet<String> = request.selected_ids.into_iter().collect();
@@ -55,12 +59,22 @@ pub fn analyze_generation_dependencies(input_json: &str) -> Result<String, Strin
                 format!("generation dependency {relation} targets {target}, which is not a source element"),
             ),
         })?;
-    let units = analysis.units.iter().map(|unit| {
-        let requires = unit.requires.iter().map(|reference| json!({
-            "id":reference.id, "kind":reference.kind, "name":reference.name,
-            "relation_kind":reference.relation_kind,
-        })).collect::<Vec<_>>();
-        json!({"id":unit.id,"kind":unit.kind,"name":unit.name,"requires":requires})
-    }).collect::<Vec<_>>();
+    let units = analysis
+        .units
+        .iter()
+        .map(|unit| {
+            let requires = unit
+                .requires
+                .iter()
+                .map(|reference| {
+                    json!({
+                        "id":reference.id, "kind":reference.kind, "name":reference.name,
+                        "relation_kind":reference.relation_kind,
+                    })
+                })
+                .collect::<Vec<_>>();
+            json!({"id":unit.id,"kind":unit.kind,"name":unit.name,"requires":requires})
+        })
+        .collect::<Vec<_>>();
     Ok(json!({"api_version":API_VERSION,"coverage":"generation_dependency_analysis","units":units}).to_string())
 }

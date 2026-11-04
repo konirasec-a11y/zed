@@ -1,9 +1,9 @@
 #[path = "support/events.rs"]
 mod events;
-use serde_json::Value;
 use bellatrix_mde_cordis::*;
 use bellatrix_project::*;
 use cordis::{Context, Plugin, PreparedPlugin, Routing, event::QueryOutcome};
+use serde_json::Value;
 use std::sync::Arc;
 
 type Receipt = tokio::sync::watch::Receiver<Option<Result<u64, String>>>;
@@ -48,10 +48,16 @@ async fn property_receipts_are_targeted_revision_guarded_and_acknowledge_noops()
             .await?,
         QueryOutcome::Answer(Ok(_))
     ));
-    let first = model["elements"].as_array().and_then(|elements| elements.first())
-        .and_then(|element| element["id"].as_str()).ok_or("first element missing")?;
-    let second = model["elements"].as_array().and_then(|elements| elements.get(1))
-        .and_then(|element| element["id"].as_str()).ok_or("second element missing")?;
+    let first = model["elements"]
+        .as_array()
+        .and_then(|elements| elements.first())
+        .and_then(|element| element["id"].as_str())
+        .ok_or("first element missing")?;
+    let second = model["elements"]
+        .as_array()
+        .and_then(|elements| elements.get(1))
+        .and_then(|element| element["id"].as_str())
+        .ok_or("second element missing")?;
     let bridge = MdeUiBridge::start(&context, id.clone())?;
     let submit =
         |element: &str, value: &str, revision| -> Result<Receipt, Box<dyn std::error::Error>> {
@@ -76,11 +82,7 @@ async fn property_receipts_are_targeted_revision_guarded_and_acknowledge_noops()
         receipt_result(submit(first, "First edited", 1)?).await?,
         Ok(1)
     );
-    assert!(
-        receipt_result(submit(second, "stale", 0)?)
-            .await?
-            .is_err()
-    );
+    assert!(receipt_result(submit(second, "stale", 0)?).await?.is_err());
     assert_eq!(service.snapshot(&id)?.revision(), 1);
     // Closing or changing the selected inspector must not redirect an already submitted edit.
     drop(submit(first, "First pending", 1)?);

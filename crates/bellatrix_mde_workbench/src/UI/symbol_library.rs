@@ -2,7 +2,10 @@
 //! The public catalog and its SVGs live in bellatrix_ui_symbols; this is a
 //! preview, not a second Dock and not a substitute for domain commands.
 use bellatrix_ui_symbols::{Family, SymbolGallery};
-use gpui::{App, Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, SharedString, Window, div, prelude::*, px};
+use gpui::{
+    App, Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, SharedString, Window,
+    div, prelude::*, px,
+};
 use ui::{Button, Clickable};
 use workspace::item::Item;
 
@@ -12,19 +15,26 @@ pub struct MdeSymbolLibraryItem {
 }
 impl MdeSymbolLibraryItem {
     pub fn new(cx: &mut Context<Self>) -> Self {
-        Self { focus: cx.focus_handle(), family: Family::Uml }
+        Self {
+            focus: cx.focus_handle(),
+            family: Family::Uml,
+        }
     }
 }
 impl EventEmitter<()> for MdeSymbolLibraryItem {}
 impl Focusable for MdeSymbolLibraryItem {
-    fn focus_handle(&self, _: &App) -> FocusHandle { self.focus.clone() }
+    fn focus_handle(&self, _: &App) -> FocusHandle {
+        self.focus.clone()
+    }
 }
 impl Item for MdeSymbolLibraryItem {
     type Event = ();
     fn tab_content_text(&self, _: usize, _: &App) -> SharedString {
         "Bellatrix · Symbol Library".into()
     }
-    fn show_toolbar(&self) -> bool { false }
+    fn show_toolbar(&self) -> bool {
+        false
+    }
 }
 
 impl Render for MdeSymbolLibraryItem {
@@ -40,23 +50,30 @@ impl Render for MdeSymbolLibraryItem {
         div()
             .id("bellatrix-symbol-library")
             .size_full()
-            .flex().flex_col()
+            .flex()
+            .flex_col()
             .track_focus(&self.focus)
             .child(
-                div().h(px(40.0)).w_full().flex_none().flex().gap_2().items_center().px_3()
+                div()
+                    .h(px(40.0))
+                    .w_full()
+                    .flex_none()
+                    .flex()
+                    .gap_2()
+                    .items_center()
+                    .px_3()
                     .children(families.into_iter().map(|(label, value)| {
                         let owner = owner.clone();
-                        Button::new(format!("bellatrix-symbol-family-{label}"), label)
-                            .on_click(move |_, _, cx| {
+                        Button::new(format!("bellatrix-symbol-family-{label}"), label).on_click(
+                            move |_, _, cx| {
                                 let _ = owner.update(cx, |item, cx| {
                                     item.family = value;
                                     cx.notify();
                                 });
-                            })
+                            },
+                        )
                     })),
             )
-            .child(
-                div().flex_1().min_h_0().child(SymbolGallery::new(family)),
-            )
+            .child(div().flex_1().min_h_0().child(SymbolGallery::new(family)))
     }
 }

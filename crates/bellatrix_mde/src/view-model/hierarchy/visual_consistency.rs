@@ -20,13 +20,19 @@ pub(crate) fn relationship_display_label(
     crate::format_relationship_label(&relation.kind, &relation.properties)
         .filter(|label| !label.trim().is_empty())
         .unwrap_or_else(|| {
-            let endpoint = |id: &str| section.elements.iter().find(|element| element.id == id)
-                .map(|element| {
-                    let exposed = crate::template_parametered_element(section, element).unwrap_or(element);
-                    crate::element_display_label_with_references(exposed, references)
-                })
-                .filter(|label| !label.trim().is_empty())
-                .unwrap_or_else(|| "Unnamed element".into());
+            let endpoint = |id: &str| {
+                section
+                    .elements
+                    .iter()
+                    .find(|element| element.id == id)
+                    .map(|element| {
+                        let exposed = crate::template_parametered_element(section, element)
+                            .unwrap_or(element);
+                        crate::element_display_label_with_references(exposed, references)
+                    })
+                    .filter(|label| !label.trim().is_empty())
+                    .unwrap_or_else(|| "Unnamed element".into())
+            };
             format!("{} → {}", endpoint(&relation.from), endpoint(&relation.to))
         })
 }
@@ -37,11 +43,19 @@ pub fn visual_components(section: &ModelingSection) -> Vec<VisualComponent> {
     let references = crate::uml::references::ReferenceIndex::new(model);
     let mut components = Vec::new();
     for diagram in &section.diagrams {
-        let mut pending = diagram.views.iter().rev()
-            .map(|view| (view, None)).collect::<Vec<_>>();
+        let mut pending = diagram
+            .views
+            .iter()
+            .rev()
+            .map(|view| (view, None))
+            .collect::<Vec<_>>();
         while let Some((view, parent_view_id)) = pending.pop() {
-            pending.extend(view.children.iter().rev()
-                .map(|child| (child, Some(view.id.clone()))));
+            pending.extend(
+                view.children
+                    .iter()
+                    .rev()
+                    .map(|child| (child, Some(view.id.clone()))),
+            );
             let element = view
                 .subject
                 .as_deref()
@@ -70,7 +84,8 @@ pub fn visual_components(section: &ModelingSection) -> Vec<VisualComponent> {
                     })
                 })
                 .or_else(|| {
-                    relation.map(|relation| relationship_display_label(section, relation, &references))
+                    relation
+                        .map(|relation| relationship_display_label(section, relation, &references))
                 })
                 .unwrap_or_else(|| kind.clone());
             components.push(VisualComponent {
@@ -78,7 +93,9 @@ pub fn visual_components(section: &ModelingSection) -> Vec<VisualComponent> {
                 view_id: view.id.clone(),
                 subject_id: view.subject.clone(),
                 parent_view_id: parent_view_id.or_else(|| {
-                    view.draft.as_ref().and_then(|draft| draft.parent_view_id.clone())
+                    view.draft
+                        .as_ref()
+                        .and_then(|draft| draft.parent_view_id.clone())
                 }),
                 label,
                 kind,

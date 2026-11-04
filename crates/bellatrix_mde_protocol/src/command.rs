@@ -84,37 +84,60 @@ fn deserialize_authored_coordinate<'de, D: serde::Deserializer<'de>>(
 #[derive(Clone, Debug, PartialEq)]
 pub enum LayoutExtent {
     Resolved(f64),
-    Unresolved { original: f64, reason: UnresolvedExtentReason },
+    Unresolved {
+        original: f64,
+        reason: UnresolvedExtentReason,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum UnresolvedExtentReason { NegativeExtent }
+pub enum UnresolvedExtentReason {
+    NegativeExtent,
+}
 
 impl LayoutExtent {
     pub fn original(&self) -> f64 {
-        match self { Self::Resolved(value) => *value, Self::Unresolved { original, .. } => *original }
+        match self {
+            Self::Resolved(value) => *value,
+            Self::Unresolved { original, .. } => *original,
+        }
     }
     pub fn resolved(&self) -> Option<f64> {
-        match self { Self::Resolved(value) if value.is_finite() && *value >= 0.0 => Some(*value), _ => None }
+        match self {
+            Self::Resolved(value) if value.is_finite() && *value >= 0.0 => Some(*value),
+            _ => None,
+        }
     }
     pub fn is_valid(&self) -> bool {
         match self {
             Self::Resolved(value) => value.is_finite() && *value >= 0.0,
-            Self::Unresolved { original, reason: UnresolvedExtentReason::NegativeExtent } => original.is_finite() && *original < 0.0,
+            Self::Unresolved {
+                original,
+                reason: UnresolvedExtentReason::NegativeExtent,
+            } => original.is_finite() && *original < 0.0,
         }
     }
 }
 
 impl Serialize for LayoutExtent {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        if !self.is_valid() { return Err(serde::ser::Error::custom("invalid authored layout extent")); }
+        if !self.is_valid() {
+            return Err(serde::ser::Error::custom("invalid authored layout extent"));
+        }
         match self {
             Self::Resolved(value) => value.serialize(serializer),
             Self::Unresolved { original, reason } => {
                 #[derive(Serialize)]
-                struct Pending<'a> { original: f64, reason: &'a UnresolvedExtentReason }
-                Pending { original: *original, reason }.serialize(serializer)
+                struct Pending<'a> {
+                    original: f64,
+                    reason: &'a UnresolvedExtentReason,
+                }
+                Pending {
+                    original: *original,
+                    reason,
+                }
+                .serialize(serializer)
             }
         }
     }
@@ -131,12 +154,20 @@ impl<'de> Deserialize<'de> for LayoutExtent {
         }
         #[derive(Deserialize)]
         #[serde(untagged)]
-        enum Encoded { Resolved(serde_json::Number), Unresolved(Pending) }
+        enum Encoded {
+            Resolved(serde_json::Number),
+            Unresolved(Pending),
+        }
         let extent = match Encoded::deserialize(deserializer)? {
             Encoded::Resolved(number) => Self::Resolved(coordinate_from_number(number)?),
-            Encoded::Unresolved(value) => Self::Unresolved { original: value.original, reason: value.reason },
+            Encoded::Unresolved(value) => Self::Unresolved {
+                original: value.original,
+                reason: value.reason,
+            },
         };
-        if !extent.is_valid() { return Err(serde::de::Error::custom("invalid authored layout extent")); }
+        if !extent.is_valid() {
+            return Err(serde::de::Error::custom("invalid authored layout extent"));
+        }
         Ok(extent)
     }
 }
@@ -156,15 +187,9 @@ pub struct LayoutBounds {
         deserialize_with = "deserialize_authored_coordinate"
     )]
     pub y: Authored<f64>,
-    #[serde(
-        default,
-        skip_serializing_if = "Authored::is_missing"
-    )]
+    #[serde(default, skip_serializing_if = "Authored::is_missing")]
     pub width: Authored<LayoutExtent>,
-    #[serde(
-        default,
-        skip_serializing_if = "Authored::is_missing"
-    )]
+    #[serde(default, skip_serializing_if = "Authored::is_missing")]
     pub height: Authored<LayoutExtent>,
 }
 
@@ -377,7 +402,6 @@ pub struct Style {
     pub uml: UmlStyle,
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ViewOccurrence {
@@ -454,7 +478,10 @@ impl UmlStyle {
         self.show_property != Some(false)
     }
     pub fn should_show_stereotype(&self) -> bool {
-        !matches!(self.stereotype_display, Some(StereotypeDisplay::Hidden | StereotypeDisplay::Icon))
+        !matches!(
+            self.stereotype_display,
+            Some(StereotypeDisplay::Hidden | StereotypeDisplay::Icon)
+        )
     }
 }
 
@@ -630,7 +657,11 @@ pub enum ModelingTool {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Aggregation { None, Shared, Composite }
+pub enum Aggregation {
+    None,
+    Shared,
+    Composite,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AssociationEndOwner {
@@ -684,13 +715,19 @@ pub enum AssociationEndEdit {
     },
 }
 
-
 /// Integration intent. Domain validation and mutation belong to the engine.
 #[derive(Clone, Debug)]
 pub enum Command {
     AdoptRootModel,
-    SetOwner { element_id: String, owner_id: Option<String> },
-    SetExplorerParent { subject_id: String, parent_id: Option<String>, parent_occurrence: Option<ViewOccurrence> },
+    SetOwner {
+        element_id: String,
+        owner_id: Option<String>,
+    },
+    SetExplorerParent {
+        subject_id: String,
+        parent_id: Option<String>,
+        parent_occurrence: Option<ViewOccurrence>,
+    },
     CreateDiagram {
         kind: StructuralDiagramKind,
         name: String,
@@ -724,15 +761,36 @@ pub enum Command {
         y: f64,
     },
     CreateElementOrVisualDraft {
-        diagram_id: String, owner_id: Option<String>, kind: ModelingElementKind, name: Option<String>, x: f64, y: f64,
+        diagram_id: String,
+        owner_id: Option<String>,
+        kind: ModelingElementKind,
+        name: Option<String>,
+        x: f64,
+        y: f64,
     },
-    CreateRelationOrVisualDraft { diagram_id: String, owner_id: Option<String>, kind: ModelingRelationKind, from: String, to: String },
+    CreateRelationOrVisualDraft {
+        diagram_id: String,
+        owner_id: Option<String>,
+        kind: ModelingRelationKind,
+        from: String,
+        to: String,
+    },
     CreateRelationAtViewsOrVisualDraft {
-        diagram_id: String, owner_id: Option<String>, kind: ModelingRelationKind, source_view_id: String, target_view_id: String,
-        from: Option<String>, to: Option<String>,
+        diagram_id: String,
+        owner_id: Option<String>,
+        kind: ModelingRelationKind,
+        source_view_id: String,
+        target_view_id: String,
+        from: Option<String>,
+        to: Option<String>,
     },
     CreateRelationAtViews {
-        diagram_id: String, owner_id: Option<String>, kind: ModelingRelationKind, from: String, to: String, endpoints: ViewEndpoints,
+        diagram_id: String,
+        owner_id: Option<String>,
+        kind: ModelingRelationKind,
+        from: String,
+        to: String,
+        endpoints: ViewEndpoints,
     },
     CreateRelation {
         diagram_id: String,
@@ -745,22 +803,56 @@ pub enum Command {
         owner_id: String,
         kind: ModelingMemberKind,
     },
-    MoveParameter { parameter_id: String, up: bool },
-    MigrateAssociation { association_id: String },
-    SetRedefinedElements { element_id: String, redefined_ids: Vec<String> },
-    SetSubsettedProperties { property_id: String, subsetted_ids: Vec<String> },
-    SetNamespaceImport { import_id: String, namespace_id: String, target_id: String, is_package: bool, alias: Option<String>, visibility: String },
-    SetAssociationEndNavigation { association_id: String, property_id: String, navigation: NavigationKnowledge },
-    SetAssociationMemberEnds { association_id: String, member_end_ids: Vec<String> },
-    EditAssociationEnds { association_id: String, edits: Vec<AssociationEndEdit> },
+    MoveParameter {
+        parameter_id: String,
+        up: bool,
+    },
+    MigrateAssociation {
+        association_id: String,
+    },
+    SetRedefinedElements {
+        element_id: String,
+        redefined_ids: Vec<String>,
+    },
+    SetSubsettedProperties {
+        property_id: String,
+        subsetted_ids: Vec<String>,
+    },
+    SetNamespaceImport {
+        import_id: String,
+        namespace_id: String,
+        target_id: String,
+        is_package: bool,
+        alias: Option<String>,
+        visibility: String,
+    },
+    SetAssociationEndNavigation {
+        association_id: String,
+        property_id: String,
+        navigation: NavigationKnowledge,
+    },
+    SetAssociationMemberEnds {
+        association_id: String,
+        member_end_ids: Vec<String>,
+    },
+    EditAssociationEnds {
+        association_id: String,
+        edits: Vec<AssociationEndEdit>,
+    },
     QuickEdit {
         diagram_id: String,
         element_id: String,
         action: UmlQuickCreate,
     },
     CreateVisualDraft {
-        diagram_id: String, notation_kind: String, label: Option<String>, geometry: Geometry, properties: std::collections::BTreeMap<String, serde_json::Value>,
-        parent_view_id: Option<String>, source_view_id: Option<String>, target_view_id: Option<String>,
+        diagram_id: String,
+        notation_kind: String,
+        label: Option<String>,
+        geometry: Geometry,
+        properties: std::collections::BTreeMap<String, serde_json::Value>,
+        parent_view_id: Option<String>,
+        source_view_id: Option<String>,
+        target_view_id: Option<String>,
     },
     PlaceElementView {
         diagram_id: String,
@@ -777,9 +869,19 @@ pub enum Command {
         view_id: String,
         order: ViewOrder,
     },
-    SetViewLabel { view_id: String, label: Option<String> },
-    SetViewTiming { view_id: String, timing: Option<TimingPresentation> },
-    SetViewEndpoints { diagram_id: String, view_id: String, endpoints: ViewEndpoints },
+    SetViewLabel {
+        view_id: String,
+        label: Option<String>,
+    },
+    SetViewTiming {
+        view_id: String,
+        timing: Option<TimingPresentation>,
+    },
+    SetViewEndpoints {
+        diagram_id: String,
+        view_id: String,
+        endpoints: ViewEndpoints,
+    },
     SetViewStyle {
         diagram_id: String,
         view_id: String,
@@ -819,24 +921,66 @@ pub enum Command {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum NavigationKnowledge { Known(bool), Unverified }
+pub enum NavigationKnowledge {
+    Known(bool),
+    Unverified,
+}
 
 /// Restricted edits supported by lossless native MDJ interchange.
 #[derive(Clone, Debug)]
 pub enum MdjEditCommand {
- SetViewLabel { view_id: String, label: Option<String> },
- SetViewStyle { diagram_id: String, view_id: String, style: Style },
- Rename { element_id: String, name: String },
- RenameDiagram { diagram_id: String, name: String },
- SetProperty { element_id: String, path: String, value: serde_json::Value },
+    SetViewLabel {
+        view_id: String,
+        label: Option<String>,
+    },
+    SetViewStyle {
+        diagram_id: String,
+        view_id: String,
+        style: Style,
+    },
+    Rename {
+        element_id: String,
+        name: String,
+    },
+    RenameDiagram {
+        diagram_id: String,
+        name: String,
+    },
+    SetProperty {
+        element_id: String,
+        path: String,
+        value: serde_json::Value,
+    },
 }
 
 impl From<MdjEditCommand> for Command {
- fn from(value: MdjEditCommand) -> Self { match value {
- MdjEditCommand::SetViewLabel { view_id, label } => Self::SetViewLabel { view_id, label },
- MdjEditCommand::SetViewStyle { diagram_id, view_id, style } => Self::SetViewStyle { diagram_id, view_id, style },
- MdjEditCommand::Rename { element_id, name } => Self::Rename { element_id, name },
- MdjEditCommand::RenameDiagram { diagram_id, name } => Self::RenameDiagram { diagram_id, name },
- MdjEditCommand::SetProperty { element_id, path, value } => Self::SetProperty { element_id, path, value },
- } }
+    fn from(value: MdjEditCommand) -> Self {
+        match value {
+            MdjEditCommand::SetViewLabel { view_id, label } => {
+                Self::SetViewLabel { view_id, label }
+            }
+            MdjEditCommand::SetViewStyle {
+                diagram_id,
+                view_id,
+                style,
+            } => Self::SetViewStyle {
+                diagram_id,
+                view_id,
+                style,
+            },
+            MdjEditCommand::Rename { element_id, name } => Self::Rename { element_id, name },
+            MdjEditCommand::RenameDiagram { diagram_id, name } => {
+                Self::RenameDiagram { diagram_id, name }
+            }
+            MdjEditCommand::SetProperty {
+                element_id,
+                path,
+                value,
+            } => Self::SetProperty {
+                element_id,
+                path,
+                value,
+            },
+        }
+    }
 }
