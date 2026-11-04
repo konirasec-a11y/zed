@@ -334,3 +334,18 @@ The canvas supplies the source identity only for source-owned relationship tools
 including Deployment's location. Other tools currently submit no owner because
 the canvas has no explicit owner picker. The relation remains editable and
 incomplete; completing that owner-selection interaction is still pending.
+
+## Imported member labels
+
+The imported-layout preview draws `UMLAttributeView` and `UMLOperationView` as
+selectable labels at their stored bounds. Text and typography come from the
+Cordis read projection's typed subject binding, not from MDJ interpretation in
+the UI. Model edits refresh the rendered member label while the source text is
+preserved for interchange. Generic labels continue to display literal text.
+The View Inspector distinguishes stored and rendered labels and shows fallback
+diagnostics when a binding cannot resolve. The style editor exposes member
+multiplicity and operation-signature visibility through existing style events.
+
+This is still a bounded imported preview: it does not relayout compartments,
+resize labels automatically, enable nested geometry gestures or establish
+pixel-for-pixel StarUML parity. No runtime/build verification is implied.

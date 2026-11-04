@@ -6,13 +6,13 @@ const CLASS_FIELDS: &[&str] = &[
 ];
 const ATTRIBUTE_FIELDS: &[&str] = &[
     "visibility", "stereotype", "type", "multiplicity", "isStatic", "isLeaf", "isReadOnly",
-    "isOrdered", "isUnique", "isDerived", "aggregation", "isID",
+    "isOrdered", "isUnique", "isDerived", "aggregation", "isID", "defaultValue",
 ];
 const OPERATION_FIELDS: &[&str] = &[
     "visibility", "stereotype", "isStatic", "isLeaf", "isQuery", "isAbstract", "concurrency",
 ];
 const PARAMETER_FIELDS: &[&str] = &[
-    "visibility", "stereotype", "type", "multiplicity", "isOrdered", "isUnique", "direction",
+    "visibility", "stereotype", "type", "multiplicity", "isOrdered", "isUnique", "direction", "defaultValue",
 ];
 
 pub(super) fn fields(kind: &str) -> &'static [&'static str] {
@@ -40,7 +40,7 @@ pub(super) fn supported_property(kind: &str, field: &str, value: &Value) -> bool
             crate::StereotypeValue::Null | crate::StereotypeValue::Text(_) | crate::StereotypeValue::Reference(_)),
         // These are encoding checks. Enum values, bounds and reference targets
         // remain kernel inputs, including unresolved textual Type declarations.
-        "visibility" | "multiplicity" | "aggregation" | "concurrency" | "direction" => value.is_string(),
+        "visibility" | "multiplicity" | "aggregation" | "concurrency" | "direction" | "defaultValue" => value.is_string(),
         "type" => value.is_null() || value.is_string() || reference(value).is_some(),
         _ => value.is_boolean(),
     }
@@ -62,10 +62,9 @@ pub(super) fn supported_field(kind: &str, field: &str, value: &Value) -> bool {
         return value.is_array();
     }
     match (kind, field) {
-        // Empty source-only declarations do not assert a UML expression/role.
-        (_, "documentation") => value.as_str() == Some(""),
-        ("UMLAttribute" | "UMLParameter", "defaultValue")
-        | ("UMLOperation", "specification") => value.as_str() == Some(""),
+        (_, "documentation") => value.is_string(),
+        // An empty source-only specification does not assert a UML expression.
+        ("UMLOperation", "specification") => value.as_str() == Some(""),
         ("UMLClass", "receptions" | "behaviors")
         | ("UMLOperation", "raisedExceptions" | "preconditions" | "postconditions" | "bodyConditions") =>
             value.as_array().is_some_and(Vec::is_empty),
@@ -184,6 +183,9 @@ pub(super) fn import_properties(kind: &str, residue: &mut BTreeMap<String, Value
         properties.entry("multiplicity".into()).or_insert_with(|| Value::String(String::new()));
         properties.entry("isUnique".into()).or_insert(Value::Bool(false));
         properties.entry("type".into()).or_insert_with(|| Value::String(String::new()));
+        // This is the source's textual editor declaration, not a fabricated
+        // ValueSpecification. The existing kernel text adapter keeps it unverified.
+        properties.entry("defaultValue".into()).or_insert_with(|| Value::String(String::new()));
     }
     properties
 }
@@ -194,12 +196,17 @@ pub(super) fn preserves_omitted_default(kind: &str, field: &str, value: &Value) 
     }
     matches!(kind, "UMLAttribute" | "UMLParameter") && match field {
         "isUnique" => value == &Value::Bool(false),
-        "multiplicity" | "type" => value.as_str() == Some(""),
+        "multiplicity" | "type" | "defaultValue" => value.as_str() == Some(""),
         _ => false,
     }
 }
 
 pub(super) fn update_metadata(element: &Element, metadata: &mut MdjObjectResidual) {
+    if element.description.is_some() {
+        metadata.mapped_fields.insert("documentation".into());
+    } else {
+        metadata.mapped_fields.remove("documentation");
+    }
     for field in fields(&metadata.type_name) {
         if !metadata.mapped_fields.contains(*field)
             && element.properties.get(*field).is_some_and(|value| preserves_omitted_default(&metadata.type_name, field, value))

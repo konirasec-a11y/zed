@@ -107,6 +107,7 @@ pub struct View {
     pub endpoints: Option<ViewEndpoints>,
     pub timing: Option<TimingPresentation>,
     pub label: Option<String>,
+    pub rendered_label: RenderedLabel,
     pub geometry: Geometry,
     pub children: Vec<View>,
     pub presentation: ViewPresentation,
@@ -131,6 +132,13 @@ pub struct ViewPresentation {
     pub has_source: bool,
     pub visible: bool,
     pub style_inheritance: Option<StyleInheritance>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct RenderedLabel {
+    pub bound: bool,
+    pub text: Option<String>,
+    pub diagnostics: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

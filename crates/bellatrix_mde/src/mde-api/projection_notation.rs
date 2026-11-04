@@ -4,6 +4,8 @@ use crate::mde_api_projection as projection;
 use crate as mde;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
+#[path = "projection_labels.rs"]
+mod labels;
 
 pub(crate) fn project_view(
     section: &mde::ModelingSection,
@@ -19,6 +21,8 @@ pub(crate) fn project_view(
     let timing = view.timing.as_ref().map(projection::convert).transpose()?;
     let projected_style = render_styles.get(&view.id)
         .ok_or_else(|| format!("missing render style projection for view {}", view.id))?;
+    let mut render_style = projected_style.style.clone();
+    let rendered_label = labels::project(section, diagram, view, references, &mut render_style);
     let figure = figure_presentation(section, diagram, view, element, references, timing.clone())?;
     let classifier = element.map(|element| {
         let presentation = mde::classifier_presentation(
@@ -96,6 +100,7 @@ pub(crate) fn project_view(
         endpoints: view.endpoints.as_ref().map(projection::convert).transpose()?,
         timing,
         label: view.label.clone(),
+        rendered_label,
         geometry: projection::convert(&view.geometry)?,
         children: view.children.iter().map(|child| {
             project_view(section, diagram, child, references, paths, render_styles)
@@ -108,7 +113,7 @@ pub(crate) fn project_view(
         },
         style: projection::convert(&view.style)?,
         z_index: view.z_index,
-        render_style: projected_style.style.clone(),
+        render_style,
         figure,
         classifier,
         display_label,

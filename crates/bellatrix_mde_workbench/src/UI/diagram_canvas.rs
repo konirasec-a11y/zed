@@ -56,6 +56,10 @@ impl Render for MdeWorkbenchItem {
                     });
                     let views = imported_preview::ordered_views(&diagram.views);
                     for view in views {
+                        if !view.rendered_label.diagnostics.is_empty() {
+                            incomplete_preview = true;
+                            marker_diagnostics.extend(view.rendered_label.diagnostics.iter().cloned());
+                        }
                         if matches!(&view.geometry, Geometry::Layout { .. }) {
                             if let Some(card) = self.render_imported_preview(&diagram.id, view, &mut node_bounds.borrow_mut(), cx) {
                                 cards.push(card);
@@ -1164,7 +1168,7 @@ impl MdeWorkbenchItem {
                 }
             }
         }
-        if let Some(label) = &view.label {
+        if let Some(label) = &view.rendered_label.text {
             card = card.child(div().w_full().min_w_0().flex_none().child(label.clone()));
         }
         let owner = cx.weak_entity();

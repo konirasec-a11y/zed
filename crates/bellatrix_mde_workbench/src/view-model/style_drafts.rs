@@ -15,6 +15,8 @@ pub(crate) const FIELDS: &[(&str, &str)] = &[
     ("show_visibility", "Show visibility"),
     ("show_type", "Show type"),
     ("show_property", "Show property annotations"),
+    ("show_multiplicity", "Show member multiplicity"),
+    ("show_operation_signature", "Show operation signature"),
     ("stereotype_display", "Stereotype display"),
     ("suppress_attributes", "Hide attribute compartment"),
     ("suppress_operations", "Hide operation compartment"),
@@ -31,6 +33,8 @@ pub(crate) fn style_value(style: &Style, key: &str) -> String {
         "show_visibility" => style.uml.show_visibility.map(|value| value.to_string()),
         "show_type" => style.uml.show_type.map(|value| value.to_string()),
         "show_property" => style.uml.show_property.map(|value| value.to_string()),
+        "show_multiplicity" => style.uml.show_multiplicity.map(|value| value.to_string()),
+        "show_operation_signature" => style.uml.show_operation_signature.map(|value| value.to_string()),
         "stereotype_display" => style.uml.stereotype_display.map(|value| {
             match value {
                 StereotypeDisplay::Hidden => "none",
@@ -114,6 +118,8 @@ pub(crate) fn field_error(key: &str, text: &str) -> Option<&'static str> {
         "show_visibility"
         | "show_type"
         | "show_property"
+        | "show_multiplicity"
+        | "show_operation_signature"
         | "word_wrap"
         | "show_shadow"
         | "suppress_attributes"
@@ -313,6 +319,8 @@ impl StyleEditState {
                     "show_visibility" => style.uml.show_visibility = text.parse().ok(),
                     "show_type" => style.uml.show_type = text.parse().ok(),
                     "show_property" => style.uml.show_property = text.parse().ok(),
+                    "show_multiplicity" => style.uml.show_multiplicity = text.parse().ok(),
+                    "show_operation_signature" => style.uml.show_operation_signature = text.parse().ok(),
                     "stereotype_display" => {
                         style.uml.stereotype_display = match text {
                             "none" => Some(StereotypeDisplay::Hidden),

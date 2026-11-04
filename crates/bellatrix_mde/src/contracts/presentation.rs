@@ -177,6 +177,8 @@ pub struct LayoutBounds {
 #[serde(deny_unknown_fields)]
 pub struct ViewPresentation {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label_binding: Option<SubjectLabelBinding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub style_inheritance: Option<StyleInheritance>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relationship_endpoints: Option<RelationshipEndpointPresentation>,
@@ -192,6 +194,28 @@ pub struct ViewPresentation {
     pub resources: std::collections::BTreeMap<String, PresentationResource>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<PresentationSource>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SubjectLabelBinding {
+    pub role: SubjectLabelRole,
+    pub options_source: LabelOptionsSource,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SubjectLabelRole {
+    Attribute,
+    Operation,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum LabelOptionsSource {
+    Defaults,
+    View { view_id: String },
+    Unresolved { reason: String },
 }
 
 impl ViewPresentation {

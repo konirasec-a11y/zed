@@ -36,6 +36,10 @@ pub struct UmlStyle {
     pub show_type: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub show_property: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show_multiplicity: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show_operation_signature: Option<bool>,
 }
 
 impl UmlStyle {

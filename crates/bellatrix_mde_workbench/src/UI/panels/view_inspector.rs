@@ -114,8 +114,14 @@ impl MdeRightPanel {
                     view.presentation.kind.as_deref().unwrap_or("Native view"),
                 ),
                 presentation_row("Subject", view.subject.as_deref().unwrap_or("None")),
-                presentation_row("Label", view.label.as_deref().unwrap_or("Absent")),
+                presentation_row(if view.rendered_label.bound { "Stored label" } else { "Label" }, view.label.as_deref().unwrap_or("Absent")),
             ];
+            if view.rendered_label.bound {
+                presentation_rows.push(presentation_row("Rendered label", view.rendered_label.text.as_deref().unwrap_or("Absent")));
+            }
+            for diagnostic in &view.rendered_label.diagnostics {
+                presentation_rows.push(presentation_row("Label projection", diagnostic));
+            }
             if read_only {
                 presentation_rows.push(presentation_row("Editing", "Read-only presentation"));
                 if let Some(notice) = style_target_id

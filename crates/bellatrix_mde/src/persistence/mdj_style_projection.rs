@@ -7,7 +7,7 @@ use crate::{
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
-const STYLE_FIELDS: [&str; 9] = [
+const STYLE_FIELDS: [&str; 15] = [
     "fillColor",
     "lineColor",
     "fontColor",
@@ -17,6 +17,12 @@ const STYLE_FIELDS: [&str; 9] = [
     "showShadow",
     "horizontalAlignment",
     "verticalAlignment",
+    "showVisibility",
+    "showType",
+    "showProperty",
+    "showMultiplicity",
+    "showOperationSignature",
+    "stereotypeDisplay",
 ];
 
 const PARENT_STYLE_PROPERTIES: [InheritedStyleProperty; 7] = [
@@ -149,6 +155,19 @@ pub(super) fn take_style(residual: &mut BTreeMap<String, Value>) -> Style {
         show_shadow: take_boolean(residual, "showShadow"),
         ..Style::default()
     };
+    style.uml.show_visibility = take_boolean(residual, "showVisibility");
+    style.uml.show_type = take_boolean(residual, "showType");
+    style.uml.show_property = take_boolean(residual, "showProperty");
+    style.uml.show_multiplicity = take_boolean(residual, "showMultiplicity");
+    style.uml.show_operation_signature = take_boolean(residual, "showOperationSignature");
+    style.uml.stereotype_display = match residual.get("stereotypeDisplay").and_then(Value::as_str) {
+        Some("none") => Some(crate::StereotypeDisplay::Hidden),
+        Some("label") => Some(crate::StereotypeDisplay::Label),
+        _ => None,
+    };
+    if style.uml.stereotype_display.is_some() {
+        residual.remove("stereotypeDisplay");
+    }
     if let Some(font) = residual
         .get("font")
         .and_then(Value::as_str)
@@ -260,10 +279,22 @@ pub(super) fn export_style(view: &View, object: &mut Map<String, Value>) -> Resu
         ("underline", style.font_underline),
         ("wordWrap", style.word_wrap),
         ("showShadow", style.show_shadow),
+        ("showVisibility", style.uml.show_visibility),
+        ("showType", style.uml.show_type),
+        ("showProperty", style.uml.show_property),
+        ("showMultiplicity", style.uml.show_multiplicity),
+        ("showOperationSignature", style.uml.show_operation_signature),
     ] {
         if let Some(value) = value {
             insert_mapped(object, field, Value::Bool(value))?;
         }
+    }
+    if let Some(display) = style.uml.stereotype_display {
+        let value = match display {
+            crate::StereotypeDisplay::Hidden => "none",
+            crate::StereotypeDisplay::Label => "label",
+        };
+        insert_mapped(object, "stereotypeDisplay", Value::String(value.into()))?;
     }
     if let Some(alignment) = style.text_align {
         let value = match alignment {

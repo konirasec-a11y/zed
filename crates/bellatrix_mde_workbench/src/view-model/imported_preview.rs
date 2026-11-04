@@ -62,6 +62,9 @@ pub(super) enum ImportedShape {
 }
 
 pub(super) fn imported_shape(view: &View) -> Option<ImportedShape> {
+    if view.rendered_label.bound {
+        return Some(ImportedShape::Label);
+    }
     match view.presentation.kind.as_deref()? {
         "RectangleView" | "UMLClassView" => Some(ImportedShape::Rectangle),
         "LabelView" | "NodeLabelView" | "EdgeLabelView" => Some(ImportedShape::Label),

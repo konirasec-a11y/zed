@@ -145,6 +145,8 @@ pub(crate) fn reconcile_style_inputs(
                         | "show_visibility"
                         | "show_type"
                         | "show_property"
+                        | "show_multiplicity"
+                        | "show_operation_signature"
                         | "suppress_attributes"
                         | "suppress_operations"
                         | "suppress_receptions"
@@ -852,6 +854,8 @@ pub(crate) fn render_styles(
                 "show_property",
                 "Show property annotations such as readOnly and query",
             ),
+            ("show_multiplicity", "Show member multiplicity"),
+            ("show_operation_signature", "Show operation signature"),
         ] {
             let enabled = draft
                 .state
@@ -860,10 +864,19 @@ pub(crate) fn render_styles(
                 .is_none_or(|value| value != "false");
             let item = item.clone();
             let key = key.clone();
+            let caption = match field {
+                "show_multiplicity" => "Multiplicity",
+                "show_operation_signature" => "Signature",
+                _ => "",
+            };
+            let icon_field = match field {
+                "show_multiplicity" | "show_operation_signature" => "show_type",
+                _ => field,
+            };
             labels = labels.child(
-                Button::new(format!("mde-style-{field}"), "")
+                Button::new(format!("mde-style-{field}"), caption)
                     .start_icon(
-                        Icon::from_path(format!("icons/bellatrix-{field}.svg"))
+                        Icon::from_path(format!("icons/bellatrix-{icon_field}.svg"))
                             .size(IconSize::Small),
                     )
                     .aria_label(description)

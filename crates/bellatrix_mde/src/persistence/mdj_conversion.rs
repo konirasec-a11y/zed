@@ -2,6 +2,8 @@
 mod associations;
 #[path = "mdj_members.rs"]
 mod members;
+#[path = "mdj_label_projection.rs"]
+mod label_projection;
 #[path = "mdj_style_projection.rs"]
 mod style_projection;
 #[path = "mdj_view_projection.rs"]
@@ -179,6 +181,19 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
                     mapped_fields.insert("_parent".into());
                 }
             }
+            let description = if mapped_kind.is_some() {
+                match residue.get("documentation").and_then(Value::as_str) {
+                    Some(documentation) => {
+                        let documentation = documentation.to_owned();
+                        residue.remove("documentation");
+                        mapped_fields.insert("documentation".into());
+                        Some(documentation)
+                    }
+                    None => None,
+                }
+            } else {
+                None
+            };
             let properties = if mapped_kind.is_some() {
                 members::import_properties(object.type_name, &mut residue, &mut mapped_fields)
             } else {
@@ -191,7 +206,7 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
                     .unwrap_or_else(|| format!("mdj.{}", object.type_name)),
                 name,
                 label: None,
-                description: None,
+                description,
                 // Opaque MDJ properties must not accidentally become UML properties.
                 properties,
                 annotations: Vec::new(),
@@ -201,7 +216,7 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
             diagnostics.push(Diagnostic {
                 path: object.path.clone(),
                 message: if mapped_kind.is_some() {
-                    format!("{} mapped by identity, name, explicit ownership and representable properties; class members and operation parameters preserve source order, textual types remain unresolved declarations, and source-only encoding stays in residue", object.type_name)
+                    format!("{} mapped by identity, name, documentation, explicit ownership and representable properties; class members and operation parameters preserve source order, textual types and default values remain unresolved declarations, and source-only encoding stays in residue", object.type_name)
                 } else if canonical_kind(object.type_name).is_some() {
                     let fields = object.properties.iter()
                         .filter(|(field, value)| !supported_semantic_field(object.type_name, field, value))
@@ -245,6 +260,7 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
         }
     }
     capture_composition(&index, &mut project, &residuals, &mut diagnostics)?;
+    label_projection::bind(&index, &mut project);
     view_projection::bind_markers(&index, &mut project, &mut diagnostics);
     Ok((
         Import {
@@ -554,6 +570,11 @@ fn export_document(project: &Project, original: &mdj::Index<'_>) -> Result<Value
             element.properties.clone()
         };
         if canonical {
+            if let Some(documentation) = &element.description {
+                if residual.insert("documentation".into(), Value::String(documentation.clone())).is_some() {
+                    return Err(failure("", "mapped documentation conflicts with source residue"));
+                }
+            }
             for (field, value) in &element.properties {
                 if !supported_semantic_property(kind, field, value) {
                     return Err(failure(

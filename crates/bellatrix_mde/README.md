@@ -256,3 +256,36 @@ UML style settings are serialized only under `style.uml`. Both `Style` and
 under `style` are rejected, rather than migrated or loaded with missing data.
 An absent UML extension means default notation preferences; an empty extension
 is omitted when saving. JSON and Protobuf use the same style decoding contract.
+
+## Bound member labels
+
+`ViewPresentation.label_binding` distinguishes a subject-derived Attribute or
+Operation label from literal `View.label` text. It records the role and an
+explicit options source (defaults, another View, or unresolved), without storing
+a second model or overwriting the source's cached text. JSON and the Protobuf
+`presentation_json` field serialize the same typed binding. `Style.uml` also
+contains `show_multiplicity` and `show_operation_signature`.
+
+The MDJ adapter recognizes `UMLAttributeView` and `UMLOperationView`, resolving
+their visual grandparent options independently of `parentStyle`. Supported
+visibility/type/property/multiplicity/signature flags and stereotype `none` or
+`label` have inverse mappings. This follows the supplied StarUML
+`extensions/essential/uml/elements.js` member View updates and `getString`
+methods, not the different quick-edit `textualNotation` expressions. Other
+stereotype modes, malformed options and unsupported option-owner contracts
+remain conservative fallbacks with diagnostics.
+
+The MDE projection supplies separate rendered text and presentation diagnostics
+through Cordis. It uses current names, ordered Parameters, authored textual
+types/defaults, multiplicity notation and explicit property suffixes. Textual
+types are still unresolved declarations, not proof of UML conformance. Authored
+multiplicity is displayed literally, with no implicit `[1]`; if identity-based
+bounds exist, the kernel query remains authoritative. Static underline and
+abstract Operation italic use the kernel's effective scalar queries. No UML
+acceptance rule is added to the UI or adapter.
+
+Generic labels remain literal; their subject alone never implies a name,
+namespace, property or association-end label role. Unresolved bound subjects or
+options retain cached text with a visible diagnostic, not a claimed live label.
+Stored geometry is not recalculated after edits, so compartment relayout,
+automatic sizing, qualifier bindings and full StarUML rendering remain pending.

@@ -212,7 +212,7 @@ fn display_label(
         label.push_str(": ");
         label.push_str(value_type);
     }
-    if property {
+    if property && style.uml.show_multiplicity != Some(false) {
         let bound = |key| match element.properties.get(key) {
             Some(Value::Number(value)) if value.is_u64() => Some(value.to_string()),
             value => text(value).map(str::to_owned),
@@ -290,7 +290,7 @@ fn operation_label(
     };
     let mut label = format!("{prefix}{}(", operation.name);
     let mut result_type = None;
-    if let Some(references) = references {
+    if style.uml.show_operation_signature != Some(false) && let Some(references) = references {
         match crate::uml::operations::owned_parameters(references, &operation.id) {
             Ok(parameters) => {
                 let parameters = parameters
@@ -322,7 +322,7 @@ fn operation_label(
     if style.uml.should_show_property()
         && operation.properties.get("isQuery").and_then(Value::as_bool) == Some(true)
     {
-        if style.uml.should_show_type() && result_type.is_none() {
+        if style.uml.show_operation_signature != Some(false) && style.uml.should_show_type() && result_type.is_none() {
             label.push(':');
         }
         label.push_str(" {query}");
