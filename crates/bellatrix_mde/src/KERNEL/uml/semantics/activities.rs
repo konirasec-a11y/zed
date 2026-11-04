@@ -8,7 +8,9 @@ use super::{
     property_contracts::{self, PropertyOutcome},
     references::{ReferenceIndex, external_reference_href, reference_id},
     root::ElementRef,
-    schema, value_specifications,
+    schema,
+    types::StandardPrimitiveType,
+    value_specifications,
 };
 use crate::{StructuralDiagnostic, StructuralSeverity};
 
@@ -547,6 +549,36 @@ fn required_action_element<'a>(
     references
         .element(&identifier)
         .map_err(|error| QueryError::unsupported(action.id(), error))
+}
+
+// Both OCL rules compare the result type to the normative PrimitiveTypes::Boolean
+// identity. User-model names are not an alias for that external library identity.
+fn action_result_is_boolean(
+    references: &ReferenceIndex<'_>,
+    action: ElementRef<'_>,
+    metaclass: &str,
+) -> Result<bool, QueryError> {
+    let result = required_action_element(references, action, metaclass, "result")?;
+    let Some(declared_type) = result
+        .properties()
+        .get("type")
+        .filter(|value| !value.is_null())
+    else {
+        return Ok(false);
+    };
+    match value_specifications::standard_primitive_reference(declared_type)
+        .map_err(|error| QueryError::unsupported(result.id(), error))?
+    {
+        Some(primitive) => Ok(primitive == StandardPrimitiveType::Boolean),
+        None => {
+            resolve_feature_type(references, result)
+                .map_err(|error| QueryError::unsupported(result.id(), error.to_string()))?;
+            Err(QueryError::unsupported(
+                result.id(),
+                "result Type has no proven link to the normative Boolean identity",
+            ))
+        }
+    }
 }
 
 // Compare value.type -> destination.type, never the reverse. Only the two
@@ -1513,6 +1545,30 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                     unverified,
                     rule,
                     "the result OutputPin multiplicity must contain the source multiplicity",
+                ));
+            }
+        }
+        for (metaclass, code, unverified, rule) in [
+            (
+                "ReadIsClassifiedObjectAction",
+                "UML_READ_IS_CLASSIFIED_OBJECT_ACTION_BOOLEAN_RESULT",
+                "MDE_READ_IS_CLASSIFIED_OBJECT_ACTION_BOOLEAN_RESULT_UNVERIFIED",
+                "ReadIsClassifiedObjectAction-boolean_result",
+            ),
+            (
+                "TestIdentityAction",
+                "UML_TEST_IDENTITY_ACTION_RESULT_IS_BOOLEAN",
+                "MDE_TEST_IDENTITY_ACTION_RESULT_IS_BOOLEAN_UNVERIFIED",
+                "TestIdentityAction-result_is_boolean",
+            ),
+        ] {
+            if node.conforms_to(metaclass) {
+                checks.push((
+                    action_result_is_boolean(references, node, metaclass),
+                    code,
+                    unverified,
+                    rule,
+                    "the result OutputPin type must be the normative Boolean type",
                 ));
             }
         }
