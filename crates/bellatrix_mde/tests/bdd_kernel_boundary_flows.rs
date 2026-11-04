@@ -1,4 +1,4 @@
-use bellatrix_mde::{Format, Project, decode_model_document, encode, validate_uml_model};
+use bellatrix_mde::{decode_model_document, encode_model_document, validate_uml_model};
 use serde_json::{Value, json};
 use std::{error::Error, fs, path::PathBuf};
 
@@ -193,18 +193,19 @@ fn mixed_domain_project_remains_unverified_after_save_reopen_and_repair() -> Flo
             "{expected}"
         );
     }
-    let project: Project = serde_json::from_value(mixed["model"].clone())?;
+    let canonical: Value = serde_json::from_str(&decode_model_document(
+        &serde_json::to_vec(&mixed["model"])?, "json").map_err(std::io::Error::other)?)?;
     let saved = SavedFlow::new("mixed-domain")?;
-    for (format, name) in [(Format::Json, "json"), (Format::Protobuf, "protobuf")] {
+    for name in ["json", "protobuf"] {
         println!("And I persist, close and reopen the mixed-domain project as {name}");
         let path = saved.0.join(name);
-        fs::write(&path, encode(&project, format)?)?;
+        fs::write(&path, encode_model_document(&canonical.to_string(), name).map_err(std::io::Error::other)?)?;
         let reopened: Value = serde_json::from_str(
             &decode_model_document(&fs::read(path)?, name).map_err(std::io::Error::other)?,
         )?;
         assert_eq!(
             reopened["model"],
-            serde_json::to_value(&project)?,
+            canonical["model"],
             "External objects, references and repeated collection entries must survive"
         );
         assert_eq!(validate(&reopened)?, expected);
@@ -231,16 +232,17 @@ fn mixed_domain_project_remains_unverified_after_save_reopen_and_repair() -> Flo
 }
 
 fn reopen_mixed_flow(name: &str, envelope: &Value, expected: &Value) -> FlowResult<()> {
-    let project: Project = serde_json::from_value(envelope["model"].clone())?;
+    let canonical: Value = serde_json::from_str(&decode_model_document(
+        &serde_json::to_vec(&envelope["model"])?, "json").map_err(std::io::Error::other)?)?;
     let saved = SavedFlow::new(name)?;
-    for (format, name) in [(Format::Json, "json"), (Format::Protobuf, "protobuf")] {
+    for name in ["json", "protobuf"] {
         println!("And I save, close and reopen this authored state using {name}");
         let path = saved.0.join(name);
-        fs::write(&path, encode(&project, format)?)?;
+        fs::write(&path, encode_model_document(&canonical.to_string(), name).map_err(std::io::Error::other)?)?;
         let reopened: Value = serde_json::from_str(
             &decode_model_document(&fs::read(path)?, name).map_err(std::io::Error::other)?,
         )?;
-        assert_eq!(reopened["model"], serde_json::to_value(&project)?);
+        assert_eq!(reopened["model"], canonical["model"]);
         assert_eq!(&validate(&reopened)?, expected);
     }
     Ok(())

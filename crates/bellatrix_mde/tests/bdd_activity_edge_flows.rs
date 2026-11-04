@@ -1,4 +1,4 @@
-use bellatrix_mde::{Format, Project, decode_model_document, encode, validate_uml_model};
+use bellatrix_mde::{decode_model_document, encode_model_document, validate_uml_model};
 use serde_json::{Value, json};
 use std::{error::Error, fs, path::PathBuf};
 
@@ -96,21 +96,22 @@ fn rule_diagnostic(response: &Value, severity: Option<&str>) -> FlowResult<()> {
 }
 
 fn reopen(name: &str, envelope: &Value, expected: &Value) -> FlowResult<()> {
-    let project: Project = serde_json::from_value(envelope["model"].clone())?;
+    let canonical: Value = serde_json::from_str(&decode_model_document(
+        &serde_json::to_vec(&envelope["model"])?, "json").map_err(std::io::Error::other)?)?;
     let directory = std::env::temp_dir().join(format!(
         "bellatrix-activity-edge-{}-{name}",
         std::process::id()
     ));
     fs::create_dir(&directory)?;
     let saved = SavedFlow(directory);
-    for (format, name) in [(Format::Json, "json"), (Format::Protobuf, "protobuf")] {
+    for name in ["json", "protobuf"] {
         println!("And I save, close and reopen {name}, preserving authored data and findings");
         let path = saved.0.join(name);
-        fs::write(&path, encode(&project, format)?)?;
+        fs::write(&path, encode_model_document(&canonical.to_string(), name).map_err(std::io::Error::other)?)?;
         let reopened: Value = serde_json::from_str(
             &decode_model_document(&fs::read(path)?, name).map_err(std::io::Error::other)?,
         )?;
-        assert_eq!(reopened["model"], serde_json::to_value(&project)?);
+        assert_eq!(reopened["model"], canonical["model"]);
         assert_eq!(&validate(&reopened)?, expected);
     }
     Ok(())

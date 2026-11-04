@@ -6,6 +6,8 @@ pub enum StereotypeDisplay {
     #[serde(rename = "none")]
     Hidden,
     Label,
+    Icon,
+    IconLabel,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -57,6 +59,6 @@ impl UmlStyle {
         self.show_property != Some(false)
     }
     pub fn should_show_stereotype(&self) -> bool {
-        self.stereotype_display != Some(StereotypeDisplay::Hidden)
+        !matches!(self.stereotype_display, Some(StereotypeDisplay::Hidden | StereotypeDisplay::Icon))
     }
 }

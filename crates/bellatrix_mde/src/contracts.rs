@@ -16,10 +16,11 @@ pub use endpoint_presentation::{
 };
 
 pub use presentation::{
-    Authored, Diagram, Geometry, HierarchyPlacement, LabelOptionsSource, LabelPlacement, LayoutBounds, LineMode,
+    Authored, Diagram, Geometry, HierarchyPlacement, LabelOptionsSource, LabelPlacement, LayoutBounds, LayoutExtent, UnresolvedExtentReason, LineMode,
     PathSegment, Point, PresentationReference, PresentationResource, PresentationSource,
     RelationshipRouting, Style, StyleInheritance, InheritedStyleProperty, SourceFieldPresence,
     SubjectLabelBinding, SubjectLabelRole, TextAlignment, TextVerticalAlignment, TimingMode, TimingPoint,
+    InterfaceIconBinding, InterfaceConnection, InterfaceConnectionRole, EntityBoxBinding, RelationshipNotation,
     TimingPresentation, View, ViewEndpoints, ViewOccurrence, ViewPresentation, VisualDraft,
 };
 pub use project::Project;

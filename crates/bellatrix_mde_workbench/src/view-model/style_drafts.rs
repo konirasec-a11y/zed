@@ -39,6 +39,8 @@ pub(crate) fn style_value(style: &Style, key: &str) -> String {
             match value {
                 StereotypeDisplay::Hidden => "none",
                 StereotypeDisplay::Label => "label",
+                StereotypeDisplay::Icon => "icon",
+                StereotypeDisplay::IconLabel => "icon_label",
             }
             .into()
         }),
@@ -113,7 +115,7 @@ pub(crate) fn field_error(key: &str, text: &str) -> Option<&'static str> {
     }
     match key {
         "stereotype_display" => {
-            (!matches!(text, "none" | "label")).then_some("Choose stereotype label or hidden")
+            (!matches!(text, "none" | "label" | "icon" | "icon_label")).then_some("Choose a supported stereotype display")
         }
         "show_visibility"
         | "show_type"
@@ -325,6 +327,8 @@ impl StyleEditState {
                         style.uml.stereotype_display = match text {
                             "none" => Some(StereotypeDisplay::Hidden),
                             "label" => Some(StereotypeDisplay::Label),
+                            "icon" => Some(StereotypeDisplay::Icon),
+                            "icon_label" => Some(StereotypeDisplay::IconLabel),
                             _ => None,
                         }
                     }

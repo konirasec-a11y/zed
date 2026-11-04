@@ -122,6 +122,11 @@ impl MdeRightPanel {
             for diagnostic in &view.rendered_label.diagnostics {
                 presentation_rows.push(presentation_row("Label projection", diagnostic));
             }
+            if let Some(icon) = &view.interface_icon {
+                for diagnostic in &icon.diagnostics {
+                    presentation_rows.push(presentation_row("Interface icon", diagnostic));
+                }
+            }
             if read_only {
                 presentation_rows.push(presentation_row("Editing", "Read-only presentation"));
                 if let Some(notice) = style_target_id
@@ -138,13 +143,23 @@ impl MdeRightPanel {
                     for (name, value) in [
                         ("X", &bounds.x),
                         ("Y", &bounds.y),
-                        ("Width", &bounds.width),
-                        ("Height", &bounds.height),
                     ] {
                         let value = match value {
                             bellatrix_mde_cordis::Authored::Missing => "Absent".to_owned(),
                             bellatrix_mde_cordis::Authored::Null => "Null".to_owned(),
                             bellatrix_mde_cordis::Authored::Value(value) => value.to_string(),
+                        };
+                        presentation_rows.push(presentation_row(name, &value));
+                    }
+                    for (name, extent) in [("Width", &bounds.width), ("Height", &bounds.height)] {
+                        let value = match extent {
+                            bellatrix_mde_cordis::Authored::Missing => "Absent".to_owned(),
+                            bellatrix_mde_cordis::Authored::Null => "Null".to_owned(),
+                            bellatrix_mde_cordis::Authored::Value(extent) => match extent {
+                                bellatrix_mde_cordis::LayoutExtent::Resolved(value) => value.to_string(),
+                                bellatrix_mde_cordis::LayoutExtent::Unresolved { original, .. } =>
+                                    format!("Unresolved negative extent ({original}); layout required"),
+                            },
                         };
                         presentation_rows.push(presentation_row(name, &value));
                     }

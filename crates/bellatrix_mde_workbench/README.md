@@ -349,3 +349,11 @@ multiplicity and operation-signature visibility through existing style events.
 This is still a bounded imported preview: it does not relayout compartments,
 resize labels automatically, enable nested geometry gestures or establish
 pixel-for-pixel StarUML parity. No runtime/build verification is implied.
+
+Imported Interface icon Views use projected ball/socket primitives from Cordis.
+The UI does not derive provided/required UML semantics, inspect source view kinds
+or replace an unresolved icon with a class rectangle. Existing child labels stay
+at their stored positions. Icon/icon-label style controls preserve that layout;
+the preview and Inspector report missing geometry and the absence of font/edge
+relayout. The generic native interface figure remains separate from this imported
+snapshot renderer, which does not add the native figure's fixed stem.

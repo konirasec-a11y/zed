@@ -19,8 +19,8 @@ pub(super) fn resolve_layout_bounds(
     let (x, y, width, height) = (
         *bounds.x.value()?,
         *bounds.y.value()?,
-        *bounds.width.value()?,
-        *bounds.height.value()?,
+        bounds.width.value()?.resolved()?,
+        bounds.height.value()?.resolved()?,
     );
     if ![x, y, width, height].iter().all(|value| value.is_finite())
         || width < 0.0
@@ -59,9 +59,16 @@ pub(super) fn resolve_layout_bounds(
 pub(super) enum ImportedShape {
     Rectangle,
     Label,
+    InterfaceIcon,
 }
 
 pub(super) fn imported_shape(view: &View) -> Option<ImportedShape> {
+    if view.entity_box.is_some() {
+        return Some(ImportedShape::Rectangle);
+    }
+    if view.interface_icon.is_some() {
+        return Some(ImportedShape::InterfaceIcon);
+    }
     if view.rendered_label.bound {
         return Some(ImportedShape::Label);
     }

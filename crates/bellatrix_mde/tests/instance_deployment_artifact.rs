@@ -1,11 +1,30 @@
-use bellatrix_mde::{Format, Project, decode, encode, validate_uml_model};
+use bellatrix_mde::{decode_model_document, encode_model_document, validate_uml_model};
 use serde_json::{Value, json};
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+fn envelope(model: &Value) -> String {
+    json!({"api_version": 1, "model": model}).to_string()
+}
+
+fn decode(document: &[u8], format: &str) -> Result<Value> {
+    let response = decode_model_document(document, format)?;
+    let mut response: Value = serde_json::from_str(&response)?;
+    Ok(response["model"].take())
+}
+
+fn encode(model: &Value, format: &str) -> Result<Vec<u8>> {
+    Ok(encode_model_document(&envelope(model), format)?)
+}
+
+fn import_document(model: &Value) -> Result<Value> {
+    decode(&serde_json::to_vec(model)?, "json")
+}
+
 const RULE: &str = "InstanceSpecification-deployment_artifact:";
 const ERROR: &str = "UML_INSTANCE_SPECIFICATION_DEPLOYMENT_ARTIFACT";
 const UNKNOWN: &str = "MDE_INSTANCE_SPECIFICATION_DEPLOYMENT_ARTIFACT_UNVERIFIED";
 
-fn document(rooted: bool) -> Result<Project> {
+fn document(rooted: bool) -> Result<Value> {
     let mut value = json!({"id":"project","name":"Instance deployment","root_model":"root",
     "elements":[
         {"id":"root","kind":"uml.model","name":"Root"},
@@ -31,23 +50,27 @@ fn document(rooted: bool) -> Result<Project> {
     if !rooted {
         value.as_object_mut().ok_or("object")?.remove("root_model");
     }
-    Ok(serde_json::from_value(value)?)
+    import_document(&value)
 }
-fn author(project: &mut Project, id: &str, key: &str, value: Value) -> Result {
-    if let Some(element) = project.elements.iter_mut().find(|element| element.id == id) {
-        element.properties.insert(key.into(), value);
+fn author(project: &mut Value, id: &str, key: &str, value: Value) -> Result {
+    if let Some(element) = project["elements"]
+        .as_array_mut()
+        .ok_or("elements")?
+        .iter_mut()
+        .find(|element| element["id"] == id)
+    {
+        element["properties"][key] = value;
     } else {
-        project
-            .relations
+        project["relations"]
+            .as_array_mut()
+            .ok_or("relations")?
             .iter_mut()
-            .find(|relation| relation.id == id)
-            .ok_or("relation")?
-            .properties
-            .insert(key.into(), value);
+            .find(|relation| relation["id"] == id)
+            .ok_or("relation")?["properties"][key] = value;
     }
     Ok(())
 }
-fn issues(project: &Project) -> Result<Vec<Value>> {
+fn issues(project: &Value) -> Result<Vec<Value>> {
     let response: Value = serde_json::from_str(&validate_uml_model(
         &json!({"api_version":1,"model":project}).to_string(),
     )?)?;
@@ -64,7 +87,7 @@ fn issues(project: &Project) -> Result<Vec<Value>> {
         .cloned()
         .collect())
 }
-fn expect(project: &Project, code: &str) -> Result {
+fn expect(project: &Value, code: &str) -> Result {
     let issues = issues(project)?;
     assert_eq!(issues.len(), 1, "{issues:#?}");
     assert_eq!(issues[0]["code"], code, "{issues:#?}");
@@ -83,16 +106,18 @@ fn given_deployed_instance_then_an_artifact_classifier_is_required() -> Result {
         for value in [json!([]), json!([{"$ref":"class"}])] {
             author(&mut project, "instance", "classifier", value)?;
             expect(&project, ERROR)?;
-            for format in [Format::Json, Format::Protobuf] {
+            for format in ["json", "protobuf"] {
                 expect(&decode(&encode(&project, format)?, format)?, ERROR)?;
             }
         }
-        project
-            .elements
+        project["elements"]
+            .as_array_mut()
+            .ok_or("elements")?
             .iter_mut()
-            .find(|element| element.id == "instance")
-            .ok_or("instance")?
-            .properties
+            .find(|element| element["id"] == "instance")
+            .ok_or("instance")?["properties"]
+            .as_object_mut()
+            .ok_or("properties")?
             .remove("classifier");
         expect(&project, ERROR)?;
     }

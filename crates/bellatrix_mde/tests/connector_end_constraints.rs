@@ -1,7 +1,44 @@
-use bellatrix_mde::{commands::{apply, Command}, decode, encode, validate_uml_model, Format, Project};
+use bellatrix_mde::{
+    apply_model_command, decode_model_document, encode_model_document, encode_model_section,
+    prepare_model_document, validate_uml_model,
+};
+use bellatrix_mde_protocol::Command;
 use serde_json::{json, Value};
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
-fn document() -> Result<Project> {
+
+fn envelope(model: &Value) -> String {
+    json!({"api_version": 1, "model": model}).to_string()
+}
+
+fn decode(document: &[u8], format: &str) -> Result<Value> {
+    let response = decode_model_document(document, format)?;
+    let mut response: Value = serde_json::from_str(&response)?;
+    Ok(response["model"].take())
+}
+
+fn encode(model: &Value, format: &str) -> Result<Vec<u8>> {
+    Ok(encode_model_document(&envelope(model), format)?)
+}
+
+fn import_document(model: &Value) -> Result<Value> {
+    decode(&serde_json::to_vec(model)?, "json")
+}
+
+fn apply(model: &Value, command: &Command, revision: u64) -> std::result::Result<Value, String> {
+    let document = prepare_model_document(&envelope(model))?;
+    let section = apply_model_command(
+        &document.id,
+        &document.name,
+        &document.section_json,
+        revision,
+        command.clone(),
+        false,
+    )?;
+    let bytes = encode_model_section(&document.id, &document.name, &section.to_string(), "json")?;
+    decode(&bytes, "json").map_err(|error| error.to_string())
+}
+
+fn document() -> Result<Value> {
     let mut value = json!({"id":"model","name":"Roles","root_model":"root",
         "elements":[
             {"id":"root","kind":"uml.model","name":"Root"},
@@ -22,21 +59,26 @@ fn document() -> Result<Project> {
     for (owner, child) in [("root","owner"),("root","parent"),("root","foreign"),("root","type"),("parent","r1"),("owner","r2"),("foreign","outside"),("type","port"),("owner","connector"),("connector","e1"),("connector","e2")] {
         value["relations"].as_array_mut().ok_or("relations")?.push(json!({"id":format!("owns-{child}"),"kind":"owns","from":owner,"to":child}));
     }
-    Ok(serde_json::from_value(value)?)
+    import_document(&value)
 }
-fn author(model: &mut Project, id: &str, property: &str, value: Value) {
-    model.elements.iter_mut().find(|e| e.id == id).expect("element").properties.insert(property.into(), value);
+fn author(model: &mut Value, id: &str, property: &str, value: Value) {
+    model["elements"]
+        .as_array_mut()
+        .expect("elements")
+        .iter_mut()
+        .find(|element| element["id"] == id)
+        .expect("element")["properties"][property] = value;
 }
-fn issues(model: &Project) -> Result<Vec<Value>> {
+fn issues(model: &Value) -> Result<Vec<Value>> {
     let value: Value = serde_json::from_str(&validate_uml_model(&json!({"api_version":1,"model":model}).to_string())?)?;
     Ok(value["diagnostics"].as_array().ok_or("diagnostics")?.clone())
 }
-fn has(model: &Project, rule: &str, severity: &str) -> Result<bool> {
+fn has(model: &Value, rule: &str, severity: &str) -> Result<bool> {
     Ok(issues(model)?.iter().any(|diagnostic| diagnostic["subject_id"] == "e1"
         && diagnostic["severity"] == severity
         && diagnostic["message"].as_str().is_some_and(|message| message.starts_with(&format!("ConnectorEnd-{rule}:")))))
 }
-fn attach_to_part(model: &mut Project) {
+fn attach_to_part(model: &mut Value) {
     author(model, "e1", "role", json!({"$ref":"port"}));
     author(model, "e1", "partWithPort", json!({"$ref":"r2"}));
 }
@@ -45,7 +87,7 @@ fn attach_to_part(model: &mut Project) {
 fn given_port_on_typed_part_when_validated_then_namespace_membership_is_required() -> Result {
     let mut model = document()?;
     attach_to_part(&mut model);
-    for format in [Format::Json, Format::Protobuf] {
+    for format in ["json", "protobuf"] {
         let reopened = decode(&encode(&model, format)?, format)?;
         for rule in ["role_and_part_with_port", "part_with_port_empty", "self_part_with_port"] {
             assert!(!has(&reopened, rule, "error")? && !has(&reopened, rule, "warning")?, "{:?}", issues(&reopened)?);

@@ -233,10 +233,10 @@ fn valid_geometry(geometry: &crate::Geometry) -> bool {
     let finite = |point: &crate::Point| point.x.is_finite() && point.y.is_finite();
     match geometry {
         Geometry::Layout { bounds } => {
-            [&bounds.x, &bounds.y, &bounds.width, &bounds.height].iter()
+            [&bounds.x, &bounds.y].iter()
                 .all(|value| value.value().is_none_or(|number| number.is_finite()))
                 && [&bounds.width, &bounds.height].iter()
-                    .all(|value| value.value().is_none_or(|number| *number >= 0.0))
+                    .all(|value| value.value().is_none_or(crate::LayoutExtent::is_valid))
         }
         Geometry::Rect { x, y, width, height } => [*x, *y, *width, *height].iter().all(|number| number.is_finite()) && *width >= 0.0 && *height >= 0.0,
         Geometry::Ellipse { cx, cy, rx, ry } => [*cx, *cy, *rx, *ry].iter().all(|number| number.is_finite()) && *rx >= 0.0 && *ry >= 0.0,

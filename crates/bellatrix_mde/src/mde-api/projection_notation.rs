@@ -6,6 +6,10 @@ use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 #[path = "projection_labels.rs"]
 mod labels;
+#[path = "projection_interface.rs"]
+mod interface;
+#[path = "projection_entity.rs"]
+mod entity;
 
 pub(crate) fn project_view(
     section: &mde::ModelingSection,
@@ -22,7 +26,8 @@ pub(crate) fn project_view(
     let projected_style = render_styles.get(&view.id)
         .ok_or_else(|| format!("missing render style projection for view {}", view.id))?;
     let mut render_style = projected_style.style.clone();
-    let rendered_label = labels::project(section, diagram, view, references, &mut render_style);
+    let mut rendered_label = labels::project(section, diagram, view, references, &mut render_style);
+    let entity_box = entity::project(section, diagram, view, &mut rendered_label, &mut render_style);
     let figure = figure_presentation(section, diagram, view, element, references, timing.clone())?;
     let classifier = element.map(|element| {
         let presentation = mde::classifier_presentation(
@@ -101,6 +106,8 @@ pub(crate) fn project_view(
         timing,
         label: view.label.clone(),
         rendered_label,
+        interface_icon: interface::project(diagram, view),
+        entity_box,
         geometry: projection::convert(&view.geometry)?,
         children: view.children.iter().map(|child| {
             project_view(section, diagram, child, references, paths, render_styles)
@@ -496,6 +503,10 @@ fn marker_composition(composition: &mde::EndpointMarkerComposition) -> EndpointM
     EndpointMarkerComposition {
         glyphs: composition.glyphs.iter().map(|part| EndpointMarkerPart {
             glyph: match part.glyph {
+                mde::EndpointMarkerGlyph::CrowfootOne => EndpointMarkerGlyph::CrowfootOne,
+                mde::EndpointMarkerGlyph::CrowfootMany => EndpointMarkerGlyph::CrowfootMany,
+                mde::EndpointMarkerGlyph::CrowfootZeroOne => EndpointMarkerGlyph::CrowfootZeroOne,
+                mde::EndpointMarkerGlyph::CrowfootZeroMany => EndpointMarkerGlyph::CrowfootZeroMany,
                 mde::EndpointMarkerGlyph::OpenArrow => EndpointMarkerGlyph::OpenArrow,
                 mde::EndpointMarkerGlyph::SolidArrow => EndpointMarkerGlyph::SolidArrow,
                 mde::EndpointMarkerGlyph::BlankArrow => EndpointMarkerGlyph::BlankArrow,

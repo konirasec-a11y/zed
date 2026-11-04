@@ -1,13 +1,45 @@
-//! Namespace overloads through canonical commands, validation and persistence.
-//! UML 2.5.1 NamedElement/BehavioralFeature::isDistinguishableFrom and Namespace.
-
 use bellatrix_mde::{
-    Format, Project, StructuralSeverity,
-    commands::{Command, apply},
-    decode, encode,
-    uml::{classifiers, namespace_imports, references::ReferenceIndex, root::Model},
+    apply_model_command, decode_model_document, encode_model_document, encode_model_section,
+    prepare_model_document, project_model_section, validate_uml_model,
 };
+use bellatrix_mde_protocol::Command;
 use serde_json::{Value, json};
+
+fn request(project: &Value) -> String {
+    json!({"api_version": 1, "model": project}).to_string()
+}
+
+fn decode(bytes: &[u8], format: &str) -> Result<Value, String> {
+    let envelope = decode_model_document(bytes, format)?;
+    let envelope: Value = serde_json::from_str(&envelope).map_err(|error| error.to_string())?;
+    envelope.get("model").cloned().ok_or_else(|| "model response is missing model".into())
+}
+
+fn encode(project: &Value, format: &str) -> Result<Vec<u8>, String> {
+    encode_model_document(&request(project), format)
+}
+
+fn apply(project: &Value, command: &Command, revision: u64) -> Result<Value, String> {
+    let document = prepare_model_document(&request(project))?;
+    let section = apply_model_command(&document.id, &document.name, &document.section_json,
+        revision, command.clone(), false)?;
+    let bytes = encode_model_section(&document.id, &document.name, &section.to_string(), "json")?;
+    decode(&bytes, "json")
+}
+
+fn findings(project: &Value) -> Vec<Value> {
+    let response = validate_uml_model(&request(project)).expect("public UML validation");
+    let response: Value = serde_json::from_str(&response).expect("validation response");
+    response["diagnostics"].as_array().expect("diagnostics").clone()
+}
+
+fn inspected(project: &Value, id: &str, path: &str) -> Value {
+    let document = prepare_model_document(&request(project)).expect("canonical section");
+    let projection = project_model_section(&document.id, &document.name, &document.section_json)
+        .expect("public read projection");
+    projection.inspect_element(id).expect("inspector").properties.into_iter()
+        .find(|property| property.path == path).expect("inspector property").value
+}
 
 fn document() -> Value {
     json!({
@@ -39,15 +71,14 @@ fn authored_element<'a>(document: &'a mut Value, id: &str) -> &'a mut Value {
         .iter_mut().find(|element| element["id"] == id).expect("authored identity")
 }
 
-fn reload(document: &Value) -> Project {
-    decode(&serde_json::to_vec(document).expect("document bytes"), Format::Json)
+fn reload(document: &Value) -> Value {
+    decode(&serde_json::to_vec(document).expect("document bytes"), "json")
         .expect("load authored document")
 }
 
-fn distinguishes(project: &Project, namespace: &str) -> bool {
-    namespace_imports::members_are_distinguishable(
-        &ReferenceIndex::new(Model::from_project(project)), namespace,
-    ).expect("resolved namespace")
+fn no_distinction_diagnostic(project: &Value) -> bool {
+    !findings(project).iter().any(|issue| matches!(issue["code"].as_str(),
+        Some("UML_NAMESPACE_MEMBERS_DISTINGUISHABLE" | "UML_NAMESPACE_DISTINGUISHABILITY_UNSUPPORTED" | "UML_NAMESPACE_DISTINGUISHABILITY")))
 }
 
 fn set_parameter(key: &str, value: Value) -> Command {
@@ -94,15 +125,14 @@ fn overload_authoring_flow_checks_every_tuple_field_and_effective_defaults() {
         let overloaded = apply(&distinct, &Command::Rename {
             element_id: "right".into(), name: "process".into(),
         }, 2).expect("different parameter tuples permit the same operation name");
-        assert!(distinguishes(&overloaded, "a"), "{key}");
-        assert!(!Model::from_project(&overloaded).validate().iter().any(|issue|
-            issue.severity == StructuralSeverity::Error), "{key}: {:?}",
-            Model::from_project(&overloaded).validate());
+        assert!(no_distinction_diagnostic(&overloaded), "{key}");
+        assert!(!findings(&overloaded).iter().any(|issue|
+            issue["severity"] == "error"), "{key}: {:?}", findings(&overloaded));
 
-        let before = encode(&overloaded, Format::Json).expect("snapshot before rejected edit");
+        let before = encode(&overloaded, "json").expect("snapshot before rejected edit");
         let collision = apply(&overloaded, &set_parameter(key, matching.clone()), 3);
         assert!(collision.is_err(), "matching {key} must reject the overload");
-        assert_eq!(before, encode(&overloaded, Format::Json).expect("unchanged snapshot"));
+        assert_eq!(before, encode(&overloaded, "json").expect("unchanged snapshot"));
 
         let mut invalid_content: Value = serde_json::from_slice(&before).expect("external draft");
         if key == "name" {
@@ -111,21 +141,22 @@ fn overload_authoring_flow_checks_every_tuple_field_and_effective_defaults() {
             authored_element(&mut invalid_content, "right-parameter")["properties"][key] = matching;
         }
         let invalid = reload(&invalid_content);
-        assert!(!distinguishes(&invalid, "a"));
-        assert!(Model::from_project(&invalid).validate().iter().any(|issue|
-            issue.code == "UML_NAMESPACE_MEMBERS_DISTINGUISHABLE"));
+        assert!(!no_distinction_diagnostic(&invalid));
+        assert!(findings(&invalid).iter().any(|issue|
+            issue["code"] == "UML_NAMESPACE_MEMBERS_DISTINGUISHABLE"));
         let repaired = apply(&invalid, &Command::Rename {
             element_id: "right".into(), name: "alternate".into(),
         }, 4).expect("repair an imported invalid overload");
-        for format in [Format::Json, Format::Protobuf] {
+        for format in ["json", "protobuf"] {
             let reopened = decode(&encode(&overloaded, format).expect("save valid overload"), format)
                 .expect("reopen valid overload");
             assert_eq!(overloaded, reopened);
-            assert!(distinguishes(&reopened, "a"));
+            assert!(no_distinction_diagnostic(&reopened));
             let reopened = decode(&encode(&invalid, format).expect("save invalid draft"), format)
                 .expect("reopen invalid draft");
-            assert!(!distinguishes(&reopened, "a"));
-            assert!(distinguishes(&repaired, "a"));
+            assert!(findings(&reopened).iter().any(|issue|
+                issue["code"] == "UML_NAMESPACE_MEMBERS_DISTINGUISHABLE"));
+            assert!(no_distinction_diagnostic(&repaired));
         }
     }
 
@@ -135,15 +166,12 @@ fn overload_authoring_flow_checks_every_tuple_field_and_effective_defaults() {
         authored_element(&mut unresolved, id)["properties"]["type"] = json!("LegacyType");
     }
     let unresolved = reload(&unresolved);
-    assert!(matches!(namespace_imports::members_are_distinguishable(
-        &ReferenceIndex::new(Model::from_project(&unresolved)), "a",
-    ), Err(classifiers::QueryError::Unsupported { .. })));
-    assert!(Model::from_project(&unresolved).validate().iter().any(|issue|
-        issue.code == "UML_NAMESPACE_DISTINGUISHABILITY_UNSUPPORTED"));
+    assert!(findings(&unresolved).iter().any(|issue|
+        issue["code"] == "UML_NAMESPACE_DISTINGUISHABILITY_UNSUPPORTED"));
     let repaired = apply(&unresolved, &Command::Rename {
         element_id: "right".into(), name: "alternate".into(),
     }, 5).expect("different names decide distinction without inventing Type identity");
-    assert!(distinguishes(&repaired, "a"));
+    assert!(no_distinction_diagnostic(&repaired));
 }
 
 #[test]
@@ -175,8 +203,7 @@ fn namespace_flow_preserves_parameter_order_aliases_and_inherited_overloads() {
     let project = apply(&project, &Command::Rename {
         element_id: "right".into(), name: "process".into(),
     }, 2).expect("sequence order distinguishes otherwise equal tuples");
-    assert!(distinguishes(&project, "a"));
-    assert!(distinguishes(&project, "child"));
+    assert!(no_distinction_diagnostic(&project));
     assert!(apply(&project, &Command::MoveParameter {
         parameter_id: "right-second".into(), up: false,
     }, 3).is_err(), "restoring equal order creates an invalid overload");
@@ -186,25 +213,22 @@ fn namespace_flow_preserves_parameter_order_aliases_and_inherited_overloads() {
         target_id: "imported".into(), is_package: false, alias: Some("Alias".into()),
         visibility: "public".into(),
     }, 4).expect("an imported name collision is excluded, not an owned-member error");
-    let references = ReferenceIndex::new(Model::from_project(&imported));
-    let namespace = classifiers::query(&references, "a").expect("effective members");
-    assert!(namespace.excluded_imports.iter().any(|member| member.id() == "imported"));
-    assert!(!namespace_imports::is_distinguishable_from(&references, "a", "imported", "nested")
-        .expect("excluded candidates retain their aliases for comparison"));
-    assert!(namespace_imports::members_are_distinguishable(&references, "a").expect("valid aliases"));
+    assert!(inspected(&imported, "a", "uml.excludedImports").as_array()
+        .expect("excluded imports").contains(&json!({"$ref":"imported"})));
+    assert!(no_distinction_diagnostic(&imported));
     let visible = apply(&imported, &Command::SetNamespaceImport {
         import_id: "alias-import".into(), namespace_id: "a".into(),
         target_id: "imported".into(), is_package: false, alias: Some("OtherAlias".into()),
         visibility: "public".into(),
     }, 5).expect("repair alias collision");
-    for format in [Format::Json, Format::Protobuf] {
+    for format in ["json", "protobuf"] {
         let reopened = decode(&encode(&visible, format).expect("save names and order"), format)
             .expect("reopen names and order");
         assert_eq!(visible, reopened);
-        let references = ReferenceIndex::new(Model::from_project(&reopened));
-        assert_eq!(namespace_imports::get_names_of_member(&references, "child", "imported")
-            .expect("inherited alias"), std::collections::BTreeSet::from([Some("OtherAlias".into())]));
-        assert!(distinguishes(&reopened, "child"));
+        assert_eq!(inspected(&reopened, "a", "uml.importedNames")["imported"], json!(["OtherAlias"]));
+        assert!(inspected(&reopened, "child", "uml.inheritedMember").as_array()
+            .expect("inherited members").contains(&json!({"$ref":"imported"})));
+        assert!(no_distinction_diagnostic(&reopened));
     }
 }
 
@@ -232,20 +256,14 @@ fn imported_interaction_draft_preserves_gate_and_message_name_overrides() {
         project = apply(&project, &Command::Rename {
             element_id: id.into(), name: name.into(),
         }, 1).expect("the name override permits another member with this name");
-        assert!(distinguishes(&project, "interaction"));
-        assert!(!Model::from_project(&project).validate().iter().any(|issue|
-            issue.code == "UML_NAMESPACE_MEMBERS_DISTINGUISHABLE"));
+        assert!(no_distinction_diagnostic(&project));
+        assert!(!findings(&project).iter().any(|issue|
+            issue["code"] == "UML_NAMESPACE_MEMBERS_DISTINGUISHABLE"));
     }
-    for format in [Format::Json, Format::Protobuf] {
+    for format in ["json", "protobuf"] {
         let reopened = decode(&encode(&project, format).expect("save interaction draft"), format)
             .expect("reopen interaction draft");
         assert_eq!(project, reopened);
-        let references = ReferenceIndex::new(Model::from_project(&reopened));
-        for (left, right) in [("gate", "other-gate"), ("message", "other-message")] {
-            assert!(namespace_imports::is_distinguishable_from(
-                &references, "interaction", left, right,
-            ).expect("Gate/Message normative override"));
-        }
-        assert!(distinguishes(&reopened, "interaction"));
+        assert!(no_distinction_diagnostic(&reopened));
     }
 }

@@ -1,9 +1,9 @@
 use bellatrix_mde::{
-    Project, Style, TextAlignment, TextVerticalAlignment, View,
-    commands::{Command, apply},
-    decode_model_document, encode_model_document, export_mdj_document, import_mdj_document,
-    validate_uml_model,
+    apply_model_command, decode_model_document, encode_model_section, export_mdj_section,
+    import_mdj_document, prepare_model_document, project_model_section, validate_uml_model,
 };
+use bellatrix_mde_protocol::{ModelDocumentParts, command::Command};
+use bellatrix_mde_protocol::{Style, TextAlignment, TextVerticalAlignment, projection::View};
 use serde_json::{Value, json};
 use std::{error::Error, fs, path::PathBuf};
 
@@ -25,11 +25,11 @@ struct MdjDiagnostic {
 }
 
 struct ImportedModel {
-    project: Project,
+    project: Value,
     diagnostics: Vec<MdjDiagnostic>,
 }
 
-fn model_request(project: &Project) -> FlowResult<String> {
+fn model_request(project: &Value) -> FlowResult<String> {
     Ok(format!(
         r#"{{"api_version":1,"model":{}}}"#,
         serde_json::to_string(project)?
@@ -37,24 +37,51 @@ fn model_request(project: &Project) -> FlowResult<String> {
 }
 
 fn import_mdj(bytes: &[u8]) -> FlowResult<ImportedModel> {
-    let response: ModelResponse = serde_json::from_str(
-        &import_mdj_document(bytes).map_err(std::io::Error::other)?,
-    )?;
+    let response: ModelResponse =
+        serde_json::from_str(&import_mdj_document(bytes).map_err(std::io::Error::other)?)?;
     Ok(ImportedModel {
         project: serde_json::from_str(response.model.get())?,
         diagnostics: response.diagnostics,
     })
 }
 
-fn export_mdj(project: &Project) -> FlowResult<Vec<u8>> {
-    Ok(export_mdj_document(&model_request(project)?).map_err(std::io::Error::other)?)
+fn document_parts(project: &Value) -> FlowResult<ModelDocumentParts> {
+    Ok(prepare_model_document(&model_request(project)?).map_err(std::io::Error::other)?)
 }
 
-fn encode_model(project: &Project, format: &str) -> FlowResult<Vec<u8>> {
-    Ok(encode_model_document(&model_request(project)?, format).map_err(std::io::Error::other)?)
+fn export_mdj(project: &Value) -> FlowResult<Vec<u8>> {
+    let document = document_parts(project)?;
+    Ok(
+        export_mdj_section(&document.id, &document.name, &document.section_json)
+            .map_err(std::io::Error::other)?,
+    )
 }
 
-fn decode_model(bytes: &[u8], format: &str) -> FlowResult<Project> {
+fn encode_model(project: &Value, format: &str) -> FlowResult<Vec<u8>> {
+    let document = document_parts(project)?;
+    Ok(
+        encode_model_section(&document.id, &document.name, &document.section_json, format)
+            .map_err(std::io::Error::other)?,
+    )
+}
+
+fn edit(project: &Value, command: Command) -> FlowResult<Value> {
+    let document = document_parts(project)?;
+    let section = apply_model_command(
+        &document.id,
+        &document.name,
+        &document.section_json,
+        1,
+        command,
+        false,
+    )
+    .map_err(std::io::Error::other)?;
+    let bytes = encode_model_section(&document.id, &document.name, &section.to_string(), "json")
+        .map_err(std::io::Error::other)?;
+    Ok(serde_json::from_slice(&bytes)?)
+}
+
+fn decode_model(bytes: &[u8], format: &str) -> FlowResult<Value> {
     let response: ModelResponse = serde_json::from_str(
         &decode_model_document(bytes, format).map_err(std::io::Error::other)?,
     )?;
@@ -73,7 +100,7 @@ impl SavedFlow {
         Ok(Self(directory))
     }
 
-    fn reopen(&self, project: &Project, name: &str, format: &str) -> FlowResult<Project> {
+    fn reopen(&self, project: &Value, name: &str, format: &str) -> FlowResult<Value> {
         let extension = match format {
             "json" => "json",
             "protobuf" => "blx",
@@ -87,13 +114,13 @@ impl SavedFlow {
         Ok(reopened)
     }
 
-    fn export_reopen(&self, project: &Project, name: &str) -> FlowResult<Project> {
+    fn export_reopen(&self, project: &Value, name: &str) -> FlowResult<Value> {
         let bytes = export_mdj(project)?;
         let path = self.0.join(format!("{name}.mdj"));
         fs::write(&path, &bytes)?;
         let reopened = import_mdj(&fs::read(path)?)?.project;
         assert_eq!(export_mdj(&reopened)?, bytes);
-        assert_projection_equal(project, &reopened);
+        assert_projection_equal(project, &reopened)?;
         Ok(reopened)
     }
 }
@@ -109,41 +136,73 @@ impl Drop for SavedFlow {
     }
 }
 
-fn view<'a>(project: &'a Project, id: &str) -> FlowResult<&'a View> {
-    project
+fn view(project: &Value, id: &str) -> FlowResult<View> {
+    let document = document_parts(project)?;
+    let projection = project_model_section(&document.id, &document.name, &document.section_json)
+        .map_err(std::io::Error::other)?;
+    projection
         .diagrams
         .iter()
         .flat_map(|diagram| diagram.all_views())
         .find(|view| view.id == id)
+        .cloned()
         .ok_or_else(|| format!("missing View {id}").into())
 }
 
-fn findings(project: &Project) -> FlowResult<Value> {
+fn raw_view<'a>(project: &'a Value, id: &str) -> FlowResult<&'a Value> {
+    fn find<'a>(views: &'a [Value], id: &str) -> Option<&'a Value> {
+        views.iter().find_map(|view| {
+            if view["id"] == id {
+                Some(view)
+            } else {
+                view.get("children")
+                    .and_then(Value::as_array)
+                    .and_then(|children| find(children, id))
+            }
+        })
+    }
+    project["diagrams"]
+        .as_array()
+        .ok_or("missing diagrams")?
+        .iter()
+        .find_map(|diagram| {
+            diagram["views"]
+                .as_array()
+                .and_then(|views| find(views, id))
+        })
+        .ok_or_else(|| format!("missing persisted View {id}").into())
+}
+
+fn findings(project: &Value) -> FlowResult<Value> {
     Ok(serde_json::from_str(
         &validate_uml_model(&json!({"api_version": 1, "model": project}).to_string())
             .map_err(std::io::Error::other)?,
     )?)
 }
 
-fn restyle(project: &Project, id: &str, style: Style) -> FlowResult<Project> {
-    Ok(apply(
+fn restyle(project: &Value, id: &str, style: Style) -> FlowResult<Value> {
+    edit(
         project,
-        &Command::SetViewStyle {
+        Command::SetViewStyle {
             diagram_id: "diagram".into(),
             view_id: id.into(),
             style,
         },
-        1,
     )
-    .map_err(std::io::Error::other)?)
 }
 
-fn assert_projection_equal(left: &Project, right: &Project) {
+fn assert_projection_equal(left: &Value, right: &Value) -> FlowResult<()> {
     let mut left = left.clone();
     let mut right = right.clone();
-    left.mdj_provenance = None;
-    right.mdj_provenance = None;
+    left.as_object_mut()
+        .ok_or("canonical model must be an object")?
+        .remove("mdj_provenance");
+    right
+        .as_object_mut()
+        .ok_or("canonical model must be an object")?
+        .remove("mdj_provenance");
     assert_eq!(left, right);
+    Ok(())
 }
 
 #[test]
@@ -168,12 +227,10 @@ fn authored_style_survives_command_save_reopen_and_mdj_export() -> FlowResult<()
     assert_eq!(original_view.style.font_weight, Some(700));
     assert_eq!(original_view.style.font_italic, Some(true));
     assert_eq!(original_view.style.show_shadow, Some(false));
-    let residue = &original_view
-        .presentation
-        .source
-        .as_ref()
-        .ok_or("missing source")?
-        .residual;
+    let residue = raw_view(&original, "class-view")?
+        .pointer("/presentation/source/residual")
+        .and_then(Value::as_object)
+        .ok_or("missing source residue")?;
     for field in ["fillColor", "lineColor", "fontColor", "font", "showShadow"] {
         assert!(!residue.contains_key(field));
     }
@@ -205,12 +262,18 @@ fn authored_style_survives_command_save_reopen_and_mdj_export() -> FlowResult<()
         style.font_italic = Some(false);
         style.show_shadow = Some(true);
         let edited = restyle(&reopened, "class-view", style)?;
-        assert_eq!(edited.elements, original.elements);
-        assert_eq!(edited.relations, original.relations);
-        assert_eq!(edited.composition, original.composition);
-        assert_eq!(edited.hierarchy, original.hierarchy);
-        assert_eq!(view(&edited, "class-copy")?, view(&original, "class-copy")?);
-        assert_eq!(view(&edited, "name-label")?, view(&original, "name-label")?);
+        assert_eq!(edited.get("elements"), original.get("elements"));
+        assert_eq!(edited.get("relations"), original.get("relations"));
+        assert_eq!(edited.get("composition"), original.get("composition"));
+        assert_eq!(edited.get("hierarchy"), original.get("hierarchy"));
+        assert_eq!(
+            raw_view(&edited, "class-copy")?,
+            raw_view(&original, "class-copy")?
+        );
+        assert_eq!(
+            raw_view(&edited, "name-label")?,
+            raw_view(&original, "name-label")?
+        );
         assert_eq!(findings(&edited)?, baseline);
         let edited = saved.reopen(&edited, &format!("edited-{name}"), format)?;
         let reopened = saved.export_reopen(&edited, &format!("edited-{name}"))?;
@@ -234,20 +297,23 @@ fn authored_style_survives_command_save_reopen_and_mdj_export() -> FlowResult<()
         let mut nested = restyle(&reopened, "edge-view", edge_style)?;
         // Nested-view style commands are not yet supported by the authoring API.
         // Exercise the persisted contract without claiming that UI capability.
-        let label = nested
-            .diagrams
+        let label = nested["diagrams"]
+            .as_array_mut()
+            .ok_or("missing diagrams")?
             .iter_mut()
-            .flat_map(|diagram| &mut diagram.views)
-            .find(|view| view.id == "class-view")
-            .ok_or("missing parent View")?
-            .children
+            .flat_map(|diagram| diagram["views"].as_array_mut().into_iter().flatten())
+            .find(|view| view["id"] == "class-view")
+            .ok_or("missing parent View")?["children"]
+            .as_array_mut()
+            .ok_or("missing children")?
             .iter_mut()
-            .find(|view| view.id == "name-label")
+            .find(|view| view["id"] == "name-label")
             .ok_or("missing label")?;
-        label.style.text_align = Some(TextAlignment::Right);
-        label.style.text_vertical_align = Some(TextVerticalAlignment::Bottom);
-        label.style.font_underline = Some(false);
-        label.style.word_wrap = Some(true);
+        label["style"]["text_align"] = serde_json::to_value(TextAlignment::Right)?;
+        label["style"]["text_vertical_align"] =
+            serde_json::to_value(TextVerticalAlignment::Bottom)?;
+        label["style"]["font_underline"] = json!(false);
+        label["style"]["word_wrap"] = json!(true);
         let nested = saved.reopen(&nested, &format!("nested-{name}"), format)?;
         let nested = saved.export_reopen(&nested, &format!("nested-{name}"))?;
         assert_eq!(findings(&nested)?, baseline);
@@ -346,7 +412,7 @@ fn unsupported_style_survives_unrelated_edit_and_blocks_conflicting_overwrite() 
             let original = saved.reopen(&imported.project, &format!("{variant}-{name}"), format)?;
             assert_eq!(export_mdj(&original)?, source);
             let mut renamed = original.clone();
-            renamed.name = "Renamed without replacing source style".into();
+            renamed["name"] = "Renamed without replacing source style".into();
             let renamed = saved.reopen(&renamed, &format!("renamed-{variant}-{name}"), format)?;
             let renamed = saved.export_reopen(&renamed, &format!("renamed-{variant}-{name}"))?;
             let mut exported: Value = serde_json::from_slice(&export_mdj(&renamed)?)?;
@@ -415,10 +481,7 @@ fn unsupported_edits_fail_after_reopening_and_repair_restores_exact_replay() -> 
                 saved.reopen(&repaired, &format!("repaired-{variant}-{name}"), format)?;
             assert_eq!(repaired, original);
             assert_eq!(export_mdj(&repaired)?, SOURCE);
-            assert_eq!(
-                export_mdj(&repaired)?,
-                export_mdj(&original)?
-            );
+            assert_eq!(export_mdj(&repaired)?, export_mdj(&original)?);
         }
     }
     Ok(())

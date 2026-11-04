@@ -60,6 +60,11 @@ pub fn project_model_section(project_id: &str, name: &str, section_json: &str) -
         let graph = crate::RelationshipGraph::new(&section, &diagram.id);
         let paths = diagram.all_views().filter_map(|view| graph.view_path(&view.id).map(|geometry| (view.id.clone(), geometry))).collect();
         Ok(Diagram { id: diagram.id.clone(), name: diagram.name.clone(), width: diagram.width, height: diagram.height,
+            type_label: crate::mde_api_projection_tools::diagram_type_label(diagram),
+            owner_label: section.composition.get(&diagram.id)
+                .and_then(|placement| placement.parent_id(&diagram.id, &section.relations))
+                .and_then(|id| section.elements.iter().find(|element| element.id == id))
+                .map(|element| element.name.clone()).filter(|name| !name.trim().is_empty()),
             uml_di_type: diagram.uml_di_type.clone(), interaction_kind: diagram.interaction_kind.clone(), model_elements: diagram.model_elements.clone(),
             kind: crate::StructuralDiagramKind::from_diagram(diagram).map(crate::mde_api_command_conversion::diagram_kind_contract),
             views: diagram.views.iter().map(|view| project_view(&section, diagram, view, &references, &paths, &render_styles)).collect::<Result<_, String>>()?, })
@@ -75,8 +80,9 @@ pub fn project_model_section(project_id: &str, name: &str, section_json: &str) -
         .chain(["uml.composition", "uml.aggregation"]);
     let identities = kinds.map(|kind| {
         let identity = crate::semantic_identity(kind);
-        (kind.to_owned(), SemanticIdentity { type_label: identity.type_label.to_owned(), metaclass: identity.metaclass.map(str::to_owned),
-            relationship: identity.metaclass.is_some_and(|metaclass| crate::uml::metamodel::conforms_to(metaclass, "Relationship")), })
+        (kind.to_owned(), SemanticIdentity { type_label: crate::mde_api_projection_tools::imported_type_label(kind)
+                .unwrap_or(identity.type_label).to_owned(), metaclass: identity.metaclass.map(str::to_owned),
+            relationship: kind == "mdj.ERDRelationship" || identity.metaclass.is_some_and(|metaclass| crate::uml::metamodel::conforms_to(metaclass, "Relationship")), })
     }).collect();
     let hierarchy_rows = crate::project_hierarchy(&section).into_iter().map(|row| HierarchyRow {
         element_id: row.element_id, label: row.label, kind: row.kind, depth: row.depth,

@@ -122,6 +122,10 @@ pub(crate) fn explorer_element_icon(
 ) -> impl gpui::IntoElement {
     use bellatrix_ui_symbols::staruml::{ExplorerIconCategory, explorer_glyph};
     let name = match kind {
+        "mdj.ERDDataModel" => "Package",
+        "mdj.ERDEntity" => "Class",
+        "mdj.ERDColumn" => "Attribute",
+        "mdj.ERDRelationship" | "mdj.ERDRelationshipEnd" => "Association",
         "uml.attribute" | "uml.property" | "rust.field" => "Attribute",
         "uml.part" => "Part",
         "uml.composition" => "Composition",

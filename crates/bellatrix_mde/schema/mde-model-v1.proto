@@ -81,6 +81,7 @@ message View {
   // Ordered authored containment; no redundant parent identifier.
   repeated View children = 10;
   // ViewPresentation from the presentation contract, including typed subject
-  // label bindings/options-source references, style inheritance and residual fields.
+  // label bindings/options-source references, interface icon/connection bindings,
+  // style inheritance and residual fields.
   optional bytes presentation_json = 11;
 }

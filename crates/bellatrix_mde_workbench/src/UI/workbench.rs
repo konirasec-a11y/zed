@@ -751,11 +751,26 @@ impl MdeWorkbenchItem {
         self.feedback = "No relationship tool selected".into();
         cx.notify();
     }
+    pub(super) fn allows_modeling_tool(&mut self, tool: ModelingTool, cx: &mut Context<Self>) -> bool {
+        let Ok(snapshot) = self.source.snapshot() else {
+            self.feedback = "Project snapshot unavailable".into();
+            cx.notify();
+            return false;
+        };
+        if !snapshot.section.tools.allows_tool(self.presentation.active_diagram(), tool) {
+            self.presentation.cancel_tool();
+            self.feedback = "This tool is not available for the active diagram's domain.".into();
+            cx.notify();
+            return false;
+        }
+        true
+    }
     pub fn arm_drag_tool(&mut self, tool: ModelingTool, cx: &mut Context<Self>) {
         if self.source.is_read_only() {
             self.source.record_interaction("tool.arm.read_only", Some(&self.tool_label(tool)), bellatrix_mde_cordis::TraceOutcome::Invalid);
             return;
         }
+        if !self.allows_modeling_tool(tool, cx) { return; }
         self.source.record_interaction("tool.arm", Some(&self.tool_label(tool)), bellatrix_mde_cordis::TraceOutcome::Success);
         self.gesture = None;
         self.inline_editor = None;

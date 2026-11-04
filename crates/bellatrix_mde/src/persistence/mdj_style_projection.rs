@@ -163,6 +163,8 @@ pub(super) fn take_style(residual: &mut BTreeMap<String, Value>) -> Style {
     style.uml.stereotype_display = match residual.get("stereotypeDisplay").and_then(Value::as_str) {
         Some("none") => Some(crate::StereotypeDisplay::Hidden),
         Some("label") => Some(crate::StereotypeDisplay::Label),
+        Some("icon") => Some(crate::StereotypeDisplay::Icon),
+        Some("icon-label") => Some(crate::StereotypeDisplay::IconLabel),
         _ => None,
     };
     if style.uml.stereotype_display.is_some() {
@@ -293,6 +295,8 @@ pub(super) fn export_style(view: &View, object: &mut Map<String, Value>) -> Resu
         let value = match display {
             crate::StereotypeDisplay::Hidden => "none",
             crate::StereotypeDisplay::Label => "label",
+            crate::StereotypeDisplay::Icon => "icon",
+            crate::StereotypeDisplay::IconLabel => "icon-label",
         };
         insert_mapped(object, "stereotypeDisplay", Value::String(value.into()))?;
     }

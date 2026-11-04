@@ -517,6 +517,52 @@ fn paint_marker_composition(
                 }
                 7.0 + diagonal
             }
+            CrowfootOne | CrowfootMany | CrowfootZeroOne | CrowfootZeroMany => {
+                if matches!(part.glyph, CrowfootMany | CrowfootZeroMany) {
+                    for side in [-7.0, 7.0] {
+                        stroke_line(
+                            window,
+                            offset(14.0, 0.0),
+                            offset(0.0, side),
+                            bounds,
+                            stroke,
+                            width,
+                        );
+                    }
+                }
+                if matches!(part.glyph, CrowfootZeroOne | CrowfootZeroMany) {
+                    let vertices = (0..32)
+                        .map(|step| {
+                            let angle = step as f32 * std::f32::consts::TAU / 32.0;
+                            offset(22.0 + 7.0 * angle.cos(), 7.0 * angle.sin())
+                        })
+                        .collect::<Vec<_>>();
+                    polygon(window, &vertices, bounds, stroke, rgb(0xffffff), false, width);
+                }
+                if matches!(part.glyph, CrowfootOne | CrowfootZeroOne) {
+                    stroke_line(
+                        window,
+                        offset(7.0, -7.0),
+                        offset(7.0, 7.0),
+                        bounds,
+                        stroke,
+                        width,
+                    );
+                }
+                if matches!(part.glyph, CrowfootOne | CrowfootMany) {
+                    stroke_line(
+                        window,
+                        offset(14.0, -7.0),
+                        offset(14.0, 7.0),
+                        bounds,
+                        stroke,
+                        width,
+                    );
+                    14.0
+                } else {
+                    29.0
+                }
+            }
             OpenCircle | FilledCircle | Dot | Containment => {
                 let radius = if part.glyph == Dot { 3.0 } else { 7.0 };
                 let vertices = (0..32)

@@ -56,6 +56,18 @@ impl Render for MdeWorkbenchItem {
                     });
                     let views = imported_preview::ordered_views(&diagram.views);
                     for view in views {
+                        if let Some(entity) = &view.entity_box {
+                            if !entity.diagnostics.is_empty() {
+                                incomplete_preview = true;
+                                marker_diagnostics.extend(entity.diagnostics.iter().cloned());
+                            }
+                        }
+                        if let Some(icon) = &view.interface_icon {
+                            if !icon.diagnostics.is_empty() {
+                                incomplete_preview = true;
+                                marker_diagnostics.extend(icon.diagnostics.iter().cloned());
+                            }
+                        }
                         if !view.rendered_label.diagnostics.is_empty() {
                             incomplete_preview = true;
                             marker_diagnostics.extend(view.rendered_label.diagnostics.iter().cloned());
@@ -1146,7 +1158,6 @@ impl MdeWorkbenchItem {
             .top(px(bounds.y))
             .w(px(bounds.width))
             .h(px(bounds.height))
-            .overflow_hidden()
             .flex()
             .flex_col()
             .map(|element| appearance.align_column(element))
@@ -1155,7 +1166,7 @@ impl MdeWorkbenchItem {
         match shape {
             imported_preview::ImportedShape::Rectangle => {
                 card = appearance.apply_rectangle_border(
-                    card.bg(appearance.fill(palette.panel)),
+                    card.overflow_hidden().bg(appearance.fill(palette.panel)),
                     palette,
                     selected,
                     self.zoom,
@@ -1163,8 +1174,16 @@ impl MdeWorkbenchItem {
                 );
             }
             imported_preview::ImportedShape::Label => {
+                card = card.overflow_hidden();
                 if selected {
                     card = card.border_1().border_color(gpui::rgb(palette.selection));
+                }
+            }
+            imported_preview::ImportedShape::InterfaceIcon => {
+                if let Some(icon) = &view.interface_icon {
+                    card = card.child(bellatrix_ui_uml::render_interface_icon(
+                        icon.glyphs.clone(), appearance.clone(), palette, selected, self.zoom,
+                    ));
                 }
             }
         }

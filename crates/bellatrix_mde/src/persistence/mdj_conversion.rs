@@ -4,6 +4,10 @@ mod associations;
 mod members;
 #[path = "mdj_label_projection.rs"]
 mod label_projection;
+#[path = "mdj_interface_projection.rs"]
+mod interface_projection;
+#[path = "mdj_erd_projection.rs"]
+mod erd_projection;
 #[path = "mdj_style_projection.rs"]
 mod style_projection;
 #[path = "mdj_view_projection.rs"]
@@ -132,7 +136,7 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
                     mapped_fields,
                 },
             );
-            diagnostics.push(Diagnostic { path: object.path.clone(), message: "diagram imported conservatively; canvas equivalence and UML context mapping are not implemented".into() });
+            diagnostics.push(Diagnostic { path: object.path.clone(), message: format!("{} presentation imported with its owned views; model semantics and diagram context are not inferred from canvas contents", object.type_name) });
         }
     }
     let association_ids = associations::import_associations(
@@ -238,6 +242,16 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
     }
     for diagram in &project.diagrams {
         for view in diagram.all_views() {
+            if let Geometry::Layout { bounds } = &view.geometry {
+                for (field, extent) in [("width", &bounds.width), ("height", &bounds.height)] {
+                    if let Authored::Value(crate::LayoutExtent::Unresolved { original, .. }) = extent {
+                        diagnostics.push(Diagnostic {
+                            path: format!("{}/{field}", paths.get(&view.id).map(String::as_str).unwrap_or_default()),
+                            message: format!("authored negative extent {original} retained as an unresolved layout dimension; it is not a rendered size and requires layout resolution"),
+                        });
+                    }
+                }
+            }
             if let Some(source) = &view.presentation.source {
                 for field in ["left", "top", "width", "height"] {
                     if source.residual.contains_key(field) {
@@ -261,6 +275,8 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
     }
     capture_composition(&index, &mut project, &residuals, &mut diagnostics)?;
     label_projection::bind(&index, &mut project);
+    interface_projection::bind(&index, &mut project);
+    erd_projection::bind(&index, &mut project);
     view_projection::bind_markers(&index, &mut project, &mut diagnostics);
     Ok((
         Import {
@@ -304,8 +320,8 @@ fn read_views(value: Option<&Value>, ids: &mut BTreeSet<String>) -> Result<Vec<V
                 bounds: LayoutBounds {
                     x: take_number(&mut residual, "left"),
                     y: take_number(&mut residual, "top"),
-                    width: take_number(&mut residual, "width"),
-                    height: take_number(&mut residual, "height"),
+                    width: take_extent(&mut residual, "width"),
+                    height: take_extent(&mut residual, "height"),
                 },
             });
             let endpoints = view_projection::take_endpoints(&mut residual);
@@ -394,6 +410,16 @@ fn take_reference(residue: &mut BTreeMap<String, Value>, key: &str) -> Option<St
     let target = value.get("$ref")?.as_str()?.to_owned();
     residue.remove(key);
     Some(target)
+}
+
+fn take_extent(residue: &mut BTreeMap<String, Value>, key: &str) -> Authored<crate::LayoutExtent> {
+    match take_number(residue, key) {
+        Authored::Missing => Authored::Missing,
+        Authored::Null => Authored::Null,
+        Authored::Value(value) => Authored::Value(if value < 0.0 {
+            crate::LayoutExtent::Unresolved { original: value, reason: crate::UnresolvedExtentReason::NegativeExtent }
+        } else { crate::LayoutExtent::Resolved(value) }),
+    }
 }
 
 fn take_number(residue: &mut BTreeMap<String, Value>, key: &str) -> Authored<f64> {
@@ -749,6 +775,8 @@ fn export_view(view: &View, original: Option<&mdj::Object<'_>>) -> Result<Value,
     }
     view_projection::export_endpoints(view, &mut object)?;
     style_projection::export_style(view, &mut object)?;
+    interface_projection::export(view, &mut object)?;
+    erd_projection::export(view, &mut object)?;
     let original = original.filter(|original| original.type_name == source.type_name);
     if view_projection::export_path(view, original, &mut object)? {
         return Ok(Value::Object(object));
@@ -762,8 +790,6 @@ fn export_view(view: &View, original: Option<&mdj::Object<'_>>) -> Result<Value,
     for (key, number) in [
         ("left", &bounds.x),
         ("top", &bounds.y),
-        ("width", &bounds.width),
-        ("height", &bounds.height),
     ] {
         match number {
             Authored::Missing => {}
@@ -774,6 +800,16 @@ fn export_view(view: &View, original: Option<&mdj::Object<'_>>) -> Result<Value,
                 }
                 // Use the shortest exact decimal representation consistently with import.
                 insert_mapped(&mut object, key, serde_json::from_str(&number.to_string())?)?;
+            }
+        }
+    }
+    for (key, extent) in [("width", &bounds.width), ("height", &bounds.height)] {
+        match extent {
+            Authored::Missing => {},
+            Authored::Null => insert_mapped(&mut object, key, Value::Null)?,
+            Authored::Value(extent) => {
+                if !extent.is_valid() { return Err(failure("", "invalid authored MDJ extent")); }
+                insert_mapped(&mut object, key, serde_json::from_str(&extent.original().to_string())?)?;
             }
         }
     }
@@ -893,11 +929,14 @@ fn in_view_composition(path: &str) -> bool {
 }
 
 fn is_diagram(kind: &str) -> bool {
-    kind.starts_with("UML") && kind.ends_with("Diagram")
+    // ERD is a separate StarUML language. Its diagram still owns presentation
+    // Views; retaining it as a model element would silently leave the canvas empty.
+    kind == "ERDDiagram" || (kind.starts_with("UML") && kind.ends_with("Diagram"))
 }
 
 fn diagram_type(kind: &str) -> &'static str {
     match kind {
+        "ERDDiagram" => "ERDDiagram",
         "UMLClassDiagram" => "UMLClassDiagram",
         "UMLUseCaseDiagram" => "UMLUseCaseDiagram",
         "UMLActivityDiagram" => "UMLActivityDiagram",

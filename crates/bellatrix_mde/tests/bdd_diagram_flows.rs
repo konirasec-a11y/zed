@@ -1,5 +1,5 @@
 use bellatrix_mde::{
-    Format, Project, decode_model_document, encode, validate_uml_diagram, validate_uml_model,
+    decode_model_document, encode_model_document, validate_uml_diagram, validate_uml_model,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -274,29 +274,23 @@ fn run_flow(group: &str, id: &str) -> FlowResult<()> {
     if envelope["api_version"] != 1 {
         return Err(format!("{id}: unexpected document API version").into());
     }
-    let project: Project = serde_json::from_value(
-        envelope
-            .get("model")
-            .ok_or("decoded envelope missing model")?
-            .clone(),
-    )?;
-    if group != "todolist" && project.diagrams.len() != 1 {
+    let diagrams = envelope.get("model").and_then(|model| model.get("diagrams"))
+        .and_then(Value::as_array).ok_or("decoded envelope missing diagrams")?;
+    if group != "todolist" && diagrams.len() != 1 {
         return Err("Isolated diagram cases must contain exactly one diagram".into());
     }
     if group == "todolist" {
-        let actual_ids: BTreeSet<_> = project
-            .diagrams
-            .iter()
-            .map(|diagram| &diagram.id)
-            .collect();
+        let actual_ids = diagrams.iter()
+            .map(|diagram| diagram.get("id").and_then(Value::as_str).ok_or("diagram id missing"))
+            .collect::<Result<BTreeSet<_>, _>>()?;
         let expected_ids: BTreeSet<_> = case
             .diagrams
             .iter()
-            .map(|diagram| &diagram.diagram_id)
+            .map(|diagram| diagram.diagram_id.as_str())
             .collect();
-        if project.diagrams.len() < 2
+        if diagrams.len() < 2
             || expected_ids.len() != case.diagrams.len()
-            || actual_ids.len() != project.diagrams.len()
+            || actual_ids.len() != diagrams.len()
             || expected_ids != actual_ids
         {
             return Err(
@@ -330,7 +324,8 @@ fn run_flow(group: &str, id: &str) -> FlowResult<()> {
         println!("And the TodoList pair differs in exactly one semantic field: {delta:?}");
     }
     println!("When I import and validate through the public pure API");
-    bellatrix_mde::decode(&serde_json::to_vec(&envelope["model"])?, Format::Json)?;
+    decode_model_document(&serde_json::to_vec(&envelope["model"])?, "json")
+        .map_err(std::io::Error::other)?;
     let original = validate(case, &envelope)?;
     let mut failures = Vec::new();
     if let Err(error) = check_outcome(case, &original) {
@@ -340,13 +335,10 @@ fn run_flow(group: &str, id: &str) -> FlowResult<()> {
     let directory = std::env::temp_dir().join(format!("bellatrix-bdd-{}-{id}", std::process::id()));
     fs::create_dir(&directory)?;
     let saved = SavedFlow(directory);
-    for (format, name, extension) in [
-        (Format::Json, "json", "json"),
-        (Format::Protobuf, "protobuf", "blx"),
-    ] {
+    for (name, extension) in [("json", "json"), ("protobuf", "blx")] {
         println!("And I persist, close and reopen the {name} project");
         let destination = saved.0.join(format!("project.{extension}"));
-        fs::write(&destination, encode(&project, format)?)?;
+        fs::write(&destination, encode_model_document(&envelope.to_string(), name).map_err(std::io::Error::other)?)?;
         let reopened: Value = serde_json::from_str(
             &decode_model_document(&fs::read(destination)?, name).map_err(std::io::Error::other)?,
         )?;

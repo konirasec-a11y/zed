@@ -118,7 +118,7 @@ fn options_source(
     if owner
         .properties
         .get("stereotypeDisplay")
-        .is_some_and(|value| !matches!(value.as_str(), Some("none" | "label")))
+        .is_some_and(|value| !matches!(value.as_str(), Some("none" | "label" | "icon" | "icon-label")))
     {
         return Err(format!(
             "stereotype label display on {} is unsupported",

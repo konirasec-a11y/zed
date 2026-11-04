@@ -163,6 +163,11 @@ fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrder) -> Vec<E
     let authored = project_authored_composition(section, sort);
     let components = crate::visual_components(section)
         .into_iter()
+        // ERD document composition already represents its entities and relationships;
+        // labels and compartments are canvas occurrences, not extra model children.
+        .filter(|view| !section.diagrams.iter().any(|diagram|
+            diagram.id == view.diagram_id && diagram.uml_di_type == "ERDDiagram"
+                && section.composition.contains_key(&diagram.id)))
         .map(|view| VisualComponent {
             diagram_id: view.diagram_id,
             view_id: view.view_id,
@@ -321,9 +326,40 @@ fn place_diagrams_at_occurrences(section: &ModelingSection, rows: Vec<ExplorerRo
 }
 
 fn explorer_type_label(kind: &str, relationship: bool) -> String {
+    if let Some(label) = crate::mde_api_projection_tools::imported_type_label(kind) {
+        return label.into();
+    }
     if relationship { return "Relationship".into(); }
     let label = crate::semantic_identity(kind).type_label;
     if label == kind { "Element".into() } else { label.into() }
+}
+
+fn imported_element_label(section: &ModelingSection, element: &crate::Element) -> Option<String> {
+    let type_label = crate::mde_api_projection_tools::imported_type_label(&element.kind)?;
+    if !element.name.trim().is_empty() { return Some(element.name.clone()); }
+    let endpoint_label = |end: &crate::Element| {
+        end.properties.get("reference").and_then(serde_json::Value::as_object)
+            .filter(|reference| reference.len() == 1)
+            .and_then(|reference| reference.get("$ref"))
+            .and_then(serde_json::Value::as_str)
+            .map(|id| section.elements.iter().find(|target| target.id == id)
+                .map(|target| target.name.trim()).filter(|name| !name.is_empty())
+                .unwrap_or(id).to_owned())
+    };
+    if element.kind == "mdj.ERDRelationship" {
+        let endpoint = |slot: &str| section.elements.iter().find(|end|
+            end.kind == "mdj.ERDRelationshipEnd" && section.composition.get(&end.id)
+                .is_some_and(|placement| placement.slot == slot
+                    && placement.parent_id(&end.id, &section.relations) == Some(element.id.as_str())))
+            .and_then(endpoint_label).unwrap_or_else(|| "Unresolved endpoint".into());
+        return Some(format!("({} — {})", endpoint("/end1"), endpoint("/end2")));
+    }
+    if element.kind == "mdj.ERDRelationshipEnd" {
+        let slot = section.composition.get(&element.id).map(|placement| placement.slot.as_str());
+        let role = match slot { Some("/end1") => "End 1", Some("/end2") => "End 2", _ => type_label };
+        return Some(endpoint_label(element).map_or_else(|| role.into(), |target| format!("{role}: {target}")));
+    }
+    Some(type_label.into())
 }
 
 
@@ -401,7 +437,8 @@ fn project_authored_composition(section: &ModelingSection, sort: ExplorerSortOrd
                 kind: diagram.uml_di_type.clone(), depth: 0, diagram: true, view: None, diagram_context: None }
         } else if let Some(element) = section.elements.iter().find(|element| element.id == *id) {
             ExplorerRow { key: semantic_key(id), element_id: id.clone(),
-                label: labels.get(id).cloned().unwrap_or_else(|| element.name.clone()), kind: element.kind.clone(),
+                label: imported_element_label(section, element)
+                    .unwrap_or_else(|| labels.get(id).cloned().unwrap_or_else(|| element.name.clone())), kind: element.kind.clone(),
                 depth: 0, diagram: false, view: None, diagram_context: None }
         } else if let Some(relation) = section.relations.iter().find(|relation| relation.id == *id) {
             ExplorerRow { key: semantic_key(id), element_id: id.clone(), label: relationship_label(section, relation),

@@ -1,10 +1,38 @@
-use bellatrix_mde::{Format, Project, decode, encode, validate_uml_model};
+use bellatrix_mde::{decode_model_document, encode_model_document, validate_uml_model};
 use serde_json::{Value, json};
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+fn envelope(model: &Value) -> String {
+    json!({"api_version": 1, "model": model}).to_string()
+}
+
+fn decode(document: &[u8], format: &str) -> Result<Value> {
+    let response = decode_model_document(document, format)?;
+    let mut response: Value = serde_json::from_str(&response)?;
+    Ok(response["model"].take())
+}
+
+fn encode(model: &Value, format: &str) -> Result<Vec<u8>> {
+    Ok(encode_model_document(&envelope(model), format)?)
+}
+
+fn import_document(model: &Value) -> Result<Value> {
+    decode(&serde_json::to_vec(model)?, "json")
+}
+
+fn element_mut<'a>(model: &'a mut Value, id: &str) -> Result<&'a mut Value> {
+    model["elements"]
+        .as_array_mut()
+        .ok_or("elements")?
+        .iter_mut()
+        .find(|element| element["id"] == id)
+        .ok_or_else(|| format!("missing element {id}").into())
+}
+
 const RULE: &str = "TemplateBinding-parameter_substitution_formal:";
 const ERROR: &str = "UML_TEMPLATE_BINDING_FORMAL";
 const UNKNOWN: &str = "MDE_TEMPLATE_BINDING_FORMAL_UNVERIFIED";
-fn document(rooted: bool) -> Result<Project> {
+fn document(rooted: bool) -> Result<Value> {
     let mut value = json!({"id":"project","name":"Bindings","root_model":"root","elements":[
         {"id":"root","kind":"uml.model","name":"Root"},
         {"id":"host","kind":"uml.package","name":"Host"},
@@ -43,19 +71,13 @@ fn document(rooted: bool) -> Result<Project> {
     if !rooted {
         value.as_object_mut().ok_or("object")?.remove("root_model");
     }
-    Ok(serde_json::from_value(value)?)
+    import_document(&value)
 }
-fn author(project: &mut Project, id: &str, key: &str, value: Value) -> Result {
-    project
-        .elements
-        .iter_mut()
-        .find(|e| e.id == id)
-        .ok_or("element")?
-        .properties
-        .insert(key.into(), value);
+fn author(project: &mut Value, id: &str, key: &str, value: Value) -> Result {
+    element_mut(project, id)?["properties"][key] = value;
     Ok(())
 }
-fn issues(project: &Project) -> Result<Vec<Value>> {
+fn issues(project: &Value) -> Result<Vec<Value>> {
     let response: Value = serde_json::from_str(&validate_uml_model(
         &json!({"api_version":1,"model":project}).to_string(),
     )?)?;
@@ -72,7 +94,7 @@ fn issues(project: &Project) -> Result<Vec<Value>> {
         .cloned()
         .collect())
 }
-fn expect(project: &Project, code: &str) -> Result {
+fn expect(project: &Value, code: &str) -> Result {
     let issues = issues(project)?;
     assert_eq!(issues.len(), 1, "{issues:#?}");
     assert_eq!(issues[0]["code"], code, "{issues:#?}");
@@ -87,7 +109,7 @@ fn substitution_formal_in_target_signature_is_valid_in_rooted_and_draft_models()
     for rooted in [true, false] {
         let project = document(rooted)?;
         assert!(issues(&project)?.is_empty());
-        for format in [Format::Json, Format::Protobuf] {
+        for format in ["json", "protobuf"] {
             assert!(issues(&decode(&encode(&project, format)?, format)?)?.is_empty());
         }
     }
@@ -103,7 +125,7 @@ fn foreign_formal_is_violation_and_survives_roundtrip() -> Result {
         json!({"$ref":"foreign"}),
     )?;
     expect(&project, ERROR)?;
-    for format in [Format::Json, Format::Protobuf] {
+    for format in ["json", "protobuf"] {
         expect(&decode(&encode(&project, format)?, format)?, ERROR)?;
     }
     Ok(())
@@ -118,7 +140,7 @@ fn rejected_snapshot_can_be_repaired_after_json_and_protobuf_reopen() -> Result 
         "formal",
         json!({"$ref":"foreign"}),
     )?;
-    for format in [Format::Json, Format::Protobuf] {
+    for format in ["json", "protobuf"] {
         let mut reopened = decode(&encode(&project, format)?, format)?;
         expect(&reopened, ERROR)?;
         author(
@@ -128,7 +150,7 @@ fn rejected_snapshot_can_be_repaired_after_json_and_protobuf_reopen() -> Result 
             json!({"$ref":"formal"}),
         )?;
         assert!(issues(&reopened)?.is_empty());
-        assert_eq!(reopened.relations, project.relations);
+        assert_eq!(reopened["relations"], project["relations"]);
     }
     Ok(())
 }
@@ -146,7 +168,7 @@ fn known_signature_member_proves_inclusion_despite_an_external_neighbor() -> Res
         }
         author(&mut project, "signature", "parameter", json!(parameters))?;
         assert!(issues(&project)?.is_empty());
-        for format in [Format::Json, Format::Protobuf] {
+        for format in ["json", "protobuf"] {
             assert!(issues(&decode(&encode(&project, format)?, format)?)?.is_empty());
         }
     }

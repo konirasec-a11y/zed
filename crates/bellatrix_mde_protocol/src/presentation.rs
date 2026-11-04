@@ -180,6 +180,10 @@ pub struct RelationshipPresentation {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EndpointMarkerGlyph {
+    CrowfootOne,
+    CrowfootMany,
+    CrowfootZeroOne,
+    CrowfootZeroMany,
     OpenArrow,
     SolidArrow,
     BlankArrow,

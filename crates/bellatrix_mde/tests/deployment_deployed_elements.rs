@@ -1,16 +1,49 @@
 use bellatrix_mde::{
-    Format, Project,
-    commands::{Command, apply},
-    decode, encode, validate_uml_model,
+    apply_model_command, decode_model_document, encode_model_document, encode_model_section,
+    prepare_model_document, validate_uml_model,
 };
+use bellatrix_mde_protocol::Command;
 use serde_json::{Value, json};
 
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+fn envelope(model: &Value) -> String {
+    json!({"api_version": 1, "model": model}).to_string()
+}
+
+fn decode(document: &[u8], format: &str) -> Result<Value> {
+    let response = decode_model_document(document, format)?;
+    let mut response: Value = serde_json::from_str(&response)?;
+    Ok(response["model"].take())
+}
+
+fn encode(model: &Value, format: &str) -> Result<Vec<u8>> {
+    Ok(encode_model_document(&envelope(model), format)?)
+}
+
+fn import_document(model: &Value) -> Result<Value> {
+    decode(&serde_json::to_vec(model)?, "json")
+}
+
+fn apply(model: &Value, command: &Command, revision: u64) -> std::result::Result<Value, String> {
+    let document = prepare_model_document(&envelope(model))?;
+    let section = apply_model_command(
+        &document.id,
+        &document.name,
+        &document.section_json,
+        revision,
+        command.clone(),
+        false,
+    )?;
+    let bytes = encode_model_section(&document.id, &document.name, &section.to_string(), "json")?;
+    decode(&bytes, "json").map_err(|error| error.to_string())
+}
+
 const RULE: &str = "DeploymentSpecification-deployed_elements:";
 const ERROR: &str = "UML_DEPLOYMENT_SPECIFICATION_DEPLOYED_ELEMENTS";
 const UNKNOWN: &str = "MDE_DEPLOYMENT_SPECIFICATION_DEPLOYED_ELEMENTS_UNVERIFIED";
 
-fn document(rooted: bool) -> Result<Project> {
+fn document(rooted: bool) -> Result<Value> {
     let mut value = json!({"id":"project","name":"Deployed elements","root_model":"root",
     "elements":[
         {"id":"root","kind":"uml.model","name":"Root"},
@@ -41,23 +74,27 @@ fn document(rooted: bool) -> Result<Project> {
     if !rooted {
         value.as_object_mut().ok_or("object")?.remove("root_model");
     }
-    Ok(serde_json::from_value(value)?)
+    import_document(&value)
 }
-fn author(project: &mut Project, id: &str, property: &str, value: Value) -> Result {
-    if let Some(element) = project.elements.iter_mut().find(|element| element.id == id) {
-        element.properties.insert(property.into(), value);
+fn author(project: &mut Value, id: &str, property: &str, value: Value) -> Result {
+    if let Some(element) = project["elements"]
+        .as_array_mut()
+        .ok_or("elements")?
+        .iter_mut()
+        .find(|element| element["id"] == id)
+    {
+        element["properties"][property] = value;
     } else {
-        project
-            .relations
+        project["relations"]
+            .as_array_mut()
+            .ok_or("relations")?
             .iter_mut()
-            .find(|relation| relation.id == id)
-            .ok_or("relation")?
-            .properties
-            .insert(property.into(), value);
+            .find(|relation| relation["id"] == id)
+            .ok_or("relation")?["properties"][property] = value;
     }
     Ok(())
 }
-fn issues(project: &Project) -> Result<Vec<Value>> {
+fn issues(project: &Value) -> Result<Vec<Value>> {
     let response: Value = serde_json::from_str(&validate_uml_model(
         &json!({"api_version":1,"model":project}).to_string(),
     )?)?;
@@ -73,7 +110,7 @@ fn issues(project: &Project) -> Result<Vec<Value>> {
         .cloned()
         .collect())
 }
-fn expect(project: &Project, code: &str) -> Result {
+fn expect(project: &Value, code: &str) -> Result {
     let actual = issues(project)?;
     assert_eq!(actual.len(), 1, "{actual:#?}");
     assert_eq!(actual[0]["code"], code, "{actual:#?}");
@@ -97,7 +134,7 @@ fn given_artifact_manifestations_then_only_components_are_deployed_elements() ->
             json!({"$ref":"class"}),
         )?;
         expect(&project, ERROR)?;
-        for format in [Format::Json, Format::Protobuf] {
+        for format in ["json", "protobuf"] {
             assert_eq!(
                 issues(&decode(&encode(&project, format)?, format)?)?,
                 issues(&project)?
@@ -111,21 +148,22 @@ fn given_artifact_manifestations_then_only_components_are_deployed_elements() ->
 fn when_manifestation_moves_to_deployed_artifact_then_reparent_rejects_atomically_and_repair_succeeds()
 -> Result {
     let mut project = document(true)?;
-    project.elements.push(serde_json::from_value(
+    project["elements"].as_array_mut().ok_or("elements")?.push(
         json!({"id":"unused", "kind":"uml.artifact", "name":"Unused"}),
-    )?);
-    project.relations.push(serde_json::from_value(
+    );
+    project["relations"].as_array_mut().ok_or("relations")?.push(
         json!({"id":"owns-unused", "kind":"owns", "from":"root", "to":"unused"}),
-    )?);
-    project.relations.push(serde_json::from_value(
+    );
+    project["relations"].as_array_mut().ok_or("relations")?.push(
         json!({"id":"bad", "kind":"uml.manifestation", "from":"unused", "to":"class",
         "properties":{"utilizedElement":{"$ref":"class"}}}),
-    )?);
-    project.relations.push(serde_json::from_value(
+    );
+    project["relations"].as_array_mut().ok_or("relations")?.push(
         json!({"id":"owns-bad", "kind":"owns", "from":"unused", "to":"bad"}),
-    )?);
+    );
+    project = import_document(&project)?;
     assert!(issues(&project)?.is_empty());
-    let before = encode(&project, Format::Json)?;
+    let before = encode(&project, "json")?;
     let error = apply(
         &project,
         &Command::SetOwner {
@@ -136,14 +174,14 @@ fn when_manifestation_moves_to_deployed_artifact_then_reparent_rejects_atomicall
     )
     .expect_err("non-Component must be rejected");
     assert!(error.contains(RULE), "{error}");
-    assert_eq!(encode(&project, Format::Json)?, before);
+    assert_eq!(encode(&project, "json")?, before);
     let mut invalid = project;
-    invalid
-        .relations
+    invalid["relations"]
+        .as_array_mut()
+        .ok_or("relations")?
         .iter_mut()
-        .find(|relation| relation.id == "owns-bad")
-        .ok_or("owner")?
-        .from = "artifact".into();
+        .find(|relation| relation["id"] == "owns-bad")
+        .ok_or("owner")?["from"] = json!("artifact");
     expect(&invalid, ERROR)?;
     let repaired = apply(
         &invalid,

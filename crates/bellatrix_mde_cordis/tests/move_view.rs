@@ -2,7 +2,6 @@
 mod events;
 use serde_json::Value;
 use bellatrix_mde_cordis::Geometry;
-use bellatrix_project::ProjectDocument;
 use bellatrix_mde_cordis::{MdePlugin, ModelingMoveView, ModelingMoveViewRequested};
 use bellatrix_project::{
     ProjectClose, ProjectCloseRequested, ProjectCreate, ProjectCreateRequested, ProjectDocument,

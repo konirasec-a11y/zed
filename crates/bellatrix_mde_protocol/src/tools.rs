@@ -8,6 +8,18 @@ pub struct ToolCatalog {
     pub diagrams: Vec<DiagramToolMetadata>,
     pub interface_forms: Vec<InterfaceToolMetadata>,
     pub groups: Vec<ToolGroup>,
+    pub profiles: std::collections::BTreeMap<String, DiagramToolProfile>,
+}
+#[derive(Clone, Debug)]
+pub struct DiagramToolProfile {
+    pub label: String,
+    pub available_tools: Vec<ModelingTool>,
+    pub unavailable_tools: Vec<UnavailableToolMetadata>,
+}
+#[derive(Clone, Debug)]
+pub struct UnavailableToolMetadata {
+    pub label: String,
+    pub reason: String,
 }
 #[derive(Clone, Debug)]
 pub struct ToolGroup { pub name: String, pub tools: Vec<ModelingTool> }
@@ -48,6 +60,11 @@ pub struct InterfaceToolMetadata {
     pub presentation: String,
 }
 impl ToolCatalog {
+    pub fn allows_tool(&self, diagram_id: Option<&str>, tool: ModelingTool) -> bool {
+        self.label(tool).is_some()
+            && diagram_id.and_then(|id| self.profiles.get(id))
+                .is_none_or(|profile| profile.available_tools.contains(&tool))
+    }
     pub fn element(&self, kind: ModelingElementKind) -> Option<&ElementToolMetadata> {
         self.elements.iter().find(|entry| entry.kind == kind)
     }

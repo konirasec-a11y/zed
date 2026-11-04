@@ -834,6 +834,21 @@ pub(crate) fn render_styles(
                     })),
             );
         }
+        if view.interface_icon.is_some() {
+            for (value, label) in [("icon", "Interface icon"), ("icon_label", "Icon + label")] {
+                let item = item.clone();
+                let key = key.clone();
+                stereotypes = stereotypes.child(
+                    Button::new(format!("mde-style-stereotype-{value}"), label)
+                        .tooltip(Tooltip::text("Use interface icon notation; stored compartment layout remains unchanged"))
+                        .toggle_state(draft.state.values.get("stereotype_display").is_some_and(|current| current == value))
+                        .disabled(draft.state.conflict)
+                        .on_click(cx.listener(move |panel, _, _, cx| {
+                            edit_style_choice(panel, &item, &key, "stereotype_display", value, cx)
+                        })),
+                );
+            }
+        }
         controls = controls.child(stereotypes);
     }
     if !is_edge {

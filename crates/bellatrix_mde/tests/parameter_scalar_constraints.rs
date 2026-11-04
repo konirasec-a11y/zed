@@ -1,16 +1,60 @@
 use bellatrix_mde::{
-    Format, Project,
-    commands::{Command, apply},
-    decode, encode, validate_uml_model,
+    apply_model_command, decode_model_document, encode_model_document, encode_model_section,
+    prepare_model_document, validate_uml_model,
 };
+use bellatrix_mde_protocol::Command;
 use serde_json::{Value, json};
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
-fn document(properties: Value) -> Result<Project> {
-    Ok(serde_json::from_value(
-        json!({"id":"project","name":"Scalars","elements":[{"id":"parameter","kind":"uml.parameter","name":"P","properties":properties}],"relations":[]}),
-    )?)
+
+fn envelope(model: &Value) -> String {
+    json!({"api_version": 1, "model": model}).to_string()
 }
-fn issues(project: &Project) -> Result<Vec<Value>> {
+
+fn decode(document: &[u8], format: &str) -> Result<Value> {
+    let response = decode_model_document(document, format)?;
+    let mut response: Value = serde_json::from_str(&response)?;
+    Ok(response["model"].take())
+}
+
+fn encode(model: &Value, format: &str) -> Result<Vec<u8>> {
+    Ok(encode_model_document(&envelope(model), format)?)
+}
+
+fn import_document(model: &Value) -> Result<Value> {
+    decode(&serde_json::to_vec(model)?, "json")
+}
+
+fn apply(model: &Value, command: &Command, revision: u64) -> std::result::Result<Value, String> {
+    let document = prepare_model_document(&envelope(model))?;
+    let section = apply_model_command(
+        &document.id,
+        &document.name,
+        &document.section_json,
+        revision,
+        command.clone(),
+        false,
+    )?;
+    let bytes = encode_model_section(&document.id, &document.name, &section.to_string(), "json")?;
+    decode(&bytes, "json").map_err(|error| error.to_string())
+}
+
+fn element_mut<'a>(model: &'a mut Value, id: &str) -> Result<&'a mut Value> {
+    model["elements"]
+        .as_array_mut()
+        .ok_or("elements")?
+        .iter_mut()
+        .find(|element| element["id"] == id)
+        .ok_or_else(|| format!("missing element {id}").into())
+}
+
+fn document(properties: Value) -> Result<Value> {
+    import_document(&json!({
+        "id":"project", "name":"Scalars",
+        "elements":[{"id":"parameter", "kind":"uml.parameter", "name":"P", "properties":properties}],
+        "relations":[]
+    }))
+}
+fn issues(project: &Value) -> Result<Vec<Value>> {
     let response: Value = serde_json::from_str(&validate_uml_model(
         &json!({"api_version":1,"model":project}).to_string(),
     )?)?;
@@ -42,7 +86,7 @@ fn has(found: &[Value], rule: &str, code: &str) -> bool {
 fn given_three_simultaneous_violations_then_all_three_are_reported_and_roundtrip() -> Result {
     let project =
         document(json!({"direction":"in","effect":"create","isException":true,"isStream":true}))?;
-    for format in [Format::Json, Format::Protobuf] {
+    for format in ["json", "protobuf"] {
         let found = issues(&decode(&encode(&project, format)?, format)?)?;
         assert_eq!(found.len(), 3, "{found:?}");
         for rule in ["in_and_out", "not_exception", "stream_and_exception"] {
@@ -75,7 +119,7 @@ fn when_scalar_edit_introduces_violation_then_command_rolls_back_and_repair_succ
         ),
     ] {
         let project = document(initial)?;
-        let before = encode(&project, Format::Json)?;
+        let before = encode(&project, "json")?;
         let error = apply(
             &project,
             &Command::SetProperty {
@@ -87,17 +131,17 @@ fn when_scalar_edit_introduces_violation_then_command_rolls_back_and_repair_succ
         )
         .expect_err("violation");
         assert!(error.contains(rule), "{error}");
-        assert_eq!(before, encode(&project, Format::Json)?);
+        assert_eq!(before, encode(&project, "json")?);
         let mut invalid = project.clone();
-        invalid.elements[0].properties.insert(path.into(), value);
-        for format in [Format::Json, Format::Protobuf] {
+        element_mut(&mut invalid, "parameter")?["properties"][path] = value;
+        for format in ["json", "protobuf"] {
             let reopened = decode(&encode(&invalid, format)?, format)?;
             let repaired = apply(
                 &reopened,
                 &Command::SetProperty {
                     element_id: "parameter".into(),
                     path: format!("properties.{path}"),
-                    value: project.elements[0].properties[path].clone(),
+                    value: project["elements"][0]["properties"][path].clone(),
                 },
                 2,
             )?;

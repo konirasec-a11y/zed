@@ -5,6 +5,8 @@ use crate::{
     View, relationship_presentation, relationship_style_for_notation,
 };
 use serde_json::Value;
+#[path = "entity_relationship.rs"]
+mod entity_relationship;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum NavigationDeclaration {
@@ -140,6 +142,9 @@ pub fn resolve_relationship_view(
     section: &ModelingSection,
     view: &View,
 ) -> Option<ResolvedRelationshipView> {
+    if view.presentation.relationship_notation == Some(crate::RelationshipNotation::EntityRelationship) {
+        return Some(entity_relationship::resolve(section, view));
+    }
     let subject = view.subject.as_deref()?;
     let relation = section
         .relations

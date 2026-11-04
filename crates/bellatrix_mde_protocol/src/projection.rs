@@ -81,6 +81,8 @@ pub struct HierarchyRow {
 pub struct Diagram {
     pub id: String,
     pub name: String,
+    pub type_label: String,
+    pub owner_label: Option<String>,
     pub width: f64,
     pub height: f64,
     pub views: Vec<View>,
@@ -108,6 +110,8 @@ pub struct View {
     pub timing: Option<TimingPresentation>,
     pub label: Option<String>,
     pub rendered_label: RenderedLabel,
+    pub interface_icon: Option<InterfaceIconProjection>,
+    pub entity_box: Option<EntityBoxProjection>,
     pub geometry: Geometry,
     pub children: Vec<View>,
     pub presentation: ViewPresentation,
@@ -139,6 +143,23 @@ pub struct RenderedLabel {
     pub bound: bool,
     pub text: Option<String>,
     pub diagnostics: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct EntityBoxProjection {
+    pub diagnostics: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct InterfaceIconProjection {
+    pub glyphs: Vec<InterfaceIconGlyph>,
+    pub diagnostics: Vec<String>,
+}
+
+#[derive(Clone, Debug)]
+pub enum InterfaceIconGlyph {
+    Ball { center: crate::command::Point, radius: f64 },
+    Socket { center: crate::command::Point, radius: f64, start_angle: f64, sweep_angle: f64 },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

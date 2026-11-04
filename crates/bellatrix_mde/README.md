@@ -275,9 +275,9 @@ targets and multiplicity strings remain kernel inputs, not parser UML verdicts.
 This covers the class-owned self-association and interface-owned association in
 the supplied MDJ sample. Receptions, behaviors, qualifiers, `ownerAttribute`,
 aggregation diamonds and other unmapped semantics remain outside this semantic
-promotion. Their source data is retained. Interface ball/socket drawing and
-classifier relayout are separate presentation work; canonical import does not
-claim that those visual forms are implemented. No new export mode is introduced.
+promotion. Their source data is retained. Interface ball/socket snapshot drawing
+is a separate typed presentation projection described below; classifier relayout
+remains pending. No new export mode is introduced.
 
 ## Bound member labels
 
@@ -290,8 +290,8 @@ contains `show_multiplicity` and `show_operation_signature`.
 
 The MDJ adapter recognizes `UMLAttributeView` and `UMLOperationView`, resolving
 their visual grandparent options independently of `parentStyle`. Supported
-visibility/type/property/multiplicity/signature flags and stereotype `none` or
-`label` have inverse mappings. This follows the supplied StarUML
+visibility/type/property/multiplicity/signature flags and stereotype `none`,
+`label`, `icon` or `icon-label` have inverse mappings. This follows the supplied StarUML
 `extensions/essential/uml/elements.js` member View updates and `getString`
 methods, not the different quick-edit `textualNotation` expressions. Other
 stereotype modes, malformed options and unsupported option-owner contracts
@@ -311,3 +311,35 @@ namespace, property or association-end label role. Unresolved bound subjects or
 options retain cached text with a visible diagnostic, not a claimed live label.
 Stored geometry is not recalculated after edits, so compartment relayout,
 automatic sizing, qualifier bindings and full StarUML rendering remain pending.
+
+## Imported interface icons
+
+`ViewPresentation.interface_icon` binds an interface icon to its label-compartment
+View, while `interface_connection` records a connection's visual required/provided
+role. The endpoint identity still lives only in `View.endpoints`. The adapter
+recognizes MDJ Interface, Dependency and InterfaceRealization Views; it does not
+derive those roles from semantic UML relationships. The name-compartment reference
+is mapped out of source residue and has an inverse mapping. Both bindings use the
+same JSON/Protobuf presentation contract as other View presentation fields.
+
+Only explicit `icon`/`icon-label` style selects the icon preview. An absent
+stereotype-display field follows the source metamodel's `label` load default,
+not the Interface constructor's creation preference. The MDE projection recovers
+a square icon from the stored boundary between the Interface and its visible
+name compartment. Missing, nonfinite or inconsistent bounds produce a diagnostic,
+not a fixed-size icon or substitute rectangle.
+
+For a coherent arranged snapshot, zero incoming dependency Views produce a ball;
+dependencies produce one socket arc per connection; dependencies plus interface
+realization Views add an inset ball. Socket orientation follows the reference's
+rectangle junction, floored center and half-circle sweep, using the stored final
+path point. These are drawing rules, not a UML validity verdict. Cordis transports
+only projected circle/arc primitives and diagnostics to the renderer, which adds
+no synthetic stem and does not inspect MDJ fields.
+
+The reference implementation recalculates text metrics and edge layout before
+drawing. This preview does not: it reports its use of stored compartment bounds
+and endpoints. Shadow placement, endpoint rerouting, dynamic label visibility,
+canonical/decoration Interface silhouettes and full pixel parity remain pending.
+Changing icon modes preserves the stored compartment layout. Unknown connection
+targets or directions do not become fabricated socket orientations.

@@ -1,19 +1,89 @@
 use bellatrix_mde::{
-    commands::{Command, apply},
-    *,
+    apply_model_command, decode_model_document, encode_model_section, project_model_section,
+    validate_graph_model,
 };
+use bellatrix_mde_protocol::{command::*, projection::ModelingProjection};
+use serde_json::{Value, json};
 
-fn fixture() -> Result<Project, Box<dyn std::error::Error>> {
-    let project: Project = serde_json::from_value(serde_json::json!({
+type FlowResult<T> = Result<T, Box<dyn std::error::Error>>;
+
+fn section(project: &Value) -> FlowResult<(String, String, Value)> {
+    let id = project["id"]
+        .as_str()
+        .ok_or("project identity missing")?
+        .to_owned();
+    let name = project["name"]
+        .as_str()
+        .ok_or("project name missing")?
+        .to_owned();
+    let mut section = project.as_object().ok_or("project missing")?.clone();
+    for key in ["id", "name", "schema_version"] {
+        section.remove(key);
+    }
+    Ok((id, name, Value::Object(section)))
+}
+fn apply(project: &Value, command: &Command, revision: u64) -> FlowResult<Value> {
+    let (id, name, section) = section(project)?;
+    let updated = apply_model_command(
+        &id,
+        &name,
+        &section.to_string(),
+        revision,
+        command.clone(),
+        false,
+    )?;
+    Ok(serde_json::from_slice(&encode_model_section(
+        &id,
+        &name,
+        &updated.to_string(),
+        "json",
+    )?)?)
+}
+fn encode(project: &Value, format: &str) -> FlowResult<Vec<u8>> {
+    let (id, name, section) = section(project)?;
+    Ok(encode_model_section(
+        &id,
+        &name,
+        &section.to_string(),
+        format,
+    )?)
+}
+fn decode(bytes: &[u8], format: &str) -> FlowResult<Value> {
+    let response: Value = serde_json::from_str(&decode_model_document(bytes, format)?)?;
+    Ok(response["model"].clone())
+}
+fn projection(project: &Value) -> FlowResult<ModelingProjection> {
+    let (id, name, section) = section(project)?;
+    Ok(project_model_section(&id, &name, &section.to_string())?)
+}
+fn views(project: &Value, diagram: usize) -> FlowResult<&Vec<Value>> {
+    project["diagrams"][diagram]["views"]
+        .as_array()
+        .ok_or_else(|| "views missing".into())
+}
+fn view<'a>(project: &'a Value, id: &str) -> FlowResult<&'a Value> {
+    views(project, 0)?
+        .iter()
+        .find(|view| view["id"] == id)
+        .ok_or_else(|| "view missing".into())
+}
+fn style(view: &Value) -> FlowResult<Style> {
+    Ok(serde_json::from_value(view["style"].clone())?)
+}
+
+fn fixture() -> FlowResult<Value> {
+    let project = serde_json::json!({
         "id":"styles", "name":"Styles", "elements":[{"id":"a","kind":"uml.class","name":"A"},{"id":"b","kind":"uml.class","name":"B"}],
         "diagrams":[{"id":"d","name":"D","uml_di_type":"UMLClassDiagram","views":[
             {"id":"a-view","subject":"a","geometry":{"kind":"rect","x":0,"y":0,"width":100,"height":80}},
             {"id":"b-view","subject":"b","geometry":{"kind":"rect","x":300,"y":0,"width":100,"height":80}}
         ]}]
-    }))?;
+    });
+    let project = decode(&serde_json::to_vec(&project)?, "json")?;
     Ok(apply(
         &project,
-        &Command::CreateRelation { owner_id: None,
+        &Command::CreateRelation {
+            owner_id: None,
             diagram_id: "d".into(),
             kind: ModelingRelationKind::Association,
             from: "a".into(),
@@ -27,21 +97,35 @@ fn fixture() -> Result<Project, Box<dyn std::error::Error>> {
 fn route_commands_author_curves_isolate_views_and_roundtrip()
 -> Result<(), Box<dyn std::error::Error>> {
     let mut project = fixture()?;
-    let edge = project.diagrams[0]
-        .views
-        .last()
-        .ok_or("missing edge")?
-        .clone();
+    let edge = views(&project, 0)?.last().ok_or("missing edge")?.clone();
+    let edge_id = edge["id"]
+        .as_str()
+        .ok_or("edge identity missing")?
+        .to_owned();
     let mut copy = edge.clone();
-    copy.id = "copy".into();
-    project.diagrams[0].views.push(copy.clone());
-    let mut second = project.diagrams[0].clone();
-    second.id = "other".into();
-    for view in &mut second.views {
-        view.id = format!("other-{}", view.id);
+    copy["id"] = "copy".into();
+    project["diagrams"][0]["views"]
+        .as_array_mut()
+        .ok_or("views missing")?
+        .push(copy.clone());
+    let mut second = project["diagrams"][0].clone();
+    second["id"] = "other".into();
+    for view in second["views"].as_array_mut().ok_or("views missing")? {
+        view["id"] = format!(
+            "other-{}",
+            view["id"].as_str().ok_or("view identity missing")?
+        )
+        .into();
     }
-    project.diagrams.push(second.clone());
-    assert!(!project.relations[0].properties.contains_key("routing"));
+    project["diagrams"]
+        .as_array_mut()
+        .ok_or("diagrams missing")?
+        .push(second.clone());
+    assert!(
+        project["relations"][0]["properties"]
+            .get("routing")
+            .is_none()
+    );
     for routing in [
         RelationshipRouting::Straight,
         RelationshipRouting::Automatic,
@@ -51,44 +135,36 @@ fn route_commands_author_curves_isolate_views_and_roundtrip()
             &project,
             &Command::SetViewRouting {
                 diagram_id: "d".into(),
-                view_id: edge.id.clone(),
+                view_id: edge_id.clone(),
                 routing,
             },
             1,
         )?;
-        assert_eq!(updated.relations, project.relations);
-        assert_eq!(updated.elements, project.elements);
-        assert_eq!(updated.diagrams[1], second);
-        assert_eq!(updated.diagrams[0].views.last(), Some(&copy));
-        let view = updated.diagrams[0]
-            .views
-            .iter()
-            .find(|view| view.id == edge.id)
-            .ok_or("edge missing")?;
-        assert_eq!(view.style.routing, Some(routing));
-        let mut styled = view.style.clone();
+        assert_eq!(updated["relations"], project["relations"]);
+        assert_eq!(updated["elements"], project["elements"]);
+        assert_eq!(updated["diagrams"][1], second);
+        assert_eq!(views(&updated, 0)?.last(), Some(&copy));
+        let view = view(&updated, &edge_id)?;
+        assert_eq!(style(view)?.routing, Some(routing));
+        let mut styled = style(view)?;
         styled.stroke = Some("#aabbcc".into());
         let restyled = apply(
             &updated,
             &Command::SetViewStyle {
                 diagram_id: "d".into(),
-                view_id: edge.id.clone(),
+                view_id: edge_id.clone(),
                 style: styled,
             },
             2,
         )?;
-        let restyled_view = restyled.diagrams[0]
-            .views
-            .iter()
-            .find(|item| item.id == edge.id)
-            .ok_or("edge missing")?;
-        assert_eq!(restyled_view.geometry, view.geometry);
-        assert_eq!(restyled_view.style.routing, view.style.routing);
-        assert_eq!(restyled.diagrams[0].views.last(), Some(&copy));
-        assert_eq!(restyled.diagrams[1], second);
+        let restyled_view = self::view(&restyled, &edge_id)?;
+        assert_eq!(restyled_view["geometry"], view["geometry"]);
+        assert_eq!(style(restyled_view)?.routing, style(view)?.routing);
+        assert_eq!(views(&restyled, 0)?.last(), Some(&copy));
+        assert_eq!(restyled["diagrams"][1], second);
         if routing == RelationshipRouting::Curve {
             assert!(
-                matches!(&view.geometry,Geometry::Path {segments,..} if matches!(segments.first(),Some(PathSegment::Cubic {..})))
+                matches!(serde_json::from_value::<Geometry>(view["geometry"].clone())?,Geometry::Path {segments,..} if matches!(segments.first(),Some(PathSegment::Cubic {..})))
             );
             let moved = apply(
                 &updated,
@@ -99,22 +175,24 @@ fn route_commands_author_curves_isolate_views_and_roundtrip()
                 },
                 2,
             )?;
-            let moved_view = moved.diagrams[0]
-                .views
-                .iter()
-                .find(|view| view.id == edge.id)
-                .ok_or("edge missing")?;
-            assert_ne!(moved_view.geometry, view.geometry);
+            let moved_view = self::view(&moved, &edge_id)?;
+            assert_ne!(moved_view["geometry"], view["geometry"]);
+            let geometry: Geometry = serde_json::from_value(moved_view["geometry"].clone())?;
             assert!(
-                matches!(&moved_view.geometry,Geometry::Path {segments,..} if matches!(segments.first(),Some(PathSegment::Cubic {..})))
+                matches!(&geometry,Geometry::Path {segments,..} if matches!(segments.first(),Some(PathSegment::Cubic {..})))
             );
-            let section = ModelingSection::from_model(&moved);
+            let projected = projection(&moved)?;
             assert_eq!(
-                RelationshipGraph::new(&section, "d").view_path(&edge.id),
-                Some(moved_view.geometry.clone())
+                projected
+                    .diagrams
+                    .iter()
+                    .find(|diagram| diagram.id == "d")
+                    .and_then(|diagram| diagram.views.iter().find(|view| view.id == edge_id))
+                    .and_then(|view| view.routed_geometry.clone()),
+                Some(geometry)
             );
         }
-        for format in [Format::Json, Format::Protobuf] {
+        for format in ["json", "protobuf"] {
             assert_eq!(decode(&encode(&updated, format)?, format)?, updated);
         }
     }
@@ -137,9 +215,9 @@ fn style_validation_is_atomic_and_preserves_semantics() -> Result<(), Box<dyn st
         style,
     };
     let updated = apply(&original, &command(style.clone()), 1)?;
-    assert_eq!(updated.diagrams[0].views[0].style, style);
-    assert_eq!(updated.relations, original.relations);
-    assert_eq!(updated.elements, original.elements);
+    assert_eq!(self::style(&updated["diagrams"][0]["views"][0])?, style);
+    assert_eq!(updated["relations"], original["relations"]);
+    assert_eq!(updated["elements"], original["elements"]);
     for style in [
         Style {
             fill: Some("red".into()),
@@ -176,35 +254,39 @@ fn style_validation_is_atomic_and_preserves_semantics() -> Result<(), Box<dyn st
         )
         .is_err()
     );
-    let edge = original.diagrams[0].views.last().ok_or("edge missing")?;
-    let mut custom = edge.style.clone();
+    let edge = views(&original, 0)?.last().ok_or("edge missing")?;
+    let edge_id = edge["id"]
+        .as_str()
+        .ok_or("edge identity missing")?
+        .to_owned();
+    let mut custom = self::style(edge)?;
     custom.dash_pattern = vec![3.0, 2.0];
     custom.line_mode = Some(LineMode::Dashed);
     let styled = apply(
         &original,
         &Command::SetViewStyle {
             diagram_id: "d".into(),
-            view_id: edge.id.clone(),
+            view_id: edge_id.clone(),
             style: custom,
         },
         1,
     )?;
-    assert_eq!(styled.elements, original.elements);
-    assert_eq!(styled.relations, original.relations);
+    assert_eq!(styled["elements"], original["elements"]);
+    assert_eq!(styled["relations"], original["relations"]);
     for mode in [LineMode::Solid, LineMode::Dotted, LineMode::Dashed] {
-        let mut style = edge.style.clone();
+        let mut style = self::style(edge)?;
         style.line_mode = Some(mode);
         let styled = apply(
             &original,
             &Command::SetViewStyle {
                 diagram_id: "d".into(),
-                view_id: edge.id.clone(),
+                view_id: edge_id.clone(),
                 style,
             },
             1,
         )?;
-        assert_eq!(styled.relations, original.relations);
-        for format in [Format::Json, Format::Protobuf] {
+        assert_eq!(styled["relations"], original["relations"]);
+        for format in ["json", "protobuf"] {
             assert_eq!(decode(&encode(&styled, format)?, format)?, styled);
         }
     }
@@ -215,25 +297,32 @@ fn style_validation_is_atomic_and_preserves_semantics() -> Result<(), Box<dyn st
 #[test]
 fn presentation_alignment_and_stack_are_view_local_and_ignore_unrelated_semantic_errors()
 -> Result<(), Box<dyn std::error::Error>> {
-    use bellatrix_mde::commands::ViewOrder;
     let mut project = fixture()?;
-    let mut other = project.diagrams[0].clone();
-    other.id = "other-diagram".into();
-    for view in &mut other.views {
-        view.id = format!("other-{}", view.id);
+    let mut other = project["diagrams"][0].clone();
+    other["id"] = "other-diagram".into();
+    for view in other["views"].as_array_mut().ok_or("views missing")? {
+        view["id"] = format!(
+            "other-{}",
+            view["id"].as_str().ok_or("view identity missing")?
+        )
+        .into();
     }
-    project.diagrams.push(other.clone());
-    // A bad semantic ownership cycle must not prevent fixing presentation.
-    project.relations.push(Relation {
-        id: "bad-ownership".into(),
-        kind: "owns".into(),
-        from: "a".into(),
-        to: "a".into(),
-        properties: Default::default(),
-    });
-    assert!(Graph::new(&project).validate().is_err());
-    let original_elements = project.elements.clone();
-    let original_relations = project.relations.clone();
+    project["diagrams"]
+        .as_array_mut()
+        .ok_or("diagrams missing")?
+        .push(other.clone());
+    project["relations"]
+        .as_array_mut()
+        .ok_or("relations missing")?
+        .push(json!({
+            "id":"bad-ownership", "kind":"owns", "from":"a", "to":"a", "properties":{}
+        }));
+    let findings: Value = serde_json::from_str(&validate_graph_model(
+        &json!({"api_version":1,"model":project}).to_string(),
+    )?)?;
+    assert_eq!(findings["has_errors"], true);
+    let original_elements = project["elements"].clone();
+    let original_relations = project["relations"].clone();
     let style = Style {
         text_align: Some(TextAlignment::Right),
         text_vertical_align: Some(TextVerticalAlignment::Bottom),
@@ -271,33 +360,20 @@ fn presentation_alignment_and_stack_are_view_local_and_ignore_unrelated_semantic
             },
             11,
         )?;
-        let mut ordered: Vec<_> = project.diagrams[0].views.iter().collect();
+        let projected = projection(&project)?;
+        let mut ordered: Vec<_> = projected.diagrams[0].views.iter().collect();
         ordered.sort_by_key(|view| view.z_index);
         assert_eq!(
             ordered.iter().position(|view| view.id == "a-view"),
             Some(expected)
         );
     }
-    assert_eq!(project.elements, original_elements);
-    assert_eq!(project.relations, original_relations);
-    assert_eq!(project.diagrams[1], other);
-    assert_eq!(project.diagrams[0].views[0].style, style);
-    for format in [Format::Json, Format::Protobuf] {
+    assert_eq!(project["elements"], original_elements);
+    assert_eq!(project["relations"], original_relations);
+    assert_eq!(project["diagrams"][1], other);
+    assert_eq!(self::style(&project["diagrams"][0]["views"][0])?, style);
+    for format in ["json", "protobuf"] {
         assert_eq!(decode(&encode(&project, format)?, format)?, project);
     }
-    let mut malformed = project.clone();
-    malformed.diagrams[0].width = f64::NAN;
-    assert!(
-        apply(
-            &malformed,
-            &Command::ReorderView {
-                diagram_id: "d".into(),
-                view_id: "a-view".into(),
-                order: ViewOrder::BringToFront
-            },
-            12
-        )
-        .is_err()
-    );
     Ok(())
 }

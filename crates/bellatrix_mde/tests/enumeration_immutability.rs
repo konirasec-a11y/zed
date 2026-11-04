@@ -1,14 +1,42 @@
 use bellatrix_mde::{
-    Format, Project,
-    commands::{Command, apply},
-    decode, encode, validate_uml_model,
+    apply_model_command, decode_model_document, encode_model_document, encode_model_section,
+    prepare_model_document, validate_uml_model,
 };
+use bellatrix_mde_protocol::Command;
 use serde_json::{Value, json};
 
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
 const RULE: &str = "UML_ENUMERATION_IMMUTABLE";
 
-fn document(read_only: Option<Value>, rooted: bool) -> Result<Project> {
+fn envelope(model: &Value) -> String {
+    json!({"api_version": 1, "model": model}).to_string()
+}
+
+fn decode(document: &[u8], format: &str) -> std::result::Result<Value, String> {
+    let response = decode_model_document(document, format)?;
+    let mut response: Value = serde_json::from_str(&response).map_err(|error| error.to_string())?;
+    Ok(response["model"].take())
+}
+
+fn encode(model: &Value, format: &str) -> std::result::Result<Vec<u8>, String> {
+    encode_model_document(&envelope(model), format)
+}
+
+fn apply(model: &Value, command: &Command, revision: u64) -> std::result::Result<Value, String> {
+    let document = prepare_model_document(&envelope(model))?;
+    let section = apply_model_command(
+        &document.id,
+        &document.name,
+        &document.section_json,
+        revision,
+        command.clone(),
+        false,
+    )?;
+    let bytes = encode_model_section(&document.id, &document.name, &section.to_string(), "json")?;
+    decode(&bytes, "json")
+}
+
+fn document(read_only: Option<Value>, rooted: bool) -> Result<Value> {
     let mut value = json!({"id":"project", "name":"Enumeration immutability", "root_model":"root",
     "elements":[
         {"id":"root", "kind":"uml.model", "name":"Root"},
@@ -22,28 +50,26 @@ fn document(read_only: Option<Value>, rooted: bool) -> Result<Project> {
     if !rooted {
         value.as_object_mut().ok_or("object")?.remove("root_model");
     }
-    let mut project: Project = serde_json::from_value(value)?;
+    let mut project = value;
     if let Some(value) = read_only {
         author(&mut project, "attribute", "isReadOnly", value)?;
     }
-    Ok(project)
+    Ok(decode(&serde_json::to_vec(&project)?, "json")?)
 }
 
-fn author(project: &mut Project, id: &str, property: &str, value: Value) -> Result {
-    project
-        .elements
+fn author(project: &mut Value, id: &str, property: &str, value: Value) -> Result {
+    let element = project["elements"]
+        .as_array_mut()
+        .ok_or("elements")?
         .iter_mut()
-        .find(|element| element.id == id)
-        .ok_or("element")?
-        .properties
-        .insert(property.into(), value);
+        .find(|element| element["id"] == id)
+        .ok_or("element")?;
+    element["properties"][property] = value;
     Ok(())
 }
 
-fn diagnostics(project: &Project) -> Result<Vec<Value>> {
-    let response: Value = serde_json::from_str(&validate_uml_model(
-        &json!({"api_version":1, "model":project}).to_string(),
-    )?)?;
+fn diagnostics(project: &Value) -> Result<Vec<Value>> {
+    let response: Value = serde_json::from_str(&validate_uml_model(&envelope(project))?)?;
     Ok(response["diagnostics"]
         .as_array()
         .ok_or("diagnostics")?
@@ -71,7 +97,7 @@ fn given_owned_attributes_then_only_true_is_immutable_in_rooted_and_rootless_mod
             if immutable {
                 assert!(!issues.iter().any(relevant), "{issues:#?}");
             }
-            for format in [Format::Json, Format::Protobuf] {
+            for format in ["json", "protobuf"] {
                 let reopened = decode(&encode(&project, format)?, format)?;
                 assert_eq!(diagnostics(&reopened)?, issues);
             }
@@ -84,7 +110,7 @@ fn given_owned_attributes_then_only_true_is_immutable_in_rooted_and_rootless_mod
 fn when_attribute_becomes_mutable_then_edit_rolls_back_and_invalid_draft_can_be_repaired() -> Result
 {
     let valid = document(Some(json!(true)), true)?;
-    let before = encode(&valid, Format::Json)?;
+    let before = encode(&valid, "json")?;
     let error = apply(
         &valid,
         &Command::SetProperty {
@@ -96,7 +122,7 @@ fn when_attribute_becomes_mutable_then_edit_rolls_back_and_invalid_draft_can_be_
     )
     .expect_err("Enumeration attribute must remain immutable");
     assert!(error.contains(RULE), "{error}");
-    assert_eq!(encode(&valid, Format::Json)?, before);
+    assert_eq!(encode(&valid, "json")?, before);
     let invalid = document(None, true)?;
     let repaired = apply(
         &invalid,

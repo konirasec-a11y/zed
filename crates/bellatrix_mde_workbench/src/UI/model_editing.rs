@@ -232,6 +232,7 @@ impl MdeWorkbenchItem {
         y: f64,
         cx: &mut Context<Self>,
     ) {
+        if !self.allows_modeling_tool(tool, cx) { return; }
         if let ModelingTool::Relation(kind) = tool {
             self.connect_free_message_endpoint(kind, bellatrix_mde_cordis::Point { x, y }, cx);
         } else {
@@ -245,6 +246,7 @@ impl MdeWorkbenchItem {
         y: f64,
         cx: &mut Context<Self>,
     ) {
+        if !self.allows_modeling_tool(tool, cx) { return; }
         match tool {
             ModelingTool::Element(kind) => self.create_element(kind, x, y, cx),
             ModelingTool::Relation(_) => self.arm_drag_tool(tool, cx),

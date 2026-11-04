@@ -1,10 +1,16 @@
-use bellatrix_mde::validate_uml_model;
+use bellatrix_mde::{decode_model_document, encode_model_document, validate_uml_model};
 use serde_json::{Value, json};
 
 #[test]
 fn kernel_contract_flow_validates_rooted_and_rootless_drafts_without_views()
 -> Result<(), Box<dyn std::error::Error>> {
-    use bellatrix_mde::{Format, decode, encode};
+    let decode = |bytes: &[u8], format: &str| -> Result<Value, Box<dyn std::error::Error>> {
+        let mut response: Value = serde_json::from_str(&decode_model_document(bytes, format)?)?;
+        Ok(response["model"].take())
+    };
+    let encode = |model: &Value, format: &str| {
+        encode_model_document(&json!({"api_version": 1, "model": model}).to_string(), format)
+    };
 
     // KB-10: omitted root designation cannot bypass namespace, relationship
     // projection or Property subsetting contracts on the same authored graph.
@@ -62,11 +68,11 @@ fn kernel_contract_flow_validates_rooted_and_rootless_drafts_without_views()
             assert!(has(&invalid, code, subject, "error"), "rooted={rooted}: {invalid}");
         }
         assert_eq!(invalid["coverage"], "implemented_rules_only");
-        let project = decode(&serde_json::to_vec(&draft)?, Format::Json)?;
-        for format in [Format::Json, Format::Protobuf] {
+        let project = decode(&serde_json::to_vec(&draft)?, "json")?;
+        for format in ["json", "protobuf"] {
             let reopened = decode(&encode(&project, format)?, format)?;
             assert_eq!(project, reopened);
-            assert_eq!(validate(&serde_json::to_value(&reopened)?)?, invalid);
+            assert_eq!(validate(&reopened)?, invalid);
         }
 
         draft["elements"][3]["name"] = json!("B");

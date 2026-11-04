@@ -283,5 +283,38 @@ pub(crate) fn project(diagrams: &[crate::Diagram]) -> ToolCatalog {
     let groups = tool_groups.into_iter().map(|(name, tools)| ToolGroup {
         name: name.into(), tools: tools.into_iter().map(convert::tool_contract).collect(),
     }).collect();
-    ToolCatalog { elements, relations, diagrams: diagram_metadata, interface_forms, groups }
+    let profiles = diagrams.iter().filter(|diagram| crate::StructuralDiagramKind::from_diagram(diagram).is_none())
+        .map(|diagram| {
+            let unavailable_tools = if diagram.uml_di_type == "ERDDiagram" {
+                ["Entity", "One to One Relationship", "One to Many Relationship", "Many to Many Relationship"]
+                    .into_iter().map(|label| UnavailableToolMetadata {
+                        label: label.into(),
+                        reason: "ERD creation commands are not implemented yet; imported objects remain inspectable.".into(),
+                    }).collect()
+            } else { Vec::new() };
+            (diagram.id.clone(), DiagramToolProfile {
+                label: diagram_type_label(diagram), available_tools: Vec::new(), unavailable_tools,
+            })
+        }).collect();
+    ToolCatalog { elements, relations, diagrams: diagram_metadata, interface_forms, groups, profiles }
+}
+
+pub(crate) fn diagram_type_label(diagram: &crate::Diagram) -> String {
+    if diagram.uml_di_type == "ERDDiagram" {
+        "Entity-Relationship".into()
+    } else {
+        diagram.uml_di_type.clone()
+    }
+}
+
+pub(crate) fn imported_type_label(kind: &str) -> Option<&'static str> {
+    match kind {
+        "mdj.ERDDataModel" => Some("Data Model"),
+        "mdj.ERDEntity" => Some("Entity"),
+        "mdj.ERDColumn" => Some("Column"),
+        "mdj.ERDRelationship" => Some("Relationship"),
+        "mdj.ERDRelationshipEnd" => Some("Relationship end"),
+        "ERDDiagram" => Some("Entity-Relationship diagram"),
+        _ => None,
+    }
 }

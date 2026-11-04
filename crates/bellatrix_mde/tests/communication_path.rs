@@ -1,17 +1,48 @@
 use bellatrix_mde::{
-    Format, Project,
-    commands::{Command, apply},
-    decode, encode,
-    uml::{associations, references::ReferenceIndex, root::Model},
-    validate_uml_model,
+    apply_model_command, decode_model_document, encode_model_document, encode_model_section,
+    prepare_model_document, project_model_section, validate_uml_model,
 };
+use bellatrix_mde_protocol::Command;
 use serde_json::{Value, json};
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+fn envelope(model: &Value) -> String {
+    json!({"api_version": 1, "model": model}).to_string()
+}
+
+fn decode(document: &[u8], format: &str) -> Result<Value> {
+    let response = decode_model_document(document, format)?;
+    let mut response: Value = serde_json::from_str(&response)?;
+    Ok(response["model"].take())
+}
+
+fn encode(model: &Value, format: &str) -> Result<Vec<u8>> {
+    Ok(encode_model_document(&envelope(model), format)?)
+}
+
+fn import_document(model: &Value) -> Result<Value> {
+    decode(&serde_json::to_vec(model)?, "json")
+}
+
+fn apply(model: &Value, command: &Command, revision: u64) -> std::result::Result<Value, String> {
+    let document = prepare_model_document(&envelope(model))?;
+    let section = apply_model_command(
+        &document.id,
+        &document.name,
+        &document.section_json,
+        revision,
+        command.clone(),
+        false,
+    )?;
+    let bytes = encode_model_section(&document.id, &document.name, &section.to_string(), "json")?;
+    decode(&bytes, "json").map_err(|error| error.to_string())
+}
+
 const RULE: &str = "CommunicationPath-association_ends:";
 const ERROR: &str = "UML_COMMUNICATION_PATH_ASSOCIATION_ENDS";
 const UNKNOWN: &str = "MDE_COMMUNICATION_PATH_ASSOCIATION_ENDS_UNVERIFIED";
 
-fn document(rooted: bool) -> Result<Project> {
+fn document(rooted: bool) -> Result<Value> {
     let mut value = json!({"id":"project","name":"Communication path","root_model":"root",
         "elements":[
             {"id":"root","kind":"uml.model","name":"Root"},
@@ -38,19 +69,31 @@ fn document(rooted: bool) -> Result<Project> {
     if !rooted {
         value.as_object_mut().ok_or("object")?.remove("root_model");
     }
-    Ok(serde_json::from_value(value)?)
+    import_document(&value)
 }
-fn author(project: &mut Project, id: &str, key: &str, value: Value) -> Result {
-    project
-        .elements
+fn author(project: &mut Value, id: &str, key: &str, value: Value) -> Result {
+    project["elements"]
+        .as_array_mut()
+        .ok_or("elements")?
         .iter_mut()
-        .find(|element| element.id == id)
-        .ok_or("element")?
-        .properties
-        .insert(key.into(), value);
+        .find(|element| element["id"] == id)
+        .ok_or("element")?["properties"][key] = value;
     Ok(())
 }
-fn diagnostics(project: &Project) -> Result<Vec<Value>> {
+
+fn inspected_property(model: &Value, id: &str, path: &str) -> Result<Value> {
+    let document = prepare_model_document(&envelope(model))?;
+    let projection = project_model_section(&document.id, &document.name, &document.section_json)?;
+    Ok(projection
+        .inspect_element(id)
+        .ok_or("inspector")?
+        .properties
+        .into_iter()
+        .find(|property| property.path == path)
+        .ok_or("inspector property")?
+        .value)
+}
+fn diagnostics(project: &Value) -> Result<Vec<Value>> {
     let response: Value = serde_json::from_str(&validate_uml_model(
         &json!({"api_version":1,"model":project}).to_string(),
     )?)?;
@@ -65,7 +108,7 @@ fn relevant(issue: &&Value) -> bool {
             .as_str()
             .is_some_and(|message| message.starts_with(RULE))
 }
-fn expect(project: &Project, code: &str) -> Result {
+fn expect(project: &Value, code: &str) -> Result {
     let issues = diagnostics(project)?;
     let specific = issues.iter().filter(relevant).collect::<Vec<_>>();
     assert_eq!(specific.len(), 1, "{issues:#?}");
@@ -82,12 +125,12 @@ fn given_canonical_communication_path_then_deployment_target_end_types_are_valid
     for rooted in [true, false] {
         for kind in ["uml.node", "uml.device", "uml.execution_environment"] {
             let mut project = document(rooted)?;
-            project
-                .elements
+            project["elements"]
+                .as_array_mut()
+                .ok_or("elements")?
                 .iter_mut()
-                .find(|element| element.id == "left")
-                .ok_or("left")?
-                .kind = kind.into();
+                .find(|element| element["id"] == "left")
+                .ok_or("left")?["kind"] = json!(kind);
             let issues = diagnostics(&project)?;
             assert_eq!(issues.iter().filter(relevant).count(), 0, "{issues:#?}");
             assert!(
@@ -104,14 +147,13 @@ fn given_canonical_communication_path_then_deployment_target_end_types_are_valid
                 "{issues:#?}"
             );
             assert_eq!(
-                associations::end_types(
-                    &ReferenceIndex::new(Model::from_project(&project)),
-                    "path"
-                )?
-                .len(),
+                inspected_property(&project, "path", "uml.endType")?
+                    .as_array()
+                    .ok_or("association end Types")?
+                    .len(),
                 2
             );
-            for format in [Format::Json, Format::Protobuf] {
+            for format in ["json", "protobuf"] {
                 assert_eq!(
                     diagnostics(&decode(&encode(&project, format)?, format)?)?,
                     issues
@@ -125,7 +167,7 @@ fn given_canonical_communication_path_then_deployment_target_end_types_are_valid
 #[test]
 fn when_end_type_becomes_class_then_edit_rejects_atomically_and_repair_succeeds() -> Result {
     let project = document(true)?;
-    let before = encode(&project, Format::Json)?;
+    let before = encode(&project, "json")?;
     let error = apply(
         &project,
         &Command::SetProperty {
@@ -137,11 +179,11 @@ fn when_end_type_becomes_class_then_edit_rejects_atomically_and_repair_succeeds(
     )
     .expect_err("Class is not a DeploymentTarget");
     assert!(error.contains(RULE), "{error}");
-    assert_eq!(encode(&project, Format::Json)?, before);
+    assert_eq!(encode(&project, "json")?, before);
     let mut invalid = project;
     author(&mut invalid, "end-left", "type", json!({"$ref":"class"}))?;
     expect(&invalid, ERROR)?;
-    for format in [Format::Json, Format::Protobuf] {
+    for format in ["json", "protobuf"] {
         let reopened = decode(&encode(&invalid, format)?, format)?;
         expect(&reopened, ERROR)?;
         let repaired = apply(

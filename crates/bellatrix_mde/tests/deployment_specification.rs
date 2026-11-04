@@ -1,14 +1,47 @@
 use bellatrix_mde::{
-    Format, Project,
-    commands::{Command, apply},
-    decode, encode, validate_uml_model,
+    apply_model_command, decode_model_document, encode_model_document, encode_model_section,
+    prepare_model_document, validate_uml_model,
 };
+use bellatrix_mde_protocol::Command;
 use serde_json::{Value, json};
 
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+fn envelope(model: &Value) -> String {
+    json!({"api_version": 1, "model": model}).to_string()
+}
+
+fn decode(document: &[u8], format: &str) -> Result<Value> {
+    let response = decode_model_document(document, format)?;
+    let mut response: Value = serde_json::from_str(&response)?;
+    Ok(response["model"].take())
+}
+
+fn encode(model: &Value, format: &str) -> Result<Vec<u8>> {
+    Ok(encode_model_document(&envelope(model), format)?)
+}
+
+fn import_document(model: &Value) -> Result<Value> {
+    decode(&serde_json::to_vec(model)?, "json")
+}
+
+fn apply(model: &Value, command: &Command, revision: u64) -> std::result::Result<Value, String> {
+    let document = prepare_model_document(&envelope(model))?;
+    let section = apply_model_command(
+        &document.id,
+        &document.name,
+        &document.section_json,
+        revision,
+        command.clone(),
+        false,
+    )?;
+    let bytes = encode_model_section(&document.id, &document.name, &section.to_string(), "json")?;
+    decode(&bytes, "json").map_err(|error| error.to_string())
+}
+
 const RULE: &str = "DeploymentSpecification-deployment_target:";
 
-fn document(location_kind: &str, rooted: bool) -> Result<Project> {
+fn document(location_kind: &str, rooted: bool) -> Result<Value> {
     let mut value = json!({"id":"project", "name":"Deployment specification", "root_model":"root",
     "elements":[
         {"id":"root", "kind":"uml.model", "name":"Root"},
@@ -26,10 +59,10 @@ fn document(location_kind: &str, rooted: bool) -> Result<Project> {
     if !rooted {
         value.as_object_mut().ok_or("object")?.remove("root_model");
     }
-    Ok(serde_json::from_value(value)?)
+    import_document(&value)
 }
 
-fn diagnostics(project: &Project) -> Result<Vec<Value>> {
+fn diagnostics(project: &Value) -> Result<Vec<Value>> {
     let response: Value = serde_json::from_str(&validate_uml_model(
         &json!({"api_version":1, "model":project}).to_string(),
     )?)?;
@@ -63,7 +96,7 @@ fn given_configured_deployment_then_only_execution_environment_location_is_valid
             if kind == "uml.execution_environment" {
                 assert!(!issues.iter().any(relevant), "{issues:#?}");
             }
-            for format in [Format::Json, Format::Protobuf] {
+            for format in ["json", "protobuf"] {
                 let reopened = decode(&encode(&project, format)?, format)?;
                 assert_eq!(diagnostics(&reopened)?, issues);
             }
@@ -76,13 +109,14 @@ fn given_configured_deployment_then_only_execution_environment_location_is_valid
 fn when_configured_deployment_moves_to_wrong_target_then_reparent_rolls_back_and_draft_can_be_repaired()
 -> Result {
     let mut valid = document("uml.execution_environment", true)?;
-    valid.elements.push(serde_json::from_value(
+    valid["elements"].as_array_mut().ok_or("elements")?.push(
         json!({"id":"other", "kind":"uml.node", "name":"Node"}),
-    )?);
-    valid.relations.push(serde_json::from_value(
+    );
+    valid["relations"].as_array_mut().ok_or("relations")?.push(
         json!({"id":"root-other", "kind":"owns", "from":"root", "to":"other"}),
-    )?);
-    let before = encode(&valid, Format::Json)?;
+    );
+    valid = import_document(&valid)?;
+    let before = encode(&valid, "json")?;
     let error = apply(
         &valid,
         &Command::SetOwner {
@@ -93,14 +127,15 @@ fn when_configured_deployment_moves_to_wrong_target_then_reparent_rolls_back_and
     )
     .expect_err("configured target must be ExecutionEnvironment");
     assert!(error.contains(RULE), "{error}");
-    assert_eq!(encode(&valid, Format::Json)?, before);
+    assert_eq!(encode(&valid, "json")?, before);
     let mut invalid = document("uml.node", true)?;
-    invalid.elements.push(serde_json::from_value(
+    invalid["elements"].as_array_mut().ok_or("elements")?.push(
         json!({"id":"other", "kind":"uml.execution_environment", "name":"Environment"}),
-    )?);
-    invalid.relations.push(serde_json::from_value(
+    );
+    invalid["relations"].as_array_mut().ok_or("relations")?.push(
         json!({"id":"root-other", "kind":"owns", "from":"root", "to":"other"}),
-    )?);
+    );
+    invalid = import_document(&invalid)?;
     let repaired = apply(
         &invalid,
         &Command::SetOwner {
@@ -120,25 +155,22 @@ fn given_external_inverses_then_known_wrong_targets_remain_errors() -> Result {
             for inverse in ["deployment", "location", "both"] {
                 let mut project = document(kind, rooted)?;
                 if inverse != "location" {
-                    project
-                        .elements
+                    project["elements"]
+                        .as_array_mut()
+                        .ok_or("elements")?
                         .iter_mut()
-                        .find(|element| element.id == "specification")
-                        .ok_or("specification")?
-                        .properties
-                        .insert(
-                            "deployment".into(),
-                            json!({"href":"external.uml#deployment"}),
-                        );
+                        .find(|element| element["id"] == "specification")
+                        .ok_or("specification")?["properties"]["deployment"] =
+                        json!({"href":"external.uml#deployment"});
                 }
                 if inverse != "deployment" {
-                    project
-                        .relations
+                    project["relations"]
+                        .as_array_mut()
+                        .ok_or("relations")?
                         .iter_mut()
-                        .find(|relation| relation.id == "deployment")
-                        .ok_or("deployment")?
-                        .properties
-                        .insert("location".into(), json!({"href":"external.uml#location"}));
+                        .find(|relation| relation["id"] == "deployment")
+                        .ok_or("deployment")?["properties"]["location"] =
+                        json!({"href":"external.uml#location"});
                 }
                 let issues = diagnostics(&project)?;
                 assert!(
@@ -153,7 +185,7 @@ fn given_external_inverses_then_known_wrong_targets_remain_errors() -> Result {
                         .any(|issue| relevant(issue) && issue["severity"] == "warning"),
                     "{issues:#?}"
                 );
-                for format in [Format::Json, Format::Protobuf] {
+                for format in ["json", "protobuf"] {
                     assert_eq!(
                         diagnostics(&decode(&encode(&project, format)?, format)?)?,
                         issues
@@ -170,25 +202,22 @@ fn given_external_inverse_when_reparented_to_node_then_command_rejects_atomicall
     for inverse in ["deployment", "location", "both"] {
         let mut project = document("uml.execution_environment", true)?;
         if inverse != "location" {
-            project
-                .elements
+            project["elements"]
+                .as_array_mut()
+                .ok_or("elements")?
                 .iter_mut()
-                .find(|element| element.id == "specification")
-                .ok_or("specification")?
-                .properties
-                .insert(
-                    "deployment".into(),
-                    json!({"href":"external.uml#deployment"}),
-                );
+                .find(|element| element["id"] == "specification")
+                .ok_or("specification")?["properties"]["deployment"] =
+                json!({"href":"external.uml#deployment"});
         }
         if inverse != "deployment" {
-            project
-                .relations
+            project["relations"]
+                .as_array_mut()
+                .ok_or("relations")?
                 .iter_mut()
-                .find(|relation| relation.id == "deployment")
-                .ok_or("deployment")?
-                .properties
-                .insert("location".into(), json!({"href":"external.uml#location"}));
+                .find(|relation| relation["id"] == "deployment")
+                .ok_or("deployment")?["properties"]["location"] =
+                json!({"href":"external.uml#location"});
         }
         let issues = diagnostics(&project)?;
         assert!(
@@ -203,13 +232,14 @@ fn given_external_inverse_when_reparented_to_node_then_command_rejects_atomicall
                 .any(|issue| relevant(issue) && issue["severity"] == "error"),
             "{issues:#?}"
         );
-        project.elements.push(serde_json::from_value(
+        project["elements"].as_array_mut().ok_or("elements")?.push(
             json!({"id":"other", "kind":"uml.node", "name":"Node"}),
-        )?);
-        project.relations.push(serde_json::from_value(
+        );
+        project["relations"].as_array_mut().ok_or("relations")?.push(
             json!({"id":"root-other", "kind":"owns", "from":"root", "to":"other"}),
-        )?);
-        let before = encode(&project, Format::Json)?;
+        );
+        project = import_document(&project)?;
+        let before = encode(&project, "json")?;
         let error = apply(
             &project,
             &Command::SetOwner {
@@ -220,7 +250,7 @@ fn given_external_inverse_when_reparented_to_node_then_command_rejects_atomicall
         )
         .expect_err("external inverse must not hide invalid canonical location");
         assert!(error.contains(RULE), "{error}");
-        assert_eq!(encode(&project, Format::Json)?, before);
+        assert_eq!(encode(&project, "json")?, before);
     }
     Ok(())
 }

@@ -12,5 +12,6 @@ pub use class::{UmlClassifier, ViewAppearance};
 pub use figures::UmlFigure;
 pub use figure_geometry::{TemplateSignatureLayout, template_signature_layout};
 pub use inline_edit::UmlInlineNameEditor;
+pub use interface_presentation::render_interface_icon;
 pub use quick_edit::{UmlQuickAction, UmlQuickEdit, UmlVisibilityPicker};
 pub use relationship::{UmlLineSegment, UmlRelationGlyph};

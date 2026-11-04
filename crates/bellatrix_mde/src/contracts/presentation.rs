@@ -144,6 +144,68 @@ fn deserialize_authored_coordinate<'de, D: serde::Deserializer<'de>>(
     }
 }
 
+/// An authored extent is not necessarily a usable rendered size. Imported
+/// layout calculations can retain negative results until layout is resolved.
+#[derive(Clone, Debug, PartialEq)]
+pub enum LayoutExtent {
+    Resolved(f64),
+    Unresolved { original: f64, reason: UnresolvedExtentReason },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UnresolvedExtentReason { NegativeExtent }
+
+impl LayoutExtent {
+    pub fn original(&self) -> f64 {
+        match self { Self::Resolved(value) => *value, Self::Unresolved { original, .. } => *original }
+    }
+    pub fn resolved(&self) -> Option<f64> {
+        match self { Self::Resolved(value) if value.is_finite() && *value >= 0.0 => Some(*value), _ => None }
+    }
+    pub fn is_valid(&self) -> bool {
+        match self {
+            Self::Resolved(value) => value.is_finite() && *value >= 0.0,
+            Self::Unresolved { original, reason: UnresolvedExtentReason::NegativeExtent } => original.is_finite() && *original < 0.0,
+        }
+    }
+}
+
+impl Serialize for LayoutExtent {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        if !self.is_valid() { return Err(serde::ser::Error::custom("invalid authored layout extent")); }
+        match self {
+            Self::Resolved(value) => value.serialize(serializer),
+            Self::Unresolved { original, reason } => {
+                #[derive(Serialize)]
+                struct Pending<'a> { original: f64, reason: &'a UnresolvedExtentReason }
+                Pending { original: *original, reason }.serialize(serializer)
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for LayoutExtent {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Pending {
+            #[serde(deserialize_with = "deserialize_coordinate")]
+            original: f64,
+            reason: UnresolvedExtentReason,
+        }
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Encoded { Resolved(serde_json::Number), Unresolved(Pending) }
+        let extent = match Encoded::deserialize(deserializer)? {
+            Encoded::Resolved(number) => Self::Resolved(coordinate_from_number(number)?),
+            Encoded::Unresolved(value) => Self::Unresolved { original: value.original, reason: value.reason },
+        };
+        if !extent.is_valid() { return Err(serde::de::Error::custom("invalid authored layout extent")); }
+        Ok(extent)
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LayoutBounds {
@@ -161,21 +223,27 @@ pub struct LayoutBounds {
     pub y: Authored<f64>,
     #[serde(
         default,
-        skip_serializing_if = "Authored::is_missing",
-        deserialize_with = "deserialize_authored_coordinate"
+        skip_serializing_if = "Authored::is_missing"
     )]
-    pub width: Authored<f64>,
+    pub width: Authored<LayoutExtent>,
     #[serde(
         default,
-        skip_serializing_if = "Authored::is_missing",
-        deserialize_with = "deserialize_authored_coordinate"
+        skip_serializing_if = "Authored::is_missing"
     )]
-    pub height: Authored<f64>,
+    pub height: Authored<LayoutExtent>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ViewPresentation {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entity_box: Option<EntityBoxBinding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relationship_notation: Option<RelationshipNotation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interface_icon: Option<InterfaceIconBinding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interface_connection: Option<InterfaceConnection>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label_binding: Option<SubjectLabelBinding>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -194,6 +262,43 @@ pub struct ViewPresentation {
     pub resources: std::collections::BTreeMap<String, PresentationResource>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<PresentationSource>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EntityBoxBinding {
+    #[serde(default, skip_serializing_if = "Authored::is_missing")]
+    pub name_label: Authored<String>,
+    #[serde(default, skip_serializing_if = "Authored::is_missing")]
+    pub column_compartment: Authored<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RelationshipNotation {
+    EntityRelationship,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InterfaceIconBinding {
+    #[serde(default, skip_serializing_if = "Authored::is_missing")]
+    pub label_compartment: Authored<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InterfaceConnection {
+    pub role: InterfaceConnectionRole,
+    // The endpoint identity remains in View.endpoints, not in this notation role.
+    pub target_unverified: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InterfaceConnectionRole {
+    Required,
+    Provided,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

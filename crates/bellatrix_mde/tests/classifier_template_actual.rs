@@ -1,10 +1,38 @@
-use bellatrix_mde::{Format, Project, decode, encode, validate_uml_model};
+use bellatrix_mde::{decode_model_document, encode_model_document, validate_uml_model};
 use serde_json::{Value, json};
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+fn envelope(model: &Value) -> String {
+    json!({"api_version": 1, "model": model}).to_string()
+}
+
+fn decode(document: &[u8], format: &str) -> Result<Value> {
+    let response = decode_model_document(document, format)?;
+    let mut response: Value = serde_json::from_str(&response)?;
+    Ok(response["model"].take())
+}
+
+fn encode(model: &Value, format: &str) -> Result<Vec<u8>> {
+    Ok(encode_model_document(&envelope(model), format)?)
+}
+
+fn import_document(model: &Value) -> Result<Value> {
+    decode(&serde_json::to_vec(model)?, "json")
+}
+
+fn element_mut<'a>(model: &'a mut Value, id: &str) -> Result<&'a mut Value> {
+    model["elements"]
+        .as_array_mut()
+        .ok_or("elements")?
+        .iter_mut()
+        .find(|element| element["id"] == id)
+        .ok_or_else(|| format!("missing element {id}").into())
+}
+
 const RULE: &str = "ClassifierTemplateParameter-actual_is_classifier:";
 const ERROR: &str = "UML_CLASSIFIER_TEMPLATE_ACTUAL";
 const UNKNOWN: &str = "MDE_CLASSIFIER_TEMPLATE_ACTUAL_UNVERIFIED";
-fn document(rooted: bool) -> Result<Project> {
+fn document(rooted: bool) -> Result<Value> {
     let mut value = json!({"id":"project","name":"Bindings","root_model":"root","elements":[
         {"id":"root","kind":"uml.model","name":"Root"},
         {"id":"host","kind":"uml.package","name":"Host"},
@@ -43,19 +71,13 @@ fn document(rooted: bool) -> Result<Project> {
     if !rooted {
         value.as_object_mut().ok_or("object")?.remove("root_model");
     }
-    Ok(serde_json::from_value(value)?)
+    import_document(&value)
 }
-fn author(project: &mut Project, id: &str, key: &str, value: Value) -> Result {
-    project
-        .elements
-        .iter_mut()
-        .find(|e| e.id == id)
-        .ok_or("element")?
-        .properties
-        .insert(key.into(), value);
+fn author(project: &mut Value, id: &str, key: &str, value: Value) -> Result {
+    element_mut(project, id)?["properties"][key] = value;
     Ok(())
 }
-fn issues(project: &Project) -> Result<Vec<Value>> {
+fn issues(project: &Value) -> Result<Vec<Value>> {
     let response: Value = serde_json::from_str(&validate_uml_model(
         &json!({"api_version":1,"model":project}).to_string(),
     )?)?;
@@ -72,7 +94,7 @@ fn issues(project: &Project) -> Result<Vec<Value>> {
         .cloned()
         .collect())
 }
-fn expect(project: &Project, code: &str) -> Result {
+fn expect(project: &Value, code: &str) -> Result {
     let issues = issues(project)?;
     assert_eq!(issues.len(), 1, "{issues:#?}");
     assert_eq!(issues[0]["code"], code, "{issues:#?}");
@@ -82,13 +104,8 @@ fn expect(project: &Project, code: &str) -> Result {
     );
     Ok(())
 }
-fn kind(project: &mut Project, id: &str, value: &str) -> Result {
-    project
-        .elements
-        .iter_mut()
-        .find(|element| element.id == id)
-        .ok_or("element")?
-        .kind = value.into();
+fn kind(project: &mut Value, id: &str, value: &str) -> Result {
+    element_mut(project, id)?["kind"] = json!(value);
     Ok(())
 }
 #[test]
@@ -107,7 +124,7 @@ fn classifier_kinds_satisfy_actual_constraint_in_rooted_and_draft_snapshots() ->
             let mut project = document(rooted)?;
             kind(&mut project, "actual", actual_kind)?;
             assert!(issues(&project)?.is_empty());
-            for format in [Format::Json, Format::Protobuf] {
+            for format in ["json", "protobuf"] {
                 assert!(issues(&decode(&encode(&project, format)?, format)?)?.is_empty());
             }
         }
@@ -126,7 +143,7 @@ fn parameterable_nonclassifier_actual_is_a_violation_not_a_type_representation_e
         let mut project = document(true)?;
         kind(&mut project, "actual", actual_kind)?;
         expect(&project, ERROR)?;
-        for format in [Format::Json, Format::Protobuf] {
+        for format in ["json", "protobuf"] {
             expect(&decode(&encode(&project, format)?, format)?, ERROR)?;
         }
     }
@@ -137,7 +154,7 @@ fn parameterable_nonclassifier_actual_is_a_violation_not_a_type_representation_e
 fn nonclassifier_snapshot_can_be_repaired_after_reopening() -> Result {
     let mut project = document(true)?;
     kind(&mut project, "actual", "uml.operation")?;
-    for format in [Format::Json, Format::Protobuf] {
+    for format in ["json", "protobuf"] {
         let mut reopened = decode(&encode(&project, format)?, format)?;
         expect(&reopened, ERROR)?;
         author(
@@ -147,7 +164,7 @@ fn nonclassifier_snapshot_can_be_repaired_after_reopening() -> Result {
             json!({"$ref":"formal-type"}),
         )?;
         assert!(issues(&reopened)?.is_empty());
-        assert_eq!(reopened.relations, project.relations);
+        assert_eq!(reopened["relations"], project["relations"]);
     }
     Ok(())
 }
@@ -171,7 +188,7 @@ fn authored_inverse_projection_is_explicitly_unverified_and_preserved() -> Resul
             "templateParameterSubstitution",
             inverse.clone(),
         )?;
-        for format in [Format::Json, Format::Protobuf] {
+        for format in ["json", "protobuf"] {
             let reopened = decode(&encode(&project, format)?, format)?;
             let response: Value = serde_json::from_str(&validate_uml_model(
                 &json!({"api_version":1,"model":reopened}).to_string(),
@@ -191,12 +208,12 @@ fn authored_inverse_projection_is_explicitly_unverified_and_preserved() -> Resul
             assert_eq!(found[0]["code"], UNKNOWN);
             assert_eq!(found[0]["severity"], "warning");
             assert_eq!(
-                reopened
-                    .elements
+                reopened["elements"]
+                    .as_array()
+                    .ok_or("elements")?
                     .iter()
-                    .find(|element| element.id == "formal")
-                    .ok_or("formal")?
-                    .properties
+                    .find(|element| element["id"] == "formal")
+                    .ok_or("formal")?["properties"]
                     .get("templateParameterSubstitution"),
                 Some(&inverse)
             );

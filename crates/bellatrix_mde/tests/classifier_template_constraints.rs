@@ -1,11 +1,56 @@
-use bellatrix_mde::commands::{Command, apply};
-use bellatrix_mde::{Format, Project, decode, encode, validate_uml_model};
+use bellatrix_mde::{
+    apply_model_command, decode_model_document, encode_model_document, encode_model_section,
+    prepare_model_document, validate_uml_model,
+};
+use bellatrix_mde_protocol::Command;
 use serde_json::{Value, json};
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+fn envelope(model: &Value) -> String {
+    json!({"api_version": 1, "model": model}).to_string()
+}
+
+fn decode(document: &[u8], format: &str) -> Result<Value> {
+    let response = decode_model_document(document, format)?;
+    let mut response: Value = serde_json::from_str(&response)?;
+    Ok(response["model"].take())
+}
+
+fn encode(model: &Value, format: &str) -> Result<Vec<u8>> {
+    Ok(encode_model_document(&envelope(model), format)?)
+}
+
+fn import_document(model: &Value) -> Result<Value> {
+    decode(&serde_json::to_vec(model)?, "json")
+}
+
+fn apply(model: &Value, command: &Command, revision: u64) -> std::result::Result<Value, String> {
+    let document = prepare_model_document(&envelope(model))?;
+    let section = apply_model_command(
+        &document.id,
+        &document.name,
+        &document.section_json,
+        revision,
+        command.clone(),
+        false,
+    )?;
+    let bytes = encode_model_section(&document.id, &document.name, &section.to_string(), "json")?;
+    decode(&bytes, "json").map_err(|error| error.to_string())
+}
+
+fn element_mut<'a>(model: &'a mut Value, id: &str) -> Result<&'a mut Value> {
+    model["elements"]
+        .as_array_mut()
+        .ok_or("elements")?
+        .iter_mut()
+        .find(|element| element["id"] == id)
+        .ok_or_else(|| format!("missing element {id}").into())
+}
+
 const RULE: &str = "ClassifierTemplateParameter-constraining_classifiers_constrain_args:";
 const ERROR: &str = "UML_CLASSIFIER_TEMPLATE_CONSTRAINED_ACTUAL";
 const UNKNOWN: &str = "MDE_CLASSIFIER_TEMPLATE_CONSTRAINED_ACTUAL_UNVERIFIED";
-fn document(rooted: bool) -> Result<Project> {
+fn document(rooted: bool) -> Result<Value> {
     let mut value = json!({"id":"project","name":"Bindings","root_model":"root","elements":[
         {"id":"root","kind":"uml.model","name":"Root"},
         {"id":"host","kind":"uml.package","name":"Host"},
@@ -44,19 +89,13 @@ fn document(rooted: bool) -> Result<Project> {
     if !rooted {
         value.as_object_mut().ok_or("object")?.remove("root_model");
     }
-    Ok(serde_json::from_value(value)?)
+    import_document(&value)
 }
-fn author(project: &mut Project, id: &str, key: &str, value: Value) -> Result {
-    project
-        .elements
-        .iter_mut()
-        .find(|e| e.id == id)
-        .ok_or("element")?
-        .properties
-        .insert(key.into(), value);
+fn author(project: &mut Value, id: &str, key: &str, value: Value) -> Result {
+    element_mut(project, id)?["properties"][key] = value;
     Ok(())
 }
-fn issues(project: &Project) -> Result<Vec<Value>> {
+fn issues(project: &Value) -> Result<Vec<Value>> {
     let response: Value = serde_json::from_str(&validate_uml_model(
         &json!({"api_version":1,"model":project}).to_string(),
     )?)?;
@@ -73,7 +112,7 @@ fn issues(project: &Project) -> Result<Vec<Value>> {
         .cloned()
         .collect())
 }
-fn expect(project: &Project, code: &str) -> Result {
+fn expect(project: &Value, code: &str) -> Result {
     let issues = issues(project)?;
     assert_eq!(issues.len(), 1, "{issues:#?}");
     assert_eq!(issues[0]["code"], code, "{issues:#?}");
@@ -83,13 +122,15 @@ fn expect(project: &Project, code: &str) -> Result {
     );
     Ok(())
 }
-fn relation(project: &mut Project, id: &str, kind: &str, from: &str, to: &str) -> Result {
-    project.relations.push(serde_json::from_value(
-        json!({"id":id,"kind":kind,"from":from,"to":to}),
-    )?);
+fn relation(project: &mut Value, id: &str, kind: &str, from: &str, to: &str) -> Result {
+    project["relations"]
+        .as_array_mut()
+        .ok_or("relations")?
+        .push(json!({"id":id,"kind":kind,"from":from,"to":to}));
+    *project = import_document(project)?;
     Ok(())
 }
-fn constrain(project: &mut Project, target: &str) -> Result {
+fn constrain(project: &mut Value, target: &str) -> Result {
     author(
         project,
         "formal",
@@ -97,8 +138,11 @@ fn constrain(project: &mut Project, target: &str) -> Result {
         json!([{"$ref":target}]),
     )
 }
-fn substitution(project: &mut Project) -> Result {
-    project.elements.push(serde_json::from_value(json!({"id":"class-substitution","kind":"uml.substitution","name":"Substitute","properties":{"contract":{"$ref":"formal-type"}}}))?);
+fn substitution(project: &mut Value) -> Result {
+    project["elements"]
+        .as_array_mut()
+        .ok_or("elements")?
+        .push(json!({"id":"class-substitution","kind":"uml.substitution","name":"Substitute","properties":{"contract":{"$ref":"formal-type"}}}));
     relation(
         project,
         "owns-class-substitution",
@@ -123,7 +167,7 @@ fn identity_conformance_and_unrelated_are_distinct_in_root_and_draft() -> Result
             "formal-type",
         )?;
         assert!(issues(&project)?.is_empty());
-        for format in [Format::Json, Format::Protobuf] {
+        for format in ["json", "protobuf"] {
             let reopened = decode(&encode(&project, format)?, format)?;
             assert!(issues(&reopened)?.is_empty());
         }
@@ -144,7 +188,7 @@ fn disabling_substitution_rolls_back_and_invalid_snapshot_can_be_repaired() -> R
     )?;
     substitution(&mut project)?;
     author(&mut project, "formal", "allowSubstitutable", json!(true))?;
-    let before = encode(&project, Format::Json)?;
+    let before = encode(&project, "json")?;
     let error = apply(
         &project,
         &Command::SetProperty {
@@ -156,9 +200,9 @@ fn disabling_substitution_rolls_back_and_invalid_snapshot_can_be_repaired() -> R
     )
     .expect_err("actual needs Substitution alternative");
     assert!(error.contains(RULE), "{error}");
-    assert_eq!(before, encode(&project, Format::Json)?);
+    assert_eq!(before, encode(&project, "json")?);
     author(&mut project, "formal", "allowSubstitutable", json!(false))?;
-    for format in [Format::Json, Format::Protobuf] {
+    for format in ["json", "protobuf"] {
         let reopened = decode(&encode(&project, format)?, format)?;
         expect(&reopened, ERROR)?;
         let repaired = apply(

@@ -2,10 +2,60 @@ use crate::class::ViewAppearance;
 use bellatrix_design_system::Palette;
 use bellatrix_mde_cordis::LineMode;
 use bellatrix_mde_cordis::presentation_contract::InterfacePresentation;
+use bellatrix_mde_cordis::projection::InterfaceIconGlyph;
 use gpui::{
     AnyElement, Bounds, IntoElement, PathBuilder, Pixels, SharedString, Window, canvas, div, point,
     prelude::*, px,
 };
+
+pub fn render_interface_icon(
+    glyphs: Vec<InterfaceIconGlyph>,
+    appearance: ViewAppearance,
+    palette: Palette,
+    selected: bool,
+    scale: f32,
+) -> AnyElement {
+    canvas(
+        |_, _, _| (),
+        move |bounds, (), window, _| {
+            if !scale.is_finite() || scale <= 0.0 { return; }
+            for glyph in &glyphs {
+                let (center, radius, start, sweep, filled) = match glyph {
+                    InterfaceIconGlyph::Ball { center, radius } => (*center, *radius, 0.0, std::f64::consts::TAU, true),
+                    InterfaceIconGlyph::Socket { center, radius, start_angle, sweep_angle } => (*center, *radius, *start_angle, *sweep_angle, false),
+                };
+                if radius <= 0.0 || ![center.x, center.y, radius, start, sweep].iter().all(|value| value.is_finite()) {
+                    continue;
+                }
+                let steps = if filled { 64 } else { 32 };
+                let points = (0..=steps).map(|step| {
+                    let angle = start + sweep * f64::from(step) / f64::from(steps);
+                    let x = (center.x + radius * angle.cos()) * f64::from(scale);
+                    let y = (center.y + radius * angle.sin()) * f64::from(scale);
+                    if !x.is_finite() || !y.is_finite() || !(x as f32).is_finite() || !(y as f32).is_finite() { return None; }
+                    Some(point(bounds.origin.x + px(x as f32), bounds.origin.y + px(y as f32)))
+                }).collect::<Option<Vec<_>>>();
+                let Some(points) = points else { continue; };
+                if filled {
+                    let mut fill = PathBuilder::fill();
+                    fill.add_polygon(&points, true);
+                    match fill.build() {
+                        Ok(path) => window.paint_path(path, appearance.fill(palette.panel)),
+                        Err(error) => log::error!("UML interface icon fill: {error}"),
+                    }
+                }
+                let mut outline = PathBuilder::stroke(px(appearance.width(1.0, scale, selected)));
+                let pattern = appearance.resolve_stroke_pattern(LineMode::Solid, scale);
+                if !pattern.is_empty() { outline = outline.dash_array(&pattern); }
+                outline.add_polygon(&points, filled);
+                match outline.build() {
+                    Ok(path) => window.paint_path(path, appearance.stroke(palette, selected)),
+                    Err(error) => log::error!("UML interface icon outline: {error}"),
+                }
+            }
+        },
+    ).absolute().top_0().left_0().size_full().into_any_element()
+}
 
 pub(crate) struct InterfaceFigure {
     pub(crate) presentation: InterfacePresentation,

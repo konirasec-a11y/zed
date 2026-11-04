@@ -237,14 +237,20 @@ impl Render for MdeLeftPanel {
             )
         };
         let catalog = snapshot.as_ref().map(|snapshot| snapshot.section.tools.clone()).unwrap_or_default();
+        let profile = active.as_deref().and_then(|id| catalog.profiles.get(id)).cloned();
+        let native_tools = profile.as_ref().is_none_or(|profile| !profile.available_tools.is_empty());
+        let chosen = chosen.filter(|tool| catalog.allows_tool(active.as_deref(), *tool));
         let mut diagrams = Vec::new();
         if let Some(snapshot) = &snapshot {
             for diagram in &snapshot.section.diagrams {
                 let diagram_id = diagram.id.clone();
                 let owner = item.clone();
                 let diagram_kind = diagram.kind
-                    .map(crate::workbench_ui::diagram_kind_label)
-                    .unwrap_or("Unsupported diagram");
+                    .map(|kind| crate::workbench_ui::diagram_kind_label(kind).to_owned())
+                    .unwrap_or_else(|| diagram.type_label.clone());
+                let display_name = diagram.owner_label.as_ref()
+                    .map(|owner| format!("{} · {owner}", diagram.name))
+                    .unwrap_or_else(|| diagram.name.clone());
                 diagrams.push(
                     div()
                         .flex()
@@ -254,15 +260,10 @@ impl Render for MdeLeftPanel {
                         .when(active.as_deref() == Some(diagram_id.as_str()), |row| {
                             row.bg(palette.surface)
                         })
-                        .child(
-                            svg()
-                                .data(glyph(ShapeKind::Class))
-                                .size(px(14.0))
-                                .text_color(palette.muted),
-                        )
+                        .child(crate::workbench_ui::hierarchy::explorer_diagram_icon(&diagram.uml_di_type, &palette))
                         .child(
                             div().flex_1().min_w_0().child(
-                                TreeViewItem::new(diagram_id.clone(), diagram.name.clone())
+                                TreeViewItem::new(diagram_id.clone(), display_name)
                                     .tooltip(ui::Tooltip::text(diagram_kind))
                                     .toggle_state(active.as_deref() == Some(diagram_id.as_str()))
                                     .on_click(move |_, window, cx| {
@@ -297,10 +298,12 @@ impl Render for MdeLeftPanel {
                     })
                 })
         });
-        let tool_groups = catalog.groups.iter().map(|group| (group.name.clone(), group.tools.clone())).collect::<Vec<_>>();
+        let tool_groups = catalog.groups.iter().map(|group| (group.name.clone(), group.tools.iter().copied()
+            .filter(|tool| catalog.allows_tool(active.as_deref(), *tool)).collect::<Vec<_>>())).collect::<Vec<_>>();
         let query = self.search_input.read(cx).text(cx).trim().to_lowercase();
         let searching = !query.is_empty();
         let mut tool_buttons: Vec<gpui::AnyElement> = Vec::new();
+        if native_tools {
         if !searching {
             tool_buttons.push(
                 div()
@@ -323,7 +326,7 @@ impl Render for MdeLeftPanel {
             .into_iter()
             .enumerate()
             {
-                if catalog.label(tool).is_none() { continue; }
+                if !catalog.allows_tool(active.as_deref(), tool) { continue; }
                 tool_buttons.push(tool_entry(
                     format!("mde-quick-tool-{index}"),
                     tool,
@@ -424,6 +427,28 @@ impl Render for MdeLeftPanel {
                     .into_any_element(),
             );
         }
+        }
+        if let Some(profile) = &profile {
+            let owner = item.clone();
+            tool_buttons.push(div().p_2().child(
+                Button::new("mde-domain-select", "Select")
+                    .on_click(move |_, _, cx| owner.update(cx, |workbench, cx| workbench.cancel_tool(cx)))
+            ).into_any_element());
+            tool_buttons.push(div().px_2().py_1().text_xs().text_color(palette.muted)
+                .child(profile.label.clone()).into_any_element());
+            for (index, tool) in profile.unavailable_tools.iter().enumerate() {
+                tool_buttons.push(div().px_2().py_1().child(
+                    Button::new(format!("mde-unavailable-domain-tool-{index}"), format!("{} · unavailable", tool.label))
+                        .disabled(true)
+                        .tooltip(ui::Tooltip::text(tool.reason.clone()))
+                ).into_any_element());
+            }
+            if !native_tools {
+                tool_buttons.push(div().p_2().text_xs().text_color(palette.muted)
+                    .child("Imported diagram: selection and inspection are available. Creation tools for this domain are not implemented yet.")
+                    .into_any_element());
+            }
+        }
         let project_name = snapshot.as_ref().map_or_else(
             || "Project unavailable".to_owned(),
             |snapshot| snapshot.name.clone(),
@@ -476,7 +501,7 @@ impl Render for MdeLeftPanel {
                                     cx.notify();
                                 }),
                             )
-                            .when(!read_only, |header| {
+                            .when(!read_only && profile.is_none(), |header| {
                                 header.action(ui::DropdownMenu::new(
                                     "mde-new-diagram",
                                     "",
@@ -569,7 +594,7 @@ impl Render for MdeLeftPanel {
                                 cx.notify();
                             }),
                         )
-                        .when(!read_only, |header| {
+                        .when(!read_only && native_tools, |header| {
                             let draft_owner = item.clone();
                             header.action(div().flex().items_center().gap_1().child(ui::IconButton::new("mde-visual-draft-mode", IconName::Pencil)
                                 .aria_label("Visual draft mode")
@@ -602,8 +627,8 @@ impl Render for MdeLeftPanel {
                             ))
                         }),
                     )
-                    .when(self.toolbox_open && !read_only, |pane| {
-                        pane.when(self.search_open, |pane| {
+                    .when(self.toolbox_open && (!read_only || profile.is_some()), |pane| {
+                        pane.when(self.search_open && native_tools && !read_only, |pane| {
                             pane.child(div().p_2().child(self.search_input.clone()))
                         })
                         .child(
@@ -652,7 +677,7 @@ impl Render for MdeLeftPanel {
                                     ),
                             )
                         })
-                        .child(
+                        .when(native_tools && !read_only, |pane| pane.child(
                             div().flex_none().px_2().py_1().child(
                                     ui::IconButton::new(
                                         "bellatrix-open-symbol-library",
@@ -666,7 +691,7 @@ impl Render for MdeLeftPanel {
                                         },
                                     ),
                                 ),
-                        )
+                        ))
                     }),
             )
             .into_any_element()

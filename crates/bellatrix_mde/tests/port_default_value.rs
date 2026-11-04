@@ -1,15 +1,57 @@
 use bellatrix_mde::{
-    Format, Project,
-    commands::{Command, apply},
-    decode, encode, validate_uml_model,
+    apply_model_command, decode_model_document, encode_model_document, encode_model_section,
+    prepare_model_document, validate_uml_model,
 };
+use bellatrix_mde_protocol::Command;
 use serde_json::{Value, json};
 
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+fn envelope(model: &Value) -> String {
+    json!({"api_version": 1, "model": model}).to_string()
+}
+
+fn decode(document: &[u8], format: &str) -> Result<Value> {
+    let response = decode_model_document(document, format)?;
+    let mut response: Value = serde_json::from_str(&response)?;
+    Ok(response["model"].take())
+}
+
+fn encode(model: &Value, format: &str) -> Result<Vec<u8>> {
+    Ok(encode_model_document(&envelope(model), format)?)
+}
+
+fn import_document(model: &Value) -> Result<Value> {
+    decode(&serde_json::to_vec(model)?, "json")
+}
+
+fn apply(model: &Value, command: &Command, revision: u64) -> std::result::Result<Value, String> {
+    let document = prepare_model_document(&envelope(model))?;
+    let section = apply_model_command(
+        &document.id,
+        &document.name,
+        &document.section_json,
+        revision,
+        command.clone(),
+        false,
+    )?;
+    let bytes = encode_model_section(&document.id, &document.name, &section.to_string(), "json")?;
+    decode(&bytes, "json").map_err(|error| error.to_string())
+}
+
+fn element_mut<'a>(model: &'a mut Value, id: &str) -> Result<&'a mut Value> {
+    model["elements"]
+        .as_array_mut()
+        .ok_or("elements")?
+        .iter_mut()
+        .find(|element| element["id"] == id)
+        .ok_or_else(|| format!("missing element {id}").into())
+}
+
 const RULE: &str = "UML_PORT_DEFAULT_VALUE";
 
-fn document(type_id: &str, default: bool) -> Result<Project> {
-    let mut project: Project = serde_json::from_value(json!({
+fn document(type_id: &str, default: bool) -> Result<Value> {
+    let mut project = json!({
         "id":"project", "name":"Port default", "root_model":"root",
         "elements":[
             {"id":"root", "kind":"uml.model", "name":"Root"},
@@ -26,30 +68,25 @@ fn document(type_id: &str, default: bool) -> Result<Project> {
             {"id":"owns-interface", "kind":"owns", "from":"root", "to":"interface"},
             {"id":"owns-port", "kind":"owns", "from":"owner", "to":"port"}
         ]
-    }))?;
+    });
     if default {
-        project.elements.push(serde_json::from_value(json!({
+        project["elements"].as_array_mut().ok_or("elements")?.push(json!({
             "id":"value", "kind":"uml.literal_integer", "name":"", "properties":{"value":0, "visibility":null}
-        }))?);
-        project.relations.push(serde_json::from_value(json!({
+        }));
+        project["relations"].as_array_mut().ok_or("relations")?.push(json!({
             "id":"owns-value", "kind":"owns", "from":"port", "to":"value"
-        }))?);
-        author(&mut project, "defaultValue", json!({"$ref":"value"}));
+        }));
+        author(&mut project, "defaultValue", json!({"$ref":"value"}))?;
     }
-    Ok(project)
+    import_document(&project)
 }
 
-fn author(project: &mut Project, key: &str, value: Value) {
-    project
-        .elements
-        .iter_mut()
-        .find(|element| element.id == "port")
-        .expect("Port")
-        .properties
-        .insert(key.into(), value);
+fn author(project: &mut Value, key: &str, value: Value) -> Result {
+    element_mut(project, "port")?["properties"][key] = value;
+    Ok(())
 }
 
-fn diagnostics(project: &Project) -> Result<Vec<Value>> {
+fn diagnostics(project: &Value) -> Result<Vec<Value>> {
     let input = json!({"api_version":1, "model":project}).to_string();
     let response: Value = serde_json::from_str(&validate_uml_model(&input)?)?;
     Ok(response["diagnostics"]
@@ -85,18 +122,13 @@ fn given_interface_typed_port_then_only_nonempty_resolved_default_is_forbidden()
         1,
         "{issues:#?}"
     );
-    for format in [Format::Json, Format::Protobuf] {
+    for format in ["json", "protobuf"] {
         let reopened = decode(&encode(&invalid, format)?, format)?;
         assert_eq!(reopened, invalid);
         assert_eq!(diagnostics(&reopened)?, issues);
     }
     let mut attribute = invalid.clone();
-    attribute
-        .elements
-        .iter_mut()
-        .find(|element| element.id == "port")
-        .ok_or("property missing")?
-        .kind = "uml.attribute".into();
+    element_mut(&mut attribute, "port")?["kind"] = json!("uml.attribute");
     assert!(!diagnostics(&attribute)?.iter().any(rule_diagnostic));
     Ok(())
 }
@@ -104,7 +136,7 @@ fn given_interface_typed_port_then_only_nonempty_resolved_default_is_forbidden()
 #[test]
 fn when_type_changes_to_interface_then_default_conflict_rolls_back_and_can_be_repaired() -> Result {
     let project = document("class", true)?;
-    let before = encode(&project, Format::Json)?;
+    let before = encode(&project, "json")?;
     let change = Command::SetProperty {
         element_id: "port".into(),
         path: "properties.type".into(),
@@ -115,7 +147,7 @@ fn when_type_changes_to_interface_then_default_conflict_rolls_back_and_can_be_re
         matches!(result, Err(ref error) if error.contains(RULE)),
         "{result:?}"
     );
-    assert_eq!(encode(&project, Format::Json)?, before);
+    assert_eq!(encode(&project, "json")?, before);
     let invalid = document("interface", true)?;
     let repaired = apply(
         &invalid,
@@ -133,14 +165,14 @@ fn when_type_changes_to_interface_then_default_conflict_rolls_back_and_can_be_re
 #[test]
 fn legacy_default_editor_rejects_reference_objects_without_partial_changes() -> Result {
     let mut project = document("interface", true)?;
-    author(&mut project, "defaultValue", Value::Null);
-    author(&mut project, "lowerValue", json!({"$ref":"value"}));
+    author(&mut project, "defaultValue", Value::Null)?;
+    author(&mut project, "lowerValue", json!({"$ref":"value"}))?;
     assert!(
         !diagnostics(&project)?
             .iter()
             .any(|issue| issue["severity"] == "error")
     );
-    let before = encode(&project, Format::Json)?;
+    let before = encode(&project, "json")?;
     let result = apply(
         &project,
         &Command::SetProperty {
@@ -154,6 +186,6 @@ fn legacy_default_editor_rejects_reference_objects_without_partial_changes() -> 
         matches!(result, Err(ref error) if error == "expected string"),
         "{result:?}"
     );
-    assert_eq!(encode(&project, Format::Json)?, before);
+    assert_eq!(encode(&project, "json")?, before);
     Ok(())
 }
