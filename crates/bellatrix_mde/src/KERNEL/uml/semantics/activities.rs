@@ -576,19 +576,37 @@ fn create_object_same_type(
     Ok(result_type.as_deref() == Some(classifier.as_str()))
 }
 
-// UML.xmi CreateObjectAction-classifier_not_abstract: not classifier.isAbstract.
-fn create_object_classifier_not_abstract(
-    references: &ReferenceIndex<'_>,
+// Resolve the required classifier through its normative reference contract.
+// Unknown metaclasses cannot become a negative oclIsKindOf result.
+fn create_object_classifier<'a>(
+    references: &ReferenceIndex<'a>,
     action: ElementRef<'_>,
-) -> Result<bool, QueryError> {
+) -> Result<ElementRef<'a>, QueryError> {
     let classifier_id =
         optional_activity_reference(references, action, "CreateObjectAction", "classifier")?
             .ok_or_else(|| {
                 QueryError::unsupported(action.id(), "required classifier is unresolved")
             })?;
-    let classifier = references
+    references
         .element(&classifier_id)
-        .map_err(|error| QueryError::unsupported(action.id(), error))?;
+        .map_err(|error| QueryError::unsupported(action.id(), error))
+}
+
+// UML.xmi CreateObjectAction-classifier_not_association_class.
+fn create_object_classifier_not_association_class(
+    references: &ReferenceIndex<'_>,
+    action: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    create_object_classifier(references, action)
+        .map(|classifier| !classifier.conforms_to("AssociationClass"))
+}
+
+// UML.xmi CreateObjectAction-classifier_not_abstract: not classifier.isAbstract.
+fn create_object_classifier_not_abstract(
+    references: &ReferenceIndex<'_>,
+    action: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let classifier = create_object_classifier(references, action)?;
     // This is the model Classifier's isAbstract property, not whether its UML
     // metaclass is abstract. Missing references cannot inherit a Boolean default.
     schema::read_effective_boolean(classifier, "isAbstract")
@@ -1225,6 +1243,13 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             ));
         }
         if node.conforms_to("CreateObjectAction") {
+            checks.push((
+                create_object_classifier_not_association_class(references, node),
+                "UML_CREATE_OBJECT_ACTION_CLASSIFIER_NOT_ASSOCIATION_CLASS",
+                "MDE_CREATE_OBJECT_ACTION_CLASSIFIER_NOT_ASSOCIATION_CLASS_UNVERIFIED",
+                "CreateObjectAction-classifier_not_association_class",
+                "a CreateObjectAction cannot instantiate an AssociationClass",
+            ));
             checks.push((
                 create_object_result_multiplicity(references, node),
                 "UML_CREATE_OBJECT_ACTION_MULTIPLICITY",
