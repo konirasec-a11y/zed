@@ -635,23 +635,28 @@ fn validate_association(
     references: &ReferenceIndex<'_>,
     association: ElementRef<'_>,
 ) -> Result<(), String> {
-    if let Some(issue) = association_end_constraints(references, association)
-        .into_iter()
-        .min_by_key(|issue| issue.severity != StructuralSeverity::Error)
+    let end_issues = association_end_constraints(references, association);
+    let structure = if member_ends(references, association.id()).is_ok() {
+        validate_association_structure(references, association, end_issues.is_empty())
+    } else {
+        Ok(())
+    };
+    if let Some(issue) = end_issues
+        .iter()
+        .find(|issue| issue.severity == StructuralSeverity::Error)
     {
-        return Err(if issue.severity == StructuralSeverity::Error {
-            issue.message
-        } else {
-            format!("Unsupported {}", issue.message)
-        });
+        return Err(issue.message.clone());
     }
-    validate_association_structure(references, association, true)
+    structure?;
+    end_issues.first().map_or(Ok(()), |issue| {
+        Err(format!("Unsupported {}", issue.message))
+    })
 }
 
 fn validate_association_structure(
     references: &ReferenceIndex<'_>,
     association: ElementRef<'_>,
-    evaluate_member_constraints: bool,
+    evaluate_type_constraints: bool,
 ) -> Result<(), String> {
     if association.properties().contains_key("endType") {
         return Err(
@@ -667,11 +672,7 @@ fn validate_association_structure(
                 .into(),
         );
     }
-    // Ownership/navigation do not depend on resolved end Types. Preserve their
-    // independent diagnostics before suspending the remaining member queries.
-    if !evaluate_member_constraints {
-        return Ok(());
-    }
+    let mut unresolved = None;
     for (index, end) in ends.iter().enumerate() {
         let owner = references
             .model()
@@ -694,7 +695,7 @@ fn validate_association_structure(
                         .into(),
                 );
             }
-            if ends.len() == 2 {
+            if ends.len() == 2 && evaluate_type_constraints {
                 let other = ends
                     .get(1 - index)
                     .ok_or("binary opposite end is missing")?;
@@ -709,24 +710,43 @@ fn validate_association_structure(
             Err(error) if error.is_unsupported() => {}
             Err(error) => return Err(format!("Property {} multiplicity: {error}", end.id)),
         }
-        if is_composite(end)? {
+        // opposite is defined only for binary Associations. The independent
+        // binary_associations predicate diagnoses aggregation on n-ary ends.
+        if is_composite(end)? && ends.len() == 2 {
             let other = ends
                 .get(1 - index)
                 .ok_or("composite Association must be binary")?;
-            let range = multiplicity(references, other).map_err(|error| match error {
-                error if error.is_unsupported() => format!(
-                    "Unsupported Property::multiplicity_of_composite evaluation of opposite bound: {error}"
-                ),
-                _ => format!("Property::multiplicity_of_composite invalid opposite bound: {error}"),
-            })?;
-            if range
-                .upper_bound()
+            // UML Property-multiplicity_of_composite needs only upperBound;
+            // neither the opposite Type nor an unevaluated lower bound matters.
+            let upper = match value_specifications::upper_bound(
+                references,
+                ElementRef::Object(other),
+            ) {
+                Ok(upper) => upper,
+                Err(error) if error.is_unsupported() => {
+                    unresolved.get_or_insert_with(|| format!(
+                        "Unsupported Property::multiplicity_of_composite evaluation of opposite bound: {error}"
+                    ));
+                    continue;
+                }
+                Err(error) => {
+                    return Err(format!(
+                        "Property::multiplicity_of_composite invalid opposite bound: {error}"
+                    ));
+                }
+            };
+            if upper
                 .finite_value()
                 .is_none_or(|upper| upper > &Integer::from(1))
             {
                 return Err("Property::multiplicity_of_composite requires the opposite end upper bound to be at most 1".into());
             }
         }
+    }
+    // Ownership, multiplicity and composition above are independent of Type
+    // resolution. Only the remaining projections/comparisons require all Types.
+    if !evaluate_type_constraints {
+        return unresolved.map_or(Ok(()), Err);
     }
     if let ElementRef::Relationship(relation) = association {
         if ends.len() != 2 {
@@ -800,7 +820,7 @@ fn validate_association_structure(
             association.metaclass().unwrap_or("Association subtype"),
         ));
     }
-    Ok(())
+    unresolved.map_or(Ok(()), Err)
 }
 
 fn validate_specialization(

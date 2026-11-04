@@ -156,8 +156,10 @@ Without a decisive local counterexample, unresolved evidence produces
 `MDE_ASSOCIATION_END_TYPES_UNVERIFIED` or
 `MDE_ASSOCIATION_AGGREGATION_UNVERIFIED`. Malformed collections and local values
 remain errors. The editing gate uses the same predicates; validation does not
-materialize or repair incomplete ends. Ownership and navigation checks remain
-independent of resolved end Types. These diagnostics describe the implemented
+materialize or repair incomplete ends. Ownership, navigation, multiplicity and
+composition checks remain independent of resolved end Types. Composite opposite
+checks use `upperBound()` without requiring the lower bound to be evaluated.
+These diagnostics describe the implemented
 rules, not complete UML conformance or a complete `memberEnd` query.
 
 UML type compatibility uses one shared, iterative Generalization traversal for
