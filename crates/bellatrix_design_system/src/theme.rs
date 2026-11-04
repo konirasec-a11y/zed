@@ -1,14 +1,8 @@
-//! Bellatrix's native Zed GPUI palette, derived from docs/design/src/styles/tokens.css.
+//! Bellatrix's native Zed GPUI palette.
 //! The Zed theme owns appearance and lifecycle; these are semantic color roles.
 
 use gpui::{App, Hsla};
 use ui::prelude::ActiveTheme;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ThemeMode {
-    Dark,
-    Light,
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Palette {
@@ -26,9 +20,7 @@ pub struct Palette {
 }
 
 impl Palette {
-    /// Colors belong to the user's active Zed theme, not to a fixed
-    /// Bellatrix light/dark palette. Retain `for_mode` only for standalone
-    /// previews and deterministic contrast tests.
+    /// Colors belong to the user's active Zed theme, not to a fixed Bellatrix palette.
     pub fn current(cx: &App) -> Self {
         let c = cx.theme().colors();
         let rgb24 = |color: Hsla| {
@@ -55,66 +47,6 @@ impl Palette {
     /// Diagram silhouettes need foreground contrast, unlike subtle UI separators.
     pub const fn diagram_outline(self, selected: bool) -> u32 {
         if selected { self.selection } else { self.text }
-    }
-
-    pub const fn for_mode(mode: ThemeMode) -> Self {
-        match mode {
-            ThemeMode::Dark => Self {
-                bar: 0x1b1d20,
-                rail: 0x1e2023,
-                panel: 0x222427,
-                panel_alt: 0x292b30,
-                canvas: 0x24272c,
-                border: 0x373b41,
-                text: 0xf0f1f3,
-                muted: 0x9ba0a9,
-                accent: 0x88b1fa,
-                selected: 0x2c3749,
-                selection: 0x83b5ff,
-            },
-            ThemeMode::Light => Self {
-                bar: 0xf7f8fa,
-                rail: 0xf7f8fa,
-                panel: 0xfdfdfd,
-                panel_alt: 0xf3f5f7,
-                canvas: 0xfafbfc,
-                border: 0xdee2e7,
-                text: 0x20262e,
-                muted: 0x697380,
-                accent: 0x3974cf,
-                selected: 0xe7effa,
-                selection: 0x3a7fe2,
-            },
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Density {
-    Comfortable,
-    Compact,
-}
-
-impl Density {
-    pub const fn toolbar_height(self) -> f32 {
-        match self {
-            Self::Compact => 30.,
-            Self::Comfortable => 36.,
-        }
-    }
-
-    pub const fn row_height(self) -> f32 {
-        match self {
-            Self::Compact => 26.,
-            Self::Comfortable => 32.,
-        }
-    }
-
-    pub const fn activity_rail_width(self) -> f32 {
-        match self {
-            Self::Compact => 40.,
-            Self::Comfortable => 44.,
-        }
     }
 }
 
