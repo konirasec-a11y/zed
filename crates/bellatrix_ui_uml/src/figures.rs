@@ -8,8 +8,9 @@ use crate::{
 };
 use bellatrix_design_system::Palette;
 use bellatrix_mde_cordis::presentation_contract::{
-    FigurePresentation, InterfacePresentation, RenderStyle, UmlHeader, UmlNotation,
+    FigurePresentation, RenderStyle, UmlHeader, UmlNotation,
 };
+use bellatrix_mde_cordis::projection::InterfaceIconProjection;
 use bellatrix_mde_cordis::{LineMode, TimingPresentation};
 use gpui::{
     App, Entity, InteractiveElement, IntoElement, MouseButton, PathBuilder, RenderOnce,
@@ -25,13 +26,15 @@ pub struct UmlFigure {
     header: UmlHeader,
     title_underlined: bool,
     history_label: String,
-    interface_presentation: Option<InterfacePresentation>,
+    interface_icon: Option<InterfaceIconProjection>,
     context_frame_kind: Option<String>,
     timing_presentation: Option<TimingPresentation>,
     name: SharedString,
     slot_labels: Vec<String>,
     interaction_operator: Option<String>,
     has_nested_views: bool,
+    authored_contents: bool,
+    divider: bool,
     composite_role: bool,
     selected: bool,
     scale: f32,
@@ -48,7 +51,11 @@ impl UmlFigure {
             || presentation.timing.is_some()
             || matches!(
                 presentation.notation,
-                UmlNotation::PackageTab
+                UmlNotation::Rectangle
+                    | UmlNotation::Label
+                    | UmlNotation::Compartment
+                    | UmlNotation::Unsupported
+                    | UmlNotation::PackageTab
                     | UmlNotation::FoldedNote
                     | UmlNotation::Frame
                     | UmlNotation::AssociationDiamond
@@ -86,13 +93,15 @@ impl UmlFigure {
             header: presentation.header,
             title_underlined: presentation.title_underlined,
             history_label: presentation.history_label,
-            interface_presentation: presentation.interface,
+            interface_icon: None,
             context_frame_kind: presentation.frame_kind,
             timing_presentation: presentation.timing,
             name: name.into(),
             slot_labels: presentation.slot_labels,
             interaction_operator: presentation.interaction_operator,
             has_nested_views: false,
+            authored_contents: false,
+            divider: false,
             composite_role: presentation.composite_role,
             selected: false,
             scale: 1.0,
@@ -103,6 +112,18 @@ impl UmlFigure {
             editor: None,
             template_parameters: None,
         }
+    }
+    pub fn interface_icon(mut self, projection: Option<InterfaceIconProjection>) -> Self {
+        self.interface_icon = projection;
+        self
+    }
+    pub fn authored_contents(mut self, authored: bool) -> Self {
+        self.authored_contents = authored;
+        self
+    }
+    pub fn divider(mut self, divider: bool) -> Self {
+        self.divider = divider;
+        self
     }
     pub fn nested_views(mut self, nested: bool) -> Self {
         self.has_nested_views = nested;
@@ -243,7 +264,7 @@ impl RenderOnce for UmlFigure {
         let applied_stereotype = self
             .header
             .applied_stereotype
-            .filter(|_| alignment.0.show_stereotype)
+            .filter(|_| alignment.0.show_stereotype && !self.authored_contents)
             .map(SharedString::from);
         let font_family = appearance.0.font_family.clone();
         let border = appearance.stroke(palette, selected);
@@ -264,7 +285,14 @@ impl RenderOnce for UmlFigure {
             .map(|element| alignment.align_text(element))
             .text_size(px(appearance.font_size(12.0, scale)))
             .text_color(appearance.text(palette.text))
-            .font_weight(gpui::FontWeight::SEMIBOLD)
+            .font_weight(if notation == UmlNotation::Label {
+                gpui::FontWeight::NORMAL
+            } else {
+                gpui::FontWeight::SEMIBOLD
+            })
+            .when(notation == UmlNotation::Label, |element| {
+                appearance.apply_text_style(element, 12.0, palette.text, scale)
+            })
             .on_mouse_down(MouseButton::Left, move |event, window, cx| {
                 if event.click_count >= 2 {
                     if let Some(handler) = &edit {
@@ -274,17 +302,19 @@ impl RenderOnce for UmlFigure {
                 }
             })
             .when(self.title_underlined, |element| element.underline())
-            .child(title);
-        if let Some(presentation) = self.interface_presentation {
+            .when(
+                !self.authored_contents || notation == UmlNotation::Unsupported,
+                |element| element.child(title),
+            );
+        if let Some(projection) = self.interface_icon {
             return InterfaceFigure {
-                presentation,
-                title: title_area.into_any_element(),
+                projection,
+                title: (!self.authored_contents).then(|| title_area.into_any_element()),
                 stereotype: applied_stereotype,
                 appearance,
                 palette,
                 selected,
                 scale,
-                height: self.view_height,
             }
             .render();
         }
@@ -315,6 +345,79 @@ impl RenderOnce for UmlFigure {
             .render();
         }
         let figure = match notation {
+            UmlNotation::Unsupported => div()
+                .size_full()
+                .border_1()
+                .border_color(gpui::rgb(palette.accent))
+                .rounded(px(6.0 * scale))
+                .bg(gpui::rgb(palette.panel_alt))
+                .p(px(6.0 * scale))
+                .flex()
+                .flex_col()
+                .gap(px(4.0 * scale))
+                .child(
+                    div()
+                        .text_size(px(10.0 * scale))
+                        .text_color(gpui::rgb(palette.accent))
+                        .child("Unsupported notation"),
+                )
+                .child(title_area)
+                .into_any_element(),
+            UmlNotation::Rectangle => div()
+                .size_full()
+                .relative()
+                .bg(appearance.fill(palette.panel))
+                .map(|element| {
+                    appearance.apply_rectangle_border(element, palette, selected, scale, 0.0)
+                })
+                .flex()
+                .flex_col()
+                .map(|element| alignment.align_column(element))
+                .child(title_area)
+                .into_any_element(),
+            UmlNotation::Label => div()
+                .size_full()
+                .flex()
+                .flex_col()
+                .map(|element| alignment.align_column(element))
+                .child(title_area)
+                .into_any_element(),
+            UmlNotation::Compartment => div()
+                .size_full()
+                .relative()
+                .when(self.divider, |element| {
+                    element.child(
+                        canvas(
+                            |_, _, _| (),
+                            move |bounds, (), window, _| {
+                                let width = appearance.width(1.0, scale, selected);
+                                let pattern =
+                                    appearance.resolve_stroke_pattern(LineMode::Solid, scale);
+                                let mut outline = PathBuilder::stroke(px(width));
+                                if !pattern.is_empty() {
+                                    outline = outline.dash_array(&pattern);
+                                }
+                                let top = bounds.origin.y + px(width / 2.0);
+                                outline.add_polygon(
+                                    &[
+                                        point(bounds.origin.x, top),
+                                        point(bounds.origin.x + bounds.size.width, top),
+                                    ],
+                                    false,
+                                );
+                                match outline.build() {
+                                    Ok(path) => {
+                                        window.paint_path(path, appearance.stroke(palette, selected))
+                                    }
+                                    Err(error) => log::error!("UML compartment divider: {error}"),
+                                }
+                            },
+                        )
+                        .absolute()
+                        .size_full(),
+                    )
+                })
+                .into_any_element(),
             UmlNotation::FoldedNote => div()
                 .size_full()
                 .relative()

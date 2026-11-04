@@ -440,18 +440,7 @@ pub(crate) fn apply_with_diagram_operations(
             diagram_operations,
         );
     }
-    if match command {
-        Command::SetOwner { element_id, .. } | Command::DeleteElement { element_id } => {
-            project.composition.contains_key(element_id)
-        }
-        Command::DeleteDiagram { diagram_id } => project.composition.contains_key(diagram_id),
-        Command::SetExplorerParent { subject_id, .. } => {
-            project.composition.contains_key(subject_id)
-        }
-        _ => false,
-    } {
-        return Err("Imported document composition is read-only for moves and deletion until a lossless MDJ inverse is available".into());
-    }
+    crate::composition_paths(project)?;
     let previous_section = ModelingSection::from_model(project);
     let mut section = previous_section.clone();
     if let Command::SetProperty {
@@ -772,7 +761,7 @@ pub(crate) fn apply_with_diagram_operations(
         Command::MoveView { view_id, .. } | Command::ResizeView { view_id, .. } => project
             .diagrams
             .iter()
-            .flat_map(|diagram| &diagram.views)
+            .flat_map(|diagram| diagram.all_views())
             .any(|view| view.id == *view_id && view.draft.is_some()),
         Command::RemoveView {
             diagram_id,
@@ -809,14 +798,10 @@ pub(crate) fn apply_with_diagram_operations(
         crate::uml::associations::synchronize_changes(&previous_section, &mut section)?;
         crate::uml::associations::validate_authoring_changes(&previous_section, &section)?;
     }
+    update_composition_placement(&previous_section, &mut section, &project.id, command)?;
     let mut updated = section.to_model(&project.id, &project.name);
     updated.schema_version = project.schema_version;
-    if crate::composition_paths(&updated)? != crate::composition_paths(project)? {
-        return Err(
-            "Document composition changes are not yet supported losslessly; no change was applied"
-                .into(),
-        );
-    }
+    crate::composition_paths(&updated)?;
     crate::validate_model_hierarchy(&updated)?;
     // Explorer placement must not be blocked by unrelated semantic or diagram drafts.
     if matches!(command, Command::SetExplorerParent { .. }) {
@@ -829,7 +814,122 @@ pub(crate) fn apply_with_diagram_operations(
     Ok(updated)
 }
 
+fn update_composition_placement(
+    previous: &ModelingSection,
+    current: &mut ModelingSection,
+    project_id: &str,
+    command: &Command,
+) -> Result<(), String> {
+    if current.composition.is_empty() {
+        return Ok(());
+    }
+    let (subject, parent) = match command {
+        Command::SetOwner {
+            element_id,
+            owner_id,
+        } if current.composition.contains_key(element_id) =>
+        {
+            let parent = if owner_id.is_some() {
+                let ownership = current
+                    .relations
+                    .iter()
+                    .find(|relation| relation.kind == "owns" && relation.to == *element_id)
+                    .ok_or("composition placement requires the canonical ownership edge")?;
+                crate::CompositionParent::SemanticOwner {
+                    relation_id: ownership.id.clone(),
+                }
+            } else {
+                crate::CompositionParent::Object {
+                    id: project_id.into(),
+                }
+            };
+            (element_id, parent)
+        }
+        Command::SetExplorerParent {
+            subject_id,
+            parent_id,
+            ..
+        } if current.composition.contains_key(subject_id) => {
+            (
+                subject_id,
+                crate::CompositionParent::Object {
+                    id: parent_id.as_deref().unwrap_or(project_id).into(),
+                },
+            )
+        }
+        Command::DeleteElement { .. } | Command::DeleteDiagram { .. } => {
+            let identities: HashSet<_> = current
+                .elements
+                .iter()
+                .map(|element| element.id.as_str())
+                .chain(current.relations.iter().map(|relation| relation.id.as_str()))
+                .chain(current.diagrams.iter().map(|diagram| diagram.id.as_str()))
+                .collect();
+            current.composition.retain(|id, _| identities.contains(id.as_str()));
+            for (id, placement) in &current.composition {
+                let parent = placement.parent_id(id, &current.relations)
+                    .ok_or_else(|| format!("Cannot delete the ownership edge of surviving composition object {id}"))?;
+                if parent != project_id && !identities.contains(parent) {
+                    return Err(format!("Cannot delete container {parent} while composition object {id} remains; move or delete that object first"));
+                }
+            }
+            return Ok(());
+        }
+        _ => return Ok(()),
+    };
+    let mut placement = current
+        .composition
+        .get(subject)
+        .cloned()
+        .ok_or("composition placement disappeared")?;
+    placement.parent = parent;
+    let parent_id = placement
+        .parent_id(subject, &current.relations)
+        .ok_or("composition ownership reference is unresolved")?;
+    if parent_id != project_id && !current.composition.contains_key(parent_id) {
+        return Err(format!("Composition destination {parent_id} has no authored placement; no parent or order was inferred"));
+    }
+    let previous_parent = previous
+        .composition
+        .get(subject)
+        .and_then(|placement| placement.parent_id(subject, &previous.relations));
+    if previous_parent != Some(parent_id) && placement.order.is_some() {
+        // Keep sibling order and slots intact; only the moved object is appended.
+        let last = current
+            .composition
+            .iter()
+            .filter(|(id, sibling)| {
+                *id != subject && sibling.slot == placement.slot
+                    && sibling.parent_id(id, &current.relations) == Some(parent_id)
+            })
+            .filter_map(|(_, sibling)| sibling.order)
+            .max();
+        placement.order = Some(match last {
+            Some(order) => order.checked_add(1).ok_or("composition order overflow")?,
+            None => 0,
+        });
+    }
+    current.composition.insert(subject.clone(), placement);
+    Ok(())
+}
+
 fn ensure_visual_edit_supported(project: &Project, command: &Command) -> Result<(), String> {
+    if let Command::MoveView { view_id, .. } | Command::ResizeView { view_id, .. } = command {
+        let view = project
+            .diagrams
+            .iter()
+            .flat_map(|diagram| diagram.all_views())
+            .find(|view| view.id == *view_id)
+            .ok_or("view not found")?;
+        let mut pending = vec![view];
+        while let Some(view) = pending.pop() {
+            if matches!(view.geometry, Geometry::Layout { .. }) {
+                return Err("this View contains unresolved layout; its authored presentation was not changed".into());
+            }
+            pending.extend(view.children.iter());
+        }
+        return Ok(());
+    }
     let diagram = match command {
         Command::MoveView { view_id, .. } | Command::ResizeView { view_id, .. } => project
             .diagrams
@@ -1236,17 +1336,21 @@ fn move_view(section: &mut ModelingSection, view_id: &str, dx: f64, dy: f64) -> 
     let diagram_id = section
         .diagrams
         .iter()
-        .find(|diagram| diagram.views.iter().any(|view| view.id == view_id))
+        .find(|diagram| diagram.all_views().any(|view| view.id == view_id))
         .map(|diagram| diagram.id.clone())
         .ok_or("view not found")?;
     let view = section
         .diagrams
         .iter_mut()
-        .flat_map(|diagram| &mut diagram.views)
-        .find(|view| view.id == view_id)
+        .find_map(|diagram| diagram.view_mut(view_id))
         .ok_or("view not found")?;
     let subject = view.subject.clone();
-    view.geometry.translate(dx, dy);
+    let mut pending = vec![view];
+    while let Some(view) = pending.pop() {
+        view.geometry.translate(dx, dy);
+        pending.extend(view.children.iter_mut());
+    }
+    drop(pending);
     if let Some(subject) = subject {
         features::translate_contained_views(section, &diagram_id, &subject, dx, dy);
     }
@@ -1268,28 +1372,37 @@ fn resize_view(
     width: f64,
     height: f64,
 ) -> Result<(), String> {
-    let is_draft = section
+    let (is_draft, authored_layout) = section
         .diagrams
         .iter()
-        .flat_map(|diagram| &diagram.views)
+        .flat_map(|diagram| diagram.all_views())
         .find(|view| view.id == view_id)
-        .is_some_and(|view| view.draft.is_some());
+        .map(|view| {
+            (
+                view.draft.is_some(),
+                view.presentation.internal
+                    || view.children.iter().any(|child| child.presentation.internal)
+                    || matches!(view.presentation.notation_kind.as_deref(),
+                        Some("presentation.label" | "presentation.compartment" | "presentation.rectangle")),
+            )
+        })
+        .ok_or("view not found")?;
     if !width.is_finite() || !height.is_finite() || width <= 0.0 || height <= 0.0 {
         return Err("view dimensions must be finite and positive".into());
     }
-    if !is_draft && (width < 80.0 || height < 48.0) {
+    if !is_draft && !authored_layout && (width < 80.0 || height < 48.0) {
         return Err("view dimensions must be at least 80x48".into());
     }
     let diagram_id = section
         .diagrams
         .iter()
-        .find(|diagram| diagram.views.iter().any(|view| view.id == view_id))
+        .find(|diagram| diagram.all_views().any(|view| view.id == view_id))
         .map(|diagram| diagram.id.clone())
         .ok_or("view not found")?;
     let owner_id = section
         .diagrams
         .iter()
-        .flat_map(|diagram| &diagram.views)
+        .flat_map(|diagram| diagram.all_views())
         .find(|view| view.id == view_id)
         .and_then(|view| view.subject.clone());
     let minimum = owner_id
@@ -1318,29 +1431,45 @@ fn resize_view(
     let view = section
         .diagrams
         .iter_mut()
-        .flat_map(|diagram| &mut diagram.views)
-        .find(|view| view.id == view_id)
+        .find_map(|diagram| diagram.view_mut(view_id))
         .ok_or("view not found")?;
     let (minimum_width, minimum_part_height) = minimum.unwrap_or(notation_minimum);
-    match &mut view.geometry {
+    let (origin_x, origin_y, scale_x, scale_y) = match &mut view.geometry {
         Geometry::Rect {
+            x,
+            y,
             width: current_width,
             height: current_height,
-            ..
         } => {
-            *current_width = if is_draft {
+            if *current_width <= 0.0 || *current_height <= 0.0 {
+                return Err("node bounds must be positive before resizing contained Views".into());
+            }
+            let previous_width = *current_width;
+            let previous_height = *current_height;
+            *current_width = if authored_layout {
+                width.max(1.0)
+            } else if is_draft {
                 width
             } else {
                 width.max(minimum_width)
             };
-            *current_height = if is_draft {
+            *current_height = if authored_layout {
+                height.max(1.0)
+            } else if is_draft {
                 height
             } else {
                 height.max(minimum_height).max(minimum_part_height)
             };
+            (*x, *y, *current_width / previous_width, *current_height / previous_height)
         }
         _ => return Err("only node Views can be resized with this command".into()),
+    };
+    let mut pending: Vec<_> = view.children.iter_mut().collect();
+    while let Some(view) = pending.pop() {
+        scale_child_geometry(&mut view.geometry, origin_x, origin_y, scale_x, scale_y)?;
+        pending.extend(view.children.iter_mut());
     }
+    drop(pending);
     if let Some(owner_id) = owner_id {
         features::reposition_boundary_nodes(section, &diagram_id, &owner_id);
         features::layout_interaction_operands(section, &diagram_id, &owner_id);
@@ -1352,6 +1481,53 @@ fn resize_view(
         .find(|diagram| diagram.id == diagram_id)
     {
         crate::reroute_visual_drafts(diagram);
+    }
+    Ok(())
+}
+
+fn scale_child_geometry(
+    geometry: &mut Geometry,
+    origin_x: f64,
+    origin_y: f64,
+    scale_x: f64,
+    scale_y: f64,
+) -> Result<(), String> {
+    let scale_point = |point: &mut crate::Point| {
+        point.x = origin_x + (point.x - origin_x) * scale_x;
+        point.y = origin_y + (point.y - origin_y) * scale_y;
+    };
+    match geometry {
+        Geometry::Rect { x, y, width, height } => {
+            *x = origin_x + (*x - origin_x) * scale_x;
+            *y = origin_y + (*y - origin_y) * scale_y;
+            *width *= scale_x;
+            *height *= scale_y;
+        }
+        Geometry::Ellipse { cx, cy, rx, ry } => {
+            *cx = origin_x + (*cx - origin_x) * scale_x;
+            *cy = origin_y + (*cy - origin_y) * scale_y;
+            *rx *= scale_x;
+            *ry *= scale_y;
+        }
+        Geometry::Polygon { points } => {
+            for point in points {
+                scale_point(point);
+            }
+        }
+        Geometry::Path { start, segments } => {
+            scale_point(start);
+            for segment in segments {
+                match segment {
+                    crate::PathSegment::Line { to } => scale_point(to),
+                    crate::PathSegment::Cubic { control1, control2, to } => {
+                        scale_point(control1);
+                        scale_point(control2);
+                        scale_point(to);
+                    }
+                }
+            }
+        }
+        Geometry::Layout { .. } => return Err("contained View has unresolved layout".into()),
     }
     Ok(())
 }

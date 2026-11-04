@@ -7,7 +7,7 @@ use crate::{
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
-const STYLE_FIELDS: [&str; 15] = [
+const STYLE_FIELDS: [&str; 18] = [
     "fillColor",
     "lineColor",
     "fontColor",
@@ -23,6 +23,9 @@ const STYLE_FIELDS: [&str; 15] = [
     "showMultiplicity",
     "showOperationSignature",
     "stereotypeDisplay",
+    "suppressAttributes",
+    "suppressOperations",
+    "suppressReceptions",
 ];
 
 const PARENT_STYLE_PROPERTIES: [InheritedStyleProperty; 7] = [
@@ -226,6 +229,9 @@ pub(super) fn take_style(residual: &mut BTreeMap<String, Value>) -> Style {
     style.uml.show_property = take_boolean(residual, "showProperty");
     style.uml.show_multiplicity = take_boolean(residual, "showMultiplicity");
     style.uml.show_operation_signature = take_boolean(residual, "showOperationSignature");
+    style.uml.suppress_attributes = take_boolean(residual, "suppressAttributes");
+    style.uml.suppress_operations = take_boolean(residual, "suppressOperations");
+    style.uml.suppress_receptions = take_boolean(residual, "suppressReceptions");
     style.uml.stereotype_display = match residual.get("stereotypeDisplay").and_then(Value::as_str) {
         Some("none") => Some(crate::StereotypeDisplay::Hidden),
         Some("label") => Some(crate::StereotypeDisplay::Label),
@@ -352,6 +358,9 @@ pub(super) fn export_style(view: &View, object: &mut Map<String, Value>) -> Resu
         ("showProperty", style.uml.show_property),
         ("showMultiplicity", style.uml.show_multiplicity),
         ("showOperationSignature", style.uml.show_operation_signature),
+        ("suppressAttributes", style.uml.suppress_attributes),
+        ("suppressOperations", style.uml.suppress_operations),
+        ("suppressReceptions", style.uml.suppress_receptions),
     ] {
         if let Some(value) = value {
             insert_mapped(object, field, Value::Bool(value))?;

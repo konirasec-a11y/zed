@@ -138,6 +138,9 @@ pub struct VisualDraftSummary {
 #[derive(Clone, Debug)]
 pub struct ViewPresentation {
     pub kind: Option<String>,
+    pub internal: bool,
+    pub name_label: Option<String>,
+    pub divider: bool,
     pub has_source: bool,
     pub visible: bool,
     pub style_inheritance: Option<StyleInheritance>,
@@ -159,6 +162,7 @@ pub struct EntityBoxProjection {
 #[derive(Clone, Debug, Default)]
 pub struct InterfaceIconProjection {
     pub glyphs: Vec<InterfaceIconGlyph>,
+    pub label_bounds: [f64; 4],
     pub diagnostics: Vec<String>,
 }
 

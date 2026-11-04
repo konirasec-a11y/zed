@@ -74,7 +74,6 @@ fn apply_candidate(project: &Document, command: &Command, revision: u64) -> Flow
         &section.to_string(),
         revision,
         command.clone(),
-        false,
     )?;
     decode(
         &encode_model_section(&id, &name, &updated.to_string(), "json")?,

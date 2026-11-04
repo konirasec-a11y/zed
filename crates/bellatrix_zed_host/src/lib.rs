@@ -14,15 +14,6 @@ use gpui::{App, Global};
 use std::{error::Error, io, path::PathBuf, sync::Arc};
 use tokio::runtime::Runtime;
 
-struct PreviewListener(Option<cordis::event::ListenerRegistration>);
-impl Drop for PreviewListener {
-    fn drop(&mut self) {
-        if let Some(listener) = self.0.take() {
-            listener.remove();
-        }
-    }
-}
-
 pub struct BellatrixZedHost {
     runtime: Runtime,
     _context: CordisContext,
@@ -62,10 +53,9 @@ impl BellatrixZedHost {
                                 .await
                                 .map_err(|error| error.to_string())?
                             {
-                                QueryOutcome::Answer(Ok(prepared)) => {
-                                    Ok((prepared.document, prepared.diagnostics))
+                                QueryOutcome::Answer(result) => {
+                                    result.map(|prepared| (prepared.document, prepared.diagnostics))
                                 }
-                                QueryOutcome::Answer(Err(error)) => Err(error),
                                 QueryOutcome::Miss => {
                                     Err("MDE document preparation service unavailable".into())
                                 }
@@ -75,101 +65,88 @@ impl BellatrixZedHost {
                         .map_err(|error| error.to_string())?
                 })
             },
-            move |document, is_saved, editable_mdj| {
+            move |document, is_saved| {
                 let runtime = runtime.clone();
                 let context = context.clone();
                 let projects = Arc::clone(&projects);
                 Box::pin(async move {
                     let cleanup_runtime = runtime.clone();
-                    // The Tokio task owns a successfully imported lease even when
-                    // its GPUI receiver disappears while the request is in flight.
                     runtime.spawn(async move {
-                    let watched_id = document.id().clone();
-                    let closed_id = watched_id.clone();
-                    let (revision_tx, revisions) = tokio::sync::watch::channel(document.revision());
-                    let closed_tx = revision_tx.clone();
-                    let changed_listener = context.on::<bellatrix_project::ProjectStateChangedEvent, _>(cordis::event::observer_sync(
-                        move |_, changed: bellatrix_project::ProjectStateChanged| {
-                            if changed.id == watched_id { revision_tx.send_replace(changed.revision); }
-                            Ok::<_, std::convert::Infallible>(())
-                        },
-                    )).map_err(|error| error.to_string())?;
-                    let changed_listener = PreviewListener(Some(changed_listener));
-                    let closed_listener = context.on::<bellatrix_project::ProjectClosedEvent, _>(cordis::event::observer_sync(
-                        move |_, closed: bellatrix_project::ProjectClosed| {
-                            if closed.id == closed_id { closed_tx.send_replace(u64::MAX); }
-                            Ok::<_, std::convert::Infallible>(())
-                        },
-                    )).map_err(|error| error.to_string())?;
-                    let closed_listener = PreviewListener(Some(closed_listener));
-                    let imported = match context.query::<bellatrix_project::ProjectImport>(
-                        Routing::Unscoped, bellatrix_project::ProjectImportRequested { document, is_saved },
-                    ).await.map_err(|error| error.to_string())? {
-                        QueryOutcome::Answer(Ok(document)) => document,
-                        QueryOutcome::Answer(Err(error @ bellatrix_project::ProjectError::AlreadyOpen(_))) => return Err(format!("Cannot open MDE preview: {error}. Close the existing MDE tab before reopening a saved copy with this identity. A configured/demo source may also own this identity.")),
-                        QueryOutcome::Answer(Err(error)) => return Err(format!("Cannot open MDE preview: {error}")),
-                        QueryOutcome::Miss => return Err("Project import service is unavailable".into()),
-                    };
-                    let snapshot = match context.query::<bellatrix_mde_cordis::ModelingReadProjection>(
-                        Routing::Unscoped,
-                        bellatrix_mde_cordis::ModelingReadProjectionRequested { document: Arc::clone(&imported) },
-                    ).await {
-                        Ok(QueryOutcome::Answer(Ok(snapshot))) => snapshot,
-                        result => {
-                            match context.query::<bellatrix_project::ProjectCloseSnapshot>(Routing::Unscoped,
-                                bellatrix_project::ProjectCloseSnapshotRequested { document: Arc::clone(&imported) }).await {
-                                Ok(QueryOutcome::Answer(Ok(()))) => {},
-                                cleanup => eprintln!("MDE projection failure cleanup retained state: {cleanup:?}"),
-                            }
-                            return Err(format!("Cannot prepare MDE project projection: {result:?}"));
-                        }
-                    };
-                    if editable_mdj {
-                        let bridge = match MdeUiBridge::start_mdj(&context, Arc::clone(&imported)) {
+                        let imported = match context.query::<bellatrix_project::ProjectImport>(
+                            Routing::Unscoped,
+                            bellatrix_project::ProjectImportRequested { document, is_saved },
+                        ).await.map_err(|error| error.to_string())? {
+                            QueryOutcome::Answer(Ok(document)) => document,
+                            QueryOutcome::Answer(Err(error)) => return Err(format!("Cannot open Bellatrix document: {error}. An existing tab may already own this project identity.")),
+                            QueryOutcome::Miss => return Err("Project import service unavailable".into()),
+                        };
+                        let prepared = context.query::<bellatrix_mde_cordis::ModelingReadProjection>(
+                            Routing::Unscoped,
+                            bellatrix_mde_cordis::ModelingReadProjectionRequested { document: Arc::clone(&imported) },
+                        ).await;
+                        let bridge = match prepared {
+                            Ok(QueryOutcome::Answer(Ok(_))) => MdeUiBridge::start(&context, imported.id().clone()).map_err(|error| error.to_string()),
+                            result => Err(format!("Cannot prepare the native document projection: {result:?}")),
+                        };
+                        let bridge = match bridge {
                             Ok(bridge) => bridge,
                             Err(error) => {
-                                match context.query::<bellatrix_project::ProjectCloseSnapshot>(Routing::Unscoped,
-                                    bellatrix_project::ProjectCloseSnapshotRequested { document: Arc::clone(&imported) }).await {
-                                    Ok(QueryOutcome::Answer(Ok(()))) => {},
-                                    result => eprintln!("MDJ failed-start cleanup retained state: {result:?}"),
+                                if let Err(cleanup) = close_snapshot(&context, imported).await {
+                                    eprintln!("Document opening cleanup retained state: {cleanup}");
                                 }
-                                return Err(error.to_string());
+                                return Err(error);
                             }
                         };
-                        let session = bridge.mdj_session().ok_or("MDJ session was not created")?;
-                        let source = MdeUiSource::from_bridge(Arc::clone(&projects), &bridge);
+                        let session = bridge.session();
+                        let source = MdeUiSource::from_bridge(projects, &bridge);
                         let save_context = context.clone();
+                        let export_context = context.clone();
                         let save_runtime = cleanup_runtime.clone();
-                        let save_lock = Arc::new(tokio::sync::Mutex::new(()));
-                        let cleanup_lock = Arc::clone(&save_lock);
-                        return Ok(NativeDocumentLease::new(source, move || {
-                            drop(changed_listener);
-                            drop(closed_listener);
+                        let export_runtime = cleanup_runtime.clone();
+                        let io_lock = Arc::new(tokio::sync::Mutex::new(()));
+                        let save_lock = Arc::clone(&io_lock);
+                        let export_lock = Arc::clone(&io_lock);
+                        Ok(NativeDocumentLease::new(source, move || {
                             drop(bridge);
                             cleanup_runtime.spawn(async move {
                                 if let Err(error) = session.wait_closed().await {
-                                    eprintln!("MDJ cleanup retained state: {error}");
+                                    eprintln!("Document cleanup retained state: {error}");
                                     return;
                                 }
-                                let _save_guard = cleanup_lock.lock().await;
-                                let document = match session.snapshot() {
-                                    Ok(document) => document,
-                                    Err(error) => { eprintln!("MDJ cleanup retained state: {error}"); return; }
-                                };
-                                match context.query::<bellatrix_project::ProjectCloseSnapshot>(Routing::Unscoped,
-                                    bellatrix_project::ProjectCloseSnapshotRequested { document }).await {
-                                    Ok(QueryOutcome::Answer(Ok(()))) => {},
-                                    result => eprintln!("MDJ cleanup did not close its snapshot: {result:?}"),
+                                let _guard = io_lock.lock().await;
+                                match session.snapshot() {
+                                    Ok(document) => if let Err(error) = close_snapshot(&context, document).await {
+                                        eprintln!("Document cleanup retained state: {error}");
+                                    },
+                                    Err(error) => eprintln!("Document cleanup skipped a closed or replaced session: {error}"),
                                 }
                             });
-                        }).with_save_copy(move |document, path| {
+                        }).with_save(move |document, path| {
                             let context = save_context.clone();
                             let runtime = save_runtime.clone();
-                            let save_lock = Arc::clone(&save_lock);
+                            let lock = Arc::clone(&save_lock);
                             Box::pin(async move {
                                 let outcome_path = path.clone();
                                 runtime.spawn(async move {
-                                    let _save_guard = save_lock.lock().await;
+                                    let _guard = lock.lock().await;
+                                    let revision = document.revision();
+                                    match context.query::<bellatrix_project::ProjectSave>(Routing::Unscoped,
+                                        bellatrix_project::ProjectSaveRequested { document, path }).await.map_err(|error| error.to_string())? {
+                                        QueryOutcome::Answer(Ok(saved)) if saved == revision => Ok(None),
+                                        QueryOutcome::Answer(Ok(_)) => Err("Save completed for a different revision; the document remains unsaved".into()),
+                                        QueryOutcome::Answer(Err(error)) => Err(error.to_string()),
+                                        QueryOutcome::Miss => Err("Project save service unavailable".into()),
+                                    }
+                                }).await.map_err(|error| format!("Save task failed for {}: {error}. Inspect the destination before retrying.", outcome_path.display()))?
+                            })
+                        }).with_mdj_export(move |document, path| {
+                            let context = export_context.clone();
+                            let runtime = export_runtime.clone();
+                            let lock = Arc::clone(&export_lock);
+                            Box::pin(async move {
+                                let outcome_path = path.clone();
+                                runtime.spawn(async move {
+                                    let _guard = lock.lock().await;
                                     let exported = match context.query::<bellatrix_mde_cordis::ModelingExportMdj>(Routing::Unscoped,
                                         bellatrix_mde_cordis::ModelingExportMdjRequested { document: Arc::clone(&document) }).await.map_err(|error| error.to_string())? {
                                         QueryOutcome::Answer(result) => result?,
@@ -179,60 +156,19 @@ impl BellatrixZedHost {
                                     let ticket = match context.query::<bellatrix_project::ProjectPrepareEncodedSave>(Routing::Unscoped,
                                         exported.prepare_save(path.clone())).await.map_err(|error| error.to_string())? {
                                         QueryOutcome::Answer(result) => result.map_err(|error| error.to_string())?,
-                                        QueryOutcome::Miss => return Err("MDJ save preparation service unavailable".into()),
+                                        QueryOutcome::Miss => return Err("Export publication service unavailable".into()),
                                     };
                                     let published = match context.query::<bellatrix_project::ProjectPublishNewFile>(Routing::Unscoped,
                                         bellatrix_project::ProjectPublishNewFileRequested { ticket }).await.map_err(|error| error.to_string())? {
                                         QueryOutcome::Answer(result) => result.map_err(|error| error.to_string())?,
-                                        QueryOutcome::Miss => return Err("MDJ publication service unavailable".into()),
+                                        QueryOutcome::Miss => return Err("Export publication service unavailable".into()),
                                     };
-                                    if !Arc::ptr_eq(published.document(), &document) { return Err(format!("Copy published to {}, but publication identity differed; document remains dirty", path.display())); }
-                                    let warning = published.cleanup_warning().map(str::to_owned);
-                                    if let Some(warning) = &warning { eprintln!("MDJ copy {}: {warning}", published.path().display()); }
-                                    match context.query::<bellatrix_project::ProjectAcknowledgeExternalSave>(Routing::Unscoped,
-                                        published.acknowledge()).await {
-                                        Ok(QueryOutcome::Answer(Ok(_))) => Ok(warning),
-                                        result => Err(format!("Copy written to {}, but acknowledgement failed and the document remains dirty: {result:?}", path.display())),
-                                    }
-                                }).await.map_err(|error| format!("MDJ copy task failed for {}: {error}. Publication outcome is uncertain; inspect this destination before retrying.", outcome_path.display()))?
+                                    // Export is not a native save. Dropping the publication releases its reservation without clearing dirty state.
+                                    Ok(published.cleanup_warning().map(str::to_owned))
+                                }).await.map_err(|error| format!("MDJ export task failed for {}: {error}. Publication outcome is uncertain; inspect the destination before retrying.", outcome_path.display()))?
                             })
-                        }));
-                    }
-                    let validation_context = context.clone();
-                    let validation_runtime = cleanup_runtime.clone();
-                    let mut source = MdeUiSource::read_only(Arc::clone(&projects), Arc::clone(&imported), snapshot)
-                        .with_read_only_validation(move |document, diagram_id| {
-                            let context = validation_context.clone();
-                            let runtime = validation_runtime.clone();
-                            Box::pin(async move {
-                                runtime.spawn(async move {
-                                    match context.query::<bellatrix_mde_cordis::ModelingValidateSnapshot>(
-                                        Routing::Unscoped,
-                                        bellatrix_mde_cordis::ModelingValidateSnapshotRequested { document, diagram_id },
-                                    ).await.map_err(|error| error.to_string())? {
-                                        QueryOutcome::Answer(result) => result,
-                                        QueryOutcome::Miss => Err("MDE snapshot validation service unavailable".into()),
-                                    }
-                                }).await.map_err(|error| error.to_string())?
-                            })
-                        });
-                    source.revisions = revisions;
-                    Ok(NativeDocumentLease::new(source, move || {
-                        drop(changed_listener);
-                        drop(closed_listener);
-                        cleanup_runtime.spawn(async move {
-                            match context.query::<bellatrix_project::ProjectCloseSnapshot>(
-                                Routing::Unscoped,
-                                bellatrix_project::ProjectCloseSnapshotRequested { document: imported },
-                            ).await {
-                                Ok(QueryOutcome::Answer(Ok(()))) => {},
-                                Ok(QueryOutcome::Answer(Err(error))) => eprintln!("MDE preview cleanup retained state: {error}"),
-                                Ok(QueryOutcome::Miss) => eprintln!("MDE preview cleanup service unavailable"),
-                                Err(error) => eprintln!("MDE preview cleanup failed: {error}"),
-                            }
-                        });
-                    }))
-                }).await.map_err(|error| error.to_string())?
+                        }))
+                    }).await.map_err(|error| error.to_string())?
                 })
             },
         )
@@ -371,4 +307,21 @@ pub fn install(cx: &mut App) -> Result<(), Box<dyn Error>> {
     register_mde_workspace(cx, source, importer);
     cx.set_global(host);
     Ok(())
+}
+
+async fn close_snapshot(
+    context: &CordisContext,
+    document: Arc<bellatrix_project::ProjectDocument>,
+) -> Result<(), String> {
+    match context
+        .query::<bellatrix_project::ProjectCloseSnapshot>(
+            Routing::Unscoped,
+            bellatrix_project::ProjectCloseSnapshotRequested { document },
+        )
+        .await
+        .map_err(|error| error.to_string())?
+    {
+        QueryOutcome::Answer(result) => result.map_err(|error| error.to_string()),
+        QueryOutcome::Miss => Err("Project cleanup service unavailable".into()),
+    }
 }

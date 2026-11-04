@@ -57,7 +57,7 @@ impl Event for ProjectReplaceSnapshot {
 
 #[derive(Clone)]
 pub struct ProjectSaveRequested {
-    pub id: ProjectId,
+    pub document: Arc<ProjectDocument>,
     pub path: PathBuf,
 }
 pub struct ProjectSave;
@@ -108,6 +108,7 @@ impl Event for ProjectStateChangedEvent {
 
 #[derive(Clone, Debug)]
 pub struct ProjectSaved {
+    pub document: Arc<ProjectDocument>,
     pub id: ProjectId,
     pub revision: u64,
     pub path: PathBuf,
@@ -122,6 +123,7 @@ impl Event for ProjectSavedEvent {
 #[derive(Clone, Debug)]
 pub struct ProjectClosed {
     pub id: ProjectId,
+    pub session: Arc<()>,
 }
 pub struct ProjectClosedEvent;
 impl Event for ProjectClosedEvent {
@@ -134,7 +136,7 @@ impl Event for ProjectClosedEvent {
 #[derive(Clone)]
 pub struct ProjectImportRequested {
     pub document: ProjectDocument,
-    /// True only when the external buffer represents successfully persisted contents.
+    /// True only when the complete native document was loaded from persisted contents.
     pub is_saved: bool,
 }
 pub struct ProjectImport;
@@ -211,7 +213,7 @@ impl Event for ProjectAcknowledgeExternalSave {
     type Output = Result<u64, ProjectError>;
 }
 
-/// Release an imported preview only if the exact captured snapshot is still open.
+/// Release a document only if the exact captured snapshot is still open.
 /// Changed or reopened identities are preserved; this never performs file I/O.
 #[derive(Clone)]
 pub struct ProjectCloseSnapshotRequested {

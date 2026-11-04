@@ -261,6 +261,18 @@ pub struct LayoutBounds {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ViewPresentation {
+    /// A visual override, never a replacement for the subject's semantic kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notation_kind: Option<String>,
+    /// The title occurrence reads its text from this View's subject, not a second name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name_label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visible: Option<bool>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub internal: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub divider: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_style: Option<ViewStyleDefaults>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

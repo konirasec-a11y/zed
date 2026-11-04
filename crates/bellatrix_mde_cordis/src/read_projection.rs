@@ -88,9 +88,8 @@ fn project_document(document: Arc<ProjectDocument>) -> Result<ModelingSnapshot, 
 
 pub(crate) fn start_feed(
     context: Context,
-    project_id: ProjectId,
     mut changes: tokio::sync::watch::Receiver<u64>,
-    session: Option<crate::MdjSession>,
+    session: crate::MdeSession,
 ) -> (
     tokio::sync::watch::Receiver<Result<Arc<ModelingSnapshot>, String>>,
     tokio::task::JoinHandle<()>,
@@ -100,18 +99,7 @@ pub(crate) fn start_feed(
     let task = tokio::spawn(async move {
         loop {
             changes.borrow_and_update();
-            let document = if let Some(session) = &session {
-                session.snapshot()
-            } else {
-                context
-                    .try_service::<ProjectService>()
-                    .map_err(|error| error.to_string())
-                    .and_then(|projects| {
-                        projects
-                            .snapshot(&project_id)
-                            .map_err(|error| error.to_string())
-                    })
-            };
+            let document = session.snapshot();
             let result = match document {
                 Ok(document) => match context
                     .query::<ModelingReadProjection>(

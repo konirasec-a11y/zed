@@ -76,7 +76,11 @@ pub fn register_mde_workspace(
         move |workspace: &mut Workspace, mut window: Option<&mut Window>, cx| {
             let source = source.for_workspace();
             source.set_preview_context(Some("No active MDE document".into()));
-            crate::workbench_ui::native_document::register_preview_action(workspace, importer.clone(), source.clone());
+            crate::workbench_ui::native_document::register_preview_action(
+                workspace,
+                importer.clone(),
+                source.clone(),
+            );
             // The full Bellatrix catalog is a native Zed Item. The Workbench
             // remains focused on supported Class and Interface editing gestures.
             workspace.register_action(|workspace, _: &OpenMdeSymbols, window, cx| {
@@ -95,25 +99,45 @@ pub fn register_mde_workspace(
             let observed_item = Rc::clone(&cached_item);
             let presentation_source = source.clone();
             if let Some(window) = window.as_deref_mut() {
-            cx.subscribe_in(&cx.entity(), window, move |workspace, _, event: &workspace::Event, window, cx| {
-                if matches!(event, workspace::Event::ActiveItemChanged | workspace::Event::ItemRemoved { .. }) {
-                    let item = crate::workbench_ui::native_document::active_workbench(workspace, cx);
-                    let inactive_context = crate::workbench_ui::native_document::active_preview_label(workspace, cx)
-                        .or_else(|| item.is_none().then(|| "No active MDE document".to_owned()));
-                    if presentation_source.set_preview_context(inactive_context) {
-                        if let Some(item) = observed_item.borrow().clone() {
-                            item.update(cx, |item, cx| item.refresh(cx));
+                cx.subscribe_in(
+                    &cx.entity(),
+                    window,
+                    move |workspace, _, event: &workspace::Event, window, cx| {
+                        if matches!(
+                            event,
+                            workspace::Event::ActiveItemChanged
+                                | workspace::Event::ItemRemoved { .. }
+                        ) {
+                            let item = crate::workbench_ui::native_document::active_workbench(
+                                workspace, cx,
+                            );
+                            let inactive_context =
+                                crate::workbench_ui::native_document::active_preview_label(
+                                    workspace, cx,
+                                )
+                                .or_else(|| {
+                                    item.is_none().then(|| "No active MDE document".to_owned())
+                                });
+                            if presentation_source.set_preview_context(inactive_context) {
+                                if let Some(item) = observed_item.borrow().clone() {
+                                    item.update(cx, |item, cx| item.refresh(cx));
+                                }
+                            }
+                            panels::bind_panels(workspace, item, window, cx);
                         }
-                    }
-                    panels::bind_panels(workspace, item, window, cx);
-                }
-            }).detach();
+                    },
+                )
+                .detach();
             }
             let save_item = Rc::clone(&cached_item);
             let save_prompt_pending = Rc::new(Cell::new(false));
             workspace.register_action(move |workspace, _: &SaveMdeProjectAs, window, cx| {
-                if crate::workbench_ui::native_document::preview_is_active(workspace, cx) {
-                    workspace.show_error("The active MDE preview is read-only. Save source edits through the native editor.", cx);
+                if let Some(item) = workspace
+                    .active_item_as::<crate::workbench_ui::native_document::NativeMdeDocumentItem>(
+                    cx,
+                ) {
+                    item.update(cx, |item, cx| item.save_project_as(cx))
+                        .detach_and_log_err(cx);
                     return;
                 }
                 if workspace.active_item_as::<MdeWorkbenchItem>(cx).is_none() {
@@ -176,13 +200,21 @@ pub fn register_mde_workspace(
                         item.update(cx, |item, cx| {
                             // Keep the native PathBuf intact, including non-UTF-8 names.
                             // The existing bridge reports the actual ProjectSave outcome.
-                            item.submit(
-                                MdeUiCommand::SaveProject(ProjectSaveRequested {
-                                    id: item.project_id().clone(),
-                                    path,
-                                }),
-                                cx,
-                            );
+                            match item.source().document() {
+                                Ok(document) => {
+                                    item.submit(
+                                        MdeUiCommand::SaveProject(ProjectSaveRequested {
+                                            document,
+                                            path,
+                                        }),
+                                        cx,
+                                    );
+                                }
+                                Err(error) => {
+                                    item.feedback = error;
+                                    cx.notify();
+                                }
+                            }
                         });
                     }) {
                         eprintln!("Bellatrix save dialog workspace unavailable: {error}");

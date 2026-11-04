@@ -503,7 +503,7 @@ async fn revision_conflict_save_close_reopen_and_missing_provider() {
         .query::<ProjectSave>(
             Routing::Unscoped,
             ProjectSaveRequested {
-                id: id.clone(),
+                document: service.snapshot(&id).unwrap(),
                 path: path.clone(),
             },
         )
@@ -645,7 +645,7 @@ async fn revision_conflict_save_close_reopen_and_missing_provider() {
         ctx.query::<ProjectSave>(
             Routing::Unscoped,
             ProjectSaveRequested {
-                id: id.clone(),
+                document: service.snapshot(&id).unwrap(),
                 path: path.clone()
             }
         )

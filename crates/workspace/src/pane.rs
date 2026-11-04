@@ -2506,12 +2506,20 @@ impl Pane {
                     let new_path = ProjectPath { worktree_id, path };
 
                     pane.update_in(cx, |pane, window, cx| {
-                        if let Some(item) = pane.item_for_path(new_path.clone(), cx) {
-                            pane.remove_item(item.item_id(), false, false, window, cx);
+                        if let Some(destination) = pane.item_for_path(new_path.clone(), cx)
+                            && destination.item_id() != item.item_id()
+                        {
+                            // The save callback runs after this point, so it cannot protect
+                            // unsaved contents once their destination tab has been removed.
+                            anyhow::ensure!(
+                                !destination.is_dirty(cx) && !destination.has_conflict(cx),
+                                "The destination is open with unsaved changes or a conflict. Save or close it before replacing it."
+                            );
+                            pane.remove_item(destination.item_id(), false, false, window, cx);
                         }
 
-                        item.save_as(project.clone(), new_path, window, cx)
-                    })?
+                        Ok(item.save_as(project.clone(), new_path, window, cx))
+                    })??
                 } else {
                     return Ok(false);
                 };

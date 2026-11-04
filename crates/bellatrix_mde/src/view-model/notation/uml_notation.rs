@@ -63,6 +63,9 @@ pub fn stereotype_presentation<'a>(
 /// Unknown and deferred kinds must not acquire a class rectangle by fallback.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UmlNotation {
+    Rectangle,
+    Label,
+    Compartment,
     ClassifierRectangle,
     PackageTab,
     FoldedNote,
@@ -143,6 +146,9 @@ pub fn resolve_element_notation(element: &crate::Element) -> UmlNotation {
 pub fn uml_notation(kind: &str) -> UmlNotation {
     // These are presentation strategies, not executable behavior adapters.
     match kind {
+        "presentation.rectangle" | "erd.entity" => return UmlNotation::Rectangle,
+        "presentation.label" => return UmlNotation::Label,
+        "presentation.compartment" => return UmlNotation::Compartment,
         "uml.deployment_specification" => return UmlNotation::ClassifierRectangle,
         "uml.collaboration_use" => return UmlNotation::Collaboration,
         "uml.destruction_occurrence_specification" => return UmlNotation::Terminate,

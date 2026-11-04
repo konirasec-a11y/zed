@@ -27,7 +27,6 @@ fn apply(model: &Value, command: &Command, revision: u64) -> FlowResult<Value> {
         &parts.section_json,
         revision,
         command.clone(),
-        false,
     )?;
     decode(
         &encode_model_section(&parts.id, &parts.name, &updated.to_string(), "json")?,

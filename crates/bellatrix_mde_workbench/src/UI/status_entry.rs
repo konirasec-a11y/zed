@@ -1,5 +1,5 @@
 use crate::workbench_ui::integration::OpenMdeWorkbench;
-use crate::workbench_ui::native_document::OpenMdeProjectPreview;
+use crate::workbench_ui::native_document::OpenMdeDocument;
 use gpui::App;
 use ui::{ContextMenu, DropdownMenu, DropdownStyle, Tooltip, prelude::*};
 use workspace::{HideStatusItem, ItemHandle, StatusItemView};
@@ -14,8 +14,8 @@ impl Render for MdeStatusEntry {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let menu = ContextMenu::build(window, cx, |menu, _, _| {
             menu.action(
-                "Open MDE project (read-only preview)",
-                Box::new(OpenMdeProjectPreview),
+                "Open Bellatrix document or import MDJ",
+                Box::new(OpenMdeDocument),
             )
         });
         h_flex()

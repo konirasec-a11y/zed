@@ -116,17 +116,6 @@ pub(super) fn set_path(
     if !matches!(current.geometry, Geometry::Path { .. }) {
         return Err("path editing requires an existing Path View".into());
     }
-    if section.mdj_provenance.is_some() {
-        if current.style.routing != Some(RelationshipRouting::Manual) {
-            return Err("MDJ path editing requires the original manual routing".into());
-        }
-        if segments
-            .iter()
-            .any(|segment| matches!(segment, PathSegment::Cubic { .. }))
-        {
-            return Err("MDJ points cannot represent cubic control points losslessly".into());
-        }
-    }
     let Geometry::Path {
         start: current_start,
         segments: current_segments,

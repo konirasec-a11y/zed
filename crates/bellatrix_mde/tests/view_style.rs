@@ -30,7 +30,6 @@ fn apply(project: &Value, command: &Command, revision: u64) -> FlowResult<Value>
         &section.to_string(),
         revision,
         command.clone(),
-        false,
     )?;
     Ok(serde_json::from_slice(&encode_model_section(
         &id,

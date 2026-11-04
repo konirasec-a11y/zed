@@ -61,8 +61,8 @@ pub fn reparent_uml_element(input_json: &str) -> Result<String, String> {
 }
 
 /// Apply an integration intent to an immutable section and return a candidate section.
-/// The caller owns revision checks and atomic publication. MDJ edits additionally
-/// require an imported source and a successful verified native export before return.
+/// The caller owns revision checks and atomic publication. Imported and native
+/// documents use the same command semantics; MDJ export is a separate operation.
 /// No publication, I/O, or alternate persistent model is performed here.
 pub fn apply_model_command(
     project_id: &str,
@@ -70,19 +70,11 @@ pub fn apply_model_command(
     section_json: &str,
     revision: u64,
     command: bellatrix_mde_protocol::command::Command,
-    require_mdj_roundtrip: bool,
 ) -> Result<serde_json::Value, String> {
     let section = crate::mde_api_projection::decode_section(project_id, name, section_json)?;
     let source = section.to_model(project_id, name);
-    if require_mdj_roundtrip && source.mdj_provenance.is_none() {
-        return Err("MDJ interchange requires an imported StarUML document".into());
-    }
     let command = crate::mde_api_command_conversion::command(command)?;
     let updated = commands::apply(&source, &command, revision)?;
-    if require_mdj_roundtrip {
-        crate::mdj_conversion::export(&updated)
-            .map_err(|error| format!("MDJ edit was not applied: {error}"))?;
-    }
     serde_json::to_value(crate::ModelingSection::from_model(&updated))
         .map_err(|error| error.to_string())
 }

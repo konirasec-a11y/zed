@@ -1,7 +1,7 @@
 use crate::ProjectError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 fn schema_version() -> u32 {
     1
@@ -44,6 +44,10 @@ impl<'de> Deserialize<'de> for ProjectId {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectDocument {
+    // A reopened identity must not accept queued work from the previous session.
+    // This token is shared across revisions and never enters the persisted contract.
+    #[serde(skip)]
+    session: Arc<()>,
     #[serde(default = "schema_version")]
     schema_version: u32,
     id: ProjectId,
@@ -58,6 +62,7 @@ pub struct ProjectDocument {
 impl ProjectDocument {
     pub fn new(id: ProjectId, name: impl Into<String>) -> Result<Self, ProjectError> {
         let doc = Self {
+            session: Arc::new(()),
             schema_version: schema_version(),
             id,
             name: name.into(),
@@ -66,6 +71,14 @@ impl ProjectDocument {
         };
         doc.validate()?;
         Ok(doc)
+    }
+
+    pub fn session_identity(&self) -> Arc<()> {
+        Arc::clone(&self.session)
+    }
+
+    pub(crate) fn begin_session(&mut self) {
+        self.session = Arc::new(());
     }
 
     pub fn id(&self) -> &ProjectId {

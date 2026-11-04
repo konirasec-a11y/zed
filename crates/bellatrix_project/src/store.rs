@@ -108,7 +108,7 @@ impl ProjectService {
 
     pub(crate) fn open(
         &self,
-        document: ProjectDocument,
+        mut document: ProjectDocument,
         from_disk: bool,
     ) -> Result<Arc<ProjectDocument>, ProjectError> {
         document.validate()?;
@@ -119,6 +119,7 @@ impl ProjectService {
         if projects.contains_key(document.id()) {
             return Err(ProjectError::AlreadyOpen(document.id().as_str().into()));
         }
+        document.begin_session();
         let saved_revision = from_disk.then_some(document.revision());
         let doc = Arc::new(document);
         projects.insert(
@@ -357,7 +358,11 @@ impl ProjectService {
 
     /// A close waits for any in-flight save of *this* bellatrix-project to finish.
     /// The Cordis responder executes it on Tokio's blocking pool.
-    pub(crate) fn close(&self, id: &ProjectId, discard_unsaved: bool) -> Result<(), ProjectError> {
+    pub(crate) fn close(
+        &self,
+        id: &ProjectId,
+        discard_unsaved: bool,
+    ) -> Result<Arc<()>, ProjectError> {
         self.close_matching(id, discard_unsaved, None)
     }
 
@@ -366,6 +371,7 @@ impl ProjectService {
         document: &Arc<ProjectDocument>,
     ) -> Result<(), ProjectError> {
         self.close_matching(document.id(), true, Some(document))
+            .map(|_| ())
     }
 
     fn close_matching(
@@ -373,7 +379,7 @@ impl ProjectService {
         id: &ProjectId,
         discard_unsaved: bool,
         expected: Option<&Arc<ProjectDocument>>,
-    ) -> Result<(), ProjectError> {
+    ) -> Result<Arc<()>, ProjectError> {
         let save_lock = {
             let projects = self
                 .projects
@@ -408,12 +414,18 @@ impl ProjectService {
         if !discard_unsaved && current.saved_revision != Some(current.document.revision()) {
             return Err(ProjectError::Unsaved(id.as_str().into()));
         }
+        let session = current.document.session_identity();
         projects.remove(id);
-        Ok(())
+        Ok(session)
     }
 
     /// Called from spawn_blocking, never while polling Cordis apply or GPUI.
-    pub(crate) fn save(&self, id: &ProjectId, path: &Path) -> Result<u64, ProjectError> {
+    pub(crate) fn save(
+        &self,
+        expected: &Arc<ProjectDocument>,
+        path: &Path,
+    ) -> Result<u64, ProjectError> {
+        let id = expected.id();
         let parent = path
             .parent()
             .filter(|p| !p.as_os_str().is_empty())
@@ -464,6 +476,9 @@ impl ProjectService {
             }
             if current.external_save.upgrade().is_some() {
                 return Err(ProjectError::SaveInProgress);
+            }
+            if !Arc::ptr_eq(expected, &current.document) {
+                return Err(ProjectError::SessionChanged(id.as_str().into()));
             }
             Arc::clone(&current.document)
         };

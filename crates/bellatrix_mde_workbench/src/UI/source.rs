@@ -1,25 +1,17 @@
 //! A typed, lifecycle-owned source for Zed Items and Panels.
 use crate::workbench_ui::MdeSnapshot;
-use bellatrix_mde_cordis::{MdeUiBridge, MdeUiCommand, MdjSession};
+use bellatrix_mde_cordis::{MdeSession, MdeUiBridge, MdeUiCommand};
 use bellatrix_project::{ProjectDocument, ProjectId, ProjectService};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
-use std::{future::Future, pin::Pin};
-use tokio::sync::{mpsc, watch};
-
-type SnapshotValidationFuture = Pin<
-    Box<dyn Future<Output = Result<bellatrix_mde_cordis::DiagramValidationResult, String>> + Send>,
->;
-type SnapshotValidator =
-    Arc<dyn Fn(Arc<ProjectDocument>, String) -> SnapshotValidationFuture + Send + Sync>;
+use tokio::sync::watch;
 
 #[derive(Clone)]
 pub struct MdeUiSource {
     pub projects: Arc<ProjectService>,
     pub project_id: ProjectId,
-    pub commands: mpsc::Sender<MdeUiCommand>,
     pub revisions: watch::Receiver<u64>,
     pub projections: watch::Receiver<Result<Arc<MdeSnapshot>, String>>,
     pub move_previews: Option<bellatrix_mde_cordis::MovePreviewClient>,
@@ -34,11 +26,8 @@ pub struct MdeUiSource {
     >,
     pub saves: watch::Receiver<Option<u64>>,
     pub journal: Arc<bellatrix_mde_cordis::ExecutionJournal>,
-    pub(crate) mdj_session: Option<Arc<MdjSession>>,
+    session: MdeSession,
     native_blocked: Arc<AtomicBool>,
-    read_only_snapshot: Option<Arc<MdeSnapshot>>,
-    read_only_document: Option<Arc<ProjectDocument>>,
-    read_only_validator: Option<SnapshotValidator>,
     presentation_suspended: Arc<AtomicBool>,
 }
 
@@ -48,7 +37,6 @@ impl MdeUiSource {
         Self {
             projects,
             project_id: bridge.project_id().clone(),
-            commands: bridge.sender(),
             revisions: bridge.changes(),
             projections: bridge.projections(),
             move_previews: Some(bridge.move_previews()),
@@ -56,110 +44,38 @@ impl MdeUiSource {
             validations: bridge.validations(),
             saves: bridge.saves(),
             journal: bridge.execution_journal(),
-            mdj_session: bridge.mdj_session().map(Arc::new),
+            session: bridge.session(),
             native_blocked: Arc::new(AtomicBool::new(false)),
-            read_only_snapshot: None,
-            read_only_document: None,
-            read_only_validator: None,
             presentation_suspended: Arc::new(AtomicBool::new(false)),
         }
-    }
-
-    pub fn read_only(
-        projects: Arc<ProjectService>,
-        document: Arc<ProjectDocument>,
-        snapshot: MdeSnapshot,
-    ) -> Self {
-        let (commands, receiver) = mpsc::channel(1);
-        drop(receiver);
-        let (_, revisions) = watch::channel(snapshot.revision);
-        let (_, projections) = watch::channel(Ok(Arc::new(snapshot.clone())));
-        let (_, feedback) = watch::channel("Read-only native document preview".to_owned());
-        let (_, validations) = watch::channel(None);
-        let (_, saves) = watch::channel(None);
-        let journal = Arc::new(bellatrix_mde_cordis::ExecutionJournal::default());
-        Self {
-            projects,
-            project_id: snapshot.project_id.clone(),
-            commands,
-            revisions,
-            projections,
-            move_previews: None,
-            feedback,
-            validations,
-            saves,
-            journal,
-            mdj_session: None,
-            native_blocked: Arc::new(AtomicBool::new(false)),
-            read_only_snapshot: Some(Arc::new(snapshot)),
-            read_only_document: Some(document),
-            read_only_validator: None,
-            presentation_suspended: Arc::new(AtomicBool::new(false)),
-        }
-    }
-
-    pub fn with_read_only_validation(
-        mut self,
-        validate: impl Fn(Arc<ProjectDocument>, String) -> SnapshotValidationFuture
-        + Send
-        + Sync
-        + 'static,
-    ) -> Self {
-        self.read_only_validator = Some(Arc::new(validate));
-        self
-    }
-
-    pub(crate) fn validate_read_only(
-        &self,
-        snapshot: &MdeSnapshot,
-        diagram_id: String,
-    ) -> Result<SnapshotValidationFuture, String> {
-        let document = self
-            .read_only_document
-            .as_ref()
-            .ok_or("Snapshot validation is unavailable for this source")?;
-        if !snapshot.matches_document(document) || !self.snapshot_is_current() {
-            return Err("The preview snapshot is no longer current".into());
-        }
-        let validate = self
-            .read_only_validator
-            .as_ref()
-            .ok_or("Snapshot validation service is unavailable")?;
-        Ok(validate(Arc::clone(document), diagram_id))
     }
 
     pub(crate) fn block_native_edits(&self, blocked: bool) {
         self.native_blocked.store(blocked, Ordering::Release);
     }
 
-    pub fn is_mdj(&self) -> bool {
-        self.mdj_session.is_some()
+    pub fn allows_creation(&self) -> bool {
+        !self.is_read_only()
     }
 
-    pub fn allows_creation(&self) -> bool {
-        // The Cordis MDJ bridge currently accepts edits to existing objects only.
-        // A writable document is not evidence that creation commands are supported.
-        !self.is_mdj() && !self.is_read_only()
+    pub fn document(&self) -> Result<Arc<ProjectDocument>, String> {
+        self.session.snapshot()
+    }
+
+    pub(crate) fn activity(&self) -> watch::Receiver<()> {
+        self.session.activity()
+    }
+
+    pub fn is_pending(&self) -> bool {
+        self.session.is_pending()
     }
 
     pub fn snapshot_is_current(&self) -> bool {
-        if let Some(session) = &self.mdj_session {
-            return session.snapshot().is_ok_and(|expected| {
-                self.projects
-                    .snapshot(&self.project_id)
-                    .is_ok_and(|current| Arc::ptr_eq(&expected, &current))
-            });
-        }
-        self.read_only_document.as_ref().is_none_or(|expected| {
-            self.projects
-                .snapshot(&self.project_id)
-                .is_ok_and(|current| Arc::ptr_eq(expected, &current))
-        })
+        self.session.snapshot().is_ok()
     }
 
     pub fn is_read_only(&self) -> bool {
-        self.read_only_snapshot.is_some()
-            || self.is_presentation_suspended()
+        self.is_presentation_suspended()
             || self.native_blocked.load(Ordering::Acquire)
             || !self.snapshot_is_current()
     }
@@ -182,16 +98,7 @@ impl MdeUiSource {
     }
 
     pub fn snapshot(&self) -> Result<MdeSnapshot, String> {
-        if let Some(snapshot) = &self.read_only_snapshot {
-            return Ok((**snapshot).clone());
-        }
-        let document = if let Some(session) = &self.mdj_session {
-            session.snapshot()?
-        } else {
-            self.projects
-                .snapshot(&self.project_id)
-                .map_err(|error| error.to_string())?
-        };
+        let document = self.session.snapshot()?;
         if let Some(previews) = &self.move_previews {
             previews.set_document(Arc::clone(&document))?;
         }
@@ -216,13 +123,7 @@ impl MdeUiSource {
         let Some(previews) = &self.move_previews else {
             return Some(Err("Move preview is unavailable for this source".into()));
         };
-        let document = if let Some(session) = &self.mdj_session {
-            session.snapshot()
-        } else {
-            self.projects
-                .snapshot(&self.project_id)
-                .map_err(|error| error.to_string())
-        };
+        let document = self.session.snapshot();
         let document = match document {
             Ok(document) => document,
             Err(error) => return Some(Err(error)),
@@ -250,15 +151,10 @@ impl MdeUiSource {
     }
 
     fn interaction_revision(&self) -> u64 {
-        self.read_only_snapshot.as_ref().map_or_else(
-            || {
-                self.projects
-                    .snapshot(&self.project_id)
-                    .map(|document| document.revision())
-                    .unwrap_or_else(|_| *self.revisions.borrow())
-            },
-            |snapshot| snapshot.revision,
-        )
+        self.session
+            .snapshot()
+            .map(|document| document.revision())
+            .unwrap_or_else(|_| *self.revisions.borrow())
     }
 
     pub fn submit(&self, command: MdeUiCommand) -> Result<(), String> {
@@ -327,51 +223,27 @@ impl MdeUiSource {
             );
             return Err("This Workbench is not the active MDE document. Select its MDE tab before editing or saving its model.".into());
         }
-        if self.is_read_only() {
+        if self.is_read_only() && !matches!(&command, MdeUiCommand::ValidateDiagram(_)) {
             self.journal.record_interaction(
                 revision,
                 action,
                 identity,
                 bellatrix_mde_cordis::TraceOutcome::Invalid,
             );
-            return Err("Read-only preview: edit the source in the native editor, then close and reopen the preview".into());
+            return Err("The document is temporarily unavailable for editing; finish its pending write or reopen the native document if its session closed".into());
         }
-        if let Some(session) = &self.mdj_session {
-            let identity = identity.map(str::to_owned);
-            let result = session.submit(command);
-            self.journal.record_interaction(
-                revision,
-                action,
-                identity.as_deref(),
-                if result.is_ok() {
-                    bellatrix_mde_cordis::TraceOutcome::Success
-                } else {
-                    bellatrix_mde_cordis::TraceOutcome::Error
-                },
-            );
-            return result;
-        }
-        let permit = match self.commands.try_reserve() {
-            Ok(permit) => permit,
-            Err(error) => {
-                self.journal.record_interaction(
-                    revision,
-                    action,
-                    identity,
-                    bellatrix_mde_cordis::TraceOutcome::Error,
-                );
-                return Err(error.to_string());
-            }
-        };
-        // Record before publishing so a fast consumer cannot report completion first.
-        // Success means queue capacity was reserved, not that the command was applied.
+        let identity = identity.map(str::to_owned);
+        let result = self.session.submit(command);
         self.journal.record_interaction(
             revision,
             action,
-            identity,
-            bellatrix_mde_cordis::TraceOutcome::Success,
+            identity.as_deref(),
+            if result.is_ok() {
+                bellatrix_mde_cordis::TraceOutcome::Success
+            } else {
+                bellatrix_mde_cordis::TraceOutcome::Error
+            },
         );
-        permit.send(command);
-        Ok(())
+        result
     }
 }

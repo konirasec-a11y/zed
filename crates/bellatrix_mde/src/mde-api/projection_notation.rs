@@ -132,7 +132,7 @@ pub(crate) fn project_view(
     }
     let visible = rendered_label
         .visible
-        .unwrap_or_else(|| visible_in_preview(view));
+        .unwrap_or_else(|| visible_on_canvas(view));
     let routed_geometry = if view.style.routing == Some(mde::RelationshipRouting::Manual) {
         None
     } else {
@@ -156,7 +156,7 @@ pub(crate) fn project_view(
         timing,
         label: view.label.clone(),
         rendered_label,
-        interface_icon: interface::project(diagram, view),
+        interface_icon: interface::project(section, diagram, view),
         entity_box,
         geometry: projection::convert(&view.geometry)?,
         children: view
@@ -165,7 +165,16 @@ pub(crate) fn project_view(
             .map(|child| project_view(section, diagram, child, references, paths, render_styles))
             .collect::<Result<_, _>>()?,
         presentation: projection::ViewPresentation {
-            kind: view.presentation.kind.clone(),
+            kind: view.presentation.notation_kind.clone(),
+            internal: view.presentation.internal,
+            // Expose every title through one canvas role while retaining the
+            // existing ERD binding as its sole persisted source of truth.
+            name_label: view.presentation.name_label.as_ref().or_else(|| {
+                view.presentation.entity_box.as_ref()
+                    .and_then(|binding| binding.name_label.value())
+                    .filter(|id| view.children.iter().any(|child| &child.id == *id))
+            }).cloned(),
+            divider: view.presentation.divider,
             has_source: view.presentation.source.is_some(),
             visible,
             style_inheritance: projected_style.inheritance.clone(),
@@ -182,20 +191,8 @@ pub(crate) fn project_view(
     })
 }
 
-fn visible_in_preview(view: &mde::View) -> bool {
-    let Some(source) = view
-        .presentation
-        .source
-        .as_ref()
-        .filter(|source| source.format == "mdj")
-    else {
-        return true;
-    };
-    match source.residual.get("visible") {
-        None => true,
-        Some(Value::Bool(visible)) => *visible,
-        Some(_) => false,
-    }
+fn visible_on_canvas(view: &mde::View) -> bool {
+    view.presentation.visible.unwrap_or(true)
 }
 
 pub(crate) struct ProjectedRenderStyle {
@@ -478,13 +475,14 @@ fn figure_presentation(
     timing: Option<TimingPresentation>,
 ) -> Result<FigurePresentation, String> {
     let empty = BTreeMap::new();
-    let (kind, properties) = if let Some(element) = element {
+    let (semantic_kind, properties) = if let Some(element) = element {
         (element.kind.as_str(), &element.properties)
     } else if let Some(draft) = &view.draft {
         (draft.notation_kind.as_str(), &draft.properties)
     } else {
         ("", &empty)
     };
+    let kind = view.presentation.notation_kind.as_deref().unwrap_or(semantic_kind);
     let pseudostate_kind = properties
         .get("kind")
         .and_then(Value::as_str)
@@ -703,6 +701,9 @@ fn marker_composition(composition: &mde::EndpointMarkerComposition) -> EndpointM
 
 fn notation_kind(notation: mde::UmlNotation) -> UmlNotation {
     match notation {
+        mde::UmlNotation::Rectangle => UmlNotation::Rectangle,
+        mde::UmlNotation::Label => UmlNotation::Label,
+        mde::UmlNotation::Compartment => UmlNotation::Compartment,
         mde::UmlNotation::ClassifierRectangle => UmlNotation::ClassifierRectangle,
         mde::UmlNotation::PackageTab => UmlNotation::PackageTab,
         mde::UmlNotation::FoldedNote => UmlNotation::FoldedNote,

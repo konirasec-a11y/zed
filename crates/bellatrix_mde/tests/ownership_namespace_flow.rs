@@ -30,7 +30,6 @@ fn apply(model: &Value, command: &Command, revision: u64) -> Result<Value, Strin
         &document.section_json,
         revision,
         command.clone(),
-        false,
     )?;
     let bytes = encode_model_section(&document.id, &document.name, &section.to_string(), "json")?;
     decode(&bytes, "json")

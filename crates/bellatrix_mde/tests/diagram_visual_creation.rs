@@ -68,7 +68,6 @@ fn apply(project: &Document, command: &Command, revision: u64) -> FlowResult<Doc
         &section.to_string(),
         revision,
         command.clone(),
-        false,
     )?;
     decode(
         &encode_model_section(&id, &name, &updated.to_string(), "json")?,

@@ -157,7 +157,7 @@ pub fn resolve_relationship_view(
             relation.kind.clone(),
             relationship_presentation(section, relation),
         )
-    } else if let Some(presentation) = imported_relationship_presentation(section, view) {
+    } else if let Some(presentation) = view_relationship_presentation(section, view) {
         (format!("view.{}", presentation.label), presentation)
     } else {
         let object = section
@@ -203,8 +203,8 @@ pub fn resolve_relationship_view(
     // paint generated labels at unrelated offsets over the authored subviews.
     if view.children.iter().any(|child| {
         matches!(
-            child.presentation.kind.as_deref(),
-            Some("EdgeLabelView" | "LabelView")
+            child.presentation.notation_kind.as_deref(),
+            Some("presentation.label")
         )
     }) {
         resolved.presentation.name = None;
@@ -242,26 +242,20 @@ pub fn resolve_relationship_view(
     Some(resolved)
 }
 
-fn imported_relationship_presentation(
+fn view_relationship_presentation(
     section: &ModelingSection,
     view: &View,
 ) -> Option<RelationshipPresentation> {
-    let source = view.presentation.source.as_ref()?;
-    if source.format != "mdj" || !matches!(&view.geometry, crate::Geometry::Path { .. }) {
+    if !matches!(&view.geometry, crate::Geometry::Path { .. }) {
         return None;
     }
-    let (model_kind, notation) = match source.type_name.as_str() {
-        "UMLExtensionView" => ("mdj.UMLExtension", "uml.extension"),
-        "UMLGeneralizationView" => ("mdj.UMLGeneralization", "uml.generalization"),
-        "UMLDependencyView" => ("mdj.UMLDependency", "uml.dependency"),
-        "UMLRealizationView" => ("mdj.UMLRealization", "uml.realization"),
-        "UMLInterfaceRealizationView" => {
-            ("mdj.UMLInterfaceRealization", "uml.interface_realization")
-        }
-        _ => return None,
-    };
+    let notation = view.presentation.notation_kind.as_deref()?;
+    if !matches!(notation, "uml.extension" | "uml.generalization" | "uml.dependency"
+        | "uml.realization" | "uml.interface_realization") {
+        return None;
+    }
     let object = section.elements.iter().find(|element| {
-        view.subject.as_deref() == Some(element.id.as_str()) && element.kind == model_kind
+        view.subject.as_deref() == Some(element.id.as_str())
     })?;
     let mut style = relationship_style_for_notation(notation);
     if view

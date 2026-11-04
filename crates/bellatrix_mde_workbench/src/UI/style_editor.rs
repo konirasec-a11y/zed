@@ -588,18 +588,17 @@ pub(crate) fn render_styles(
         return rows;
     }
     let Some(draft) = draft else { return rows };
-    let layout_editable = !item.read(cx).source().is_mdj()
-        && item
-            .read(cx)
-            .source()
-            .snapshot()
-            .ok()
-            .is_some_and(|snapshot| {
-                snapshot.section.diagrams.iter().any(|diagram| {
-                    diagram.id == diagram_id
-                        && super::selection::supports_view_layout_editing(diagram, &view.id)
-                })
-            });
+    let layout_editable = item
+        .read(cx)
+        .source()
+        .snapshot()
+        .ok()
+        .is_some_and(|snapshot| {
+            snapshot.section.diagrams.iter().any(|diagram| {
+                diagram.id == diagram_id
+                    && super::selection::supports_view_layout_editing(diagram, &view.id)
+            })
+        });
     let key = (
         item.read(cx).project_id().as_str().to_owned(),
         diagram_id.to_owned(),
@@ -1252,14 +1251,13 @@ impl MdeWorkbenchItem {
             return Err("This view supports inspection only".into());
         }
         if (submission.order.is_some() || submission.routing.is_some())
-            && (self.source().is_mdj()
-                || !snapshot.section.diagrams.iter().any(|diagram| {
-                    diagram.id == key.1
-                        && super::selection::supports_view_layout_editing(diagram, &key.2)
-                }))
+            && !snapshot.section.diagrams.iter().any(|diagram| {
+                diagram.id == key.1
+                    && super::selection::supports_view_layout_editing(diagram, &key.2)
+            })
         {
             return Err(
-                "Routing and stacking changes require a supported flat editable diagram".into(),
+                "Routing and stacking changes require a supported editable view".into(),
             );
         }
         let command = if let Some(order) = submission.order {

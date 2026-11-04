@@ -76,7 +76,6 @@ fn edit(project: &Value, command: Command) -> FlowResult<Value> {
         &document.section_json,
         1,
         command,
-        false,
     )
     .map_err(std::io::Error::other)?;
     let bytes = encode_model_section(&document.id, &document.name, &section.to_string(), "json")

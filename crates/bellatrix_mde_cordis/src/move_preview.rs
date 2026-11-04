@@ -90,7 +90,6 @@ fn preview(request: &ModelingPreviewMoveRequested) -> Result<(), String> {
         &section_json,
         request.document.revision(),
         command,
-        false,
     )
     .map(|_| ())
 }

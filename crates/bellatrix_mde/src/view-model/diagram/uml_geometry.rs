@@ -136,6 +136,32 @@ pub fn interface_layout(width: f64, height: f64, contents: ClassifierContents) -
         members_top: label_top + 22.0,
     }
 }
+
+pub fn interface_view_layout(view: &crate::View, contents: ClassifierContents) -> Option<InterfaceLayout> {
+    let crate::Geometry::Rect { x, y, width, height } = view.geometry else {
+        return None;
+    };
+    if ![x, y, width, height].iter().all(|value| value.is_finite()) || width <= 0.0 || height <= 0.0 {
+        return None;
+    }
+    if let Some(binding) = &view.presentation.interface_icon {
+        let id = binding.label_compartment.value()?;
+        let compartment = view.children.iter().find(|child| &child.id == id)?;
+        if let crate::Geometry::Rect { y: label_top, .. } = compartment.geometry {
+            let diameter = label_top - y;
+            if diameter > 0.0 && diameter <= width && diameter <= height {
+                return Some(InterfaceLayout {
+                    center: Point { x: width / 2.0, y: diameter / 2.0 },
+                    radius: diameter / 2.0,
+                    label_top: diameter,
+                    members_top: diameter,
+                });
+            }
+        }
+        return None;
+    }
+    Some(interface_layout(width, height, contents))
+}
 fn finite_size(value: f64) -> f64 {
     if value.is_finite() && value > 0.0 {
         value

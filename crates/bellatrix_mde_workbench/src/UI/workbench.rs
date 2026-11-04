@@ -12,8 +12,8 @@ mod execution_dashboard;
 mod explorer;
 #[path = "hierarchy.rs"]
 mod hierarchy;
-#[path = "../view-model/imported_preview.rs"]
-mod imported_preview;
+#[path = "../view-model/canvas_presentation.rs"]
+mod canvas_presentation;
 #[path = "../view-model/inspector_drafts.rs"]
 mod inspector_drafts;
 #[path = "integration.rs"]
@@ -472,14 +472,7 @@ impl MdeWorkbenchItem {
                 .iter()
                 .find(|diagram| Some(diagram.id.as_str()) == self.presentation.active_diagram())
                 .is_none_or(|diagram| {
-                    if self.source.is_mdj() {
-                        !diagram
-                            .views
-                            .iter()
-                            .any(|view| view.id == view_id && view.presentation.has_source)
-                    } else {
-                        !selection::supports_view_editing(diagram, view_id)
-                    }
+                    !selection::supports_view_editing(diagram, view_id)
                 })
         })
     }
@@ -1013,7 +1006,7 @@ impl MdeWorkbenchItem {
             return;
         }
         self.select_view(subject, view_id.clone(), cx);
-        if self.source.is_read_only() || self.source.is_mdj() {
+        if self.source.is_read_only() {
             return;
         }
         self.gesture = Some(CanvasGesture::Move {
@@ -1034,7 +1027,7 @@ impl MdeWorkbenchItem {
         position: Point<Pixels>,
         cx: &mut Context<Self>,
     ) {
-        if self.source.is_read_only() || self.source.is_mdj() {
+        if self.source.is_read_only() {
             return;
         }
         self.gesture = Some(CanvasGesture::Resize {
@@ -1050,10 +1043,7 @@ impl MdeWorkbenchItem {
         cx.notify();
     }
     fn update_gesture(&mut self, event: &MouseMoveEvent, cx: &mut Context<Self>) {
-        if self.source.is_read_only()
-            || (self.source.is_mdj()
-                && !matches!(&self.gesture, Some(CanvasGesture::EditPath { .. })))
-        {
+        if self.source.is_read_only() {
             return;
         }
         if event.pressed_button != Some(MouseButton::Left) || !event.dragging() {
@@ -1113,9 +1103,7 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         }
-        if self.source.is_read_only()
-            || (self.source.is_mdj() && !matches!(&gesture, CanvasGesture::EditPath { .. }))
-        {
+        if self.source.is_read_only() {
             self.source.record_interaction(
                 "canvas.gesture.read_only",
                 Some(view_id),
@@ -1192,11 +1180,16 @@ impl MdeWorkbenchItem {
                     cx.notify();
                     return;
                 }
+                let minimum = self.source.snapshot().ok().and_then(|snapshot| {
+                    snapshot.section.diagrams.iter().flat_map(|diagram| diagram.all_views())
+                        .find(|view| view.id == view_id)
+                        .map(|view| canvas_presentation::minimum_size(&snapshot.section, view))
+                }).unwrap_or((80.0, 48.0));
                 MdeUiCommand::ResizeView(ModelingResizeViewRequested {
                     project_id: self.project_id().clone(),
                     view_id,
-                    width: (width + dx).max(80.0),
-                    height: (height + dy).max(48.0),
+                    width: (width + dx).max(minimum.0),
+                    height: (height + dy).max(minimum.1),
                     expected_revision,
                 })
             }

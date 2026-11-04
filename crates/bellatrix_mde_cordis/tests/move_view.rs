@@ -145,7 +145,7 @@ async fn translated_view_roundtrips_through_public_project_save_and_open() {
         .query::<ProjectSave>(
             Routing::Unscoped,
             ProjectSaveRequested {
-                id: id.clone(),
+                document: service.snapshot(&id).unwrap(),
                 path: path.clone(),
             },
         )

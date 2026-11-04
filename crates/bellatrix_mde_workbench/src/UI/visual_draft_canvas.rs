@@ -49,8 +49,9 @@ impl MdeWorkbenchItem {
                 width,
                 height,
             } => {
-                let figure = if UmlFigure::supports(&view.figure) {
+                let figure = if UmlFigure::supports(&view.figure) || view.interface_icon.is_some() {
                     UmlFigure::new(view.figure.clone(), label)
+                        .interface_icon(view.interface_icon.clone())
                         .view_style(&view.render_style)
                         .selected(selected)
                         .view_size(*width, *height, zoom)
@@ -200,7 +201,7 @@ impl MdeWorkbenchItem {
                     field,
                     move |window, cx| {
                         if let Err(error) = confirm.update(cx, |item, cx| {
-                            item.commit_draft_label(&target, editor_id, window, cx)
+                            item.commit_view_label(&target, editor_id, window, cx)
                         }) {
                             eprintln!("MDE draft label update failed: {error}");
                         }
@@ -250,7 +251,7 @@ impl MdeWorkbenchItem {
                         if let Err(error) = owner.update(cx, |item, cx| {
                             if event.click_count >= 2 && item.presentation.selected_tool().is_none()
                             {
-                                item.begin_draft_label_edit(id.clone(), window, cx);
+                                item.begin_view_label_edit(id.clone(), window, cx);
                             } else if matches!(
                                 item.presentation.selected_tool(),
                                 Some(ModelingTool::Relation(_))
@@ -337,7 +338,7 @@ impl MdeWorkbenchItem {
 }
 
 impl MdeWorkbenchItem {
-    pub(super) fn begin_draft_label_edit(
+    pub(super) fn begin_view_label_edit(
         &mut self,
         view_id: String,
         window: &mut Window,
@@ -353,8 +354,8 @@ impl MdeWorkbenchItem {
             .section
             .diagrams
             .iter()
-            .flat_map(|diagram| &diagram.views)
-            .find(|view| view.id == view_id && view.draft.is_some())
+            .flat_map(|diagram| diagram.all_views())
+            .find(|view| view.id == view_id && view.subject.is_none())
         else {
             return;
         };
@@ -376,7 +377,7 @@ impl MdeWorkbenchItem {
         field.read(cx).editor().clone().select_all(window, cx);
         cx.notify();
     }
-    fn commit_draft_label(
+    pub(super) fn commit_view_label(
         &mut self,
         target: &str,
         editor_id: gpui::EntityId,

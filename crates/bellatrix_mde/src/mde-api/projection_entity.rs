@@ -65,7 +65,7 @@ pub(super) fn project(
             None => projected.diagnostics.push(format!("View {}: entity name label binding is unresolved", view.id)),
         }
         match binding.column_compartment.value().and_then(|id| view.children.iter().find(|child| child.id == *id)) {
-            Some(compartment) if super::visible_in_preview(compartment) && !compartment.children.is_empty() => {
+            Some(compartment) if super::visible_on_canvas(compartment) && !compartment.children.is_empty() => {
                 projected.diagnostics.push(format!("View {}: populated entity columns and measured column dividers are not rendered", view.id));
             }
             Some(_) => {},

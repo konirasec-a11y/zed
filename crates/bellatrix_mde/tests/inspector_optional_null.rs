@@ -45,7 +45,6 @@ fn set_property(model: &Value, owner: &str, path: &str, value: Value) -> Result<
             path: path.into(),
             value,
         },
-        false,
     )?;
     let bytes = encode_model_section(&parts.id, &parts.name, &section.to_string(), "json")?;
     let decoded = decode_model_document(&bytes, "json")?;

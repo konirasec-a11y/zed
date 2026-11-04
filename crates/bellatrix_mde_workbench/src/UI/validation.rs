@@ -189,45 +189,6 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         }
-        if self.source.is_read_only() {
-            let diagram_id = diagram.id.clone();
-            let revision = snapshot.revision;
-            let project_id = snapshot.project_id.clone();
-            let source = self.source.clone();
-            let validation = match source.validate_read_only(&snapshot, diagram_id.clone()) {
-                Ok(validation) => validation,
-                Err(error) => {
-                    self.validation_status = format!("Validation not sent: {error}");
-                    cx.notify();
-                    return;
-                }
-            };
-            self.validation_status = format!("Validation pending for revision {revision}");
-            cx.spawn(async move |this, cx| {
-                let result = validation.await.map_err(|message| {
-                    bellatrix_mde_cordis::DiagramValidationFailure {
-                        diagram_id: diagram_id.clone(),
-                        revision,
-                        message,
-                    }
-                });
-                if let Err(error) = this.update(cx, |item, cx| {
-                    if item.project_id() != &project_id
-                        || !source.snapshot_is_current()
-                        || !item.source.snapshot_is_current()
-                        || item.presentation.active_diagram() != Some(diagram_id.as_str())
-                    {
-                        return;
-                    }
-                    item.accept_validation(Some(result), cx);
-                }) {
-                    eprintln!("MDE snapshot validation update failed: {error}");
-                }
-            })
-            .detach();
-            cx.notify();
-            return;
-        }
         self.validation_status = format!("Validation pending for revision {}", snapshot.revision);
         if let Err(error) = self.source.submit(MdeUiCommand::ValidateDiagram(
             bellatrix_mde_cordis::ModelingValidateDiagramRequested {

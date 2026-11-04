@@ -187,13 +187,14 @@ fn register_save(ctx: &Context, service: &Arc<ProjectService>) -> Result<(), io:
         .on::<ProjectSave, _>(responder(move |ctx, args: ProjectSaveRequested| {
             let service = Arc::clone(&service);
             async move {
-                let id = args.id;
+                let id = args.document.id().clone();
+                let document = args.document;
                 let path = args.path;
                 let saved = tokio::task::spawn_blocking({
                     let service = Arc::clone(&service);
-                    let id = id.clone();
+                    let document = Arc::clone(&document);
                     let path = path.clone();
-                    move || service.save(&id, &path)
+                    move || service.save(&document, &path)
                 })
                 .await
                 .map_err(|e| ProjectError::Io(io::Error::other(e.to_string())));
@@ -202,6 +203,7 @@ fn register_save(ctx: &Context, service: &Arc<ProjectService>) -> Result<(), io:
                     notify::<ProjectSavedEvent>(
                         &ctx,
                         ProjectSaved {
+                            document,
                             id,
                             path,
                             revision: *revision,
@@ -232,10 +234,17 @@ fn register_close(ctx: &Context, service: &Arc<ProjectService>) -> Result<(), io
                 .await
                 .map_err(|e| ProjectError::Io(io::Error::other(e.to_string())))
                 .and_then(|value| value);
-                if result.is_ok() {
-                    notify::<ProjectClosedEvent>(&ctx, ProjectClosed { id }).await;
+                if let Ok(session) = &result {
+                    notify::<ProjectClosedEvent>(
+                        &ctx,
+                        ProjectClosed {
+                            id,
+                            session: Arc::clone(session),
+                        },
+                    )
+                    .await;
                 }
-                Ok::<_, Infallible>(Some(result))
+                Ok::<_, Infallible>(Some(result.map(|_| ())))
             }
         }))
         .map_err(|e| io::Error::other(e.to_string()))?;
@@ -333,6 +342,7 @@ fn register_external_storage(
                         notify::<ProjectSavedEvent>(
                             &ctx,
                             ProjectSaved {
+                                document: Arc::clone(args.ticket.document()),
                                 id: args.ticket.document().id().clone(),
                                 path: args.ticket.path().to_path_buf(),
                                 revision: *revision,
@@ -356,13 +366,14 @@ fn register_close_snapshot(ctx: &Context, service: &Arc<ProjectService>) -> Resu
                 let service = Arc::clone(&service);
                 async move {
                     let id = args.document.id().clone();
+                    let session = args.document.session_identity();
                     let result =
                         tokio::task::spawn_blocking(move || service.close_snapshot(&args.document))
                             .await
                             .map_err(|error| ProjectError::Io(io::Error::other(error.to_string())))
                             .and_then(|result| result);
                     if result.is_ok() {
-                        notify::<ProjectClosedEvent>(&ctx, ProjectClosed { id }).await;
+                        notify::<ProjectClosedEvent>(&ctx, ProjectClosed { id, session }).await;
                     }
                     Ok::<_, Infallible>(Some(result))
                 }

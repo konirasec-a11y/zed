@@ -135,7 +135,7 @@ pub(crate) use structural_diagrams::{
 pub(crate) use uml_geometry::{
     ClassifierContents, FoldedNoteLayout, FrameHeadingLayout, InterfaceLayout, PortLabelLayout,
     TemplateSignatureLayout, classifier_contents, folded_note_layout, frame_heading_layout,
-    interface_layout, port_label_layout, template_signature_layout,
+    interface_layout, interface_view_layout, port_label_layout, template_signature_layout,
 };
 pub(crate) use uml_types::{UmlCapability, UmlQuickCreate, UmlType};
 

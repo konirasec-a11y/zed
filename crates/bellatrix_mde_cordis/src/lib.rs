@@ -29,9 +29,8 @@ pub use diagrams::{
     ModelingValidateSnapshotRequested, TracedDiagramValidationResult,
 };
 pub use mdj_interchange::{
-    MdjExportReceipt, ModelingApplyMdjEdit, ModelingApplyMdjEditRequested, ModelingDocumentFormat,
-    ModelingExportMdj, ModelingExportMdjRequested, ModelingPrepareDocument,
-    ModelingPrepareDocumentRequested, PreparedModelingDocument,
+    MdjExportReceipt, ModelingDocumentFormat, ModelingExportMdj, ModelingExportMdjRequested,
+    ModelingPrepareDocument, ModelingPrepareDocumentRequested, PreparedModelingDocument,
 };
 mod artifact_publication;
 mod headless_operations;
@@ -73,10 +72,9 @@ mod view_edits;
 mod view_style;
 pub use view_style::{
     ModelingReorderView, ModelingReorderViewRequested, ModelingSetViewLabel,
-    ModelingSetViewPath, ModelingSetViewPathRequested,
-    ModelingSetViewLabelRequested, ModelingSetViewRouting, ModelingSetViewRoutingRequested,
-    ModelingSetViewStyle, ModelingSetViewStyleRequested, ModelingSetViewTiming,
-    ModelingSetViewTimingRequested,
+    ModelingSetViewLabelRequested, ModelingSetViewPath, ModelingSetViewPathRequested,
+    ModelingSetViewRouting, ModelingSetViewRoutingRequested, ModelingSetViewStyle,
+    ModelingSetViewStyleRequested, ModelingSetViewTiming, ModelingSetViewTimingRequested,
 };
 mod views;
 pub use delete_element::{ModelingDeleteElement, ModelingDeleteElementRequested};
@@ -86,8 +84,8 @@ pub use views::{
     ModelingCreateVisualDraft, ModelingCreateVisualDraftRequested, ModelingPlaceElementView,
     ModelingPlaceElementViewRequested, ModelingRemoveView, ModelingRemoveViewRequested,
 };
-mod mdj_ui_bridge;
-pub use mdj_ui_bridge::MdjSession;
+mod ui_session;
+pub use ui_session::MdeSession;
 mod ui_bridge;
 use cordis::event::{ListenerRegistrationError, observer_sync};
 use cordis::{Context, Event, Plugin};

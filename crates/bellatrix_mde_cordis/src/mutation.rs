@@ -1,4 +1,4 @@
-use crate::{Command, MODELING_NAMESPACE, MdjEditCommand};
+use crate::{Command, MODELING_NAMESPACE};
 use crate::{TraceOutcome, TracePhase};
 use bellatrix_mde::MdeExecutionTrace as ExecutionTrace;
 use bellatrix_project::{
@@ -18,7 +18,7 @@ pub(crate) async fn execute(
     expected_revision: u64,
     command: Command,
 ) -> Result<u64, String> {
-    execute_with_interchange(
+    execute_with_snapshot(
         context,
         projects,
         project_id,
@@ -30,24 +30,24 @@ pub(crate) async fn execute(
     .map(|document| document.revision())
 }
 
-pub(crate) async fn execute_mdj(
+pub(crate) async fn execute_snapshot(
     context: &Context,
     projects: &ProjectService,
     document: Arc<ProjectDocument>,
-    command: MdjEditCommand,
+    command: Command,
 ) -> Result<Arc<ProjectDocument>, String> {
-    execute_with_interchange(
+    execute_with_snapshot(
         context,
         projects,
         document.id().clone(),
         document.revision(),
-        command.into(),
+        command,
         Some(document),
     )
     .await
 }
 
-async fn execute_with_interchange(
+async fn execute_with_snapshot(
     context: &Context,
     projects: &ProjectService,
     project_id: ProjectId,
@@ -114,20 +114,11 @@ async fn execute_inner(
     if document.revision() != expected_revision {
         return Err("stale MDE command; refresh project snapshot".into());
     }
-    let require_mdj_roundtrip = expected_snapshot.is_some();
     if expected_snapshot
         .as_ref()
         .is_some_and(|expected| !Arc::ptr_eq(expected, &document))
     {
-        return Err("stale MDJ document session; the requested snapshot is no longer open".into());
-    }
-    if require_mdj_roundtrip
-        && document
-            .sections()
-            .keys()
-            .any(|namespace| namespace != MODELING_NAMESPACE)
-    {
-        return Err("MDJ interchange cannot represent other platform sections; save the complete native project instead".into());
+        return Err("stale document session; the requested snapshot is no longer open".into());
     }
     let section_json = document
         .sections()
@@ -152,7 +143,6 @@ async fn execute_inner(
             &section_json,
             expected_revision,
             command,
-            require_mdj_roundtrip,
         )
     })
     .await

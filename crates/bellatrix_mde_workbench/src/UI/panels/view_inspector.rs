@@ -244,7 +244,6 @@ impl MdeRightPanel {
             inspector_rows = presentation_rows;
         }
         if !read_only
-            && !item.read(cx).source().is_mdj()
             && let Some((diagram_id, view, _)) = style_target
         {
             let is_timing_lifeline = snapshot.as_ref().is_some_and(|snapshot| {

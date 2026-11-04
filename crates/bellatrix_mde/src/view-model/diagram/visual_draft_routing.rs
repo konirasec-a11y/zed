@@ -56,8 +56,8 @@ pub fn reroute_visual_drafts(diagram: &mut Diagram) {
     let mut endpoints: std::collections::HashMap<String, crate::relationships::Endpoint> = diagram
         .all_views()
         .filter_map(|view| {
-            let center = resolve_visual_center(&view.geometry)?;
-            let (width, height) = match &view.geometry {
+            let mut center = resolve_visual_center(&view.geometry)?;
+            let (mut width, mut height) = match &view.geometry {
                 Geometry::Layout { .. } => return None,
                 Geometry::Rect { width, height, .. } => (*width, *height),
                 Geometry::Ellipse { rx, ry, .. } => (rx * 2.0, ry * 2.0),
@@ -82,12 +82,34 @@ pub fn reroute_visual_drafts(diagram: &mut Diagram) {
                 }
                 Geometry::Path { .. } => (0.0, 0.0),
             };
+            let notation = view.presentation.notation_kind.as_deref()
+                .or_else(|| view.draft.as_ref().map(|draft| draft.notation_kind.as_str()));
+            let circle = if notation.and_then(crate::UmlType::from_kind) == Some(crate::UmlType::Interface)
+                && !matches!(view.style.uml.stereotype_display,
+                    Some(crate::StereotypeDisplay::Hidden | crate::StereotypeDisplay::Label))
+            {
+                crate::interface_view_layout(view, crate::ClassifierContents::default()).map(|mut layout| {
+                    if let Geometry::Rect { x, y, .. } = &view.geometry {
+                        layout.center.x += *x;
+                        layout.center.y += *y;
+                    }
+                    layout
+                })
+            } else {
+                None
+            };
+            if let Some(layout) = circle {
+                center = layout.center;
+                width = layout.radius * 2.0;
+                height = width;
+            }
             Some((
                 view.id.clone(),
                 crate::relationships::Endpoint {
                     center,
                     width,
                     height,
+                    circle,
                 },
             ))
         })
@@ -259,6 +281,7 @@ pub fn reroute_visual_drafts(diagram: &mut Diagram) {
                         center,
                         width: 0.0,
                         height: 0.0,
+                        circle: None,
                     },
                 );
             }

@@ -94,6 +94,9 @@ pub struct MemberPresentation {
 /// A renderer strategy, not a UML metaclass or an editable semantic object.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum UmlNotation {
+    Rectangle,
+    Label,
+    Compartment,
     ClassifierRectangle,
     PackageTab,
     FoldedNote,

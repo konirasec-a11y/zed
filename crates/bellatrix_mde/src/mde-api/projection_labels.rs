@@ -20,17 +20,33 @@ pub(super) fn project(
         text: view.label.clone(),
         diagnostics: Vec::new(),
     };
+    let name_owners = diagram.all_views()
+        .filter(|owner| owner.presentation.name_label.as_deref() == Some(view.id.as_str()))
+        .collect::<Vec<_>>();
+    if !name_owners.is_empty() {
+        rendered.bound = true;
+        match name_owners.as_slice() {
+            [owner] => {
+                if let Some(element) = owner.subject.as_deref().and_then(|subject| {
+                    section.elements.iter().find(|element| element.id == subject)
+                }) {
+                    rendered.text = Some(element.name.clone());
+                    style.font_weight = Some(700);
+                    style.text_align.get_or_insert(TextAlignment::Center);
+                } else {
+                    rendered.diagnostics.push(format!("View {}: name subject is unresolved", view.id));
+                }
+            }
+            _ => rendered.diagnostics.push(format!("View {}: name label has multiple owners", view.id)),
+        }
+        return rendered;
+    }
     let Some(binding) = &view.presentation.label_binding else {
         return rendered;
     };
-    // Opaque MDJ members have source labels but no canonical UML semantics.
-    // Reuse that text without treating a preserved member as a broken Property.
+    // Opaque members retain authored labels without acquiring canonical UML semantics.
+    // This depends on their contract, never on retained source provenance.
     if rendered.text.is_some()
-        && view
-            .presentation
-            .source
-            .as_ref()
-            .is_some_and(|source| source.format == "mdj")
         && section.elements.iter().any(|element| {
             view.subject.as_deref() == Some(element.id.as_str())
                 && matches!(

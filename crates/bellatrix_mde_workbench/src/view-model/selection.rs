@@ -47,10 +47,7 @@ pub(super) fn reconcile_selection(
                 || view.is_some_and(|view| {
                     view.id == id
                         && view.subject.is_none()
-                        && view.draft.is_some()
-                        && diagram.is_some_and(|diagram| {
-                            diagram.views.iter().any(|root| root.id == view.id)
-                        })
+                        && matches!(view.geometry, Geometry::Rect { .. } | Geometry::Path { .. })
                 })
         });
     ReconciledSelection {
@@ -62,7 +59,7 @@ pub(super) fn reconcile_selection(
 }
 
 fn has_inline_representation(section: &ModelingSection, diagram: &Diagram, target: &str) -> bool {
-    diagram.views.iter().any(|view| {
+    diagram.all_views().any(|view| {
         let Geometry::Rect {
             x,
             y,
@@ -118,7 +115,7 @@ fn has_inline_representation(section: &ModelingSection, diagram: &Diagram, targe
 }
 
 pub(super) fn supports_view_editing(diagram: &Diagram, view_id: &str) -> bool {
-    diagram.views.iter().any(|view| {
+    diagram.all_views().any(|view| {
         view.id == view_id && matches!(view.geometry, Geometry::Rect { .. } | Geometry::Path { .. })
     })
 }
@@ -130,7 +127,4 @@ pub(super) fn supports_view_style_editing(diagram: &Diagram, view_id: &str) -> b
 
 pub(super) fn supports_view_layout_editing(diagram: &Diagram, view_id: &str) -> bool {
     supports_view_editing(diagram, view_id)
-        && !diagram.all_views().any(|view| {
-            !view.children.is_empty() || matches!(view.geometry, Geometry::Layout { .. })
-        })
 }

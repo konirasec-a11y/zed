@@ -8,6 +8,8 @@ mod interface_projection;
 mod label_projection;
 #[path = "mdj_members.rs"]
 mod members;
+#[path = "mdj_native.rs"]
+mod native;
 #[path = "mdj_style_projection.rs"]
 mod style_projection;
 #[path = "mdj_view_projection.rs"]
@@ -21,7 +23,7 @@ use crate::{
 use serde_json::{Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
-const PROJECTION_VERSION: u32 = 3;
+const PROJECTION_VERSION: u32 = 4;
 
 #[derive(Debug)]
 pub struct Import {
@@ -280,6 +282,7 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
     interface_projection::bind(&index, &mut project);
     erd_projection::bind(&index, &mut project);
     view_projection::bind_markers(&index, &mut project, &mut diagnostics);
+    native::normalize(&mut project, &mut diagnostics);
     Ok((
         Import {
             project,
@@ -800,14 +803,28 @@ fn export_view(view: &View, original: Option<&mdj::Object<'_>>) -> Result<Value,
     style_projection::export_style(view, &mut object)?;
     interface_projection::export(view, &mut object)?;
     erd_projection::export(view, &mut object)?;
+    if let Some(visible) = view.presentation.visible
+        && !source.residual.contains_key("visible")
+    {
+        insert_mapped(&mut object, "visible", Value::Bool(visible))?;
+    }
     let original = original.filter(|original| original.type_name == source.type_name);
     if view_projection::export_path(view, original, &mut object)? {
+        return Ok(Value::Object(object));
+    }
+    if let Geometry::Rect { x, y, width, height } = &view.geometry {
+        for (key, value) in [("left", x), ("top", y), ("width", width), ("height", height)] {
+            if !value.is_finite() || matches!(key, "width" | "height") && *value < 0.0 {
+                return Err(failure(&view.id, "invalid rectangular MDJ geometry"));
+            }
+            insert_mapped(&mut object, key, serde_json::from_str(&value.to_string())?)?;
+        }
         return Ok(Value::Object(object));
     }
     let Geometry::Layout { bounds } = &view.geometry else {
         return Err(failure(
             "",
-            "MDJ geometry export only supports authored Layout bounds",
+            "MDJ geometry export requires rectangular or unresolved Layout bounds",
         ));
     };
     for (key, number) in [("left", &bounds.x), ("top", &bounds.y)] {

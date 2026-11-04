@@ -262,25 +262,7 @@ fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrder) -> Vec<E
                 && presentations
                     .get(component.view_id.as_str())
                     .is_some_and(|view| {
-                        view.presentation
-                            .source
-                            .as_ref()
-                            .is_some_and(|source| source.format == "mdj")
-                            && matches!(
-                                view.presentation.kind.as_deref(),
-                                Some(
-                                    "LabelView"
-                                        | "NodeLabelView"
-                                        | "EdgeLabelView"
-                                        | "UMLNameCompartmentView"
-                                        | "UMLAttributeCompartmentView"
-                                        | "UMLOperationCompartmentView"
-                                        | "UMLReceptionCompartmentView"
-                                        | "UMLTemplateParameterCompartmentView"
-                                        | "UMLQualifierCompartmentView"
-                                        | "UMLSlotCompartmentView"
-                                )
-                            )
+                        view.presentation.internal
                     })
         })
         .map(|component| {
@@ -318,14 +300,8 @@ fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrder) -> Vec<E
             let kind = if view.kind == "visual component" {
                 presentations
                     .get(view.view_id.as_str())
-                    .filter(|view| {
-                        view.presentation
-                            .source
-                            .as_ref()
-                            .is_some_and(|source| source.format == "mdj")
-                    })
-                    .and_then(|view| view.presentation.kind.as_deref())
-                    .map(|kind| format!("mdj.{kind}"))
+                    .and_then(|view| view.presentation.notation_kind.as_deref())
+                    .map(str::to_owned)
                     .unwrap_or_else(|| view.kind.clone())
             } else {
                 view.kind.clone()

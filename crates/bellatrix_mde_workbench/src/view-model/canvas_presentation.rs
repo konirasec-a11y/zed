@@ -10,20 +10,19 @@ pub(super) struct CanvasBounds {
     pub height: f32,
 }
 
-pub(super) fn resolve_layout_bounds(
+pub(super) fn resolve_bounds(
     geometry: &Geometry,
     zoom: f32,
     pan: (f32, f32),
 ) -> Option<CanvasBounds> {
-    let Geometry::Layout { bounds } = geometry else {
-        return None;
+    let (x, y, width, height) = match geometry {
+        Geometry::Rect { x, y, width, height } => (*x, *y, *width, *height),
+        Geometry::Layout { bounds } => (
+            *bounds.x.value()?, *bounds.y.value()?,
+            bounds.width.value()?.resolved()?, bounds.height.value()?.resolved()?,
+        ),
+        _ => return None,
     };
-    let (x, y, width, height) = (
-        *bounds.x.value()?,
-        *bounds.y.value()?,
-        bounds.width.value()?.resolved()?,
-        bounds.height.value()?.resolved()?,
-    );
     if ![x, y, width, height].iter().all(|value| value.is_finite())
         || width < 0.0
         || height < 0.0
@@ -58,44 +57,15 @@ pub(super) fn resolve_layout_bounds(
     })
 }
 
-pub(super) enum ImportedShape {
-    Rectangle,
-    Label,
-    InterfaceIcon,
-}
-
-pub(super) fn imported_shape(view: &View) -> Option<ImportedShape> {
-    if view.entity_box.is_some() {
-        return Some(ImportedShape::Rectangle);
-    }
-    if view.interface_icon.is_some() {
-        return Some(ImportedShape::InterfaceIcon);
-    }
-    if view.rendered_label.bound {
-        return Some(ImportedShape::Label);
-    }
-    match view.presentation.kind.as_deref()? {
-        "RectangleView" | "UMLClassView" | "UMLMetaClassView" | "UMLStereotypeView" => {
-            Some(ImportedShape::Rectangle)
-        }
-        "LabelView" | "NodeLabelView" | "EdgeLabelView" | "UMLAttributeView"
-        | "UMLOperationView" => Some(ImportedShape::Label),
-        _ => None,
-    }
-}
-
 pub(super) fn render_style(view: &View, palette: Palette) -> RenderStyle {
     let mut style = view.render_style.clone();
-    if !view.presentation.has_source {
-        return style;
-    }
     let matches_color = |color: Option<&str>, expected: &str| {
         color.is_some_and(|color| {
             color.eq_ignore_ascii_case(expected)
                 || color.eq_ignore_ascii_case(&format!("{expected}ff"))
         })
     };
-    // Source palette defaults are paint inputs, not the editor's theme. Keep
+    // Neutral palette defaults are paint inputs, not the editor's theme. Keep
     // authored colors in the document and retain non-default color accents.
     let themed_surface = style.fill.is_none()
         || matches_color(style.fill.as_deref(), "#ffffff")
@@ -127,7 +97,7 @@ pub(super) fn ordered_views(views: &[View]) -> Vec<&View> {
     let mut pending = siblings.into_iter().rev().collect::<Vec<_>>();
     let mut ordered = Vec::new();
     while let Some(view) = pending.pop() {
-        if !visible_in_preview(view) {
+        if !visible_on_canvas(view) {
             continue;
         }
         ordered.push(view);
@@ -138,6 +108,27 @@ pub(super) fn ordered_views(views: &[View]) -> Vec<&View> {
     ordered
 }
 
-fn visible_in_preview(view: &View) -> bool {
+fn visible_on_canvas(view: &View) -> bool {
     view.presentation.visible
+}
+
+
+pub(super) fn minimum_size(
+    section: &bellatrix_mde_cordis::projection::ModelingProjection,
+    view: &View,
+) -> (f64, f64) {
+    if view.draft.is_some() || view.presentation.internal
+        || view.children.iter().any(|child| child.presentation.internal)
+        || matches!(view.presentation.kind.as_deref(),
+            Some("presentation.label" | "presentation.compartment" | "presentation.rectangle"))
+    {
+        return (1.0, 1.0);
+    }
+    section.elements.iter().find(|element| Some(element.id.as_str()) == view.subject.as_deref())
+        .map(|element| (
+            element.minimum_size.0.max(80.0),
+            element.minimum_size.1.max(48.0).max(element.minimum_header_height)
+                .max(element.minimum_interface_height.unwrap_or(0.0)),
+        ))
+        .unwrap_or((80.0, 48.0))
 }

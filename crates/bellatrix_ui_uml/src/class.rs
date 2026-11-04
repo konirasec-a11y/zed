@@ -280,6 +280,7 @@ pub struct UmlClassifier {
     pub(crate) operations: Vec<MemberRow>,
     pub(crate) receptions: Vec<MemberRow>,
     show_internal_structure: bool,
+    authored_contents: bool,
     pub(crate) template_parameters: Vec<MemberRow>,
     pub(crate) selected: bool,
     pub(crate) editing: Option<(String, Entity<InputField>)>,
@@ -295,6 +296,10 @@ pub struct UmlClassifier {
 }
 
 impl UmlClassifier {
+    pub fn authored_contents(mut self, authored: bool) -> Self {
+        self.authored_contents = authored;
+        self
+    }
     pub fn show_internal_structure(mut self, show: bool) -> Self {
         self.show_internal_structure = show;
         self
@@ -309,6 +314,7 @@ impl UmlClassifier {
             operations: Vec::new(),
             receptions: Vec::new(),
             show_internal_structure: false,
+            authored_contents: false,
             template_parameters: Vec::new(),
             selected: false,
             editing: None,
@@ -688,7 +694,7 @@ impl RenderOnce for UmlClassifier {
             })
             .bg(appearance.fill(palette.panel))
             .overflow_hidden()
-            .child(
+            .when(!self.authored_contents, |element| element.child(
                 div()
                     .id("uml-classifier-title")
                     .min_h(px(header_height as f32 * scale))
@@ -748,9 +754,9 @@ impl RenderOnce for UmlClassifier {
                             })
                             .child(title),
                     ),
-            )
+            ))
             .when(
-                appearance.0.show_attributes && !self.attributes.is_empty(),
+                !self.authored_contents && appearance.0.show_attributes && !self.attributes.is_empty(),
                 |element| {
                     element.child(compartment(
                         self.attributes,
@@ -762,7 +768,7 @@ impl RenderOnce for UmlClassifier {
                 },
             )
             .when(
-                appearance.0.show_operations && !self.operations.is_empty(),
+                !self.authored_contents && appearance.0.show_operations && !self.operations.is_empty(),
                 |element| {
                     element.child(compartment(
                         self.operations,
@@ -774,7 +780,7 @@ impl RenderOnce for UmlClassifier {
                 },
             )
             .when(
-                appearance.0.show_receptions && !self.receptions.is_empty(),
+                !self.authored_contents && appearance.0.show_receptions && !self.receptions.is_empty(),
                 |element| {
                     element.child(compartment(
                         self.receptions,
@@ -785,7 +791,7 @@ impl RenderOnce for UmlClassifier {
                     ))
                 },
             )
-            .when(self.show_internal_structure, |element| {
+            .when(self.show_internal_structure && !self.authored_contents, |element| {
                 element.child(
                     div()
                         .flex_1()
