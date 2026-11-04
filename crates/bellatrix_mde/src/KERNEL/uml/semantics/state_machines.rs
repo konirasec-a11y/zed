@@ -475,6 +475,27 @@ fn transition_outgoing_pseudostates(references: &ReferenceIndex<'_>, transition:
     implies(condition, composite_role_empty(references, transition, "trigger", "Trigger"))
 }
 
+fn pseudostate_outgoing_from_initial(references: &ReferenceIndex<'_>, point: ElementRef<'_>) -> Result<bool, QueryError> {
+    let kind = schema::read_effective_scalar(point, "kind")
+        .map_err(|error| QueryError::invalid(point.id(), error))?;
+    if kind.as_str() != Some("initial") { return Ok(true); }
+    let mut checks = Vec::new();
+    for transition in references.model().elements().filter(|element| element.conforms_to("Transition")) {
+        // Identity establishes membership even if the endpoint's metaclass is
+        // unresolved. An external/missing source remains only a possible member.
+        let member = transition_endpoint(references, transition, "source")
+            .map(|source| source.id() == point.id());
+        if matches!(&member, Ok(false)) { continue; }
+        // If both roles are empty, a possible member cannot violate the rule.
+        // Conversely, a known violating member dominates other unknown members.
+        checks.push(implies(member, require_all([
+            composite_role_empty(references, transition, "guard", "Constraint"),
+            composite_role_empty(references, transition, "trigger", "Trigger"),
+        ])));
+    }
+    require_all(checks)
+}
+
 pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     for element in references.model().elements() {
@@ -489,6 +510,9 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "State-entry_or_exit", "connection points must have kind entryPoint or exitPoint"));
         }
         if element.conforms_to("Pseudostate") {
+            constraints.push((pseudostate_outgoing_from_initial(references, element),
+                "UML_PSEUDOSTATE_OUTGOING_FROM_INITIAL", "MDE_PSEUDOSTATE_OUTGOING_FROM_INITIAL_UNVERIFIED",
+                "Pseudostate-outgoing_from_initial", "a Transition from an initial Pseudostate cannot have a guard or triggers"));
             constraints.push((pseudostate_incident_transitions(references, element, "fork", (1, 1), (2, usize::MAX)),
                 "UML_PSEUDOSTATE_FORK_VERTEX", "MDE_PSEUDOSTATE_FORK_VERTEX_UNVERIFIED",
                 "Pseudostate-fork_vertex", "a fork Pseudostate requires exactly one incoming and at least two outgoing Transitions"));
