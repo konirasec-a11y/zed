@@ -1,5 +1,7 @@
 //! Read-only toolbox metadata computed in MDE, never UML policy in the UI.
-use crate::{ModelingElementKind, ModelingRelationKind, ModelingTool, StructuralDiagramKind};
+use crate::protocol::{
+    ModelingElementKind, ModelingRelationKind, ModelingTool, StructuralDiagramKind,
+};
 
 #[derive(Clone, Debug, Default)]
 pub struct ToolCatalog {

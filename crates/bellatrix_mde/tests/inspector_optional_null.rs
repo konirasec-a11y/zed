@@ -1,7 +1,7 @@
 use bellatrix_mde::{
     apply_model_command, decode_model_document, encode_model_section, prepare_model_document,
 };
-use bellatrix_mde_protocol::Command;
+use bellatrix_mde_contracts::protocol::Command;
 use serde_json::{Value, json};
 
 fn document() -> Value {

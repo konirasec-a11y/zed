@@ -1,22 +1,10 @@
+pub use bellatrix_mde_contracts::events::{ModelingAddMemberRequested, ModelingAddMember, ModelingMoveParameterRequested, ModelingMoveParameter};
 use crate::Command;
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::{Context, Event};
 
 use crate::ModelingMemberKind;
 
-#[derive(Clone, Debug)]
-pub struct ModelingAddMemberRequested {
-    pub project_id: ProjectId,
-    pub owner_id: String,
-    pub kind: ModelingMemberKind,
-    pub expected_revision: u64,
-}
-pub struct ModelingAddMember;
-impl Event for ModelingAddMember {
-    const NAME: &'static str = "bellatrix.mde.add-member.v1";
-    type Args = ModelingAddMemberRequested;
-    type Output = Result<u64, String>;
-}
 pub(crate) async fn add_member(
     context: &Context,
     projects: &ProjectService,
@@ -35,19 +23,6 @@ pub(crate) async fn add_member(
     .await
 }
 
-#[derive(Clone, Debug)]
-pub struct ModelingMoveParameterRequested {
-    pub project_id: ProjectId,
-    pub parameter_id: String,
-    pub up: bool,
-    pub expected_revision: u64,
-}
-pub struct ModelingMoveParameter;
-impl Event for ModelingMoveParameter {
-    const NAME: &'static str = "bellatrix.mde.move-parameter.v1";
-    type Args = ModelingMoveParameterRequested;
-    type Output = Result<u64, String>;
-}
 pub(crate) async fn move_parameter(
     context: &Context,
     projects: &ProjectService,

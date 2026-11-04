@@ -1,9 +1,8 @@
-use bellatrix_mde_protocol::tools::*;
+use bellatrix_mde_contracts::protocol::tools::*;
 // Catalog policy is resolved inside MDE; consumers receive only derived metadata.
 pub(crate) fn project(diagrams: &[crate::Diagram]) -> ToolCatalog {
     use crate::ModelingRelationKind as R;
     use crate::commands::{ModelingElementKind as E, ModelingTool as T};
-    use crate::mde_api_command_conversion as convert;
     let elements = [
         E::Port,
         E::Part,
@@ -77,7 +76,7 @@ pub(crate) fn project(diagrams: &[crate::Diagram]) -> ToolCatalog {
     ]
     .into_iter()
     .map(|kind| ElementToolMetadata {
-        kind: convert::element_kind_contract(kind),
+        kind,
         label: kind.label().into(),
         model_kind: kind.model_kind().into(),
         default_name: kind.default_name().into(),
@@ -129,7 +128,7 @@ pub(crate) fn project(diagrams: &[crate::Diagram]) -> ToolCatalog {
     ]
     .into_iter()
     .map(|kind| RelationToolMetadata {
-        kind: convert::relation_kind_contract(kind),
+        kind,
         label: kind.label().into(),
         model_kind: kind.model_kind().into(),
         endpoint_instruction: kind.endpoint_instruction().into(),
@@ -142,7 +141,7 @@ pub(crate) fn project(diagrams: &[crate::Diagram]) -> ToolCatalog {
     let diagram_metadata = crate::StructuralDiagramKind::ALL_DIAGRAMS
         .into_iter()
         .map(|kind| DiagramToolMetadata {
-            kind: convert::diagram_kind_contract(kind),
+            kind,
             uml_di_type: kind.uml_di_type().into(),
             interaction_kind: kind.interaction_kind().map(str::to_owned),
             context_metaclass: kind.context_metaclass().map(str::to_owned),
@@ -154,7 +153,7 @@ pub(crate) fn project(diagrams: &[crate::Diagram]) -> ToolCatalog {
         .filter_map(|tool| {
             tool.resolve_interface_presentation()
                 .map(|presentation| InterfaceToolMetadata {
-                    tool: convert::tool_contract(tool),
+                    tool,
                     label: tool.label().into(),
                     presentation: presentation.into(),
                 })
@@ -244,7 +243,7 @@ pub(crate) fn project(diagrams: &[crate::Diagram]) -> ToolCatalog {
         .into_iter()
         .map(|(name, tools)| ToolGroup {
             name: name.into(),
-            tools: tools.into_iter().map(convert::tool_contract).collect(),
+            tools,
         })
         .collect();
     let profiles = diagrams.iter().filter(|diagram| crate::StructuralDiagramKind::from_diagram(diagram).is_none())

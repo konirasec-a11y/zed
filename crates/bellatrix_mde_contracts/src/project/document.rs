@@ -1,4 +1,4 @@
-use crate::ProjectError;
+use super::ProjectError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::BTreeMap, sync::Arc};
@@ -77,7 +77,9 @@ impl ProjectDocument {
         Arc::clone(&self.session)
     }
 
-    pub(crate) fn begin_session(&mut self) {
+    /// Reset a detached document before admitting it to a runtime session.
+    /// This cannot change an immutable snapshot already held by a service.
+    pub fn begin_session(&mut self) {
         self.session = Arc::new(());
     }
 
@@ -109,7 +111,7 @@ impl ProjectDocument {
         Ok(self)
     }
 
-    pub(crate) fn validate(&self) -> Result<(), ProjectError> {
+    pub fn validate(&self) -> Result<(), ProjectError> {
         ProjectId::new(self.id.as_str())?;
         if self.schema_version != schema_version() {
             return Err(ProjectError::Schema(self.schema_version));
@@ -120,11 +122,9 @@ impl ProjectDocument {
         Ok(())
     }
 
-    pub(crate) fn replace(
-        &mut self,
-        namespace: String,
-        value: Value,
-    ) -> Result<bool, ProjectError> {
+    /// Advance a detached snapshot; only the owning service can publish it
+    /// as live state after checking the expected revision and session.
+    pub fn replace(&mut self, namespace: String, value: Value) -> Result<bool, ProjectError> {
         validate_namespace(&namespace)?;
         if self.sections.get(&namespace) == Some(&value) {
             return Ok(false);

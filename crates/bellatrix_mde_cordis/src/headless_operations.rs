@@ -1,18 +1,9 @@
+pub use bellatrix_mde_contracts::events::{ModelingExecute};
 use crate::ModelingOperation;
 use cordis::event::{ListenerRegistrationError, responder};
 use cordis::{Context, Event};
 use serde_json::Value;
 use std::{convert::Infallible, fs, path::Path};
-
-/// Execute a headless integration operation without exposing domain objects.
-/// Sources and destinations are explicit caller-selected paths. Reports are text;
-/// validation, generation and publication remain behind the Cordis boundary.
-pub struct ModelingExecute;
-impl Event for ModelingExecute {
-    const NAME: &'static str = "bellatrix.mde.execute.v1";
-    type Args = ModelingOperation;
-    type Output = Result<String, String>;
-}
 
 fn format_name(path: &Path) -> &'static str {
     if matches!(

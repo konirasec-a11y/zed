@@ -1,4 +1,5 @@
 //! Bounded MDE execution history shared by host consumers.
+pub use bellatrix_mde_contracts::events::{ExecutionJournalSnapshot};
 use crate::ModelingExecutionTrace;
 use crate::{ExecutionEvent, TraceOutcome, TracePhase};
 use std::{
@@ -15,15 +16,6 @@ static NEXT_UI_SESSION: AtomicU64 = AtomicU64::new(1);
 
 const CAPACITY: usize = 2_000;
 const LOSS_NOTICE_CAPACITY: usize = 100;
-
-#[derive(Clone, Default)]
-pub struct ExecutionJournalSnapshot {
-    pub version: u64,
-    pub events: VecDeque<ExecutionEvent>,
-    pub evicted_events: u64,
-    pub producer_dropped_events: u64,
-    pub producer_loss: VecDeque<(String, u64)>,
-}
 
 pub struct ExecutionJournal {
     state: Mutex<ExecutionJournalSnapshot>,

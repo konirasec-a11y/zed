@@ -52,23 +52,7 @@ pub enum UmlCapability {
     Part,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum UmlQuickCreate {
-    Note,
-    Constraint,
-    Reception,
-    Subtype,
-    Supertype,
-    RealizingClass,
-    TemplateParameter,
-    ProvidedInterface,
-    RequiredInterface,
-    AssociatedClass,
-    AggregatedClass,
-    CompositedClass,
-    Port,
-    Part,
-}
+pub use bellatrix_mde_contracts::protocol::command::UmlQuickCreate;
 
 impl UmlType {
     pub fn from_kind(kind: &str) -> Option<Self> {
@@ -199,24 +183,26 @@ impl UmlType {
     }
 }
 
-impl UmlQuickCreate {
-    pub fn capability(self) -> UmlCapability {
-        match self {
-            Self::Note | Self::Constraint => UmlCapability::Annotation,
-            Self::Reception => UmlCapability::Reception,
-            Self::Subtype | Self::Supertype => UmlCapability::Specialization,
-            Self::RealizingClass => UmlCapability::RealizationTarget,
-            Self::TemplateParameter => UmlCapability::TemplateParameter,
-            Self::ProvidedInterface | Self::RequiredInterface => UmlCapability::ClassInterfaces,
-            Self::AssociatedClass | Self::AggregatedClass | Self::CompositedClass => {
-                UmlCapability::ClassAssociation
-            }
-            Self::Port => UmlCapability::Port,
-            Self::Part => UmlCapability::Part,
+pub fn quick_create_capability(action: UmlQuickCreate) -> UmlCapability {
+    match action {
+        UmlQuickCreate::Note | UmlQuickCreate::Constraint => UmlCapability::Annotation,
+        UmlQuickCreate::Reception => UmlCapability::Reception,
+        UmlQuickCreate::Subtype | UmlQuickCreate::Supertype => UmlCapability::Specialization,
+        UmlQuickCreate::RealizingClass => UmlCapability::RealizationTarget,
+        UmlQuickCreate::TemplateParameter => UmlCapability::TemplateParameter,
+        UmlQuickCreate::ProvidedInterface | UmlQuickCreate::RequiredInterface => {
+            UmlCapability::ClassInterfaces
+        },
+        UmlQuickCreate::AssociatedClass
+        | UmlQuickCreate::AggregatedClass
+        | UmlQuickCreate::CompositedClass => {
+            UmlCapability::ClassAssociation
         }
+        UmlQuickCreate::Port => UmlCapability::Port,
+        UmlQuickCreate::Part => UmlCapability::Part,
     }
+}
 
-    pub fn accepts(self, kind: &str) -> bool {
-        UmlType::from_kind(kind).is_some_and(|kind| kind.supports(self.capability()))
-    }
+pub fn quick_create_accepts(action: UmlQuickCreate, kind: &str) -> bool {
+    UmlType::from_kind(kind).is_some_and(|kind| kind.supports(quick_create_capability(action)))
 }

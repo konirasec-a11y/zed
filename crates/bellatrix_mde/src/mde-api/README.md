@@ -29,11 +29,12 @@ The application facade is defined here and reexported from `src/mde.rs`:
   `MdeExecutionTrace` struct and its public methods `new`, `set_sink`, `clear_sink`,
   `run_id`, `events`, `dropped` and `emit`.
 
-Implementation modules are private. Input commands and derived read records are
-independent DTOs in `bellatrix_mde_protocol`; they do not expose engine model,
-graph, compiler or UML types. The protocol depends on neither MDE nor Cordis and
-contains no runtime, document store or semantic algorithm. `ModelDocumentParts`
-contains identity plus opaque canonical section JSON, rather than a second model.
+Implementation modules are private. Canonical model records, commands and derived
+read records live in `bellatrix_mde_contracts`; command execution consumes those
+same types directly. Shared contracts have no dependency on the engine or Cordis.
+Graph algorithms, compiler IR, document stores and execution state remain local.
+`ModelDocumentParts` contains identity plus opaque canonical section JSON, rather
+than another model. `bellatrix_mde_protocol` is a reexport-only compatibility facade.
 `src/api_contract.rs` owns the common envelope version, errors and full-document
 decoder. Kernel and application APIs use that private helper independently.
 The semantic-only projection in `kernel-api/contract.rs` is never a save format.

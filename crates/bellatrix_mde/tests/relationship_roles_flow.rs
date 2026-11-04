@@ -2,7 +2,7 @@ use bellatrix_mde::{
     apply_model_command, decode_model_document, encode_model_document, encode_model_section,
     prepare_model_document, project_model_section, validate_uml_model,
 };
-use bellatrix_mde_protocol::Command;
+use bellatrix_mde_contracts::protocol::Command;
 use serde_json::{Value, json};
 
 fn request(project: &Value) -> String {

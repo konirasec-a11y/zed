@@ -1,35 +1,9 @@
+pub use bellatrix_mde_contracts::events::{ModelingDocumentFormat, ModelingPrepareDocumentRequested, PreparedModelingDocument, ModelingPrepareDocument, ModelingExportMdjRequested, ModelingExportMdj, MdjExportReceipt};
 use crate::MODELING_NAMESPACE;
 use crate::project_integration::section_json;
 use bellatrix_project::{ProjectDocument, ProjectPrepareEncodedSaveRequested, ProjectService};
 use cordis::{Context, Event, event::responder};
 use std::{convert::Infallible, io, sync::Arc};
-
-#[derive(Clone, Copy, Debug)]
-pub enum ModelingDocumentFormat {
-    ProjectJson,
-    ModelJson,
-    ModelProtobuf,
-    StarUml,
-}
-
-#[derive(Clone, Debug)]
-pub struct ModelingPrepareDocumentRequested {
-    pub bytes: Vec<u8>,
-    pub format: ModelingDocumentFormat,
-}
-
-#[derive(Clone, Debug)]
-pub struct PreparedModelingDocument {
-    pub document: ProjectDocument,
-    pub diagnostics: Vec<String>,
-}
-
-pub struct ModelingPrepareDocument;
-impl Event for ModelingPrepareDocument {
-    const NAME: &'static str = "bellatrix.mde.prepare-document.v1";
-    type Args = ModelingPrepareDocumentRequested;
-    type Output = Result<PreparedModelingDocument, String>;
-}
 
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -182,48 +156,6 @@ fn prepare_document(
     }
 }
 
-#[derive(Clone)]
-pub struct ModelingExportMdjRequested {
-    pub document: Arc<ProjectDocument>,
-}
-
-pub struct ModelingExportMdj;
-impl Event for ModelingExportMdj {
-    const NAME: &'static str = "bellatrix.mde.export-mdj.v1";
-    type Args = ModelingExportMdjRequested;
-    type Output = Result<MdjExportReceipt, String>;
-}
-
-/// Verified bytes for one immutable snapshot, not a write reservation or a save acknowledgement.
-/// Native adapters must still guard source/destination changes and acknowledge actual I/O.
-#[derive(Clone, Debug)]
-pub struct MdjExportReceipt {
-    document: Arc<ProjectDocument>,
-    bytes: Arc<[u8]>,
-}
-
-impl MdjExportReceipt {
-    pub fn document(&self) -> &Arc<ProjectDocument> {
-        &self.document
-    }
-
-    pub fn bytes(&self) -> &[u8] {
-        &self.bytes
-    }
-
-    pub fn matches_snapshot(&self, snapshot: &Arc<ProjectDocument>) -> bool {
-        Arc::ptr_eq(&self.document, snapshot)
-    }
-
-    pub fn prepare_save(&self, path: std::path::PathBuf) -> ProjectPrepareEncodedSaveRequested {
-        ProjectPrepareEncodedSaveRequested {
-            document: Arc::clone(&self.document),
-            path,
-            bytes: Arc::clone(&self.bytes),
-        }
-    }
-}
-
 fn ensure_mdj_sections(document: &ProjectDocument) -> Result<(), String> {
     if document
         .sections()
@@ -260,10 +192,7 @@ async fn export_snapshot(
     if !Arc::ptr_eq(&document, &current) {
         return Err("document changed while preparing MDJ bytes; no save was acknowledged".into());
     }
-    Ok(MdjExportReceipt {
-        document,
-        bytes: bytes.into(),
-    })
+    Ok(MdjExportReceipt::from_encoded(document, bytes.into()))
 }
 
 pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Result<(), io::Error> {

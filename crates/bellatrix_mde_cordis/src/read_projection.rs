@@ -1,33 +1,9 @@
-pub use bellatrix_mde_protocol::projection::*;
+pub use bellatrix_mde_contracts::events::{ModelingSnapshot, ModelingReadProjectionRequested, ModelingReadProjection};
+pub use bellatrix_mde_contracts::protocol::projection::*;
 use bellatrix_project::{ProjectDocument, ProjectId, ProjectService};
 use cordis::event::responder;
 use cordis::{Context, Event};
 use std::{convert::Infallible, sync::Arc};
-
-/// A derived read result, never a document, command or persistence input.
-#[derive(Clone, Debug)]
-pub struct ModelingSnapshot {
-    pub project_id: ProjectId,
-    pub name: String,
-    pub revision: u64,
-    pub section: ModelingProjection,
-    document: Arc<ProjectDocument>,
-}
-impl ModelingSnapshot {
-    pub fn matches_document(&self, document: &Arc<ProjectDocument>) -> bool {
-        Arc::ptr_eq(&self.document, document)
-    }
-}
-#[derive(Clone)]
-pub struct ModelingReadProjectionRequested {
-    pub document: Arc<ProjectDocument>,
-}
-pub struct ModelingReadProjection;
-impl Event for ModelingReadProjection {
-    const NAME: &'static str = "bellatrix.mde.read-projection.v1";
-    type Args = ModelingReadProjectionRequested;
-    type Output = Result<ModelingSnapshot, String>;
-}
 
 pub(crate) fn register(
     context: &Context,
@@ -77,13 +53,7 @@ fn project_document(document: Arc<ProjectDocument>) -> Result<ModelingSnapshot, 
         document.name(),
         &section_json,
     )?;
-    Ok(ModelingSnapshot {
-        project_id: document.id().clone(),
-        name: document.name().to_owned(),
-        revision: document.revision(),
-        section,
-        document,
-    })
+    Ok(ModelingSnapshot::new(document, section))
 }
 
 pub(crate) fn start_feed(

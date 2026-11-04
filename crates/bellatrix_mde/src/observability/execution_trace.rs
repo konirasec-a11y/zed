@@ -1,38 +1,5 @@
 //! Opt-in execution events. A caller owns each bounded run and chooses how to export it.
-use serde::Serialize;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TracePhase {
-    Start,
-    Finish,
-    Error,
-    Diagnostic,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TraceOutcome {
-    Success,
-    Invalid,
-    Unsupported,
-    Error,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct ExecutionEvent {
-    pub run_id: String,
-    pub revision: Option<String>,
-    pub sequence: u64,
-    /// Monotonic nanoseconds since this run was created.
-    pub elapsed_ns: u64,
-    pub component: String,
-    pub action: String,
-    pub phase: TracePhase,
-    pub identity: Option<String>,
-    pub dependencies: Vec<String>,
-    pub outcome: Option<TraceOutcome>,
-}
+pub use bellatrix_mde_contracts::protocol::trace::{ExecutionEvent, TraceOutcome, TracePhase};
 
 type EventSink = std::sync::Arc<dyn Fn(&ExecutionEvent) + Send + Sync>;
 

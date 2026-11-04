@@ -69,12 +69,43 @@ pub fn apply_model_command(
     name: &str,
     section_json: &str,
     revision: u64,
-    command: bellatrix_mde_protocol::command::Command,
+    command: bellatrix_mde_contracts::protocol::command::Command,
 ) -> Result<serde_json::Value, String> {
     let section = crate::mde_api_projection::decode_section(project_id, name, section_json)?;
     let source = section.to_model(project_id, name);
-    let command = crate::mde_api_command_conversion::command(command)?;
+    validate_command_presentation(&command)?;
     let updated = commands::apply(&source, &command, revision)?;
     serde_json::to_value(crate::ModelingSection::from_model(&updated))
         .map_err(|error| error.to_string())
+}
+
+fn validate_command_presentation(command: &commands::Command) -> Result<(), String> {
+    use commands::Command;
+    match command {
+        Command::CreateVisualDraft { geometry, .. } | Command::SetViewPath { geometry, .. } => {
+            geometry.validate()
+        }
+        Command::SetViewStyle { style, .. } => {
+            if [
+                style.stroke_width,
+                style.font_size,
+                style.opacity,
+                style.corner_radius,
+            ]
+            .into_iter()
+            .flatten()
+            .chain(style.dash_pattern.iter().copied())
+            .all(f64::is_finite)
+            {
+                Ok(())
+            } else {
+                Err("command style values must be finite".into())
+            }
+        }
+        Command::SetViewTiming {
+            timing: Some(timing),
+            ..
+        } => timing.validate(),
+        _ => Ok(()),
+    }
 }

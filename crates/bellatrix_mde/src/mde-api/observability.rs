@@ -1,5 +1,5 @@
-//! Opaque execution observation handle. Domain trace types remain private.
-use bellatrix_mde_protocol::trace::{
+//! Opaque execution observation handle over shared trace contracts.
+use bellatrix_mde_contracts::protocol::trace::{
     DiagnosticSeverity, ExecutionEvent, ModelingDiagnostic, TraceOutcome, TracePhase,
 };
 
@@ -11,7 +11,7 @@ impl MdeExecutionTrace {
     }
     /// Sinks must not block; hosts should forward to bounded channels.
     pub fn set_sink(&mut self, sink: impl Fn(&ExecutionEvent) + Send + Sync + 'static) {
-        self.0.set_sink(move |event| sink(&event_contract(event)));
+        self.0.set_sink(sink);
     }
     pub fn clear_sink(&mut self) {
         self.0.clear_sink();
@@ -20,7 +20,7 @@ impl MdeExecutionTrace {
         self.0.run_id()
     }
     pub fn events(&self) -> Vec<ExecutionEvent> {
-        self.0.events().iter().map(event_contract).collect()
+        self.0.events().to_vec()
     }
     pub fn dropped(&self) -> u64 {
         self.0.dropped()
@@ -34,49 +34,7 @@ impl MdeExecutionTrace {
         dependencies: &[String],
         outcome: Option<TraceOutcome>,
     ) {
-        self.0.emit(
-            component,
-            action,
-            match phase {
-                TracePhase::Start => crate::TracePhase::Start,
-                TracePhase::Finish => crate::TracePhase::Finish,
-                TracePhase::Error => crate::TracePhase::Error,
-                TracePhase::Diagnostic => crate::TracePhase::Diagnostic,
-            },
-            identity,
-            dependencies,
-            outcome.map(|outcome| match outcome {
-                TraceOutcome::Success => crate::TraceOutcome::Success,
-                TraceOutcome::Invalid => crate::TraceOutcome::Invalid,
-                TraceOutcome::Unsupported => crate::TraceOutcome::Unsupported,
-                TraceOutcome::Error => crate::TraceOutcome::Error,
-            }),
-        );
-    }
-}
-
-fn event_contract(event: &crate::ExecutionEvent) -> ExecutionEvent {
-    ExecutionEvent {
-        run_id: event.run_id.clone(),
-        revision: event.revision.clone(),
-        sequence: event.sequence,
-        elapsed_ns: event.elapsed_ns,
-        component: event.component.clone(),
-        action: event.action.clone(),
-        phase: match event.phase {
-            crate::TracePhase::Start => TracePhase::Start,
-            crate::TracePhase::Finish => TracePhase::Finish,
-            crate::TracePhase::Error => TracePhase::Error,
-            crate::TracePhase::Diagnostic => TracePhase::Diagnostic,
-        },
-        identity: event.identity.clone(),
-        dependencies: event.dependencies.clone(),
-        outcome: event.outcome.map(|outcome| match outcome {
-            crate::TraceOutcome::Success => TraceOutcome::Success,
-            crate::TraceOutcome::Invalid => TraceOutcome::Invalid,
-            crate::TraceOutcome::Unsupported => TraceOutcome::Unsupported,
-            crate::TraceOutcome::Error => TraceOutcome::Error,
-        }),
+        self.0.emit(component, action, phase, identity, dependencies, outcome);
     }
 }
 

@@ -95,7 +95,7 @@ pub fn composition_paths(
 }
 
 /// Reject ambiguous keys instead of silently retaining only the last placement.
-pub(crate) fn deserialize_composition<'de, D: serde::Deserializer<'de>>(
+pub fn deserialize_composition<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> Result<std::collections::BTreeMap<String, CompositionPlacement>, D::Error> {
     struct CompositionVisitor;

@@ -1,4 +1,4 @@
-use crate::command::{
+use crate::protocol::command::{
     ModelingElementKind, ModelingMemberKind, StructuralDiagramKind, ViewOccurrence,
 };
 use std::collections::BTreeMap;

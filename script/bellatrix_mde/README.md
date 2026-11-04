@@ -23,8 +23,8 @@ python3 script/bellatrix_mde/bellatrix_uml_catalog.py
 python3 script/bellatrix_mde/bellatrix_uml_catalog.py --check
 ```
 
-The generated files are `crates/bellatrix_mde/src/KERNEL/uml/metamodel/metamodel.rs` and
-`crates/bellatrix_mde/src/KERNEL/uml/metamodel/metamodel.inventory.json`. Do not edit
+The generated files are `crates/bellatrix_mde_contracts/src/uml/metamodel.rs` and
+`crates/bellatrix_mde_contracts/src/uml/metamodel.inventory.json`. Do not edit
 these files manually or use a formatter as a substitute for generation. The
 extractor locates its inputs relative to its own repository location, so it
 also works from another working directory. To inspect a separate output:
@@ -38,7 +38,7 @@ The coverage JSON defaults to the Rust output's `.inventory.json` sibling;
 `--inventory-output PATH` selects another destination. `--check` checks both
 outputs, performs no writes, and exits nonzero on drift, missing inputs, or an
 unsupported extraction shape. Output is deterministic for the same inputs and
-extractor. It imports descriptor types from the handwritten `uml/schema.rs`;
+extractor. It imports descriptor types from the handwritten `bellatrix_mde_contracts::uml::schema`;
 it is not a standalone Rust crate.
 
 ## Windows checkouts
@@ -121,7 +121,7 @@ values are resolved by type. No Integer is narrowed to a machine-sized type.
 
 ## Executable Rust consumers
 
-`crates/bellatrix_mde/src/KERNEL/uml/metamodel/schema.rs` is handwritten and separate from the
+`crates/bellatrix_mde_contracts/src/uml/schema.rs` is handwritten and separate from the
 extractor. It provides source-qualified conformance and inherited-property
 queries, follows explicit redefinition edges, resolves effective defaults,
 and reports ambiguous or incomplete lookup. It also exposes source documentation,
@@ -129,7 +129,9 @@ operation parameter contracts and specification bodies for implementation/review
 Subsetting and equal property
 names are not treated as redefinition.
 
-Existing engine paths use these contracts:
+The engine retains authored Element readers, structural diagnostics and edit policy in
+`crates/bellatrix_mde/src/KERNEL/uml/metamodel/schema.rs`; the shared crate has no dependency
+on engine validation or editor state. Existing engine paths re-export and use these contracts:
 
 - `uml/metamodel.rs` delegates inheritance and property queries to this runtime.
 - `uml/root.rs` reads effective visibility defaults and validates explicitly

@@ -1,3 +1,4 @@
+pub use bellatrix_mde_contracts::events::{ModelingPreviewMoveRequested, ModelingPreviewMove};
 use crate::command_contract::ViewOccurrence;
 use bellatrix_project::{ProjectDocument, ProjectService};
 use cordis::event::{QueryOutcome, responder};
@@ -9,23 +10,6 @@ use std::{
 use tokio::sync::watch;
 
 pub const MOVE_PREVIEW_PENDING: &str = "Checking this move with Cordis";
-
-#[derive(Clone)]
-pub struct ModelingPreviewMoveRequested {
-    pub document: Arc<ProjectDocument>,
-    pub subject_id: String,
-    pub parent_id: Option<String>,
-    pub parent_occurrence: Option<ViewOccurrence>,
-    pub diagram: bool,
-}
-
-pub struct ModelingPreviewMove;
-
-impl Event for ModelingPreviewMove {
-    const NAME: &'static str = "bellatrix.mde.preview-move.v1";
-    type Args = ModelingPreviewMoveRequested;
-    type Output = Result<(), String>;
-}
 
 pub(crate) fn register(
     context: &Context,

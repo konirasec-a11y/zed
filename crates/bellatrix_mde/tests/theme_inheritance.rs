@@ -2,7 +2,7 @@ use bellatrix_mde::{
     apply_model_command, decode_model_document, encode_model_document, encode_model_section,
     prepare_model_document,
 };
-use bellatrix_mde_protocol::{Command, RelationshipRouting, Style};
+use bellatrix_mde_contracts::protocol::{Command, RelationshipRouting, Style};
 use serde_json::{Value, json};
 
 type FlowResult<T> = Result<T, Box<dyn std::error::Error>>;

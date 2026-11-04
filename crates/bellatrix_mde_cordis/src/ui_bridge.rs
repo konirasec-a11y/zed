@@ -1,4 +1,5 @@
 //! One lifecycle-owned transport for every native modeling document.
+pub use bellatrix_mde_contracts::events::{DiagramValidationFailure, MdeUiCommand};
 use crate::*;
 use bellatrix_project::{
     ProjectClosed, ProjectClosedEvent, ProjectId, ProjectSaveRequested, ProjectSaved,
@@ -10,76 +11,6 @@ use cordis::{
 };
 use std::{convert::Infallible, io, sync::Arc};
 use tokio::sync::watch;
-
-#[derive(Clone, Debug)]
-pub struct DiagramValidationFailure {
-    pub diagram_id: String,
-    pub revision: u64,
-    pub message: String,
-}
-
-#[derive(Clone)]
-pub enum MdeUiCommand {
-    SetViewLabel(ModelingSetViewLabelRequested),
-    SetViewLabelTracked {
-        request: ModelingSetViewLabelRequested,
-        completion: watch::Sender<Option<Result<u64, String>>>,
-    },
-    SetViewTimingTracked {
-        request: ModelingSetViewTimingRequested,
-        completion: watch::Sender<Option<Result<u64, String>>>,
-    },
-    SetViewStyle(ModelingSetViewStyleRequested),
-    SetViewStyleTracked {
-        request: ModelingSetViewStyleRequested,
-        completion: watch::Sender<Option<Result<u64, String>>>,
-    },
-    SetViewPath(ModelingSetViewPathRequested),
-    SetViewPathTracked {
-        request: ModelingSetViewPathRequested,
-        completion: watch::Sender<Option<Result<u64, String>>>,
-    },
-    SetViewRouting(ModelingSetViewRoutingRequested),
-    SetViewRoutingTracked {
-        request: ModelingSetViewRoutingRequested,
-        completion: watch::Sender<Option<Result<u64, String>>>,
-    },
-    ReorderViewTracked {
-        request: ModelingReorderViewRequested,
-        completion: watch::Sender<Option<Result<u64, String>>>,
-    },
-    CreateDiagram(ModelingCreateDiagramRequested),
-    CreateExplorerDiagram(crate::ModelingCreateExplorerDiagramRequested),
-    RenameDiagram(ModelingRenameDiagramRequested),
-    DeleteDiagram(ModelingDeleteDiagramRequested),
-    ValidateDiagram(ModelingValidateDiagramRequested),
-    CreateVisualDraft(ModelingCreateVisualDraftRequested),
-    CreateElementOrVisualDraft(ModelingCreateElementRequested),
-    CreateElementVisualDraft(ModelingCreateElementRequested),
-    CreateElement(ModelingCreateElementRequested),
-    CreateModelElement(crate::ModelingCreateModelElementRequested),
-    CreateRelationOrVisualDraft(ModelingCreateRelationRequested),
-    CreateRelationAtViewsOrVisualDraft(ModelingCreateRelationAtViewsRequested),
-    CreateRelation(ModelingCreateRelationRequested),
-    MoveView(ModelingMoveViewRequested),
-    ResizeView(ModelingResizeViewRequested),
-    RemoveView(ModelingRemoveViewRequested),
-    PlaceElementView(ModelingPlaceElementViewRequested),
-    Rename(ModelingRenameRequested),
-    SetOwner(ModelingSetOwnerRequested),
-    SetExplorerParent(ModelingSetExplorerParentRequested),
-    DeleteElement(ModelingDeleteElementRequested),
-    SetProperty(ModelingSetPropertyRequested),
-    SetPropertyTracked {
-        request: ModelingSetPropertyRequested,
-        completion: watch::Sender<Option<Result<u64, String>>>,
-    },
-    AddMember(ModelingAddMemberRequested),
-    MoveParameter(ModelingMoveParameterRequested),
-    QuickEdit(ModelingQuickEditRequested),
-    SetNameExpression(ModelingSetNameExpressionRequested),
-    SaveProject(ProjectSaveRequested),
-}
 
 pub struct MdeUiBridge {
     project_id: ProjectId,

@@ -1,4 +1,7 @@
-use crate::{ProjectDocument, ProjectError, ProjectId, ProjectPublishedFile, ProjectSaveTicket};
+use super::{ProjectDocument, ProjectId, ProjectSaveTicket};
+#[cfg(feature = "cordis")]
+use super::{ProjectError, ProjectPublishedFile};
+#[cfg(feature = "cordis")]
 use cordis::Event;
 use serde_json::Value;
 use std::{path::PathBuf, sync::Arc};
@@ -9,6 +12,7 @@ pub struct ProjectCreateRequested {
     pub document: ProjectDocument,
 }
 pub struct ProjectCreate;
+#[cfg(feature = "cordis")]
 impl Event for ProjectCreate {
     const NAME: &'static str = "bellatrix.bellatrix-project.create.v1";
     type Args = ProjectCreateRequested;
@@ -20,6 +24,7 @@ pub struct ProjectOpenRequested {
     pub path: PathBuf,
 }
 pub struct ProjectOpen;
+#[cfg(feature = "cordis")]
 impl Event for ProjectOpen {
     const NAME: &'static str = "bellatrix.bellatrix-project.open.v1";
     type Args = ProjectOpenRequested;
@@ -34,6 +39,7 @@ pub struct ProjectReplaceRequested {
     pub state: Value,
 }
 pub struct ProjectReplace;
+#[cfg(feature = "cordis")]
 impl Event for ProjectReplace {
     const NAME: &'static str = "bellatrix.bellatrix-project.replace.v1";
     type Args = ProjectReplaceRequested;
@@ -49,6 +55,7 @@ pub struct ProjectReplaceSnapshotRequested {
     pub state: Value,
 }
 pub struct ProjectReplaceSnapshot;
+#[cfg(feature = "cordis")]
 impl Event for ProjectReplaceSnapshot {
     const NAME: &'static str = "bellatrix.bellatrix-project.replace-snapshot.v1";
     type Args = ProjectReplaceSnapshotRequested;
@@ -61,6 +68,7 @@ pub struct ProjectSaveRequested {
     pub path: PathBuf,
 }
 pub struct ProjectSave;
+#[cfg(feature = "cordis")]
 impl Event for ProjectSave {
     const NAME: &'static str = "bellatrix.bellatrix-project.save.v1";
     type Args = ProjectSaveRequested;
@@ -73,6 +81,7 @@ pub struct ProjectCloseRequested {
     pub discard_unsaved: bool,
 }
 pub struct ProjectClose;
+#[cfg(feature = "cordis")]
 impl Event for ProjectClose {
     const NAME: &'static str = "bellatrix.bellatrix-project.close.v1";
     type Args = ProjectCloseRequested;
@@ -85,6 +94,7 @@ pub struct ProjectOpened {
     pub from_disk: bool,
 }
 pub struct ProjectOpenedEvent;
+#[cfg(feature = "cordis")]
 impl Event for ProjectOpenedEvent {
     const NAME: &'static str = "bellatrix.bellatrix-project.opened.v1";
     type Args = ProjectOpened;
@@ -100,6 +110,7 @@ pub struct ProjectStateChanged {
     pub state: Arc<Value>,
 }
 pub struct ProjectStateChangedEvent;
+#[cfg(feature = "cordis")]
 impl Event for ProjectStateChangedEvent {
     const NAME: &'static str = "bellatrix.bellatrix-project.state-changed.v1";
     type Args = ProjectStateChanged;
@@ -114,6 +125,7 @@ pub struct ProjectSaved {
     pub path: PathBuf,
 }
 pub struct ProjectSavedEvent;
+#[cfg(feature = "cordis")]
 impl Event for ProjectSavedEvent {
     const NAME: &'static str = "bellatrix.bellatrix-project.saved.v1";
     type Args = ProjectSaved;
@@ -126,6 +138,7 @@ pub struct ProjectClosed {
     pub session: Arc<()>,
 }
 pub struct ProjectClosedEvent;
+#[cfg(feature = "cordis")]
 impl Event for ProjectClosedEvent {
     const NAME: &'static str = "bellatrix.bellatrix-project.closed.v1";
     type Args = ProjectClosed;
@@ -140,6 +153,7 @@ pub struct ProjectImportRequested {
     pub is_saved: bool,
 }
 pub struct ProjectImport;
+#[cfg(feature = "cordis")]
 impl Event for ProjectImport {
     const NAME: &'static str = "bellatrix.bellatrix-project.import.v1";
     type Args = ProjectImportRequested;
@@ -160,6 +174,7 @@ pub struct ProjectPrepareExternalSaveRequested {
     pub path: PathBuf,
 }
 pub struct ProjectPrepareExternalSave;
+#[cfg(feature = "cordis")]
 impl Event for ProjectPrepareExternalSave {
     const NAME: &'static str = "bellatrix.bellatrix-project.prepare-external-save.v1";
     type Args = ProjectPrepareExternalSaveRequested;
@@ -177,6 +192,7 @@ pub struct ProjectPrepareEncodedSaveRequested {
     pub bytes: Arc<[u8]>,
 }
 pub struct ProjectPrepareEncodedSave;
+#[cfg(feature = "cordis")]
 impl Event for ProjectPrepareEncodedSave {
     const NAME: &'static str = "bellatrix.bellatrix-project.prepare-encoded-save.v1";
     type Args = ProjectPrepareEncodedSaveRequested;
@@ -190,6 +206,7 @@ pub struct ProjectPublishNewFileRequested {
     pub ticket: ProjectSaveTicket,
 }
 pub struct ProjectPublishNewFile;
+#[cfg(feature = "cordis")]
 impl Event for ProjectPublishNewFile {
     const NAME: &'static str = "bellatrix.bellatrix-project.publish-new-file.v1";
     type Args = ProjectPublishNewFileRequested;
@@ -207,6 +224,7 @@ pub struct ProjectAcknowledgeExternalSaveRequested {
     pub written_bytes: Arc<[u8]>,
 }
 pub struct ProjectAcknowledgeExternalSave;
+#[cfg(feature = "cordis")]
 impl Event for ProjectAcknowledgeExternalSave {
     const NAME: &'static str = "bellatrix.bellatrix-project.acknowledge-external-save.v1";
     type Args = ProjectAcknowledgeExternalSaveRequested;
@@ -220,6 +238,7 @@ pub struct ProjectCloseSnapshotRequested {
     pub document: Arc<ProjectDocument>,
 }
 pub struct ProjectCloseSnapshot;
+#[cfg(feature = "cordis")]
 impl Event for ProjectCloseSnapshot {
     const NAME: &'static str = "bellatrix.bellatrix-project.close-snapshot.v1";
     type Args = ProjectCloseSnapshotRequested;

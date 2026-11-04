@@ -10,57 +10,9 @@ use crate::{
 use serde_json::json;
 use std::collections::{BTreeMap, HashSet};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum AssociationEndOwner {
-    Association,
-    Classifier(String),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AssociationEndDraft {
-    pub name: String,
-    pub type_id: String,
-    pub owner: AssociationEndOwner,
-    pub aggregation: Aggregation,
-    pub multiplicity: Option<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RemovedAssociationEnd {
-    KeepClassifierOwned,
-    ReparentToClassifier(String),
-    DeleteAssociationOwned,
-}
-
-/// Removal always states what happens to the Property identity.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum AssociationEndEdit {
-    Insert {
-        position: usize,
-        end: AssociationEndDraft,
-    },
-    Attach {
-        position: usize,
-        property_id: String,
-        owner: Option<AssociationEndOwner>,
-    },
-    Remove {
-        property_id: String,
-        disposition: RemovedAssociationEnd,
-    },
-    Move {
-        property_id: String,
-        position: usize,
-    },
-    Reparent {
-        property_id: String,
-        owner: AssociationEndOwner,
-    },
-    Retype {
-        property_id: String,
-        type_id: String,
-    },
-}
+pub use bellatrix_mde_contracts::protocol::command::{
+    AssociationEndOwner, AssociationEndDraft, RemovedAssociationEnd, AssociationEndEdit,
+};
 
 fn owner_id(
     section: &ModelingSection,

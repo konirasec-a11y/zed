@@ -2,7 +2,7 @@ use crate::uml::{
     operations, references::ReferenceIndex, root::ElementRef, schema, value_specifications,
 };
 use crate::{Element, LabelOptionsSource, ModelingSection, SubjectLabelRole, UmlStyle, View};
-use bellatrix_mde_protocol::{
+use bellatrix_mde_contracts::protocol::{
     command::TextAlignment, presentation::RenderStyle, projection::RenderedLabel,
 };
 use serde_json::Value;

@@ -1,4 +1,4 @@
-//! Transport events emitted by Cordis; engine event types never cross this API.
+//! Shared execution events and diagnostics; trace storage belongs to the caller.
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

@@ -327,7 +327,7 @@ pub struct ViewStyleDefaults {
 }
 
 impl ViewStyleDefaults {
-    pub(crate) fn is_valid(&self) -> bool {
+    pub fn is_valid(&self) -> bool {
         self.stroke_width
             .is_none_or(|width| width.is_finite() && (0.0..=100.0).contains(&width))
             && [&self.fill, &self.stroke, &self.text_color]
@@ -635,6 +635,46 @@ pub enum Geometry {
         start: Point,
         segments: Vec<PathSegment>,
     },
+}
+
+impl Geometry {
+    pub fn validate(&self) -> Result<(), String> {
+        let point_is_finite = |point: &Point| point.x.is_finite() && point.y.is_finite();
+        let valid = match self {
+            Geometry::Layout { bounds } => {
+                bounds.x.value().is_none_or(|value| value.is_finite())
+                    && bounds.y.value().is_none_or(|value| value.is_finite())
+                    && bounds.width.value().is_none_or(LayoutExtent::is_valid)
+                    && bounds.height.value().is_none_or(LayoutExtent::is_valid)
+            }
+            Geometry::Rect {
+                x,
+                y,
+                width,
+                height,
+            } => [*x, *y, *width, *height].into_iter().all(f64::is_finite),
+            Geometry::Ellipse { cx, cy, rx, ry } => {
+                [*cx, *cy, *rx, *ry].into_iter().all(f64::is_finite)
+            }
+            Geometry::Polygon { points } => points.iter().all(point_is_finite),
+            Geometry::Path { start, segments } => {
+                point_is_finite(start)
+                    && segments.iter().all(|segment| match segment {
+                        PathSegment::Line { to } => point_is_finite(to),
+                        PathSegment::Cubic {
+                            control1,
+                            control2,
+                            to,
+                        } => [control1, control2, to].into_iter().all(point_is_finite),
+                    })
+            }
+        };
+        if valid {
+            Ok(())
+        } else {
+            Err("geometry must contain finite coordinates and valid authored extents".into())
+        }
+    }
 }
 
 impl Default for Geometry {

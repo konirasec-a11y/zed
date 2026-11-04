@@ -1,9 +1,9 @@
 //! Single MDE domain: persisted objects, UML semantics, commands and validation.
 //! Adapters own transport/presentation, never another implementation of the model.
-pub(crate) const MODELING_NAMESPACE: &str = "bellatrix.mde";
+pub(crate) use bellatrix_mde_contracts::MODELING_NAMESPACE;
 
-pub(crate) mod contracts;
-pub(crate) use contracts::*;
+pub(crate) use bellatrix_mde_contracts::model as contracts;
+pub(crate) use bellatrix_mde_contracts::model::*;
 #[path = "persistence/io.rs"]
 mod io;
 #[path = "persistence/mdj.rs"]
@@ -217,8 +217,6 @@ pub use mde_api_commands::{apply_model_command, reparent_uml_element};
 #[path = "mde-api/projection.rs"]
 mod mde_api_projection;
 pub use mde_api_projection::project_model_section;
-#[path = "mde-api/command_conversion.rs"]
-mod mde_api_command_conversion;
 #[path = "mde-api/projection_explorer.rs"]
 mod mde_api_projection_explorer;
 #[path = "mde-api/projection_inspector.rs"]

@@ -1,4 +1,5 @@
 //! Tasks consume a committed project revision; generated artifacts are emissions.
+pub use bellatrix_mde_contracts::events::{ModelingTaskKind, ModelingRunRequested, ModelingRun, ModelingTaskSummary, ModelingTaskCompleted, ModelingTaskCompletedEvent};
 use crate::{TraceOutcome, TracePhase};
 use bellatrix_mde::MdeExecutionTrace as ExecutionTrace;
 use bellatrix_project::{ProjectId, ProjectService};
@@ -16,50 +17,6 @@ use std::{
 
 static NEXT_TASK_RUN: AtomicU64 = AtomicU64::new(1);
 
-#[derive(Clone, Debug)]
-pub enum ModelingTaskKind {
-    /// None selects the project; Some([]) must not widen an empty selection.
-    GenerateRust {
-        element_ids: Option<Vec<String>>,
-        skeleton: bool,
-    },
-    ExportHtml,
-}
-#[derive(Clone, Debug)]
-pub struct ModelingRunRequested {
-    pub project_id: ProjectId,
-    pub correlation_id: u64,
-    pub expected_revision: u64,
-    pub destination: PathBuf,
-    pub replace_generated: bool,
-    pub task: ModelingTaskKind,
-}
-pub struct ModelingRun;
-impl Event for ModelingRun {
-    const NAME: &'static str = "bellatrix.mde.run.v1";
-    type Args = ModelingRunRequested;
-    type Output = Result<ModelingTaskSummary, String>;
-}
-#[derive(Clone, Debug)]
-pub struct ModelingTaskSummary {
-    pub project_id: ProjectId,
-    pub correlation_id: u64,
-    pub revision: u64,
-    pub artifact_count: usize,
-    pub destination: PathBuf,
-}
-#[derive(Clone, Debug)]
-pub struct ModelingTaskCompleted {
-    pub project_id: ProjectId,
-    pub correlation_id: u64,
-    pub outcome: Result<ModelingTaskSummary, String>,
-}
-pub struct ModelingTaskCompletedEvent;
-impl Event for ModelingTaskCompletedEvent {
-    const NAME: &'static str = "bellatrix.mde.task-completed.v1";
-    type Args = ModelingTaskCompleted;
-    type Output = ();
-}
 pub fn register(context: &Context, projects: Arc<ProjectService>) -> Result<(), io::Error> {
     let _listener = context
         .on::<ModelingRun, _>(responder(

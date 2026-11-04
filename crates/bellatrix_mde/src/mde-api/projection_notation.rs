@@ -1,7 +1,7 @@
 use crate as mde;
 use crate::mde_api_projection as projection;
-use bellatrix_mde_protocol::command::{LineMode, TimingMode, TimingPresentation};
-use bellatrix_mde_protocol::presentation::*;
+use bellatrix_mde_contracts::protocol::command::{LineMode, TimingMode, TimingPresentation};
+use bellatrix_mde_contracts::protocol::presentation::*;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 #[path = "projection_entity.rs"]
@@ -25,7 +25,7 @@ pub(crate) fn project_view(
             .iter()
             .find(|element| element.id == subject)
     });
-    let timing = view.timing.as_ref().map(projection::convert).transpose()?;
+    let timing = view.timing.clone();
     let projected_style = render_styles
         .get(&view.id)
         .ok_or_else(|| format!("missing render style projection for view {}", view.id))?;
@@ -136,7 +136,10 @@ pub(crate) fn project_view(
     let routed_geometry = if view.style.routing == Some(mde::RelationshipRouting::Manual) {
         None
     } else {
-        paths.get(&view.id).map(projection::convert).transpose()?
+        paths.get(&view.id).map(|geometry| {
+            geometry.validate()?;
+            Ok::<_, String>(geometry.clone())
+        }).transpose()?
     };
     Ok(projection::View {
         id: view.id.clone(),
@@ -148,17 +151,13 @@ pub(crate) fn project_view(
                 notation_kind: draft.notation_kind.clone(),
                 parent_view_id: draft.parent_view_id.clone(),
             }),
-        endpoints: view
-            .endpoints
-            .as_ref()
-            .map(projection::convert)
-            .transpose()?,
+        endpoints: view.endpoints.clone(),
         timing,
         label: view.label.clone(),
         rendered_label,
         interface_icon: interface::project(section, diagram, view),
         entity_box,
-        geometry: projection::convert(&view.geometry)?,
+        geometry: view.geometry.clone(),
         children: view
             .children
             .iter()
@@ -179,7 +178,7 @@ pub(crate) fn project_view(
             visible,
             style_inheritance: projected_style.inheritance.clone(),
         },
-        style: projection::convert(&view.style)?,
+        style: view.style.clone(),
         z_index: view.z_index,
         render_style,
         figure,
@@ -349,15 +348,7 @@ fn inheritance_source(view: &mde::View, property: mde::InheritedStyleProperty) -
 }
 
 fn inherited_property(property: mde::InheritedStyleProperty) -> projection::InheritedStyleProperty {
-    match property {
-        mde::InheritedStyleProperty::Fill => projection::InheritedStyleProperty::Fill,
-        mde::InheritedStyleProperty::Stroke => projection::InheritedStyleProperty::Stroke,
-        mde::InheritedStyleProperty::TextColor => projection::InheritedStyleProperty::TextColor,
-        mde::InheritedStyleProperty::FontFamily => projection::InheritedStyleProperty::FontFamily,
-        mde::InheritedStyleProperty::FontSize => projection::InheritedStyleProperty::FontSize,
-        mde::InheritedStyleProperty::FontWeight => projection::InheritedStyleProperty::FontWeight,
-        mde::InheritedStyleProperty::FontItalic => projection::InheritedStyleProperty::FontItalic,
-    }
+    property
 }
 
 fn authored_render_style(view: &mde::View) -> Result<ProjectedRenderStyle, String> {
@@ -367,16 +358,8 @@ fn authored_render_style(view: &mde::View) -> Result<ProjectedRenderStyle, Strin
         style.stroke = style.stroke.or_else(|| defaults.stroke.clone());
         style.text_color = style.text_color.or_else(|| defaults.text_color.clone());
         style.stroke_width = style.stroke_width.or(defaults.stroke_width);
-        style.text_align = style.text_align.or(defaults
-            .text_align
-            .as_ref()
-            .map(projection::convert)
-            .transpose()?);
-        style.text_vertical_align = style.text_vertical_align.or(defaults
-            .text_vertical_align
-            .as_ref()
-            .map(projection::convert)
-            .transpose()?);
+        style.text_align = style.text_align.or(defaults.text_align);
+        style.text_vertical_align = style.text_vertical_align.or(defaults.text_vertical_align);
         style.show_shadow = style.show_shadow.or(defaults.show_shadow);
     }
     Ok(ProjectedRenderStyle {
@@ -443,16 +426,8 @@ fn render_style(style: &mde::Style) -> Result<RenderStyle, String> {
         font_underline: style.font_underline,
         opacity: style.opacity,
         text_color: style.text_color.clone(),
-        text_align: style
-            .text_align
-            .as_ref()
-            .map(projection::convert)
-            .transpose()?,
-        text_vertical_align: style
-            .text_vertical_align
-            .as_ref()
-            .map(projection::convert)
-            .transpose()?,
+        text_align: style.text_align,
+        text_vertical_align: style.text_vertical_align,
         corner_radius: style.corner_radius,
         stroke_pattern: (style.line_mode.is_some() || custom_pattern)
             .then(|| style.resolve_stroke_pattern(mde::LineMode::Solid).to_vec()),
@@ -631,110 +606,13 @@ pub(crate) fn relationship_labels(
 }
 
 fn relationship_style(style: mde::RelationshipStyle) -> RelationshipStyle {
-    RelationshipStyle {
-        source_marker: relationship_marker(style.source_marker),
-        target_marker: relationship_marker(style.target_marker),
-        middle_marker: relationship_marker(style.middle_marker),
-        line_mode: match style.line_mode {
-            mde::LineMode::Solid => LineMode::Solid,
-            mde::LineMode::Dotted => LineMode::Dotted,
-            mde::LineMode::Dashed => LineMode::Dashed,
-        },
-    }
-}
-
-fn relationship_marker(marker: mde::RelationshipMarker) -> RelationshipMarker {
-    match marker {
-        mde::RelationshipMarker::None => RelationshipMarker::None,
-        mde::RelationshipMarker::OpenArrow => RelationshipMarker::OpenArrow,
-        mde::RelationshipMarker::Triangle => RelationshipMarker::Triangle,
-        mde::RelationshipMarker::Diamond => RelationshipMarker::Diamond,
-        mde::RelationshipMarker::FilledDiamond => RelationshipMarker::FilledDiamond,
-        mde::RelationshipMarker::FilledTriangle => RelationshipMarker::FilledTriangle,
-        mde::RelationshipMarker::FilledCircle => RelationshipMarker::FilledCircle,
-        mde::RelationshipMarker::OpenArrowAndCircle => RelationshipMarker::OpenArrowAndCircle,
-        mde::RelationshipMarker::FilledTriangleAndCircle => {
-            RelationshipMarker::FilledTriangleAndCircle
-        }
-        mde::RelationshipMarker::Containment => RelationshipMarker::Containment,
-    }
+    style
 }
 
 fn marker_composition(composition: &mde::EndpointMarkerComposition) -> EndpointMarkerComposition {
-    EndpointMarkerComposition {
-        glyphs: composition
-            .glyphs
-            .iter()
-            .map(|part| EndpointMarkerPart {
-                glyph: match part.glyph {
-                    mde::EndpointMarkerGlyph::CrowfootOne => EndpointMarkerGlyph::CrowfootOne,
-                    mde::EndpointMarkerGlyph::CrowfootMany => EndpointMarkerGlyph::CrowfootMany,
-                    mde::EndpointMarkerGlyph::CrowfootZeroOne => {
-                        EndpointMarkerGlyph::CrowfootZeroOne
-                    }
-                    mde::EndpointMarkerGlyph::CrowfootZeroMany => {
-                        EndpointMarkerGlyph::CrowfootZeroMany
-                    }
-                    mde::EndpointMarkerGlyph::OpenArrow => EndpointMarkerGlyph::OpenArrow,
-                    mde::EndpointMarkerGlyph::SolidArrow => EndpointMarkerGlyph::SolidArrow,
-                    mde::EndpointMarkerGlyph::BlankArrow => EndpointMarkerGlyph::BlankArrow,
-                    mde::EndpointMarkerGlyph::Cross => EndpointMarkerGlyph::Cross,
-                    mde::EndpointMarkerGlyph::OpenDiamond => EndpointMarkerGlyph::OpenDiamond,
-                    mde::EndpointMarkerGlyph::FilledDiamond => EndpointMarkerGlyph::FilledDiamond,
-                    mde::EndpointMarkerGlyph::OpenTriangle => EndpointMarkerGlyph::OpenTriangle,
-                    mde::EndpointMarkerGlyph::FilledTriangle => EndpointMarkerGlyph::FilledTriangle,
-                    mde::EndpointMarkerGlyph::OpenCircle => EndpointMarkerGlyph::OpenCircle,
-                    mde::EndpointMarkerGlyph::FilledCircle => EndpointMarkerGlyph::FilledCircle,
-                    mde::EndpointMarkerGlyph::Dot => EndpointMarkerGlyph::Dot,
-                    mde::EndpointMarkerGlyph::Containment => EndpointMarkerGlyph::Containment,
-                },
-                placement: match part.placement {
-                    mde::EndpointMarkerPlacement::Endpoint => EndpointMarkerPlacement::Endpoint,
-                    mde::EndpointMarkerPlacement::AfterPrevious => {
-                        EndpointMarkerPlacement::AfterPrevious
-                    }
-                },
-            })
-            .collect(),
-    }
+    composition.clone()
 }
 
 fn notation_kind(notation: mde::UmlNotation) -> UmlNotation {
-    match notation {
-        mde::UmlNotation::Rectangle => UmlNotation::Rectangle,
-        mde::UmlNotation::Label => UmlNotation::Label,
-        mde::UmlNotation::Compartment => UmlNotation::Compartment,
-        mde::UmlNotation::ClassifierRectangle => UmlNotation::ClassifierRectangle,
-        mde::UmlNotation::PackageTab => UmlNotation::PackageTab,
-        mde::UmlNotation::FoldedNote => UmlNotation::FoldedNote,
-        mde::UmlNotation::Frame => UmlNotation::Frame,
-        mde::UmlNotation::AssociationDiamond => UmlNotation::AssociationDiamond,
-        mde::UmlNotation::Port => UmlNotation::Port,
-        mde::UmlNotation::Part => UmlNotation::Part,
-        mde::UmlNotation::Actor => UmlNotation::Actor,
-        mde::UmlNotation::UseCase => UmlNotation::UseCase,
-        mde::UmlNotation::DeploymentNode => UmlNotation::DeploymentNode,
-        mde::UmlNotation::Collaboration => UmlNotation::Collaboration,
-        mde::UmlNotation::Instance => UmlNotation::Instance,
-        mde::UmlNotation::Action => UmlNotation::Action,
-        mde::UmlNotation::State => UmlNotation::State,
-        mde::UmlNotation::InitialNode => UmlNotation::InitialNode,
-        mde::UmlNotation::FinalNode => UmlNotation::FinalNode,
-        mde::UmlNotation::FlowFinal => UmlNotation::FlowFinal,
-        mde::UmlNotation::Decision => UmlNotation::Decision,
-        mde::UmlNotation::Fork => UmlNotation::Fork,
-        mde::UmlNotation::Lifeline => UmlNotation::Lifeline,
-        mde::UmlNotation::Execution => UmlNotation::Execution,
-        mde::UmlNotation::InteractionUse => UmlNotation::InteractionUse,
-        mde::UmlNotation::CombinedFragment => UmlNotation::CombinedFragment,
-        mde::UmlNotation::InteractionOperand => UmlNotation::InteractionOperand,
-        mde::UmlNotation::ObjectNode => UmlNotation::ObjectNode,
-        mde::UmlNotation::SendSignal => UmlNotation::SendSignal,
-        mde::UmlNotation::AcceptEvent => UmlNotation::AcceptEvent,
-        mde::UmlNotation::Partition => UmlNotation::Partition,
-        mde::UmlNotation::TimingState => UmlNotation::TimingState,
-        mde::UmlNotation::History => UmlNotation::History,
-        mde::UmlNotation::Terminate => UmlNotation::Terminate,
-        mde::UmlNotation::Unsupported => UmlNotation::Unsupported,
-    }
+    notation
 }

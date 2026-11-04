@@ -1,3 +1,4 @@
+pub use bellatrix_mde_contracts::protocol::presentation::{ClassifierPresentation, MemberPresentation};
 use crate::{Element, ModelingRelationKind, Style, UmlType};
 use serde_json::Value;
 
@@ -63,12 +64,6 @@ pub struct ClassifierPresentationOptions {
     pub show_active_class_sides: bool,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct ClassifierPresentation {
-    pub name_is_italic: bool,
-    pub double_sided: bool,
-}
-
 pub fn classifier_presentation(
     element: &Element,
     options: ClassifierPresentationOptions,
@@ -97,11 +92,6 @@ fn text(value: Option<&Value>) -> Option<&str> {
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct MemberPresentation {
-    pub underlined: bool,
 }
 
 pub fn member_presentation(element: &Element) -> MemberPresentation {

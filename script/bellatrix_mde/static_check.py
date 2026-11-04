@@ -12,6 +12,8 @@ ROOT = Path(__file__).resolve().parents[2]
 CRATES = [
     "bellatrix_project",
     "bellatrix_mde",
+    "bellatrix_mde_contracts",
+    "bellatrix_mde_protocol",
     "bellatrix_mde_templates",
     "bellatrix_mde_cordis",
     "bellatrix_mde_rust_generator",
@@ -32,6 +34,8 @@ CRATES = [
 HEADLESS = {
     "bellatrix_project",
     "bellatrix_mde",
+    "bellatrix_mde_contracts",
+    "bellatrix_mde_protocol",
     "bellatrix_mde_templates",
     "bellatrix_mde_cordis",
     "bellatrix_mde_rust_generator",

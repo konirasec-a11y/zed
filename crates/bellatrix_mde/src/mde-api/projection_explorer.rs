@@ -1,9 +1,8 @@
 use crate::ModelingSection;
-use crate::mde_api_projection::convert;
-use bellatrix_mde_protocol::command::{
+use bellatrix_mde_contracts::protocol::command::{
     ModelingElementKind, ModelingMemberKind, StructuralDiagramKind, ViewOccurrence,
 };
-use bellatrix_mde_protocol::explorer::*;
+use bellatrix_mde_contracts::protocol::explorer::*;
 use std::collections::BTreeMap;
 pub(crate) fn project(section: &ModelingSection) -> Result<ExplorerProjection, String> {
     let added = project_explorer(section, ExplorerSortOrder::Added);
@@ -40,7 +39,7 @@ pub(crate) fn project(section: &ModelingSection) -> Result<ExplorerProjection, S
             {
                 parent_occurrences
                     .entry(row.key.clone())
-                    .or_insert(convert(&occurrence)?);
+                    .or_insert(occurrence);
             }
         }
     }
@@ -728,7 +727,7 @@ fn model_creation_kinds(
     section: &ModelingSection,
     owner: Option<&str>,
 ) -> Vec<ModelingElementKind> {
-    use bellatrix_mde_protocol::command::ModelingElementKind::*;
+    use bellatrix_mde_contracts::protocol::command::ModelingElementKind::*;
     if owner.is_some_and(|id| {
         !section.elements.iter().any(|element| {
             element.id == id && matches!(element.kind.as_str(), "uml.model" | "uml.package")

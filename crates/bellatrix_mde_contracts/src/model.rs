@@ -1,4 +1,4 @@
-pub(crate) mod composition;
+pub mod composition;
 pub use composition::{CompositionParent, CompositionPlacement, composition_paths};
 pub mod endpoint_presentation;
 pub mod presentation;

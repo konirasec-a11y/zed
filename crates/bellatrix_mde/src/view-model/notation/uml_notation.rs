@@ -1,3 +1,4 @@
+pub use bellatrix_mde_contracts::protocol::presentation::UmlNotation;
 use crate::{Element, ModelingSection, StereotypeValue, UmlType};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -61,62 +62,6 @@ pub fn stereotype_presentation<'a>(
 
 /// Supported presentation strategies, not UML metaclass inheritance.
 /// Unknown and deferred kinds must not acquire a class rectangle by fallback.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum UmlNotation {
-    Rectangle,
-    Label,
-    Compartment,
-    ClassifierRectangle,
-    PackageTab,
-    FoldedNote,
-    Frame,
-    AssociationDiamond,
-    Port,
-    Part,
-    Actor,
-    UseCase,
-    DeploymentNode,
-    Collaboration,
-    Instance,
-    Action,
-    State,
-    InitialNode,
-    FinalNode,
-    FlowFinal,
-    Decision,
-    Fork,
-    Lifeline,
-    Execution,
-    InteractionUse,
-    CombinedFragment,
-    InteractionOperand,
-    ObjectNode,
-    SendSignal,
-    AcceptEvent,
-    Partition,
-    TimingState,
-    History,
-    Terminate,
-    Unsupported,
-}
-
-impl UmlNotation {
-    pub fn minimum_size(self) -> (f64, f64) {
-        match self {
-            Self::InitialNode
-            | Self::FinalNode
-            | Self::FlowFinal
-            | Self::History
-            | Self::Terminate => (20.0, 20.0),
-            Self::Fork => (20.0, 8.0),
-            Self::Execution => (12.0, 24.0),
-            Self::Port => (12.0, 12.0),
-            Self::Decision => (32.0, 32.0),
-            _ => (80.0, 48.0),
-        }
-    }
-}
-
 pub fn resolve_pseudostate_notation(kind: &str) -> UmlNotation {
     match kind {
         "initial" | "junction" => UmlNotation::InitialNode,

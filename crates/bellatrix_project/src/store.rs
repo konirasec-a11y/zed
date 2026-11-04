@@ -1,4 +1,4 @@
-use crate::{ProjectDocument, ProjectError, ProjectId};
+use crate::{ProjectDocument, ProjectError, ProjectId, ProjectPublishedFile, ProjectSaveTicket};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -11,54 +11,10 @@ struct OpenProject {
     external_save: Weak<()>,
 }
 
-/// A single external write reservation. Drop every clone after cancellation or failure.
-/// The adapter must finish or cancel its I/O before releasing the reservation.
-/// Reservation scope is one project/session, not its filesystem destination.
-#[derive(Clone, Debug)]
-pub struct ProjectSaveTicket {
-    document: Arc<ProjectDocument>,
-    bytes: Arc<[u8]>,
-    path: PathBuf,
+// This type stays private so a cross-domain ticket cannot forge a reservation.
+struct SaveLease {
     session: Arc<Mutex<()>>,
     reservation: Arc<()>,
-}
-
-impl ProjectSaveTicket {
-    pub fn document(&self) -> &Arc<ProjectDocument> {
-        &self.document
-    }
-    pub fn bytes(&self) -> &[u8] {
-        &self.bytes
-    }
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-}
-
-/// Created only after the complete reserved file was published. A later model
-/// change can still make acknowledgement fail; retain the published path then.
-#[derive(Clone, Debug)]
-pub struct ProjectPublishedFile {
-    ticket: ProjectSaveTicket,
-    cleanup_warning: Option<String>,
-}
-
-impl ProjectPublishedFile {
-    pub fn path(&self) -> &Path {
-        self.ticket.path()
-    }
-    pub fn document(&self) -> &Arc<ProjectDocument> {
-        self.ticket.document()
-    }
-    pub fn cleanup_warning(&self) -> Option<&str> {
-        self.cleanup_warning.as_deref()
-    }
-    pub fn acknowledge(&self) -> crate::ProjectAcknowledgeExternalSaveRequested {
-        crate::ProjectAcknowledgeExternalSaveRequested {
-            ticket: self.ticket.clone(),
-            written_bytes: Arc::clone(&self.ticket.bytes),
-        }
-    }
 }
 
 #[derive(Default)]
@@ -210,13 +166,15 @@ impl ProjectService {
         };
         let reservation = Arc::new(());
         current.external_save = Arc::downgrade(&reservation);
-        Ok(ProjectSaveTicket {
-            document: Arc::clone(&current.document),
+        Ok(ProjectSaveTicket::from_runtime(
+            Arc::clone(&current.document),
             bytes,
             path,
-            session: Arc::clone(&session),
-            reservation,
-        })
+            SaveLease {
+                session: Arc::clone(&session),
+                reservation,
+            },
+        ))
     }
 
     pub(crate) fn acknowledge_external_save(
@@ -224,7 +182,10 @@ impl ProjectService {
         ticket: &ProjectSaveTicket,
         written_bytes: &[u8],
     ) -> Result<u64, ProjectError> {
-        let id = ticket.document.id();
+        let lease = ticket
+            .runtime_lease::<SaveLease>()
+            .ok_or(ProjectError::InvalidSaveTicket)?;
+        let id = ticket.document().id();
         let mut projects = self
             .projects
             .write()
@@ -232,13 +193,13 @@ impl ProjectService {
         let current = projects
             .get_mut(id)
             .ok_or_else(|| ProjectError::NotOpen(id.as_str().into()))?;
-        if !Arc::ptr_eq(&current.save_lock, &ticket.session) {
+        if !Arc::ptr_eq(&current.save_lock, &lease.session) {
             return Err(ProjectError::SessionChanged(id.as_str().into()));
         }
         if !current
             .external_save
             .upgrade()
-            .is_some_and(|reservation| Arc::ptr_eq(&reservation, &ticket.reservation))
+            .is_some_and(|reservation| Arc::ptr_eq(&reservation, &lease.reservation))
         {
             return Err(ProjectError::InvalidSaveTicket);
         }
@@ -248,21 +209,24 @@ impl ProjectService {
         if written_bytes != ticket.bytes() {
             return Err(ProjectError::SaveContentMismatch);
         }
-        if current.document.revision() != ticket.document.revision() {
+        if current.document.revision() != ticket.document().revision() {
             return Err(ProjectError::Conflict {
-                expected: ticket.document.revision(),
+                expected: ticket.document().revision(),
                 current: current.document.revision(),
             });
         }
-        current.saved_revision = Some(ticket.document.revision());
-        Ok(ticket.document.revision())
+        current.saved_revision = Some(ticket.document().revision());
+        Ok(ticket.document().revision())
     }
 
     pub(crate) fn publish_new_file(
         &self,
         ticket: ProjectSaveTicket,
     ) -> Result<ProjectPublishedFile, ProjectError> {
-        let session = Arc::clone(&ticket.session);
+        let lease = ticket
+            .runtime_lease::<SaveLease>()
+            .ok_or(ProjectError::InvalidSaveTicket)?;
+        let session = Arc::clone(&lease.session);
         let _guard = session
             .try_lock()
             .map_err(|_| ProjectError::SaveInProgress)?;
@@ -270,32 +234,29 @@ impl ProjectService {
             let projects = self.projects.read().map_err(|_| {
                 ProjectError::Io(std::io::Error::other("project state lock poisoned"))
             })?;
-            let id = ticket.document.id();
+            let id = ticket.document().id();
             let current = projects
                 .get(id)
                 .ok_or_else(|| ProjectError::NotOpen(id.as_str().into()))?;
-            if !Arc::ptr_eq(&current.save_lock, &ticket.session) {
+            if !Arc::ptr_eq(&current.save_lock, &lease.session) {
                 return Err(ProjectError::SessionChanged(id.as_str().into()));
             }
             if !current
                 .external_save
                 .upgrade()
-                .is_some_and(|reservation| Arc::ptr_eq(&reservation, &ticket.reservation))
+                .is_some_and(|reservation| Arc::ptr_eq(&reservation, &lease.reservation))
             {
                 return Err(ProjectError::InvalidSaveTicket);
             }
-            if !Arc::ptr_eq(&current.document, &ticket.document) {
+            if !Arc::ptr_eq(&current.document, ticket.document()) {
                 return Err(ProjectError::Conflict {
-                    expected: ticket.document.revision(),
+                    expected: ticket.document().revision(),
                     current: current.document.revision(),
                 });
             }
         }
         let cleanup_warning = crate::file::publish_new(ticket.path(), ticket.bytes())?;
-        Ok(ProjectPublishedFile {
-            ticket,
-            cleanup_warning,
-        })
+        Ok(ProjectPublishedFile::from_published(ticket, cleanup_warning))
     }
 
     pub(crate) fn replace(

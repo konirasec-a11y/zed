@@ -1,9 +1,9 @@
 use crate::mde_api_projection_notation::{
     project_render_styles, project_view, relationship_labels,
 };
-use bellatrix_mde_protocol::command::*;
-use bellatrix_mde_protocol::presentation::*;
-pub(crate) use bellatrix_mde_protocol::projection::*;
+use bellatrix_mde_contracts::protocol::command::*;
+use bellatrix_mde_contracts::protocol::presentation::*;
+pub(crate) use bellatrix_mde_contracts::protocol::projection::*;
 
 pub(crate) fn decode_section(
     project_id: &str,
@@ -23,12 +23,6 @@ pub(crate) fn decode_section(
     Ok(section)
 }
 
-pub(crate) fn convert<T: serde::Serialize, U: serde::de::DeserializeOwned>(
-    value: &T,
-) -> Result<U, String> {
-    let json = serde_json::to_string(value).map_err(|error| error.to_string())?;
-    serde_json::from_str(&json).map_err(|error| error.to_string())
-}
 pub fn project_model_section(
     project_id: &str,
     name: &str,
@@ -79,7 +73,7 @@ pub fn project_model_section(
                 ]
                 .into_iter()
                 .filter(|action| {
-                    crate::mde_api_command_conversion::quick_create(*action).accepts(&element.kind)
+                    crate::uml_types::quick_create_accepts(*action, &element.kind)
                 })
                 .collect(),
                 is_classifier: crate::UmlType::from_kind(&element.kind)
@@ -163,8 +157,7 @@ pub fn project_model_section(
                 uml_di_type: diagram.uml_di_type.clone(),
                 interaction_kind: diagram.interaction_kind.clone(),
                 model_elements: diagram.model_elements.clone(),
-                kind: crate::StructuralDiagramKind::from_diagram(diagram)
-                    .map(crate::mde_api_command_conversion::diagram_kind_contract),
+                kind: crate::StructuralDiagramKind::from_diagram(diagram),
                 views: diagram
                     .views
                     .iter()
@@ -175,19 +168,7 @@ pub fn project_model_section(
             })
         })
         .collect::<Result<_, String>>()?;
-    let hierarchy = section
-        .hierarchy
-        .iter()
-        .map(|(id, placement)| {
-            Ok((
-                id.clone(),
-                HierarchyPlacement {
-                    parent_id: placement.parent_id.clone(),
-                    occurrence: placement.occurrence.as_ref().map(convert).transpose()?,
-                },
-            ))
-        })
-        .collect::<Result<_, String>>()?;
+    let hierarchy = section.hierarchy.clone();
     let inspections = section
         .elements
         .iter()

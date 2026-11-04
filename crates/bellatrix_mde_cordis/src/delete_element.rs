@@ -1,19 +1,8 @@
+pub use bellatrix_mde_contracts::events::{ModelingDeleteElementRequested, ModelingDeleteElement};
 use crate::Command;
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::{Context, Event};
 
-#[derive(Clone, Debug)]
-pub struct ModelingDeleteElementRequested {
-    pub project_id: ProjectId,
-    pub element_id: String,
-    pub expected_revision: u64,
-}
-pub struct ModelingDeleteElement;
-impl Event for ModelingDeleteElement {
-    const NAME: &'static str = "bellatrix.mde.delete-element.v1";
-    type Args = ModelingDeleteElementRequested;
-    type Output = Result<u64, String>;
-}
 pub(crate) async fn delete_element(
     context: &Context,
     projects: &ProjectService,

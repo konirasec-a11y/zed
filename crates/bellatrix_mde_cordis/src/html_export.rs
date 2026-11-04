@@ -1,35 +1,8 @@
+pub use bellatrix_mde_contracts::events::{ModelingRenderHtmlRequested, ModelingRenderHtml, ModelingPublishHtmlRequested, ModelingPublishHtml};
 use crate::artifact_publication::{self, PreparedArtifacts};
 use cordis::event::{ListenerRegistrationError, responder};
 use cordis::{Context, Event};
 use std::{convert::Infallible, path::PathBuf};
-
-#[derive(Clone, Debug)]
-pub struct ModelingRenderHtmlRequested {
-    pub bytes: Vec<u8>,
-    pub format: String,
-}
-
-pub struct ModelingRenderHtml;
-impl Event for ModelingRenderHtml {
-    const NAME: &'static str = "bellatrix.mde.render-html.v1";
-    type Args = ModelingRenderHtmlRequested;
-    type Output = Result<String, String>;
-}
-
-#[derive(Clone, Debug)]
-pub struct ModelingPublishHtmlRequested {
-    pub bytes: Vec<u8>,
-    pub format: String,
-    pub destination: PathBuf,
-    pub replace_generated: bool,
-}
-
-pub struct ModelingPublishHtml;
-impl Event for ModelingPublishHtml {
-    const NAME: &'static str = "bellatrix.mde.publish-html.v1";
-    type Args = ModelingPublishHtmlRequested;
-    type Output = Result<usize, String>;
-}
 
 fn render_document(bytes: &[u8], format: &str) -> Result<String, String> {
     let model = bellatrix_mde::decode_model_document(bytes, format)?;

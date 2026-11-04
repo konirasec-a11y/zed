@@ -228,7 +228,7 @@ fn pinned_sources_resolve_typed_inheritance_and_expose_normative_defects() -> Te
             .is_some_and(|body| body.contains("includes all the cardinalities"))
     }));
     assert!(operation_by_id(XmiId::new(Document::Uml, "State-isConsistentWith")).is_none());
-    let inventory: Value = serde_json::from_str(include_str!("metamodel.inventory.json"))?;
+    let inventory: Value = serde_json::from_str(include_str!("../../../../../bellatrix_mde_contracts/src/uml/metamodel.inventory.json"))?;
     assert_eq!(inventory["sources"].as_array().map(Vec::len), Some(8));
     assert!(
         inventory["not_executable_from_extraction"]

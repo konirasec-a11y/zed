@@ -1,37 +1,8 @@
+pub use bellatrix_mde_contracts::events::{ModelingCreateRelationRequested, ModelingCreateRelationAtViewsRequested, ModelingCreateRelationAtViewsOrVisualDraft, ModelingCreateRelation, ModelingCreateRelationOrVisualDraft};
 use crate::Command;
 use crate::ModelingRelationKind;
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::{Context, Event};
-
-#[derive(Clone, Debug)]
-pub struct ModelingCreateRelationRequested {
-    pub project_id: ProjectId,
-    pub diagram_id: String,
-    pub owner_id: Option<String>,
-    pub kind: ModelingRelationKind,
-    pub from: String,
-    pub to: String,
-    pub expected_revision: u64,
-}
-#[derive(Clone, Debug)]
-pub struct ModelingCreateRelationAtViewsRequested {
-    pub project_id: ProjectId,
-    pub diagram_id: String,
-    pub owner_id: Option<String>,
-    pub kind: ModelingRelationKind,
-    pub source_view_id: String,
-    pub target_view_id: String,
-    pub from: Option<String>,
-    pub to: Option<String>,
-    pub expected_revision: u64,
-}
-
-pub struct ModelingCreateRelationAtViewsOrVisualDraft;
-impl Event for ModelingCreateRelationAtViewsOrVisualDraft {
-    const NAME: &'static str = "bellatrix.mde.create-relation-at-views-or-visual-draft.v1";
-    type Args = ModelingCreateRelationAtViewsRequested;
-    type Output = Result<u64, String>;
-}
 
 pub(crate) async fn create_relation_at_views_or_visual_draft(
     context: &Context,
@@ -56,18 +27,6 @@ pub(crate) async fn create_relation_at_views_or_visual_draft(
     .await
 }
 
-pub struct ModelingCreateRelation;
-impl Event for ModelingCreateRelation {
-    const NAME: &'static str = "bellatrix.mde.create-relation.v1";
-    type Args = ModelingCreateRelationRequested;
-    type Output = Result<u64, String>;
-}
-pub struct ModelingCreateRelationOrVisualDraft;
-impl Event for ModelingCreateRelationOrVisualDraft {
-    const NAME: &'static str = "bellatrix.mde.create-relation-or-visual-draft.v1";
-    type Args = ModelingCreateRelationRequested;
-    type Output = Result<u64, String>;
-}
 pub(crate) async fn create_relation_or_visual_draft(
     context: &Context,
     projects: &ProjectService,

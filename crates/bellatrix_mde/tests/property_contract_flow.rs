@@ -4,7 +4,7 @@ use bellatrix_mde::{
     apply_model_command, decode_model_document, encode_model_document, encode_model_section,
     prepare_model_document, project_model_section, validate_uml_model,
 };
-use bellatrix_mde_protocol::{
+use bellatrix_mde_contracts::protocol::{
     Command, inspector::ElementInspector, projection::ModelingProjection,
 };
 use serde_json::{Value, json};

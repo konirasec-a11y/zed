@@ -24,7 +24,8 @@ from datetime import datetime, timezone
 
 
 PACKAGES = (
-    "bellatrix_mde", "bellatrix_project", "bellatrix_mde_cordis",
+    "bellatrix_mde", "bellatrix_mde_contracts", "bellatrix_mde_protocol",
+    "bellatrix_project", "bellatrix_mde_cordis",
     "bellatrix_mde_templates", "bellatrix_mde_rust_generator",
     "bellatrix_mde_html_exporter", "bellatrix_mde_cli",
 )

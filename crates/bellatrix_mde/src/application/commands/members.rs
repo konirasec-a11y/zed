@@ -3,13 +3,7 @@ use crate::{
     reroute_relationships,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ModelingMemberKind {
-    Attribute,
-    Operation,
-    Parameter,
-    Reception,
-}
+pub use bellatrix_mde_contracts::protocol::command::ModelingMemberKind;
 
 pub(super) fn grow_classifier_views(
     section: &mut ModelingSection,

@@ -14,17 +14,14 @@ artifacts and emission; it is not limited to passive validation.
   Both boundaries share the private `api_contract.rs` envelope/codec helper;
   neither depends on the other.
 - `KERNEL/graph/`: graph integrity, indexing and graph-scope queries.
-- `KERNEL/uml/metamodel/`: normative catalog, schema descriptors, primitive types
-  and their tests/inventory.
+- `KERNEL/uml/metamodel/`: adapters over `bellatrix_mde_contracts::uml`, with
+  engine-specific semantic reads and editing policy.
 - `KERNEL/uml/semantics/`: canonical UML identities, ownership, references,
   classifiers, properties, associations, operations, values and template rules.
 - `KERNEL/uml/validation/`: structural-model and diagram conformance checks.
-- `contracts/`: the single persisted document contract consumed by the kernel,
-  application, persistence, projections and adapters. `semantic.rs` owns generic
-  elements and relations; `presentation.rs` owns diagrams, Views, geometry,
-  base style and diagram hierarchy placements. `uml_presentation.rs` defines
-  UML-specific style preferences under `Style.uml`. `project.rs` and `section.rs`
-  compose these records, without a second semantic or presentation model.
+- `bellatrix_mde_contracts`: the separate shared crate containing canonical model
+  records, command inputs, read projection contracts and normative UML descriptors.
+  Kernel, application, persistence and adapters use the same type definitions.
 - `persistence/`: JSON/Protobuf encoding, decoding and wire representation.
 - `application/commands/`: transactional command execution, authoring workflows,
   revision-sensitive identifiers and command validation. `application/commands.rs`
@@ -56,7 +53,7 @@ remain distinct from its native UI implementation.
 
 ## Similar names with different contexts
 
-- `contracts/semantic.rs` defines stored elements and relations;
+- `bellatrix_mde_contracts::model::semantic` defines stored elements and relations;
   `KERNEL/graph/graph.rs` validates the graph and `index.rs` queries it.
 - `KERNEL/uml/semantics/associations.rs` defines Association contracts;
   `view-model/diagram/relationships.rs` computes diagram paths and anchors.
@@ -85,9 +82,9 @@ a diagram/View and semantic member path, without replacing UML ownership.
 The crate root reexports these exact types for existing consumers; there are no
 copied DTOs or conversion layer between contracts and the application. The wire
 representation remains a persistence encoding, not another authoring model.
-This change separates contract definitions, not the aggregate JSON fields or
-all existing kernel/presentation behavior. It does not claim complete UMLDI
-interchange or a separately enforced Cargo dependency boundary. Consumers still
+The contracts crate enforces a one-way Cargo dependency boundary without changing
+aggregate JSON fields or existing kernel/presentation behavior. It does not claim
+complete UMLDI interchange. Consumers still
 depend on `bellatrix_mde`; this is not yet a standalone, UML-independent contract
 crate. `Style` holds generic colors, fonts and line styling; its explicit `uml`
 namespace references `UmlStyle` for stereotype labels, compartment suppression

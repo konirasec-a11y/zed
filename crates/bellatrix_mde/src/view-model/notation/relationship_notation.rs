@@ -1,26 +1,9 @@
+pub use bellatrix_mde_contracts::protocol::presentation::{
+    RelationshipEndpointLabels, RelationshipMarker, RelationshipStyle,
+};
 use crate::uml::types::{RelationEnd, RelationEndMultiplicity};
 use crate::{LineMode, ModelingSection, Relation};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RelationshipMarker {
-    None,
-    OpenArrow,
-    Triangle,
-    Diamond,
-    FilledDiamond,
-    FilledTriangle,
-    FilledCircle,
-    OpenArrowAndCircle,
-    FilledTriangleAndCircle,
-    Containment,
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct RelationshipStyle {
-    pub source_marker: RelationshipMarker,
-    pub target_marker: RelationshipMarker,
-    pub line_mode: LineMode,
-    pub middle_marker: RelationshipMarker,
-}
 pub fn relationship_style_for_notation(kind: &str) -> RelationshipStyle {
     use RelationshipMarker::*;
     let (source_marker, target_marker, dashed) = match kind {
@@ -66,12 +49,6 @@ pub fn relationship_style_for_notation(kind: &str) -> RelationshipStyle {
         },
     }
 }
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct RelationshipEndpointLabels {
-    pub role: Option<String>,
-    pub multiplicity: Option<String>,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RelationshipPresentation {
     pub name: Option<String>,

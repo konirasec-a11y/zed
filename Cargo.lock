@@ -2160,13 +2160,11 @@ name = "bellatrix_mde"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
- "bellatrix_mde_protocol",
- "num-bigint",
+ "bellatrix_mde_contracts",
  "petgraph",
  "prost",
  "serde",
  "serde_json",
- "sha2",
  "thiserror 2.0.17",
 ]
 
@@ -2182,12 +2180,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "bellatrix_mde_contracts"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "cordis-rs",
+ "num-bigint",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.17",
+ "tokio",
+]
+
+[[package]]
 name = "bellatrix_mde_cordis"
 version = "0.1.0"
 dependencies = [
  "bellatrix_mde",
  "bellatrix_mde_html_exporter",
- "bellatrix_mde_protocol",
+ "bellatrix_mde_contracts",
  "bellatrix_mde_rust_generator",
  "bellatrix_project",
  "cordis-rs",
@@ -2209,8 +2221,7 @@ dependencies = [
 name = "bellatrix_mde_protocol"
 version = "0.1.0"
 dependencies = [
- "serde",
- "serde_json",
+ "bellatrix_mde_contracts",
 ]
 
 [[package]]
@@ -2262,6 +2273,7 @@ dependencies = [
 name = "bellatrix_project"
 version = "0.1.0"
 dependencies = [
+ "bellatrix_mde_contracts",
  "cordis-rs",
  "serde",
  "serde_json",

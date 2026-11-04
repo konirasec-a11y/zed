@@ -1,7 +1,7 @@
 {
   "format_version": 1,
   "generator": "script/bellatrix_mde/bellatrix_uml_catalog.py",
-  "generated_rust": "crates/bellatrix_mde/src/KERNEL/uml/metamodel/metamodel.rs",
+  "generated_rust": "crates/bellatrix_mde_contracts/src/uml/metamodel.rs",
   "sources": [
     {
       "document": "Uml",
@@ -1012,8 +1012,12 @@
   ],
   "executable_consumers": [
     {
+      "file": "crates/bellatrix_mde_contracts/src/uml/schema.rs",
+      "scope": "Source-qualified inheritance/redefinition queries, inherited defaults, explicitly supplied scalar type and null/cardinality checks; metadata reads for operations/specifications/documentation."
+    },
+    {
       "file": "crates/bellatrix_mde/src/KERNEL/uml/metamodel/schema.rs",
-      "scope": "Source-qualified inheritance/redefinition queries, inherited defaults, shared authored/default scalar readers, explicitly supplied scalar type and null/cardinality checks; metadata reads for operations/specifications/documentation."
+      "scope": "Shared authored/default scalar readers over canonical Elements, structural diagnostics and semantic edit policy consuming the universal UML contracts."
     },
     {
       "file": "crates/bellatrix_mde/src/KERNEL/uml/semantics/root.rs",
@@ -1040,7 +1044,7 @@
       "scope": "Pure evaluation of canonical Integer/UnlimitedNatural/Real/Boolean/String/Null literal identities and generated defaults, computability, null and typed value queries; Real uses finite JSON numbers. Owned lowerValue/upperValue role resolution is shared by Property, Parameter, Operation return and redefinition checks, plus independent upperBound evaluation for subsetting. External references, opaque/nonliteral expression evaluation and unassigned owned-value roles remain explicit unsupported capabilities."
     },
     {
-      "file": "crates/bellatrix_mde/src/KERNEL/uml/metamodel/types.rs",
+      "file": "crates/bellatrix_mde_contracts/src/uml/types.rs",
       "scope": "Arbitrary-precision Integer, UnlimitedNatural upper-bound comparison and evaluated multiplicity intervals; one retained literal-notation adapter, with reference-aware ValueSpecification evaluation supplied by the separate shared consumer."
     },
     {

@@ -123,7 +123,7 @@ pub(super) fn model_value(model: Project) -> Result<serde_json::Value, String> {
 /// Checks presentation integrity, but does not assert full UML validity or retain state.
 pub fn prepare_model_document(
     input_json: &str,
-) -> Result<bellatrix_mde_protocol::ModelDocumentParts, String> {
+) -> Result<bellatrix_mde_contracts::protocol::ModelDocumentParts, String> {
     let model = decode_model_request(input_json)?;
     ensure_json_model(&model)?;
     crate::Graph::new(&model)
@@ -131,7 +131,7 @@ pub fn prepare_model_document(
         .map_err(|error| error.to_string())?;
     let section_json = serde_json::to_string(&crate::ModelingSection::from_model(&model))
         .map_err(|error| error.to_string())?;
-    Ok(bellatrix_mde_protocol::ModelDocumentParts {
+    Ok(bellatrix_mde_contracts::protocol::ModelDocumentParts {
         id: model.id,
         name: model.name,
         section_json,

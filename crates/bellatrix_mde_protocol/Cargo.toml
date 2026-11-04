@@ -9,5 +9,4 @@ rust-version = "1.98.1"
 path = "src/protocol.rs"
 
 [dependencies]
-serde.workspace = true
-serde_json = { workspace = true, features = ["arbitrary_precision", "float_roundtrip"] }
+bellatrix_mde_contracts.workspace = true

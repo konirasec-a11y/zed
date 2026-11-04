@@ -9,12 +9,10 @@ rust-version = "1.98.1"
 path = "src/mde.rs"
 
 [dependencies]
-bellatrix_mde_protocol = { path = "../bellatrix_mde_protocol" }
+bellatrix_mde_contracts.workspace = true
 base64.workspace = true
-num-bigint = "0.4.8"
 prost.workspace = true
 serde.workspace = true
-sha2.workspace = true
 serde_json = { workspace = true, features = ["float_roundtrip", "arbitrary_precision"] }
 thiserror.workspace = true
 petgraph.workspace = true

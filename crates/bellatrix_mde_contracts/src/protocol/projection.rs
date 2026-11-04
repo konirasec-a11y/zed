@@ -1,11 +1,12 @@
-use crate::command::*;
-use crate::inspector::{ElementInspector, QuickEditAction};
-use crate::presentation::*;
+use crate::protocol::command::*;
+use crate::protocol::inspector::{ElementInspector, QuickEditAction};
+use crate::protocol::presentation::*;
+pub use crate::{HierarchyPlacement, InheritedStyleProperty};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Debug)]
 pub struct ModelingProjection {
-    pub tools: crate::ToolCatalog,
+    pub tools: crate::protocol::ToolCatalog,
     pub root_model: Option<String>,
     pub elements: Vec<Element>,
     pub relations: Vec<Relation>,
@@ -15,7 +16,7 @@ pub struct ModelingProjection {
     pub inspections: BTreeMap<String, ElementInspector>,
     pub identities: BTreeMap<String, SemanticIdentity>,
     pub hierarchy_rows: Vec<HierarchyRow>,
-    pub explorer: crate::explorer::ExplorerProjection,
+    pub explorer: crate::protocol::explorer::ExplorerProjection,
 }
 impl ModelingProjection {
     pub fn inspect_element(&self, id: &str) -> Option<ElementInspector> {
@@ -69,11 +70,6 @@ pub struct Relation {
     pub presentation: RelationshipPresentation,
     pub source_role: String,
     pub target_role: String,
-}
-#[derive(Clone, Debug)]
-pub struct HierarchyPlacement {
-    pub parent_id: Option<String>,
-    pub occurrence: Option<ViewOccurrence>,
 }
 #[derive(Clone, Debug)]
 pub struct HierarchyRow {
@@ -169,11 +165,11 @@ pub struct InterfaceIconProjection {
 #[derive(Clone, Debug)]
 pub enum InterfaceIconGlyph {
     Ball {
-        center: crate::command::Point,
+        center: crate::protocol::command::Point,
         radius: f64,
     },
     Socket {
-        center: crate::command::Point,
+        center: crate::protocol::command::Point,
         radius: f64,
         start_angle: f64,
         sweep_angle: f64,
@@ -201,17 +197,6 @@ pub enum StyleInheritanceStatus {
     Inactive,
     Resolved,
     Unresolved,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum InheritedStyleProperty {
-    Fill,
-    Stroke,
-    TextColor,
-    FontFamily,
-    FontSize,
-    FontWeight,
-    FontItalic,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

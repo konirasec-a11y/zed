@@ -1,12 +1,13 @@
 //! Cordis transport and project-revision integration for the single MDE domain.
-use bellatrix_mde_protocol::trace as trace_contract;
+pub use bellatrix_mde_contracts::events::{ModelingOperation, ModelingCommand, ModelingRequested, ModelingCompletion, ModelingCompleted, ModelingChannels};
+use bellatrix_mde_contracts::protocol::trace as trace_contract;
 pub use trace_contract::{
     DiagnosticSeverity, ExecutionEvent, ModelingDiagnostic, TraceOutcome, TracePhase,
 };
 mod execution_journal;
-pub use bellatrix_mde_protocol::MODELING_NAMESPACE;
-use bellatrix_mde_protocol::command as command_contract;
-use bellatrix_mde_protocol::tools as tool_catalog;
+pub use bellatrix_mde_contracts::protocol::MODELING_NAMESPACE;
+use bellatrix_mde_contracts::protocol::command as command_contract;
+use bellatrix_mde_contracts::protocol::tools as tool_catalog;
 pub use command_contract::*;
 pub use execution_journal::{ExecutionJournal, ExecutionJournalSnapshot};
 pub use tool_catalog::{
@@ -102,72 +103,6 @@ use tokio::sync::mpsc;
 pub use ui_bridge::{DiagramValidationFailure, MdeUiBridge, MdeUiCommand};
 pub use view_edits::{ModelingMoveView, ModelingMoveViewRequested};
 
-#[derive(Clone, Debug)]
-pub enum ModelingOperation {
-    Check {
-        source: std::path::PathBuf,
-    },
-    Inspect {
-        source: std::path::PathBuf,
-    },
-    Analyze {
-        source: std::path::PathBuf,
-        from: Option<String>,
-        to: Option<String>,
-        relation: Option<String>,
-    },
-    Plan {
-        source: std::path::PathBuf,
-        /// None selects the project; Some([]) preserves an explicitly empty selection.
-        element_ids: Option<Vec<String>>,
-        skeleton: bool,
-    },
-    Generate {
-        source: std::path::PathBuf,
-        /// None selects the project; Some([]) preserves an explicitly empty selection.
-        element_ids: Option<Vec<String>>,
-        destination: std::path::PathBuf,
-        replace: bool,
-        skeleton: bool,
-    },
-    ExportHtml {
-        source: std::path::PathBuf,
-        destination: std::path::PathBuf,
-        replace: bool,
-    },
-    Convert {
-        source: std::path::PathBuf,
-        destination: std::path::PathBuf,
-    },
-}
-#[derive(Clone, Debug)]
-pub struct ModelingCommand {
-    pub correlation_id: u64,
-    pub operation: ModelingOperation,
-}
-pub struct ModelingRequested;
-impl Event for ModelingRequested {
-    const NAME: &'static str = "bellatrix.mde.requested.v1";
-    type Args = ModelingCommand;
-    type Output = ();
-}
-#[derive(Clone, Debug)]
-pub struct ModelingCompletion {
-    pub correlation_id: u64,
-    pub success: bool,
-    pub summary: String,
-}
-pub struct ModelingCompleted;
-impl Event for ModelingCompleted {
-    const NAME: &'static str = "bellatrix.mde.completed.v1";
-    type Args = ModelingCompletion;
-    type Output = ();
-}
-#[derive(Clone)]
-pub struct ModelingChannels {
-    pub requests: mpsc::Sender<ModelingCommand>,
-    pub completions: mpsc::Sender<ModelingCompletion>,
-}
 pub struct ModelingPlugin {
     channels: ModelingChannels,
 }
@@ -217,9 +152,9 @@ impl Plugin for ModelingPlugin {
     }
 }
 
-use bellatrix_mde_protocol::explorer as explorer_projection;
-use bellatrix_mde_protocol::inspector as inspector_contract;
-pub use bellatrix_mde_protocol::presentation as presentation_contract;
+use bellatrix_mde_contracts::protocol::explorer as explorer_projection;
+use bellatrix_mde_contracts::protocol::inspector as inspector_contract;
+pub use bellatrix_mde_contracts::protocol::presentation as presentation_contract;
 pub use explorer_projection::{ExplorerProjection, ExplorerRow, VisualComponent};
 pub use inspector_contract::{
     ElementInspector, InspectorMember, InspectorProperty, InspectorReferenceChoice, PropertyEditor,

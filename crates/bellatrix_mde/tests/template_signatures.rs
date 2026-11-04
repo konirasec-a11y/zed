@@ -2,7 +2,7 @@ use bellatrix_mde::{
     apply_model_command, decode_model_document, encode_model_section, project_model_section,
     validate_uml_model,
 };
-use bellatrix_mde_protocol::{
+use bellatrix_mde_contracts::protocol::{
     command::*,
     projection::ModelingProjection,
     trace::{DiagnosticSeverity, ModelingDiagnostic},
@@ -107,7 +107,7 @@ fn inspected(project: &Document, id: &str, path: &str) -> Value {
 fn inspect_element(
     project: &Document,
     id: &str,
-) -> Option<bellatrix_mde_protocol::inspector::ElementInspector> {
+) -> Option<bellatrix_mde_contracts::protocol::inspector::ElementInspector> {
     project.inspections.get(id).cloned()
 }
 fn raw_element<'a>(project: &'a Document, id: &str) -> &'a Value {

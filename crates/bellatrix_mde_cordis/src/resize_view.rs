@@ -1,21 +1,8 @@
+pub use bellatrix_mde_contracts::events::{ModelingResizeViewRequested, ModelingResizeView};
 use crate::Command;
 use bellatrix_project::{ProjectId, ProjectService};
 use cordis::{Context, Event};
 
-#[derive(Clone, Debug)]
-pub struct ModelingResizeViewRequested {
-    pub project_id: ProjectId,
-    pub view_id: String,
-    pub width: f64,
-    pub height: f64,
-    pub expected_revision: u64,
-}
-pub struct ModelingResizeView;
-impl Event for ModelingResizeView {
-    const NAME: &'static str = "bellatrix.mde.resize-view.v1";
-    type Args = ModelingResizeViewRequested;
-    type Output = Result<u64, String>;
-}
 pub(crate) async fn resize_view(
     context: &Context,
     projects: &ProjectService,

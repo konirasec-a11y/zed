@@ -1,4 +1,5 @@
 //! Diagram lifecycle requests share the same revision-checked mutation boundary as element edits.
+pub use bellatrix_mde_contracts::events::{ModelingCreateDiagramRequested, ModelingCreateDiagram, ModelingCreateExplorerDiagramRequested, ModelingCreateExplorerDiagram, ModelingRenameDiagramRequested, ModelingRenameDiagram, ModelingDeleteDiagramRequested, ModelingDeleteDiagram, ModelingValidateDiagramRequested, DiagramValidationResult, ModelingValidateDiagram, ModelingValidateSnapshotRequested, ModelingValidateSnapshot, ModelingExecutionTrace, ModelingExecutionTraceEvent, ModelingValidateDiagramTracedRequested, TracedDiagramValidationResult, ModelingValidateDiagramTraced};
 use crate::Command;
 use crate::{ExecutionEvent, ModelingDiagnostic, StructuralDiagramKind, TraceOutcome, TracePhase};
 use bellatrix_mde::MdeExecutionTrace as ExecutionTrace;
@@ -14,128 +15,7 @@ use std::{
     },
 };
 
-#[derive(Clone, Debug)]
-pub struct ModelingCreateDiagramRequested {
-    pub project_id: ProjectId,
-    pub kind: StructuralDiagramKind,
-    pub name: String,
-    pub model_elements: Vec<String>,
-    pub expected_revision: u64,
-}
-pub struct ModelingCreateDiagram;
-impl Event for ModelingCreateDiagram {
-    const NAME: &'static str = "bellatrix.mde.create-diagram.v1";
-    type Args = ModelingCreateDiagramRequested;
-    type Output = Result<u64, String>;
-}
-
-#[derive(Clone, Debug)]
-pub struct ModelingCreateExplorerDiagramRequested {
-    pub diagram: ModelingCreateDiagramRequested,
-    pub parent_id: Option<String>,
-    pub parent_occurrence: Option<crate::ViewOccurrence>,
-}
-pub struct ModelingCreateExplorerDiagram;
-impl Event for ModelingCreateExplorerDiagram {
-    const NAME: &'static str = "bellatrix.mde.create-explorer-diagram.v1";
-    type Args = ModelingCreateExplorerDiagramRequested;
-    type Output = Result<u64, String>;
-}
-
-#[derive(Clone, Debug)]
-pub struct ModelingRenameDiagramRequested {
-    pub project_id: ProjectId,
-    pub diagram_id: String,
-    pub name: String,
-    pub expected_revision: u64,
-}
-pub struct ModelingRenameDiagram;
-impl Event for ModelingRenameDiagram {
-    const NAME: &'static str = "bellatrix.mde.rename-diagram.v1";
-    type Args = ModelingRenameDiagramRequested;
-    type Output = Result<u64, String>;
-}
-
-#[derive(Clone, Debug)]
-pub struct ModelingDeleteDiagramRequested {
-    pub project_id: ProjectId,
-    pub diagram_id: String,
-    pub expected_revision: u64,
-}
-pub struct ModelingDeleteDiagram;
-impl Event for ModelingDeleteDiagram {
-    const NAME: &'static str = "bellatrix.mde.delete-diagram.v1";
-    type Args = ModelingDeleteDiagramRequested;
-    type Output = Result<u64, String>;
-}
-
-/// Validation uses the required stored UMLDI type; callers cannot override it.
-#[derive(Clone, Debug)]
-pub struct ModelingValidateDiagramRequested {
-    pub project_id: ProjectId,
-    pub diagram_id: String,
-    pub expected_revision: u64,
-}
-#[derive(Clone, Debug)]
-pub struct DiagramValidationResult {
-    pub diagram_id: String,
-    pub revision: u64,
-    pub diagnostics: Vec<ModelingDiagnostic>,
-}
-pub struct ModelingValidateDiagram;
-impl Event for ModelingValidateDiagram {
-    const NAME: &'static str = "bellatrix.mde.validate-diagram.v1";
-    type Args = ModelingValidateDiagramRequested;
-    type Output = Result<DiagramValidationResult, String>;
-}
-
-#[derive(Clone)]
-pub struct ModelingValidateSnapshotRequested {
-    pub document: Arc<ProjectDocument>,
-    pub diagram_id: String,
-}
-pub struct ModelingValidateSnapshot;
-impl Event for ModelingValidateSnapshot {
-    const NAME: &'static str = "bellatrix.mde.validate-snapshot.v1";
-    type Args = ModelingValidateSnapshotRequested;
-    type Output = Result<DiagramValidationResult, String>;
-}
-
-/// Events produced by an MDE run, suitable for a UI observer or JSONL export.
-#[derive(Clone, Debug)]
-pub struct ModelingExecutionTrace {
-    pub project_id: ProjectId,
-    pub run_id: String,
-    pub events: Vec<ExecutionEvent>,
-    pub dropped: u64,
-}
-pub struct ModelingExecutionTraceEvent;
-impl Event for ModelingExecutionTraceEvent {
-    const NAME: &'static str = "bellatrix.mde.execution-trace.v1";
-    type Args = ModelingExecutionTrace;
-    type Output = ();
-}
 static NEXT_VALIDATION_RUN: AtomicU64 = AtomicU64::new(1);
-
-/// Opt-in validation request that returns bounded, correlated execution events.
-#[derive(Clone, Debug)]
-pub struct ModelingValidateDiagramTracedRequested {
-    pub request: ModelingValidateDiagramRequested,
-    pub run_id: String,
-    pub capacity: usize,
-}
-#[derive(Debug)]
-pub struct TracedDiagramValidationResult {
-    pub result: Result<DiagramValidationResult, String>,
-    pub events: Vec<ExecutionEvent>,
-    pub dropped: u64,
-}
-pub struct ModelingValidateDiagramTraced;
-impl Event for ModelingValidateDiagramTraced {
-    const NAME: &'static str = "bellatrix.mde.validate-diagram-traced.v1";
-    type Args = ModelingValidateDiagramTracedRequested;
-    type Output = TracedDiagramValidationResult;
-}
 
 fn validate_inner(
     projects: &ProjectService,

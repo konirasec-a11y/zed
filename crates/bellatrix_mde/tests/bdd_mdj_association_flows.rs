@@ -2,7 +2,7 @@ use bellatrix_mde::{
     apply_model_command, decode_model_document, encode_model_section, export_mdj_section,
     import_mdj_document, prepare_model_document, project_model_section, validate_uml_model,
 };
-use bellatrix_mde_protocol::{ModelDocumentParts, command::Command};
+use bellatrix_mde_contracts::protocol::{ModelDocumentParts, command::Command};
 use serde_json::{Value, json};
 use std::{error::Error, fs, path::PathBuf};
 
@@ -208,7 +208,7 @@ fn omitted_multiplicity_survives_edit_save_reopen_and_restore() -> FlowResult<()
 fn choose_navigation(
     project: &Value,
     id: &str,
-    navigation: bellatrix_mde_protocol::NavigationKnowledge,
+    navigation: bellatrix_mde_contracts::protocol::NavigationKnowledge,
 ) -> FlowResult<Value> {
     edit(
         project,
@@ -252,7 +252,7 @@ fn assert_navigation_export(project: &Value, left: Option<&str>, right: &str) ->
 }
 
 fn assert_navigation_consumers(project: &Value, known: bool) -> FlowResult<()> {
-    use bellatrix_mde_protocol::presentation::EndpointMarkerGlyph;
+    use bellatrix_mde_contracts::protocol::presentation::EndpointMarkerGlyph;
     let mut document = project.clone();
     document["diagrams"] = json!([{
         "id":"navigation-preview", "name":"Navigation preview", "uml_di_type":"UMLClassDiagram",
@@ -330,7 +330,7 @@ fn has_code(response: &Value, code: &str) -> bool {
 
 #[test]
 fn unknown_navigation_survives_reopening_decisions_and_atomic_repair() -> FlowResult<()> {
-    use bellatrix_mde_protocol::NavigationKnowledge;
+    use bellatrix_mde_contracts::protocol::NavigationKnowledge;
     assert!(include_str!("features/mdj_association_lifecycle.feature").contains(
         "Scenario: Author navigation decisions without inventing defaults or losing source spelling"
     ));

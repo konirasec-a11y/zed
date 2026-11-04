@@ -48,7 +48,7 @@ impl MdjProvenance {
 
     // Only the conversion module may use this as input to reimport and compare
     // complete projections; the persisted fingerprint alone is never proof.
-    pub(crate) fn source_bytes_for_verification(&self) -> &[u8] {
+    pub fn source_bytes_for_verification(&self) -> &[u8] {
         &self.original.bytes
     }
 

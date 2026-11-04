@@ -2,7 +2,7 @@ use bellatrix_mde::{
     apply_model_command, decode_model_document, encode_model_document, encode_model_section,
     prepare_model_document, project_model_section, validate_uml_model,
 };
-use bellatrix_mde_protocol::{Command, inspector::ElementInspector};
+use bellatrix_mde_contracts::protocol::{Command, inspector::ElementInspector};
 use serde_json::{Value, json};
 
 const READ_ONLY_RULE: &str = "Property-derived_union_is_read_only";

@@ -1,3 +1,4 @@
+pub use bellatrix_mde_contracts::events::{ModelingRenameRequested, ModelingRename, ModelingSetOwnerRequested, ModelingSetOwner, ModelingSetExplorerParentRequested, ModelingSetExplorerParent};
 use crate::Command;
 use crate::MODELING_NAMESPACE;
 use crate::view_edits::{ModelingMoveView, move_view};
@@ -12,46 +13,7 @@ pub(crate) fn section_json(document: &ProjectDocument) -> Result<String, String>
         .ok_or("unsupported or missing MDE section: expected bellatrix.mde; beta documents in other namespaces are not supported")?;
     serde_json::to_string(section).map_err(|error| error.to_string())
 }
-#[derive(Clone)]
-pub struct ModelingRenameRequested {
-    pub project_id: ProjectId,
-    pub element_id: String,
-    pub new_name: String,
-    pub expected_revision: u64,
-}
-pub struct ModelingRename;
-impl Event for ModelingRename {
-    const NAME: &'static str = "bellatrix.mde.rename.v1";
-    type Args = ModelingRenameRequested;
-    type Output = Result<u64, String>;
-}
-#[derive(Clone, Debug)]
-pub struct ModelingSetOwnerRequested {
-    pub project_id: ProjectId,
-    pub element_id: String,
-    pub owner_id: Option<String>,
-    pub expected_revision: u64,
-}
-pub struct ModelingSetOwner;
-impl Event for ModelingSetOwner {
-    const NAME: &'static str = "bellatrix.mde.set-owner.v1";
-    type Args = ModelingSetOwnerRequested;
-    type Output = Result<u64, String>;
-}
-#[derive(Clone, Debug)]
-pub struct ModelingSetExplorerParentRequested {
-    pub project_id: ProjectId,
-    pub subject_id: String,
-    pub parent_id: Option<String>,
-    pub parent_occurrence: Option<crate::ViewOccurrence>,
-    pub expected_revision: u64,
-}
-pub struct ModelingSetExplorerParent;
-impl Event for ModelingSetExplorerParent {
-    const NAME: &'static str = "bellatrix.mde.set-explorer-parent.v1";
-    type Args = ModelingSetExplorerParentRequested;
-    type Output = Result<u64, String>;
-}
+
 pub struct MdePlugin;
 impl Plugin for MdePlugin {
     type Config = ();
