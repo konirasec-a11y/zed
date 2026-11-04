@@ -164,7 +164,8 @@ additional ownership restriction from this particular invariant.
 `AssociationClass-disjoint_attributes_ends` checks the intersection of owned
 attribute/end roles without first demanding complete `memberEnd` resolution.
 A known Property in both roles produces
-`UML_ASSOCIATION_CLASS_DISJOINT_ATTRIBUTES_ENDS`; unresolved role/ownership
+the existing public `UML_ASSOCIATION_ENDS` error, with
+`AssociationClass-disjoint_attributes_ends` in its message; unresolved role/ownership
 evidence without a local collision produces
 `MDE_ASSOCIATION_CLASS_DISJOINT_ATTRIBUTES_ENDS_UNVERIFIED`. Type resolution is
 not needed for this identity-based rule. The complete `owned_ends` query rejects

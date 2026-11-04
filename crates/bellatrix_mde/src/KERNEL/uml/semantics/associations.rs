@@ -1210,17 +1210,19 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
         .filter(|element| element.conforms_to("Association"))
     {
         if association.conforms_to("AssociationClass") {
+            // Keep the established public error code when moving this rule out
+            // of owned_ends; consumers already identify its rule in the message.
             let outcome = match association_class_disjoint_attributes_ends(references, association)
             {
                 Ok(true) => None,
                 Ok(false) => Some((
                     StructuralSeverity::Error,
-                    "UML_ASSOCIATION_CLASS_DISJOINT_ATTRIBUTES_ENDS",
+                    "UML_ASSOCIATION_ENDS",
                     "ownedAttribute and ownedEnd must be disjoint".to_owned(),
                 )),
                 Err(classifiers::QueryError::Invalid { message, .. }) => Some((
                     StructuralSeverity::Error,
-                    "UML_ASSOCIATION_CLASS_DISJOINT_ATTRIBUTES_ENDS",
+                    "UML_ASSOCIATION_ENDS",
                     message,
                 )),
                 Err(classifiers::QueryError::Unsupported { message, .. }) => Some((
