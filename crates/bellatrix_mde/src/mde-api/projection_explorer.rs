@@ -246,8 +246,53 @@ fn relationship_label(section: &ModelingSection, relation: &crate::Relation) -> 
 fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrder) -> Vec<ExplorerRow> {
     use std::collections::{HashMap, HashSet};
     let authored = project_authored_composition(section, sort);
-    let components = crate::visual_components(section)
-        .into_iter()
+    let components = crate::visual_components(section);
+    let presentations = section
+        .diagrams
+        .iter()
+        .flat_map(|diagram| diagram.all_views())
+        .map(|view| (view.id.as_str(), view))
+        .collect::<HashMap<_, _>>();
+    // Source compartments and labels belong to their figure, not to the model
+    // tree. Keep the complete visual inventory available to other consumers.
+    let internal_parents = components
+        .iter()
+        .filter(|component| {
+            component.parent_view_id.is_some()
+                && presentations
+                    .get(component.view_id.as_str())
+                    .is_some_and(|view| {
+                        view.presentation
+                            .source
+                            .as_ref()
+                            .is_some_and(|source| source.format == "mdj")
+                            && matches!(
+                                view.presentation.kind.as_deref(),
+                                Some(
+                                    "LabelView"
+                                        | "NodeLabelView"
+                                        | "EdgeLabelView"
+                                        | "UMLNameCompartmentView"
+                                        | "UMLAttributeCompartmentView"
+                                        | "UMLOperationCompartmentView"
+                                        | "UMLReceptionCompartmentView"
+                                        | "UMLTemplateParameterCompartmentView"
+                                        | "UMLQualifierCompartmentView"
+                                        | "UMLSlotCompartmentView"
+                                )
+                            )
+                    })
+        })
+        .map(|component| {
+            (
+                component.view_id.as_str(),
+                component.parent_view_id.as_deref(),
+            )
+        })
+        .collect::<HashMap<_, _>>();
+    let components = components
+        .iter()
+        .filter(|component| !internal_parents.contains_key(component.view_id.as_str()))
         // ERD document composition already represents its entities and relationships;
         // labels and compartments are canvas occurrences, not extra model children.
         .filter(|view| {
@@ -257,13 +302,60 @@ fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrder) -> Vec<E
                     && section.composition.contains_key(&diagram.id)
             })
         })
-        .map(|view| VisualComponent {
-            diagram_id: view.diagram_id,
-            view_id: view.view_id,
-            subject_id: view.subject_id,
-            parent_view_id: view.parent_view_id,
-            label: view.label,
-            kind: view.kind,
+        .map(|view| {
+            let mut parent = view.parent_view_id.as_deref();
+            let mut visited = HashSet::new();
+            while let Some(parent_id) = parent {
+                let Some(internal_parent) = internal_parents.get(parent_id) else {
+                    break;
+                };
+                if !visited.insert(parent_id) {
+                    parent = None;
+                    break;
+                }
+                parent = *internal_parent;
+            }
+            let kind = if view.kind == "visual component" {
+                presentations
+                    .get(view.view_id.as_str())
+                    .filter(|view| {
+                        view.presentation
+                            .source
+                            .as_ref()
+                            .is_some_and(|source| source.format == "mdj")
+                    })
+                    .and_then(|view| view.presentation.kind.as_deref())
+                    .map(|kind| format!("mdj.{kind}"))
+                    .unwrap_or_else(|| view.kind.clone())
+            } else {
+                view.kind.clone()
+            };
+            let missing_label = view.label.trim().is_empty()
+                || (view.kind == "visual component"
+                    && view.label == "visual component"
+                    && presentations
+                        .get(view.view_id.as_str())
+                        .and_then(|view| view.label.as_deref())
+                        .is_none_or(|label| label.trim().is_empty()));
+            let label = if missing_label {
+                view.subject_id
+                    .as_deref()
+                    .and_then(|subject| {
+                        section.elements.iter().find(|element| element.id == subject)
+                    })
+                    .and_then(|element| imported_element_label(section, element))
+                    .unwrap_or_else(|| explorer_type_label(&kind, false))
+            } else {
+                view.label.clone()
+            };
+            VisualComponent {
+                diagram_id: view.diagram_id.clone(),
+                view_id: view.view_id.clone(),
+                subject_id: view.subject_id.clone(),
+                parent_view_id: parent.map(str::to_owned),
+                label,
+                kind,
+            }
         })
         .collect::<Vec<_>>();
     let represented = components
@@ -550,8 +642,8 @@ fn place_diagrams_at_occurrences(
 }
 
 fn explorer_type_label(kind: &str, relationship: bool) -> String {
-    if let Some(label) = crate::mde_api_projection_tools::imported_type_label(kind) {
-        return label.into();
+    if let Some(label) = imported_kind_label(kind) {
+        return label;
     }
     if relationship {
         return "Relationship".into();
@@ -564,8 +656,26 @@ fn explorer_type_label(kind: &str, relationship: bool) -> String {
     }
 }
 
+fn imported_kind_label(kind: &str) -> Option<String> {
+    if let Some(label) = crate::mde_api_projection_tools::imported_type_label(kind) {
+        return Some(label.into());
+    }
+    let kind = kind.strip_prefix("mdj.")?;
+    let kind = kind.strip_prefix("UML").unwrap_or(kind);
+    let mut label = String::new();
+    let mut previous_lowercase = false;
+    for character in kind.chars() {
+        if character.is_uppercase() && previous_lowercase {
+            label.push(' ');
+        }
+        label.push(character);
+        previous_lowercase = character.is_lowercase();
+    }
+    Some(label)
+}
+
 fn imported_element_label(section: &ModelingSection, element: &crate::Element) -> Option<String> {
-    let type_label = crate::mde_api_projection_tools::imported_type_label(&element.kind)?;
+    let type_label = imported_kind_label(&element.kind)?;
     if !element.name.trim().is_empty() {
         return Some(element.name.clone());
     }
@@ -613,14 +723,29 @@ fn imported_element_label(section: &ModelingSection, element: &crate::Element) -
         let role = match slot {
             Some("/end1") => "End 1",
             Some("/end2") => "End 2",
-            _ => type_label,
+            _ => type_label.as_str(),
         };
         return Some(
             endpoint_label(element)
                 .map_or_else(|| role.into(), |target| format!("{role}: {target}")),
         );
     }
-    Some(type_label.into())
+    let endpoint = |slot: &str| {
+        element
+            .properties
+            .get(slot)
+            .and_then(serde_json::Value::as_object)
+            .filter(|reference| reference.len() == 1)
+            .and_then(|reference| reference.get("$ref"))
+            .and_then(serde_json::Value::as_str)
+            .and_then(|id| section.elements.iter().find(|target| target.id == id))
+            .map(|target| target.name.trim())
+            .filter(|name| !name.is_empty())
+    };
+    if let (Some(source), Some(target)) = (endpoint("source"), endpoint("target")) {
+        return Some(format!("{type_label}: {source} → {target}"));
+    }
+    Some(type_label)
 }
 
 fn model_creation_kinds(
@@ -749,6 +874,16 @@ fn project_authored_composition(
         .collect::<Vec<_>>();
     identities.sort();
     identities.dedup();
+    identities.retain(|id| {
+        !section.elements.iter().any(|element| {
+            element.id == *id
+                && element.kind == "mdj.UMLImage"
+                && section
+                    .composition
+                    .get(id)
+                    .is_some_and(|placement| placement.slot == "/icon")
+        })
+    });
     let source_order = section
         .elements
         .iter()

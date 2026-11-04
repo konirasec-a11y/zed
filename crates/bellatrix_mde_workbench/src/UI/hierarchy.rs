@@ -111,6 +111,9 @@ pub(crate) fn element_glyph(kind: &str, type_label: &str) -> bellatrix_ui_symbol
         "Constraint" => return ShapeKind::Note,
         "Generalization" => return ShapeKind::Inheritance,
         "Frame" => return ShapeKind::Boundary,
+        "Rectangle" => return ShapeKind::Process,
+        "RoundRect" | "RoundedRectangle" => return ShapeKind::Topic,
+        "Ellipse" => return ShapeKind::Usecase,
         _ => {}
     }
     let label = if kind == "rust.module" {
@@ -123,7 +126,7 @@ pub(crate) fn element_glyph(kind: &str, type_label: &str) -> bellatrix_ui_symbol
         .flat_map(|group| group.items)
         .find(|symbol| symbol.label.eq_ignore_ascii_case(label))
         .map(|symbol| symbol.kind)
-        .unwrap_or(ShapeKind::Topic)
+        .unwrap_or(ShapeKind::Document)
 }
 
 pub(crate) fn explorer_element_icon(
@@ -132,6 +135,10 @@ pub(crate) fn explorer_element_icon(
     palette: &crate::workbench_ui::WorkbenchPalette,
 ) -> impl gpui::IntoElement {
     use bellatrix_ui_symbols::staruml::{ExplorerIconCategory, explorer_glyph};
+    let imported_name = kind.strip_prefix("mdj.").map(|kind| {
+        let kind = kind.strip_prefix("UML").unwrap_or(kind);
+        kind.strip_suffix("View").unwrap_or(kind)
+    });
     let name = match kind {
         "mdj.ERDDataModel" => "Package",
         "mdj.ERDEntity" => "Class",
@@ -157,10 +164,19 @@ pub(crate) fn explorer_element_icon(
         "rust.enum" => "Enumeration",
         "rust.trait" => "Interface",
         "rust.function" | "rust.method" => "Operation",
-        _ => identity
-            .metaclass
-            .as_deref()
-            .unwrap_or(&identity.type_label),
+        _ => imported_name.unwrap_or_else(|| {
+            identity
+                .metaclass
+                .as_deref()
+                .unwrap_or(&identity.type_label)
+        }),
+    };
+    // These are presentation aliases only; opaque source objects keep their
+    // imported identity and never gain canonical UML editing capabilities.
+    let name = match name {
+        "Label" | "NodeLabel" | "EdgeLabel" => "Text",
+        "RoundRect" => "RoundedRectangle",
+        _ => name,
     };
     let (data, category) = explorer_glyph(name).unwrap_or_else(|| {
         let category = if identity.relationship {
@@ -169,7 +185,7 @@ pub(crate) fn explorer_element_icon(
             ExplorerIconCategory::Element
         };
         (
-            bellatrix_ui_symbols::glyph(element_glyph(kind, &identity.type_label)),
+            bellatrix_ui_symbols::glyph(element_glyph(kind, name)),
             category,
         )
     });
