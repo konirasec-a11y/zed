@@ -526,11 +526,15 @@ fn partition_represents_property_and_is_contained(
     accept_any([guard.map(|value| !value), consequence])
 }
 
-// UML.xmi ActionInputPin-one_output_pin: fromAction.output->size() = 1.
-fn action_input_pin_one_output(
-    references: &ReferenceIndex<'_>,
+// Canonical Action input/output evidence shared by ActionInputPin constraints.
+// The returned incompleteness cannot erase a known counterexample.
+fn action_input_pin_members<'a>(
+    references: &ReferenceIndex<'a>,
     pin: ElementRef<'_>,
-) -> Result<bool, QueryError> {
+    property: &str,
+    role: &'static str,
+    pin_metaclass: &str,
+) -> Result<(Vec<ElementRef<'a>>, Option<QueryError>), QueryError> {
     let action_id = optional_activity_reference(references, pin, "ActionInputPin", "fromAction")?
         .ok_or_else(|| {
         QueryError::unsupported(pin.id(), "required fromAction is unresolved")
@@ -541,9 +545,9 @@ fn action_input_pin_one_output(
     let mut incomplete = None;
     let mut projection = None;
     // Inspect every contributing authored slot, including external entries that
-    // have no local owns edge. A missing derived output list is not an empty list.
+    // have no local owns edge. A missing derived Pin list is not an empty list.
     for descriptor in classifiers::properties(action)? {
-        if !classifiers::contributes(descriptor, "Action-output")
+        if !classifiers::contributes(descriptor, role)
             .map_err(|error| QueryError::unsupported(action.id(), error))?
         {
             continue;
@@ -551,11 +555,11 @@ fn action_input_pin_one_output(
         let Some(value) = action.properties().get(descriptor.name) else {
             continue;
         };
-        // Check the stored output projection's shape/type/ownership separately
+        // Check the stored Pin projection's shape/type/ownership separately
         // from derivation. Membership is still established below from canonical
         // composite roles; this local descriptor does not change the metamodel.
         let projection_descriptor = schema::PropertyDescriptor {
-            is_derived: if descriptor.name == "output" {
+            is_derived: if descriptor.name == property {
                 false
             } else {
                 descriptor.is_derived
@@ -569,7 +573,7 @@ fn action_input_pin_one_output(
             PropertyOutcome::Unverified(message) => {
                 incomplete = Some(QueryError::unsupported(action.id(), message));
             }
-            PropertyOutcome::Satisfied if descriptor.name == "output" => {
+            PropertyOutcome::Satisfied if descriptor.name == property => {
                 projection = Some(
                     references
                         .validate_many(descriptor, value)
@@ -579,7 +583,7 @@ fn action_input_pin_one_output(
             PropertyOutcome::Satisfied => {}
         }
     }
-    let mut outputs = Vec::new();
+    let mut members = Vec::new();
     for child in references
         .explicit_owned_elements(action.id())
         .map_err(|error| QueryError::unsupported(action.id(), error))?
@@ -587,15 +591,15 @@ fn action_input_pin_one_output(
         if child.metaclass().is_none() {
             incomplete = Some(QueryError::unsupported(
                 child.id(),
-                "owned metaclass may be an OutputPin",
+                format!("owned metaclass may be an {pin_metaclass}"),
             ));
-        } else if child.conforms_to("OutputPin") {
-            match classifiers::contributes_to_owned_union(action, child, "Action-output") {
-                Ok(true) => outputs.push(child.id()),
+        } else if child.conforms_to(pin_metaclass) {
+            match classifiers::contributes_to_owned_union(action, child, role) {
+                Ok(true) => members.push(child),
                 Ok(false) => {
                     if action
                         .properties()
-                        .get("output")
+                        .get(property)
                         .and_then(serde_json::Value::as_array)
                         .is_some_and(|values| {
                             values.iter().any(|value|
@@ -604,7 +608,9 @@ fn action_input_pin_one_output(
                     {
                         return Err(QueryError::unsupported(
                             action.id(),
-                            "authored output includes a child outside the canonical output role",
+                            format!(
+                                "authored {property} includes a child outside the canonical {property} role"
+                            ),
                         ));
                     }
                 }
@@ -617,30 +623,40 @@ fn action_input_pin_one_output(
     }
     if action
         .properties()
-        .get("output")
+        .get(property)
         .and_then(serde_json::Value::as_array)
-        .is_some_and(|values| values.len() < outputs.len())
+        .is_some_and(|values| values.len() < members.len())
     {
         return Err(QueryError::unsupported(
             action.id(),
-            "authored output has too few slots for canonical output membership",
+            format!("authored {property} has too few slots for canonical {property} membership"),
         ));
     }
     if let Some(projection) = projection {
-        // This constraint only counts identities; it neither infers nor rewrites
-        // the order of the derived union. Contradictory membership is not proof
-        // of a cardinality violation.
-        if outputs
+        // These constraints consume identities, not position. Do not infer or
+        // rewrite the derived union's order. Contradictory membership is not
+        // proof of a violation of either consuming constraint.
+        if members
             .iter()
-            .any(|id| !projection.iter().any(|element| element.id() == *id))
-            || (incomplete.is_none() && outputs.len() != projection.len())
+            .any(|id| !projection.iter().any(|element| element.id() == id.id()))
+            || (incomplete.is_none() && members.len() != projection.len())
         {
             return Err(QueryError::unsupported(
                 action.id(),
-                "authored output contradicts canonical membership",
+                format!("authored {property} contradicts canonical membership"),
             ));
         }
     }
+    Ok((members, incomplete))
+}
+
+// UML.xmi ActionInputPin-one_output_pin: fromAction.output->size() = 1.
+fn action_input_pin_one_output(
+    references: &ReferenceIndex<'_>,
+    pin: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let (outputs, incomplete) =
+        action_input_pin_members(references, pin, "output", "Action-output", "OutputPin")?;
     if outputs.len() > 1 {
         // Additional opaque members cannot reduce two distinct known outputs.
         Ok(false)
@@ -649,6 +665,23 @@ fn action_input_pin_one_output(
     } else {
         Ok(outputs.len() == 1)
     }
+}
+
+// UML.xmi ActionInputPin-input_pin: every fromAction input is an ActionInputPin.
+fn action_input_pin_inputs(
+    references: &ReferenceIndex<'_>,
+    pin: ElementRef<'_>,
+) -> Result<bool, QueryError> {
+    let (inputs, incomplete) =
+        action_input_pin_members(references, pin, "input", "Action-input", "InputPin")?;
+    // Empty is valid only with complete evidence. One known ordinary InputPin
+    // (including a ValuePin) violates the rule despite other unknown members.
+    require_all(
+        inputs
+            .into_iter()
+            .map(|input| Ok(input.conforms_to("ActionInputPin")))
+            .chain(incomplete.map(Err)),
+    )
 }
 
 // UML.xmi ValuePin-compatible_type: value.type.conformsTo(type).
@@ -1081,6 +1114,13 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
             ));
         }
         if node.conforms_to("ActionInputPin") {
+            checks.push((
+                action_input_pin_inputs(references, node),
+                "UML_ACTION_INPUT_PIN_INPUT_PIN",
+                "MDE_ACTION_INPUT_PIN_INPUT_PIN_UNVERIFIED",
+                "ActionInputPin-input_pin",
+                "all InputPins of the fromAction must be ActionInputPins",
+            ));
             checks.push((
                 action_input_pin_one_output(references, node),
                 "UML_ACTION_INPUT_PIN_ONE_OUTPUT_PIN",
