@@ -197,9 +197,12 @@ absence of aggregation versus an explicit `none`.
 Canonical association Views use the existing UML endpoint convention, so the
 same canvas draws the diamond on its original side. Opaque associations keep
 the source convention. Experimental export applies the inverse translation and
-reimports the actual bytes before accepting them. Derived relation diamond fields
-follow the same convention as native authoring, rather than retaining a second
-editable aggregation value.
+reimports the actual bytes before accepting them. Aggregation is stored only on
+its Property. Canvas, Explorer and Inspector derive diamond placement from those
+Properties; `end1Aggregation` and `end2Aggregation` are editor command paths, not
+persisted relation fields. Validation reports stale relation copies; JSON/BLX
+codecs and the platform section boundary reject them when canonical `memberEnd`
+is present instead of persisting a competing value or silently discarding it.
 
 This does not translate `ownerAttribute`, qualifiers or unknown association/end
 fields. Those objects and any classifier whose completeness depends on them

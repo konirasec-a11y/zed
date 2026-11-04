@@ -320,12 +320,12 @@ fn project_endpoint(relation: &mut Relation, end: &Element, position: usize) {
     let target = reference(end.properties.get("type"))
         .unwrap_or_default()
         .to_owned();
-    let (role, multiplicity, diamond) = if position == 0 {
+    let (role, multiplicity) = if position == 0 {
         relation.from = target;
-        ("sourceRole", "sourceMultiplicity", "end2Aggregation")
+        ("sourceRole", "sourceMultiplicity")
     } else {
         relation.to = target;
-        ("targetRole", "targetMultiplicity", "end1Aggregation")
+        ("targetRole", "targetMultiplicity")
     };
     if !end.name.is_empty() {
         relation
@@ -336,11 +336,6 @@ fn project_endpoint(relation: &mut Relation, end: &Element, position: usize) {
         relation
             .properties
             .insert(multiplicity.into(), value.clone());
-    }
-    if let Some(value) = end.properties.get("aggregation")
-        && matches!(value.as_str(), Some("shared" | "composite"))
-    {
-        relation.properties.insert(diamond.into(), value.clone());
     }
 }
 

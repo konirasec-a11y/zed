@@ -59,7 +59,10 @@ fn inherited_interface_creation_uses_behaviored_classifier_contract() {
                     .expect("typed relationship");
                 assert_eq!(relation.from, "owner");
                 if action == UmlQuickCreate::RequiredInterface {
-                    let presentation = bellatrix_mde::relationship_presentation(relation);
+                    let presentation = bellatrix_mde::relationship_presentation(
+                        &bellatrix_mde::ModelingSection::from_model(&updated),
+                        relation,
+                    );
                     assert_eq!(presentation.name.as_deref(), Some("«use»"));
                     assert_eq!(presentation.source_role, "client");
                     assert_eq!(presentation.target_role, "supplier");
@@ -213,10 +216,14 @@ fn association_quick_create_uses_typed_member_ends_not_class_whitelist() {
                     .find(|relation| relation.kind == "uml.association")
                     .expect("association");
                 assert_eq!(relation.from, "owner");
+                let references = bellatrix_mde::uml::references::ReferenceIndex::new(
+                    bellatrix_mde::uml::root::Model::from_project(&updated),
+                );
+                let ends = bellatrix_mde::uml::associations::member_ends(&references, &relation.id)
+                    .expect("canonical ends");
                 assert_eq!(
-                    relation
-                        .properties
-                        .get("end1Aggregation")
+                    ends.get(1)
+                        .and_then(|end| end.properties.get("aggregation"))
                         .and_then(|value| value.as_str()),
                     aggregation
                 );

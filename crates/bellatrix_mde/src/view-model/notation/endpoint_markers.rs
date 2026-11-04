@@ -153,7 +153,10 @@ pub fn resolve_relationship_view(
         .iter()
         .find(|relation| relation.id == subject);
     let (kind, presentation) = if let Some(relation) = relation {
-        (relation.kind.clone(), relationship_presentation(relation))
+        (
+            relation.kind.clone(),
+            relationship_presentation(section, relation),
+        )
     } else if let Some(presentation) = imported_relationship_presentation(section, view) {
         (format!("view.{}", presentation.label), presentation)
     } else {
@@ -186,14 +189,15 @@ pub fn resolve_relationship_view(
                 style: relationship_style_for_notation("uml.association"),
                 source_role: "source",
                 target_role: "target",
+                diagnostics: Vec::new(),
             },
         )
     };
     let mut resolved = ResolvedRelationshipView {
         kind,
+        diagnostics: presentation.diagnostics.clone(),
         presentation,
         markers: None,
-        diagnostics: Vec::new(),
     };
     // Child label views own their text, placement and visibility. Do not also
     // paint generated labels at unrelated offsets over the authored subviews.
@@ -298,5 +302,6 @@ fn imported_relationship_presentation(
         style,
         source_role: "source",
         target_role: "target",
+        diagnostics: Vec::new(),
     })
 }

@@ -995,6 +995,23 @@ const PROJECTION_KEYS: [&str; 6] = [
     "end2Aggregation",
 ];
 
+pub(crate) fn validate_aggregation_storage(model: Model<'_>) -> Result<(), String> {
+    for association in model.elements().filter(|element| {
+        element.conforms_to("Association") && element.properties().contains_key("memberEnd")
+    }) {
+        if let Some(field) = ["end1Aggregation", "end2Aggregation"]
+            .into_iter()
+            .find(|field| association.properties().contains_key(*field))
+        {
+            return Err(format!(
+                "Association {} stores {field}, but diamond values must be derived from memberEnd Property aggregation",
+                association.id(),
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn binary_projection(
     references: &ReferenceIndex<'_>,
     relation: &Relation,
@@ -1017,19 +1034,9 @@ fn binary_projection(
     for key in PROJECTION_KEYS {
         result.properties.remove(key);
     }
-    for (end, role, range, diamond) in [
-        (
-            source,
-            "sourceRole",
-            "sourceMultiplicity",
-            "end2Aggregation",
-        ),
-        (
-            target,
-            "targetRole",
-            "targetMultiplicity",
-            "end1Aggregation",
-        ),
+    for (end, role, range) in [
+        (source, "sourceRole", "sourceMultiplicity"),
+        (target, "targetRole", "targetMultiplicity"),
     ] {
         if !end.name.is_empty() {
             result.properties.insert(role.into(), json!(end.name));
@@ -1051,11 +1058,6 @@ fn binary_projection(
             }
         } else if let Some(value) = end.properties.get("multiplicity") {
             result.properties.insert(range.into(), value.clone());
-        }
-        let kind = aggregation(end)?;
-        // UML places the diamond at the composing end, opposite the composite Property's Type.
-        if kind != "none" {
-            result.properties.insert(diamond.into(), json!(kind));
         }
     }
     Ok(result)

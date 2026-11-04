@@ -34,6 +34,7 @@ pub(super) fn invalid_model(error: ModelIoError) -> String {
             "INVALID_MODEL",
             format!("unsupported model schema_version: {version}"),
         ),
+        ModelIoError::SemanticStorage(message) => error_response("INVALID_MODEL", message),
         _ => error_response(
             "INVALID_MODEL",
             "model does not match the supported document schema",

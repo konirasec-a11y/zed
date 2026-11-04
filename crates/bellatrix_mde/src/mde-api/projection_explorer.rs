@@ -177,7 +177,7 @@ fn relationship_label(section: &ModelingSection, relation: &crate::Relation) -> 
             .unwrap_or(id)
             .to_owned()
     };
-    let presentation = crate::relationship_presentation(relation);
+    let presentation = crate::relationship_presentation(section, relation);
     let relation_type = crate::semantic_identity(&presentation.notation).type_label;
     let name = presentation
         .name
@@ -798,7 +798,7 @@ fn project_authored_composition(
                 key: semantic_key(id),
                 element_id: id.clone(),
                 label: relationship_label(section, relation),
-                kind: crate::relationship_presentation(relation).notation,
+                kind: crate::relationship_presentation(section, relation).notation,
                 depth: 0,
                 diagram: false,
                 view: None,

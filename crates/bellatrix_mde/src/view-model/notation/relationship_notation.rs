@@ -1,5 +1,5 @@
 use crate::uml::types::{RelationEnd, RelationEndMultiplicity};
-use crate::{LineMode, Relation};
+use crate::{LineMode, ModelingSection, Relation};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RelationshipMarker {
@@ -82,6 +82,7 @@ pub struct RelationshipPresentation {
     pub style: RelationshipStyle,
     pub source_role: &'static str,
     pub target_role: &'static str,
+    pub diagnostics: Vec<String>,
 }
 impl RelationshipPresentation {
     pub fn describe(&self, from: &str, to: &str) -> String {
@@ -99,19 +100,50 @@ impl RelationshipPresentation {
         }
     }
 }
-pub fn relationship_presentation(relation: &Relation) -> RelationshipPresentation {
+pub(crate) fn association_diamonds<'a>(
+    section: &'a ModelingSection,
+    relation: &Relation,
+) -> Result<[&'a str; 2], String> {
+    let references = crate::uml::references::ReferenceIndex::new(
+        crate::uml::root::Model::from_section(section),
+    );
+    let ends = crate::uml::associations::member_ends(&references, &relation.id)?;
+    let [source, target] = ends.as_slice() else {
+        return Err("Association diamond projection requires two Property ends".into());
+    };
+    // The diamond is opposite the typed Property that owns aggregation.
+    Ok([
+        crate::uml::associations::aggregation(*target)?,
+        crate::uml::associations::aggregation(*source)?,
+    ])
+}
+
+pub fn relationship_presentation(
+    section: &ModelingSection,
+    relation: &Relation,
+) -> RelationshipPresentation {
+    let mut diagnostics = Vec::new();
+    let [source_aggregation, target_aggregation] = if matches!(
+        relation.kind.as_str(),
+        "uml.association" | "uml.directed_association"
+    ) {
+        match association_diamonds(section, relation) {
+            Ok(aggregations) => aggregations,
+            Err(message) => {
+                diagnostics.push(message);
+                ["none", "none"]
+            }
+        }
+    } else {
+        ["none", "none"]
+    };
     let notation = match relation.kind.as_str() {
         "depends_on" => "uml.dependency",
         "uml.association" | "uml.directed_association" => {
-            let aggregations = ["end1Aggregation", "end2Aggregation"].map(|key| {
-                relation
-                    .properties
-                    .get(key)
-                    .and_then(serde_json::Value::as_str)
-            });
-            if aggregations.contains(&Some("composite")) {
+            let aggregations = [source_aggregation, target_aggregation];
+            if aggregations.contains(&"composite") {
                 "uml.composition"
-            } else if aggregations.contains(&Some("shared")) {
+            } else if aggregations.contains(&"shared") {
                 "uml.aggregation"
             } else {
                 relation.kind.as_str()
@@ -129,11 +161,7 @@ pub fn relationship_presentation(relation: &Relation) -> RelationshipPresentatio
         "uml.realization" => ("implementation", "specification"),
         "uml.dependency" | "uml.usage" | "uml.template_binding" => ("client", "supplier"),
         "uml.aggregation" | "uml.composition"
-            if relation
-                .properties
-                .get("end2Aggregation")
-                .and_then(serde_json::Value::as_str)
-                .is_some_and(|kind| matches!(kind, "shared" | "composite")) =>
+            if matches!(target_aggregation, "shared" | "composite") =>
         {
             ("part", "whole")
         }
@@ -161,17 +189,13 @@ pub fn relationship_presentation(relation: &Relation) -> RelationshipPresentatio
         relation.kind.as_str(),
         "uml.association" | "uml.directed_association"
     ) {
-        let marker = |key: &str| match relation
-            .properties
-            .get(key)
-            .and_then(serde_json::Value::as_str)
-        {
-            Some("shared") => RelationshipMarker::Diamond,
-            Some("composite") => RelationshipMarker::FilledDiamond,
+        let marker = |aggregation: &str| match aggregation {
+            "shared" => RelationshipMarker::Diamond,
+            "composite" => RelationshipMarker::FilledDiamond,
             _ => RelationshipMarker::None,
         };
-        style.source_marker = marker("end1Aggregation");
-        let target_marker = marker("end2Aggregation");
+        style.source_marker = marker(source_aggregation);
+        let target_marker = marker(target_aggregation);
         if relation.kind == "uml.association" || target_marker != RelationshipMarker::None {
             style.target_marker = target_marker;
         }
@@ -195,6 +219,7 @@ pub fn relationship_presentation(relation: &Relation) -> RelationshipPresentatio
         style,
         source_role,
         target_role,
+        diagnostics,
     }
 }
 

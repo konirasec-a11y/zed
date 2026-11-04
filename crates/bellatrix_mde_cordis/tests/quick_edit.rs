@@ -1004,16 +1004,29 @@ async fn class_specializations_use_the_same_versioned_cordis_event() {
         .filter(|r| r.kind == "uml.association")
         .collect::<Vec<_>>();
     assert_eq!(associations.len(), 3);
+    let stored_section = events::section(&projects, &project_id).unwrap();
     for aggregation in ["shared", "composite"] {
         assert!(
             associations.iter().any(|relation| {
-                events::section(&projects, &project_id).unwrap()["relations"]
+                stored_section["relations"]
                     .as_array()
                     .unwrap()
                     .iter()
                     .any(|stored| {
+                        let end_id = stored["properties"]["memberEnd"]
+                            .as_array()
+                            .and_then(|ends| ends.get(1))
+                            .and_then(|end| end.get("$ref"))
+                            .and_then(serde_json::Value::as_str);
                         stored["id"] == relation.id
-                            && stored["properties"]["end1Aggregation"] == aggregation
+                            && stored_section["elements"]
+                                .as_array()
+                                .unwrap()
+                                .iter()
+                                .any(|end| {
+                                    end["id"].as_str() == end_id
+                                        && end["properties"]["aggregation"] == aggregation
+                                })
                     })
             }),
             "{aggregation}"

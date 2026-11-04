@@ -188,11 +188,11 @@ fn public_association_flow_creates_edits_reparents_navigates_rejects_and_reopens
         (&"a".to_owned(), &"c".to_owned())
     );
     assert_eq!(
-        relationship_presentation(relation).notation,
+        relationship_presentation(&ModelingSection::from_model(&model), relation).notation,
         "uml.composition"
     );
     assert_eq!(
-        relationship_presentation(relation)
+        relationship_presentation(&ModelingSection::from_model(&model), relation)
             .target_labels
             .role
             .as_deref(),
@@ -255,7 +255,6 @@ fn public_association_flow_creates_edits_reparents_navigates_rejects_and_reopens
     .expect("rename Type");
     let expected_warnings = [
         (ends[1].as_str(), "multiplicity"),
-        (association.as_str(), "end1Aggregation"),
         (association.as_str(), "sourceRole"),
         (association.as_str(), "targetMultiplicity"),
         (association.as_str(), "targetRole"),

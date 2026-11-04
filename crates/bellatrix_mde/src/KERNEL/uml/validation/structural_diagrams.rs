@@ -506,13 +506,23 @@ fn collect_structural_model_diagnostics(project: &Project) -> Vec<StructuralDiag
         .map(|element| (element.id.as_str(), element))
         .collect::<HashMap<_, _>>();
     for relation in &project.relations {
+        if ["end1Aggregation", "end2Aggregation"]
+            .iter()
+            .any(|field| relation.properties.contains_key(*field))
+        {
+            issues.push(problem(
+                "UML_ASSOCIATION_AGGREGATION_STORAGE",
+                &relation.id,
+                "Association diamond values are derived from memberEnd Property aggregation and must not be stored on the relation",
+            ));
+        }
         if matches!(
             relation.kind.as_str(),
             "uml.aggregation" | "uml.composition"
         ) {
             issues.push(problem(
                 "UML_UNSUPPORTED_RELATIONSHIP_FORMAT", &relation.id,
-                "Unsupported old relationship format: use canonical uml.association with end1Aggregation set to shared or composite",
+                "Unsupported old relationship format: use canonical uml.association with aggregation on its memberEnd Properties",
             ));
             continue;
         }
@@ -565,16 +575,6 @@ fn collect_structural_model_diagnostics(project: &Project) -> Vec<StructuralDiag
                 "UML_INTERFACE_REALIZATION_TARGET",
                 &relation.id,
                 "InterfaceRealization must target a UML Interface",
-            ));
-        }
-        if let Some(value) = relation.properties.get("end1Aggregation")
-            && (relation.kind != "uml.association"
-                || !matches!(value.as_str(), Some("none" | "shared" | "composite")))
-        {
-            issues.push(problem(
-                "UML_ASSOCIATION_AGGREGATION",
-                &relation.id,
-                "end1Aggregation belongs to Association and must be none, shared or composite",
             ));
         }
         // Property-reference and editor links remain supported without becoming UML Relationships.

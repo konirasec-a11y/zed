@@ -632,7 +632,7 @@ pub(crate) fn inspect_element_with_references(
                         .any(|view| view.subject.as_deref() == Some(id))
                 }))
     }) {
-        let presentation = crate::relationship_presentation(relation);
+        let presentation = crate::relationship_presentation(section, relation);
         let source = section
             .elements
             .iter()
@@ -713,28 +713,48 @@ pub(crate) fn inspect_element_with_references(
                 "end2Aggregation" => "Target diamond",
                 _ => "Property",
             };
+            let (value, editor, editable) = if matches!(key, "end1Aggregation" | "end2Aggregation") {
+                match crate::property_edit::property_contract(
+                    section,
+                    id,
+                    &format!("properties.{key}"),
+                ) {
+                    Ok(contract) => (
+                        contract.value,
+                        editor_for_value_type(contract.value_type, false),
+                        true,
+                    ),
+                    Err(message) => (json!(message), PropertyEditor::ReadOnly, false),
+                }
+            } else {
+                (
+                    relation
+                        .properties
+                        .get(key)
+                        .cloned()
+                        .unwrap_or_else(definition.default),
+                    editor_for_value_type(definition.value_type, false),
+                    true,
+                )
+            };
             properties.push(InspectorProperty {
                 path: format!("properties.{key}"),
                 label: label.into(),
                 group: "Relationship",
-                editor: editor_for_value_type(definition.value_type, false),
-                value: relation
-                    .properties
-                    .get(key)
-                    .cloned()
-                    .unwrap_or_else(definition.default),
-                editable: true,
+                editor,
+                value,
+                editable,
             });
         }
         for (key, value) in &relation.properties {
             if known.contains(key.as_str()) {
                 continue;
             }
-            let (editor, editable) = if key == "end1Aggregation" {
-                (
-                    PropertyEditor::Choice(&["none", "shared", "composite"]),
-                    true,
-                )
+            let (editor, editable) = if matches!(
+                key.as_str(),
+                "end1Aggregation" | "end2Aggregation"
+            ) {
+                (PropertyEditor::ReadOnly, false)
             } else {
                 match value {
                     Value::String(_) => (PropertyEditor::Text, true),

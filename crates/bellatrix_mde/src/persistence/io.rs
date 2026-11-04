@@ -31,12 +31,18 @@ pub enum ModelIoError {
     Provenance(String),
     #[error("invalid authoring knowledge encoding: {0}")]
     AuthoringKnowledge(String),
+    #[error("invalid semantic storage: {0}")]
+    SemanticStorage(String),
     #[error("unsupported schema version: {0}")]
     Version(u32),
 }
 
 pub fn encode(project: &Project, format: Format) -> Result<Vec<u8>, ModelIoError> {
     ensure_version(project.schema_version)?;
+    crate::uml::associations::validate_aggregation_storage(
+        crate::uml::root::Model::from_project(&project),
+    )
+    .map_err(ModelIoError::SemanticStorage)?;
     crate::composition_paths(&project).map_err(ModelIoError::Hierarchy)?;
     if let Some(provenance) = &project.mdj_provenance {
         provenance
@@ -65,6 +71,10 @@ pub fn decode(bytes: &[u8], format: Format) -> Result<Project, ModelIoError> {
         }
     };
     ensure_version(project.schema_version)?;
+    crate::uml::associations::validate_aggregation_storage(
+        crate::uml::root::Model::from_project(&project),
+    )
+    .map_err(ModelIoError::SemanticStorage)?;
     crate::composition_paths(&project).map_err(ModelIoError::Hierarchy)?;
     if let Some(provenance) = &project.mdj_provenance {
         provenance

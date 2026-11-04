@@ -65,6 +65,7 @@ pub(super) fn resolve(section: &ModelingSection, view: &View) -> ResolvedRelatio
             },
             source_role: "source",
             target_role: "target",
+            diagnostics: Vec::new(),
         },
         markers,
         diagnostics,

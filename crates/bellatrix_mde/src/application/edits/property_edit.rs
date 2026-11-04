@@ -450,6 +450,27 @@ pub(crate) fn property_contract(
             }
         }
         ElementRef::Relationship(relation) => {
+            if matches!(key, "end1Aggregation" | "end2Aggregation") {
+                if element.metaclass() != Some("Association") {
+                    return Err("diamond editing requires an Association".into());
+                }
+                let references = crate::uml::references::ReferenceIndex::new(
+                    crate::uml::root::Model::from_section(section),
+                );
+                let ends = crate::uml::associations::member_ends(&references, &relation.id)?;
+                let end = ends
+                    .get(if key == "end1Aggregation" { 1 } else { 0 })
+                    .ok_or("Association member end is missing")?;
+                return Ok(PropertyContract {
+                    value_type: PropertyValueType::Choice(&["none", "shared", "composite"]),
+                    // Keep an invalid authored value editable so the user can repair it.
+                    value: end
+                        .properties
+                        .get("aggregation")
+                        .cloned()
+                        .unwrap_or_else(|| json!("none")),
+                });
+            }
             if let Some(definition) =
                 relationship_fields(element).find(|definition| definition.key == key)
             {
@@ -460,11 +481,6 @@ pub(crate) fn property_contract(
                         .get(key)
                         .cloned()
                         .unwrap_or_else(definition.default),
-                )
-            } else if key == "end1Aggregation" && relation.properties.contains_key(key) {
-                (
-                    PropertyValueType::Choice(&["none", "shared", "composite"]),
-                    relation.properties.get(key).cloned().unwrap_or(Value::Null),
                 )
             } else if let Some(value) = relation.properties.get(key) {
                 (authored_value_type(value), value.clone())

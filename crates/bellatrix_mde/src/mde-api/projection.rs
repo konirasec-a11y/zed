@@ -13,6 +13,9 @@ pub(crate) fn decode_section(
     let section: crate::ModelingSection = serde_json::from_str(section_json)
         .map_err(|error| format!("invalid MDE section: {error}"))?;
     let project = section.to_model(project_id, name);
+    crate::uml::associations::validate_aggregation_storage(
+        crate::uml::root::Model::from_project(&project),
+    )?;
     crate::Graph::new(&project)
         .validate_identifiers()
         .map_err(|error| error.to_string())?;
@@ -118,7 +121,7 @@ pub fn project_model_section(
         .relations
         .iter()
         .map(|relation| {
-            let presentation = crate::relationship_presentation(relation);
+            let presentation = crate::relationship_presentation(&section, relation);
             Relation {
                 id: relation.id.clone(),
                 kind: relation.kind.clone(),

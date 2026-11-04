@@ -453,10 +453,12 @@ mod tests {
                     _ => None,
                 };
                 if let Some(value) = aggregation {
+                    let section = ModelingSection::from_model(&project);
                     assert_eq!(
-                        edge.properties
-                            .get("end1Aggregation")
-                            .and_then(|value| value.as_str()),
+                        crate::relationship_notation::association_diamonds(&section, edge)
+                            .expect("canonical association diamonds")
+                            .first()
+                            .copied(),
                         Some(value)
                     );
                 }

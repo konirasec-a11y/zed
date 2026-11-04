@@ -29,6 +29,24 @@ fn relation_properties<'a>(document: &'a ProjectDocument, id: &str) -> &'a serde
         .expect("persisted relation")["properties"]
 }
 
+fn source_aggregation<'a>(document: &'a ProjectDocument, id: &str) -> Option<&'a str> {
+    let end_id = relation_properties(document, id)
+        .get("memberEnd")?
+        .as_array()?
+        .get(1)?
+        .get("$ref")?
+        .as_str()?;
+    document
+        .section(MODELING_NAMESPACE)?
+        .get("elements")?
+        .as_array()?
+        .iter()
+        .find(|element| element.get("id").and_then(serde_json::Value::as_str) == Some(end_id))?
+        .get("properties")?
+        .get("aggregation")?
+        .as_str()
+}
+
 async fn reopen(
     context: &Context,
     document: &ProjectDocument,
@@ -315,10 +333,7 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
             .iter()
             .find(|relation| {
                 relation.kind == kind
-                    && relation_properties(&final_snapshot, &relation.id)
-                        .get("end1Aggregation")
-                        .and_then(serde_json::Value::as_str)
-                        == aggregation
+                    && source_aggregation(&final_snapshot, &relation.id) == aggregation
             })
             .unwrap();
         assert!(
@@ -336,10 +351,7 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
         .iter()
         .find(|relation| {
             relation.kind == "uml.association"
-                && relation_properties(&final_snapshot, &relation.id)
-                    .get("end1Aggregation")
-                    .and_then(serde_json::Value::as_str)
-                    == Some("shared")
+                && source_aggregation(&final_snapshot, &relation.id) == Some("shared")
         })
         .unwrap()
         .id
@@ -422,9 +434,7 @@ async fn complete_class_diagram_toolset_is_revisioned_and_editable() {
         .iter()
         .find(|relation| {
             relation.kind == "uml.association"
-                && relation_properties(&updated, &relation.id)
-                    .get("end1Aggregation")
-                    .is_none()
+                && source_aggregation(&updated, &relation.id).is_none()
         })
         .expect("authored association");
     let association_id = association.id.clone();
