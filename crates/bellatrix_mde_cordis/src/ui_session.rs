@@ -306,6 +306,18 @@ fn edit(command: MdeUiCommand) -> Result<(ProjectId, u64, Command, Option<Comple
                 y: request.y,
             },
         ),
+        MdeUiCommand::CreateElementVisualDraft(request) => (
+            request.project_id,
+            request.expected_revision,
+            Command::CreateElementVisualDraft {
+                diagram_id: request.diagram_id,
+                owner_id: request.owner_id,
+                kind: request.kind,
+                name: request.name,
+                x: request.x,
+                y: request.y,
+            },
+        ),
         MdeUiCommand::CreateElement(request) => (
             request.project_id,
             request.expected_revision,

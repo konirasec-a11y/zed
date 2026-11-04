@@ -95,6 +95,14 @@ pub enum Command {
         x: f64,
         y: f64,
     },
+    CreateElementVisualDraft {
+        diagram_id: String,
+        owner_id: Option<String>,
+        kind: ModelingElementKind,
+        name: Option<String>,
+        x: f64,
+        y: f64,
+    },
     CreateRelationOrVisualDraft {
         diagram_id: String,
         owner_id: Option<String>,
@@ -261,6 +269,30 @@ pub(crate) fn apply_with_diagram_operations(
     diagram_operations: &dyn crate::diagram_operations::DiagramOperations,
 ) -> Result<Project, String> {
     ensure_visual_edit_supported(project, command)?;
+    if let Command::CreateElementVisualDraft {
+        diagram_id,
+        owner_id,
+        kind,
+        name,
+        x,
+        y,
+    } = command
+    {
+        let diagram = project
+            .diagrams
+            .iter()
+            .find(|diagram| diagram.id == *diagram_id)
+            .ok_or("diagram not found")?;
+        let draft = views::element_draft_command(
+            diagram,
+            *kind,
+            name.as_deref(),
+            (*x, *y),
+            owner_id.as_deref(),
+            None,
+        );
+        return apply_with_diagram_operations(project, &draft, revision, diagram_operations);
+    }
     if let Command::CreateElementOrVisualDraft {
         diagram_id,
         owner_id,
@@ -287,29 +319,17 @@ pub(crate) fn apply_with_diagram_operations(
                     .iter()
                     .find(|diagram| diagram.id == *diagram_id)
                     .ok_or("diagram not found")?;
-                let mut properties = std::collections::BTreeMap::new();
-                properties.insert("semantic_creation_diagnostic".into(), Value::String(reason));
-                if matches!(kind, ModelingElementKind::Part | ModelingElementKind::Port) {
-                    properties.insert("aggregation".into(), serde_json::json!("composite"));
-                }
-                if let Some(pseudostate) = kind.resolve_pseudostate_kind() {
-                    properties.insert("kind".into(), Value::String(pseudostate.into()));
-                }
-                if let Some(owner) = owner_id {
-                    properties.insert("requested_owner_id".into(), Value::String(owner.clone()));
-                }
+                let draft = views::element_draft_command(
+                    diagram,
+                    *kind,
+                    name.as_deref(),
+                    (*x, *y),
+                    owner_id.as_deref(),
+                    Some(&reason),
+                );
                 apply_with_diagram_operations(
                     project,
-                    &Command::CreateVisualDraft {
-                        diagram_id: diagram_id.clone(),
-                        notation_kind: kind.model_kind().into(),
-                        label: name.clone(),
-                        geometry: views::initial_geometry_in_diagram(*kind, diagram, *x, *y),
-                        properties,
-                        parent_view_id: None,
-                        source_view_id: None,
-                        target_view_id: None,
-                    },
+                    &draft,
                     revision,
                     diagram_operations,
                 )
@@ -509,7 +529,7 @@ pub(crate) fn apply_with_diagram_operations(
         | Command::CreateRelationAtViewsOrVisualDraft { .. } => {
             return Err("visual relation dispatch failed".into());
         }
-        Command::CreateElementOrVisualDraft { .. } => {
+        Command::CreateElementOrVisualDraft { .. } | Command::CreateElementVisualDraft { .. } => {
             return Err("visual creation dispatch failed".into());
         }
         Command::CreateElement { .. } | Command::CreateModelElement { .. } => {
@@ -937,6 +957,7 @@ fn ensure_visual_edit_supported(project: &Project, command: &Command) -> Result<
             .find(|diagram| diagram.all_views().any(|view| view.id == *view_id)),
         Command::CreateElement { diagram_id, .. }
         | Command::CreateElementOrVisualDraft { diagram_id, .. }
+        | Command::CreateElementVisualDraft { diagram_id, .. }
         | Command::CreateRelation { diagram_id, .. }
         | Command::CreateRelationOrVisualDraft { diagram_id, .. }
         | Command::CreateRelationAtViews { diagram_id, .. }
@@ -1004,6 +1025,72 @@ fn fresh_ids<const N: usize>(
     }
 }
 
+fn resolve_element_owner(
+    section: &ModelingSection,
+    model_kind: &str,
+    owner_id: Option<&str>,
+) -> Result<Option<String>, String> {
+    if let Some(owner_id) = owner_id {
+        Ok(Some(owner_id.into()))
+    } else if crate::uml::root::object_metaclass(model_kind).is_some() {
+        // Creating one element must not adopt unrelated rootless elements.
+        Ok(crate::uml::root::Model::from_section(section)
+            .root()?
+            .map(|root| root.element().id().to_owned()))
+    } else {
+        Ok(None)
+    }
+}
+
+fn element_name(
+    section: &ModelingSection,
+    owner_id: Option<&str>,
+    default_name: &str,
+    requested_name: Option<&str>,
+) -> Result<String, String> {
+    if let Some(name) = requested_name {
+        return if name.trim().is_empty() {
+            Err("element name must not be blank".into())
+        } else {
+            Ok(name.into())
+        };
+    }
+    let model = crate::uml::root::Model::from_section(section);
+    let mut name = default_name.to_owned();
+    let mut sequence = 0_u64;
+    loop {
+        let mut duplicate = false;
+        for element in section
+            .elements
+            .iter()
+            .filter(|element| element.name == name)
+        {
+            // Unrelated malformed ownership must not block this namespace. A
+            // conflicting owner that includes this scope still fails below.
+            let mut owners = model
+                .ownership_links()
+                .filter(|relation| relation.to == element.id);
+            let in_scope = match owner_id {
+                Some(owner_id) => owners.any(|relation| relation.from == owner_id),
+                None => owners.next().is_none(),
+            };
+            if !in_scope {
+                continue;
+            }
+            let owner = model.owner(crate::uml::root::ElementRef::Object(element))?;
+            if owner.map(|owner| owner.id()) == owner_id {
+                duplicate = true;
+                break;
+            }
+        }
+        if !duplicate {
+            return Ok(name);
+        }
+        sequence = sequence.checked_add(1).ok_or("name sequence overflow")?;
+        name = format!("{default_name}{sequence}");
+    }
+}
+
 fn create_element(
     section: &mut ModelingSection,
     command: &Command,
@@ -1040,8 +1127,6 @@ fn create_element(
     {
         return Err("place the containing Action or CombinedFragment in this diagram before adding its detail".into());
     }
-    let requested_name = name.as_deref();
-    let mut chosen_name = requested_name.unwrap_or(kind.default_name()).to_owned();
     let basic_classifier = matches!(
         kind,
         ModelingElementKind::Class | ModelingElementKind::Interface
@@ -1058,16 +1143,7 @@ fn create_element(
         }
         .into());
     }
-    let resolved_owner = if let Some(owner_id) = owner_id {
-        Some(owner_id.clone())
-    } else if crate::uml::root::object_metaclass(kind.model_kind()).is_some() {
-        // Creating one element must not adopt unrelated rootless elements.
-        crate::uml::root::Model::from_section(section)
-            .root()?
-            .map(|root| root.element().id().to_owned())
-    } else {
-        None
-    };
+    let resolved_owner = resolve_element_owner(section, kind.model_kind(), owner_id.as_deref())?;
     if let Some(owner_id) = &resolved_owner {
         let owner = section
             .elements
@@ -1086,31 +1162,12 @@ fn create_element(
     if diagram_id.is_some_and(|id| !section.diagrams.iter().any(|diagram| diagram.id == id)) {
         return Err("diagram not found".into());
     }
-    if requested_name.is_some_and(|name| name.trim().is_empty()) {
-        return Err("element name must not be blank".into());
-    }
-    if requested_name.is_none() {
-        let base = chosen_name.clone();
-        for sequence in 1_u64.. {
-            let model = crate::uml::root::Model::from_section(section);
-            let mut duplicate = false;
-            for element in section
-                .elements
-                .iter()
-                .filter(|element| element.name == chosen_name)
-            {
-                let owner = model.owner(crate::uml::root::ElementRef::Object(element))?;
-                if owner.map(|owner| owner.id()) == resolved_owner.as_deref() {
-                    duplicate = true;
-                    break;
-                }
-            }
-            if !duplicate {
-                break;
-            }
-            chosen_name = format!("{base}{sequence}");
-        }
-    }
+    let chosen_name = element_name(
+        section,
+        resolved_owner.as_deref(),
+        kind.default_name(),
+        name.as_deref(),
+    )?;
     let [element_id, view_id, ownership_id] = fresh_ids(
         section,
         ["mde-element", "mde-view", "mde-ownership"],
@@ -1145,7 +1202,7 @@ fn create_element(
             z_index,
         });
     }
-    let mut properties = std::collections::BTreeMap::new();
+    let mut properties = kind.initial_properties();
     if crate::uml::root::object_metaclass(kind.model_kind()).is_some_and(|metaclass| {
         crate::uml::metamodel::conforms_to(metaclass, "PackageableElement")
     }) {
@@ -1161,12 +1218,6 @@ fn create_element(
     if *kind == ModelingElementKind::Component {
         properties.insert("isIndirectlyInstantiated".into(), serde_json::json!(true));
         properties.insert("isActive".into(), serde_json::json!(false));
-    }
-    if matches!(kind, ModelingElementKind::Part | ModelingElementKind::Port) {
-        properties.insert("aggregation".into(), serde_json::json!("composite"));
-    }
-    if let Some(pseudostate_kind) = kind.resolve_pseudostate_kind() {
-        properties.insert("kind".into(), serde_json::json!(pseudostate_kind));
     }
     if crate::uml::root::object_metaclass(kind.model_kind()) == Some("Comment") {
         properties.insert("body".into(), Value::String(chosen_name.clone()));

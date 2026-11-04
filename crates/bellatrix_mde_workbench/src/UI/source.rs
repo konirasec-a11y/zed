@@ -190,6 +190,9 @@ impl MdeUiSource {
                 "command.enqueue.create_element_or_visual_draft"
             }
             MdeUiCommand::CreateElement(..) => "command.enqueue.create_element",
+            MdeUiCommand::CreateElementVisualDraft(..) => {
+                "command.enqueue.create_element_visual_draft"
+            }
             MdeUiCommand::CreateModelElement(..) => "command.enqueue.create_model_element",
             MdeUiCommand::CreateRelationOrVisualDraft(..) => {
                 "command.enqueue.create_relation_or_visual_draft"

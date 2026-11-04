@@ -167,8 +167,8 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
         .unwrap()
         .section;
     for (name, kind) in [
-        ("Attribute1", "rust.field"),
-        ("Operation1", "rust.function"),
+        ("Attribute", "rust.field"),
+        ("Operation", "rust.function"),
     ] {
         let element = section
             .elements
@@ -186,15 +186,15 @@ async fn class_quick_edit_creates_owned_attribute_and_operation_through_cordis()
     let attribute = section
         .elements
         .iter()
-        .find(|element| element.name == "Attribute1")
+        .find(|element| element.name == "Attribute")
         .expect("created attribute");
     let operation = section
         .elements
         .iter()
-        .find(|element| element.name == "Operation1")
+        .find(|element| element.name == "Operation")
         .expect("created operation");
-    assert_eq!(attribute.display_label, "+Attribute1");
-    assert_eq!(operation.display_label, "+Operation1()");
+    assert_eq!(attribute.display_label, "+Attribute");
+    assert_eq!(operation.display_label, "+Operation()");
     let type_id = "type-task".to_owned();
     let inspection = section
         .inspect_element(&attribute.id)

@@ -768,6 +768,14 @@ pub enum Command {
         x: f64,
         y: f64,
     },
+    CreateElementVisualDraft {
+        diagram_id: String,
+        owner_id: Option<String>,
+        kind: ModelingElementKind,
+        name: Option<String>,
+        x: f64,
+        y: f64,
+    },
     CreateRelationOrVisualDraft {
         diagram_id: String,
         owner_id: Option<String>,

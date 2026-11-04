@@ -107,24 +107,7 @@ pub(super) fn append_member(
         ModelingMemberKind::Reception => ("uml.reception", "reception", "Reception"),
         ModelingMemberKind::Parameter => ("uml.parameter", "parameter", "Parameter"),
     };
-    let mut name_sequence = 1_u64;
-    let name = loop {
-        let candidate = format!("{base}{name_sequence}");
-        let duplicate = section.relations.iter().any(|relation| {
-            relation.kind == "owns"
-                && relation.from == owner_id
-                && section
-                    .elements
-                    .iter()
-                    .any(|element| element.id == relation.to && element.name == candidate)
-        });
-        if !duplicate {
-            break candidate;
-        }
-        name_sequence = name_sequence
-            .checked_add(1)
-            .ok_or("name sequence overflow")?;
-    };
+    let name = super::element_name(section, Some(owner_id), base, None)?;
     let member_prefix = format!("mde-{prefix}");
     let relation_prefix = format!("mde-owns-{prefix}");
     let [member_id, relation_id] = super::fresh_ids(

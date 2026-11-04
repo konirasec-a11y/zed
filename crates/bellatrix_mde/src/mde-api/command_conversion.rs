@@ -625,6 +625,21 @@ pub(crate) fn command(value: Command) -> Result<crate::commands::Command, String
             x: x,
             y: y,
         },
+        Command::CreateElementVisualDraft {
+            diagram_id,
+            owner_id,
+            kind,
+            name,
+            x,
+            y,
+        } => crate::commands::Command::CreateElementVisualDraft {
+            diagram_id,
+            owner_id,
+            kind: element_kind(kind),
+            name,
+            x,
+            y,
+        },
         Command::CreateRelationOrVisualDraft {
             diagram_id,
             owner_id,

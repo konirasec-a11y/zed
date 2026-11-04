@@ -25,6 +25,33 @@ pub(super) fn initial_geometry_in_diagram(
     geometry
 }
 
+pub(super) fn element_draft_command(
+    diagram: &crate::Diagram,
+    kind: ModelingElementKind,
+    name: Option<&str>,
+    position: (f64, f64),
+    owner_id: Option<&str>,
+    diagnostic: Option<&str>,
+) -> super::Command {
+    let mut properties = kind.initial_properties();
+    if let Some(reason) = diagnostic {
+        properties.insert("semantic_creation_diagnostic".into(), reason.into());
+    }
+    if let Some(owner) = owner_id {
+        properties.insert("requested_owner_id".into(), owner.into());
+    }
+    super::Command::CreateVisualDraft {
+        diagram_id: diagram.id.clone(),
+        notation_kind: kind.model_kind().into(),
+        label: Some(name.unwrap_or(kind.default_name()).into()),
+        geometry: initial_geometry_in_diagram(kind, diagram, position.0, position.1),
+        properties,
+        parent_view_id: None,
+        source_view_id: None,
+        target_view_id: None,
+    }
+}
+
 pub(super) fn place(
     section: &mut ModelingSection,
     diagram_id: &str,

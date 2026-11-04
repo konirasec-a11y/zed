@@ -55,6 +55,7 @@ pub enum MdeUiCommand {
     ValidateDiagram(ModelingValidateDiagramRequested),
     CreateVisualDraft(ModelingCreateVisualDraftRequested),
     CreateElementOrVisualDraft(ModelingCreateElementRequested),
+    CreateElementVisualDraft(ModelingCreateElementRequested),
     CreateElement(ModelingCreateElementRequested),
     CreateModelElement(crate::ModelingCreateModelElementRequested),
     CreateRelationOrVisualDraft(ModelingCreateRelationRequested),

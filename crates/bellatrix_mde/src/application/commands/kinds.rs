@@ -156,6 +156,18 @@ impl ModelingElementKind {
             _ => None,
         }
     }
+    pub(super) fn initial_properties(
+        self,
+    ) -> std::collections::BTreeMap<String, serde_json::Value> {
+        let mut properties = std::collections::BTreeMap::new();
+        if matches!(self, Self::Part | Self::Port) {
+            properties.insert("aggregation".into(), serde_json::json!("composite"));
+        }
+        if let Some(kind) = self.resolve_pseudostate_kind() {
+            properties.insert("kind".into(), serde_json::json!(kind));
+        }
+        properties
+    }
     pub fn requires_nested_owner(self) -> bool {
         Self::ACTIVITY_NODES.contains(&self)
             || Self::STATE_NODES.contains(&self)

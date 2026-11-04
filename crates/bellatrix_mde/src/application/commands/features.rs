@@ -12,20 +12,6 @@ fn fresh(
     Ok(id)
 }
 
-fn name(section: &ModelingSection, prefix: &str) -> Result<String, String> {
-    for sequence in 1_u64.. {
-        let candidate = format!("{prefix}{sequence}");
-        if !section
-            .elements
-            .iter()
-            .any(|element| element.name == candidate)
-        {
-            return Ok(candidate);
-        }
-    }
-    Err("member name overflow".into())
-}
-
 fn resolve_boundary_side(element: &Element) -> Option<bool> {
     match element.kind.as_str() {
         "uml.input_pin" | "uml.value_pin" => Some(true),
@@ -322,7 +308,7 @@ fn insert_template_parameter(
     let exposed_id = fresh(section, "parametered-classifier", revision, project_id)?;
     let exposed_ownership = fresh(section, "parametered-classifier-owns", revision, project_id)?;
     let reference_id = fresh(section, "parametered-element", revision, project_id)?;
-    let parameter_name = name(section, "T")?;
+    let parameter_name = super::element_name(section, Some(&signature_id), "T", None)?;
     let make_element = |id: String, kind: &str, name: String, properties| Element {
         id,
         kind: kind.into(),
@@ -446,14 +432,15 @@ pub(super) fn insert_feature(
         } => (*x, *y, *width, *height),
         _ => return Err("feature owner geometry must be Rect".into()),
     };
-    let (kind, prefix, shape) = match action {
+    let (element_kind, shape) = match action {
         UmlQuickCreate::TemplateParameter => {
             return Err("template parameters require a signature".into());
         }
-        UmlQuickCreate::Port => ("uml.port", "Port", Some((16.0, 16.0))),
-        UmlQuickCreate::Part => ("uml.part", "Part", Some((86.0, 48.0))),
+        UmlQuickCreate::Port => (super::ModelingElementKind::Port, Some((16.0, 16.0))),
+        UmlQuickCreate::Part => (super::ModelingElementKind::Part, Some((86.0, 48.0))),
         _ => return Err("not a contained feature action".into()),
     };
+    let kind = element_kind.model_kind();
     let previous = section
         .relations
         .iter()
@@ -467,15 +454,13 @@ pub(super) fn insert_feature(
         .count();
     let node_id = fresh(section, "feature", revision, project_id)?;
     let owner_relation_id = fresh(section, "owns", revision, project_id)?;
-    let label = name(section, prefix)?;
-    let mut properties = std::collections::BTreeMap::new();
+    let label = super::element_name(section, Some(owner_id), element_kind.default_name(), None)?;
+    let mut properties = element_kind.initial_properties();
     properties.insert("visibility".into(), serde_json::json!("public"));
     if action == UmlQuickCreate::Port {
         properties.insert("isService".into(), serde_json::json!(false));
-        properties.insert("aggregation".into(), serde_json::json!("composite"));
     }
     if action == UmlQuickCreate::Part {
-        properties.insert("aggregation".into(), serde_json::json!("composite"));
         properties.insert("type".into(), serde_json::json!(""));
     }
     section.elements.push(Element {

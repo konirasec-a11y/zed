@@ -198,6 +198,7 @@ fn command_name(command: &Command) -> &'static str {
         Command::CreateModelElement { .. } => "CreateModelElement",
         Command::CreateElement { .. } => "CreateElement",
         Command::CreateElementOrVisualDraft { .. } => "CreateElementOrVisualDraft",
+        Command::CreateElementVisualDraft { .. } => "CreateElementVisualDraft",
         Command::CreateRelationOrVisualDraft { .. } => "CreateRelationOrVisualDraft",
         Command::CreateRelationAtViewsOrVisualDraft { .. } => "CreateRelationAtViewsOrVisualDraft",
         Command::CreateRelationAtViews { .. } => "CreateRelationAtViews",

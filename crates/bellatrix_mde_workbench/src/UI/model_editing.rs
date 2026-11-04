@@ -389,38 +389,17 @@ impl MdeWorkbenchItem {
             self.presentation.selected_element(),
         );
         if self.presentation.visual_draft_mode() {
-            let (width, height) = metadata
-                .sizes_by_diagram
-                .get(&diagram_id)
-                .copied()
-                .unwrap_or(metadata.initial_size);
-            let mut properties = std::collections::BTreeMap::new();
-            if kind == ModelingElementKind::Part {
-                properties.insert("aggregation".into(), serde_json::json!("composite"));
-            }
-            if let Some(pseudostate_kind) = metadata.pseudostate_kind.as_deref() {
-                properties.insert("kind".into(), serde_json::json!(pseudostate_kind));
-            }
             self.submit(
-                MdeUiCommand::CreateVisualDraft(
-                    bellatrix_mde_cordis::ModelingCreateVisualDraftRequested {
-                        project_id: self.project_id().clone(),
-                        diagram_id,
-                        notation_kind: metadata.model_kind.clone(),
-                        label: Some(metadata.default_name.clone()),
-                        geometry: Geometry::Rect {
-                            x,
-                            y,
-                            width,
-                            height,
-                        },
-                        properties,
-                        parent_view_id: None,
-                        source_view_id: None,
-                        target_view_id: None,
-                        expected_revision: snapshot.revision,
-                    },
-                ),
+                MdeUiCommand::CreateElementVisualDraft(ModelingCreateElementRequested {
+                    project_id: self.project_id().clone(),
+                    diagram_id,
+                    owner_id,
+                    kind,
+                    name: None,
+                    x,
+                    y,
+                    expected_revision: snapshot.revision,
+                }),
                 cx,
             );
             self.presentation.cancel_tool();

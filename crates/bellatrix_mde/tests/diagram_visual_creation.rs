@@ -174,11 +174,12 @@ fn connect(
     kind: ModelingRelationKind,
     from: &str,
     to: &str,
+    owner: Option<&str>,
 ) -> Result<Document, String> {
     apply(
         project,
         &Command::CreateRelation {
-            owner_id: None,
+            owner_id: owner.map(str::to_owned),
             diagram_id: "diagram-tasks".into(),
             kind,
             from: from.into(),
@@ -326,6 +327,7 @@ fn behavior_nodes_use_canonical_composite_owners_and_transactional_commands()
         ModelingRelationKind::ElementImport,
         &namespace_id,
         "type-list",
+        Some(&namespace_id),
     )?;
     let import = imported
         .relations
@@ -381,7 +383,7 @@ fn behavior_nodes_use_canonical_composite_owners_and_transactional_commands()
         ModelingRelationKind::ControlFlow,
         ModelingRelationKind::ObjectFlow,
     ] {
-        let linked = connect(&graph, kind, &source_node, &target_node)?;
+        let linked = connect(&graph, kind, &source_node, &target_node, Some(&activity_id))?;
         let model_kind = &source
             .tools
             .relation(kind)
@@ -401,7 +403,19 @@ fn behavior_nodes_use_canonical_composite_owners_and_transactional_commands()
             relationship_style(&linked, &edge.id)?.target_marker,
             RelationshipMarker::OpenArrow
         );
-        assert!(connect(&graph, kind, &source_node, "type-list").is_err());
+        let invalid = connect(&graph, kind, &source_node, "type-list", Some(&activity_id))?;
+        let invalid_edge = invalid
+            .relations
+            .iter()
+            .find(|edge| &edge.kind == model_kind)
+            .ok_or("missing incomplete flow")?;
+        assert!(
+            diagnostics(&invalid, "diagram-tasks")?
+                .iter()
+                .any(|issue| issue.code == "UML_ACTIVITY_EDGE_SOURCE_AND_TARGET"
+                    && issue.subject_id == invalid_edge.id
+                    && issue.severity == DiagnosticSeverity::Error)
+        );
     }
     for (left, right, kinds, owner_is_target) in [
         (
@@ -439,7 +453,8 @@ fn behavior_nodes_use_canonical_composite_owners_and_transactional_commands()
         graph = create(&graph, right, Some(&package_id))?;
         let right_id = graph.elements.last().ok_or("missing target")?.id.clone();
         for kind in kinds {
-            let linked = connect(&graph, *kind, &left_id, &right_id)?;
+            let owner_id = if owner_is_target { &right_id } else { &left_id };
+            let linked = connect(&graph, *kind, &left_id, &right_id, Some(owner_id))?;
             let model_kind = &source
                 .tools
                 .relation(*kind)
@@ -450,7 +465,6 @@ fn behavior_nodes_use_canonical_composite_owners_and_transactional_commands()
                 .iter()
                 .find(|edge| &edge.kind == model_kind)
                 .ok_or("missing relationship")?;
-            let owner_id = if owner_is_target { &right_id } else { &left_id };
             assert_eq!(inspected(&linked, &edge.id, "uml.owner")?, json!(owner_id));
             if matches!(
                 kind,
@@ -765,9 +779,10 @@ fn exercise_visual_drafts() -> Result<(), Box<dyn std::error::Error>> {
         .ok_or("repeated View missing")?
         .id
         .clone();
+    // Choose a real Namespace explicitly so the collision below has authored scope.
     let make_link = |source: &str, target: &str, from: Option<&str>, to: Option<&str>| {
         Command::CreateRelationAtViewsOrVisualDraft {
-            owner_id: None,
+            owner_id: Some("type-list".into()),
             diagram_id: "diagram-tasks".into(),
             kind: ModelingRelationKind::Association,
             source_view_id: source.into(),
@@ -1040,8 +1055,8 @@ fn exercise_visual_drafts() -> Result<(), Box<dyn std::error::Error>> {
         55,
     )?;
     assert_ne!(canonical_path(&canonical), canonical_path(&selected_moved));
-    // Two unnamed Associations collide in their owning Namespace. Preserve the
-    // fallback check, then distinguish the first relation for the endpoint test.
+    // The authoring command preserves both unnamed Associations. Only explicit
+    // kernel validation reports their collision in the requested Namespace.
     let conflicting = apply(
         &canonical,
         &make_link(
@@ -1057,14 +1072,24 @@ fn exercise_visual_drafts() -> Result<(), Box<dyn std::error::Error>> {
         .iter()
         .find(|diagram| diagram.id == "diagram-tasks")
         .and_then(|diagram| diagram.views.last())
-        .ok_or("expected conflicting relation draft")?;
+        .ok_or("expected conflicting relation view")?;
+    assert!(conflict.draft.is_none());
+    let conflict_id = conflict.subject.as_deref().ok_or("relation subject missing")?;
     assert!(
-        raw_view(&conflicting, &conflict.id)?["draft"]["properties"]
-            .get("semantic_creation_diagnostic")
-            .and_then(serde_json::Value::as_str)
-            .is_some_and(|message| message.starts_with("UML_NAMESPACE_MEMBERS_DISTINGUISHABLE:"))
+        diagnostics(&conflicting, "diagram-tasks")?
+            .iter()
+            .any(|issue| issue.code == "UML_NAMESPACE_MEMBERS_DISTINGUISHABLE"
+                && issue.subject_id == conflict_id
+                && issue.severity == DiagnosticSeverity::Error)
     );
-    assert_eq!(conflicting.model["relations"], canonical.model["relations"]);
+    assert_eq!(
+        conflicting
+            .relations
+            .iter()
+            .filter(|relation| relation.kind == "uml.association")
+            .count(),
+        initial_associations + 2
+    );
     let canonical = apply(
         &canonical,
         &Command::SetProperty {
@@ -1091,6 +1116,16 @@ fn exercise_visual_drafts() -> Result<(), Box<dyn std::error::Error>> {
         .and_then(|diagram| diagram.views.last())
         .ok_or("reverse canonical edge missing")?;
     assert!(reverse_view.draft.is_none());
+    let reverse_id = reverse_view
+        .subject
+        .as_deref()
+        .ok_or("reverse relation subject missing")?;
+    assert!(
+        !diagnostics(&canonical_reverse, "diagram-tasks")?
+            .iter()
+            .any(|issue| issue.code == "UML_NAMESPACE_MEMBERS_DISTINGUISHABLE"
+                && (issue.subject_id == reverse_id || issue.subject_id == relation_id))
+    );
     assert_eq!(
         reverse_view.endpoints.as_ref(),
         Some(&ViewEndpoints {

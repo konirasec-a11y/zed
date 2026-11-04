@@ -1,3 +1,4 @@
+use super::ModelingElementKind;
 use crate::{
     Element, Geometry, ModelingSection, Relation, Style, UmlQuickCreate, UmlType, View,
     quick_relation_rule, reroute_relationships, route_relationship,
@@ -12,16 +13,6 @@ fn fresh_id(
     let prefix = format!("mde-quick-{purpose}");
     let [id] = super::fresh_ids(section, [prefix.as_str()], revision, project_id)?;
     Ok(id)
-}
-fn unique_name(section: &ModelingSection, prefix: &str) -> Result<String, String> {
-    let mut sequence = 1_u64;
-    loop {
-        let name = format!("{prefix}{sequence}");
-        if !section.elements.iter().any(|element| element.name == name) {
-            return Ok(name);
-        }
-        sequence = sequence.checked_add(1).ok_or("name sequence overflow")?;
-    }
 }
 
 pub(super) fn apply(
@@ -77,7 +68,12 @@ pub(super) fn apply(
         _ => return Err("Quick Edit requires a node View".into()),
     };
     let (child_kind, prefix, offset, child_size) = match action {
-        UmlQuickCreate::Note => ("uml.note", "Note", (width + 48.0, -16.0), (136.0, 78.0)),
+        UmlQuickCreate::Note => (
+            "uml.note",
+            ModelingElementKind::Comment.default_name(),
+            (width + 48.0, -16.0),
+            (136.0, 78.0),
+        ),
         UmlQuickCreate::Constraint => (
             "uml.constraint",
             "Constraint",
@@ -98,35 +94,42 @@ pub(super) fn apply(
             };
             (
                 kind.as_str(),
-                subject_type
-                    .and_then(UmlType::metaclass)
-                    .unwrap_or("Element"),
+                match subject_type {
+                    Some(UmlType::Class) => ModelingElementKind::Class.default_name(),
+                    Some(UmlType::Interface) => ModelingElementKind::Interface.default_name(),
+                    _ => subject_type.and_then(UmlType::metaclass).unwrap_or("Element"),
+                },
                 offset,
                 size,
             )
         }
         UmlQuickCreate::RealizingClass => (
             "rust.struct",
-            "Class",
+            ModelingElementKind::Class.default_name(),
             (width + 65.0, height + 50.0),
             (185.0, 112.0),
         ),
         UmlQuickCreate::ProvidedInterface => (
             "rust.trait",
-            "Interface",
+            ModelingElementKind::Interface.default_name(),
             (width + 55.0, -75.0),
             (120.0, 76.0),
         ),
         UmlQuickCreate::RequiredInterface => (
             "rust.trait",
-            "Interface",
+            ModelingElementKind::Interface.default_name(),
             (width + 55.0, height + 10.0),
             (120.0, 76.0),
         ),
         UmlQuickCreate::AssociatedClass
         | UmlQuickCreate::AggregatedClass
         | UmlQuickCreate::CompositedClass => {
-            ("rust.struct", "Class", (width + 80.0, 0.0), (185.0, 112.0))
+            (
+                "rust.struct",
+                ModelingElementKind::Class.default_name(),
+                (width + 80.0, 0.0),
+                (185.0, 112.0),
+            )
         }
         UmlQuickCreate::TemplateParameter | UmlQuickCreate::Port | UmlQuickCreate::Part => {
             return Err("contained features must use Class specialization".into());
@@ -139,7 +142,19 @@ pub(super) fn apply(
     let new_view_id = fresh_id(section, "view", revision, project_id)?;
     let relation_id = fresh_id(section, "relation", revision, project_id)?;
     let relation_view_id = fresh_id(section, "relation-view", revision, project_id)?;
-    let name = unique_name(section, prefix)?;
+    let owner_id = if matches!(action, UmlQuickCreate::Note | UmlQuickCreate::Constraint) {
+        Some(element_id.to_owned())
+    } else {
+        let model = crate::uml::root::Model::from_section(section);
+        let subject = model
+            .element(element_id)
+            .ok_or("Quick Edit subject not found")?;
+        let namespace = model
+            .owner(subject)?
+            .filter(|owner| owner.conforms_to("Namespace"));
+        super::resolve_element_owner(section, child_kind, namespace.map(|owner| owner.id()))?
+    };
+    let name = super::element_name(section, owner_id.as_deref(), prefix, None)?;
     let z_index = diagram
         .views
         .iter()
@@ -253,23 +268,10 @@ pub(super) fn apply(
             },
             z_index: edge_z_index,
         });
-    if matches!(action, UmlQuickCreate::Note | UmlQuickCreate::Constraint) {
-        crate::uml::root::set_owner(section, project_id, &new_id, element_id)?;
-    } else {
-        let model = crate::uml::root::Model::from_section(section);
-        let subject = model
-            .element(element_id)
-            .ok_or("Quick Edit subject not found")?;
-        let namespace = model
-            .owner(subject)?
-            .filter(|owner| owner.conforms_to("Namespace"))
-            .map(|owner| owner.id().to_owned());
-        let owner_id = namespace.or(model.root()?.map(|root| root.element().id().to_owned()));
-        if let Some(owner_id) = owner_id {
-            crate::uml::root::set_owner(section, project_id, &new_id, &owner_id)?;
-            if matches!(rule.kind, "uml.association" | "uml.usage") {
-                crate::uml::root::set_owner(section, project_id, &relation_id, &owner_id)?;
-            }
+    if let Some(owner_id) = owner_id {
+        crate::uml::root::set_owner(section, project_id, &new_id, &owner_id)?;
+        if matches!(rule.kind, "uml.association" | "uml.usage") {
+            crate::uml::root::set_owner(section, project_id, &relation_id, &owner_id)?;
         }
     }
     reroute_relationships(section, diagram_id);
