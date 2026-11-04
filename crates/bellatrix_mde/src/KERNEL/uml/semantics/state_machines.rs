@@ -615,6 +615,57 @@ fn region_pseudostate_limit(references: &ReferenceIndex<'_>, region: ElementRef<
     require_all(checks)
 }
 
+fn state_connections_empty(
+    references: &ReferenceIndex<'_>, state: ElementRef<'_>, role: &str, point_type: &str,
+) -> Result<bool, QueryError> {
+    let opposite = schema::uml_property(point_type, "state")
+        .map_err(|error| QueryError::unsupported(state.id(), error.to_string()))?
+        .ok_or_else(|| QueryError::unsupported(state.id(), format!("missing {point_type}::state contract")))?;
+    let mut checks = vec![composite_role_empty(references, state, role, point_type)];
+    for point in references.model().elements().filter(|element| element.conforms_to(point_type)) {
+        let Some(value) = point.properties().get("state") else { continue; };
+        let owner = references.model().owner(point)
+            .map_err(|error| QueryError::invalid(point.id(), error))?;
+        let canonical_member = owner.is_some_and(|owner| owner.id() == state.id());
+        match reference_id(value) {
+            Ok(Some(id)) if id == state.id() => {
+                references.element(point.id()).map_err(|error| QueryError::invalid(point.id(), error))?;
+                checks.push(Ok(false));
+                if !canonical_member {
+                    checks.push(Err(QueryError::invalid(point.id(), "authored state contradicts canonical connection ownership")));
+                }
+            }
+            Ok(_) => {
+                if canonical_member {
+                    checks.push(Err(QueryError::invalid(point.id(), "authored state excludes its canonical connection owner")));
+                }
+                continue;
+            }
+            Err(_) if owner.is_some() && !canonical_member => continue,
+            Err(_) => {}
+        }
+        checks.push(match property_contracts::check_value(references, point, opposite, value) {
+            PropertyOutcome::Satisfied => Ok(true),
+            PropertyOutcome::Violation(message) => Err(QueryError::invalid(point.id(), message)),
+            PropertyOutcome::Unverified(message) => Err(QueryError::unsupported(point.id(), message)),
+        });
+    }
+    require_all(checks)
+}
+
+fn state_composite_states(references: &ReferenceIndex<'_>, state: ElementRef<'_>) -> Result<bool, QueryError> {
+    implies(state_connections_empty(references, state, "connectionPoint", "Pseudostate").map(|empty| !empty),
+        state_regions_empty(references, state).map(|empty| !empty))
+}
+
+fn state_submachine_states(references: &ReferenceIndex<'_>, state: ElementRef<'_>) -> Result<bool, QueryError> {
+    // Follow the published OCL literally: isSubmachineState implies
+    // connection->notEmpty(). Its accompanying prose suggests the converse;
+    // do not silently substitute that different implication here.
+    implies(state_submachine_empty(references, state).map(|empty| !empty),
+        state_connections_empty(references, state, "connection", "ConnectionPointReference").map(|empty| !empty))
+}
+
 pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnostic> {
     let mut issues = Vec::new();
     for element in references.model().elements() {
@@ -629,6 +680,12 @@ pub(crate) fn validate(references: &ReferenceIndex<'_>) -> Vec<StructuralDiagnos
                 "State-entry_or_exit", "connection points must have kind entryPoint or exitPoint"));
         }
         if element.conforms_to("State") {
+            constraints.push((state_composite_states(references, element),
+                "UML_STATE_COMPOSITE_STATES", "MDE_STATE_COMPOSITE_STATES_UNVERIFIED",
+                "State-composite_states", "a State with connection points must have Regions"));
+            constraints.push((state_submachine_states(references, element),
+                "UML_STATE_SUBMACHINE_STATES", "MDE_STATE_SUBMACHINE_STATES_UNVERIFIED",
+                "State-submachine_states", "a submachine State must have connection point references"));
             constraints.push((state_submachine_or_regions(references, element),
                 "UML_STATE_SUBMACHINE_OR_REGIONS", "MDE_STATE_SUBMACHINE_OR_REGIONS_UNVERIFIED",
                 "State-submachine_or_regions", "a composite State cannot also be a submachine State"));

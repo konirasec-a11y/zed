@@ -109,6 +109,35 @@ pub fn evaluate(
     })
 }
 
+/// Resolve the represented instance identity without evaluating its Slots or
+/// specification recursively. InstanceValue denotes that instance, not a copy
+/// of its fields and not a primitive value guessed from its name.
+pub fn referenced_instance<'a>(
+    references: &ReferenceIndex<'a>,
+    id: &str,
+) -> Result<ElementRef<'a>, EvaluationError> {
+    let element = resolve(references, id)?;
+    if element.metaclass().is_none() {
+        return Err(EvaluationError::unsupported(id, "InstanceValue metaclass is unresolved"));
+    }
+    if !element.conforms_to("InstanceValue") {
+        return Err(EvaluationError::invalid(id, "an InstanceValue is required"));
+    }
+    let descriptor = schema::uml_property("InstanceValue", "instance")
+        .map_err(|error| EvaluationError::unsupported(id, error.to_string()))?
+        .ok_or_else(|| EvaluationError::unsupported(id, "InstanceValue instance contract is unavailable"))?;
+    let value = element.properties().get("instance").unwrap_or(&Value::Null);
+    match super::property_contracts::check_value(references, element, descriptor, value) {
+        super::property_contracts::PropertyOutcome::Violation(message) => return Err(EvaluationError::invalid(id, message)),
+        super::property_contracts::PropertyOutcome::Unverified(message) => return Err(EvaluationError::unsupported(id, message)),
+        super::property_contracts::PropertyOutcome::Satisfied => {}
+    }
+    let target_id = reference_id(value)
+        .map_err(|error| EvaluationError::invalid(id, error))?
+        .ok_or_else(|| EvaluationError::invalid(id, "InstanceValue requires exactly one represented instance"))?;
+    resolve(references, target_id)
+}
+
 fn evaluate_literal(
     references: &ReferenceIndex<'_>,
     id: &str,
@@ -122,6 +151,10 @@ fn evaluate_literal(
             id,
             "a ValueSpecification is required",
         ));
+    }
+    if element.conforms_to("InstanceValue") {
+        referenced_instance(references, id)?;
+        return Ok(None);
     }
     if metaclass == "LiteralNull" {
         return Ok(Some(LiteralValue::Null));
@@ -745,6 +778,16 @@ pub fn validate(references: &ReferenceIndex<'_>) -> Vec<crate::StructuralDiagnos
             })
         })
         .collect::<Vec<_>>();
+    for value in references.model().elements().filter(|element| element.conforms_to("InstanceValue")) {
+        if let Err(error) = referenced_instance(references, value.id()) {
+            issues.push(crate::StructuralDiagnostic {
+                severity: if error.is_unsupported() { crate::StructuralSeverity::Warning } else { crate::StructuralSeverity::Error },
+                code: if error.is_unsupported() { "MDE_INSTANCE_VALUE_REFERENCE_UNVERIFIED" } else { "UML_INSTANCE_VALUE_REFERENCE" },
+                subject_id: value.id().into(),
+                message: error.to_string(),
+            });
+        }
+    }
     for element in references.model().elements().filter(|element| element.conforms_to("MultiplicityElement")) {
         if let Err(error) = bound_expression_guarantees(references, element) {
             for (rule, invalid_code, unknown_code) in [
