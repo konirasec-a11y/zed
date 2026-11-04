@@ -165,9 +165,17 @@ diagram is selected and revealed at the drop point by panning, instead of duplic
 unchanged. Drags are bound to the source project, model revision and active target
 diagram, and stale/cross-project/read-only drops are rejected. View-only drafts
 and relationships are not offered for placement by this element-only command.
-Internal tree relocation remains unavailable in this UI. It must use the validated
-SetOwner/reparent command boundary; cosmetic explorer_parents are not a substitute
-for semantic ownership.
+Internal tree drops onto semantic element rows validate the proposed owner with
+the kernel's SetOwner/reparent command, then send it through Cordis with the
+captured revision. They work without an active diagram and preserve the active
+diagram, semantic identity and existing views. Read-only, stale, cross-project,
+self, unchanged-owner and unsupported/cyclic moves are rejected. Diagrams,
+relationships, visual-only drafts and the project row are not ownership drop
+targets or relocation sources. A visual occurrence represents its semantic
+subject here: changing ownership affects that subject everywhere, not only the
+dragged occurrence. Explicit visual containment is not rewritten, and cosmetic
+explorer_parents are never used. This is a semantic move, not sibling reordering
+or diagram nesting.
 
 Explorer quick search filters incrementally by displayed text, type and identity,
 retaining ancestors and the contents of matching containers. Search expansion is

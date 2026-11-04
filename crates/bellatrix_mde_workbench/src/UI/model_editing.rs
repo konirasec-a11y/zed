@@ -407,7 +407,9 @@ impl MdeWorkbenchItem {
         if self.project_id() != &drag.project_id {
             return Err("The dragged element belongs to another project".into());
         }
-        if self.active_diagram() != Some(drag.target_diagram_id.as_str()) {
+        let target_diagram_id = drag.target_diagram_id.as_deref()
+            .ok_or("No active diagram was captured for this drag")?;
+        if self.active_diagram() != Some(target_diagram_id) {
             return Err("The active diagram changed during the drag; drag the element again".into());
         }
         let snapshot = self.source.snapshot()?;
@@ -418,7 +420,7 @@ impl MdeWorkbenchItem {
             return Err("The dragged model element no longer exists".into());
         }
         let diagram = snapshot.section.diagrams.iter()
-            .find(|diagram| diagram.id == drag.target_diagram_id)
+            .find(|diagram| diagram.id == target_diagram_id)
             .ok_or_else(|| "The target diagram no longer exists".to_owned())?;
         if let Some(view_id) = &drag.source_view_id
             && !diagram.views.iter().any(|view| &view.id == view_id && view.subject.as_deref() == Some(drag.element_id.as_str()))
@@ -426,6 +428,70 @@ impl MdeWorkbenchItem {
             return Err("The dragged occurrence no longer matches its element".into());
         }
         Ok(())
+    }
+
+    pub(super) fn validate_explorer_reparent(
+        &self, drag: &hierarchy::ExplorerElementDrag, owner_id: &str,
+    ) -> Result<(), String> {
+        if self.source.is_read_only() || self.source.is_presentation_suspended() {
+            return Err("The active document is not editable".into());
+        }
+        if self.project_id() != &drag.project_id {
+            return Err("The dragged element belongs to another project".into());
+        }
+        let snapshot = self.source.snapshot()?;
+        if snapshot.revision != drag.revision {
+            return Err("The model changed during the drag; drag the element again".into());
+        }
+        if drag.element_id == owner_id {
+            return Err("An element cannot own itself".into());
+        }
+        if !snapshot.section.elements.iter().any(|element| element.id == drag.element_id)
+            || !snapshot.section.elements.iter().any(|element| element.id == owner_id)
+        {
+            return Err("Ownership drops require existing semantic elements".into());
+        }
+        if snapshot.section.relations.iter().any(|relation|
+            relation.kind == "owns" && relation.to == drag.element_id && relation.from == owner_id)
+        {
+            return Err("The element already belongs to this owner".into());
+        }
+        // A drag has a fixed project and revision. Cache the pure kernel check per
+        // target, not per frame, while still checking editability and revision above.
+        if let Some(result) = drag.ownership_checks.borrow().get(owner_id) {
+            return result.clone();
+        }
+        let model = snapshot.section.to_model(snapshot.project_id.as_str(), &snapshot.name);
+        let result = bellatrix_mde::Graph::new(&model).validate()
+            .map_err(|error| error.to_string())
+            .and_then(|()| bellatrix_mde::commands::apply(
+                &model,
+                &bellatrix_mde::commands::Command::SetOwner {
+                    element_id: drag.element_id.clone(), owner_id: Some(owner_id.to_owned()),
+                },
+                drag.revision,
+            ).map(|_| ()));
+        drag.ownership_checks.borrow_mut().insert(owner_id.to_owned(), result.clone());
+        result
+    }
+
+    pub(super) fn reparent_explorer_element(
+        &mut self, drag: &hierarchy::ExplorerElementDrag, owner_id: String,
+        cx: &mut Context<Self>,
+    ) {
+        if let Err(error) = self.validate_explorer_reparent(drag, &owner_id) {
+            self.feedback = error;
+            cx.notify();
+            return;
+        }
+        // Cordis revalidates the command and publishes with this exact revision;
+        // never replace it with a newer snapshot after validating the drag.
+        self.submit(MdeUiCommand::SetOwner(bellatrix_mde_cordis::ModelingSetOwnerRequested {
+            project_id: drag.project_id.clone(),
+            element_id: drag.element_id.clone(),
+            owner_id: Some(owner_id),
+            expected_revision: drag.revision,
+        }), cx);
     }
 
     pub(super) fn drop_explorer_element(

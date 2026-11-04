@@ -194,7 +194,7 @@ pub struct MdeRightPanel {
     pub(crate) inspector_styles_open: bool,
     pub(crate) timing_drafts: HashMap<(String, String, String), crate::workbench_ui::timing_editor::TimingDraft>,
     collapsed_elements: HashSet<String>,
-    last_revealed_row: Option<(gpui::EntityId, String)>,
+    last_revealed_row: Option<(gpui::EntityId, Vec<String>)>,
     explorer_scroll: gpui::ScrollHandle,
     collapsed_by_document: HashMap<gpui::EntityId, HashSet<String>>,
     explorer_open: bool,
@@ -352,11 +352,24 @@ impl Render for MdeRightPanel {
                 }))
                 .or_else(|| active_diagram.as_ref().and_then(|id| tree.iter().find(|row| row.diagram && &row.element_id == id)));
             can_reveal_selection = selected_id.is_some() || active_diagram.is_some();
-            let reveal = selected_row.map(|row| (item.entity_id(), row.key.clone()));
+            let selected_index = selected_row.and_then(|selected| tree.iter().position(|row| row.key == selected.key));
+            let reveal = selected_index.map(|index| {
+                let mut path = vec![tree[index].key.clone()];
+                let mut depth = tree[index].depth;
+                for ancestor in tree[..index].iter().rev() {
+                    if ancestor.depth < depth {
+                        path.push(ancestor.key.clone());
+                        depth = ancestor.depth;
+                    }
+                    if depth == 0 { break; }
+                }
+                path.push(root_key.clone());
+                (item.entity_id(), path)
+            });
             if !searching && reveal != self.last_revealed_row {
                 self.last_revealed_row = reveal;
                 reveal_selected = selected_row.is_some();
-                if let Some(index) = selected_row.and_then(|selected| tree.iter().position(|row| row.key == selected.key)) {
+                if let Some(index) = selected_index {
                     self.collapsed_elements.remove(&root_key);
                     if tree[index].diagram {
                         self.collapsed_elements.remove(&tree[index].key);
@@ -405,18 +418,24 @@ impl Render for MdeRightPanel {
                     .or_else(|| (!row.diagram && row.view.is_none()).then_some(row.element_id.as_str()));
                 let element_drag = if read_only { None } else {
                     drag_subject.filter(|id| snapshot.section.elements.iter().any(|element| element.id == *id))
-                        .zip(active_diagram.as_ref())
-                        .map(|(element_id, target_diagram_id)| crate::workbench_ui::hierarchy::ExplorerElementDrag {
+                        .map(|element_id| crate::workbench_ui::hierarchy::ExplorerElementDrag {
                             project_id: snapshot.project_id.clone(),
                             element_id: element_id.to_owned(),
-                            target_diagram_id: target_diagram_id.clone(),
+                            target_diagram_id: active_diagram.clone(),
                             source_view_id: row.view.as_ref()
-                                .filter(|view| &view.diagram_id == target_diagram_id)
+                                .filter(|view| active_diagram.as_deref() == Some(view.diagram_id.as_str()))
                                 .map(|view| view.view_id.clone()),
                             revision: snapshot.revision,
                             label: row.label.clone(),
+                            ownership_checks: Default::default(),
                         })
                 };
+                let ownership_target = if read_only { None } else {
+                    drag_subject.filter(|id| snapshot.section.elements.iter().any(|element| element.id == *id))
+                        .map(str::to_owned)
+                };
+                let ownership_filter_owner = item.clone();
+                let ownership_drop_owner = item.clone();
                 if let Some(view) = &row.view {
                     let diagram_id = view.diagram_id.clone();
                     let view_id = view.view_id.clone();
@@ -435,6 +454,34 @@ impl Render for MdeRightPanel {
                     let view_accessible_label = format!("{}: {}", type_label, row.label);
                     rows.push(div().id(format!("mde-explorer-view-{}", row.key))
                         .when_some(element_drag, |row, drag| row.on_drag(drag, |drag: &crate::workbench_ui::hierarchy::ExplorerElementDrag, _, _, cx| cx.new(|_| drag.clone())))
+                        .when_some(ownership_target, |row, target| {
+                            let filter_target = target.clone();
+                            let hover_target = target.clone();
+                            let hover_owner = ownership_filter_owner.clone();
+                            let highlight = palette.selection;
+                            row.drag_over::<crate::workbench_ui::hierarchy::ExplorerElementDrag>(move |style, drag, _, cx| {
+                                if hover_owner.read(cx).validate_explorer_reparent(drag, &hover_target).is_ok() {
+                                    style.border_1().border_color(highlight)
+                                } else {
+                                    style
+                                }
+                            }).can_drop(move |drag, _, cx| {
+                                // GPUI checks every row here, including unhovered rows.
+                                // Full kernel validation belongs to hover feedback and drop.
+                                drag.downcast_ref::<crate::workbench_ui::hierarchy::ExplorerElementDrag>()
+                                    .is_some_and(|drag| {
+                                        let workbench = ownership_filter_owner.read(cx);
+                                        drag.element_id != filter_target
+                                            && workbench.project_id() == &drag.project_id
+                                            && !workbench.source.is_read_only()
+                                            && !workbench.source.is_presentation_suspended()
+                                    })
+                            }).on_drop(move |drag: &crate::workbench_ui::hierarchy::ExplorerElementDrag, _, cx| {
+                                ownership_drop_owner.update(cx, |workbench, cx| {
+                                    workbench.reparent_explorer_element(drag, target.clone(), cx);
+                                });
+                            })
+                        })
                         .tooltip(ui::Tooltip::text(format!("Visual component · {type_label}")))
                         .pl(px((row.depth.min(15) + 2) as f32 * 14.0)).flex().items_center().gap_1()
                         .when(selected, |row| row.bg(palette.surface))
@@ -571,6 +618,34 @@ impl Render for MdeRightPanel {
                     div()
                         .id(format!("mde-explorer-row-{}", row.key))
                         .when_some(element_drag, |row, drag| row.on_drag(drag, |drag: &crate::workbench_ui::hierarchy::ExplorerElementDrag, _, _, cx| cx.new(|_| drag.clone())))
+                        .when_some(ownership_target, |row, target| {
+                            let filter_target = target.clone();
+                            let hover_target = target.clone();
+                            let hover_owner = ownership_filter_owner.clone();
+                            let highlight = palette.selection;
+                            row.drag_over::<crate::workbench_ui::hierarchy::ExplorerElementDrag>(move |style, drag, _, cx| {
+                                if hover_owner.read(cx).validate_explorer_reparent(drag, &hover_target).is_ok() {
+                                    style.border_1().border_color(highlight)
+                                } else {
+                                    style
+                                }
+                            }).can_drop(move |drag, _, cx| {
+                                // GPUI checks every row here, including unhovered rows.
+                                // Full kernel validation belongs to hover feedback and drop.
+                                drag.downcast_ref::<crate::workbench_ui::hierarchy::ExplorerElementDrag>()
+                                    .is_some_and(|drag| {
+                                        let workbench = ownership_filter_owner.read(cx);
+                                        drag.element_id != filter_target
+                                            && workbench.project_id() == &drag.project_id
+                                            && !workbench.source.is_read_only()
+                                            && !workbench.source.is_presentation_suspended()
+                                    })
+                            }).on_drop(move |drag: &crate::workbench_ui::hierarchy::ExplorerElementDrag, _, cx| {
+                                ownership_drop_owner.update(cx, |workbench, cx| {
+                                    workbench.reparent_explorer_element(drag, target.clone(), cx);
+                                });
+                            })
+                        })
                         .tooltip(ui::Tooltip::text(type_label))
                         .pl(px((row.depth.min(15) + 2) as f32 * 14.0))
                         .flex()

@@ -17,10 +17,11 @@ pub struct ExplorerRow {
 pub(crate) struct ExplorerElementDrag {
     pub project_id: bellatrix_project::ProjectId,
     pub element_id: String,
-    pub target_diagram_id: String,
+    pub target_diagram_id: Option<String>,
     pub source_view_id: Option<String>,
     pub revision: u64,
     pub label: String,
+    pub ownership_checks: std::rc::Rc<std::cell::RefCell<std::collections::HashMap<String, Result<(), String>>>>,
 }
 
 impl gpui::Render for ExplorerElementDrag {
