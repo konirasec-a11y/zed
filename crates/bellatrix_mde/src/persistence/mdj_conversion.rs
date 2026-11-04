@@ -130,8 +130,9 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
         let mut mapped_fields = BTreeSet::new();
         let name = take_name(&mut residue, &mut mapped_fields);
         if object.id != project.id {
-            let canonical_kind = canonical_kind_for_object(object.type_name, &object.path);
+            let canonical_kind = canonical_kind_for_object(object, &index);
             if canonical_kind.is_some() {
+                mapped_fields.insert("_type".into());
                 if let Some(parent) = residue
                     .get("_parent")
                     .and_then(Value::as_object)
@@ -140,7 +141,7 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
                     .and_then(Value::as_str)
                     .filter(|parent| {
                         index.object(parent).is_some_and(|parent| {
-                            canonical_kind_for_object(parent.type_name, &parent.path).is_some()
+                            canonical_kind_for_object(parent, &index).is_some()
                         })
                     })
                 {
@@ -177,6 +178,11 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
                 path: object.path.clone(),
                 message: if canonical_kind.is_some() {
                     format!("{} mapped by identity, name and supported explicit ownership only; remaining MDJ properties are preserved as source residue", object.type_name)
+                } else if matches!(object.type_name, "UMLModel" | "UMLPackage" | "UMLClass") {
+                    let fields = object.properties.keys()
+                        .filter(|field| !supported_semantic_field(field))
+                        .cloned().collect::<Vec<_>>().join(", ");
+                    format!("{} kept opaque, not promoted to UML: unmapped fields [{}], a non-string name, presentation containment or an unmappable explicit ownership chain; source semantics must not be replaced with UML defaults", object.type_name, fields)
                 } else {
                     format!("{} preserved as an MDJ object; canonical UML mapping (including associations and ends) is not implemented", object.type_name)
                 },
@@ -487,11 +493,7 @@ fn export_document(project: &Project) -> Result<Value, MdjError> {
             })?;
         let kind = mdj_kind(&element.kind)
             .ok_or_else(|| failure("", "this canonical UML kind has no MDJ export mapping"))?;
-        let path = provenance
-            .object_paths
-            .get(&element.id)
-            .ok_or_else(|| failure("", "missing semantic object composition path"))?;
-        let canonical = canonical_kind_for_object(&metadata.type_name, path).is_some();
+        let canonical = metadata.mapped_fields.contains("_type");
         if canonical == element.kind.starts_with("mdj.") {
             return Err(failure(
                 "",
@@ -700,12 +702,50 @@ fn canonical_kind(kind: &str) -> Option<&'static str> {
     }
 }
 
-fn canonical_kind_for_object(kind: &str, path: &str) -> Option<&'static str> {
-    // Objects occupying presentation slots must not acquire semantic authority.
-    if in_view_composition(path) {
-        None
-    } else {
-        canonical_kind(kind)
+fn supported_semantic_field(field: &str) -> bool {
+    matches!(
+        field,
+        "_id" | "_type" | "name" | "_parent" | "ownedElements"
+    )
+}
+
+fn canonical_kind_for_object<'document>(
+    object: &mdj::Object<'document>,
+    index: &mdj::Index<'document>,
+) -> Option<&'static str> {
+    let kind = canonical_kind(object.type_name)?;
+    let mut current = object;
+    let mut visited = BTreeSet::new();
+    loop {
+        // A partially promoted chain would hide known ownership from the kernel.
+        // Unsupported source semantics must not become canonical UML defaults.
+        if !visited.insert(current.id)
+            || in_view_composition(&current.path)
+            || canonical_kind(current.type_name).is_none()
+            || current
+                .properties
+                .get("name")
+                .is_some_and(|name| !name.is_string())
+            || current
+                .properties
+                .keys()
+                .any(|field| !supported_semantic_field(field))
+        {
+            return None;
+        }
+        let Some(parent) = current.properties.get("_parent") else {
+            return Some(kind);
+        };
+        let reference = parent
+            .as_object()
+            .filter(|reference| reference.len() == 1)?;
+        let parent_id = reference.get("$ref")?.as_str()?;
+        let parent = index.object(parent_id)?;
+        // The MDJ Project is an interchange envelope, not a UML owner.
+        if parent.path.is_empty() && parent.type_name == "Project" {
+            return Some(kind);
+        }
+        current = parent;
     }
 }
 
