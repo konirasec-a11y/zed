@@ -53,8 +53,9 @@ declarados como atributos UML de toda metaclasse.
 A exclusão semântica remove Views folha também quando aninhadas, preservando o
 contêiner visual sobrevivente, seus irmãos, sua ordem e a geometria autoral. Isso
 inclui bounds de layout ausentes: remover a folha não exige resolver coordenadas.
-Referências de apresentação sobreviventes para essas ocorrências bloqueiam a
-operação inteira, sem descartar estilos ou vínculos. Views afetadas que têm filhos
+Referências de apresentação sobreviventes para essas ocorrências ou para elementos
+semânticos apagados, incluindo membros sem View própria, bloqueiam a operação
+inteira, sem descartar estilos ou vínculos. Views afetadas que têm filhos
 continuam bloqueadas: este fluxo não promove filhos nem elimina uma subárvore
 visual. A composição visual não determina ownership UML (§7.8.6 e §B.7.14).
 

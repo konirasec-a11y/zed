@@ -3,8 +3,8 @@ use bellatrix_mde::{
     project_model_section,
 };
 use bellatrix_mde_contracts::{
-    Authored, Geometry, InheritedStyleProperty, ModelingSection, RelationshipRouting,
-    StyleInheritance, View, ViewEndpoints,
+    Authored, Geometry, InheritedStyleProperty, ModelingSection, PresentationReference,
+    RelationshipRouting, StyleInheritance, View, ViewEndpoints,
     protocol::{
         Command, ModelDocumentParts, ModelingElementKind, ModelingMemberKind, ModelingRelationKind,
         inspector::PropertyEditor, projection::ModelingProjection,
@@ -999,6 +999,52 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
     };
     assert_eq!(nested_flow.section()?, with_nested_leaves);
     reopen_both_formats(&nested_flow.document, &with_nested_leaves)?;
+
+    assert!(with_nested_leaves.diagrams.iter().all(|diagram| {
+        diagram
+            .all_views()
+            .all(|view| view.subject.as_deref() != Some(attribute.as_str()))
+    }));
+    let mut with_property_reference = with_nested_leaves.clone();
+    with_property_reference
+        .diagrams
+        .iter_mut()
+        .find(|diagram| diagram.id == "classes")
+        .ok_or("missing class diagram for the surviving model reference")?
+        .views
+        .iter_mut()
+        .find(|view| view.id == "surviving-visual-container")
+        .ok_or("missing surviving visual container")?
+        .presentation
+        .references
+        .insert(
+            "owned-property-reference".into(),
+            Authored::Value(PresentationReference::Model(attribute.clone())),
+        );
+    let reference_bytes = encode_model_section(
+        &flow.document.id,
+        &flow.document.name,
+        &serde_json::to_string(&with_property_reference)?,
+        "json",
+    )?;
+    let mut reference_flow = NativeAuthoring {
+        document: prepare_model_document(&decode_model_document(&reference_bytes, "json")?)?,
+        revision: flow.revision,
+    };
+    let rejection = reference_flow
+        .apply(Command::DeleteElement {
+            element_id: "model".into(),
+        })
+        .err()
+        .ok_or(
+            "deletion must not strand a surviving container's reference to an unshown Property",
+        )?;
+    assert!(rejection.to_string().contains("surviving-visual-container"));
+    assert!(rejection.to_string().contains(&attribute));
+    assert_eq!(reference_flow.revision, flow.revision);
+    assert_eq!(reference_flow.section()?, with_property_reference);
+    reopen_both_formats(&reference_flow.document, &with_property_reference)?;
+
     let nested_deleted = nested_flow.apply(Command::DeleteElement {
         element_id: "model".into(),
     })?;
@@ -1006,6 +1052,77 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
     assert!(nested_deleted.registry.entries().is_empty());
     assert_eq!(nested_deleted.diagrams, vec![expected_diagram]);
     reopen_both_formats(&nested_flow.document, &nested_deleted)?;
+
+    let annotation_bytes = encode_model_section(
+        &flow.document.id,
+        &flow.document.name,
+        &flow.document.section_json,
+        "json",
+    )?;
+    let mut annotation_flow = NativeAuthoring {
+        document: prepare_model_document(&decode_model_document(&annotation_bytes, "json")?)?,
+        revision: flow.revision,
+    };
+    let comment = annotation_flow.create(
+        Command::CreateModelElement {
+            owner_id: Some("model".into()),
+            kind: ModelingElementKind::Comment,
+            name: None,
+        },
+        "Comment",
+    )?;
+    let annotated = annotation_flow.apply(Command::SetProperty {
+        element_id: comment.clone(),
+        path: "properties.annotatedElement".into(),
+        value: json!([{"$ref": invoice}]),
+    })?;
+    let Contract::Comment(annotation) = contract(&annotated, &comment)? else {
+        return Err("annotation authoring must retain a concrete Comment".into());
+    };
+    assert_eq!(annotation.annotated_element, vec![invoice.clone()]);
+    let annotation_projection = annotation_flow.projection()?;
+    let mut note_links = annotation_projection.relations.iter().filter(|relation| {
+        relation.kind == "uml.note_link" && relation.from == invoice && relation.to == comment
+    });
+    let note_link = note_links
+        .next()
+        .ok_or("missing projected Comment link")?
+        .id
+        .clone();
+    assert!(note_links.next().is_none());
+    assert!(annotated.diagrams.iter().all(|diagram| {
+        diagram
+            .all_views()
+            .all(|view| view.subject.as_deref() != Some(note_link.as_str()))
+    }));
+    let hierarchy_bound = annotation_flow.apply(Command::SetExplorerParent {
+        subject_id: "classes".into(),
+        parent_id: Some(note_link.clone()),
+        parent_occurrence: None,
+    })?;
+    let placement = hierarchy_bound
+        .hierarchy
+        .get("classes")
+        .ok_or("missing diagram placement under the Comment link")?;
+    assert_eq!(placement.parent_id.as_deref(), Some(note_link.as_str()));
+    assert!(placement.occurrence.is_none());
+    reopen_both_formats(&annotation_flow.document, &hierarchy_bound)?;
+    let annotation_revision = annotation_flow.revision;
+    let rejection = annotation_flow
+        .apply(Command::DeleteElement {
+            element_id: note_link,
+        })
+        .err()
+        .ok_or("deleting an unshown Comment link must not strand its child diagram")?;
+    assert!(
+        rejection
+            .to_string()
+            .contains("surviving hierarchy placement")
+    );
+    assert!(rejection.to_string().contains("classes"));
+    assert_eq!(annotation_flow.revision, annotation_revision);
+    assert_eq!(annotation_flow.section()?, hierarchy_bound);
+    reopen_both_formats(&annotation_flow.document, &hierarchy_bound)?;
 
     let deleted = flow.apply(Command::DeleteElement {
         element_id: "model".into(),

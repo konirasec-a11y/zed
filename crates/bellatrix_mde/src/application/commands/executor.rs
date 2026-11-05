@@ -1635,16 +1635,13 @@ fn ensure_leaf_view_dependencies(
                     .is_some_and(|id| affected_subjects.contains(id))
         })
         .collect::<Vec<_>>();
-    if removed_leaf_views.is_empty() {
-        return Ok(());
-    }
     let view_ids = removed_leaf_views
         .iter()
         .map(|view| view.id.as_str())
         .collect::<HashSet<_>>();
-    let subject_ids = removed_leaf_views
+    let subject_ids = affected_subjects
         .iter()
-        .filter_map(|view| view.subject.as_deref())
+        .map(String::as_str)
         .collect::<HashSet<_>>();
     for diagram in &section.diagrams {
         for view in diagram.all_views().filter(|view| {
@@ -1782,6 +1779,15 @@ fn ensure_leaf_view_dependencies(
                     .is_some_and(|id| affected_subjects.contains(id)))
         {
             continue;
+        }
+        if !clears_affected_hierarchy_parents
+            && let Some(parent) = placement.parent_id.as_ref()
+            && affected_subjects.contains(parent)
+        {
+            return Err(format!(
+                "Cannot delete element: surviving hierarchy placement {} references parent {}; no elements or presentation were changed",
+                subject, parent,
+            ));
         }
         if let Some(occurrence) = &placement.occurrence
             && (view_ids.contains(occurrence.view_id.as_str())
