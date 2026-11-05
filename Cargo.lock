@@ -2155,6 +2155,7 @@ dependencies = [
  "bellatrix_mde_contracts",
  "bellatrix_ui_panels",
  "bellatrix_ui_uml",
+ "dirs",
  "gpui",
  "gpui_platform",
  "serde_json",

@@ -47,13 +47,48 @@ repository's pinned rustfmt.
   the last read/saved version and reports external changes instead of knowingly
   overwriting them. Resolved paths also cover relative paths and symlinks.
 
+## Native quit recovery
+
+Some native termination paths, including macOS Dock → Quit, bypass GPUI's
+window-close confirmation. `Context::on_app_quit` therefore writes the current
+dirty `Project` to a new local recovery copy before returning its ready future.
+This is synchronous shutdown recovery, not autosave. It does not retain another
+live semantic model or involve a backend.
+
+Recovery files live under the current user's local application-data directory:
+
+- macOS: `~/Library/Application Support/Bellatrix/Recovery/`
+- Linux: `$XDG_DATA_HOME/Bellatrix/Recovery/`, normally
+  `~/.local/share/Bellatrix/Recovery/`
+- Windows: `%LOCALAPPDATA%\Bellatrix\Recovery\`
+
+Each copy gets a uniquely reserved directory and an atomically written
+`project.json`. Existing copies are neither replaced nor automatically deleted.
+On Unix, directories are created with mode 0700 and files with mode 0600; an
+existing recovery directory accessible to other users is rejected. On Windows,
+the user-specific application-data directory's permissions are inherited.
+
+At startup, a recovery banner lists available copies, newest first, with their
+paths. Select one to restore it as an **unsaved document**. Save asks for a new
+destination and refuses to replace that source recovery copy. Opening recovery
+while the current document is dirty requires the usual discard confirmation;
+failed or cancelled recovery leaves the current document untouched. Explicitly
+discarding changes through the normal close confirmation does not request a
+recovery copy.
+
+An unavailable recovery directory is reported in the startup banner. A shutdown
+write failure is reported to stderr: this late GPUI callback cannot cancel quit
+or reliably show another dialog. Recovery can delay shutdown for large models,
+and does not protect against crashes, force-kill, power loss, or disk failure.
+Regular Save remains necessary.
+
 ## State boundary
 
 The only persistent model is `bellatrix_mde_contracts::model::Project`.
 `model.registry` holds typed UML contracts, and `model.diagrams` holds view
 occurrences and geometry. No second element/relation model, backend, domain
 service, or document store is introduced. The shell retains only interaction
-state, the current file path, dirty/error status, a text widget, and last-saved
+state, file/recovery paths, dirty/error status, a text widget, and last-saved
 bytes used for conflict detection. Render projections are temporary.
 
 Portable Bellatrix components are reused: `Palette`, `PaneHeader`, and
@@ -73,7 +108,7 @@ Portable Bellatrix components are reused: `Palette`, `PaneHeader`, and
   bounds are capped for rendering without rewriting the authored geometry.
 - The name input clips long names rather than horizontally scrolling. Keyboard
   navigation and selection continue to operate on the complete string.
-- There is no undo/redo, automatic recovery, import/export adapter, project
+- There is no undo/redo, continuous autosave, import/export adapter, project
   browser, or formal UML semantic validation. Loading checks JSON/schema,
   registry identities, unique diagram/view IDs, and finite geometry only.
 - Save conflict detection is a pre-write check, not a cross-process file lock.

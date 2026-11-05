@@ -25,12 +25,16 @@ struct Bellatrix {
     name_input: Entity<TextInput>,
     path: Option<PathBuf>,
     saved_bytes: Option<Vec<u8>>,
+    recovery_source: Option<PathBuf>,
+    recoveries: Vec<PathBuf>,
+    recovery_warning: Option<String>,
     dirty: bool,
     busy: bool,
     error: Option<String>,
     status: String,
     focus: FocusHandle,
     _name_subscription: Subscription,
+    _quit_subscription: Subscription,
 }
 
 impl Bellatrix {
@@ -61,6 +65,23 @@ impl Bellatrix {
             }
             cx.notify();
         });
+        let quit_subscription = cx.on_app_quit(|this, _| {
+            // Native termination can bypass the window-close confirmation. Do the
+            // write before returning a future, while this canonical document exists.
+            if this.dirty {
+                match document::write_recovery(&this.document) {
+                    Ok(path) => eprintln!("Bellatrix recovery saved at {}", path.display()),
+                    Err(error) => {
+                        eprintln!("Bellatrix could not preserve unsaved changes: {error}")
+                    }
+                }
+            }
+            async {}
+        });
+        let (recoveries, recovery_warning) = match document::recovery_files() {
+            Ok(paths) => (paths, None),
+            Err(error) => (Vec::new(), Some(error)),
+        };
         let mut this = Self {
             document: document::blank(),
             selected_class: None,
@@ -68,12 +89,16 @@ impl Bellatrix {
             name_input,
             path: None,
             saved_bytes: None,
+            recovery_source: None,
+            recoveries,
+            recovery_warning,
             dirty: false,
             busy: false,
             error: None,
             status: "Create a class or open a schema-2 project".into(),
             focus: cx.focus_handle(),
             _name_subscription: subscription,
+            _quit_subscription: quit_subscription,
         };
         let weak = cx.weak_entity();
         window.on_window_should_close(cx, move |window, cx| {
@@ -87,7 +112,7 @@ impl Bellatrix {
         });
         window.focus(&this.focus, cx);
         if let Some(path) = path {
-            this.load(path, window, cx);
+            this.load(path, false, window, cx);
         }
         this
     }
@@ -301,7 +326,7 @@ impl Bellatrix {
                     this.update(cx, |this, cx| {
                         this.set_busy(false, cx);
                         match selected {
-                            Ok(Some(path)) => this.load(path, window, cx),
+                            Ok(Some(path)) => this.load(path, false, window, cx),
                             Ok(None) => {
                                 this.status = "Open cancelled; document unchanged".into();
                                 cx.notify();
@@ -321,7 +346,54 @@ impl Bellatrix {
         .detach();
     }
 
-    fn load(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
+    fn recover(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
+        if self.busy {
+            return;
+        }
+        if !self.dirty {
+            self.load(path, true, window, cx);
+            return;
+        }
+        self.set_busy(true, cx);
+        cx.notify();
+        let answer = window.prompt(
+            PromptLevel::Warning,
+            "Open a recovery copy?",
+            Some("The current document has unsaved changes. Cancel and save first to keep them."),
+            &["Cancel", "Discard current changes and recover"],
+            cx,
+        );
+        cx.spawn_in(window, async move |this, cx| {
+            let answer = answer.await;
+            if let Err(error) = cx
+                .update(|window, cx| {
+                    this.update(cx, |this, cx| {
+                        this.set_busy(false, cx);
+                        match answer {
+                            Ok(1) => this.load(path, true, window, cx),
+                            Ok(_) => cx.notify(),
+                            Err(error) => {
+                                this.error = Some(error.to_string());
+                                cx.notify();
+                            }
+                        }
+                    })
+                })
+                .and_then(|result| result)
+            {
+                eprintln!("Cannot finish recovery selection: {error}");
+            }
+        })
+        .detach();
+    }
+
+    fn load(
+        &mut self,
+        path: PathBuf,
+        recovering: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.set_busy(true, cx);
         self.status = format!("Opening {}", path.display());
         cx.notify();
@@ -337,14 +409,22 @@ impl Bellatrix {
                 match result {
                     Ok((document, bytes, path)) => {
                         this.document = document;
-                        this.path = Some(path);
-                        this.saved_bytes = Some(bytes);
-                        this.dirty = false;
+                        if recovering {
+                            this.recovery_source = Some(path.clone());
+                            this.path = None;
+                            this.saved_bytes = None;
+                            this.status = format!("Recovered {}. Save As to keep working; the recovery copy is unchanged.", path.display());
+                        } else {
+                            this.recovery_source = None;
+                            this.path = Some(path);
+                            this.saved_bytes = Some(bytes);
+                            this.status = "Project opened. All contract data retained; this prototype edits classes.".into();
+                        }
+                        this.dirty = recovering;
                         this.error = None;
                         this.selected_class = None;
                         this.selected_view = None;
                         this.name_input.update(cx, |input, cx| input.set_text(String::new(), window, cx));
-                        this.status = "Project opened. All contract data retained; this prototype edits classes.".into();
                     }
                     Err(error) => this.error = Some(error),
                 }
@@ -370,6 +450,7 @@ impl Bellatrix {
         cx.notify();
         let previous_path = self.path.clone();
         let previous_bytes = self.saved_bytes.clone();
+        let recovery_source = self.recovery_source.clone();
         let path = if save_as { None } else { self.path.clone() };
         let prompt = path.is_none().then(|| {
             cx.prompt_for_new_path(
@@ -395,6 +476,9 @@ impl Bellatrix {
                     let write_bytes = bytes.clone();
                     cx.background_spawn(async move {
                         let path = document::destination(&path)?;
+                        if recovery_source.as_ref() == Some(&path) {
+                            return Err("Choose a different destination; the recovery copy must remain unchanged".into());
+                        }
                         let expected = (previous_path.as_ref() == Some(&path))
                             .then_some(previous_bytes)
                             .flatten();
@@ -414,6 +498,7 @@ impl Bellatrix {
                             Ok(Some(path)) => {
                                 this.status = format!("Saved {}", path.display());
                                 this.path = Some(path);
+                                this.recovery_source = None;
                                 this.saved_bytes = Some(bytes);
                                 this.dirty = false;
                                 this.error = None;
@@ -458,7 +543,10 @@ impl Bellatrix {
                     this.update(cx, |this, cx| {
                         this.set_busy(false, cx);
                         match answer {
-                            Ok(1) => window.remove_window(),
+                            Ok(1) => {
+                                this.dirty = false;
+                                window.remove_window();
+                            }
                             Ok(_) => cx.notify(),
                             Err(error) => {
                                 this.error = Some(error.to_string());
@@ -782,6 +870,40 @@ impl Render for Bellatrix {
                     .child("Select a class to edit its name and position."),
             );
         }
+        let mut recovery_panel = div()
+            .id("recovery-copies")
+            .max_h(px(140.0))
+            .overflow_y_scroll()
+            .flex_none()
+            .p_2()
+            .bg(rgb(palette.panel_alt))
+            .border_b_1()
+            .border_color(rgb(palette.border));
+        if let Some(warning) = &self.recovery_warning {
+            recovery_panel = recovery_panel.child(
+                div()
+                    .text_color(rgb(0xf38ba8))
+                    .child(format!("Quit recovery unavailable: {warning}")),
+            );
+        }
+        if !self.recoveries.is_empty() {
+            recovery_panel = recovery_panel.child(div().text_xs().text_color(rgb(palette.accent))
+                .child("Unsaved recovery copies · select one to open as an unsaved document. Copies are retained."));
+            for (index, path) in self.recoveries.iter().enumerate() {
+                let path = path.clone();
+                recovery_panel = recovery_panel.child(
+                    div()
+                        .id(SharedString::from(format!("recovery-{index}")))
+                        .py_1()
+                        .cursor_pointer()
+                        .text_xs()
+                        .child(format!("Recover {}: {}", index + 1, path.display()))
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.recover(path.clone(), window, cx)
+                        })),
+                );
+            }
+        }
         let path_label = self
             .path
             .as_ref()
@@ -853,6 +975,10 @@ impl Render for Bellatrix {
                     } else {
                         "Saved"
                     }),
+            )
+            .when(
+                !self.recoveries.is_empty() || self.recovery_warning.is_some(),
+                |root| root.child(recovery_panel),
             )
             .child(
                 div()

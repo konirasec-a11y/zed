@@ -134,9 +134,14 @@ pub fn write(path: &Path, bytes: &[u8], expected: Option<&[u8]>) -> Result<(), S
     let mut temporary_name = filename.to_os_string();
     temporary_name.push(format!(".bellatrix-{}-{stamp}.tmp", std::process::id()));
     let temporary: PathBuf = parent.join(temporary_name);
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options
         .open(&temporary)
         .map_err(|error| format!("Cannot prepare {}: {error}", path.display()))?;
     // A failed write must not truncate the user's existing document.
@@ -163,4 +168,103 @@ pub fn write(path: &Path, bytes: &[u8], expected: Option<&[u8]>) -> Result<(), S
         ));
     }
     Ok(())
+}
+
+pub fn recovery_directory() -> Result<PathBuf, String> {
+    let directory = dirs::data_local_dir()
+        .ok_or("The current user's local data directory is unavailable")?
+        .join("Bellatrix")
+        .join("Recovery");
+    let mut builder = fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        builder.mode(0o700);
+    }
+    builder.create(&directory).map_err(|error| {
+        format!(
+            "Cannot prepare recovery directory {}: {error}",
+            directory.display()
+        )
+    })?;
+    let metadata = fs::symlink_metadata(&directory).map_err(|error| error.to_string())?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(format!(
+            "Recovery destination is not a private directory: {}",
+            directory.display()
+        ));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if metadata.permissions().mode() & 0o077 != 0 {
+            return Err(format!(
+                "Recovery directory is accessible to other users: {}",
+                directory.display()
+            ));
+        }
+    }
+    Ok(directory)
+}
+
+pub fn recovery_files() -> Result<Vec<PathBuf>, String> {
+    let directory = recovery_directory()?;
+    let entries = fs::read_dir(&directory).map_err(|error| {
+        format!(
+            "Cannot read recovery directory {}: {error}",
+            directory.display()
+        )
+    })?;
+    let mut files = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|error| error.to_string())?;
+        if entry
+            .file_type()
+            .map_err(|error| error.to_string())?
+            .is_dir()
+            && entry.file_name().to_string_lossy().starts_with("recovery-")
+        {
+            let path = entry.path().join("project.json");
+            if path.is_file() {
+                files.push(path);
+            }
+        }
+    }
+    files.sort();
+    files.reverse();
+    Ok(files)
+}
+
+pub fn write_recovery(project: &Project) -> Result<PathBuf, String> {
+    let bytes = encode(project)?;
+    let directory = recovery_directory()?;
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_nanos();
+    for attempt in 0..100 {
+        let snapshot = directory.join(format!("recovery-{stamp}-{}-{attempt}", std::process::id()));
+        let mut builder = fs::DirBuilder::new();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        match builder.create(&snapshot) {
+            Ok(()) => {
+                let path = snapshot.join("project.json");
+                write(&path, &bytes, None)?;
+                return Ok(path);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(format!(
+                    "Cannot create recovery snapshot {}: {error}",
+                    snapshot.display()
+                ));
+            }
+        }
+    }
+    Err("Cannot reserve a unique recovery snapshot; previous copies were kept".into())
 }
