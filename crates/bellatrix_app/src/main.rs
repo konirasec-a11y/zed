@@ -25,7 +25,6 @@ struct Bellatrix {
     name_input: Entity<TextInput>,
     path: Option<PathBuf>,
     saved_bytes: Option<Vec<u8>>,
-    recovery_source: Option<PathBuf>,
     recoveries: Vec<PathBuf>,
     recovery_warning: Option<String>,
     dirty: bool,
@@ -89,7 +88,6 @@ impl Bellatrix {
             name_input,
             path: None,
             saved_bytes: None,
-            recovery_source: None,
             recoveries,
             recovery_warning,
             dirty: false,
@@ -409,13 +407,12 @@ impl Bellatrix {
                 match result {
                     Ok((document, bytes, path)) => {
                         this.document = document;
+                        let recovering = recovering || document::is_recovery_path(&path);
                         if recovering {
-                            this.recovery_source = Some(path.clone());
                             this.path = None;
                             this.saved_bytes = None;
                             this.status = format!("Recovered {}. Save As to keep working; the recovery copy is unchanged.", path.display());
                         } else {
-                            this.recovery_source = None;
                             this.path = Some(path);
                             this.saved_bytes = Some(bytes);
                             this.status = "Project opened. All contract data retained; this prototype edits classes.".into();
@@ -450,7 +447,6 @@ impl Bellatrix {
         cx.notify();
         let previous_path = self.path.clone();
         let previous_bytes = self.saved_bytes.clone();
-        let recovery_source = self.recovery_source.clone();
         let path = if save_as { None } else { self.path.clone() };
         let prompt = path.is_none().then(|| {
             cx.prompt_for_new_path(
@@ -476,8 +472,8 @@ impl Bellatrix {
                     let write_bytes = bytes.clone();
                     cx.background_spawn(async move {
                         let path = document::destination(&path)?;
-                        if recovery_source.as_ref() == Some(&path) {
-                            return Err("Choose a different destination; the recovery copy must remain unchanged".into());
+                        if document::is_recovery_path(&path) {
+                            return Err("Choose a destination outside Bellatrix Recovery; recovery copies must remain unchanged".into());
                         }
                         let expected = (previous_path.as_ref() == Some(&path))
                             .then_some(previous_bytes)
@@ -498,8 +494,7 @@ impl Bellatrix {
                             Ok(Some(path)) => {
                                 this.status = format!("Saved {}", path.display());
                                 this.path = Some(path);
-                                this.recovery_source = None;
-                                this.saved_bytes = Some(bytes);
+                                    this.saved_bytes = Some(bytes);
                                 this.dirty = false;
                                 this.error = None;
                             }

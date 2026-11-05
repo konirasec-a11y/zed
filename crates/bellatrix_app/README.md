@@ -114,3 +114,7 @@ Portable Bellatrix components are reused: `Palette`, `PaneHeader`, and
 - Save conflict detection is a pre-write check, not a cross-process file lock.
   Simultaneous external writes during the final rename are not coordinated.
 - This is a native desktop entry point, not a web/mobile application bundle.
+
+All files opened from the recovery directory, including a command-line path,
+are treated as unsaved recovery copies. Saving into that directory is blocked,
+even after saving the recovered document elsewhere.

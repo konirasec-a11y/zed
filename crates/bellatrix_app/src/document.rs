@@ -170,6 +170,15 @@ pub fn write(path: &Path, bytes: &[u8], expected: Option<&[u8]>) -> Result<(), S
     Ok(())
 }
 
+pub fn is_recovery_path(path: &Path) -> bool {
+    let Some(directory) = dirs::data_local_dir() else {
+        return false;
+    };
+    let directory = directory.join("Bellatrix").join("Recovery");
+    let directory = fs::canonicalize(&directory).unwrap_or(directory);
+    path.starts_with(directory)
+}
+
 pub fn recovery_directory() -> Result<PathBuf, String> {
     let directory = dirs::data_local_dir()
         .ok_or("The current user's local data directory is unavailable")?
