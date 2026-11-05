@@ -103,7 +103,7 @@ preservados; somente a participação especializada antiga é substituída.
 O alvo deve existir, ter a metaclasse exigida e respeitar ownership. Referências
 nulas, estados anteriores contraditórios e ciclos de Generalization são
 rejeitados sem alterar o documento. A validação final dos contratos continua
-obrigatória (UML 2.5.1 §§9.9.7.5 e 10.5.6.5).
+obrigatória (UML 2.5.1 §§9.9.7.5 e 10.5.6.4).
 
 Cada ocorrência gráfica conserva seu nome, estilo e geometria. Apenas o vínculo
 do lado alterado é atualizado, usando uma View existente do novo alvo quando ela
