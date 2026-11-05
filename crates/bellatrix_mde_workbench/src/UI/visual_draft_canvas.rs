@@ -301,7 +301,9 @@ impl MdeWorkbenchItem {
                                             );
                                         }
                                     }
-                                } else if !item.source.is_read_only() {
+                                } else if !item.source.is_read_only()
+                                    && !item.gesture_submission_pending()
+                                {
                                     item.gesture = Some(CanvasGesture::Move {
                                         view_id: id.clone(),
                                         start: event.position,
@@ -309,6 +311,7 @@ impl MdeWorkbenchItem {
                                         dy: 0.0,
                                         revision,
                                         began: false,
+                                        submitted: false,
                                     });
                                 }
                                 cx.notify();
