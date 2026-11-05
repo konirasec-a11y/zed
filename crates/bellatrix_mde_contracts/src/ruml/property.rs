@@ -335,6 +335,7 @@ impl Property {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.datatype {
                 if let Some(mut old_target) = registry.get::<DataType>(&old_ref_id) {
@@ -354,7 +355,7 @@ impl Property {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -365,6 +366,7 @@ impl Property {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.datatype.is_none() {
                 return Ok(false);
@@ -379,7 +381,7 @@ impl Property {
 
             instance.datatype = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -457,6 +459,7 @@ impl Property {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.owning_association {
                 if let Some(mut old_target) = registry.get::<Association>(&old_ref_id) {
@@ -476,7 +479,7 @@ impl Property {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -490,6 +493,7 @@ impl Property {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.owning_association.is_none() {
                 return Ok(false);
@@ -504,7 +508,7 @@ impl Property {
 
             instance.owning_association = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -617,6 +621,7 @@ impl Property {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.association {
                 if let Some(mut old_target) = registry.get::<Association>(&old_ref_id) {
@@ -636,7 +641,7 @@ impl Property {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -647,6 +652,7 @@ impl Property {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.association.is_none() {
                 return Ok(false);
@@ -661,7 +667,7 @@ impl Property {
 
             instance.association = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -676,6 +682,7 @@ impl Property {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.qualifier.contains(&ref_id) {
                 return Ok(false);
@@ -689,7 +696,7 @@ impl Property {
                 registry.insert(ref_id.clone(), "Property", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -704,6 +711,7 @@ impl Property {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.qualifier.len();
             instance.qualifier.retain(|id| id != &ref_id);
@@ -719,7 +727,7 @@ impl Property {
                 registry.insert(ref_id.clone(), "Property", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -730,6 +738,7 @@ impl Property {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.qualifier.len();
 
@@ -747,7 +756,7 @@ impl Property {
 
             instance.qualifier.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -762,6 +771,7 @@ impl Property {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.association_end {
                 if let Some(mut old_target) = registry.get::<Property>(&old_ref_id) {
@@ -781,7 +791,7 @@ impl Property {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -795,6 +805,7 @@ impl Property {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.association_end.is_none() {
                 return Ok(false);
@@ -809,7 +820,7 @@ impl Property {
 
             instance.association_end = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })

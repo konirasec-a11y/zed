@@ -179,6 +179,7 @@ impl Slot {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let old_ref_id = instance.owning_instance.clone();
             if let Some(mut old_target) = registry.get::<InstanceSpecification>(&old_ref_id) {
@@ -195,7 +196,7 @@ impl Slot {
                 registry.insert(ref_id.clone(), "InstanceSpecification", &new_target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })

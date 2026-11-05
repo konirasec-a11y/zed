@@ -236,6 +236,7 @@ impl StructuredActivityNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.variable.contains(&ref_id) {
                 return Ok(false);
@@ -249,7 +250,7 @@ impl StructuredActivityNode {
                 registry.insert(ref_id.clone(), "Variable", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -264,6 +265,7 @@ impl StructuredActivityNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.variable.len();
             instance.variable.retain(|id| id != &ref_id);
@@ -279,7 +281,7 @@ impl StructuredActivityNode {
                 registry.insert(ref_id.clone(), "Variable", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -290,6 +292,7 @@ impl StructuredActivityNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.variable.len();
 
@@ -307,7 +310,7 @@ impl StructuredActivityNode {
 
             instance.variable.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -322,6 +325,7 @@ impl StructuredActivityNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.edge.contains(&ref_id) {
                 return Ok(false);
@@ -335,7 +339,7 @@ impl StructuredActivityNode {
                 registry.insert(ref_id.clone(), "ActivityEdge", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -350,6 +354,7 @@ impl StructuredActivityNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.edge.len();
             instance.edge.retain(|id| id != &ref_id);
@@ -365,7 +370,7 @@ impl StructuredActivityNode {
                 registry.insert(ref_id.clone(), "ActivityEdge", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -376,6 +381,7 @@ impl StructuredActivityNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.edge.len();
 
@@ -393,7 +399,7 @@ impl StructuredActivityNode {
 
             instance.edge.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -408,6 +414,7 @@ impl StructuredActivityNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.node.contains(&ref_id) {
                 return Ok(false);
@@ -421,7 +428,7 @@ impl StructuredActivityNode {
                 registry.insert(ref_id.clone(), "ActivityNode", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -436,6 +443,7 @@ impl StructuredActivityNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.node.len();
             instance.node.retain(|id| id != &ref_id);
@@ -451,7 +459,7 @@ impl StructuredActivityNode {
                 registry.insert(ref_id.clone(), "ActivityNode", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -462,6 +470,7 @@ impl StructuredActivityNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.node.len();
 
@@ -479,7 +488,7 @@ impl StructuredActivityNode {
 
             instance.node.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })

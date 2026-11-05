@@ -507,7 +507,7 @@ fn require_endpoint(record: &mut PendingContract, field: &str, target: &str) -> 
     Ok(())
 }
 
-fn field_shape(metaclass: &str, field: &str) -> Result<Option<&'static str>, String> {
+pub(crate) fn field_shape(metaclass: &str, field: &str) -> Result<Option<&'static str>, String> {
     Ok(fields(metaclass)?
         .find(|(name, _)| *name == field)
         .map(|(_, shape)| shape))

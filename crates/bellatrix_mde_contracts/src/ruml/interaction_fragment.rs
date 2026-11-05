@@ -161,6 +161,7 @@ impl InteractionFragment {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.covered.contains(&ref_id) {
                 return Ok(false);
@@ -176,7 +177,7 @@ impl InteractionFragment {
                 registry.insert(ref_id.clone(), "Lifeline", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -191,6 +192,7 @@ impl InteractionFragment {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.covered.len();
             instance.covered.retain(|id| id != &ref_id);
@@ -206,7 +208,7 @@ impl InteractionFragment {
                 registry.insert(ref_id.clone(), "Lifeline", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -217,6 +219,7 @@ impl InteractionFragment {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.covered.len();
 
@@ -234,7 +237,7 @@ impl InteractionFragment {
 
             instance.covered.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -312,6 +315,7 @@ impl InteractionFragment {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.enclosing_interaction {
                 if let Some(mut old_target) = registry.get::<Interaction>(&old_ref_id) {
@@ -331,7 +335,7 @@ impl InteractionFragment {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -345,6 +349,7 @@ impl InteractionFragment {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.enclosing_interaction.is_none() {
                 return Ok(false);
@@ -359,7 +364,7 @@ impl InteractionFragment {
 
             instance.enclosing_interaction = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -374,6 +379,7 @@ impl InteractionFragment {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.enclosing_operand {
                 if let Some(mut old_target) = registry.get::<InteractionOperand>(&old_ref_id) {
@@ -393,7 +399,7 @@ impl InteractionFragment {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -407,6 +413,7 @@ impl InteractionFragment {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.enclosing_operand.is_none() {
                 return Ok(false);
@@ -421,7 +428,7 @@ impl InteractionFragment {
 
             instance.enclosing_operand = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })

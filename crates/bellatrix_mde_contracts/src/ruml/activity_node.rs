@@ -188,6 +188,7 @@ impl ActivityNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.in_structured_node {
                 if let Some(mut old_target) = registry.get::<StructuredActivityNode>(&old_ref_id) {
@@ -207,7 +208,7 @@ impl ActivityNode {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -221,6 +222,7 @@ impl ActivityNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.in_structured_node.is_none() {
                 return Ok(false);
@@ -235,7 +237,7 @@ impl ActivityNode {
 
             instance.in_structured_node = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -250,6 +252,7 @@ impl ActivityNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.activity {
                 if let Some(mut old_target) = registry.get::<Activity>(&old_ref_id) {
@@ -269,7 +272,7 @@ impl ActivityNode {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -280,6 +283,7 @@ impl ActivityNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.activity.is_none() {
                 return Ok(false);
@@ -294,7 +298,7 @@ impl ActivityNode {
 
             instance.activity = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -309,6 +313,7 @@ impl ActivityNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.outgoing.contains(&ref_id) {
                 return Ok(false);
@@ -322,7 +327,7 @@ impl ActivityNode {
                 registry.insert(ref_id.clone(), "ActivityEdge", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -337,6 +342,7 @@ impl ActivityNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.outgoing.len();
             instance.outgoing.retain(|id| id != &ref_id);
@@ -351,7 +357,7 @@ impl ActivityNode {
                 registry.insert(ref_id.clone(), "ActivityEdge", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -362,6 +368,7 @@ impl ActivityNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.outgoing.len();
 
@@ -378,7 +385,7 @@ impl ActivityNode {
 
             instance.outgoing.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -393,6 +400,7 @@ impl ActivityNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.incoming.contains(&ref_id) {
                 return Ok(false);
@@ -406,7 +414,7 @@ impl ActivityNode {
                 registry.insert(ref_id.clone(), "ActivityEdge", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -421,6 +429,7 @@ impl ActivityNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.incoming.len();
             instance.incoming.retain(|id| id != &ref_id);
@@ -435,7 +444,7 @@ impl ActivityNode {
                 registry.insert(ref_id.clone(), "ActivityEdge", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -446,6 +455,7 @@ impl ActivityNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.incoming.len();
 
@@ -462,7 +472,7 @@ impl ActivityNode {
 
             instance.incoming.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -477,6 +487,7 @@ impl ActivityNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.in_partition.contains(&ref_id) {
                 return Ok(false);
@@ -492,7 +503,7 @@ impl ActivityNode {
                 registry.insert(ref_id.clone(), "ActivityPartition", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -507,6 +518,7 @@ impl ActivityNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.in_partition.len();
             instance.in_partition.retain(|id| id != &ref_id);
@@ -522,7 +534,7 @@ impl ActivityNode {
                 registry.insert(ref_id.clone(), "ActivityPartition", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -536,6 +548,7 @@ impl ActivityNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.in_partition.len();
 
@@ -553,7 +566,7 @@ impl ActivityNode {
 
             instance.in_partition.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -568,6 +581,7 @@ impl ActivityNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.in_interruptible_region.contains(&ref_id) {
                 return Ok(false);
@@ -583,7 +597,7 @@ impl ActivityNode {
                 registry.insert(ref_id.clone(), "InterruptibleActivityRegion", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -598,6 +612,7 @@ impl ActivityNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.in_interruptible_region.len();
             instance.in_interruptible_region.retain(|id| id != &ref_id);
@@ -613,7 +628,7 @@ impl ActivityNode {
                 registry.insert(ref_id.clone(), "InterruptibleActivityRegion", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -627,6 +642,7 @@ impl ActivityNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.in_interruptible_region.len();
 
@@ -644,7 +660,7 @@ impl ActivityNode {
 
             instance.in_interruptible_region.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })

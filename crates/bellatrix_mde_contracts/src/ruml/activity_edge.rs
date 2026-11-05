@@ -201,6 +201,7 @@ impl ActivityEdge {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let old_ref_id = instance.source.clone();
             if let Some(mut old_target) = registry.get::<ActivityNode>(&old_ref_id) {
@@ -217,7 +218,7 @@ impl ActivityEdge {
                 registry.insert(ref_id.clone(), "ActivityNode", &new_target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -232,6 +233,7 @@ impl ActivityEdge {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let old_ref_id = instance.target.clone();
             if let Some(mut old_target) = registry.get::<ActivityNode>(&old_ref_id) {
@@ -248,7 +250,7 @@ impl ActivityEdge {
                 registry.insert(ref_id.clone(), "ActivityNode", &new_target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -326,6 +328,7 @@ impl ActivityEdge {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.in_partition.contains(&ref_id) {
                 return Ok(false);
@@ -341,7 +344,7 @@ impl ActivityEdge {
                 registry.insert(ref_id.clone(), "ActivityPartition", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -356,6 +359,7 @@ impl ActivityEdge {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.in_partition.len();
             instance.in_partition.retain(|id| id != &ref_id);
@@ -371,7 +375,7 @@ impl ActivityEdge {
                 registry.insert(ref_id.clone(), "ActivityPartition", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -385,6 +389,7 @@ impl ActivityEdge {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.in_partition.len();
 
@@ -402,7 +407,7 @@ impl ActivityEdge {
 
             instance.in_partition.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -449,6 +454,7 @@ impl ActivityEdge {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.interrupts {
                 if let Some(mut old_target) =
@@ -480,7 +486,7 @@ impl ActivityEdge {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -491,6 +497,7 @@ impl ActivityEdge {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.interrupts.is_none() {
                 return Ok(false);
@@ -511,7 +518,7 @@ impl ActivityEdge {
 
             instance.interrupts = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -526,6 +533,7 @@ impl ActivityEdge {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.in_structured_node {
                 if let Some(mut old_target) = registry.get::<StructuredActivityNode>(&old_ref_id) {
@@ -545,7 +553,7 @@ impl ActivityEdge {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -559,6 +567,7 @@ impl ActivityEdge {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.in_structured_node.is_none() {
                 return Ok(false);
@@ -573,7 +582,7 @@ impl ActivityEdge {
 
             instance.in_structured_node = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -588,6 +597,7 @@ impl ActivityEdge {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.activity {
                 if let Some(mut old_target) = registry.get::<Activity>(&old_ref_id) {
@@ -607,7 +617,7 @@ impl ActivityEdge {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -618,6 +628,7 @@ impl ActivityEdge {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.activity.is_none() {
                 return Ok(false);
@@ -632,7 +643,7 @@ impl ActivityEdge {
 
             instance.activity = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })

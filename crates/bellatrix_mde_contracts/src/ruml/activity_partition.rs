@@ -202,6 +202,7 @@ impl ActivityPartition {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.node.contains(&ref_id) {
                 return Ok(false);
@@ -217,7 +218,7 @@ impl ActivityPartition {
                 registry.insert(ref_id.clone(), "ActivityNode", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -232,6 +233,7 @@ impl ActivityPartition {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.node.len();
             instance.node.retain(|id| id != &ref_id);
@@ -247,7 +249,7 @@ impl ActivityPartition {
                 registry.insert(ref_id.clone(), "ActivityNode", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -258,6 +260,7 @@ impl ActivityPartition {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.node.len();
 
@@ -275,7 +278,7 @@ impl ActivityPartition {
 
             instance.node.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -290,6 +293,7 @@ impl ActivityPartition {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.subpartition.contains(&ref_id) {
                 return Ok(false);
@@ -303,7 +307,7 @@ impl ActivityPartition {
                 registry.insert(ref_id.clone(), "ActivityPartition", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -318,6 +322,7 @@ impl ActivityPartition {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.subpartition.len();
             instance.subpartition.retain(|id| id != &ref_id);
@@ -333,7 +338,7 @@ impl ActivityPartition {
                 registry.insert(ref_id.clone(), "ActivityPartition", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -347,6 +352,7 @@ impl ActivityPartition {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.subpartition.len();
 
@@ -364,7 +370,7 @@ impl ActivityPartition {
 
             instance.subpartition.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -379,6 +385,7 @@ impl ActivityPartition {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.super_partition {
                 if let Some(mut old_target) = registry.get::<ActivityPartition>(&old_ref_id) {
@@ -398,7 +405,7 @@ impl ActivityPartition {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -412,6 +419,7 @@ impl ActivityPartition {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.super_partition.is_none() {
                 return Ok(false);
@@ -426,7 +434,7 @@ impl ActivityPartition {
 
             instance.super_partition = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -473,6 +481,7 @@ impl ActivityPartition {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.edge.contains(&ref_id) {
                 return Ok(false);
@@ -488,7 +497,7 @@ impl ActivityPartition {
                 registry.insert(ref_id.clone(), "ActivityEdge", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -503,6 +512,7 @@ impl ActivityPartition {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.edge.len();
             instance.edge.retain(|id| id != &ref_id);
@@ -518,7 +528,7 @@ impl ActivityPartition {
                 registry.insert(ref_id.clone(), "ActivityEdge", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -529,6 +539,7 @@ impl ActivityPartition {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.edge.len();
 
@@ -546,7 +557,7 @@ impl ActivityPartition {
 
             instance.edge.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })

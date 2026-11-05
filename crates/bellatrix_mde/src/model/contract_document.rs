@@ -5,7 +5,23 @@ use bellatrix_mde_contracts::model::{
 use std::collections::BTreeMap;
 
 pub(crate) fn project_section(stored: StoredSection) -> Result<ModelingSection, String> {
-    let (mut elements, relations) = crate::contract_projection::project_registry(&stored.registry)?;
+    for id in stored.presentation.keys() {
+        if stored.registry.get_entry(id).is_none() {
+            return Err(format!(
+                "presentation subject {id} is absent from the registry"
+            ));
+        }
+    }
+    let (mut elements, mut relations) =
+        crate::contract_projection::project_registry(&stored.registry)?;
+    for relation in &mut relations {
+        if let Some(metadata) = stored.presentation.get(&relation.id) {
+            relation.properties.insert(
+                "$presentation".into(),
+                serde_json::to_value(metadata).map_err(|error| error.to_string())?,
+            );
+        }
+    }
     for element in &mut elements {
         if let Some(presentation) = stored.presentation.get(&element.id) {
             element.label = presentation.label.clone();
@@ -28,9 +44,21 @@ pub(crate) fn project_section(stored: StoredSection) -> Result<ModelingSection, 
 }
 
 pub(crate) fn store_section(snapshot: &ModelingSection) -> Result<StoredSection, String> {
-    let registry =
-        crate::contract_edits::registry_from_projection(&snapshot.elements, &snapshot.relations)?;
+    let mut relations = snapshot.relations.clone();
     let mut presentation = BTreeMap::new();
+    // Metadata travels with the disposable relation, then leaves it before the
+    // semantic converter. No generated UML contract has this reserved field.
+    for relation in &mut relations {
+        if let Some(value) = relation.properties.remove("$presentation") {
+            if relation.kind == "owns" {
+                return Err("derived ownership cannot own presentation metadata".into());
+            }
+            let metadata = serde_json::from_value::<SubjectPresentation>(value)
+                .map_err(|error| error.to_string())?;
+            presentation.insert(relation.id.clone(), metadata);
+        }
+    }
+    let registry = crate::contract_edits::registry_from_projection(&snapshot.elements, &relations)?;
     for element in &snapshot.elements {
         let metadata = SubjectPresentation {
             label: element.label.clone(),

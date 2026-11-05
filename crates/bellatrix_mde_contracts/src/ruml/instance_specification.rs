@@ -225,6 +225,7 @@ impl InstanceSpecification {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.slot.contains(&ref_id) {
                 return Ok(false);
@@ -238,7 +239,7 @@ impl InstanceSpecification {
                 registry.insert(ref_id.clone(), "Slot", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -253,6 +254,7 @@ impl InstanceSpecification {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.slot.len();
             instance.slot.retain(|id| id != &ref_id);
@@ -267,7 +269,7 @@ impl InstanceSpecification {
                 registry.insert(ref_id.clone(), "Slot", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -278,6 +280,7 @@ impl InstanceSpecification {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.slot.len();
 
@@ -294,7 +297,7 @@ impl InstanceSpecification {
 
             instance.slot.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })

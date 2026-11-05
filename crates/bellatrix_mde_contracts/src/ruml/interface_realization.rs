@@ -188,6 +188,7 @@ impl InterfaceRealization {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let old_ref_id = instance.implementing_classifier.clone();
             if let Some(mut old_target) = registry.get::<BehavioredClassifier>(&old_ref_id) {
@@ -206,7 +207,7 @@ impl InterfaceRealization {
                 registry.insert(ref_id.clone(), "BehavioredClassifier", &new_target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })

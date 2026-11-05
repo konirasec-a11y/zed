@@ -190,6 +190,7 @@ impl Region {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.subvertex.contains(&ref_id) {
                 return Ok(false);
@@ -203,7 +204,7 @@ impl Region {
                 registry.insert(ref_id.clone(), "Vertex", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -218,6 +219,7 @@ impl Region {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.subvertex.len();
             instance.subvertex.retain(|id| id != &ref_id);
@@ -233,7 +235,7 @@ impl Region {
                 registry.insert(ref_id.clone(), "Vertex", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -244,6 +246,7 @@ impl Region {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.subvertex.len();
 
@@ -261,7 +264,7 @@ impl Region {
 
             instance.subvertex.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -276,6 +279,7 @@ impl Region {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.transition.contains(&ref_id) {
                 return Ok(false);
@@ -289,7 +293,7 @@ impl Region {
                 registry.insert(ref_id.clone(), "Transition", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -304,6 +308,7 @@ impl Region {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.transition.len();
             instance.transition.retain(|id| id != &ref_id);
@@ -318,7 +323,7 @@ impl Region {
                 registry.insert(ref_id.clone(), "Transition", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -329,6 +334,7 @@ impl Region {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.transition.len();
 
@@ -345,7 +351,7 @@ impl Region {
 
             instance.transition.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -360,6 +366,7 @@ impl Region {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.state {
                 if let Some(mut old_target) = registry.get::<State>(&old_ref_id) {
@@ -379,7 +386,7 @@ impl Region {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -390,6 +397,7 @@ impl Region {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.state.is_none() {
                 return Ok(false);
@@ -404,7 +412,7 @@ impl Region {
 
             instance.state = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -454,6 +462,7 @@ impl Region {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.state_machine {
                 if let Some(mut old_target) = registry.get::<StateMachine>(&old_ref_id) {
@@ -473,7 +482,7 @@ impl Region {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -487,6 +496,7 @@ impl Region {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.state_machine.is_none() {
                 return Ok(false);
@@ -501,7 +511,7 @@ impl Region {
 
             instance.state_machine = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })

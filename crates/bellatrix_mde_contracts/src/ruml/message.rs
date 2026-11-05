@@ -282,6 +282,7 @@ impl Message {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let old_ref_id = instance.interaction.clone();
             if let Some(mut old_target) = registry.get::<Interaction>(&old_ref_id) {
@@ -298,7 +299,7 @@ impl Message {
                 registry.insert(ref_id.clone(), "Interaction", &new_target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })

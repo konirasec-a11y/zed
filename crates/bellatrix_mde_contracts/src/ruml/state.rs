@@ -208,6 +208,7 @@ impl State {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.submachine {
                 if let Some(mut old_target) = registry.get::<StateMachine>(&old_ref_id) {
@@ -227,7 +228,7 @@ impl State {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -238,6 +239,7 @@ impl State {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.submachine.is_none() {
                 return Ok(false);
@@ -252,7 +254,7 @@ impl State {
 
             instance.submachine = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -267,6 +269,7 @@ impl State {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.connection.contains(&ref_id) {
                 return Ok(false);
@@ -280,7 +283,7 @@ impl State {
                 registry.insert(ref_id.clone(), "ConnectionPointReference", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -295,6 +298,7 @@ impl State {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.connection.len();
             instance.connection.retain(|id| id != &ref_id);
@@ -310,7 +314,7 @@ impl State {
                 registry.insert(ref_id.clone(), "ConnectionPointReference", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -321,6 +325,7 @@ impl State {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.connection.len();
 
@@ -338,7 +343,7 @@ impl State {
 
             instance.connection.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -353,6 +358,7 @@ impl State {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.connection_point.contains(&ref_id) {
                 return Ok(false);
@@ -366,7 +372,7 @@ impl State {
                 registry.insert(ref_id.clone(), "Pseudostate", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -381,6 +387,7 @@ impl State {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.connection_point.len();
             instance.connection_point.retain(|id| id != &ref_id);
@@ -396,7 +403,7 @@ impl State {
                 registry.insert(ref_id.clone(), "Pseudostate", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -410,6 +417,7 @@ impl State {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.connection_point.len();
 
@@ -427,7 +435,7 @@ impl State {
 
             instance.connection_point.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -671,6 +679,7 @@ impl State {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.region.contains(&ref_id) {
                 return Ok(false);
@@ -684,7 +693,7 @@ impl State {
                 registry.insert(ref_id.clone(), "Region", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -699,6 +708,7 @@ impl State {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.region.len();
             instance.region.retain(|id| id != &ref_id);
@@ -714,7 +724,7 @@ impl State {
                 registry.insert(ref_id.clone(), "Region", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -725,6 +735,7 @@ impl State {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.region.len();
 
@@ -742,7 +753,7 @@ impl State {
 
             instance.region.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })

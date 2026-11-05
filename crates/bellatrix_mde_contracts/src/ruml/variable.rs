@@ -205,6 +205,7 @@ impl Variable {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.scope {
                 if let Some(mut old_target) = registry.get::<StructuredActivityNode>(&old_ref_id) {
@@ -224,7 +225,7 @@ impl Variable {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -235,6 +236,7 @@ impl Variable {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.scope.is_none() {
                 return Ok(false);
@@ -249,7 +251,7 @@ impl Variable {
 
             instance.scope = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -264,6 +266,7 @@ impl Variable {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.activity_scope {
                 if let Some(mut old_target) = registry.get::<Activity>(&old_ref_id) {
@@ -283,7 +286,7 @@ impl Variable {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -297,6 +300,7 @@ impl Variable {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.activity_scope.is_none() {
                 return Ok(false);
@@ -311,7 +315,7 @@ impl Variable {
 
             instance.activity_scope = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })

@@ -160,6 +160,7 @@ impl TemplateSignature {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.owned_parameter.contains(&ref_id) {
                 return Ok(false);
@@ -173,7 +174,7 @@ impl TemplateSignature {
                 registry.insert(ref_id.clone(), "TemplateParameter", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -188,6 +189,7 @@ impl TemplateSignature {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.owned_parameter.len();
             instance.owned_parameter.retain(|id| id != &ref_id);
@@ -202,7 +204,7 @@ impl TemplateSignature {
                 registry.insert(ref_id.clone(), "TemplateParameter", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -216,6 +218,7 @@ impl TemplateSignature {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.owned_parameter.len();
 
@@ -232,7 +235,7 @@ impl TemplateSignature {
 
             instance.owned_parameter.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -247,6 +250,7 @@ impl TemplateSignature {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let old_ref_id = instance.template.clone();
             if let Some(mut old_target) = registry.get::<TemplateableElement>(&old_ref_id) {
@@ -261,7 +265,7 @@ impl TemplateSignature {
                 registry.insert(ref_id.clone(), "TemplateableElement", &new_target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })

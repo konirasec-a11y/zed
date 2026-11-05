@@ -157,6 +157,7 @@ impl GeneralOrdering {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let old_ref_id = instance.before.clone();
             if let Some(mut old_target) = registry.get::<OccurrenceSpecification>(&old_ref_id) {
@@ -173,7 +174,7 @@ impl GeneralOrdering {
                 registry.insert(ref_id.clone(), "OccurrenceSpecification", &new_target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -188,6 +189,7 @@ impl GeneralOrdering {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let old_ref_id = instance.after.clone();
             if let Some(mut old_target) = registry.get::<OccurrenceSpecification>(&old_ref_id) {
@@ -204,7 +206,7 @@ impl GeneralOrdering {
                 registry.insert(ref_id.clone(), "OccurrenceSpecification", &new_target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })

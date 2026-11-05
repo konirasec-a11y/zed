@@ -358,6 +358,7 @@ impl Component {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.realization.contains(&ref_id) {
                 return Ok(false);
@@ -371,7 +372,7 @@ impl Component {
                 registry.insert(ref_id.clone(), "ComponentRealization", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -386,6 +387,7 @@ impl Component {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.realization.len();
             instance.realization.retain(|id| id != &ref_id);
@@ -401,7 +403,7 @@ impl Component {
                 registry.insert(ref_id.clone(), "ComponentRealization", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -415,6 +417,7 @@ impl Component {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.realization.len();
 
@@ -432,7 +435,7 @@ impl Component {
 
             instance.realization.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })

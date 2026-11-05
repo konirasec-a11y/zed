@@ -148,6 +148,7 @@ impl Generalization {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.generalization_set.contains(&ref_id) {
                 return Ok(false);
@@ -163,7 +164,7 @@ impl Generalization {
                 registry.insert(ref_id.clone(), "GeneralizationSet", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -178,6 +179,7 @@ impl Generalization {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.generalization_set.len();
             instance.generalization_set.retain(|id| id != &ref_id);
@@ -193,7 +195,7 @@ impl Generalization {
                 registry.insert(ref_id.clone(), "GeneralizationSet", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -207,6 +209,7 @@ impl Generalization {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.generalization_set.len();
 
@@ -224,7 +227,7 @@ impl Generalization {
 
             instance.generalization_set.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -239,6 +242,7 @@ impl Generalization {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let old_ref_id = instance.specific.clone();
             if let Some(mut old_target) = registry.get::<Classifier>(&old_ref_id) {
@@ -255,7 +259,7 @@ impl Generalization {
                 registry.insert(ref_id.clone(), "Classifier", &new_target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })

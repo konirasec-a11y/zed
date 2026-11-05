@@ -147,6 +147,7 @@ impl NamedElement {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.client_dependency.contains(&ref_id) {
                 return Ok(false);
@@ -162,7 +163,7 @@ impl NamedElement {
                 registry.insert(ref_id.clone(), "Dependency", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -177,6 +178,7 @@ impl NamedElement {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.client_dependency.len();
             instance.client_dependency.retain(|id| id != &ref_id);
@@ -192,7 +194,7 @@ impl NamedElement {
                 registry.insert(ref_id.clone(), "Dependency", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -206,6 +208,7 @@ impl NamedElement {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.client_dependency.len();
 
@@ -223,7 +226,7 @@ impl NamedElement {
 
             instance.client_dependency.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })

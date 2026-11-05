@@ -322,6 +322,7 @@ impl ProtocolStateMachine {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.conformance.contains(&ref_id) {
                 return Ok(false);
@@ -335,7 +336,7 @@ impl ProtocolStateMachine {
                 registry.insert(ref_id.clone(), "ProtocolConformance", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -350,6 +351,7 @@ impl ProtocolStateMachine {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.conformance.len();
             instance.conformance.retain(|id| id != &ref_id);
@@ -364,7 +366,7 @@ impl ProtocolStateMachine {
                 registry.insert(ref_id.clone(), "ProtocolConformance", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -378,6 +380,7 @@ impl ProtocolStateMachine {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.conformance.len();
 
@@ -394,7 +397,7 @@ impl ProtocolStateMachine {
 
             instance.conformance.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })

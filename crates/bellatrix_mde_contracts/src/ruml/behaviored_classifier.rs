@@ -338,6 +338,7 @@ impl BehavioredClassifier {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.interface_realization.contains(&ref_id) {
                 return Ok(false);
@@ -351,7 +352,7 @@ impl BehavioredClassifier {
                 registry.insert(ref_id.clone(), "InterfaceRealization", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -366,6 +367,7 @@ impl BehavioredClassifier {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.interface_realization.len();
             instance.interface_realization.retain(|id| id != &ref_id);
@@ -380,7 +382,7 @@ impl BehavioredClassifier {
                 registry.insert(ref_id.clone(), "InterfaceRealization", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -394,6 +396,7 @@ impl BehavioredClassifier {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.interface_realization.len();
 
@@ -410,7 +413,7 @@ impl BehavioredClassifier {
 
             instance.interface_realization.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })

@@ -174,6 +174,7 @@ impl Pseudostate {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.state_machine {
                 if let Some(mut old_target) = registry.get::<StateMachine>(&old_ref_id) {
@@ -193,7 +194,7 @@ impl Pseudostate {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -207,6 +208,7 @@ impl Pseudostate {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.state_machine.is_none() {
                 return Ok(false);
@@ -221,7 +223,7 @@ impl Pseudostate {
 
             instance.state_machine = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -236,6 +238,7 @@ impl Pseudostate {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.state {
                 if let Some(mut old_target) = registry.get::<State>(&old_ref_id) {
@@ -255,7 +258,7 @@ impl Pseudostate {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -266,6 +269,7 @@ impl Pseudostate {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.state.is_none() {
                 return Ok(false);
@@ -280,7 +284,7 @@ impl Pseudostate {
 
             instance.state = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })

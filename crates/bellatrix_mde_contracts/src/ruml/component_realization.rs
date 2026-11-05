@@ -168,6 +168,7 @@ impl ComponentRealization {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.abstraction {
                 if let Some(mut old_target) = registry.get::<Component>(&old_ref_id) {
@@ -187,7 +188,7 @@ impl ComponentRealization {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -198,6 +199,7 @@ impl ComponentRealization {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.abstraction.is_none() {
                 return Ok(false);
@@ -212,7 +214,7 @@ impl ComponentRealization {
 
             instance.abstraction = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })

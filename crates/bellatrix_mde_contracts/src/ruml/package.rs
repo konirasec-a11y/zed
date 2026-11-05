@@ -178,6 +178,7 @@ impl Package {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.package_merge.contains(&ref_id) {
                 return Ok(false);
@@ -191,7 +192,7 @@ impl Package {
                 registry.insert(ref_id.clone(), "PackageMerge", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -206,6 +207,7 @@ impl Package {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.package_merge.len();
             instance.package_merge.retain(|id| id != &ref_id);
@@ -220,7 +222,7 @@ impl Package {
                 registry.insert(ref_id.clone(), "PackageMerge", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -234,6 +236,7 @@ impl Package {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.package_merge.len();
 
@@ -250,7 +253,7 @@ impl Package {
 
             instance.package_merge.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -328,6 +331,7 @@ impl Package {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.profile_application.contains(&ref_id) {
                 return Ok(false);
@@ -341,7 +345,7 @@ impl Package {
                 registry.insert(ref_id.clone(), "ProfileApplication", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -356,6 +360,7 @@ impl Package {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.profile_application.len();
             instance.profile_application.retain(|id| id != &ref_id);
@@ -370,7 +375,7 @@ impl Package {
                 registry.insert(ref_id.clone(), "ProfileApplication", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -384,6 +389,7 @@ impl Package {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.profile_application.len();
 
@@ -400,7 +406,7 @@ impl Package {
 
             instance.profile_application.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })

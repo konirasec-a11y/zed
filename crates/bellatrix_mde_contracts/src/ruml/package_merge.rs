@@ -116,6 +116,7 @@ impl PackageMerge {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let old_ref_id = instance.receiving_package.clone();
             if let Some(mut old_target) = registry.get::<Package>(&old_ref_id) {
@@ -132,7 +133,7 @@ impl PackageMerge {
                 registry.insert(ref_id.clone(), "Package", &new_target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })

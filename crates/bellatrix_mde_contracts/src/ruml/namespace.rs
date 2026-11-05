@@ -158,6 +158,7 @@ impl Namespace {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.element_import.contains(&ref_id) {
                 return Ok(false);
@@ -171,7 +172,7 @@ impl Namespace {
                 registry.insert(ref_id.clone(), "ElementImport", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -186,6 +187,7 @@ impl Namespace {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.element_import.len();
             instance.element_import.retain(|id| id != &ref_id);
@@ -200,7 +202,7 @@ impl Namespace {
                 registry.insert(ref_id.clone(), "ElementImport", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -214,6 +216,7 @@ impl Namespace {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.element_import.len();
 
@@ -230,7 +233,7 @@ impl Namespace {
 
             instance.element_import.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -245,6 +248,7 @@ impl Namespace {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.package_import.contains(&ref_id) {
                 return Ok(false);
@@ -258,7 +262,7 @@ impl Namespace {
                 registry.insert(ref_id.clone(), "PackageImport", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -273,6 +277,7 @@ impl Namespace {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.package_import.len();
             instance.package_import.retain(|id| id != &ref_id);
@@ -287,7 +292,7 @@ impl Namespace {
                 registry.insert(ref_id.clone(), "PackageImport", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -301,6 +306,7 @@ impl Namespace {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.package_import.len();
 
@@ -317,7 +323,7 @@ impl Namespace {
 
             instance.package_import.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -332,6 +338,7 @@ impl Namespace {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.owned_rule.contains(&ref_id) {
                 return Ok(false);
@@ -345,7 +352,7 @@ impl Namespace {
                 registry.insert(ref_id.clone(), "Constraint", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -360,6 +367,7 @@ impl Namespace {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.owned_rule.len();
             instance.owned_rule.retain(|id| id != &ref_id);
@@ -375,7 +383,7 @@ impl Namespace {
                 registry.insert(ref_id.clone(), "Constraint", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -386,6 +394,7 @@ impl Namespace {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.owned_rule.len();
 
@@ -403,7 +412,7 @@ impl Namespace {
 
             instance.owned_rule.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })

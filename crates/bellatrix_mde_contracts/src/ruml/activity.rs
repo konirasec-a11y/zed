@@ -359,6 +359,7 @@ impl Activity {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.variable.contains(&ref_id) {
                 return Ok(false);
@@ -372,7 +373,7 @@ impl Activity {
                 registry.insert(ref_id.clone(), "Variable", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -387,6 +388,7 @@ impl Activity {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.variable.len();
             instance.variable.retain(|id| id != &ref_id);
@@ -402,7 +404,7 @@ impl Activity {
                 registry.insert(ref_id.clone(), "Variable", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -413,6 +415,7 @@ impl Activity {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.variable.len();
 
@@ -430,7 +433,7 @@ impl Activity {
 
             instance.variable.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -445,6 +448,7 @@ impl Activity {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.node.contains(&ref_id) {
                 return Ok(false);
@@ -458,7 +462,7 @@ impl Activity {
                 registry.insert(ref_id.clone(), "ActivityNode", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -473,6 +477,7 @@ impl Activity {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.node.len();
             instance.node.retain(|id| id != &ref_id);
@@ -488,7 +493,7 @@ impl Activity {
                 registry.insert(ref_id.clone(), "ActivityNode", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -499,6 +504,7 @@ impl Activity {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.node.len();
 
@@ -516,7 +522,7 @@ impl Activity {
 
             instance.node.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -531,6 +537,7 @@ impl Activity {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.edge.contains(&ref_id) {
                 return Ok(false);
@@ -544,7 +551,7 @@ impl Activity {
                 registry.insert(ref_id.clone(), "ActivityEdge", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -559,6 +566,7 @@ impl Activity {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.edge.len();
             instance.edge.retain(|id| id != &ref_id);
@@ -574,7 +582,7 @@ impl Activity {
                 registry.insert(ref_id.clone(), "ActivityEdge", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -585,6 +593,7 @@ impl Activity {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.edge.len();
 
@@ -602,7 +611,7 @@ impl Activity {
 
             instance.edge.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -677,6 +686,7 @@ impl Activity {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.group.contains(&ref_id) {
                 return Ok(false);
@@ -690,7 +700,7 @@ impl Activity {
                 registry.insert(ref_id.clone(), "ActivityGroup", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -705,6 +715,7 @@ impl Activity {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.group.len();
             instance.group.retain(|id| id != &ref_id);
@@ -720,7 +731,7 @@ impl Activity {
                 registry.insert(ref_id.clone(), "ActivityGroup", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -731,6 +742,7 @@ impl Activity {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.group.len();
 
@@ -748,7 +760,7 @@ impl Activity {
 
             instance.group.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })

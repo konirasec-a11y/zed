@@ -622,6 +622,7 @@ impl Behavior {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.specification {
                 if let Some(mut old_target) = registry.get::<BehavioralFeature>(&old_ref_id) {
@@ -641,7 +642,7 @@ impl Behavior {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -655,6 +656,7 @@ impl Behavior {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.specification.is_none() {
                 return Ok(false);
@@ -669,7 +671,7 @@ impl Behavior {
 
             instance.specification = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })

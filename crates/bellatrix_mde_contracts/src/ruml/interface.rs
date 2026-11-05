@@ -309,6 +309,7 @@ impl Interface {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.owned_operation.contains(&ref_id) {
                 return Ok(false);
@@ -322,7 +323,7 @@ impl Interface {
                 registry.insert(ref_id.clone(), "Operation", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -337,6 +338,7 @@ impl Interface {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.owned_operation.len();
             instance.owned_operation.retain(|id| id != &ref_id);
@@ -352,7 +354,7 @@ impl Interface {
                 registry.insert(ref_id.clone(), "Operation", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -366,6 +368,7 @@ impl Interface {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.owned_operation.len();
 
@@ -383,7 +386,7 @@ impl Interface {
 
             instance.owned_operation.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })

@@ -187,6 +187,7 @@ impl ExecutableNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.handler.contains(&ref_id) {
                 return Ok(false);
@@ -200,7 +201,7 @@ impl ExecutableNode {
                 registry.insert(ref_id.clone(), "ExceptionHandler", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -215,6 +216,7 @@ impl ExecutableNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.handler.len();
             instance.handler.retain(|id| id != &ref_id);
@@ -229,7 +231,7 @@ impl ExecutableNode {
                 registry.insert(ref_id.clone(), "ExceptionHandler", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -240,6 +242,7 @@ impl ExecutableNode {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.handler.len();
 
@@ -256,7 +259,7 @@ impl ExecutableNode {
 
             instance.handler.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })

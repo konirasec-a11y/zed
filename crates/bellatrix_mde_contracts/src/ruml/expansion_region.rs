@@ -258,6 +258,7 @@ impl ExpansionRegion {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.input_element.contains(&ref_id) {
                 return Ok(false);
@@ -271,7 +272,7 @@ impl ExpansionRegion {
                 registry.insert(ref_id.clone(), "ExpansionNode", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -286,6 +287,7 @@ impl ExpansionRegion {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.input_element.len();
             instance.input_element.retain(|id| id != &ref_id);
@@ -301,7 +303,7 @@ impl ExpansionRegion {
                 registry.insert(ref_id.clone(), "ExpansionNode", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -315,6 +317,7 @@ impl ExpansionRegion {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.input_element.len();
 
@@ -332,7 +335,7 @@ impl ExpansionRegion {
 
             instance.input_element.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -347,6 +350,7 @@ impl ExpansionRegion {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.output_element.contains(&ref_id) {
                 return Ok(false);
@@ -360,7 +364,7 @@ impl ExpansionRegion {
                 registry.insert(ref_id.clone(), "ExpansionNode", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -375,6 +379,7 @@ impl ExpansionRegion {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.output_element.len();
             instance.output_element.retain(|id| id != &ref_id);
@@ -390,7 +395,7 @@ impl ExpansionRegion {
                 registry.insert(ref_id.clone(), "ExpansionNode", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -404,6 +409,7 @@ impl ExpansionRegion {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.output_element.len();
 
@@ -421,7 +427,7 @@ impl ExpansionRegion {
 
             instance.output_element.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })

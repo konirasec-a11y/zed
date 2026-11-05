@@ -241,6 +241,7 @@ impl Constraint {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.context {
                 if let Some(mut old_target) = registry.get::<Namespace>(&old_ref_id) {
@@ -260,7 +261,7 @@ impl Constraint {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -271,6 +272,7 @@ impl Constraint {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.context.is_none() {
                 return Ok(false);
@@ -285,7 +287,7 @@ impl Constraint {
 
             instance.context = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })

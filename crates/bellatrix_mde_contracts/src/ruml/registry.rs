@@ -197,6 +197,70 @@ impl Registry {
         self.insert_projected(id, contract)
     }
 
+    pub fn insert_changes<T: Serialize + ContractType>(
+        &mut self,
+        id: String,
+        type_name: &str,
+        original: &T,
+        instance: &T,
+    ) -> Result<(), String> {
+        if type_name != T::TYPE_NAME {
+            return Err(format!(
+                "Expected type {}, received {type_name}",
+                T::TYPE_NAME
+            ));
+        }
+        let original_data = serde_json::to_value(original).map_err(|error| error.to_string())?;
+        let proposed_data = serde_json::to_value(instance).map_err(|error| error.to_string())?;
+        let original_entry = RegistryEntry {
+            id: id.clone(),
+            contract: Contract::from_data(type_name, original_data)?,
+        };
+        let proposed_entry = RegistryEntry {
+            id: id.clone(),
+            contract: Contract::from_data(type_name, proposed_data)?,
+        };
+        original_entry.validate()?;
+        proposed_entry.validate()?;
+        let existing = self
+            .entries
+            .get(&id)
+            .ok_or_else(|| "Instance not found".to_owned())?;
+        if !type_matches(existing.type_name(), type_name) {
+            return Err(format!(
+                "Registry ID {id} has incompatible type {} for {type_name}",
+                existing.type_name()
+            ));
+        }
+
+        // Opposite-reference writes may already have changed this same identity.
+        // Only the source's edits may replace the current staged fields.
+        let mut data = existing.data()?;
+        let original_data = original_entry.data()?;
+        let proposed_data = proposed_entry.data()?;
+        let destination = data
+            .as_object_mut()
+            .ok_or_else(|| "Expected contract object".to_owned())?;
+        let original = original_data
+            .as_object()
+            .ok_or_else(|| "Expected original contract object".to_owned())?;
+        let proposed = proposed_data
+            .as_object()
+            .ok_or_else(|| "Expected changed contract object".to_owned())?;
+        for field in original.keys() {
+            if !proposed.contains_key(field) {
+                destination.remove(field);
+            }
+        }
+        for (field, value) in proposed {
+            if original.get(field) != Some(value) {
+                destination.insert(field.clone(), value.clone());
+            }
+        }
+        let contract = Contract::from_data(existing.type_name(), data)?;
+        self.insert_entry(RegistryEntry { id, contract })
+    }
+
     fn insert_projected(&mut self, id: String, contract: Contract) -> Result<(), String> {
         let proposed = RegistryEntry { id, contract };
         proposed.validate()?;

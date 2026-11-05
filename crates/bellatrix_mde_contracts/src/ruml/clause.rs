@@ -226,6 +226,7 @@ impl Clause {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.predecessor_clause.contains(&ref_id) {
                 return Ok(false);
@@ -241,7 +242,7 @@ impl Clause {
                 registry.insert(ref_id.clone(), "Clause", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -256,6 +257,7 @@ impl Clause {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.predecessor_clause.len();
             instance.predecessor_clause.retain(|id| id != &ref_id);
@@ -271,7 +273,7 @@ impl Clause {
                 registry.insert(ref_id.clone(), "Clause", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -285,6 +287,7 @@ impl Clause {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.predecessor_clause.len();
 
@@ -302,7 +305,7 @@ impl Clause {
 
             instance.predecessor_clause.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -317,6 +320,7 @@ impl Clause {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.successor_clause.contains(&ref_id) {
                 return Ok(false);
@@ -332,7 +336,7 @@ impl Clause {
                 registry.insert(ref_id.clone(), "Clause", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -347,6 +351,7 @@ impl Clause {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.successor_clause.len();
             instance.successor_clause.retain(|id| id != &ref_id);
@@ -362,7 +367,7 @@ impl Clause {
                 registry.insert(ref_id.clone(), "Clause", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -376,6 +381,7 @@ impl Clause {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.successor_clause.len();
 
@@ -393,7 +399,7 @@ impl Clause {
 
             instance.successor_clause.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })

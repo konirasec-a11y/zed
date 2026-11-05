@@ -130,6 +130,7 @@ impl PackageImport {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let old_ref_id = instance.importing_namespace.clone();
             if let Some(mut old_target) = registry.get::<Namespace>(&old_ref_id) {
@@ -146,7 +147,7 @@ impl PackageImport {
                 registry.insert(ref_id.clone(), "Namespace", &new_target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })

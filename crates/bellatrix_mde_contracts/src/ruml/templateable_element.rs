@@ -97,6 +97,7 @@ impl TemplateableElement {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.template_binding.contains(&ref_id) {
                 return Ok(false);
@@ -110,7 +111,7 @@ impl TemplateableElement {
                 registry.insert(ref_id.clone(), "TemplateBinding", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -125,6 +126,7 @@ impl TemplateableElement {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.template_binding.len();
             instance.template_binding.retain(|id| id != &ref_id);
@@ -139,7 +141,7 @@ impl TemplateableElement {
                 registry.insert(ref_id.clone(), "TemplateBinding", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -153,6 +155,7 @@ impl TemplateableElement {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.template_binding.len();
 
@@ -169,7 +172,7 @@ impl TemplateableElement {
 
             instance.template_binding.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -184,6 +187,7 @@ impl TemplateableElement {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.owned_template_signature {
                 if let Some(old_target) = registry.get::<TemplateSignature>(&old_ref_id) {
@@ -200,7 +204,7 @@ impl TemplateableElement {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -214,6 +218,7 @@ impl TemplateableElement {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.owned_template_signature.is_none() {
                 return Ok(false);
@@ -227,7 +232,7 @@ impl TemplateableElement {
 
             instance.owned_template_signature = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })

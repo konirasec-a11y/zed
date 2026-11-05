@@ -195,6 +195,7 @@ impl StringExpression {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.sub_expression.contains(&ref_id) {
                 return Ok(false);
@@ -208,7 +209,7 @@ impl StringExpression {
                 registry.insert(ref_id.clone(), "StringExpression", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -223,6 +224,7 @@ impl StringExpression {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.sub_expression.len();
             instance.sub_expression.retain(|id| id != &ref_id);
@@ -238,7 +240,7 @@ impl StringExpression {
                 registry.insert(ref_id.clone(), "StringExpression", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -252,6 +254,7 @@ impl StringExpression {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.sub_expression.len();
 
@@ -269,7 +272,7 @@ impl StringExpression {
 
             instance.sub_expression.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -284,6 +287,7 @@ impl StringExpression {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.owning_expression {
                 if let Some(mut old_target) = registry.get::<StringExpression>(&old_ref_id) {
@@ -303,7 +307,7 @@ impl StringExpression {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -317,6 +321,7 @@ impl StringExpression {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.owning_expression.is_none() {
                 return Ok(false);
@@ -331,7 +336,7 @@ impl StringExpression {
 
             instance.owning_expression = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })

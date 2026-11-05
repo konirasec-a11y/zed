@@ -202,6 +202,7 @@ impl ExceptionHandler {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let old_ref_id = instance.protected_node.clone();
             if let Some(mut old_target) = registry.get::<ExecutableNode>(&old_ref_id) {
@@ -218,7 +219,7 @@ impl ExceptionHandler {
                 registry.insert(ref_id.clone(), "ExecutableNode", &new_target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })

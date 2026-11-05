@@ -254,6 +254,7 @@ impl Association {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.owned_end.contains(&ref_id) {
                 return Ok(false);
@@ -267,7 +268,7 @@ impl Association {
                 registry.insert(ref_id.clone(), "Property", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -282,6 +283,7 @@ impl Association {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.owned_end.len();
             instance.owned_end.retain(|id| id != &ref_id);
@@ -297,7 +299,7 @@ impl Association {
                 registry.insert(ref_id.clone(), "Property", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -308,6 +310,7 @@ impl Association {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.owned_end.len();
 
@@ -325,7 +328,7 @@ impl Association {
 
             instance.owned_end.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -340,6 +343,7 @@ impl Association {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.member_end.contains(&ref_id) {
                 return Ok(false);
@@ -353,7 +357,7 @@ impl Association {
                 registry.insert(ref_id.clone(), "Property", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -368,6 +372,7 @@ impl Association {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.member_end.len();
             instance.member_end.retain(|id| id != &ref_id);
@@ -383,7 +388,7 @@ impl Association {
                 registry.insert(ref_id.clone(), "Property", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -394,6 +399,7 @@ impl Association {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.member_end.len();
 
@@ -411,7 +417,7 @@ impl Association {
 
             instance.member_end.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })

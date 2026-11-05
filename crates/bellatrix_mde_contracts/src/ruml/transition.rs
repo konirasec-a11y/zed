@@ -217,6 +217,7 @@ impl Transition {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let old_ref_id = instance.container.clone();
             if let Some(mut old_target) = registry.get::<Region>(&old_ref_id) {
@@ -233,7 +234,7 @@ impl Transition {
                 registry.insert(ref_id.clone(), "Region", &new_target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })

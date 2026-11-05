@@ -180,6 +180,11 @@ fn project_value(descriptor: &PropertyDescriptor, value: &Value) -> Value {
         }
         _ => None,
     };
+    if let (Some(Value::Number(number)), Some(original)) = (&converted, value.as_str()) {
+        if number.to_string() != original {
+            return value.clone();
+        }
+    }
     converted.unwrap_or_else(|| value.clone())
 }
 

@@ -255,6 +255,7 @@ impl UseCase {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.include.contains(&ref_id) {
                 return Ok(false);
@@ -268,7 +269,7 @@ impl UseCase {
                 registry.insert(ref_id.clone(), "Include", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -283,6 +284,7 @@ impl UseCase {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.include.len();
             instance.include.retain(|id| id != &ref_id);
@@ -297,7 +299,7 @@ impl UseCase {
                 registry.insert(ref_id.clone(), "Include", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -308,6 +310,7 @@ impl UseCase {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.include.len();
 
@@ -324,7 +327,7 @@ impl UseCase {
 
             instance.include.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -339,6 +342,7 @@ impl UseCase {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.extend.contains(&ref_id) {
                 return Ok(false);
@@ -352,7 +356,7 @@ impl UseCase {
                 registry.insert(ref_id.clone(), "Extend", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -367,6 +371,7 @@ impl UseCase {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.extend.len();
             instance.extend.retain(|id| id != &ref_id);
@@ -381,7 +386,7 @@ impl UseCase {
                 registry.insert(ref_id.clone(), "Extend", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -392,6 +397,7 @@ impl UseCase {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.extend.len();
 
@@ -408,7 +414,7 @@ impl UseCase {
 
             instance.extend.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -423,6 +429,7 @@ impl UseCase {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.extension_point.contains(&ref_id) {
                 return Ok(false);
@@ -436,7 +443,7 @@ impl UseCase {
                 registry.insert(ref_id.clone(), "ExtensionPoint", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -451,6 +458,7 @@ impl UseCase {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.extension_point.len();
             instance.extension_point.retain(|id| id != &ref_id);
@@ -465,7 +473,7 @@ impl UseCase {
                 registry.insert(ref_id.clone(), "ExtensionPoint", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -479,6 +487,7 @@ impl UseCase {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.extension_point.len();
 
@@ -495,7 +504,7 @@ impl UseCase {
 
             instance.extension_point.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -510,6 +519,7 @@ impl UseCase {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.subject.contains(&ref_id) {
                 return Ok(false);
@@ -525,7 +535,7 @@ impl UseCase {
                 registry.insert(ref_id.clone(), "Classifier", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -540,6 +550,7 @@ impl UseCase {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.subject.len();
             instance.subject.retain(|id| id != &ref_id);
@@ -555,7 +566,7 @@ impl UseCase {
                 registry.insert(ref_id.clone(), "Classifier", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -566,6 +577,7 @@ impl UseCase {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.subject.len();
 
@@ -583,7 +595,7 @@ impl UseCase {
 
             instance.subject.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })

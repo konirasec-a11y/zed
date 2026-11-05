@@ -100,6 +100,7 @@ impl InterruptibleActivityRegion {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.node.contains(&ref_id) {
                 return Ok(false);
@@ -115,7 +116,7 @@ impl InterruptibleActivityRegion {
                 registry.insert(ref_id.clone(), "ActivityNode", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -130,6 +131,7 @@ impl InterruptibleActivityRegion {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.node.len();
             instance.node.retain(|id| id != &ref_id);
@@ -147,7 +149,7 @@ impl InterruptibleActivityRegion {
                 registry.insert(ref_id.clone(), "ActivityNode", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -158,6 +160,7 @@ impl InterruptibleActivityRegion {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.node.len();
 
@@ -177,7 +180,7 @@ impl InterruptibleActivityRegion {
 
             instance.node.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -192,6 +195,7 @@ impl InterruptibleActivityRegion {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.interrupting_edge.contains(&ref_id) {
                 return Ok(false);
@@ -205,7 +209,7 @@ impl InterruptibleActivityRegion {
                 registry.insert(ref_id.clone(), "ActivityEdge", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -220,6 +224,7 @@ impl InterruptibleActivityRegion {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.interrupting_edge.len();
             instance.interrupting_edge.retain(|id| id != &ref_id);
@@ -235,7 +240,7 @@ impl InterruptibleActivityRegion {
                 registry.insert(ref_id.clone(), "ActivityEdge", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -249,6 +254,7 @@ impl InterruptibleActivityRegion {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.interrupting_edge.len();
 
@@ -266,7 +272,7 @@ impl InterruptibleActivityRegion {
 
             instance.interrupting_edge.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })

@@ -168,6 +168,7 @@ impl OccurrenceSpecification {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.to_before.contains(&ref_id) {
                 return Ok(false);
@@ -181,7 +182,7 @@ impl OccurrenceSpecification {
                 registry.insert(ref_id.clone(), "GeneralOrdering", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -196,6 +197,7 @@ impl OccurrenceSpecification {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.to_before.len();
             instance.to_before.retain(|id| id != &ref_id);
@@ -210,7 +212,7 @@ impl OccurrenceSpecification {
                 registry.insert(ref_id.clone(), "GeneralOrdering", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -221,6 +223,7 @@ impl OccurrenceSpecification {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.to_before.len();
 
@@ -237,7 +240,7 @@ impl OccurrenceSpecification {
 
             instance.to_before.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -268,6 +271,7 @@ impl OccurrenceSpecification {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.to_after.contains(&ref_id) {
                 return Ok(false);
@@ -281,7 +285,7 @@ impl OccurrenceSpecification {
                 registry.insert(ref_id.clone(), "GeneralOrdering", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -296,6 +300,7 @@ impl OccurrenceSpecification {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.to_after.len();
             instance.to_after.retain(|id| id != &ref_id);
@@ -310,7 +315,7 @@ impl OccurrenceSpecification {
                 registry.insert(ref_id.clone(), "GeneralOrdering", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -321,6 +326,7 @@ impl OccurrenceSpecification {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.to_after.len();
 
@@ -337,7 +343,7 @@ impl OccurrenceSpecification {
 
             instance.to_after.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })

@@ -120,6 +120,7 @@ impl TemplateBinding {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.parameter_substitution.contains(&ref_id) {
                 return Ok(false);
@@ -133,7 +134,7 @@ impl TemplateBinding {
                 registry.insert(ref_id.clone(), "TemplateParameterSubstitution", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -148,6 +149,7 @@ impl TemplateBinding {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.parameter_substitution.len();
             instance.parameter_substitution.retain(|id| id != &ref_id);
@@ -162,7 +164,7 @@ impl TemplateBinding {
                 registry.insert(ref_id.clone(), "TemplateParameterSubstitution", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -176,6 +178,7 @@ impl TemplateBinding {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.parameter_substitution.len();
 
@@ -192,7 +195,7 @@ impl TemplateBinding {
 
             instance.parameter_substitution.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -207,6 +210,7 @@ impl TemplateBinding {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let old_ref_id = instance.bound_element.clone();
             if let Some(mut old_target) = registry.get::<TemplateableElement>(&old_ref_id) {
@@ -223,7 +227,7 @@ impl TemplateBinding {
                 registry.insert(ref_id.clone(), "TemplateableElement", &new_target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })

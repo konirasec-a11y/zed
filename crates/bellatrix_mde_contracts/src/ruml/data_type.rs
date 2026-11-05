@@ -235,6 +235,7 @@ impl DataType {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.owned_attribute.contains(&ref_id) {
                 return Ok(false);
@@ -248,7 +249,7 @@ impl DataType {
                 registry.insert(ref_id.clone(), "Property", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -263,6 +264,7 @@ impl DataType {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.owned_attribute.len();
             instance.owned_attribute.retain(|id| id != &ref_id);
@@ -278,7 +280,7 @@ impl DataType {
                 registry.insert(ref_id.clone(), "Property", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -292,6 +294,7 @@ impl DataType {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.owned_attribute.len();
 
@@ -309,7 +312,7 @@ impl DataType {
 
             instance.owned_attribute.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -324,6 +327,7 @@ impl DataType {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.owned_operation.contains(&ref_id) {
                 return Ok(false);
@@ -337,7 +341,7 @@ impl DataType {
                 registry.insert(ref_id.clone(), "Operation", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -352,6 +356,7 @@ impl DataType {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.owned_operation.len();
             instance.owned_operation.retain(|id| id != &ref_id);
@@ -367,7 +372,7 @@ impl DataType {
                 registry.insert(ref_id.clone(), "Operation", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -381,6 +386,7 @@ impl DataType {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.owned_operation.len();
 
@@ -398,7 +404,7 @@ impl DataType {
 
             instance.owned_operation.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })

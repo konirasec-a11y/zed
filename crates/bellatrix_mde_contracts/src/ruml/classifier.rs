@@ -231,6 +231,7 @@ impl Classifier {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.generalization.contains(&ref_id) {
                 return Ok(false);
@@ -244,7 +245,7 @@ impl Classifier {
                 registry.insert(ref_id.clone(), "Generalization", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -259,6 +260,7 @@ impl Classifier {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.generalization.len();
             instance.generalization.retain(|id| id != &ref_id);
@@ -273,7 +275,7 @@ impl Classifier {
                 registry.insert(ref_id.clone(), "Generalization", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -287,6 +289,7 @@ impl Classifier {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.generalization.len();
 
@@ -303,7 +306,7 @@ impl Classifier {
 
             instance.generalization.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -318,6 +321,7 @@ impl Classifier {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.powertype_extent.contains(&ref_id) {
                 return Ok(false);
@@ -331,7 +335,7 @@ impl Classifier {
                 registry.insert(ref_id.clone(), "GeneralizationSet", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -346,6 +350,7 @@ impl Classifier {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.powertype_extent.len();
             instance.powertype_extent.retain(|id| id != &ref_id);
@@ -361,7 +366,7 @@ impl Classifier {
                 registry.insert(ref_id.clone(), "GeneralizationSet", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -375,6 +380,7 @@ impl Classifier {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.powertype_extent.len();
 
@@ -392,7 +398,7 @@ impl Classifier {
 
             instance.powertype_extent.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -470,6 +476,7 @@ impl Classifier {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.substitution.contains(&ref_id) {
                 return Ok(false);
@@ -483,7 +490,7 @@ impl Classifier {
                 registry.insert(ref_id.clone(), "Substitution", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -498,6 +505,7 @@ impl Classifier {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.substitution.len();
             instance.substitution.retain(|id| id != &ref_id);
@@ -512,7 +520,7 @@ impl Classifier {
                 registry.insert(ref_id.clone(), "Substitution", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -526,6 +534,7 @@ impl Classifier {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.substitution.len();
 
@@ -542,7 +551,7 @@ impl Classifier {
 
             instance.substitution.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -718,6 +727,7 @@ impl Classifier {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.use_case.contains(&ref_id) {
                 return Ok(false);
@@ -733,7 +743,7 @@ impl Classifier {
                 registry.insert(ref_id.clone(), "UseCase", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -748,6 +758,7 @@ impl Classifier {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.use_case.len();
             instance.use_case.retain(|id| id != &ref_id);
@@ -763,7 +774,7 @@ impl Classifier {
                 registry.insert(ref_id.clone(), "UseCase", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -774,6 +785,7 @@ impl Classifier {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.use_case.len();
 
@@ -791,7 +803,7 @@ impl Classifier {
 
             instance.use_case.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })

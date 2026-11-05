@@ -150,6 +150,7 @@ impl Vertex {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.container {
                 if let Some(mut old_target) = registry.get::<Region>(&old_ref_id) {
@@ -169,7 +170,7 @@ impl Vertex {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -180,6 +181,7 @@ impl Vertex {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.container.is_none() {
                 return Ok(false);
@@ -194,7 +196,7 @@ impl Vertex {
 
             instance.container = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })

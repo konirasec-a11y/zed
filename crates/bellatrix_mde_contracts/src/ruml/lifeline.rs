@@ -195,6 +195,7 @@ impl Lifeline {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let old_ref_id = instance.interaction.clone();
             if let Some(mut old_target) = registry.get::<Interaction>(&old_ref_id) {
@@ -211,7 +212,7 @@ impl Lifeline {
                 registry.insert(ref_id.clone(), "Interaction", &new_target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -293,6 +294,7 @@ impl Lifeline {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.covered_by.contains(&ref_id) {
                 return Ok(false);
@@ -308,7 +310,7 @@ impl Lifeline {
                 registry.insert(ref_id.clone(), "InteractionFragment", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -323,6 +325,7 @@ impl Lifeline {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.covered_by.len();
             instance.covered_by.retain(|id| id != &ref_id);
@@ -338,7 +341,7 @@ impl Lifeline {
                 registry.insert(ref_id.clone(), "InteractionFragment", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -349,6 +352,7 @@ impl Lifeline {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.covered_by.len();
 
@@ -366,7 +370,7 @@ impl Lifeline {
 
             instance.covered_by.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })

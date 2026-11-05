@@ -93,6 +93,7 @@ impl ActivityGroup {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.in_activity {
                 if let Some(mut old_target) = registry.get::<Activity>(&old_ref_id) {
@@ -112,7 +113,7 @@ impl ActivityGroup {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -123,6 +124,7 @@ impl ActivityGroup {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.in_activity.is_none() {
                 return Ok(false);
@@ -137,7 +139,7 @@ impl ActivityGroup {
 
             instance.in_activity = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })

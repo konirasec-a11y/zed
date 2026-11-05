@@ -232,6 +232,7 @@ impl Deployment {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.configuration.contains(&ref_id) {
                 return Ok(false);
@@ -245,7 +246,7 @@ impl Deployment {
                 registry.insert(ref_id.clone(), "DeploymentSpecification", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -260,6 +261,7 @@ impl Deployment {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.configuration.len();
             instance.configuration.retain(|id| id != &ref_id);
@@ -275,7 +277,7 @@ impl Deployment {
                 registry.insert(ref_id.clone(), "DeploymentSpecification", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -289,6 +291,7 @@ impl Deployment {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.configuration.len();
 
@@ -306,7 +309,7 @@ impl Deployment {
 
             instance.configuration.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })
@@ -321,6 +324,7 @@ impl Deployment {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let old_ref_id = instance.location.clone();
             if let Some(mut old_target) = registry.get::<DeploymentTarget>(&old_ref_id) {
@@ -337,7 +341,7 @@ impl Deployment {
                 registry.insert(ref_id.clone(), "DeploymentTarget", &new_target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })

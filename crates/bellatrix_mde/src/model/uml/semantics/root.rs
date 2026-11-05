@@ -675,11 +675,10 @@ pub(crate) fn set_owner(
             Err("The relationship's specialized source determines its owner".into())
         };
     }
-    if ownership_property(owner, element).is_none() {
-        return Err(
-            "This owner/element pair has no supported UML composite ownership property".into(),
-        );
-    }
+    let role = ownership_property(owner, element)
+        .ok_or("This owner/element pair has no supported UML composite ownership property")?;
+    let inverse_fields = ownership_inverse_fields(owner, element, role);
+    let metaclass = element.metaclass().ok_or("UML metaclass is missing")?;
     if let Some(previous) = model.owner(element)? {
         return if previous.id() == owner_id {
             Ok(())
@@ -693,8 +692,17 @@ pub(crate) fn set_owner(
         kind: "owns".into(),
         from: owner_id.into(),
         to: element_id.into(),
-        properties: Default::default(),
+        properties: std::collections::BTreeMap::from([("role".into(), Value::String(role.into()))]),
     });
+    synchronize_owner_inverses(
+        section,
+        element_id,
+        metaclass,
+        None,
+        &[],
+        Some(owner_id),
+        &inverse_fields,
+    )?;
     Ok(())
 }
 
@@ -772,6 +780,15 @@ pub(crate) fn reparent(
 ) -> Result<(), String> {
     let model = Model::from_section(section);
     let element = model.element(element_id).ok_or("UML element not found")?;
+    let metaclass = element.metaclass().ok_or("UML metaclass is missing")?;
+    let previous_owner = model.owner(element)?;
+    let previous_role = previous_owner.and_then(|owner| ownership_property(owner, element));
+    let previous_inverse_fields = match (previous_owner, previous_role) {
+        (Some(owner), Some(role)) => ownership_inverse_fields(owner, element, role),
+        _ => Vec::new(),
+    };
+    let previous_owner_id = previous_owner.map(|owner| owner.id().to_owned());
+    let mut next_inverse_fields = Vec::new();
     if let Some(slot) = element.slot() {
         let owner = owner_id
             .and_then(|identifier| model.element(identifier))
@@ -779,9 +796,6 @@ pub(crate) fn reparent(
             .ok_or("Slot owningInstance requires an existing InstanceSpecification")?;
         super::instances::validate_assignment(slot, owner, model)
             .map_err(|error| error.to_string())?;
-        // Adapted from RUML Slot::set_owning_instance (pinned provenance in instances.rs).
-        // Replacing this edge below simultaneously detaches the old inverse and attaches
-        // the new one; neither InstanceSpecification::slot nor owningInstance is stored twice.
     }
     if let ElementRef::Relationship(relation) = element
         && matches!(
@@ -805,17 +819,18 @@ pub(crate) fn reparent(
         if owner.metaclass().is_none() {
             return Err("UML ownership requires a supported owner metaclass".into());
         }
-        if ownership_property(owner, element).is_none() {
-            return Err(
-                "This owner/element pair has no supported UML composite ownership property".into(),
-            );
-        }
+        let role = ownership_property(owner, element)
+            .ok_or("This owner/element pair has no supported UML composite ownership property")?;
+        next_inverse_fields = ownership_inverse_fields(owner, element, role);
         if let Some(ownership) = section
             .relations
             .iter_mut()
             .find(|relation| relation.kind == "owns" && relation.to == element_id)
         {
             ownership.from = owner_id.into();
+            ownership
+                .properties
+                .insert("role".into(), Value::String(role.into()));
         } else {
             set_owner(section, project_id, element_id, owner_id)?;
         }
@@ -826,6 +841,102 @@ pub(crate) fn reparent(
         section
             .relations
             .retain(|relation| relation.kind != "owns" || relation.to != element_id);
+    }
+    synchronize_owner_inverses(
+        section,
+        element_id,
+        metaclass,
+        previous_owner_id.as_deref(),
+        &previous_inverse_fields,
+        owner_id,
+        &next_inverse_fields,
+    )?;
+    Ok(())
+}
+
+fn ownership_inverse_fields(
+    owner: ElementRef<'_>,
+    child: ElementRef<'_>,
+    role: &str,
+) -> Vec<&'static str> {
+    let Some(owner_type) = owner.metaclass() else {
+        return Vec::new();
+    };
+    let Some(child_type) = child.metaclass() else {
+        return Vec::new();
+    };
+    let Ok(Some(property)) = super::schema::uml_property(owner_type, role) else {
+        return Vec::new();
+    };
+    property
+        .opposites
+        .iter()
+        .filter_map(|reference| reference.target)
+        .filter_map(super::schema::property_by_id)
+        .map(|property| property.name)
+        .filter(|name| {
+            crate::contract_edits::field_shape(child_type, name)
+                .ok()
+                .flatten()
+                .is_some()
+        })
+        .collect()
+}
+
+fn synchronize_owner_inverses(
+    section: &mut ModelingSection,
+    element_id: &str,
+    metaclass: &str,
+    previous_owner: Option<&str>,
+    previous_fields: &[&str],
+    next_owner: Option<&str>,
+    next_fields: &[&str],
+) -> Result<(), String> {
+    let properties = if let Some(element) = section
+        .elements
+        .iter_mut()
+        .find(|element| element.id == element_id)
+    {
+        &mut element.properties
+    } else {
+        &mut section
+            .relations
+            .iter_mut()
+            .find(|relation| relation.id == element_id)
+            .ok_or("UML element not found")?
+            .properties
+    };
+    for field in previous_fields {
+        if crate::contract_edits::field_shape(metaclass, field)? == Some("v") {
+            if let Some(values) = properties.get_mut(*field).and_then(Value::as_array_mut) {
+                values.retain(|value| {
+                    value
+                        .get("$ref")
+                        .and_then(Value::as_str)
+                        .or_else(|| value.as_str())
+                        != previous_owner
+                });
+            }
+        } else if !next_fields.contains(field) {
+            properties.remove(*field);
+        }
+    }
+    if let Some(owner) = next_owner {
+        for field in next_fields {
+            let value = serde_json::json!({"$ref": owner});
+            if crate::contract_edits::field_shape(metaclass, field)? == Some("v") {
+                let values = properties
+                    .entry((*field).into())
+                    .or_insert_with(|| Value::Array(Vec::new()))
+                    .as_array_mut()
+                    .ok_or("inverse field is not a collection")?;
+                if !values.contains(&value) {
+                    values.push(value);
+                }
+            } else {
+                properties.insert((*field).into(), value);
+            }
+        }
     }
     Ok(())
 }

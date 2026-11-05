@@ -237,6 +237,7 @@ impl Enumeration {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.owned_literal.contains(&ref_id) {
                 return Ok(false);
@@ -250,7 +251,7 @@ impl Enumeration {
                 registry.insert(ref_id.clone(), "EnumerationLiteral", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -265,6 +266,7 @@ impl Enumeration {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.owned_literal.len();
             instance.owned_literal.retain(|id| id != &ref_id);
@@ -280,7 +282,7 @@ impl Enumeration {
                 registry.insert(ref_id.clone(), "EnumerationLiteral", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -294,6 +296,7 @@ impl Enumeration {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.owned_literal.len();
 
@@ -311,7 +314,7 @@ impl Enumeration {
 
             instance.owned_literal.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })

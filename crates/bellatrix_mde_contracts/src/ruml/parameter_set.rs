@@ -153,6 +153,7 @@ impl ParameterSet {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.parameter.contains(&ref_id) {
                 return Ok(false);
@@ -168,7 +169,7 @@ impl ParameterSet {
                 registry.insert(ref_id.clone(), "Parameter", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -183,6 +184,7 @@ impl ParameterSet {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let initial_len = instance.parameter.len();
             instance.parameter.retain(|id| id != &ref_id);
@@ -198,7 +200,7 @@ impl ParameterSet {
                 registry.insert(ref_id.clone(), "Parameter", &target)?;
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -209,6 +211,7 @@ impl ParameterSet {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             let count = instance.parameter.len();
 
@@ -226,7 +229,7 @@ impl ParameterSet {
 
             instance.parameter.clear();
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(count)
         })

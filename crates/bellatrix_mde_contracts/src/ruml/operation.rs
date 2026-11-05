@@ -291,6 +291,7 @@ impl Operation {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.interface {
                 if let Some(mut old_target) = registry.get::<Interface>(&old_ref_id) {
@@ -310,7 +311,7 @@ impl Operation {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -321,6 +322,7 @@ impl Operation {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.interface.is_none() {
                 return Ok(false);
@@ -335,7 +337,7 @@ impl Operation {
 
             instance.interface = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -350,6 +352,7 @@ impl Operation {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.class {
                 if let Some(mut old_target) = registry.get::<Class>(&old_ref_id) {
@@ -369,7 +372,7 @@ impl Operation {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -380,6 +383,7 @@ impl Operation {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.class.is_none() {
                 return Ok(false);
@@ -394,7 +398,7 @@ impl Operation {
 
             instance.class = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
@@ -598,6 +602,7 @@ impl Operation {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.datatype {
                 if let Some(mut old_target) = registry.get::<DataType>(&old_ref_id) {
@@ -617,7 +622,7 @@ impl Operation {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -628,6 +633,7 @@ impl Operation {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.datatype.is_none() {
                 return Ok(false);
@@ -642,7 +648,7 @@ impl Operation {
 
             instance.datatype = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })

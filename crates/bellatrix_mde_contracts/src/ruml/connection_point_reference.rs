@@ -279,6 +279,7 @@ impl ConnectionPointReference {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if let Some(old_ref_id) = &instance.state {
                 if let Some(mut old_target) = registry.get::<State>(&old_ref_id) {
@@ -298,7 +299,7 @@ impl ConnectionPointReference {
                 }
             }
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(())
         })
@@ -309,6 +310,7 @@ impl ConnectionPointReference {
             let mut instance: Self = registry
                 .get(&instance_id)
                 .ok_or_else(|| String::from("Instance not found"))?;
+            let original = instance.clone();
 
             if instance.state.is_none() {
                 return Ok(false);
@@ -323,7 +325,7 @@ impl ConnectionPointReference {
 
             instance.state = None;
 
-            registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert_changes(instance_id, TYPE_NAME, &original, &instance)?;
 
             Ok(true)
         })
