@@ -131,8 +131,10 @@ pub fn prepare_model_document(
     crate::Graph::new(&model)
         .validate_presentation()
         .map_err(|error| error.to_string())?;
-    let section =
-        crate::contract_document::store_section(&crate::ModelingSection::from_model(&model))?;
+    let section = crate::contract_document::store_section(
+        &crate::ModelingSection::from_model(&model),
+        &model.id,
+    )?;
     let section_json = serde_json::to_string(&section).map_err(|error| error.to_string())?;
     Ok(bellatrix_mde_contracts::protocol::ModelDocumentParts {
         id: model.id,

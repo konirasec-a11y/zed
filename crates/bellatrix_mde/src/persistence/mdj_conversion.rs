@@ -62,11 +62,11 @@ pub fn export(project: &Project) -> Result<Vec<u8>, MdjError> {
         return Ok(provenance.source_bytes_for_verification().to_vec());
     }
     let original_index = mdj::Index::new(&original)?;
-    let document = export_document(project, &original_index)?;
+    let document = export_document(project, &original_import.project, &original_index)?;
     // Reimport the actual result, not a digest supplied by the persisted source.
     // This also rejects edits to contract fields with no inverse MDJ mapping.
     let (reimported, residuals, paths) = project_document(&document)?;
-    let expected = metadata_after_export(project);
+    let expected = metadata_after_export(project, &original_import.project);
     if !equivalent(&expected, &reimported.project, &residuals, &paths) {
         return Err(failure(
             "",
@@ -141,17 +141,10 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
             diagnostics.push(Diagnostic { path: object.path.clone(), message: format!("{} presentation imported with its owned views; model semantics and diagram context are not inferred from canvas contents", object.type_name) });
         }
     }
-    let association_ids = associations::import_associations(
-        &index,
-        &mut project,
-        &mut residuals,
-        &paths,
-        &mut diagnostics,
-    );
+    // The old association adapter relies on flattened multiplicity and
+    // endpoint fields absent from ruml. Keep that encoding opaque until both
+    // directions can be represented without inventing ValueSpecifications.
     for object in objects {
-        if association_ids.contains(object.id) {
-            continue;
-        }
         if view_ids.contains(object.id)
             || (is_diagram(object.type_name) && !in_view_composition(&object.path))
         {
@@ -203,7 +196,11 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
             let properties = if mapped_kind.is_some() {
                 members::import_properties(object.type_name, &mut residue, &mut mapped_fields)
             } else {
-                std::mem::take(&mut residue)
+                residue = extract_residue(object.properties);
+                mapped_fields.clear();
+                let mut properties = residue.clone();
+                properties.remove("name");
+                properties
             };
             project.elements.push(Element {
                 id: object.id.into(),
@@ -219,6 +216,19 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
                 implementations: Vec::new(),
                 content: None,
             });
+            if mapped_kind.is_some() {
+                let opaque_fields = members::fields(object.type_name)
+                    .iter()
+                    .filter(|field| residue.contains_key(**field))
+                    .copied()
+                    .collect::<Vec<_>>();
+                if !opaque_fields.is_empty() {
+                    diagnostics.push(Diagnostic {
+                        path: object.path.clone(),
+                        message: format!("source declarations retained opaquely, without asserting canonical values: {}", opaque_fields.join(", ")),
+                    });
+                }
+            }
             diagnostics.push(Diagnostic {
                 path: object.path.clone(),
                 message: if mapped_kind.is_some() {
@@ -283,10 +293,18 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
     erd_projection::bind(&index, &mut project);
     view_projection::bind_markers(&index, &mut project, &mut diagnostics);
     native::normalize(&mut project, &mut diagnostics);
+    project.mdj_provenance = Some(MdjProvenance::capture(
+        serde_json::to_vec(document)?,
+        PROJECTION_VERSION,
+        &Value::Null,
+        paths.clone(),
+        residuals.clone(),
+    )?);
     let stored = crate::contract_document::store_document(&project)
         .map_err(|error| failure("", format!("UML contract conversion: {error}")))?;
-    let project = crate::contract_document::project_document(stored)
+    let mut project = crate::contract_document::project_document(stored)
         .map_err(|error| failure("", format!("UML contract projection: {error}")))?;
+    project.mdj_provenance = None;
     Ok((
         Import {
             project,
@@ -526,7 +544,7 @@ fn equivalent(current: &Project, imported: &Project, residuals: &Residuals, path
     }
 }
 
-fn metadata_after_export(project: &Project) -> Project {
+fn metadata_after_export(project: &Project, original: &Project) -> Project {
     let mut expected = project.clone();
     for diagram in &mut expected.diagrams {
         style_projection::update_inheritance_metadata(&mut diagram.views);
@@ -542,6 +560,9 @@ fn metadata_after_export(project: &Project) -> Project {
         }
         for element in &project.elements {
             if let Some(metadata) = provenance.object_residuals.get_mut(&element.id) {
+                if element.kind.starts_with("mdj.") {
+                    continue;
+                }
                 if !element.name.is_empty() {
                     metadata.mapped_fields.insert("name".into());
                 }
@@ -552,7 +573,29 @@ fn metadata_after_export(project: &Project) -> Project {
                         metadata.type_name = kind.into();
                     }
                     if metadata.mapped_fields.contains("_type") {
-                        members::update_metadata(element, metadata);
+                        if element.description.is_some() {
+                            metadata.mapped_fields.insert("documentation".into());
+                        } else {
+                            metadata.mapped_fields.remove("documentation");
+                        }
+                        let baseline = original
+                            .elements
+                            .iter()
+                            .find(|value| value.id == element.id);
+                        for field in members::fields(&metadata.type_name) {
+                            if metadata.residual.contains_key(*field) {
+                                continue;
+                            }
+                            let value = element.properties.get(*field);
+                            if value != baseline.and_then(|element| element.properties.get(*field))
+                            {
+                                if value.is_some() {
+                                    metadata.mapped_fields.insert((*field).into());
+                                } else {
+                                    metadata.mapped_fields.remove(*field);
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -569,7 +612,11 @@ fn metadata_after_export(project: &Project) -> Project {
     expected
 }
 
-fn export_document(project: &Project, original: &mdj::Index<'_>) -> Result<Value, MdjError> {
+fn export_document(
+    project: &Project,
+    baseline: &Project,
+    original: &mdj::Index<'_>,
+) -> Result<Value, MdjError> {
     let provenance = project
         .mdj_provenance
         .as_ref()
@@ -611,11 +658,14 @@ fn export_document(project: &Project, original: &mdj::Index<'_>) -> Result<Value
                 "changing between opaque MDJ and canonical UML objects is not supported",
             ));
         }
-        let mut residual = if canonical {
-            metadata.residual.clone()
-        } else {
-            element.properties.clone()
-        };
+        if !canonical {
+            objects.insert(
+                element.id.clone(),
+                Value::Object(base_object(&element.id, kind, &metadata.residual)?),
+            );
+            continue;
+        }
+        let mut residual = metadata.residual.clone();
         if canonical {
             if let Some(documentation) = &element.description {
                 if residual
@@ -628,17 +678,28 @@ fn export_document(project: &Project, original: &mdj::Index<'_>) -> Result<Value
                     ));
                 }
             }
+            let baseline = baseline
+                .elements
+                .iter()
+                .find(|value| value.id == element.id);
             for (field, value) in &element.properties {
-                if !supported_semantic_property(kind, field, value) {
+                if field == "name" {
+                    continue;
+                }
+                let unchanged =
+                    baseline.and_then(|element| element.properties.get(field)) == Some(value);
+                // Registry projections include optional fields and official
+                // defaults that were never authored in the interchange source.
+                if unchanged && !metadata.mapped_fields.contains(field) {
+                    continue;
+                }
+                if !supported_semantic_property(kind, field, value)
+                    || metadata.residual.contains_key(field)
+                {
                     return Err(failure(
                         "",
-                        "canonical UML property has no lossless MDJ mapping",
+                        format!("canonical UML property {field} has no lossless MDJ mapping"),
                     ));
-                }
-                if !metadata.mapped_fields.contains(field)
-                    && members::preserves_omitted_default(kind, field, value)
-                {
-                    continue;
                 }
                 if residual.insert(field.clone(), value.clone()).is_some() {
                     return Err(failure(
@@ -649,11 +710,10 @@ fn export_document(project: &Project, original: &mdj::Index<'_>) -> Result<Value
             }
         }
         if canonical && metadata.mapped_fields.contains("_parent") {
-            let relation_id = ownership_relation_id(&element.id, &provenance.object_paths);
             let ownership = project
                 .relations
                 .iter()
-                .find(|relation| relation.id == relation_id)
+                .find(|relation| relation.kind == "owns" && relation.to == element.id)
                 .ok_or_else(|| failure("", "mapped MDJ ownership is missing"))?;
             if ownership.kind != "owns"
                 || ownership.to != element.id
@@ -962,7 +1022,7 @@ fn mdj_kind(kind: &str) -> Option<&str> {
         "uml.package" => Some("UMLPackage"),
         "uml.class" => Some("UMLClass"),
         "uml.interface" => Some("UMLInterface"),
-        "uml.attribute" => Some("UMLAttribute"),
+        "uml.attribute" | "uml.property" => Some("UMLAttribute"),
         "uml.operation" => Some("UMLOperation"),
         "uml.parameter" => Some("UMLParameter"),
         _ => kind.strip_prefix("mdj."),

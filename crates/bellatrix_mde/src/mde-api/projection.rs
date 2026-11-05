@@ -12,7 +12,7 @@ pub(crate) fn decode_section(
 ) -> Result<crate::ModelingSection, String> {
     let stored = serde_json::from_str(section_json)
         .map_err(|error| format!("invalid MDE section: {error}"))?;
-    let section = crate::contract_document::project_section(stored)?;
+    let section = crate::contract_document::project_section(stored, project_id)?;
     let project = section.to_model(project_id, name);
     crate::Graph::new(&project)
         .validate_identifiers()

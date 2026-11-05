@@ -79,10 +79,19 @@ pub(super) fn supported_property(kind: &str, field: &str, value: &Value) -> bool
                 | crate::StereotypeValue::Text(_)
                 | crate::StereotypeValue::Reference(_)
         ),
-        // These are encoding checks. Enum values, bounds and reference targets
-        // remain kernel inputs, including unresolved textual Type declarations.
-        "visibility" | "multiplicity" | "aggregation" | "concurrency" | "direction"
-        | "defaultValue" => value.is_string(),
+        // Unknown source literals stay opaque rather than failing registry
+        // construction or being replaced with a canonical default.
+        "visibility" => matches!(
+            value.as_str(),
+            Some("public" | "private" | "protected" | "package")
+        ),
+        "aggregation" => matches!(value.as_str(), Some("none" | "shared" | "composite")),
+        "concurrency" => matches!(
+            value.as_str(),
+            Some("sequential" | "guarded" | "concurrent")
+        ),
+        "direction" => matches!(value.as_str(), Some("in" | "out" | "inout" | "return")),
+        "multiplicity" | "defaultValue" => value.is_string(),
         "type" => value.is_null() || value.is_string() || reference(value).is_some(),
         _ => value.is_boolean(),
     }
@@ -269,67 +278,22 @@ pub(super) fn import_properties(
 ) -> BTreeMap<String, Value> {
     let mut properties = BTreeMap::new();
     for field in fields(kind) {
+        let Some(value) = residue.get(*field) else {
+            continue;
+        };
+        // These declarations have no lossless inverse through the supplied
+        // registry: text is not a Type/ValueSpecification identity.
+        if matches!(
+            *field,
+            "stereotype" | "isFinalSpecialization" | "isID" | "multiplicity" | "defaultValue"
+        ) || (*field == "type" && !value.is_null() && reference(value).is_none())
+        {
+            continue;
+        }
         if let Some(value) = residue.remove(*field) {
             properties.insert((*field).into(), value);
             mapped.insert((*field).into());
         }
     }
-    if matches!(kind, "UMLAttribute" | "UMLOperation" | "UMLParameter") {
-        // NamedElement has no default visibility, unlike PackageableElement.
-        properties
-            .entry("visibility".into())
-            .or_insert_with(|| Value::String("public".into()));
-    }
-    if matches!(kind, "UMLAttribute" | "UMLParameter") {
-        properties
-            .entry("multiplicity".into())
-            .or_insert_with(|| Value::String(String::new()));
-        properties
-            .entry("isUnique".into())
-            .or_insert(Value::Bool(false));
-        properties
-            .entry("type".into())
-            .or_insert_with(|| Value::String(String::new()));
-        // This is the source's textual editor declaration, not a fabricated
-        // ValueSpecification. The existing kernel text adapter keeps it unverified.
-        properties
-            .entry("defaultValue".into())
-            .or_insert_with(|| Value::String(String::new()));
-    }
     properties
-}
-
-pub(super) fn preserves_omitted_default(kind: &str, field: &str, value: &Value) -> bool {
-    if matches!(kind, "UMLAttribute" | "UMLOperation" | "UMLParameter") && field == "visibility" {
-        return value.as_str() == Some("public");
-    }
-    matches!(kind, "UMLAttribute" | "UMLParameter")
-        && match field {
-            "isUnique" => value == &Value::Bool(false),
-            "multiplicity" | "type" | "defaultValue" => value.as_str() == Some(""),
-            _ => false,
-        }
-}
-
-pub(super) fn update_metadata(element: &Element, metadata: &mut MdjObjectResidual) {
-    if element.description.is_some() {
-        metadata.mapped_fields.insert("documentation".into());
-    } else {
-        metadata.mapped_fields.remove("documentation");
-    }
-    for field in fields(&metadata.type_name) {
-        if !metadata.mapped_fields.contains(*field)
-            && element
-                .properties
-                .get(*field)
-                .is_some_and(|value| preserves_omitted_default(&metadata.type_name, field, value))
-        {
-            continue;
-        }
-        if element.properties.contains_key(*field) {
-            metadata.mapped_fields.insert((*field).into());
-        } else {
-            metadata.mapped_fields.remove(*field);
-        }
-    }
 }

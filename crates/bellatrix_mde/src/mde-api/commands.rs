@@ -77,8 +77,10 @@ pub fn apply_model_command(
     let source = section.to_model(project_id, name);
     validate_command_presentation(&command)?;
     let updated = commands::apply(&source, &command, revision)?;
-    let stored =
-        crate::contract_document::store_section(&crate::ModelingSection::from_model(&updated))?;
+    let stored = crate::contract_document::store_section(
+        &crate::ModelingSection::from_model(&updated),
+        project_id,
+    )?;
     serde_json::to_value(stored).map_err(|error| error.to_string())
 }
 

@@ -4,9 +4,16 @@ use bellatrix_mde_contracts::model::{
 };
 use std::collections::BTreeMap;
 
-pub(crate) fn project_section(stored: StoredSection) -> Result<ModelingSection, String> {
+pub(crate) fn project_section(
+    stored: StoredSection,
+    project_id: &str,
+) -> Result<ModelingSection, String> {
+    let opaque =
+        opaque_source_objects(stored.mdj_provenance.as_ref(), project_id, &stored.diagrams);
+    let opaque_ids: std::collections::BTreeSet<_> =
+        opaque.iter().map(|(id, _)| id.as_str()).collect();
     for id in stored.presentation.keys() {
-        if stored.registry.get_entry(id).is_none() {
+        if stored.registry.get_entry(id).is_none() && !opaque_ids.contains(id.as_str()) {
             return Err(format!(
                 "presentation subject {id} is absent from the registry"
             ));
@@ -14,6 +21,14 @@ pub(crate) fn project_section(stored: StoredSection) -> Result<ModelingSection, 
     }
     let (mut elements, mut relations) =
         crate::contract_projection::project_registry(&stored.registry)?;
+    for (id, source) in opaque {
+        if stored.registry.get_entry(id).is_some() {
+            return Err(format!(
+                "source object {id} is both opaque and a UML contract"
+            ));
+        }
+        elements.push(project_opaque_object(id, source));
+    }
     for relation in &mut relations {
         if let Some(metadata) = stored.presentation.get(&relation.id) {
             relation.properties.insert(
@@ -43,7 +58,49 @@ pub(crate) fn project_section(stored: StoredSection) -> Result<ModelingSection, 
     })
 }
 
-pub(crate) fn store_section(snapshot: &ModelingSection) -> Result<StoredSection, String> {
+pub(crate) fn store_section(
+    snapshot: &ModelingSection,
+    project_id: &str,
+) -> Result<StoredSection, String> {
+    let opaque = opaque_source_objects(
+        snapshot.mdj_provenance.as_ref(),
+        project_id,
+        &snapshot.diagrams,
+    );
+    for (id, source) in &opaque {
+        let element = snapshot
+            .elements
+            .iter()
+            .find(|element| element.id == **id)
+            .ok_or_else(|| {
+                format!("opaque source object {id} cannot be deleted through semantic commands")
+            })?;
+        let expected = project_opaque_object(id, source);
+        if element.kind != expected.kind
+            || element.name != expected.name
+            || element.properties != expected.properties
+        {
+            return Err(format!(
+                "opaque source object {id} is preserved as interchange data and cannot be rewritten as UML"
+            ));
+        }
+    }
+    let opaque_ids: std::collections::BTreeSet<_> =
+        opaque.iter().map(|(id, _)| id.as_str()).collect();
+    for element in &snapshot.elements {
+        if element.kind.starts_with("mdj.") && !opaque_ids.contains(element.id.as_str()) {
+            return Err(format!(
+                "opaque object {} has no retained source data",
+                element.id
+            ));
+        }
+    }
+    let semantic_elements: Vec<_> = snapshot
+        .elements
+        .iter()
+        .filter(|element| !opaque_ids.contains(element.id.as_str()))
+        .cloned()
+        .collect();
     let mut relations = snapshot.relations.clone();
     let mut presentation = BTreeMap::new();
     // Metadata travels with the disposable relation, then leaves it before the
@@ -58,7 +115,7 @@ pub(crate) fn store_section(snapshot: &ModelingSection) -> Result<StoredSection,
             presentation.insert(relation.id.clone(), metadata);
         }
     }
-    let registry = crate::contract_edits::registry_from_projection(&snapshot.elements, &relations)?;
+    let registry = crate::contract_edits::registry_from_projection(&semantic_elements, &relations)?;
     for element in &snapshot.elements {
         let metadata = SubjectPresentation {
             label: element.label.clone(),
@@ -105,13 +162,54 @@ pub(crate) fn project_document(stored: StoredProject) -> Result<Project, String>
             stored.schema_version
         ));
     }
-    let section = project_section(stored.model)?;
+    let section = project_section(stored.model, &stored.id)?;
     let mut project = section.to_model(&stored.id, &stored.name);
     project.schema_version = 2;
     Ok(project)
 }
 
 pub(crate) fn store_document(snapshot: &Project) -> Result<StoredProject, String> {
-    Ok(store_section(&ModelingSection::from_model(snapshot))?
-        .to_model(&snapshot.id, &snapshot.name))
+    Ok(
+        store_section(&ModelingSection::from_model(snapshot), &snapshot.id)?
+            .to_model(&snapshot.id, &snapshot.name),
+    )
+}
+
+fn opaque_source_objects<'a>(
+    provenance: Option<&'a crate::MdjProvenance>,
+    project_id: &str,
+    diagrams: &[crate::Diagram],
+) -> Vec<(&'a String, &'a crate::MdjObjectResidual)> {
+    provenance
+        .into_iter()
+        .flat_map(|provenance| &provenance.object_residuals)
+        .filter(|(id, source)| {
+            id.as_str() != project_id
+                && source.mapped_fields.is_empty()
+                && !diagrams.iter().any(|diagram| {
+                    &diagram.id == *id || diagram.all_views().any(|view| &view.id == *id)
+                })
+        })
+        .collect()
+}
+
+fn project_opaque_object(id: &str, source: &crate::MdjObjectResidual) -> crate::Element {
+    let mut properties = source.residual.clone();
+    properties.remove("name");
+    crate::Element {
+        id: id.into(),
+        kind: format!("mdj.{}", source.type_name),
+        name: source
+            .residual
+            .get("name")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .into(),
+        label: None,
+        description: None,
+        properties,
+        annotations: Vec::new(),
+        implementations: Vec::new(),
+        content: None,
+    }
 }
