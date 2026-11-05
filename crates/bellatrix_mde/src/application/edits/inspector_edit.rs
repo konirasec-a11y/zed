@@ -26,7 +26,7 @@ fn set_inspected_property_inner(
     if field.value_type == PropertyValueType::ReadOnly {
         return Err("property is read-only".into());
     }
-    // Absence is an authored draft state; UML requiredness belongs to Model::validate.
+    // Optional absence is retained; requiredness is checked by contract conversion.
     let property_null = value.is_null()
         && path.strip_prefix("properties.").is_some_and(|key| {
             crate::uml::root::Model::from_section(section)
@@ -62,28 +62,6 @@ fn set_inspected_property_inner(
             crate::uml::references::reference_id(&value)?;
         }
         _ => {}
-    }
-    let mut canonical_type = false;
-    if let Some(key) = path.strip_prefix("properties.")
-        && let Some(element) = crate::uml::root::Model::from_section(section).element(id)
-        && let Some(metaclass) = element.metaclass()
-    {
-        if key == "type"
-            && crate::uml::schema::uml_property(metaclass, key)
-                .map_err(|error| error.to_string())?
-                .is_some()
-        {
-            canonical_type = true;
-            if let Some(text) = element
-                .properties()
-                .get("type")
-                .filter(|value| value.is_string())
-                && let Some(preserved) = element.properties().get("typeText")
-                && preserved != text
-            {
-                return Err("existing typeText differs from the legacy type declaration; preserve both before choosing a Type".into());
-            }
-        }
     }
     if crate::uml::associations::set_projection_property(section, id, path, &value)? {
         return Ok(());
@@ -125,20 +103,6 @@ fn set_inspected_property_inner(
             let key = path
                 .strip_prefix("properties.")
                 .ok_or("invalid property path")?;
-            if canonical_type {
-                if let Some(text) = element
-                    .properties
-                    .get("type")
-                    .filter(|value| value.is_string())
-                    .cloned()
-                {
-                    element.properties.insert("typeText".into(), text);
-                }
-                if value.is_null() {
-                    element.properties.remove(key);
-                    return Ok(());
-                }
-            }
             element.properties.insert(key.to_owned(), value);
         }
     }

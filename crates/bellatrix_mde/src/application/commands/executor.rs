@@ -515,7 +515,25 @@ pub(crate) fn apply_with_diagram_operations(
             path,
             value,
         } => {
-            if path != "name"
+            if path == "properties.multiplicity" {
+                let metaclass = section
+                    .elements
+                    .iter()
+                    .find(|element| element.id == *element_id)
+                    .and_then(|element| crate::uml::root::object_metaclass(&element.kind))
+                    .ok_or("multiplicity subject not found")?;
+                if crate::contract_edits::field_shape(metaclass, "lowerValue")?.is_none()
+                    || crate::contract_edits::field_shape(metaclass, "upperValue")?.is_none()
+                {
+                    return Err("this contract has no multiplicity bounds".into());
+                }
+                crate::uml::associations::set_end_multiplicity(
+                    &mut section,
+                    &project.id,
+                    element_id,
+                    value.as_str().ok_or("expected multiplicity text")?,
+                )?;
+            } else if path != "name"
                 || !crate::templates::rename_parameter(
                     &mut section,
                     element_id,

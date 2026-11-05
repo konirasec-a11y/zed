@@ -61,18 +61,11 @@ const COMMON_CLASSIFIER: &[DeclaredProperty] = &[
         default: false_value,
     },
 ];
-const CLASS: &[DeclaredProperty] = &[
-    DeclaredProperty {
-        key: "isFinalSpecialization",
-        value_type: PropertyValueType::Boolean,
-        default: false_value,
-    },
-    DeclaredProperty {
-        key: "isActive",
-        value_type: PropertyValueType::Boolean,
-        default: false_value,
-    },
-];
+const CLASS: &[DeclaredProperty] = &[DeclaredProperty {
+    key: "isActive",
+    value_type: PropertyValueType::Boolean,
+    default: false_value,
+}];
 const COMMENT: &[DeclaredProperty] = &[DeclaredProperty {
     key: "body",
     value_type: PropertyValueType::String,
@@ -95,18 +88,13 @@ const FIELD: &[DeclaredProperty] = &[
         default: public,
     },
     DeclaredProperty {
-        key: "declaration",
-        value_type: PropertyValueType::String,
-        default: empty,
-    },
-    DeclaredProperty {
         key: "type",
         value_type: PropertyValueType::String,
         default: empty,
     },
     DeclaredProperty {
         key: "defaultValue",
-        value_type: PropertyValueType::String,
+        value_type: PropertyValueType::Reference,
         default: empty,
     },
     DeclaredProperty {
@@ -177,11 +165,6 @@ const FUNCTION: &[DeclaredProperty] = &[
         key: "visibility",
         value_type: PropertyValueType::Choice(VISIBILITY),
         default: public,
-    },
-    DeclaredProperty {
-        key: "signature",
-        value_type: PropertyValueType::String,
-        default: empty,
     },
     DeclaredProperty {
         key: "isStatic",
@@ -491,21 +474,25 @@ pub(crate) fn property_contract(
     };
     let mut contract = normalize_property_contract(element, key, value_type, value);
     if matches!(element, ElementRef::Object(_)) {
-        if key == "typeText"
-            && element
-                .metaclass()
-                .and_then(|metaclass| {
-                    crate::uml::schema::uml_property(metaclass, "type")
-                        .ok()
-                        .flatten()
-                })
-                .is_some()
-        {
-            contract.value_type = PropertyValueType::ReadOnly;
-        }
         if key == "multiplicity" && crate::uml::value_specifications::has_bound_references(element)
         {
-            contract.value_type = PropertyValueType::ReadOnly;
+            let references = crate::uml::references::ReferenceIndex::new(
+                crate::uml::root::Model::from_section(section),
+            );
+            match crate::uml::value_specifications::multiplicity(&references, element) {
+                Ok(bounds) => {
+                    contract.value_type = PropertyValueType::String;
+                    contract.value = json!(format!(
+                        "{}..{}",
+                        bounds.lower_bound(),
+                        bounds.upper_bound()
+                    ));
+                }
+                Err(error) => {
+                    contract.value_type = PropertyValueType::ReadOnly;
+                    contract.value = json!(error.to_string());
+                }
+            }
         }
     }
     Ok(contract)
