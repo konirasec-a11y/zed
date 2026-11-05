@@ -164,6 +164,19 @@ pub(super) fn apply(
         }
         UmlQuickCreate::Reception => return Err("reception must use member command".into()),
     };
+    let canonical_kind = match child_kind {
+        "rust.struct" | "uml.class" => Some(ModelingElementKind::Class),
+        "rust.trait" | "uml.interface" => Some(ModelingElementKind::Interface),
+        _ => None,
+    };
+    let child_size = canonical_kind
+        .map(|kind| kind.initial_size_in_diagram(diagram))
+        .unwrap_or(child_size);
+    let offset = if action == UmlQuickCreate::Supertype {
+        (offset.0, -child_size.1 - 90.0)
+    } else {
+        offset
+    };
     let rule = quick_relation_rule(action)
         .ok_or("Quick Edit action does not create a graph relationship")?;
     let new_id = fresh_id(section, "node", revision, project_id)?;
@@ -228,85 +241,115 @@ pub(super) fn apply(
         }
         child_y += child_size.1 + 24.0;
     }
-    let mut child_properties = std::collections::BTreeMap::new();
-    if action == UmlQuickCreate::Note {
-        child_properties.insert("body".into(), serde_json::Value::String(name.clone()));
-        child_properties.insert(
-            "annotatedElement".into(),
-            serde_json::json!([{ "$ref": element_id }]),
-        );
-    } else if action == UmlQuickCreate::Constraint {
-        let specification_id = fresh_id(section, "specification", revision, project_id)?;
-        let ownership_id = fresh_id(section, "specification-owner", revision, project_id)?;
-        child_properties.insert(
-            "constrainedElement".into(),
-            serde_json::json!([{ "$ref": element_id }]),
-        );
-        child_properties.insert(
-            "specification".into(),
-            serde_json::json!({ "$ref": specification_id }),
-        );
-        // An empty authored expression records no invented predicate or language.
+    let (new_id, new_view_id) = if let Some(kind) = canonical_kind {
+        let new_id = super::create_element(
+            section,
+            &super::Command::CreateElement {
+                diagram_id: diagram_id.into(),
+                owner_id: owner_id.clone(),
+                kind,
+                name: None,
+                x: child_x,
+                y: child_y,
+            },
+            revision,
+            project_id,
+        )?;
+        let new_view_id = section
+            .diagrams
+            .iter()
+            .find(|diagram| diagram.id == diagram_id)
+            .and_then(|diagram| {
+                diagram
+                    .all_views()
+                    .find(|view| view.subject.as_deref() == Some(&new_id))
+            })
+            .ok_or("created classifier has no View")?
+            .id
+            .clone();
+        (new_id, new_view_id)
+    } else {
+        let mut child_properties = std::collections::BTreeMap::new();
+        if action == UmlQuickCreate::Note {
+            child_properties.insert("body".into(), serde_json::Value::String(name.clone()));
+            child_properties.insert(
+                "annotatedElement".into(),
+                serde_json::json!([{ "$ref": element_id }]),
+            );
+        } else if action == UmlQuickCreate::Constraint {
+            let specification_id = fresh_id(section, "specification", revision, project_id)?;
+            let ownership_id = fresh_id(section, "specification-owner", revision, project_id)?;
+            child_properties.insert(
+                "constrainedElement".into(),
+                serde_json::json!([{ "$ref": element_id }]),
+            );
+            child_properties.insert(
+                "specification".into(),
+                serde_json::json!({ "$ref": specification_id }),
+            );
+            // An empty authored expression records no invented predicate or language.
+            section.elements.push(Element {
+                id: specification_id.clone(),
+                kind: "uml.opaque_expression".into(),
+                name: String::new(),
+                label: Some("Constraint specification".into()),
+                description: None,
+                properties: std::collections::BTreeMap::from([
+                    ("body".into(), serde_json::json!([])),
+                    ("language".into(), serde_json::json!([])),
+                ]),
+                annotations: Vec::new(),
+                implementations: Vec::new(),
+                content: None,
+            });
+            section.relations.push(Relation {
+                id: ownership_id,
+                kind: "owns".into(),
+                from: new_id.clone(),
+                to: specification_id,
+                properties: std::collections::BTreeMap::from([(
+                    "role".into(),
+                    serde_json::json!("specification"),
+                )]),
+            });
+        }
         section.elements.push(Element {
-            id: specification_id.clone(),
-            kind: "uml.opaque_expression".into(),
-            name: String::new(),
-            label: Some("Constraint specification".into()),
+            id: new_id.clone(),
+            kind: child_kind.into(),
+            name,
+            label: None,
             description: None,
-            properties: std::collections::BTreeMap::from([
-                ("body".into(), serde_json::json!([])),
-                ("language".into(), serde_json::json!([])),
-            ]),
+            properties: child_properties,
             annotations: Vec::new(),
             implementations: Vec::new(),
             content: None,
         });
-        section.relations.push(Relation {
-            id: ownership_id,
-            kind: "owns".into(),
-            from: new_id.clone(),
-            to: specification_id,
-            properties: std::collections::BTreeMap::from([(
-                "role".into(),
-                serde_json::json!("specification"),
-            )]),
-        });
-    }
-    section.elements.push(Element {
-        id: new_id.clone(),
-        kind: child_kind.into(),
-        name,
-        label: None,
-        description: None,
-        properties: child_properties,
-        annotations: Vec::new(),
-        implementations: Vec::new(),
-        content: None,
-    });
-    section
-        .diagrams
-        .iter_mut()
-        .find(|diagram| diagram.id == diagram_id)
-        .ok_or("diagram not found")?
-        .views
-        .push(View {
-            children: Vec::new(),
-            presentation: Default::default(),
-            endpoints: None,
-            timing: None,
-            draft: None,
-            id: new_view_id.clone(),
-            subject: Some(new_id.clone()),
-            label: None,
-            geometry: Geometry::Rect {
-                x: child_x,
-                y: child_y,
-                width: child_size.0,
-                height: child_size.1,
-            },
-            style: Style::default(),
-            z_index,
-        });
+        section
+            .diagrams
+            .iter_mut()
+            .find(|diagram| diagram.id == diagram_id)
+            .ok_or("diagram not found")?
+            .views
+            .push(View {
+                children: Vec::new(),
+                presentation: Default::default(),
+                endpoints: None,
+                timing: None,
+                draft: None,
+                id: new_view_id.clone(),
+                subject: Some(new_id.clone()),
+                label: None,
+                geometry: Geometry::Rect {
+                    x: child_x,
+                    y: child_y,
+                    width: child_size.0,
+                    height: child_size.1,
+                },
+                style: Style::default(),
+                z_index,
+            });
+        (new_id, new_view_id)
+    };
     let (source, target) = if rule.child_is_source {
         (new_id.as_str(), element_id)
     } else {
@@ -321,6 +364,42 @@ pub(super) fn apply(
         source_view_id: Some(source_view_id),
         target_view_id: Some(target_view_id),
     };
+    let relation_kind = match action {
+        UmlQuickCreate::Subtype | UmlQuickCreate::Supertype => {
+            Some(super::ModelingRelationKind::Generalization)
+        }
+        UmlQuickCreate::RealizingClass | UmlQuickCreate::ProvidedInterface => {
+            Some(super::ModelingRelationKind::InterfaceRealization)
+        }
+        UmlQuickCreate::RequiredInterface => Some(super::ModelingRelationKind::Usage),
+        UmlQuickCreate::AssociatedClass => Some(super::ModelingRelationKind::Association),
+        UmlQuickCreate::AggregatedClass => Some(super::ModelingRelationKind::Aggregation),
+        UmlQuickCreate::CompositedClass => Some(super::ModelingRelationKind::Composition),
+        _ => None,
+    };
+    if let Some(kind) = relation_kind {
+        if canonical_kind.is_none()
+            && let Some(owner_id) = &owner_id
+        {
+            crate::uml::root::set_owner(section, project_id, &new_id, owner_id)?;
+        }
+        let relation_owner = if matches!(rule.kind, "uml.association" | "uml.usage") {
+            owner_id.as_deref()
+        } else {
+            None
+        };
+        return super::create_relation(
+            section,
+            diagram_id,
+            kind,
+            source,
+            target,
+            relation_owner,
+            Some(&endpoints),
+            revision,
+            project_id,
+        );
+    }
     let geometry =
         crate::relationships::route_at_views(section, diagram_id, source, target, &endpoints)?;
     let mut properties = std::collections::BTreeMap::new();

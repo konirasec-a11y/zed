@@ -305,7 +305,7 @@ pub(crate) fn apply_with_diagram_operations(
             return Err("visual creation dispatch failed".into());
         }
         Command::CreateElement { .. } | Command::CreateModelElement { .. } => {
-            create_element(&mut section, command, revision, &project.id)?
+            create_element(&mut section, command, revision, &project.id)?;
         }
         Command::CreateRelation {
             diagram_id,
@@ -919,7 +919,7 @@ fn create_element(
     command: &Command,
     revision: u64,
     project_id: &str,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let (diagram_id, owner_id, kind, name, x, y) = match command {
         Command::CreateElement {
             diagram_id,
@@ -1069,12 +1069,12 @@ fn create_element(
                 id: ownership_id,
                 kind: "owns".into(),
                 from: owner_id.clone(),
-                to: element_id,
+                to: element_id.clone(),
                 properties: Default::default(),
             });
         }
     }
-    Ok(())
+    Ok(element_id)
 }
 
 #[allow(clippy::too_many_arguments)]
