@@ -1,0 +1,208 @@
+// ClassifierTemplateParameter - Generated UML Class
+// Uses unified registry with type filtering
+
+use crate::ruml::registry::Registry;
+use uuid::Uuid;
+
+use serde::{Deserialize, Serialize};
+
+const TYPE_NAME: &str = "ClassifierTemplateParameter";
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+
+pub struct ClassifierTemplateParameter {
+    /// Unique identifier for this instance
+    pub id: String,
+
+    pub e_annotations: Vec<String>,
+
+    pub owned_comment: Vec<String>,
+
+    pub signature: String,
+
+    pub parametered_element: String,
+
+    pub owned_parametered_element: Option<String>,
+
+    pub default: Option<String>,
+
+    pub owned_default: Option<String>,
+
+    pub allow_substitutable: String,
+
+    pub default_classifier: Option<String>,
+
+    pub constraining_classifier: Option<String>,
+}
+
+impl ClassifierTemplateParameter {
+    /// Creates a new ClassifierTemplateParameter instance
+
+    pub fn create(
+        registry: &mut Registry,
+        signature: String,
+        parametered_element: String,
+        allow_substitutable: String,
+    ) -> Result<String, String> {
+        let id = Uuid::new_v4().to_string();
+        let instance = Self {
+            id: id.clone(),
+            e_annotations: Vec::new(),
+            owned_comment: Vec::new(),
+            signature,
+            parametered_element,
+            owned_parametered_element: None,
+            default: None,
+            owned_default: None,
+            allow_substitutable,
+            default_classifier: None,
+            constraining_classifier: None,
+        };
+
+        registry.insert(id.clone(), TYPE_NAME, &instance)?;
+
+        Ok(id)
+    }
+
+    /// Gets a snapshot of this instance
+    /// Note: Returns a snapshot. Modifications require calling update().
+
+    pub fn get(registry: &Registry, id: String) -> Result<String, String> {
+        registry.get_as_string(&id)
+    }
+
+    /// Updates the instance in the registry
+
+    pub fn update(registry: &mut Registry, value: String) -> Result<(), String> {
+        let instance: ClassifierTemplateParameter =
+            serde_json::from_str(&value).map_err(|_| String::from("Invalid data"))?;
+        registry.update_from_string(
+            instance.id.clone(),
+            TYPE_NAME,
+            serde_json::to_string(&instance).map_err(|_| String::from("Invalid data"))?,
+        )
+    }
+
+    /// Deletes this instance from the registry
+
+    pub fn delete(registry: &mut Registry, id: String) -> bool {
+        registry.delete(&id)
+    }
+
+    /// Checks if an instance exists
+
+    pub fn exists(registry: &Registry, id: String) -> bool {
+        registry.exists(&id)
+    }
+
+    /// Gets all instances of this type
+
+    pub fn get_all(registry: &Registry) -> Result<String, String> {
+        registry.get_all_of_type_as_string(TYPE_NAME)
+    }
+
+    /// Clears all instances of this type
+
+    pub fn clear_all(registry: &mut Registry) -> usize {
+        registry.clear_type(TYPE_NAME)
+    }
+
+    pub fn set_allow_substitutable(
+        registry: &mut Registry,
+        instance_id: String,
+        value: String,
+    ) -> Result<(), String> {
+        let mut instance: Self = registry
+            .get(&instance_id)
+            .ok_or_else(|| String::from("Instance not found"))?;
+        instance.allow_substitutable = value;
+        registry.insert(instance_id, TYPE_NAME, &instance)?;
+        Ok(())
+    }
+
+    pub fn set_default_classifier(
+        registry: &mut Registry,
+        instance_id: String,
+        ref_id: Option<String>,
+    ) -> Result<(), String> {
+        let mut instance: Self = registry
+            .get(&instance_id)
+            .ok_or_else(|| String::from("Instance not found"))?;
+
+        instance.default_classifier = ref_id.clone();
+
+        registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+        Ok(())
+    }
+
+    pub fn clear_default_classifier(
+        registry: &mut Registry,
+        instance_id: String,
+    ) -> Result<bool, String> {
+        let mut instance: Self = registry
+            .get(&instance_id)
+            .ok_or_else(|| String::from("Instance not found"))?;
+
+        if instance.default_classifier.is_none() {
+            return Ok(false);
+        }
+
+        instance.default_classifier = None;
+
+        registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+        Ok(true)
+    }
+
+    pub fn set_constraining_classifier(
+        registry: &mut Registry,
+        instance_id: String,
+        ref_id: Option<String>,
+    ) -> Result<(), String> {
+        let mut instance: Self = registry
+            .get(&instance_id)
+            .ok_or_else(|| String::from("Instance not found"))?;
+
+        instance.constraining_classifier = ref_id.clone();
+
+        registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+        Ok(())
+    }
+
+    pub fn clear_constraining_classifier(
+        registry: &mut Registry,
+        instance_id: String,
+    ) -> Result<bool, String> {
+        let mut instance: Self = registry
+            .get(&instance_id)
+            .ok_or_else(|| String::from("Instance not found"))?;
+
+        if instance.constraining_classifier.is_none() {
+            return Ok(false);
+        }
+
+        instance.constraining_classifier = None;
+
+        registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+        Ok(true)
+    }
+
+    /// Returns whether this type can be created standalone (not nested)
+    pub fn can_exist_standalone() -> bool {
+        true
+    }
+
+    /// Returns whether this type requires a container
+    pub fn requires_container() -> bool {
+        false
+    }
+
+    /// Returns the type name
+    pub fn type_name() -> String {
+        "ClassifierTemplateParameter".to_string()
+    }
+}

@@ -1,3 +1,4 @@
+pub mod ruml;
 pub mod events;
 pub mod model;
 pub mod project;
