@@ -208,7 +208,10 @@ fn specialization_flow_preserves_ordered_type_conformance_and_diagnoses_parent_a
             model_diagnostics(&candidate)
         );
         assert_ne!(encode(&candidate, "json").expect("candidate"), snapshot);
-        assert_eq!(encode(&project, "json").expect("source unchanged"), snapshot);
+        assert_eq!(
+            encode(&project, "json").expect("source unchanged"),
+            snapshot
+        );
         authored_drafts.push(candidate);
     }
     // The explicit membership transaction still enforces its Association contract.
@@ -290,16 +293,14 @@ fn specialization_flow_preserves_ordered_type_conformance_and_diagnoses_parent_a
                 .is_some()
         );
     });
-    assert!(
-        model_diagnostics(&unresolved_parent)
-            .iter()
-            .any(|diagnostic| diagnostic["subject_id"] == "specific"
-                && diagnostic["severity"] == "warning"
-                && diagnostic["code"] == "MDE_ASSOCIATION_UNSUPPORTED"
-                && diagnostic["message"].as_str().is_some_and(|message| {
-                    message.contains("memberEnd identities are not materialized")
-                }))
-    );
+    assert!(model_diagnostics(&unresolved_parent).iter().any(
+        |diagnostic| diagnostic["subject_id"] == "specific"
+            && diagnostic["severity"] == "warning"
+            && diagnostic["code"] == "MDE_ASSOCIATION_UNSUPPORTED"
+            && diagnostic["message"].as_str().is_some_and(|message| {
+                message.contains("memberEnd identities are not materialized")
+            })
+    ));
     project = apply(
         &project,
         &Command::Rename {
@@ -408,7 +409,10 @@ fn navigation_flow_uses_canonical_roles_and_checks_inherited_association_contrac
         encode(&invalid_navigation, "json").expect("candidate"),
         snapshot
     );
-    assert_eq!(encode(&navigable, "json").expect("source unchanged"), snapshot);
+    assert_eq!(
+        encode(&navigable, "json").expect("source unchanged"),
+        snapshot
+    );
     let cleared = external_edit(&navigable, |content| {
         element_mut(content, "specific")["properties"]["navigableOwnedEnd"] = json!([]);
     });

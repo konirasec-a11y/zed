@@ -26,9 +26,7 @@ mod diagram_operation_policy;
 mod diagram_operations;
 #[path = "observability/execution_trace.rs"]
 mod execution_trace;
-pub(crate) use execution_trace::{
-    ExecutionTrace, TraceOutcome, TracePhase, execution_trace_jsonl,
-};
+pub(crate) use execution_trace::{ExecutionTrace, TraceOutcome, TracePhase, execution_trace_jsonl};
 #[path = "application/generation/analysis/generation_graph.rs"]
 mod generation;
 #[path = "model/graph/graph.rs"]
@@ -90,6 +88,10 @@ mod uml_notation;
 mod uml_types;
 pub(crate) use templates::{template_parametered_element, template_parameters};
 
+pub(crate) use bellatrix_mde_contracts::protocol::command::StructuralDiagramKind;
+pub(crate) use bellatrix_mde_contracts::uml::validation::{
+    RootMetaclass, StructuralDiagnostic, StructuralSeverity,
+};
 pub(crate) use construction_script::{ConstructionScriptError, python_construction_script};
 pub(crate) use generation::{GenerationGraphError, analyze_generation_graph};
 pub(crate) use graph::{Graph, GraphError};
@@ -108,18 +110,16 @@ pub(crate) use presentation::{
     semantic_identity,
 };
 pub(crate) use publish::{publish_new, publish_replace};
-pub(crate) use quick_edit::{QuickEditAvailability, QuickEditControl, QuickEditSide, quick_edit_for};
+pub(crate) use quick_edit::{
+    QuickEditAvailability, QuickEditControl, QuickEditSide, quick_edit_for,
+};
 pub(crate) use relationships::{
     ModelingRelationKind, RelationshipEndpointLabels, RelationshipGraph, RelationshipMarker,
     RelationshipPresentation, RelationshipStyle, quick_relation_rule, relation_kind_for_creation,
-    relationship_presentation,
-    relationship_style_for_notation, reroute_relationships, route as route_relationship,
+    relationship_presentation, relationship_style_for_notation, reroute_relationships,
+    route as route_relationship,
 };
 pub(crate) use scope::{Scope, select_elements};
-pub(crate) use bellatrix_mde_contracts::uml::validation::{
-    RootMetaclass, StructuralDiagnostic, StructuralSeverity,
-};
-pub(crate) use bellatrix_mde_contracts::protocol::command::StructuralDiagramKind;
 pub(crate) use uml::root::{element_root_kind, relationship_root_kind};
 pub(crate) use uml_geometry::{
     ClassifierContents, InterfaceLayout, classifier_contents, interface_view_layout,

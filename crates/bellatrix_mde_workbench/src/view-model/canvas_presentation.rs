@@ -121,7 +121,12 @@ pub(super) fn ordered_views<'a>(section: &ModelingProjection, views: &'a [View])
         };
         let mut children = view.children.iter().collect::<Vec<_>>();
         children.sort_by_key(|child| child.z_index);
-        pending.extend(children.into_iter().rev().map(|child| (child, native_parent)));
+        pending.extend(
+            children
+                .into_iter()
+                .rev()
+                .map(|child| (child, native_parent)),
+        );
     }
     ordered
 }
@@ -187,7 +192,10 @@ fn uses_native_contents(section: &ModelingProjection, view: &View) -> bool {
 
 pub(super) fn has_authored_contents(section: &ModelingProjection, view: &View) -> bool {
     !uses_native_contents(section, view)
-        && view.children.iter().any(|child| child.presentation.internal)
+        && view
+            .children
+            .iter()
+            .any(|child| child.presentation.internal)
 }
 
 fn visible_on_canvas(view: &View) -> bool {

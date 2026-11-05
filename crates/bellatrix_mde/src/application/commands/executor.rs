@@ -726,7 +726,10 @@ fn ensure_visual_edit_supported(project: &Project, command: &Command) -> Result<
             .ok_or("view not found")?;
         if matches!(command, Command::MoveView { .. }) {
             if matches!(view.geometry, Geometry::Layout { .. }) {
-                return Err("this View has unresolved layout; its authored presentation was not changed".into());
+                return Err(
+                    "this View has unresolved layout; its authored presentation was not changed"
+                        .into(),
+                );
             }
             // Translation already moves only authored coordinates. Missing bounds
             // in dormant compartments must not immobilize a resolved parent.

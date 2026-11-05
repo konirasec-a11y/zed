@@ -61,7 +61,11 @@ pub fn validate_model_section_diagram(
     let result = (|| {
         let section = crate::mde_api_projection::decode_section(project_id, name, section_json)?;
         let model = section.to_model(project_id, name);
-        if !model.diagrams.iter().any(|diagram| diagram.id == diagram_id) {
+        if !model
+            .diagrams
+            .iter()
+            .any(|diagram| diagram.id == diagram_id)
+        {
             return Err("diagram not found".to_owned());
         }
         Ok(match crate::Graph::new(&model).validate_presentation() {

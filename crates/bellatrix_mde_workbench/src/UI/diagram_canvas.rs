@@ -54,7 +54,8 @@ impl Render for MdeWorkbenchItem {
                 );
                 if let Some(diagram) = diagram {
                     title = format!("{} / {}", snapshot.name, diagram.name);
-                    let views = canvas_presentation::ordered_views(&snapshot.section, &diagram.views);
+                    let views =
+                        canvas_presentation::ordered_views(&snapshot.section, &diagram.views);
                     for view in views {
                         if matches!(
                             view.geometry,
@@ -1366,12 +1367,10 @@ impl MdeWorkbenchItem {
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
         let (x, y, width, height) = self.preview_rectangle(section, diagram, view)?;
-        let owner_view = diagram
-            .all_views()
-            .find(|owner| {
-                !owner.presentation.internal
-                    && owner.presentation.name_label.as_deref() == Some(view.id.as_str())
-            });
+        let owner_view = diagram.all_views().find(|owner| {
+            !owner.presentation.internal
+                && owner.presentation.name_label.as_deref() == Some(view.id.as_str())
+        });
         let subject = owner_view
             .and_then(|owner| owner.subject.clone())
             .or_else(|| view.subject.clone());

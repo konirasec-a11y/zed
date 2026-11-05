@@ -328,5 +328,4 @@ impl<'a> ReferenceIndex<'a> {
             })
             .collect()
     }
-
 }

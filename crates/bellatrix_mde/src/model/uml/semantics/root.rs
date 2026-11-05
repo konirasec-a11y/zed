@@ -1,6 +1,4 @@
-use crate::{
-    Element as ElementRecord, ModelingSection, Project, Relation, UmlType,
-};
+use crate::{Element as ElementRecord, ModelingSection, Project, Relation, UmlType};
 use serde_json::Value;
 use std::collections::HashSet;
 
