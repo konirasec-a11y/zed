@@ -46,8 +46,7 @@ pub fn registry_from_projection(
         if !identities.insert(relation.id.clone()) {
             return Err(format!("Duplicate projection identity {}", relation.id));
         }
-        if relation.kind == "owns"
-            || crate::contract_projection::is_annotation_link(&relation.kind)
+        if relation.kind == "owns" || crate::contract_projection::is_annotation_link(&relation.kind)
         {
             continue;
         }
@@ -112,8 +111,7 @@ pub fn registry_from_projection(
         add_reference(owner, &role, &relation.to)?;
     }
     for relation in relations.iter().filter(|relation| {
-        relation.kind != "owns"
-            && !crate::contract_projection::is_annotation_link(&relation.kind)
+        relation.kind != "owns" && !crate::contract_projection::is_annotation_link(&relation.kind)
     }) {
         apply_endpoints(&mut pending, relation)?;
     }

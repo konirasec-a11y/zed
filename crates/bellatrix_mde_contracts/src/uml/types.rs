@@ -2,7 +2,7 @@
 //! model elements. Owned lowerValue/upperValue and TypedElement::type references
 //! still require their own canonical model identities (UML 2.5.1 §§7.5, 8).
 
-use crate::model::Relation;
+use crate::protocol::model_snapshot::Relation;
 use num_bigint::{BigInt, Sign};
 use serde_json::Value;
 use std::{fmt, str::FromStr};
