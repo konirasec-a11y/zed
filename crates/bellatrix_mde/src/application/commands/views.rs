@@ -177,10 +177,14 @@ pub(super) fn remove(
         .find(|diagram| diagram.id == diagram_id)
         .ok_or("diagram not found")?;
     let view = diagram
-        .views
-        .iter()
+        .all_views()
         .find(|view| view.id == view_id)
         .ok_or("view not found in diagram")?;
+    if !view.children.is_empty() {
+        return Err(format!(
+            "Cannot remove View {view_id}: removing a View with children requires hierarchy-aware deletion"
+        ));
+    }
     let element_id = view
         .subject
         .as_ref()
@@ -193,36 +197,62 @@ pub(super) fn remove(
         .cloned();
     let graph = RelationshipGraph::new(section, diagram_id);
     let previously_drawable = diagram
-        .views
-        .iter()
+        .all_views()
         .filter(|view| graph.view_path(&view.id).is_some())
         .map(|view| view.id.clone())
         .collect::<Vec<_>>();
-    section
+    let mut staged = section.clone();
+    let mut removed = HashSet::from([view_id.to_owned()]);
+    let diagram = staged
         .diagrams
         .iter_mut()
         .find(|diagram| diagram.id == diagram_id)
-        .ok_or("diagram not found")?
-        .views
-        .retain(|view| view.id != view_id);
+        .ok_or("diagram not found")?;
+    remove_view_ids(&mut diagram.views, &removed);
     if let Some(element_id) = element_id {
-        let graph = RelationshipGraph::new(section, diagram_id);
-        // A second View of the same endpoint can keep an edge renderable. Do not
-        // erase unrelated draft edges that were already missing a usable route.
+        let graph = RelationshipGraph::new(&staged, diagram_id);
+        // Preserve the existing policy: only previously drawable semantic edges
+        // that lose their route disappear. Existing unrouteable drafts remain.
         let hidden = previously_drawable
             .into_iter()
             .filter(|identifier| graph.view_path(identifier).is_none())
             .collect::<HashSet<_>>();
-        section
+        let diagram = staged
             .diagrams
             .iter_mut()
             .find(|diagram| diagram.id == diagram_id)
-            .ok_or("diagram not found")?
-            .views
-            .retain(|view| !hidden.contains(&view.id));
-        crate::relationships::reroute_relationships_for_endpoint(section, diagram_id, &element_id);
+            .ok_or("diagram not found")?;
+        if let Some(view) = diagram
+            .all_views()
+            .find(|view| hidden.contains(&view.id) && !view.children.is_empty())
+        {
+            return Err(format!(
+                "Cannot remove View {view_id}: affected relationship View {} has children",
+                view.id
+            ));
+        }
+        remove_view_ids(&mut diagram.views, &hidden);
+        removed.extend(hidden);
+        crate::relationships::reroute_relationships_for_endpoint(
+            &mut staged,
+            diagram_id,
+            &element_id,
+        );
     }
+    let removed_ids = removed.iter().map(String::as_str).collect();
+    super::ensure_removed_view_dependencies(&staged, &removed_ids, &HashSet::new(), false, true)?;
+    *section = staged;
     Ok(())
+}
+
+fn remove_view_ids(views: &mut Vec<View>, removed: &HashSet<String>) {
+    views.retain_mut(|view| {
+        if removed.contains(&view.id) {
+            return false;
+        }
+        remove_view_ids(&mut view.children, removed);
+        true
+    });
 }
 
 #[allow(clippy::too_many_arguments)]

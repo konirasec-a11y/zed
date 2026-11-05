@@ -62,9 +62,19 @@ visual. A composição visual não determina ownership UML (§7.8.6 e §B.7.14).
 O contexto `modelElement` de um diagrama é uma referência UMLDI, não ownership do
 conteúdo UML (§B.7.14); permanece o bloqueio explícito quando a exclusão afetaria
 esse contexto. Um ClassDiagram independente permanece após a exclusão de seu
-conteúdo (§B.7.6.3). `Remove from diagram` é uma operação distinta, por ocorrência,
-e sua remoção de Views aninhadas ainda depende de suporte próprio de referências
-e roteamento. A exclusão semântica não é usada como substituto desse comando.
+conteúdo (§B.7.6.3).
+
+`Remove from diagram` retira uma ocorrência folha pelo seu ID, incluindo folhas
+aninhadas, sem excluir o elemento UML ou suas outras ocorrências. A operação mantém
+a política existente de remover apenas arestas que eram desenháveis e perderam a
+rota. Dependências sobreviventes de estilo, rótulos, hierarquia ou endpoints
+semânticos bloqueiam a operação inteira; uma rota manual não é descartada para
+contornar o bloqueio. Attachments órfãos de drafts continuam preservados para
+reparo, conforme a política de diagnóstico já existente. Views com filhos
+permanecem bloqueadas. A UI continua oferecendo esse comando para Rect/Path;
+Layout ainda tem a limitação de capacidade explícita. Nenhuma dessas limitações
+é uma restrição da UML nem autoriza substituir remoção visual por exclusão
+semântica.
 
 ### Esquema mínimo por tipo
 

@@ -958,6 +958,7 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
     assert!(matches!(rectangular_leaf.geometry, Geometry::Rect { .. }));
     assert!(rectangular_leaf.children.is_empty());
     assert!(rectangular_leaf.draft.is_none());
+    let rectangular_leaf_id = rectangular_leaf.id.clone();
     nested_diagram
         .views
         .retain(|view| view.id != layout_leaf.id && view.id != rectangular_leaf.id);
@@ -999,6 +1000,29 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
     };
     assert_eq!(nested_flow.section()?, with_nested_leaves);
     reopen_both_formats(&nested_flow.document, &with_nested_leaves)?;
+
+    let mut occurrence_flow = NativeAuthoring {
+        document: prepare_model_document(&decode_model_document(&nested_bytes, "json")?)?,
+        revision: flow.revision,
+    };
+    let mut expected_occurrence_removed = with_nested_leaves.clone();
+    expected_occurrence_removed
+        .diagrams
+        .iter_mut()
+        .find(|diagram| diagram.id == "classes")
+        .ok_or("missing class diagram for nested occurrence removal")?
+        .views
+        .iter_mut()
+        .find(|view| view.id == "surviving-visual-container")
+        .ok_or("missing visual container for nested occurrence removal")?
+        .children
+        .retain(|view| view.id != rectangular_leaf_id);
+    let occurrence_removed = occurrence_flow.apply(Command::RemoveView {
+        diagram_id: "classes".into(),
+        view_id: rectangular_leaf_id,
+    })?;
+    assert_eq!(occurrence_removed, expected_occurrence_removed);
+    reopen_both_formats(&occurrence_flow.document, &expected_occurrence_removed)?;
 
     assert!(with_nested_leaves.diagrams.iter().all(|diagram| {
         diagram

@@ -582,8 +582,7 @@ pub(crate) fn apply_with_diagram_operations(
             .find(|diagram| diagram.id == *diagram_id)
             .is_some_and(|diagram| {
                 diagram
-                    .views
-                    .iter()
+                    .all_views()
                     .any(|view| view.id == *view_id && view.draft.is_some())
             }),
         _ => false,
@@ -787,7 +786,6 @@ fn ensure_visual_edit_supported(project: &Project, command: &Command) -> Result<
         | Command::CreateRelationAtViewsOrVisualDraft { diagram_id, .. }
         | Command::CreateVisualDraft { diagram_id, .. }
         | Command::PlaceElementView { diagram_id, .. }
-        | Command::RemoveView { diagram_id, .. }
         | Command::ReorderView { diagram_id, .. }
         | Command::SetViewEndpoints { diagram_id, .. }
         | Command::SetViewRouting { diagram_id, .. }
@@ -1639,19 +1637,33 @@ fn ensure_leaf_view_dependencies(
         .iter()
         .map(|view| view.id.as_str())
         .collect::<HashSet<_>>();
+    ensure_removed_view_dependencies(
+        section,
+        &view_ids,
+        affected_subjects,
+        clears_affected_hierarchy_parents,
+        false,
+    )
+}
+
+fn ensure_removed_view_dependencies(
+    section: &ModelingSection,
+    view_ids: &HashSet<&str>,
+    affected_subjects: &HashSet<String>,
+    clears_affected_hierarchy_parents: bool,
+    allow_orphaned_draft_endpoints: bool,
+) -> Result<(), String> {
     let subject_ids = affected_subjects
         .iter()
         .map(String::as_str)
         .collect::<HashSet<_>>();
     for diagram in &section.diagrams {
-        for view in diagram.all_views().filter(|view| {
-            !view
-                .subject
-                .as_ref()
-                .is_some_and(|id| affected_subjects.contains(id))
-        }) {
+        for view in diagram
+            .all_views()
+            .filter(|view| !view_ids.contains(view.id.as_str()))
+        {
             let check = |target: Option<&str>, role: &str, model: bool| -> Result<(), String> {
-                let removed = if model { &subject_ids } else { &view_ids };
+                let removed = if model { &subject_ids } else { view_ids };
                 if let Some(target) = target
                     && removed.contains(target)
                 {
@@ -1662,7 +1674,9 @@ fn ensure_leaf_view_dependencies(
                 }
                 Ok(())
             };
-            if let Some(endpoints) = &view.endpoints {
+            if let Some(endpoints) = &view.endpoints
+                && !(allow_orphaned_draft_endpoints && view.draft.is_some())
+            {
                 check(
                     endpoints.source_view_id.as_deref(),
                     "endpoints.source_view_id",
