@@ -1795,6 +1795,8 @@ pub(crate) fn set_end_multiplicity(
     let upper: UnlimitedNatural = upper.trim().parse().map_err(|error| {
         format!("Cannot translate upper bound {upper:?} into a LiteralUnlimitedNatural: {error}")
     })?;
+    MultiplicityRange::from_bounds(Some(lower.clone()), Some(upper.clone()))
+        .map_err(|error| format!("Invalid multiplicity interval: {error}"))?;
     // Stage both identities together: rejecting a nonliteral/shared upper bound
     // must not leave a successfully changed lower bound behind.
     let mut staged = section.clone();

@@ -562,21 +562,36 @@ fn unknown_navigation_survives_reopening_decisions_and_atomic_repair() -> FlowRe
     conflicting["model"]["authoringKnowledge"] = project["model"]["authoringKnowledge"].clone();
     assert!(export_mdj(&conflicting).is_err());
     println!("And ambiguous authoring identities cannot disappear in a document or API envelope");
-    let mut document = project.clone();
-    document["model"]["authoringKnowledge"] = Value::Null;
-    let ambiguous = document.to_string().replace(
-        "\"authoringKnowledge\":null",
-        r#""authoringKnowledge":{"associations":{"association":{"navigation_unverified":["left-end"]},"association":{"navigation_unverified":[]}}}"#,
+    let knowledge = project
+        .pointer("/model/authoringKnowledge")
+        .ok_or("missing original authoring knowledge")?;
+    let association_knowledge = knowledge
+        .pointer("/associations/association")
+        .ok_or("missing original Association knowledge")?;
+    let original_field = format!(r#""authoringKnowledge":{knowledge}"#);
+    let document = project.to_string();
+    assert_eq!(document.matches(&original_field).count(), 1);
+    let ambiguous = document.replacen(
+        &original_field,
+        &format!(r#""authoringKnowledge":{{"associations":{{"association":{association_knowledge},"association":{association_knowledge}}}}}"#),
+        1,
     );
+    let expected_error = json!({
+        "api_version": 1,
+        "error": {
+            "code": "INVALID_MODEL",
+            "message": "model does not match the supported document schema"
+        }
+    });
     let path = saved.0.join("ambiguous.json");
     fs::write(&path, &ambiguous)?;
     let Err(error) = decode_model(&fs::read(path)?, "json") else {
         return Err("duplicate Association knowledge identity was accepted in JSON".into());
     };
-    assert!(
-        error
-            .to_string()
-            .contains("duplicate Association knowledge identity")
+    assert_eq!(
+        serde_json::from_str::<Value>(&error.to_string())?,
+        expected_error,
+        "JSON duplicate rejection returned: {error}"
     );
     let envelope = format!(r#"{{"api_version":1,"model":{ambiguous}}}"#);
     assert!(bellatrix_mde::validate_graph_model(&envelope).is_err());
@@ -615,10 +630,10 @@ fn unknown_navigation_survives_reopening_decisions_and_atomic_repair() -> FlowRe
     let Err(error) = decode_model(&fs::read(saved.0.join("ambiguous.blx"))?, "protobuf") else {
         return Err("duplicate Association knowledge identity was accepted in BLX2".into());
     };
-    assert!(
-        error
-            .to_string()
-            .contains("duplicate Association knowledge identity")
+    assert_eq!(
+        serde_json::from_str::<Value>(&error.to_string())?,
+        expected_error,
+        "BLX2 duplicate rejection returned: {error}"
     );
     let mut native = project.clone();
     let native_fields = native
