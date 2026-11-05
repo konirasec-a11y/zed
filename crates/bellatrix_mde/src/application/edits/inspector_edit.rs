@@ -84,6 +84,9 @@ fn set_inspected_property_inner(
         }
         _ => {}
     }
+    if crate::relationship_retarget::set_endpoint(section, id, path, &value)? {
+        return Ok(());
+    }
     if crate::uml::associations::set_projection_property(section, id, path, &value)? {
         return Ok(());
     }

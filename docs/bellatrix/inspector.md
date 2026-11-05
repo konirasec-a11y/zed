@@ -91,6 +91,32 @@ Esse editor substitui o antigo Boolean genérico `properties.navigable`, que nã
 representava a navegabilidade individual das pontas e não podia ser persistido
 como campo da Association. Abrir o Inspector não toma uma decisão de navegação.
 
+### Referências de Generalization e InterfaceRealization
+
+Os campos `specific`/`general` da Generalization e
+`implementingClassifier`/`contract` da InterfaceRealization usam uma edição
+atômica. Além da referência, o adaptador atualiza os endpoints projetados. Ao
+mudar a source, move a composição especializada e seu oposto. Na
+InterfaceRealization, os membros adicionais de `client`/`supplier` são
+preservados; somente a participação especializada antiga é substituída.
+
+O alvo deve existir, ter a metaclasse exigida e respeitar ownership. Referências
+nulas, estados anteriores contraditórios e ciclos de Generalization são
+rejeitados sem alterar o documento. A validação final dos contratos continua
+obrigatória (UML 2.5.1 §§9.9.7.5 e 10.5.6.5).
+
+Cada ocorrência gráfica conserva seu nome, estilo e geometria. Apenas o vínculo
+do lado alterado é atualizado, usando uma View existente do novo alvo quando ela
+é inequívoca. Sem essa ocorrência, ou com várias candidatas, o lado fica sem
+attachment e a projeção mostra o diagnóstico de rota; nenhuma figura é criada
+automaticamente. O vínculo do outro lado permanece intacto. Marcadores que não
+possam ser reconciliados com segurança causam rejeição atômica.
+
+O retarget de uma relação com rota Manual ainda é rejeitado explicitamente para
+não desenhar o caminho antigo como se estivesse ligado ao novo alvo. Preservar
+as curvas e reancorar apenas suas pontas exige um editor adicional; mudar a
+referência não autoriza descartar o caminho manual.
+
 ### Suporte pendente, sem alterar ruml neste lote
 
 - `Classifier::isFinalSpecialization` existe em UML 2.5.1 §9.9.4.5 e no XMI
@@ -101,12 +127,6 @@ como campo da Association. Abrir o Inspector não toma uma decisão de navegaç�
 - `Property::class` existe em §9.9.17.6 e no XMI `Property-class`, mas não no
   contrato Property atual. O papel `Class::ownedAttribute` continua preservado;
   o adaptador não inventa um campo ausente para armazenar a referência oposta.
-- Retarget de Generalization (`specific`/`general`) e InterfaceRealization
-  (`implementingClassifier`/`contract`) exige atualizar referências, ownership,
-  opostos e ocorrências gráficas em uma operação atômica. O editor genérico
-  dessas referências ainda não faz essa sincronização; mudanças podem ser
-  rejeitadas pelo adaptador. Isso é suporte pendente da aplicação, não uma
-  restrição UML a modificar essas propriedades.
 - `Generalization` especializa DirectedRelationship, não NamedElement (§9.9.7).
   Não possui nome UML; não se deve confundir o rótulo de uma figura com `name`.
   Association, Dependency e InterfaceRealization podem editar seu nome no

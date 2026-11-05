@@ -135,6 +135,9 @@ pub(crate) use uml_notation::{
 mod visual_draft_routing;
 pub(crate) use visual_draft_routing::{reroute_visual_drafts, resolve_visual_center};
 
+#[path = "application/edits/relationship_retarget.rs"]
+mod relationship_retarget;
+
 #[path = "application/edits/inspector_edit.rs"]
 mod inspector_edit;
 pub(crate) use inspector_edit::set_inspected_property;

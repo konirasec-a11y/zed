@@ -3,7 +3,7 @@ use bellatrix_mde::{
     project_model_section,
 };
 use bellatrix_mde_contracts::{
-    ModelingSection, View,
+    ModelingSection, RelationshipRouting, View, ViewEndpoints,
     protocol::{
         Command, ModelDocumentParts, ModelingElementKind, ModelingMemberKind, ModelingRelationKind,
         inspector::PropertyEditor, projection::ModelingProjection,
@@ -116,6 +116,89 @@ fn reopen_both_formats(
         assert_eq!(
             restored, *expected,
             "{format} changed authored UML or presentation"
+        );
+    }
+    Ok(())
+}
+
+fn assert_retargeted_view(
+    flow: &NativeAuthoring,
+    relationship: &str,
+    original: &View,
+    source: &str,
+    target: &str,
+    source_view: Option<&str>,
+    target_view: Option<&str>,
+) -> FlowResult<()> {
+    let section = flow.section()?;
+    let mut expected = original.clone();
+    expected.endpoints = Some(ViewEndpoints {
+        source_view_id: source_view.map(str::to_owned),
+        target_view_id: target_view.map(str::to_owned),
+    });
+    assert_eq!(semantic_view(&section, relationship)?, &expected);
+    let projection = flow.projection()?;
+    assert_eq!(
+        projection.contract(relationship),
+        Some(contract(&section, relationship)?)
+    );
+    let relation = projection
+        .relations
+        .iter()
+        .find(|relation| relation.id == relationship)
+        .ok_or("retargeted relationship disappeared from the public projection")?;
+    assert_eq!(
+        (relation.from.as_str(), relation.to.as_str()),
+        (source, target)
+    );
+    let projected_view = projection
+        .diagrams
+        .iter()
+        .flat_map(|diagram| diagram.all_views())
+        .find(|view| view.id == original.id)
+        .ok_or("retargeted relationship lost its existing View")?;
+    assert_eq!(projected_view.endpoints, expected.endpoints);
+    let projected_relationship = projected_view
+        .relationship
+        .as_ref()
+        .ok_or("retargeted View lost its resolved relationship")?;
+    let has_unattached_endpoint = source_view.is_none() || target_view.is_none();
+    assert_eq!(
+        projected_relationship
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.contains("unattached")),
+        has_unattached_endpoint
+    );
+    if has_unattached_endpoint {
+        assert!(projected_view.routed_geometry.is_none());
+    }
+    Ok(())
+}
+
+fn assert_realization_endpoints(
+    section: &ModelingSection,
+    realization: &str,
+    source: &str,
+    target: &str,
+    owners: [&str; 3],
+) -> FlowResult<()> {
+    let Contract::InterfaceRealization(implementation) = contract(section, realization)? else {
+        return Err("retargeting must preserve the InterfaceRealization contract".into());
+    };
+    assert_eq!(implementation.name.as_deref(), Some("PrintableContract"));
+    assert_eq!(implementation.implementing_classifier, source);
+    assert_eq!(implementation.contract, target);
+    assert_eq!(implementation.client, vec![source.to_owned()]);
+    assert_eq!(implementation.supplier, vec![target.to_owned()]);
+    for owner in owners {
+        assert_eq!(
+            class(section, owner)?.interface_realization,
+            if owner == source {
+                vec![realization.to_owned()]
+            } else {
+                Vec::new()
+            }
         );
     }
     Ok(())
@@ -355,6 +438,194 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
         "InterfaceRealization",
     )?;
 
+    let exportable = flow.create(
+        Command::CreateModelElement {
+            owner_id: Some("model".into()),
+            kind: ModelingElementKind::Interface,
+            name: Some("Exportable".into()),
+        },
+        "Interface",
+    )?;
+    flow.apply(Command::SetProperty {
+        element_id: realization.clone(),
+        path: "properties.name".into(),
+        value: json!("PrintableContract"),
+    })?;
+    for relationship in [&generalization, &realization] {
+        let view = semantic_view(&flow.section()?, relationship)?.clone();
+        let mut style = view.style.clone();
+        style.stroke = Some("#4169e1".into());
+        style.stroke_width = Some(2.5);
+        flow.apply(Command::SetViewStyle {
+            diagram_id: "classes".into(),
+            view_id: view.id.clone(),
+            style,
+        })?;
+        flow.apply(Command::SetViewLabel {
+            view_id: view.id,
+            label: Some("authored relationship label".into()),
+        })?;
+    }
+    let before_retarget = flow.section()?;
+    let generalization_view = semantic_view(&before_retarget, &generalization)?.clone();
+    let realization_view = semantic_view(&before_retarget, &realization)?.clone();
+    let printable_view = semantic_view(&before_retarget, &printable)?.id.clone();
+    for (path, target, specific, general) in [
+        ("general", &nested, &invoice, &nested),
+        ("general", &document, &invoice, &document),
+        ("specific", &nested, &nested, &document),
+        ("specific", &invoice, &invoice, &document),
+    ] {
+        let changed = flow.apply(Command::SetProperty {
+            element_id: generalization.clone(),
+            path: format!("properties.{path}"),
+            value: json!({"$ref": target}),
+        })?;
+        let Contract::Generalization(inheritance) = contract(&changed, &generalization)? else {
+            return Err("retargeting must preserve the Generalization contract".into());
+        };
+        assert_eq!(
+            (&inheritance.specific, &inheritance.general),
+            (specific, general)
+        );
+        for owner in [&invoice, &document, &nested] {
+            assert_eq!(
+                class(&changed, owner)?.generalization,
+                if owner == specific {
+                    vec![generalization.clone()]
+                } else {
+                    Vec::new()
+                }
+            );
+        }
+        assert_retargeted_view(
+            &flow,
+            &generalization,
+            &generalization_view,
+            specific,
+            general,
+            Some(&semantic_view(&changed, specific)?.id),
+            Some(&semantic_view(&changed, general)?.id),
+        )?;
+    }
+    // A semantic target remains valid without a View, or with ambiguous occurrences.
+    for occurrence_count in 0..=2 {
+        if occurrence_count > 0 {
+            flow.apply(Command::PlaceElementView {
+                diagram_id: "classes".into(),
+                element_id: exportable.clone(),
+                x: 750.0,
+                y: 150.0 * f64::from(occurrence_count),
+            })?;
+        }
+        let exportable_view = if occurrence_count == 1 {
+            Some(semantic_view(&flow.section()?, &exportable)?.id.clone())
+        } else {
+            None
+        };
+        for target in [&exportable, &printable] {
+            let changed = flow.apply(Command::SetProperty {
+                element_id: realization.clone(),
+                path: "properties.contract".into(),
+                value: json!({"$ref": target}),
+            })?;
+            assert_realization_endpoints(
+                &changed,
+                &realization,
+                &invoice,
+                target,
+                [&invoice, &document, &nested],
+            )?;
+            let target_view = if target == &printable {
+                Some(printable_view.as_str())
+            } else {
+                exportable_view.as_deref()
+            };
+            assert_retargeted_view(
+                &flow,
+                &realization,
+                &realization_view,
+                &invoice,
+                target,
+                Some(&invoice_view),
+                target_view,
+            )?;
+            reopen_both_formats(&flow.document, &changed)?;
+        }
+    }
+    for implementer in [&document, &invoice] {
+        let changed = flow.apply(Command::SetProperty {
+            element_id: realization.clone(),
+            path: "properties.implementingClassifier".into(),
+            value: json!({"$ref": implementer}),
+        })?;
+        assert_realization_endpoints(
+            &changed,
+            &realization,
+            implementer,
+            &printable,
+            [&invoice, &document, &nested],
+        )?;
+        assert_retargeted_view(
+            &flow,
+            &realization,
+            &realization_view,
+            implementer,
+            &printable,
+            Some(&semantic_view(&changed, implementer)?.id),
+            Some(&printable_view),
+        )?;
+    }
+    for (relationship, path, wrong_type) in [
+        (&generalization, "general", &attribute),
+        (&generalization, "specific", &attribute),
+        (&realization, "contract", &invoice),
+        (&realization, "implementingClassifier", &printable),
+    ] {
+        let unchanged = flow.document.section_json.clone();
+        let revision = flow.revision;
+        assert!(
+            flow.apply(Command::SetProperty {
+                element_id: relationship.clone(),
+                path: format!("properties.{path}"),
+                value: json!({"$ref": wrong_type}),
+            })
+            .is_err(),
+            "{path} must reject an endpoint of the wrong UML type"
+        );
+        assert_eq!(flow.document.section_json, unchanged);
+        assert_eq!(flow.revision, revision);
+    }
+
+    let mut manual_style = realization_view.style.clone();
+    manual_style.routing = Some(RelationshipRouting::Manual);
+    flow.apply(Command::SetViewStyle {
+        diagram_id: "classes".into(),
+        view_id: realization_view.id.clone(),
+        style: manual_style,
+    })?;
+    let manual_section = flow.document.section_json.clone();
+    let manual_revision = flow.revision;
+    let Err(error) = flow.apply(Command::SetProperty {
+        element_id: realization.clone(),
+        path: "properties.contract".into(),
+        value: json!({"$ref": exportable}),
+    }) else {
+        return Err("retargeting a manually routed relationship must be rejected".into());
+    };
+    assert!(error.to_string().to_ascii_lowercase().contains("manual"));
+    assert_eq!(flow.document.section_json, manual_section);
+    assert_eq!(flow.revision, manual_revision);
+    let restored_routing = flow.apply(Command::SetViewStyle {
+        diagram_id: "classes".into(),
+        view_id: realization_view.id.clone(),
+        style: realization_view.style.clone(),
+    })?;
+    assert_eq!(
+        semantic_view(&restored_routing, &realization)?,
+        &realization_view
+    );
+
     let before_navigation = flow.section()?;
     let Contract::Association(before_association) = contract(&before_navigation, &association)?
     else {
@@ -535,9 +806,16 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
     };
     assert_eq!(
         root.packaged_element.iter().collect::<BTreeSet<_>>(),
-        [&invoice, &document, &printable, &association, &dependency]
-            .into_iter()
-            .collect::<BTreeSet<_>>()
+        [
+            &invoice,
+            &document,
+            &printable,
+            &exportable,
+            &association,
+            &dependency
+        ]
+        .into_iter()
+        .collect::<BTreeSet<_>>()
     );
 
     let Contract::Association(binary) = contract(&authored, &association)? else {

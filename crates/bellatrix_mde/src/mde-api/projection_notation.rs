@@ -77,7 +77,7 @@ pub(crate) fn project_view(
                 .collect()
         })
         .unwrap_or_default();
-    let relationship = if let Some(resolved) = mde::resolve_relationship_view(section, view) {
+    let mut relationship = if let Some(resolved) = mde::resolve_relationship_view(section, view) {
         Some(projection::ResolvedRelationship {
             communication_message: resolved.kind == "uml.message"
                 && diagram.interaction_kind.as_deref() == Some("communication"),
@@ -144,6 +144,29 @@ pub(crate) fn project_view(
             })
             .transpose()?
     };
+    if view.draft.is_none()
+        && matches!(view.geometry, mde::Geometry::Path { .. })
+        && let Some(endpoints) = &view.endpoints
+        && let Some(resolved) = &mut relationship
+    {
+        let missing = match (
+            endpoints.source_view_id.is_none(),
+            endpoints.target_view_id.is_none(),
+        ) {
+            (true, true) => Some("source and target"),
+            (true, false) => Some("source"),
+            (false, true) => Some("target"),
+            (false, false) => None,
+        };
+        if let Some(missing) = missing {
+            // A preserved path is not proof that its new semantic endpoints
+            // have occurrences. Surface incomplete authoring rather than a false connection.
+            resolved.diagnostics.push(format!(
+                "{}: unattached {missing} endpoint; showing the stored path",
+                resolved.presentation.type_label,
+            ));
+        }
+    }
     Ok(projection::View {
         id: view.id.clone(),
         subject: view.subject.clone(),
