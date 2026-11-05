@@ -2152,7 +2152,7 @@ name = "bellatrix_design_system"
 version = "0.1.0"
 dependencies = [
  "gpui",
- "ui",
+ "theme",
 ]
 
 [[package]]
@@ -2289,7 +2289,6 @@ version = "0.1.0"
 dependencies = [
  "bellatrix_design_system",
  "gpui",
- "ui",
 ]
 
 [[package]]
@@ -2305,7 +2304,7 @@ name = "bellatrix_ui_uml"
 version = "0.1.0"
 dependencies = [
  "bellatrix_design_system",
- "bellatrix_mde_cordis",
+ "bellatrix_mde_contracts",
  "gpui",
  "log",
  "ui",

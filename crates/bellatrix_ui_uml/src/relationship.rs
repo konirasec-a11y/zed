@@ -1,8 +1,8 @@
 //! Paint the domain's relationship notation with native GPUI paths.
 use crate::class::ViewAppearance;
 use bellatrix_design_system::Palette;
-use bellatrix_mde_cordis::LineMode;
-use bellatrix_mde_cordis::presentation_contract::{
+use bellatrix_mde_contracts::model::LineMode;
+use bellatrix_mde_contracts::protocol::presentation::{
     EndpointMarkerComposition, EndpointMarkerGlyph, EndpointMarkerPlacement, RelationshipMarker,
     RelationshipPresentation, RelationshipStyle, RenderStyle,
 };

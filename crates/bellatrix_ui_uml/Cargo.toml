@@ -3,12 +3,16 @@ publish.workspace = true
 name = "bellatrix_ui_uml"
 version = "0.1.0"
 edition = "2024"
-description = "UML presentation on Zed GPUI using the single MDE domain"
+description = "UML presentation on GPUI using shared Bellatrix contracts"
+
+[features]
+default = []
+legacy_editors = ["dep:ui", "dep:ui_input"]
 
 [dependencies]
 gpui.workspace = true
-ui.workspace = true
-ui_input.workspace = true
+ui = { workspace = true, optional = true }
+ui_input = { workspace = true, optional = true }
 log.workspace = true
 bellatrix_design_system = { path = "../bellatrix_design_system" }
-bellatrix_mde_cordis = { path = "../bellatrix_mde_cordis" }
+bellatrix_mde_contracts.workspace = true

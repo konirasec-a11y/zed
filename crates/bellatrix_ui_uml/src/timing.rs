@@ -1,6 +1,6 @@
 use crate::class::ViewAppearance;
 use bellatrix_design_system::Palette;
-use bellatrix_mde_cordis::{LineMode, TimingMode, TimingPoint, TimingPresentation};
+use bellatrix_mde_contracts::model::{LineMode, TimingMode, TimingPoint, TimingPresentation};
 use gpui::{AnyElement, IntoElement, PathBuilder, canvas, div, point, prelude::*, px, relative};
 
 pub(crate) struct TimingLifeline {

@@ -3,8 +3,12 @@ publish.workspace = true
 name = "bellatrix_design_system"
 version = "0.1.0"
 edition = "2024"
-description = "Shared semantic colors for native Zed GPUI Bellatrix components"
+description = "Shared semantic colors for Bellatrix GPUI components"
+
+[features]
+default = []
+zed_theme = ["dep:theme"]
 
 [dependencies]
 gpui.workspace = true
-ui.workspace = true
+theme = { workspace = true, optional = true }

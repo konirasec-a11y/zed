@@ -1,4 +1,4 @@
-//! Reusable panel headers; the embedding workspace owns dock layout and panel contents.
+//! Reusable panel headers; the host application owns layout and panel contents.
 
 use bellatrix_design_system::Palette;
 use gpui::{
@@ -27,7 +27,14 @@ impl PaneHeader {
         handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
         self.disclosure = Some(
-            ui::Disclosure::new(format!("{}-disclosure", self.title), open)
+            div()
+                .id(format!("{}-disclosure", self.title))
+                .size_5()
+                .flex()
+                .items_center()
+                .justify_center()
+                .cursor_pointer()
+                .child(if open { "▾" } else { "▸" })
                 .on_click(handler)
                 .into_any_element(),
         );
