@@ -523,6 +523,32 @@ pub(crate) fn ownership_property(
     child: ElementRef<'_>,
 ) -> Option<&'static str> {
     let roles = super::classifiers::ownership_roles(owner, child).ok()?;
+    choose_ownership_property(owner, child, &roles)
+}
+
+pub(crate) fn ownership_property_for_assignment(
+    owner: ElementRef<'_>,
+    child: ElementRef<'_>,
+) -> Result<&'static str, String> {
+    let roles = super::classifiers::ownership_roles_for_assignment(owner, child)
+        .map_err(|error| error.to_string())?;
+    choose_ownership_property(owner, child, &roles)
+        .filter(|role| {
+            roles
+                .properties
+                .iter()
+                .any(|property| property.name == *role)
+        })
+        .ok_or_else(|| {
+            "This owner/element pair has no supported UML composite ownership property".into()
+        })
+}
+
+fn choose_ownership_property(
+    owner: ElementRef<'_>,
+    child: ElementRef<'_>,
+    roles: &super::classifiers::OwnershipRoles,
+) -> Option<&'static str> {
     // A unique composite target type does not establish connection-point kind.
     // StateMachine::connection_points and State::entry_or_exit require these kinds.
     if child.conforms_to("Pseudostate")
@@ -675,8 +701,7 @@ pub(crate) fn set_owner(
             Err("The relationship's specialized source determines its owner".into())
         };
     }
-    let role = ownership_property(owner, element)
-        .ok_or("This owner/element pair has no supported UML composite ownership property")?;
+    let role = ownership_property_for_assignment(owner, element)?;
     let inverse_fields = ownership_inverse_fields(owner, element, role);
     let metaclass = element.metaclass().ok_or("UML metaclass is missing")?;
     if let Some(previous) = model.owner(element)? {
@@ -819,8 +844,7 @@ pub(crate) fn reparent(
         if owner.metaclass().is_none() {
             return Err("UML ownership requires a supported owner metaclass".into());
         }
-        let role = ownership_property(owner, element)
-            .ok_or("This owner/element pair has no supported UML composite ownership property")?;
+        let role = ownership_property_for_assignment(owner, element)?;
         next_inverse_fields = ownership_inverse_fields(owner, element, role);
         if let Some(ownership) = section
             .relations

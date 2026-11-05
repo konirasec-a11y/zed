@@ -73,6 +73,7 @@ pub fn registry_from_projection(
         );
     }
     let previous_composites = clear_projected_composites(&mut pending)?;
+    let mut ownership_assignments = Vec::new();
     for relation in relations.iter().filter(|relation| relation.kind == "owns") {
         if relation.properties.keys().any(|key| key != "role") {
             return Err(format!(
@@ -89,13 +90,8 @@ pub fn registry_from_projection(
             None => {
                 let owner_ref = projection_ref(elements, relations, &relation.from)?;
                 let child_ref = projection_ref(elements, relations, &relation.to)?;
-                crate::uml::root::ownership_property(owner_ref, child_ref)
-                    .ok_or_else(|| {
-                        format!(
-                            "{}: ownership role is ambiguous; supply an explicit role",
-                            relation.id
-                        )
-                    })?
+                crate::uml::root::ownership_property_for_assignment(owner_ref, child_ref)
+                    .map_err(|error| format!("{}: {error}", relation.id))?
                     .to_owned()
             }
         };
@@ -109,11 +105,52 @@ pub fn registry_from_projection(
             .get_mut(&relation.from)
             .ok_or_else(|| format!("Missing owner {}", relation.from))?;
         add_reference(owner, &role, &relation.to)?;
+        ownership_assignments.push((relation.from.as_str(), role, relation.to.as_str()));
     }
     for relation in relations.iter().filter(|relation| {
         relation.kind != "owns" && !crate::contract_projection::is_annotation_link(&relation.kind)
     }) {
         apply_endpoints(&mut pending, relation)?;
+    }
+    for (owner_id, role, child_id) in ownership_assignments {
+        let owner_type = pending
+            .get(owner_id)
+            .ok_or_else(|| format!("Missing owner {owner_id}"))?
+            .metaclass;
+        let Some(property) = schema::uml_property(owner_type, &role)
+            .map_err(|error| format!("{owner_type}.{role}: {error}"))?
+        else {
+            continue;
+        };
+        let child = pending
+            .get_mut(child_id)
+            .ok_or_else(|| format!("Missing owned element {child_id}"))?;
+        for opposite in property
+            .opposites
+            .iter()
+            .filter_map(|reference| reference.target)
+            .filter_map(schema::property_by_id)
+            .filter(|opposite| !opposite.is_derived && !opposite.is_read_only)
+        {
+            // New members need both declared association ends. Retain authored
+            // null/empty fields on existing contracts rather than repairing them.
+            if !child.data.contains_key(opposite.name)
+                && schema::classifier(opposite.owner).is_some_and(|declaring| {
+                    metamodel::conforms_to(child.metaclass, declaring.name)
+                })
+                && opposite
+                    .property_type
+                    .target
+                    .and_then(schema::classifier)
+                    .is_some_and(|required| metamodel::conforms_to(owner_type, required.name))
+                && matches!(
+                    field_shape(child.metaclass, opposite.name)?,
+                    Some("s" | "?s" | "v")
+                )
+            {
+                add_reference(child, opposite.name, owner_id)?;
+            }
+        }
     }
     restore_composite_order(&mut pending, previous_composites)?;
     let mut registry = ruml::Registry::new();
@@ -475,6 +512,7 @@ fn apply_endpoints(
         _ => None,
     };
     if let Some((source, target, opposite)) = endpoints {
+        let new_source = !record.data.contains_key(source);
         // A projected source may be derived from an owner's slot. Preserve that
         // representation rather than rewriting a complete contract on roundtrip.
         let derived_source = record.data.get(source).is_some_and(|value| {
@@ -482,12 +520,15 @@ fn apply_endpoints(
                 || value.as_str() == Some("")
                 || value.as_array().is_some_and(Vec::is_empty)
         });
-        if derived_source && let Some(opposite) = opposite {
+        if (new_source || derived_source)
+            && let Some(opposite) = opposite
+        {
             let owner = pending.get_mut(&relation.from).ok_or_else(|| {
                 format!("{}: missing source owner {}", relation.id, relation.from)
             })?;
             add_reference(owner, opposite, &relation.id)?;
-        } else {
+        }
+        if !derived_source || opposite.is_none() {
             let record = pending
                 .get_mut(&relation.id)
                 .ok_or_else(|| format!("Missing relationship {}", relation.id))?;
@@ -496,7 +537,14 @@ fn apply_endpoints(
         let record = pending
             .get_mut(&relation.id)
             .ok_or_else(|| format!("Missing relationship {}", relation.id))?;
-        return require_endpoint(record, target, &relation.to);
+        require_endpoint(record, target, &relation.to)?;
+        if new_source && source != "client" && metamodel::conforms_to(metaclass, "Dependency") {
+            // Specialized ends still belong to the non-derived Dependency
+            // client/supplier supersets when a new relationship is authored.
+            add_reference(record, "client", &relation.from)?;
+            add_reference(record, "supplier", &relation.to)?;
+        }
+        return Ok(());
     }
     if metamodel::conforms_to(metaclass, "Association") {
         let ends = record

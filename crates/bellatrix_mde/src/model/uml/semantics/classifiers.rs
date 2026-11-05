@@ -231,6 +231,21 @@ pub(crate) fn ownership_roles(
     owner: ElementRef<'_>,
     child: ElementRef<'_>,
 ) -> Result<OwnershipRoles, QueryError> {
+    resolve_ownership_roles(owner, child, false)
+}
+
+pub(crate) fn ownership_roles_for_assignment(
+    owner: ElementRef<'_>,
+    child: ElementRef<'_>,
+) -> Result<OwnershipRoles, QueryError> {
+    resolve_ownership_roles(owner, child, true)
+}
+
+fn resolve_ownership_roles(
+    owner: ElementRef<'_>,
+    child: ElementRef<'_>,
+    for_assignment: bool,
+) -> Result<OwnershipRoles, QueryError> {
     let mut explicit = Vec::new();
     let mut candidates = Vec::new();
     let mut excluded_by_explicit_role = false;
@@ -293,7 +308,13 @@ pub(crate) fn ownership_roles(
                 }
                 explicit.push(property);
             } else if compatible {
-                excluded_by_explicit_role = true;
+                if for_assignment {
+                    // An existing empty collection excludes current membership,
+                    // not a new assignment to this compatible composite slot.
+                    candidates.push(property);
+                } else {
+                    excluded_by_explicit_role = true;
+                }
             }
         } else if compatible {
             candidates.push(property);
