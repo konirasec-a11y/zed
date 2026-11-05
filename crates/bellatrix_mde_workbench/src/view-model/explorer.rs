@@ -85,6 +85,44 @@ pub(crate) fn project_explorer(
     }
 }
 
+pub(crate) fn selection_occurrence(
+    section: &ModelingProjection,
+    subject: &str,
+    diagram: Option<&str>,
+    preferred_view: Option<&str>,
+) -> Option<(String, ViewOccurrence)> {
+    let candidates = section
+        .explorer
+        .added
+        .iter()
+        .filter(|row| {
+            !row.diagram
+                && row
+                    .view
+                    .as_ref()
+                    .and_then(|view| view.subject_id.as_deref())
+                    .unwrap_or(row.element_id.as_str())
+                    == subject
+        })
+        .filter_map(|row| {
+            let occurrence = section.explorer.parent_occurrences.get(&row.key)?;
+            (Some(occurrence.diagram_id.as_str()) == diagram).then_some((row, occurrence))
+        })
+        .collect::<Vec<_>>();
+    let has_preferred = candidates
+        .iter()
+        .any(|(_, occurrence)| Some(occurrence.view_id.as_str()) == preferred_view);
+    let mut candidates = candidates.into_iter().filter(|(_, occurrence)| {
+        !has_preferred || Some(occurrence.view_id.as_str()) == preferred_view
+    });
+    let (row, occurrence) = candidates.next()?;
+    // Multiple renderings are not interchangeable. Keep model-only selection when ambiguous.
+    if candidates.any(|(_, candidate)| candidate != occurrence) {
+        return None;
+    }
+    Some((row.key.clone(), occurrence.clone()))
+}
+
 pub(crate) fn explorer_type_label(
     section: &ModelingProjection,
     kind: &str,

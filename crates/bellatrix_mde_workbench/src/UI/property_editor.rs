@@ -216,14 +216,20 @@ pub(crate) fn reconcile_inputs(
             let listener = input.as_ref().map(|input| {
                 let owner = cx.weak_entity();
                 let event_key = key.clone();
-                let event_item = item.clone();
                 let numeric = property.editor == PropertyEditor::Number;
                 input.read(cx).editor().clone().subscribe(
                     Box::new(move |event, _, cx| {
                         if event == ErasedEditorEvent::BufferEdited {
                             let owner = owner.clone();
                             let key = event_key.clone();
-                            let item = event_item.clone();
+                            // Draft inputs survive rebinding to another workbench item.
+                            // Capture the binding when typing, not when creating the input.
+                            let Some(item) = owner
+                                .upgrade()
+                                .and_then(|panel| panel.read(cx).bound_item())
+                            else {
+                                return;
+                            };
                             cx.defer(move |cx| {
                                 if let Err(error) = owner.update(cx, |panel, cx| {
                                     let admitted =
@@ -734,6 +740,9 @@ fn property_row(
                         let panel = panel.clone();
                         menu.entry(label, None, move |window, cx| {
                             if let Err(error) = panel.update(cx, |panel, cx| {
+                                if !property_admission_allowed(panel, &target, &key, cx) {
+                                    return;
+                                }
                                 if let Some(draft) = panel.property_drafts.get_mut(&key) {
                                     let text = draft_value_text(&key.path, &value);
                                     draft.last_observed = text.clone();
@@ -1152,7 +1161,10 @@ pub(crate) fn render_inspector(
     let advanced: Vec<_> = inspector
         .properties
         .iter()
-        .filter(|property| !is_general(&property.path) && property.path != "description")
+        .filter(|property| {
+            (!is_general(&property.path) || property.path == "kind")
+                && property.path != "description"
+        })
         .collect();
     if !advanced.is_empty() {
         children.push(
@@ -1232,6 +1244,16 @@ fn navigate_inspector_element(
         return;
     }
     item.update(cx, |workbench, cx| {
-        workbench.select_element(target.to_owned(), cx);
+        let occurrence = crate::workbench_ui::explorer::selection_occurrence(
+            &snapshot.section,
+            target,
+            workbench.presentation.active_diagram(),
+            workbench.presentation.selected_canvas_view(),
+        );
+        if let Some((key, occurrence)) = occurrence {
+            workbench.select_explorer_element(target.to_owned(), key, Some(occurrence), cx);
+        } else {
+            workbench.select_element(target.to_owned(), cx);
+        }
     });
 }

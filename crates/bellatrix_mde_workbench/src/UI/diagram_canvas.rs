@@ -489,7 +489,16 @@ impl Render for MdeWorkbenchItem {
                                         .iter()
                                         .find(|parameter| parameter.id == id)
                                         .copied()
-                                } else if view.member_labels.contains_key(id) {
+                                } else if view.member_labels.contains_key(id)
+                                    || self
+                                        .presentation
+                                        .selected_explorer_occurrence()
+                                        .is_some_and(|occurrence| {
+                                            occurrence.view_id == view.id
+                                                && occurrence.member_path.last().map(String::as_str)
+                                                    == Some(id)
+                                        })
+                                {
                                     snapshot
                                         .section
                                         .elements
@@ -506,7 +515,12 @@ impl Render for MdeWorkbenchItem {
                             });
                         let is_selected = selected_target.is_some();
                         let editing = selected_target.filter(|selected| {
-                            self.presentation.editing_element() == Some(selected.id.as_str())
+                            (selected.id == subject
+                                || view.member_labels.contains_key(&selected.id)
+                                || template_parameters
+                                    .iter()
+                                    .any(|parameter| parameter.id == selected.id))
+                                && self.presentation.editing_element() == Some(selected.id.as_str())
                                 && self.inline_editor.is_some()
                         });
                         let (quick_actions, left_actions, visibility_picker) =
@@ -518,6 +532,7 @@ impl Render for MdeWorkbenchItem {
                                     selected,
                                     cx.entity(),
                                     self.project_id().clone(),
+                                    diagram.id.clone(),
                                     snapshot.revision,
                                 )
                             } else {

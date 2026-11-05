@@ -77,7 +77,7 @@ use gpui::{
     IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
     Point, Render, ScrollEvent, SharedString, Task, Window, div, prelude::*, px,
 };
-use quick_edit_view::{ParameterAction, quick_edit_for_element};
+use quick_edit_view::{ParameterAction, QuickEditTarget, quick_edit_for_element};
 use ui::{Clickable, Label, LabelCommon};
 use ui_input::InputField;
 use workspace::{Workspace, item::Item};
@@ -560,27 +560,58 @@ impl MdeWorkbenchItem {
     fn name_expression_text(element: &bellatrix_mde_cordis::projection::Element) -> String {
         element.name_expression.clone()
     }
-    pub(crate) fn run_quick_action(&mut self, action: UmlQuickCreate, cx: &mut Context<Self>) {
+    pub(crate) fn quick_edit_snapshot(
+        &mut self,
+        target: &QuickEditTarget,
+        cx: &mut Context<Self>,
+    ) -> Option<MdeSnapshot> {
+        if self.source.is_read_only() || self.selected_view_is_inspection_only() {
+            return None;
+        }
+        if self.project_id() != &target.project
+            || self.presentation.selected_element() != Some(target.element.as_str())
+            || self.presentation.active_diagram() != Some(target.diagram.as_str())
+            || self.presentation.selected_tool().is_some()
+        {
+            self.feedback = "Quick edit not sent: the active selection changed".into();
+            cx.notify();
+            return None;
+        }
+        let snapshot = match self.source.snapshot() {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                self.feedback = format!("Quick edit not sent: {error}");
+                cx.notify();
+                return None;
+            }
+        };
+        if snapshot.revision != target.revision {
+            self.feedback = "Quick edit not sent: the model changed; try again".into();
+            cx.notify();
+            return None;
+        }
+        Some(snapshot)
+    }
+
+    pub(crate) fn run_quick_action(
+        &mut self,
+        action: UmlQuickCreate,
+        target: &QuickEditTarget,
+        cx: &mut Context<Self>,
+    ) {
         if !self.source.allows_creation() {
             self.feedback = "Quick creation is not available for this document".into();
             cx.notify();
             return;
         }
-        let Some(element_id) = self.presentation.selected_element().map(str::to_owned) else {
-            self.feedback = "Select a UML element first".into();
-            cx.notify();
-            return;
-        };
-        let Ok(snapshot) = self.source.snapshot() else {
-            self.feedback = "Project snapshot unavailable".into();
-            cx.notify();
+        let Some(snapshot) = self.quick_edit_snapshot(target, cx) else {
             return;
         };
         let Some(element) = snapshot
             .section
             .elements
             .iter()
-            .find(|element| element.id == element_id)
+            .find(|element| element.id == target.element)
         else {
             self.feedback = "Element was removed from the model".into();
             cx.notify();
@@ -591,34 +622,18 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         }
-        let Some(diagram_id) = self
-            .presentation
-            .active_diagram()
-            .map(str::to_owned)
-            .or_else(|| {
-                snapshot
-                    .section
-                    .diagrams
-                    .first()
-                    .map(|diagram| diagram.id.clone())
-            })
-        else {
-            self.feedback = "No active UML diagram".into();
-            cx.notify();
-            return;
-        };
-        if !snapshot.section.tools.allows_new_views(&diagram_id) {
+        if !snapshot.section.tools.allows_new_views(&target.diagram) {
             self.feedback = "Quick creation is not available for this diagram's domain".into();
             cx.notify();
             return;
         }
         self.submit(
             MdeUiCommand::QuickEdit(ModelingQuickEditRequested {
-                project_id: self.project_id().clone(),
-                element_id,
-                diagram_id,
+                project_id: target.project.clone(),
+                element_id: target.element.clone(),
+                diagram_id: target.diagram.clone(),
                 action,
-                expected_revision: snapshot.revision,
+                expected_revision: target.revision,
             }),
             cx,
         );

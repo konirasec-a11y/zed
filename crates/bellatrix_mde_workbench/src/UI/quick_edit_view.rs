@@ -1,14 +1,22 @@
 //! Map domain action descriptors to controls; no action semantics belong to a shape.
 use crate::workbench_ui::MdeWorkbenchItem;
 use bellatrix_mde_cordis::{
-    ModelingMemberKind, QuickEditAction, QuickEditAvailability, QuickEditControl, QuickEditSide,
-    UmlQuickCreate,
+    MdeUiCommand, ModelingAddMemberRequested, ModelingMemberKind, ModelingSetPropertyRequested,
+    QuickEditAction, QuickEditAvailability, QuickEditControl, QuickEditSide, UmlQuickCreate,
     projection::{Element, ModelingProjection, Relation},
 };
 use bellatrix_project::ProjectId;
 use bellatrix_ui_uml::{UmlQuickAction, UmlQuickEdit, UmlVisibilityPicker};
 use gpui::Entity;
 use ui::IconName;
+
+#[derive(Clone)]
+pub(crate) struct QuickEditTarget {
+    pub project: ProjectId,
+    pub diagram: String,
+    pub element: String,
+    pub revision: u64,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ParameterAction {
@@ -56,12 +64,19 @@ pub(crate) fn quick_edit_for_element(
     element: &Element,
     owner: Entity<MdeWorkbenchItem>,
     project: ProjectId,
+    diagram: String,
     revision: u64,
 ) -> (
     Option<UmlQuickEdit>,
     Option<UmlQuickEdit>,
     Option<UmlVisibilityPicker>,
 ) {
+    let target = QuickEditTarget {
+        project,
+        diagram,
+        element: element.id.clone(),
+        revision,
+    };
     let descriptors = &element.quick_actions;
     let actions: Vec<(QuickEditSide, UmlQuickAction)> = descriptors
         .iter()
@@ -115,32 +130,46 @@ pub(crate) fn quick_edit_for_element(
             return None;
         }
         let owner = owner.clone();
-        let project = project.clone();
-        let element_id = element.id.clone();
+        let target = target.clone();
         Some(
             UmlQuickEdit::new(actions, move |id, _, cx| {
+                if owner
+                    .update(cx, |item, cx| item.quick_edit_snapshot(&target, cx))
+                    .is_none()
+                {
+                    return;
+                }
                 if let Some(action) = ParameterAction::from_id(id) {
                     owner.update(cx, |item, cx| {
                         item.run_parameter_action(
                             action,
-                            project.clone(),
-                            element_id.clone(),
-                            revision,
+                            target.project.clone(),
+                            target.element.clone(),
+                            target.revision,
                             cx,
                         );
                     });
                     return;
                 }
                 match id {
-                    "uml.add-attribute" => owner.update(cx, |item, cx| {
-                        item.add_member_to_selected(ModelingMemberKind::Attribute, cx)
-                    }),
-                    "uml.add-operation" => owner.update(cx, |item, cx| {
-                        item.add_member_to_selected(ModelingMemberKind::Operation, cx)
-                    }),
-                    "uml.add-reception" => owner.update(cx, |item, cx| {
-                        item.add_member_to_selected(ModelingMemberKind::Reception, cx)
-                    }),
+                    "uml.add-attribute" | "uml.add-operation" | "uml.add-reception" => {
+                        let kind = match id {
+                            "uml.add-attribute" => ModelingMemberKind::Attribute,
+                            "uml.add-operation" => ModelingMemberKind::Operation,
+                            _ => ModelingMemberKind::Reception,
+                        };
+                        owner.update(cx, |item, cx| {
+                            item.submit(
+                                MdeUiCommand::AddMember(ModelingAddMemberRequested {
+                                    project_id: target.project.clone(),
+                                    owner_id: target.element.clone(),
+                                    kind,
+                                    expected_revision: target.revision,
+                                }),
+                                cx,
+                            );
+                        });
+                    }
                     id => {
                         let action = match id {
                             "uml.add-note" => UmlQuickCreate::Note,
@@ -160,7 +189,7 @@ pub(crate) fn quick_edit_for_element(
                             "uml.add-part" => UmlQuickCreate::Part,
                             _ => return,
                         };
-                        owner.update(cx, |item, cx| item.run_quick_action(action, cx));
+                        owner.update(cx, |item, cx| item.run_quick_action(action, &target, cx));
                     }
                 }
             })
@@ -179,9 +208,17 @@ pub(crate) fn quick_edit_for_element(
             let current = element.visibility.as_deref().unwrap_or("public");
             UmlVisibilityPicker::new(current, move |value, _, cx| {
                 owner.update(cx, |item, cx| {
-                    item.set_selected_property(
-                        "properties.visibility".into(),
-                        serde_json::Value::String(value.into()),
+                    if item.quick_edit_snapshot(&target, cx).is_none() {
+                        return;
+                    }
+                    item.submit(
+                        MdeUiCommand::SetProperty(ModelingSetPropertyRequested {
+                            project_id: target.project.clone(),
+                            element_id: target.element.clone(),
+                            path: "properties.visibility".into(),
+                            value: serde_json::Value::String(value.into()),
+                            expected_revision: target.revision,
+                        }),
                         cx,
                     )
                 });

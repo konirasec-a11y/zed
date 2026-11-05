@@ -69,11 +69,16 @@ impl WorkbenchState {
         self.selected_explorer.as_ref().map(|(key, _)| key.as_str())
     }
 
+    pub fn selected_explorer_occurrence(&self) -> Option<&bellatrix_mde_cordis::ViewOccurrence> {
+        self.selected_explorer
+            .as_ref()
+            .and_then(|(_, occurrence)| occurrence.as_ref())
+            .filter(|occurrence| Some(occurrence.diagram_id.as_str()) == self.active_diagram())
+    }
+
     pub fn selected_canvas_view(&self) -> Option<&str> {
         self.selected_view().or_else(|| {
-            self.selected_explorer
-                .as_ref()
-                .and_then(|(_, occurrence)| occurrence.as_ref())
+            self.selected_explorer_occurrence()
                 .map(|occurrence| occurrence.view_id.as_str())
         })
     }
@@ -99,12 +104,23 @@ impl WorkbenchState {
         };
         let rows =
             super::explorer::project_explorer(section, super::explorer::ExplorerSortOrder::Added);
-        if !rows.iter().any(|row| {
+        if rows.iter().any(|row| {
             &row.key == key
-                && Some(row.element_id.as_str()) == self.selected_element()
+                && Some(
+                    row.view
+                        .as_ref()
+                        .and_then(|view| view.subject_id.as_deref())
+                        .unwrap_or(row.element_id.as_str()),
+                ) == self.selected_element()
                 && (row.diagram_context.is_none()
                     || row.diagram_context.as_deref() == self.active_diagram())
         }) {
+            // The same Explorer row can acquire a different occurrence after a move.
+            self.selected_explorer = Some((
+                key.clone(),
+                section.explorer.parent_occurrences.get(key).cloned(),
+            ));
+        } else {
             self.selected_explorer = None;
         }
     }

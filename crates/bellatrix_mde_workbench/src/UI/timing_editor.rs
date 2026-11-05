@@ -132,7 +132,6 @@ fn is_active(
 fn create_row(
     draft: &mut TimingDraft,
     key: &TimingKey,
-    item: &Entity<MdeWorkbenchItem>,
     time: &str,
     value: &str,
     window: &mut Window,
@@ -148,7 +147,6 @@ fn create_row(
         let input_id = input.entity_id();
         draft.admitted_inputs.insert(input_id, text.to_owned());
         let owner = cx.weak_entity();
-        let item = item.downgrade();
         let key = key.clone();
         draft
             .listeners
@@ -157,7 +155,12 @@ fn create_row(
                     if event != ErasedEditorEvent::BufferEdited {
                         return;
                     }
-                    let Some(item) = item.upgrade() else { return };
+                    let Some(item) = owner
+                        .upgrade()
+                        .and_then(|panel| panel.read(cx).bound_item())
+                    else {
+                        return;
+                    };
                     let admission = owner.read_with(cx, |panel, cx| {
                         if !is_active(panel, &item, &key, cx) {
                             return None;
@@ -239,7 +242,6 @@ pub(crate) fn reconcile_timing_inputs(
             create_row(
                 &mut draft,
                 &key,
-                item,
                 &point.time.to_string(),
                 &point.value,
                 window,
@@ -264,7 +266,6 @@ pub(crate) fn reconcile_timing_inputs(
                 create_row(
                     draft,
                     &key,
-                    item,
                     &point.time.to_string(),
                     &point.value,
                     window,
@@ -436,7 +437,7 @@ fn edit_timing(
         return;
     };
     match action {
-        TimingAction::Add => create_row(draft, key, item, "", "", window, cx),
+        TimingAction::Add => create_row(draft, key, "", "", window, cx),
         TimingAction::Remove(id) => draft.rows.retain(|(time, _)| time.entity_id() != id),
         TimingAction::Mode(mode) => draft.mode = mode,
         TimingAction::Reload | TimingAction::Keep => {
@@ -471,7 +472,6 @@ fn edit_timing(
                     create_row(
                         draft,
                         key,
-                        item,
                         &point.time.to_string(),
                         &point.value,
                         window,

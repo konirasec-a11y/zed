@@ -745,11 +745,12 @@ pub struct MdeRightPanel {
     pub(crate) inspector_advanced_open: bool,
 }
 impl MdeRightPanel {
+    pub(crate) fn bound_item(&self) -> Option<Entity<MdeWorkbenchItem>> {
+        self.state.item.as_ref().and_then(gpui::WeakEntity::upgrade)
+    }
+
     pub(crate) fn is_bound_to(&self, item: &Entity<MdeWorkbenchItem>) -> bool {
-        self.state
-            .item
-            .as_ref()
-            .and_then(gpui::WeakEntity::upgrade)
+        self.bound_item()
             .is_some_and(|bound| bound.entity_id() == item.entity_id())
     }
 

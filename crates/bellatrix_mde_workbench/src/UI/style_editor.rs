@@ -160,7 +160,6 @@ pub(crate) fn reconcile_style_inputs(
                 });
                 let owner = cx.weak_entity();
                 let key = key.clone();
-                let item = item.downgrade();
                 let field = *field;
                 listeners.push(input.read(cx).editor().clone().subscribe(
                     Box::new(move |event, _, cx| {
@@ -169,9 +168,13 @@ pub(crate) fn reconcile_style_inputs(
                         }
                         let owner = owner.clone();
                         let key = key.clone();
-                        let item = item.clone();
+                        let Some(item) = owner
+                            .upgrade()
+                            .and_then(|panel| panel.read(cx).bound_item())
+                        else {
+                            return;
+                        };
                         cx.defer(move |cx| {
-                            let Some(item) = item.upgrade() else { return };
                             if let Err(error) = owner.update(cx, |panel, cx| {
                                 if !target_is_active(panel, &item, &key, cx) {
                                     return;
