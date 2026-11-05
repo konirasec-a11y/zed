@@ -1593,9 +1593,7 @@ fn ensure_view_deletion_supported(
                 .subject
                 .as_ref()
                 .is_some_and(|subject| affected_subjects.contains(subject))
-                && (nested
-                    || !view.children.is_empty()
-                    || matches!(view.geometry, Geometry::Layout { .. }))
+                && (nested || !view.children.is_empty())
             {
                 return Err(format!(
                     "deleting this element affects View {} in diagram {}, which requires hierarchy-aware deletion; no elements or authored presentation were changed",
@@ -1603,6 +1601,187 @@ fn ensure_view_deletion_supported(
                 ));
             }
             pending.extend(view.children.iter().map(|child| (child, true)));
+        }
+    }
+    ensure_layout_leaf_dependencies(section, affected_subjects)?;
+    Ok(())
+}
+
+fn ensure_layout_leaf_dependencies(
+    section: &ModelingSection,
+    affected_subjects: &HashSet<String>,
+) -> Result<(), String> {
+    let removed_layout_views = section
+        .diagrams
+        .iter()
+        .flat_map(|diagram| diagram.views.iter())
+        .filter(|view| {
+            view.children.is_empty()
+                && matches!(view.geometry, Geometry::Layout { .. })
+                && view
+                    .subject
+                    .as_ref()
+                    .is_some_and(|id| affected_subjects.contains(id))
+        })
+        .collect::<Vec<_>>();
+    if removed_layout_views.is_empty() {
+        return Ok(());
+    }
+    let view_ids = removed_layout_views
+        .iter()
+        .map(|view| view.id.as_str())
+        .collect::<HashSet<_>>();
+    let subject_ids = removed_layout_views
+        .iter()
+        .filter_map(|view| view.subject.as_deref())
+        .collect::<HashSet<_>>();
+    for diagram in &section.diagrams {
+        for view in diagram.all_views().filter(|view| {
+            !view
+                .subject
+                .as_ref()
+                .is_some_and(|id| affected_subjects.contains(id))
+        }) {
+            let check = |target: Option<&str>, role: &str, model: bool| -> Result<(), String> {
+                let removed = if model { &subject_ids } else { &view_ids };
+                if let Some(target) = target
+                    && removed.contains(target)
+                {
+                    return Err(format!(
+                        "Cannot delete Layout leaf: surviving View {} in diagram {} references {} through {}; no elements or presentation were changed",
+                        view.id, diagram.id, target, role,
+                    ));
+                }
+                Ok(())
+            };
+            if let Some(endpoints) = &view.endpoints {
+                check(
+                    endpoints.source_view_id.as_deref(),
+                    "endpoints.source_view_id",
+                    false,
+                )?;
+                check(
+                    endpoints.target_view_id.as_deref(),
+                    "endpoints.target_view_id",
+                    false,
+                )?;
+            }
+            if let Some(draft) = &view.draft {
+                check(
+                    draft.parent_view_id.as_deref(),
+                    "draft.parent_view_id",
+                    false,
+                )?;
+            }
+            let presentation = &view.presentation;
+            check(
+                presentation.name_label.as_deref(),
+                "presentation.name_label",
+                false,
+            )?;
+            if let Some(binding) = &presentation.entity_box {
+                check(
+                    binding.name_label.value().map(String::as_str),
+                    "entity_box.name_label",
+                    false,
+                )?;
+                check(
+                    binding.column_compartment.value().map(String::as_str),
+                    "entity_box.column_compartment",
+                    false,
+                )?;
+            }
+            if let Some(binding) = &presentation.relationship_labels {
+                check(
+                    binding.name.value().map(String::as_str),
+                    "relationship_labels.name",
+                    false,
+                )?;
+                check(
+                    binding.source_name.value().map(String::as_str),
+                    "relationship_labels.source_name",
+                    false,
+                )?;
+                check(
+                    binding.target_name.value().map(String::as_str),
+                    "relationship_labels.target_name",
+                    false,
+                )?;
+            }
+            if let Some(binding) = &presentation.interface_icon {
+                check(
+                    binding.label_compartment.value().map(String::as_str),
+                    "interface_icon.label_compartment",
+                    false,
+                )?;
+            }
+            if let Some(binding) = &presentation.label_binding
+                && let crate::LabelOptionsSource::View { view_id } = &binding.options_source
+            {
+                check(
+                    Some(view_id.as_str()),
+                    "label_binding.options_source",
+                    false,
+                )?;
+            }
+            if let Some(inheritance) = &presentation.style_inheritance {
+                check(
+                    inheritance.source.value().map(String::as_str),
+                    "style_inheritance.source",
+                    false,
+                )?;
+            }
+            for (role, reference) in &presentation.references {
+                match reference.value() {
+                    Some(crate::PresentationReference::View(id)) => {
+                        check(Some(id.as_str()), role, false)?
+                    }
+                    Some(crate::PresentationReference::Model(id)) => {
+                        check(Some(id.as_str()), role, true)?
+                    }
+                    _ => {}
+                }
+            }
+            if let Some(endpoints) = &presentation.relationship_endpoints {
+                for (role, binding) in [
+                    ("relationship_endpoints.source", &endpoints.source),
+                    ("relationship_endpoints.target", &endpoints.target),
+                ] {
+                    match &binding.target {
+                        crate::EndpointMarkerTarget::View { id } => {
+                            check(Some(id.as_str()), role, false)?
+                        }
+                        crate::EndpointMarkerTarget::ModelEnd { id } => {
+                            check(Some(id.as_str()), role, true)?
+                        }
+                        crate::EndpointMarkerTarget::RelationshipRole { .. } => {}
+                    }
+                }
+            }
+        }
+    }
+    for (subject, placement) in &section.hierarchy {
+        // remove_element drops affected subjects and clears occurrences whose
+        // parent is affected, so only remaining placements can become dangling.
+        if affected_subjects.contains(subject)
+            || placement
+                .parent_id
+                .as_ref()
+                .is_some_and(|id| affected_subjects.contains(id))
+        {
+            continue;
+        }
+        if let Some(occurrence) = &placement.occurrence
+            && (view_ids.contains(occurrence.view_id.as_str())
+                || occurrence
+                    .member_path
+                    .iter()
+                    .any(|id| subject_ids.contains(id.as_str())))
+        {
+            return Err(format!(
+                "Cannot delete Layout leaf: surviving hierarchy placement {} references View {} or its subject; no elements or presentation were changed",
+                subject, occurrence.view_id,
+            ));
         }
     }
     Ok(())

@@ -50,6 +50,15 @@ O contrato nativo `View`/`Geometry`/`Style` preserva esses dados separadamente.
 Descrição e demais metadados de aplicação também permanecem separados; não são
 declarados como atributos UML de toda metaclasse.
 
+A exclusão semântica aceita Views folha no nível principal mesmo com bounds de
+layout ausentes: remover a ocorrência não exige resolver coordenadas. Referências
+de apresentação sobreviventes para essas ocorrências bloqueiam a operação inteira,
+sem descartar estilos ou vínculos. Views aninhadas ou com filhos continuam
+bloqueadas até haver remoção que preserve sua hierarquia e referências. O contexto `modelElement` de um diagrama é uma
+referência UMLDI, não ownership do conteúdo UML (§B.7.14); este lote mantém o
+bloqueio explícito quando a exclusão afetaria esse contexto. Um ClassDiagram
+independente permanece após a exclusão de seu conteúdo (§B.7.6.3).
+
 ### Esquema mínimo por tipo
 
 | Origem                        | Propriedades editáveis                                                   | Editor/observações                                                                            |

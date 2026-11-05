@@ -3,7 +3,8 @@ use bellatrix_mde::{
     project_model_section,
 };
 use bellatrix_mde_contracts::{
-    ModelingSection, RelationshipRouting, View, ViewEndpoints,
+    Authored, Geometry, InheritedStyleProperty, ModelingSection, RelationshipRouting,
+    StyleInheritance, View, ViewEndpoints,
     protocol::{
         Command, ModelDocumentParts, ModelingElementKind, ModelingMemberKind, ModelingRelationKind,
         inspector::PropertyEditor, projection::ModelingProjection,
@@ -872,6 +873,73 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
     }
 
     reopen_both_formats(&flow.document, &authored)?;
+
+    let mut with_layout_leaf = authored.clone();
+    let layout_view = with_layout_leaf
+        .diagrams
+        .iter_mut()
+        .find(|diagram| diagram.id == "classes")
+        .ok_or("missing class diagram before loading a layout leaf")?
+        .views
+        .iter_mut()
+        .find(|view| view.subject.as_deref() == Some(exportable.as_str()))
+        .ok_or("missing top-level Exportable View")?;
+    assert!(layout_view.children.is_empty());
+    assert!(layout_view.draft.is_none());
+    layout_view.geometry = Geometry::Layout {
+        bounds: Default::default(),
+    };
+    assert_eq!(
+        serde_json::to_value(&layout_view.geometry)?,
+        json!({"kind": "layout", "bounds": {}})
+    );
+    let layout_leaf = layout_view.clone();
+    let layout_bytes = encode_model_section(
+        &flow.document.id,
+        &flow.document.name,
+        &serde_json::to_string(&with_layout_leaf)?,
+        "json",
+    )?;
+    flow.document = prepare_model_document(&decode_model_document(&layout_bytes, "json")?)?;
+    assert_eq!(flow.section()?, with_layout_leaf);
+    reopen_both_formats(&flow.document, &with_layout_leaf)?;
+
+    let mut with_style_dependent = with_layout_leaf.clone();
+    let mut dependent_view = layout_leaf;
+    let layout_view_id = dependent_view.id.clone();
+    dependent_view.id = "surviving-style-dependent".into();
+    dependent_view.subject = None;
+    dependent_view.presentation.style_inheritance = Some(StyleInheritance {
+        source: Authored::Value(layout_view_id),
+        properties: BTreeSet::from([InheritedStyleProperty::Fill]),
+    });
+    with_style_dependent
+        .diagrams
+        .iter_mut()
+        .find(|diagram| diagram.id == "classes")
+        .ok_or("missing class diagram for the surviving style dependency")?
+        .views
+        .push(dependent_view);
+    let dependent_bytes = encode_model_section(
+        &flow.document.id,
+        &flow.document.name,
+        &serde_json::to_string(&with_style_dependent)?,
+        "json",
+    )?;
+    let mut guarded_flow = NativeAuthoring {
+        document: prepare_model_document(&decode_model_document(&dependent_bytes, "json")?)?,
+        revision: flow.revision,
+    };
+    let rejection = guarded_flow
+        .apply(Command::DeleteElement {
+            element_id: "model".into(),
+        })
+        .err()
+        .ok_or("deletion must not strand a surviving View's inherited style")?;
+    assert!(rejection.to_string().contains("surviving-style-dependent"));
+    assert_eq!(guarded_flow.revision, flow.revision);
+    assert_eq!(guarded_flow.section()?, with_style_dependent);
+    reopen_both_formats(&guarded_flow.document, &with_style_dependent)?;
 
     let deleted = flow.apply(Command::DeleteElement {
         element_id: "model".into(),
