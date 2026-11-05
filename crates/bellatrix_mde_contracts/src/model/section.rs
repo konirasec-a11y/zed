@@ -1,10 +1,14 @@
-use crate::{Diagram, Element, Project, Relation};
+use super::{Annotation, Diagram, FileContent, Implementation, Project};
+use crate::ruml::Registry;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
-/// Domain payload inside a platform ProjectDocument, without duplicate identity.
+/// The only persistent UML state is the supplied typed registry. Presentation
+/// metadata references its identities and cannot override contract fields.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ModelingSection {
+    pub registry: Registry,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub root_model: Option<String>,
     #[serde(default, skip_serializing_if = "super::AuthoringKnowledge::is_empty")]
@@ -13,48 +17,44 @@ pub struct ModelingSection {
     pub mdj_provenance: Option<super::MdjProvenance>,
     #[serde(
         default,
-        skip_serializing_if = "std::collections::BTreeMap::is_empty",
-        deserialize_with = "super::project::deserialize_hierarchy"
+        skip_serializing_if = "BTreeMap::is_empty",
+        deserialize_with = "crate::protocol::model_snapshot::deserialize_hierarchy"
     )]
-    pub hierarchy: std::collections::BTreeMap<String, crate::HierarchyPlacement>,
+    pub hierarchy: BTreeMap<String, crate::HierarchyPlacement>,
     #[serde(
         default,
-        skip_serializing_if = "std::collections::BTreeMap::is_empty",
+        skip_serializing_if = "BTreeMap::is_empty",
         deserialize_with = "super::composition::deserialize_composition"
     )]
-    pub composition: std::collections::BTreeMap<String, crate::CompositionPlacement>,
-    pub elements: Vec<Element>,
-    pub relations: Vec<Relation>,
+    pub composition: BTreeMap<String, crate::CompositionPlacement>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub presentation: BTreeMap<String, SubjectPresentation>,
+    #[serde(default)]
     pub diagrams: Vec<Diagram>,
 }
 
-impl ModelingSection {
-    pub fn from_model(model: &Project) -> Self {
-        Self {
-            root_model: model.root_model.clone(),
-            authoring_knowledge: model.authoring_knowledge.clone(),
-            mdj_provenance: model.mdj_provenance.clone(),
-            hierarchy: model.hierarchy.clone(),
-            composition: model.composition.clone(),
-            elements: model.elements.clone(),
-            relations: model.relations.clone(),
-            diagrams: model.diagrams.clone(),
-        }
-    }
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SubjectPresentation {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub annotations: Vec<Annotation>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub implementations: Vec<Implementation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<FileContent>,
+}
 
-    pub fn to_model(&self, id: &str, name: &str) -> Project {
+impl ModelingSection {
+    pub fn to_model(self, id: impl Into<String>, name: impl Into<String>) -> Project {
         Project {
-            schema_version: 1,
+            schema_version: 2,
             id: id.into(),
             name: name.into(),
-            root_model: self.root_model.clone(),
-            authoring_knowledge: self.authoring_knowledge.clone(),
-            mdj_provenance: self.mdj_provenance.clone(),
-            hierarchy: self.hierarchy.clone(),
-            composition: self.composition.clone(),
-            elements: self.elements.clone(),
-            relations: self.relations.clone(),
-            diagrams: self.diagrams.clone(),
+            model: self,
         }
     }
 }

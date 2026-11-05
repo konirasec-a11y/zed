@@ -52,7 +52,10 @@ impl MdjProvenance {
         &self.original.bytes
     }
 
-    pub fn validate_residual_ownership(&self, project: &super::Project) -> Result<(), String> {
+    pub fn validate_residual_ownership(
+        &self,
+        project: &crate::protocol::model_snapshot::Project,
+    ) -> Result<(), String> {
         let view_ids: HashSet<_> = project
             .diagrams
             .iter()

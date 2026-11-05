@@ -27,10 +27,10 @@ pub(super) fn decode_model_request(input_json: &str) -> Result<Project, String> 
     decode_model(request.api_version, &request.model)
 }
 
-/// Decode an in-memory JSON or BLX1 protobuf document into a versioned model envelope.
+/// Decode an in-memory JSON or BLX2 protobuf document into a versioned model envelope.
 ///
 /// Input is the original document byte slice and an explicit `json` or `protobuf`
-/// format string. Protobuf bytes include the existing BLX1 header.
+/// format string. Protobuf bytes include the existing BLX2 header.
 /// Output is `{"api_version":1,"model":...}`; it can be passed directly to
 /// `validate_graph_model` or `validate_uml_model`. Existing codec defaults and
 /// normalization apply. Decoding does not validate graph or UML semantics.
@@ -49,7 +49,7 @@ pub fn decode_model_document(document: &[u8], format: &str) -> Result<String, St
     Ok(serde_json::json!({"api_version":API_VERSION,"model":model}).to_string())
 }
 
-/// Encode a versioned model envelope as an in-memory JSON or BLX1 document.
+/// Encode a versioned model envelope as an in-memory JSON or BLX2 document.
 ///
 /// Input contains exactly `api_version: 1` and `model`. The explicit format is
 /// `json` or `protobuf`. Output is the existing codec's document bytes, not an
@@ -71,7 +71,7 @@ pub fn encode_model_document(input_json: &str, format: &str) -> Result<Vec<u8>, 
 
 /// Convert document bytes with the existing codec and no JSON envelope in between.
 ///
-/// Formats are `json` or `protobuf`; binary input/output uses BLX1. This retains
+/// Formats are `json` or `protobuf`; binary input/output uses BLX2. This retains
 /// codec behavior even for binary values that cannot enter a JSON model envelope.
 /// A non-finite diagram dimension is retained for binary output and explicitly
 /// rejected for JSON output instead of becoming null.
@@ -110,7 +110,9 @@ fn ensure_json_model(model: &Project) -> Result<(), String> {
 
 pub(super) fn model_value(model: Project) -> Result<serde_json::Value, String> {
     ensure_json_model(&model)?;
-    serde_json::to_value(model).map_err(|_| {
+    let stored = crate::contract_document::store_document(&model)
+        .map_err(|error| error_response("INVALID_MODEL", error))?;
+    serde_json::to_value(stored).map_err(|_| {
         error_response(
             "RESPONSE_SERIALIZATION_FAILED",
             "decoded model cannot be encoded as JSON",
@@ -129,8 +131,9 @@ pub fn prepare_model_document(
     crate::Graph::new(&model)
         .validate_presentation()
         .map_err(|error| error.to_string())?;
-    let section_json = serde_json::to_string(&crate::ModelingSection::from_model(&model))
-        .map_err(|error| error.to_string())?;
+    let section =
+        crate::contract_document::store_section(&crate::ModelingSection::from_model(&model))?;
+    let section_json = serde_json::to_string(&section).map_err(|error| error.to_string())?;
     Ok(bellatrix_mde_contracts::protocol::ModelDocumentParts {
         id: model.id,
         name: model.name,
@@ -152,7 +155,7 @@ pub fn validate_model_section(
 
 /// Reconstitute document bytes from canonical section JSON and its platform identity.
 /// Preserves authoring knowledge, composition and original MDJ bytes in provenance.
-/// JSON output rejects non-finite dimensions; binary output uses the unchanged BLX1 codec.
+/// JSON output rejects non-finite dimensions; binary output uses the unchanged BLX2 codec.
 /// No persistence, publication or UML validation occurs here.
 pub fn encode_model_section(
     project_id: &str,

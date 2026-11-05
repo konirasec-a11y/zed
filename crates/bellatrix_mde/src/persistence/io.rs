@@ -1,7 +1,7 @@
 use crate::Project;
 use thiserror::Error;
 
-const MAGIC: &[u8; 4] = b"BLX1";
+const MAGIC: &[u8; 4] = b"BLX2";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Format {
@@ -19,7 +19,7 @@ pub enum ModelIoError {
     Base64(#[from] base64::DecodeError),
     #[error("invalid utf8 asset: {0}")]
     Utf8(#[from] std::string::FromUtf8Error),
-    #[error("binary file does not begin with BLX1")]
+    #[error("binary file does not begin with BLX2")]
     Magic,
     #[error("diagram uml_di_type is required and must not be blank")]
     DiagramType,
@@ -48,24 +48,28 @@ pub fn encode(project: &Project, format: Format) -> Result<Vec<u8>, ModelIoError
     crate::Graph::new(&project)
         .validate_identifiers()
         .map_err(|error| ModelIoError::Presentation(error.to_string()))?;
+    let stored =
+        crate::contract_document::store_document(project).map_err(ModelIoError::SemanticStorage)?;
     match format {
-        Format::Json => Ok(serde_json::to_vec_pretty(project)?),
+        Format::Json => Ok(serde_json::to_vec_pretty(&stored)?),
         Format::Protobuf => {
             let mut out = MAGIC.to_vec();
-            out.extend(crate::wire::encode(project)?);
+            out.extend(crate::wire::encode(&stored)?);
             Ok(out)
         }
     }
 }
 
 pub fn decode(bytes: &[u8], format: Format) -> Result<Project, ModelIoError> {
-    let project = match format {
+    let stored = match format {
         Format::Json => serde_json::from_slice(bytes)?,
         Format::Protobuf => {
             let payload = bytes.strip_prefix(MAGIC).ok_or(ModelIoError::Magic)?;
             crate::wire::decode(payload)?
         }
     };
+    let project = crate::contract_document::project_document(stored)
+        .map_err(ModelIoError::SemanticStorage)?;
     ensure_version(project.schema_version)?;
     crate::composition_paths(&project).map_err(ModelIoError::Hierarchy)?;
     if let Some(provenance) = &project.mdj_provenance {
@@ -80,7 +84,7 @@ pub fn decode(bytes: &[u8], format: Format) -> Result<Project, ModelIoError> {
 }
 
 fn ensure_version(version: u32) -> Result<(), ModelIoError> {
-    if version == 1 {
+    if version == 2 {
         Ok(())
     } else {
         Err(ModelIoError::Version(version))

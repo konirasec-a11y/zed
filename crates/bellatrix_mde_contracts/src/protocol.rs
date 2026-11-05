@@ -2,6 +2,7 @@ pub mod command;
 mod command_metadata;
 pub mod explorer;
 pub mod inspector;
+pub mod model_snapshot;
 pub mod presentation;
 pub mod projection;
 pub mod tools;

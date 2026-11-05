@@ -27,7 +27,7 @@ pub use presentation::{
 };
 pub use project::Project;
 pub use provenance::{MdjObjectResidual, MdjProjectionFingerprint, MdjProvenance};
-pub use section::ModelingSection;
-pub use semantic::{Annotation, Element, FileContent, Implementation, Relation, StereotypeValue};
+pub use section::{ModelingSection, SubjectPresentation};
+pub use semantic::{Annotation, FileContent, Implementation, StereotypeValue};
 pub use uml_authoring::{AssociationKnowledge, AuthoringKnowledge, NavigationKnowledge};
 pub use uml_presentation::{AssociationEndConvention, StereotypeDisplay, UmlStyle};

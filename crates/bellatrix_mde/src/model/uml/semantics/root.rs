@@ -227,6 +227,9 @@ pub fn object_metaclass(kind: &str) -> Option<&'static str> {
     if let Some(kind) = UmlType::from_kind(kind) {
         return kind.metaclass();
     }
+    if let Some(metaclass) = crate::contract_edits::contract_type_for_kind(kind) {
+        return Some(metaclass);
+    }
     let mut name = String::new();
     for word in kind.strip_prefix("uml.")?.split('_') {
         let mut characters = word.chars();
@@ -515,7 +518,10 @@ fn fresh_id(section: &ModelingSection, project_id: &str, prefix: &str) -> Result
     Err("identifier overflow".into())
 }
 
-fn ownership_property(owner: ElementRef<'_>, child: ElementRef<'_>) -> Option<&'static str> {
+pub(crate) fn ownership_property(
+    owner: ElementRef<'_>,
+    child: ElementRef<'_>,
+) -> Option<&'static str> {
     let roles = super::classifiers::ownership_roles(owner, child).ok()?;
     // A unique composite target type does not establish connection-point kind.
     // StateMachine::connection_points and State::entry_or_exit require these kinds.

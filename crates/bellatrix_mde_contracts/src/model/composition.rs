@@ -23,7 +23,7 @@ impl CompositionPlacement {
     pub fn parent_id<'a>(
         &'a self,
         subject: &str,
-        relations: &'a [crate::Relation],
+        relations: &'a [crate::protocol::model_snapshot::Relation],
     ) -> Option<&'a str> {
         match &self.parent {
             CompositionParent::Object { id } => Some(id),
@@ -45,7 +45,7 @@ impl CompositionPlacement {
 
 /// Structural resolution only. No UML metaclass or ownership admissibility rules.
 pub fn composition_paths(
-    project: &crate::Project,
+    project: &crate::protocol::model_snapshot::Project,
 ) -> Result<std::collections::BTreeMap<String, String>, String> {
     use std::collections::{BTreeMap, HashSet};
     let mut paths = BTreeMap::from([(project.id.clone(), String::new())]);

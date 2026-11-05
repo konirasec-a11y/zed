@@ -85,7 +85,7 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
         .as_object()
         .ok_or_else(|| failure("", "expected object"))?;
     let mut project = Project {
-        schema_version: 1,
+        schema_version: 2,
         id: string(root, "_id")?.into(),
         name: root
             .get("name")
@@ -283,6 +283,10 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
     erd_projection::bind(&index, &mut project);
     view_projection::bind_markers(&index, &mut project, &mut diagnostics);
     native::normalize(&mut project, &mut diagnostics);
+    let stored = crate::contract_document::store_document(&project)
+        .map_err(|error| failure("", format!("UML contract conversion: {error}")))?;
+    let project = crate::contract_document::project_document(stored)
+        .map_err(|error| failure("", format!("UML contract projection: {error}")))?;
     Ok((
         Import {
             project,

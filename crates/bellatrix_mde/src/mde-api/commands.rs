@@ -51,7 +51,9 @@ pub fn reparent_uml_element(input_json: &str) -> Result<String, String> {
     // seed. Revision locking belongs to the application publishing the candidate.
     let updated = commands::apply(&model, &command, 0)
         .map_err(|error| error_response("OWNERSHIP_REPARENT_REJECTED", error))?;
-    let model = serde_json::to_value(updated).map_err(|_| {
+    let stored = crate::contract_document::store_document(&updated)
+        .map_err(|error| error_response("INVALID_MODEL", error))?;
+    let model = serde_json::to_value(stored).map_err(|_| {
         error_response(
             "RESPONSE_SERIALIZATION_FAILED",
             "updated model cannot be encoded as JSON",
@@ -75,8 +77,9 @@ pub fn apply_model_command(
     let source = section.to_model(project_id, name);
     validate_command_presentation(&command)?;
     let updated = commands::apply(&source, &command, revision)?;
-    serde_json::to_value(crate::ModelingSection::from_model(&updated))
-        .map_err(|error| error.to_string())
+    let stored =
+        crate::contract_document::store_section(&crate::ModelingSection::from_model(&updated))?;
+    serde_json::to_value(stored).map_err(|error| error.to_string())
 }
 
 fn validate_command_presentation(command: &commands::Command) -> Result<(), String> {

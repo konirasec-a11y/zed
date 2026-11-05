@@ -2,8 +2,8 @@
 //! Adapters own transport/presentation, never another implementation of the model.
 pub(crate) use bellatrix_mde_contracts::MODELING_NAMESPACE;
 
-pub(crate) use bellatrix_mde_contracts::model as contracts;
-pub(crate) use bellatrix_mde_contracts::model::*;
+pub(crate) use bellatrix_mde_contracts::protocol::model_snapshot as contracts;
+pub(crate) use contracts::*;
 #[path = "persistence/io.rs"]
 mod io;
 #[path = "persistence/mdj.rs"]
@@ -212,3 +212,10 @@ mod mde_api_projection_tools;
 #[path = "mde-api/observability.rs"]
 mod mde_api_observability;
 pub use mde_api_observability::{MdeExecutionTrace, validate_model_section_diagram};
+
+#[path = "model/contract_document.rs"]
+mod contract_document;
+#[path = "model/contract_edits.rs"]
+mod contract_edits;
+#[path = "model/contract_projection.rs"]
+mod contract_projection;
