@@ -617,6 +617,12 @@ pub(crate) fn apply_with_diagram_operations(
     let updated = crate::contract_document::project_document(
         crate::contract_document::store_document(&updated)?,
     )?;
+    // Composite collections must be rebuilt before checking navigation knowledge
+    // against Association ownership; the editing projection can still be stale.
+    crate::uml::associations::validate_changed_navigation(
+        &previous_section,
+        &ModelingSection::from_model(&updated),
+    )?;
     crate::composition_paths(&updated)?;
     crate::validate_model_hierarchy(&updated)?;
     // Explorer placement must not be blocked by unrelated semantic or diagram drafts.

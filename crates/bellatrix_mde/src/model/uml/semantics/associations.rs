@@ -1755,6 +1755,56 @@ pub(crate) fn synchronize_changes(
     Ok(())
 }
 
+pub(crate) fn validate_changed_navigation(
+    before: &ModelingSection,
+    after: &ModelingSection,
+) -> Result<(), String> {
+    let references = ReferenceIndex::new(Model::from_section(after));
+    let previous = Model::from_section(before);
+    for association in references
+        .model()
+        .elements()
+        .filter(|element| element.conforms_to("Association"))
+    {
+        let declarations_changed = before
+            .authoring_knowledge
+            .associations
+            .get(association.id())
+            != after.authoring_knowledge.associations.get(association.id());
+        let membership_changed = previous.element(association.id()).is_none_or(|prior| {
+            ["memberEnd", "ownedEnd", "navigableOwnedEnd"]
+                .iter()
+                .any(|key| prior.properties().get(*key) != association.properties().get(*key))
+        });
+        let ownership_changed = association
+            .properties()
+            .get("memberEnd")
+            .and_then(Value::as_array)
+            .is_some_and(|members| {
+                members
+                    .iter()
+                    .filter_map(|value| reference_id(value).ok().flatten())
+                    .any(|id| {
+                        let owners = |section: &ModelingSection| {
+                            section
+                                .relations
+                                .iter()
+                                .filter(|relation| relation.kind == "owns" && relation.to == id)
+                                .map(|relation| {
+                                    (relation.from.clone(), relation.properties.clone())
+                                })
+                                .collect::<Vec<_>>()
+                        };
+                        owners(before) != owners(after)
+                    })
+            });
+        if declarations_changed || membership_changed || ownership_changed {
+            validate_navigation_declarations(&references, association.id())?;
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn materialize_new(before: &Project, after: &mut ModelingSection) -> Result<(), String> {
     let added = after
         .relations
