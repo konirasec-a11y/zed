@@ -180,6 +180,21 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
+        let context_diagrams = snapshot
+            .section
+            .diagrams
+            .iter()
+            .filter(|diagram| diagram.model_elements.contains(&element_id))
+            .map(|diagram| diagram.name.as_str())
+            .collect::<Vec<_>>();
+        if !context_diagrams.is_empty() {
+            self.feedback = format!(
+                "Cannot delete this model element: it is the model context of {}. Remove those diagrams or change their model context first.",
+                context_diagrams.join(", ")
+            );
+            cx.notify();
+            return;
+        }
         self.submit(
             MdeUiCommand::DeleteElement(ModelingDeleteElementRequested {
                 project_id: self.project_id().clone(),
@@ -188,8 +203,8 @@ impl MdeWorkbenchItem {
             }),
             cx,
         );
-        let change = self.presentation.clear_selection();
-        self.apply_selection_change(change, cx);
+        // Submission only queues the command. Reconciliation clears a selection
+        // after deletion succeeds, keeping the inspector available on rejection.
         self.gesture = None;
         cx.notify();
     }

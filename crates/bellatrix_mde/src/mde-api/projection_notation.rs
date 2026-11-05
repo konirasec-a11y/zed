@@ -153,6 +153,11 @@ pub(crate) fn project_view(
             .map(|draft| projection::VisualDraftSummary {
                 notation_kind: draft.notation_kind.clone(),
                 parent_view_id: draft.parent_view_id.clone(),
+                semantic_creation_diagnostic: draft
+                    .properties
+                    .get("semantic_creation_diagnostic")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_owned),
             }),
         endpoints: view.endpoints.clone(),
         timing,

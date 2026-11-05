@@ -130,6 +130,7 @@ pub struct View {
 pub struct VisualDraftSummary {
     pub notation_kind: String,
     pub parent_view_id: Option<String>,
+    pub semantic_creation_diagnostic: Option<String>,
 }
 #[derive(Clone, Debug)]
 pub struct ViewPresentation {

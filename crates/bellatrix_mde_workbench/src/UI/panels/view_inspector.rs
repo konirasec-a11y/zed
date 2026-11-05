@@ -123,6 +123,16 @@ impl MdeRightPanel {
                     view.label.as_deref().unwrap_or("Absent"),
                 ),
             ];
+            if let Some(draft) = &view.draft {
+                presentation_rows.push(presentation_row(
+                    "Model status",
+                    "Visual draft only; no semantic UML element",
+                ));
+                if let Some(diagnostic) = &draft.semantic_creation_diagnostic {
+                    presentation_rows
+                        .push(presentation_row("Semantic creation rejected", diagnostic));
+                }
+            }
             if view.rendered_label.bound {
                 presentation_rows.push(presentation_row(
                     "Rendered label",

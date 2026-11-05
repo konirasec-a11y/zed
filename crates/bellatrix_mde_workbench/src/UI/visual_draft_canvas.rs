@@ -38,6 +38,10 @@ impl MdeWorkbenchItem {
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
         let draft = view.draft.as_ref()?;
+        let selection_feedback = draft.semantic_creation_diagnostic.as_ref().map_or_else(
+            || "Visual draft · not yet a semantic UML element".to_owned(),
+            |diagnostic| format!("Semantic creation rejected; visual draft only: {diagnostic}"),
+        );
         let zoom = self.zoom;
         let selected = self.presentation.selected_view() == Some(view.id.as_str());
         let label = view.display_label.clone();
@@ -252,6 +256,7 @@ impl MdeWorkbenchItem {
                             if event.click_count >= 2 && item.presentation.selected_tool().is_none()
                             {
                                 item.begin_view_label_edit(id.clone(), window, cx);
+                                return;
                             } else if matches!(
                                 item.presentation.selected_tool(),
                                 Some(ModelingTool::Relation(_))
@@ -267,8 +272,7 @@ impl MdeWorkbenchItem {
                                     item.presentation.selected_canvas_view() == Some(id.as_str());
                                 let change = item.presentation.select_view(None, id.clone());
                                 item.apply_selection_change(change, cx);
-                                item.feedback =
-                                    "Visual draft · not yet a semantic UML element".into();
+                                item.feedback = selection_feedback.clone();
                                 if let Some(geometry) = &hit_geometry {
                                     if selected && let Some(origin) = click_origin.get() {
                                         let (x, y) = canvas_model_position(
@@ -379,8 +383,9 @@ impl MdeWorkbenchItem {
             return;
         };
         if self.presentation.editing_view() == Some(view_id.as_str())
-            && self.inline_editor.is_some()
+            && let Some(field) = self.inline_editor.as_ref()
         {
+            field.read(cx).focus_handle(cx).focus(window, cx);
             return;
         }
         let field = cx.new(|cx| InputField::new(window, cx, "Label").label_min_width(px(96.0)));
