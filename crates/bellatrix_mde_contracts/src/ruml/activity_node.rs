@@ -83,7 +83,7 @@ impl ActivityNode {
     /// Note: Returns a snapshot. Modifications require calling update().
 
     pub fn get(registry: &Registry, id: String) -> Result<String, String> {
-        registry.get_as_string(&id)
+        registry.get_as_string_of_type(&id, TYPE_NAME)
     }
 
     /// Updates the instance in the registry
@@ -101,13 +101,13 @@ impl ActivityNode {
     /// Deletes this instance from the registry
 
     pub fn delete(registry: &mut Registry, id: String) -> bool {
-        registry.delete(&id)
+        registry.delete_of_type(&id, TYPE_NAME)
     }
 
     /// Checks if an instance exists
 
     pub fn exists(registry: &Registry, id: String) -> bool {
-        registry.exists(&id)
+        registry.exists_of_type(&id, TYPE_NAME)
     }
 
     /// Gets all instances of this type
@@ -184,57 +184,61 @@ impl ActivityNode {
         instance_id: String,
         ref_id: Option<String>,
     ) -> Result<(), String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if let Some(old_ref_id) = &instance.in_structured_node {
-            if let Some(mut old_target) = registry.get::<StructuredActivityNode>(&old_ref_id) {
-                old_target.node.retain(|id| id != &instance_id);
-                registry.insert(old_ref_id.clone(), "StructuredActivityNode", &old_target)?;
-            }
-        }
-
-        instance.in_structured_node = ref_id.clone();
-
-        if let Some(new_ref_id) = &ref_id {
-            if let Some(mut new_target) = registry.get::<StructuredActivityNode>(&new_ref_id) {
-                if !new_target.node.contains(&instance_id) {
-                    new_target.node.push(instance_id.clone());
+            if let Some(old_ref_id) = &instance.in_structured_node {
+                if let Some(mut old_target) = registry.get::<StructuredActivityNode>(&old_ref_id) {
+                    old_target.node.retain(|id| id != &instance_id);
+                    registry.insert(old_ref_id.clone(), "StructuredActivityNode", &old_target)?;
                 }
-                registry.insert(new_ref_id.clone(), "StructuredActivityNode", &new_target)?;
             }
-        }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.in_structured_node = ref_id.clone();
 
-        Ok(())
+            if let Some(new_ref_id) = &ref_id {
+                if let Some(mut new_target) = registry.get::<StructuredActivityNode>(&new_ref_id) {
+                    if !new_target.node.contains(&instance_id) {
+                        new_target.node.push(instance_id.clone());
+                    }
+                    registry.insert(new_ref_id.clone(), "StructuredActivityNode", &new_target)?;
+                }
+            }
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(())
+        })
     }
 
     pub fn clear_in_structured_node(
         registry: &mut Registry,
         instance_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.in_structured_node.is_none() {
-            return Ok(false);
-        }
-
-        if let Some(old_ref_id) = &instance.in_structured_node {
-            if let Some(mut old_target) = registry.get::<StructuredActivityNode>(&old_ref_id) {
-                old_target.node.retain(|id| id != &instance_id);
-                registry.insert(old_ref_id.clone(), "StructuredActivityNode", &old_target)?;
+            if instance.in_structured_node.is_none() {
+                return Ok(false);
             }
-        }
 
-        instance.in_structured_node = None;
+            if let Some(old_ref_id) = &instance.in_structured_node {
+                if let Some(mut old_target) = registry.get::<StructuredActivityNode>(&old_ref_id) {
+                    old_target.node.retain(|id| id != &instance_id);
+                    registry.insert(old_ref_id.clone(), "StructuredActivityNode", &old_target)?;
+                }
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.in_structured_node = None;
 
-        Ok(true)
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(true)
+        })
     }
 
     pub fn set_activity(
@@ -242,54 +246,58 @@ impl ActivityNode {
         instance_id: String,
         ref_id: Option<String>,
     ) -> Result<(), String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if let Some(old_ref_id) = &instance.activity {
-            if let Some(mut old_target) = registry.get::<Activity>(&old_ref_id) {
-                old_target.node.retain(|id| id != &instance_id);
-                registry.insert(old_ref_id.clone(), "Activity", &old_target)?;
-            }
-        }
-
-        instance.activity = ref_id.clone();
-
-        if let Some(new_ref_id) = &ref_id {
-            if let Some(mut new_target) = registry.get::<Activity>(&new_ref_id) {
-                if !new_target.node.contains(&instance_id) {
-                    new_target.node.push(instance_id.clone());
+            if let Some(old_ref_id) = &instance.activity {
+                if let Some(mut old_target) = registry.get::<Activity>(&old_ref_id) {
+                    old_target.node.retain(|id| id != &instance_id);
+                    registry.insert(old_ref_id.clone(), "Activity", &old_target)?;
                 }
-                registry.insert(new_ref_id.clone(), "Activity", &new_target)?;
             }
-        }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.activity = ref_id.clone();
 
-        Ok(())
+            if let Some(new_ref_id) = &ref_id {
+                if let Some(mut new_target) = registry.get::<Activity>(&new_ref_id) {
+                    if !new_target.node.contains(&instance_id) {
+                        new_target.node.push(instance_id.clone());
+                    }
+                    registry.insert(new_ref_id.clone(), "Activity", &new_target)?;
+                }
+            }
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(())
+        })
     }
 
     pub fn clear_activity(registry: &mut Registry, instance_id: String) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.activity.is_none() {
-            return Ok(false);
-        }
-
-        if let Some(old_ref_id) = &instance.activity {
-            if let Some(mut old_target) = registry.get::<Activity>(&old_ref_id) {
-                old_target.node.retain(|id| id != &instance_id);
-                registry.insert(old_ref_id.clone(), "Activity", &old_target)?;
+            if instance.activity.is_none() {
+                return Ok(false);
             }
-        }
 
-        instance.activity = None;
+            if let Some(old_ref_id) = &instance.activity {
+                if let Some(mut old_target) = registry.get::<Activity>(&old_ref_id) {
+                    old_target.node.retain(|id| id != &instance_id);
+                    registry.insert(old_ref_id.clone(), "Activity", &old_target)?;
+                }
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.activity = None;
 
-        Ok(true)
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(true)
+        })
     }
 
     pub fn add_outgoing(
@@ -297,25 +305,27 @@ impl ActivityNode {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.outgoing.contains(&ref_id) {
-            return Ok(false);
-        }
+            if instance.outgoing.contains(&ref_id) {
+                return Ok(false);
+            }
 
-        instance.outgoing.push(ref_id.clone());
+            instance.outgoing.push(ref_id.clone());
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<ActivityEdge>(&ref_id) {
-            target.source = instance_id.clone();
-            registry.insert(ref_id.clone(), "ActivityEdge", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<ActivityEdge>(&ref_id) {
+                target.source = instance_id.clone();
+                registry.insert(ref_id.clone(), "ActivityEdge", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn remove_outgoing(
@@ -323,51 +333,55 @@ impl ActivityNode {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.outgoing.len();
-        instance.outgoing.retain(|id| id != &ref_id);
-        let removed = instance.outgoing.len() < initial_len;
+            let initial_len = instance.outgoing.len();
+            instance.outgoing.retain(|id| id != &ref_id);
+            let removed = instance.outgoing.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(target) = registry.get::<ActivityEdge>(&ref_id) {
-            registry.insert(ref_id.clone(), "ActivityEdge", &target)?;
-        }
-
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
-
-        Ok(true)
-    }
-
-    pub fn clear_outgoing(registry: &mut Registry, instance_id: String) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
-
-        let count = instance.outgoing.len();
-
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.outgoing {
             // Update opposite reference
             if let Some(target) = registry.get::<ActivityEdge>(&ref_id) {
                 registry.insert(ref_id.clone(), "ActivityEdge", &target)?;
             }
-        }
 
-        instance.outgoing.clear();
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            Ok(true)
+        })
+    }
 
-        Ok(count)
+    pub fn clear_outgoing(registry: &mut Registry, instance_id: String) -> Result<usize, String> {
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
+
+            let count = instance.outgoing.len();
+
+            if count == 0 {
+                return Ok(0);
+            }
+
+            for ref_id in &instance.outgoing {
+                // Update opposite reference
+                if let Some(target) = registry.get::<ActivityEdge>(&ref_id) {
+                    registry.insert(ref_id.clone(), "ActivityEdge", &target)?;
+                }
+            }
+
+            instance.outgoing.clear();
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     pub fn add_incoming(
@@ -375,25 +389,27 @@ impl ActivityNode {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.incoming.contains(&ref_id) {
-            return Ok(false);
-        }
+            if instance.incoming.contains(&ref_id) {
+                return Ok(false);
+            }
 
-        instance.incoming.push(ref_id.clone());
+            instance.incoming.push(ref_id.clone());
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<ActivityEdge>(&ref_id) {
-            target.target = instance_id.clone();
-            registry.insert(ref_id.clone(), "ActivityEdge", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<ActivityEdge>(&ref_id) {
+                target.target = instance_id.clone();
+                registry.insert(ref_id.clone(), "ActivityEdge", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn remove_incoming(
@@ -401,51 +417,55 @@ impl ActivityNode {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.incoming.len();
-        instance.incoming.retain(|id| id != &ref_id);
-        let removed = instance.incoming.len() < initial_len;
+            let initial_len = instance.incoming.len();
+            instance.incoming.retain(|id| id != &ref_id);
+            let removed = instance.incoming.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(target) = registry.get::<ActivityEdge>(&ref_id) {
-            registry.insert(ref_id.clone(), "ActivityEdge", &target)?;
-        }
-
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
-
-        Ok(true)
-    }
-
-    pub fn clear_incoming(registry: &mut Registry, instance_id: String) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
-
-        let count = instance.incoming.len();
-
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.incoming {
             // Update opposite reference
             if let Some(target) = registry.get::<ActivityEdge>(&ref_id) {
                 registry.insert(ref_id.clone(), "ActivityEdge", &target)?;
             }
-        }
 
-        instance.incoming.clear();
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            Ok(true)
+        })
+    }
 
-        Ok(count)
+    pub fn clear_incoming(registry: &mut Registry, instance_id: String) -> Result<usize, String> {
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
+
+            let count = instance.incoming.len();
+
+            if count == 0 {
+                return Ok(0);
+            }
+
+            for ref_id in &instance.incoming {
+                // Update opposite reference
+                if let Some(target) = registry.get::<ActivityEdge>(&ref_id) {
+                    registry.insert(ref_id.clone(), "ActivityEdge", &target)?;
+                }
+            }
+
+            instance.incoming.clear();
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     pub fn add_in_partition(
@@ -453,27 +473,29 @@ impl ActivityNode {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.in_partition.contains(&ref_id) {
-            return Ok(false);
-        }
-
-        instance.in_partition.push(ref_id.clone());
-
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<ActivityPartition>(&ref_id) {
-            if !target.node.contains(&instance_id) {
-                target.node.push(instance_id.clone());
+            if instance.in_partition.contains(&ref_id) {
+                return Ok(false);
             }
-            registry.insert(ref_id.clone(), "ActivityPartition", &target)?;
-        }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.in_partition.push(ref_id.clone());
 
-        Ok(true)
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<ActivityPartition>(&ref_id) {
+                if !target.node.contains(&instance_id) {
+                    target.node.push(instance_id.clone());
+                }
+                registry.insert(ref_id.clone(), "ActivityPartition", &target)?;
+            }
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(true)
+        })
     }
 
     pub fn remove_in_partition(
@@ -481,56 +503,60 @@ impl ActivityNode {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.in_partition.len();
-        instance.in_partition.retain(|id| id != &ref_id);
-        let removed = instance.in_partition.len() < initial_len;
+            let initial_len = instance.in_partition.len();
+            instance.in_partition.retain(|id| id != &ref_id);
+            let removed = instance.in_partition.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<ActivityPartition>(&ref_id) {
-            target.node.retain(|id| id != &instance_id);
-            registry.insert(ref_id.clone(), "ActivityPartition", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<ActivityPartition>(&ref_id) {
+                target.node.retain(|id| id != &instance_id);
+                registry.insert(ref_id.clone(), "ActivityPartition", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn clear_in_partition(
         registry: &mut Registry,
         instance_id: String,
     ) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let count = instance.in_partition.len();
+            let count = instance.in_partition.len();
 
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.in_partition {
-            // Update opposite reference
-            if let Some(mut target) = registry.get::<ActivityPartition>(&ref_id) {
-                target.node.retain(|id| id != &instance_id);
-                registry.insert(ref_id.clone(), "ActivityPartition", &target)?;
+            if count == 0 {
+                return Ok(0);
             }
-        }
 
-        instance.in_partition.clear();
+            for ref_id in &instance.in_partition {
+                // Update opposite reference
+                if let Some(mut target) = registry.get::<ActivityPartition>(&ref_id) {
+                    target.node.retain(|id| id != &instance_id);
+                    registry.insert(ref_id.clone(), "ActivityPartition", &target)?;
+                }
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.in_partition.clear();
 
-        Ok(count)
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     pub fn add_in_interruptible_region(
@@ -538,27 +564,29 @@ impl ActivityNode {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.in_interruptible_region.contains(&ref_id) {
-            return Ok(false);
-        }
-
-        instance.in_interruptible_region.push(ref_id.clone());
-
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<InterruptibleActivityRegion>(&ref_id) {
-            if !target.node.contains(&instance_id) {
-                target.node.push(instance_id.clone());
+            if instance.in_interruptible_region.contains(&ref_id) {
+                return Ok(false);
             }
-            registry.insert(ref_id.clone(), "InterruptibleActivityRegion", &target)?;
-        }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.in_interruptible_region.push(ref_id.clone());
 
-        Ok(true)
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<InterruptibleActivityRegion>(&ref_id) {
+                if !target.node.contains(&instance_id) {
+                    target.node.push(instance_id.clone());
+                }
+                registry.insert(ref_id.clone(), "InterruptibleActivityRegion", &target)?;
+            }
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(true)
+        })
     }
 
     pub fn remove_in_interruptible_region(
@@ -566,56 +594,60 @@ impl ActivityNode {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.in_interruptible_region.len();
-        instance.in_interruptible_region.retain(|id| id != &ref_id);
-        let removed = instance.in_interruptible_region.len() < initial_len;
+            let initial_len = instance.in_interruptible_region.len();
+            instance.in_interruptible_region.retain(|id| id != &ref_id);
+            let removed = instance.in_interruptible_region.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<InterruptibleActivityRegion>(&ref_id) {
-            target.node.retain(|id| id != &instance_id);
-            registry.insert(ref_id.clone(), "InterruptibleActivityRegion", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<InterruptibleActivityRegion>(&ref_id) {
+                target.node.retain(|id| id != &instance_id);
+                registry.insert(ref_id.clone(), "InterruptibleActivityRegion", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn clear_in_interruptible_region(
         registry: &mut Registry,
         instance_id: String,
     ) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let count = instance.in_interruptible_region.len();
+            let count = instance.in_interruptible_region.len();
 
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.in_interruptible_region {
-            // Update opposite reference
-            if let Some(mut target) = registry.get::<InterruptibleActivityRegion>(&ref_id) {
-                target.node.retain(|id| id != &instance_id);
-                registry.insert(ref_id.clone(), "InterruptibleActivityRegion", &target)?;
+            if count == 0 {
+                return Ok(0);
             }
-        }
 
-        instance.in_interruptible_region.clear();
+            for ref_id in &instance.in_interruptible_region {
+                // Update opposite reference
+                if let Some(mut target) = registry.get::<InterruptibleActivityRegion>(&ref_id) {
+                    target.node.retain(|id| id != &instance_id);
+                    registry.insert(ref_id.clone(), "InterruptibleActivityRegion", &target)?;
+                }
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.in_interruptible_region.clear();
 
-        Ok(count)
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     pub fn add_redefined_node(

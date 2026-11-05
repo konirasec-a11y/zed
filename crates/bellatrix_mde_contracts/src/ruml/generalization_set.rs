@@ -78,7 +78,7 @@ impl GeneralizationSet {
     /// Note: Returns a snapshot. Modifications require calling update().
 
     pub fn get(registry: &Registry, id: String) -> Result<String, String> {
-        registry.get_as_string(&id)
+        registry.get_as_string_of_type(&id, TYPE_NAME)
     }
 
     /// Updates the instance in the registry
@@ -96,13 +96,13 @@ impl GeneralizationSet {
     /// Deletes this instance from the registry
 
     pub fn delete(registry: &mut Registry, id: String) -> bool {
-        registry.delete(&id)
+        registry.delete_of_type(&id, TYPE_NAME)
     }
 
     /// Checks if an instance exists
 
     pub fn exists(registry: &Registry, id: String) -> bool {
-        registry.exists(&id)
+        registry.exists_of_type(&id, TYPE_NAME)
     }
 
     /// Gets all instances of this type
@@ -192,54 +192,58 @@ impl GeneralizationSet {
         instance_id: String,
         ref_id: Option<String>,
     ) -> Result<(), String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if let Some(old_ref_id) = &instance.powertype {
-            if let Some(mut old_target) = registry.get::<Classifier>(&old_ref_id) {
-                old_target.powertype_extent.retain(|id| id != &instance_id);
-                registry.insert(old_ref_id.clone(), "Classifier", &old_target)?;
-            }
-        }
-
-        instance.powertype = ref_id.clone();
-
-        if let Some(new_ref_id) = &ref_id {
-            if let Some(mut new_target) = registry.get::<Classifier>(&new_ref_id) {
-                if !new_target.powertype_extent.contains(&instance_id) {
-                    new_target.powertype_extent.push(instance_id.clone());
+            if let Some(old_ref_id) = &instance.powertype {
+                if let Some(mut old_target) = registry.get::<Classifier>(&old_ref_id) {
+                    old_target.powertype_extent.retain(|id| id != &instance_id);
+                    registry.insert(old_ref_id.clone(), "Classifier", &old_target)?;
                 }
-                registry.insert(new_ref_id.clone(), "Classifier", &new_target)?;
             }
-        }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.powertype = ref_id.clone();
 
-        Ok(())
+            if let Some(new_ref_id) = &ref_id {
+                if let Some(mut new_target) = registry.get::<Classifier>(&new_ref_id) {
+                    if !new_target.powertype_extent.contains(&instance_id) {
+                        new_target.powertype_extent.push(instance_id.clone());
+                    }
+                    registry.insert(new_ref_id.clone(), "Classifier", &new_target)?;
+                }
+            }
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(())
+        })
     }
 
     pub fn clear_powertype(registry: &mut Registry, instance_id: String) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.powertype.is_none() {
-            return Ok(false);
-        }
-
-        if let Some(old_ref_id) = &instance.powertype {
-            if let Some(mut old_target) = registry.get::<Classifier>(&old_ref_id) {
-                old_target.powertype_extent.retain(|id| id != &instance_id);
-                registry.insert(old_ref_id.clone(), "Classifier", &old_target)?;
+            if instance.powertype.is_none() {
+                return Ok(false);
             }
-        }
 
-        instance.powertype = None;
+            if let Some(old_ref_id) = &instance.powertype {
+                if let Some(mut old_target) = registry.get::<Classifier>(&old_ref_id) {
+                    old_target.powertype_extent.retain(|id| id != &instance_id);
+                    registry.insert(old_ref_id.clone(), "Classifier", &old_target)?;
+                }
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.powertype = None;
 
-        Ok(true)
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(true)
+        })
     }
 
     pub fn add_generalization(
@@ -247,27 +251,29 @@ impl GeneralizationSet {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.generalization.contains(&ref_id) {
-            return Ok(false);
-        }
-
-        instance.generalization.push(ref_id.clone());
-
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<Generalization>(&ref_id) {
-            if !target.generalization_set.contains(&instance_id) {
-                target.generalization_set.push(instance_id.clone());
+            if instance.generalization.contains(&ref_id) {
+                return Ok(false);
             }
-            registry.insert(ref_id.clone(), "Generalization", &target)?;
-        }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.generalization.push(ref_id.clone());
 
-        Ok(true)
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<Generalization>(&ref_id) {
+                if !target.generalization_set.contains(&instance_id) {
+                    target.generalization_set.push(instance_id.clone());
+                }
+                registry.insert(ref_id.clone(), "Generalization", &target)?;
+            }
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(true)
+        })
     }
 
     pub fn remove_generalization(
@@ -275,56 +281,60 @@ impl GeneralizationSet {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.generalization.len();
-        instance.generalization.retain(|id| id != &ref_id);
-        let removed = instance.generalization.len() < initial_len;
+            let initial_len = instance.generalization.len();
+            instance.generalization.retain(|id| id != &ref_id);
+            let removed = instance.generalization.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<Generalization>(&ref_id) {
-            target.generalization_set.retain(|id| id != &instance_id);
-            registry.insert(ref_id.clone(), "Generalization", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<Generalization>(&ref_id) {
+                target.generalization_set.retain(|id| id != &instance_id);
+                registry.insert(ref_id.clone(), "Generalization", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn clear_generalization(
         registry: &mut Registry,
         instance_id: String,
     ) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let count = instance.generalization.len();
+            let count = instance.generalization.len();
 
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.generalization {
-            // Update opposite reference
-            if let Some(mut target) = registry.get::<Generalization>(&ref_id) {
-                target.generalization_set.retain(|id| id != &instance_id);
-                registry.insert(ref_id.clone(), "Generalization", &target)?;
+            if count == 0 {
+                return Ok(0);
             }
-        }
 
-        instance.generalization.clear();
+            for ref_id in &instance.generalization {
+                // Update opposite reference
+                if let Some(mut target) = registry.get::<Generalization>(&ref_id) {
+                    target.generalization_set.retain(|id| id != &instance_id);
+                    registry.insert(ref_id.clone(), "Generalization", &target)?;
+                }
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.generalization.clear();
 
-        Ok(count)
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     /// Returns whether this type can be created standalone (not nested)

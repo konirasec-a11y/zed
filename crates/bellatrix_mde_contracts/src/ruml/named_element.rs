@@ -55,7 +55,7 @@ impl NamedElement {
     /// Note: Returns a snapshot. Modifications require calling update().
 
     pub fn get(registry: &Registry, id: String) -> Result<String, String> {
-        registry.get_as_string(&id)
+        registry.get_as_string_of_type(&id, TYPE_NAME)
     }
 
     /// Updates the instance in the registry
@@ -73,13 +73,13 @@ impl NamedElement {
     /// Deletes this instance from the registry
 
     pub fn delete(registry: &mut Registry, id: String) -> bool {
-        registry.delete(&id)
+        registry.delete_of_type(&id, TYPE_NAME)
     }
 
     /// Checks if an instance exists
 
     pub fn exists(registry: &Registry, id: String) -> bool {
-        registry.exists(&id)
+        registry.exists_of_type(&id, TYPE_NAME)
     }
 
     /// Gets all instances of this type
@@ -143,27 +143,29 @@ impl NamedElement {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.client_dependency.contains(&ref_id) {
-            return Ok(false);
-        }
-
-        instance.client_dependency.push(ref_id.clone());
-
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<Dependency>(&ref_id) {
-            if !target.client.contains(&instance_id) {
-                target.client.push(instance_id.clone());
+            if instance.client_dependency.contains(&ref_id) {
+                return Ok(false);
             }
-            registry.insert(ref_id.clone(), "Dependency", &target)?;
-        }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.client_dependency.push(ref_id.clone());
 
-        Ok(true)
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<Dependency>(&ref_id) {
+                if !target.client.contains(&instance_id) {
+                    target.client.push(instance_id.clone());
+                }
+                registry.insert(ref_id.clone(), "Dependency", &target)?;
+            }
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(true)
+        })
     }
 
     pub fn remove_client_dependency(
@@ -171,56 +173,60 @@ impl NamedElement {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.client_dependency.len();
-        instance.client_dependency.retain(|id| id != &ref_id);
-        let removed = instance.client_dependency.len() < initial_len;
+            let initial_len = instance.client_dependency.len();
+            instance.client_dependency.retain(|id| id != &ref_id);
+            let removed = instance.client_dependency.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<Dependency>(&ref_id) {
-            target.client.retain(|id| id != &instance_id);
-            registry.insert(ref_id.clone(), "Dependency", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<Dependency>(&ref_id) {
+                target.client.retain(|id| id != &instance_id);
+                registry.insert(ref_id.clone(), "Dependency", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn clear_client_dependency(
         registry: &mut Registry,
         instance_id: String,
     ) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let count = instance.client_dependency.len();
+            let count = instance.client_dependency.len();
 
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.client_dependency {
-            // Update opposite reference
-            if let Some(mut target) = registry.get::<Dependency>(&ref_id) {
-                target.client.retain(|id| id != &instance_id);
-                registry.insert(ref_id.clone(), "Dependency", &target)?;
+            if count == 0 {
+                return Ok(0);
             }
-        }
 
-        instance.client_dependency.clear();
+            for ref_id in &instance.client_dependency {
+                // Update opposite reference
+                if let Some(mut target) = registry.get::<Dependency>(&ref_id) {
+                    target.client.retain(|id| id != &instance_id);
+                    registry.insert(ref_id.clone(), "Dependency", &target)?;
+                }
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.client_dependency.clear();
 
-        Ok(count)
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     pub fn set_name_expression(

@@ -76,7 +76,7 @@ impl ComponentRealization {
     /// Note: Returns a snapshot. Modifications require calling update().
 
     pub fn get(registry: &Registry, id: String) -> Result<String, String> {
-        registry.get_as_string(&id)
+        registry.get_as_string_of_type(&id, TYPE_NAME)
     }
 
     /// Updates the instance in the registry
@@ -94,13 +94,13 @@ impl ComponentRealization {
     /// Deletes this instance from the registry
 
     pub fn delete(registry: &mut Registry, id: String) -> bool {
-        registry.delete(&id)
+        registry.delete_of_type(&id, TYPE_NAME)
     }
 
     /// Checks if an instance exists
 
     pub fn exists(registry: &Registry, id: String) -> bool {
-        registry.exists(&id)
+        registry.exists_of_type(&id, TYPE_NAME)
     }
 
     /// Gets all instances of this type
@@ -164,54 +164,58 @@ impl ComponentRealization {
         instance_id: String,
         ref_id: Option<String>,
     ) -> Result<(), String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if let Some(old_ref_id) = &instance.abstraction {
-            if let Some(mut old_target) = registry.get::<Component>(&old_ref_id) {
-                old_target.realization.retain(|id| id != &instance_id);
-                registry.insert(old_ref_id.clone(), "Component", &old_target)?;
-            }
-        }
-
-        instance.abstraction = ref_id.clone();
-
-        if let Some(new_ref_id) = &ref_id {
-            if let Some(mut new_target) = registry.get::<Component>(&new_ref_id) {
-                if !new_target.realization.contains(&instance_id) {
-                    new_target.realization.push(instance_id.clone());
+            if let Some(old_ref_id) = &instance.abstraction {
+                if let Some(mut old_target) = registry.get::<Component>(&old_ref_id) {
+                    old_target.realization.retain(|id| id != &instance_id);
+                    registry.insert(old_ref_id.clone(), "Component", &old_target)?;
                 }
-                registry.insert(new_ref_id.clone(), "Component", &new_target)?;
             }
-        }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.abstraction = ref_id.clone();
 
-        Ok(())
+            if let Some(new_ref_id) = &ref_id {
+                if let Some(mut new_target) = registry.get::<Component>(&new_ref_id) {
+                    if !new_target.realization.contains(&instance_id) {
+                        new_target.realization.push(instance_id.clone());
+                    }
+                    registry.insert(new_ref_id.clone(), "Component", &new_target)?;
+                }
+            }
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(())
+        })
     }
 
     pub fn clear_abstraction(registry: &mut Registry, instance_id: String) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.abstraction.is_none() {
-            return Ok(false);
-        }
-
-        if let Some(old_ref_id) = &instance.abstraction {
-            if let Some(mut old_target) = registry.get::<Component>(&old_ref_id) {
-                old_target.realization.retain(|id| id != &instance_id);
-                registry.insert(old_ref_id.clone(), "Component", &old_target)?;
+            if instance.abstraction.is_none() {
+                return Ok(false);
             }
-        }
 
-        instance.abstraction = None;
+            if let Some(old_ref_id) = &instance.abstraction {
+                if let Some(mut old_target) = registry.get::<Component>(&old_ref_id) {
+                    old_target.realization.retain(|id| id != &instance_id);
+                    registry.insert(old_ref_id.clone(), "Component", &old_target)?;
+                }
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.abstraction = None;
 
-        Ok(true)
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(true)
+        })
     }
 
     pub fn set_realizing_classifier(

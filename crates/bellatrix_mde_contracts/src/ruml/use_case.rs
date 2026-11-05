@@ -137,7 +137,7 @@ impl UseCase {
     /// Note: Returns a snapshot. Modifications require calling update().
 
     pub fn get(registry: &Registry, id: String) -> Result<String, String> {
-        registry.get_as_string(&id)
+        registry.get_as_string_of_type(&id, TYPE_NAME)
     }
 
     /// Updates the instance in the registry
@@ -155,13 +155,13 @@ impl UseCase {
     /// Deletes this instance from the registry
 
     pub fn delete(registry: &mut Registry, id: String) -> bool {
-        registry.delete(&id)
+        registry.delete_of_type(&id, TYPE_NAME)
     }
 
     /// Checks if an instance exists
 
     pub fn exists(registry: &Registry, id: String) -> bool {
-        registry.exists(&id)
+        registry.exists_of_type(&id, TYPE_NAME)
     }
 
     /// Gets all instances of this type
@@ -251,25 +251,27 @@ impl UseCase {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.include.contains(&ref_id) {
-            return Ok(false);
-        }
+            if instance.include.contains(&ref_id) {
+                return Ok(false);
+            }
 
-        instance.include.push(ref_id.clone());
+            instance.include.push(ref_id.clone());
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<Include>(&ref_id) {
-            target.including_case = instance_id.clone();
-            registry.insert(ref_id.clone(), "Include", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<Include>(&ref_id) {
+                target.including_case = instance_id.clone();
+                registry.insert(ref_id.clone(), "Include", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn remove_include(
@@ -277,51 +279,55 @@ impl UseCase {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.include.len();
-        instance.include.retain(|id| id != &ref_id);
-        let removed = instance.include.len() < initial_len;
+            let initial_len = instance.include.len();
+            instance.include.retain(|id| id != &ref_id);
+            let removed = instance.include.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(target) = registry.get::<Include>(&ref_id) {
-            registry.insert(ref_id.clone(), "Include", &target)?;
-        }
-
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
-
-        Ok(true)
-    }
-
-    pub fn clear_include(registry: &mut Registry, instance_id: String) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
-
-        let count = instance.include.len();
-
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.include {
             // Update opposite reference
             if let Some(target) = registry.get::<Include>(&ref_id) {
                 registry.insert(ref_id.clone(), "Include", &target)?;
             }
-        }
 
-        instance.include.clear();
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            Ok(true)
+        })
+    }
 
-        Ok(count)
+    pub fn clear_include(registry: &mut Registry, instance_id: String) -> Result<usize, String> {
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
+
+            let count = instance.include.len();
+
+            if count == 0 {
+                return Ok(0);
+            }
+
+            for ref_id in &instance.include {
+                // Update opposite reference
+                if let Some(target) = registry.get::<Include>(&ref_id) {
+                    registry.insert(ref_id.clone(), "Include", &target)?;
+                }
+            }
+
+            instance.include.clear();
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     pub fn add_extend(
@@ -329,25 +335,27 @@ impl UseCase {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.extend.contains(&ref_id) {
-            return Ok(false);
-        }
+            if instance.extend.contains(&ref_id) {
+                return Ok(false);
+            }
 
-        instance.extend.push(ref_id.clone());
+            instance.extend.push(ref_id.clone());
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<Extend>(&ref_id) {
-            target.extension = instance_id.clone();
-            registry.insert(ref_id.clone(), "Extend", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<Extend>(&ref_id) {
+                target.extension = instance_id.clone();
+                registry.insert(ref_id.clone(), "Extend", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn remove_extend(
@@ -355,51 +363,55 @@ impl UseCase {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.extend.len();
-        instance.extend.retain(|id| id != &ref_id);
-        let removed = instance.extend.len() < initial_len;
+            let initial_len = instance.extend.len();
+            instance.extend.retain(|id| id != &ref_id);
+            let removed = instance.extend.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(target) = registry.get::<Extend>(&ref_id) {
-            registry.insert(ref_id.clone(), "Extend", &target)?;
-        }
-
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
-
-        Ok(true)
-    }
-
-    pub fn clear_extend(registry: &mut Registry, instance_id: String) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
-
-        let count = instance.extend.len();
-
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.extend {
             // Update opposite reference
             if let Some(target) = registry.get::<Extend>(&ref_id) {
                 registry.insert(ref_id.clone(), "Extend", &target)?;
             }
-        }
 
-        instance.extend.clear();
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            Ok(true)
+        })
+    }
 
-        Ok(count)
+    pub fn clear_extend(registry: &mut Registry, instance_id: String) -> Result<usize, String> {
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
+
+            let count = instance.extend.len();
+
+            if count == 0 {
+                return Ok(0);
+            }
+
+            for ref_id in &instance.extend {
+                // Update opposite reference
+                if let Some(target) = registry.get::<Extend>(&ref_id) {
+                    registry.insert(ref_id.clone(), "Extend", &target)?;
+                }
+            }
+
+            instance.extend.clear();
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     pub fn add_extension_point(
@@ -407,25 +419,27 @@ impl UseCase {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.extension_point.contains(&ref_id) {
-            return Ok(false);
-        }
+            if instance.extension_point.contains(&ref_id) {
+                return Ok(false);
+            }
 
-        instance.extension_point.push(ref_id.clone());
+            instance.extension_point.push(ref_id.clone());
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<ExtensionPoint>(&ref_id) {
-            target.use_case = instance_id.clone();
-            registry.insert(ref_id.clone(), "ExtensionPoint", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<ExtensionPoint>(&ref_id) {
+                target.use_case = instance_id.clone();
+                registry.insert(ref_id.clone(), "ExtensionPoint", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn remove_extension_point(
@@ -433,54 +447,58 @@ impl UseCase {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.extension_point.len();
-        instance.extension_point.retain(|id| id != &ref_id);
-        let removed = instance.extension_point.len() < initial_len;
+            let initial_len = instance.extension_point.len();
+            instance.extension_point.retain(|id| id != &ref_id);
+            let removed = instance.extension_point.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(target) = registry.get::<ExtensionPoint>(&ref_id) {
-            registry.insert(ref_id.clone(), "ExtensionPoint", &target)?;
-        }
+            // Update opposite reference
+            if let Some(target) = registry.get::<ExtensionPoint>(&ref_id) {
+                registry.insert(ref_id.clone(), "ExtensionPoint", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn clear_extension_point(
         registry: &mut Registry,
         instance_id: String,
     ) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let count = instance.extension_point.len();
+            let count = instance.extension_point.len();
 
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.extension_point {
-            // Update opposite reference
-            if let Some(target) = registry.get::<ExtensionPoint>(&ref_id) {
-                registry.insert(ref_id.clone(), "ExtensionPoint", &target)?;
+            if count == 0 {
+                return Ok(0);
             }
-        }
 
-        instance.extension_point.clear();
+            for ref_id in &instance.extension_point {
+                // Update opposite reference
+                if let Some(target) = registry.get::<ExtensionPoint>(&ref_id) {
+                    registry.insert(ref_id.clone(), "ExtensionPoint", &target)?;
+                }
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.extension_point.clear();
 
-        Ok(count)
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     pub fn add_subject(
@@ -488,27 +506,29 @@ impl UseCase {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.subject.contains(&ref_id) {
-            return Ok(false);
-        }
-
-        instance.subject.push(ref_id.clone());
-
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<Classifier>(&ref_id) {
-            if !target.use_case.contains(&instance_id) {
-                target.use_case.push(instance_id.clone());
+            if instance.subject.contains(&ref_id) {
+                return Ok(false);
             }
-            registry.insert(ref_id.clone(), "Classifier", &target)?;
-        }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.subject.push(ref_id.clone());
 
-        Ok(true)
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<Classifier>(&ref_id) {
+                if !target.use_case.contains(&instance_id) {
+                    target.use_case.push(instance_id.clone());
+                }
+                registry.insert(ref_id.clone(), "Classifier", &target)?;
+            }
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(true)
+        })
     }
 
     pub fn remove_subject(
@@ -516,53 +536,57 @@ impl UseCase {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.subject.len();
-        instance.subject.retain(|id| id != &ref_id);
-        let removed = instance.subject.len() < initial_len;
+            let initial_len = instance.subject.len();
+            instance.subject.retain(|id| id != &ref_id);
+            let removed = instance.subject.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<Classifier>(&ref_id) {
-            target.use_case.retain(|id| id != &instance_id);
-            registry.insert(ref_id.clone(), "Classifier", &target)?;
-        }
-
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
-
-        Ok(true)
-    }
-
-    pub fn clear_subject(registry: &mut Registry, instance_id: String) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
-
-        let count = instance.subject.len();
-
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.subject {
             // Update opposite reference
             if let Some(mut target) = registry.get::<Classifier>(&ref_id) {
                 target.use_case.retain(|id| id != &instance_id);
                 registry.insert(ref_id.clone(), "Classifier", &target)?;
             }
-        }
 
-        instance.subject.clear();
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            Ok(true)
+        })
+    }
 
-        Ok(count)
+    pub fn clear_subject(registry: &mut Registry, instance_id: String) -> Result<usize, String> {
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
+
+            let count = instance.subject.len();
+
+            if count == 0 {
+                return Ok(0);
+            }
+
+            for ref_id in &instance.subject {
+                // Update opposite reference
+                if let Some(mut target) = registry.get::<Classifier>(&ref_id) {
+                    target.use_case.retain(|id| id != &instance_id);
+                    registry.insert(ref_id.clone(), "Classifier", &target)?;
+                }
+            }
+
+            instance.subject.clear();
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     /// Returns whether this type can be created standalone (not nested)

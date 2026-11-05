@@ -119,7 +119,7 @@ impl Enumeration {
     /// Note: Returns a snapshot. Modifications require calling update().
 
     pub fn get(registry: &Registry, id: String) -> Result<String, String> {
-        registry.get_as_string(&id)
+        registry.get_as_string_of_type(&id, TYPE_NAME)
     }
 
     /// Updates the instance in the registry
@@ -137,13 +137,13 @@ impl Enumeration {
     /// Deletes this instance from the registry
 
     pub fn delete(registry: &mut Registry, id: String) -> bool {
-        registry.delete(&id)
+        registry.delete_of_type(&id, TYPE_NAME)
     }
 
     /// Checks if an instance exists
 
     pub fn exists(registry: &Registry, id: String) -> bool {
-        registry.exists(&id)
+        registry.exists_of_type(&id, TYPE_NAME)
     }
 
     /// Gets all instances of this type
@@ -233,25 +233,27 @@ impl Enumeration {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.owned_literal.contains(&ref_id) {
-            return Ok(false);
-        }
+            if instance.owned_literal.contains(&ref_id) {
+                return Ok(false);
+            }
 
-        instance.owned_literal.push(ref_id.clone());
+            instance.owned_literal.push(ref_id.clone());
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<EnumerationLiteral>(&ref_id) {
-            target.enumeration = Some(instance_id.clone());
-            registry.insert(ref_id.clone(), "EnumerationLiteral", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<EnumerationLiteral>(&ref_id) {
+                target.enumeration = Some(instance_id.clone());
+                registry.insert(ref_id.clone(), "EnumerationLiteral", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn remove_owned_literal(
@@ -259,56 +261,60 @@ impl Enumeration {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.owned_literal.len();
-        instance.owned_literal.retain(|id| id != &ref_id);
-        let removed = instance.owned_literal.len() < initial_len;
+            let initial_len = instance.owned_literal.len();
+            instance.owned_literal.retain(|id| id != &ref_id);
+            let removed = instance.owned_literal.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<EnumerationLiteral>(&ref_id) {
-            target.enumeration = None;
-            registry.insert(ref_id.clone(), "EnumerationLiteral", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<EnumerationLiteral>(&ref_id) {
+                target.enumeration = None;
+                registry.insert(ref_id.clone(), "EnumerationLiteral", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn clear_owned_literal(
         registry: &mut Registry,
         instance_id: String,
     ) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let count = instance.owned_literal.len();
+            let count = instance.owned_literal.len();
 
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.owned_literal {
-            // Update opposite reference
-            if let Some(mut target) = registry.get::<EnumerationLiteral>(&ref_id) {
-                target.enumeration = None;
-                registry.insert(ref_id.clone(), "EnumerationLiteral", &target)?;
+            if count == 0 {
+                return Ok(0);
             }
-        }
 
-        instance.owned_literal.clear();
+            for ref_id in &instance.owned_literal {
+                // Update opposite reference
+                if let Some(mut target) = registry.get::<EnumerationLiteral>(&ref_id) {
+                    target.enumeration = None;
+                    registry.insert(ref_id.clone(), "EnumerationLiteral", &target)?;
+                }
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.owned_literal.clear();
 
-        Ok(count)
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     /// Returns whether this type can be created standalone (not nested)

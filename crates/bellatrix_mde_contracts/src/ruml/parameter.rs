@@ -103,7 +103,7 @@ impl Parameter {
     /// Note: Returns a snapshot. Modifications require calling update().
 
     pub fn get(registry: &Registry, id: String) -> Result<String, String> {
-        registry.get_as_string(&id)
+        registry.get_as_string_of_type(&id, TYPE_NAME)
     }
 
     /// Updates the instance in the registry
@@ -121,13 +121,13 @@ impl Parameter {
     /// Deletes this instance from the registry
 
     pub fn delete(registry: &mut Registry, id: String) -> bool {
-        registry.delete(&id)
+        registry.delete_of_type(&id, TYPE_NAME)
     }
 
     /// Checks if an instance exists
 
     pub fn exists(registry: &Registry, id: String) -> bool {
-        registry.exists(&id)
+        registry.exists_of_type(&id, TYPE_NAME)
     }
 
     /// Gets all instances of this type
@@ -278,27 +278,29 @@ impl Parameter {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.parameter_set.contains(&ref_id) {
-            return Ok(false);
-        }
-
-        instance.parameter_set.push(ref_id.clone());
-
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<ParameterSet>(&ref_id) {
-            if !target.parameter.contains(&instance_id) {
-                target.parameter.push(instance_id.clone());
+            if instance.parameter_set.contains(&ref_id) {
+                return Ok(false);
             }
-            registry.insert(ref_id.clone(), "ParameterSet", &target)?;
-        }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.parameter_set.push(ref_id.clone());
 
-        Ok(true)
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<ParameterSet>(&ref_id) {
+                if !target.parameter.contains(&instance_id) {
+                    target.parameter.push(instance_id.clone());
+                }
+                registry.insert(ref_id.clone(), "ParameterSet", &target)?;
+            }
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(true)
+        })
     }
 
     pub fn remove_parameter_set(
@@ -306,56 +308,60 @@ impl Parameter {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.parameter_set.len();
-        instance.parameter_set.retain(|id| id != &ref_id);
-        let removed = instance.parameter_set.len() < initial_len;
+            let initial_len = instance.parameter_set.len();
+            instance.parameter_set.retain(|id| id != &ref_id);
+            let removed = instance.parameter_set.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<ParameterSet>(&ref_id) {
-            target.parameter.retain(|id| id != &instance_id);
-            registry.insert(ref_id.clone(), "ParameterSet", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<ParameterSet>(&ref_id) {
+                target.parameter.retain(|id| id != &instance_id);
+                registry.insert(ref_id.clone(), "ParameterSet", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn clear_parameter_set(
         registry: &mut Registry,
         instance_id: String,
     ) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let count = instance.parameter_set.len();
+            let count = instance.parameter_set.len();
 
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.parameter_set {
-            // Update opposite reference
-            if let Some(mut target) = registry.get::<ParameterSet>(&ref_id) {
-                target.parameter.retain(|id| id != &instance_id);
-                registry.insert(ref_id.clone(), "ParameterSet", &target)?;
+            if count == 0 {
+                return Ok(0);
             }
-        }
 
-        instance.parameter_set.clear();
+            for ref_id in &instance.parameter_set {
+                // Update opposite reference
+                if let Some(mut target) = registry.get::<ParameterSet>(&ref_id) {
+                    target.parameter.retain(|id| id != &instance_id);
+                    registry.insert(ref_id.clone(), "ParameterSet", &target)?;
+                }
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.parameter_set.clear();
 
-        Ok(count)
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     pub fn set_default_value(

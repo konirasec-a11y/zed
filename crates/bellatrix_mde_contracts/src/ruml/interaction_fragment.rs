@@ -69,7 +69,7 @@ impl InteractionFragment {
     /// Note: Returns a snapshot. Modifications require calling update().
 
     pub fn get(registry: &Registry, id: String) -> Result<String, String> {
-        registry.get_as_string(&id)
+        registry.get_as_string_of_type(&id, TYPE_NAME)
     }
 
     /// Updates the instance in the registry
@@ -87,13 +87,13 @@ impl InteractionFragment {
     /// Deletes this instance from the registry
 
     pub fn delete(registry: &mut Registry, id: String) -> bool {
-        registry.delete(&id)
+        registry.delete_of_type(&id, TYPE_NAME)
     }
 
     /// Checks if an instance exists
 
     pub fn exists(registry: &Registry, id: String) -> bool {
-        registry.exists(&id)
+        registry.exists_of_type(&id, TYPE_NAME)
     }
 
     /// Gets all instances of this type
@@ -157,27 +157,29 @@ impl InteractionFragment {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.covered.contains(&ref_id) {
-            return Ok(false);
-        }
-
-        instance.covered.push(ref_id.clone());
-
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<Lifeline>(&ref_id) {
-            if !target.covered_by.contains(&instance_id) {
-                target.covered_by.push(instance_id.clone());
+            if instance.covered.contains(&ref_id) {
+                return Ok(false);
             }
-            registry.insert(ref_id.clone(), "Lifeline", &target)?;
-        }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.covered.push(ref_id.clone());
 
-        Ok(true)
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<Lifeline>(&ref_id) {
+                if !target.covered_by.contains(&instance_id) {
+                    target.covered_by.push(instance_id.clone());
+                }
+                registry.insert(ref_id.clone(), "Lifeline", &target)?;
+            }
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(true)
+        })
     }
 
     pub fn remove_covered(
@@ -185,53 +187,57 @@ impl InteractionFragment {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.covered.len();
-        instance.covered.retain(|id| id != &ref_id);
-        let removed = instance.covered.len() < initial_len;
+            let initial_len = instance.covered.len();
+            instance.covered.retain(|id| id != &ref_id);
+            let removed = instance.covered.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<Lifeline>(&ref_id) {
-            target.covered_by.retain(|id| id != &instance_id);
-            registry.insert(ref_id.clone(), "Lifeline", &target)?;
-        }
-
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
-
-        Ok(true)
-    }
-
-    pub fn clear_covered(registry: &mut Registry, instance_id: String) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
-
-        let count = instance.covered.len();
-
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.covered {
             // Update opposite reference
             if let Some(mut target) = registry.get::<Lifeline>(&ref_id) {
                 target.covered_by.retain(|id| id != &instance_id);
                 registry.insert(ref_id.clone(), "Lifeline", &target)?;
             }
-        }
 
-        instance.covered.clear();
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            Ok(true)
+        })
+    }
 
-        Ok(count)
+    pub fn clear_covered(registry: &mut Registry, instance_id: String) -> Result<usize, String> {
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
+
+            let count = instance.covered.len();
+
+            if count == 0 {
+                return Ok(0);
+            }
+
+            for ref_id in &instance.covered {
+                // Update opposite reference
+                if let Some(mut target) = registry.get::<Lifeline>(&ref_id) {
+                    target.covered_by.retain(|id| id != &instance_id);
+                    registry.insert(ref_id.clone(), "Lifeline", &target)?;
+                }
+            }
+
+            instance.covered.clear();
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     pub fn add_general_ordering(
@@ -302,57 +308,61 @@ impl InteractionFragment {
         instance_id: String,
         ref_id: Option<String>,
     ) -> Result<(), String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if let Some(old_ref_id) = &instance.enclosing_interaction {
-            if let Some(mut old_target) = registry.get::<Interaction>(&old_ref_id) {
-                old_target.fragment.retain(|id| id != &instance_id);
-                registry.insert(old_ref_id.clone(), "Interaction", &old_target)?;
-            }
-        }
-
-        instance.enclosing_interaction = ref_id.clone();
-
-        if let Some(new_ref_id) = &ref_id {
-            if let Some(mut new_target) = registry.get::<Interaction>(&new_ref_id) {
-                if !new_target.fragment.contains(&instance_id) {
-                    new_target.fragment.push(instance_id.clone());
+            if let Some(old_ref_id) = &instance.enclosing_interaction {
+                if let Some(mut old_target) = registry.get::<Interaction>(&old_ref_id) {
+                    old_target.fragment.retain(|id| id != &instance_id);
+                    registry.insert(old_ref_id.clone(), "Interaction", &old_target)?;
                 }
-                registry.insert(new_ref_id.clone(), "Interaction", &new_target)?;
             }
-        }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.enclosing_interaction = ref_id.clone();
 
-        Ok(())
+            if let Some(new_ref_id) = &ref_id {
+                if let Some(mut new_target) = registry.get::<Interaction>(&new_ref_id) {
+                    if !new_target.fragment.contains(&instance_id) {
+                        new_target.fragment.push(instance_id.clone());
+                    }
+                    registry.insert(new_ref_id.clone(), "Interaction", &new_target)?;
+                }
+            }
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(())
+        })
     }
 
     pub fn clear_enclosing_interaction(
         registry: &mut Registry,
         instance_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.enclosing_interaction.is_none() {
-            return Ok(false);
-        }
-
-        if let Some(old_ref_id) = &instance.enclosing_interaction {
-            if let Some(mut old_target) = registry.get::<Interaction>(&old_ref_id) {
-                old_target.fragment.retain(|id| id != &instance_id);
-                registry.insert(old_ref_id.clone(), "Interaction", &old_target)?;
+            if instance.enclosing_interaction.is_none() {
+                return Ok(false);
             }
-        }
 
-        instance.enclosing_interaction = None;
+            if let Some(old_ref_id) = &instance.enclosing_interaction {
+                if let Some(mut old_target) = registry.get::<Interaction>(&old_ref_id) {
+                    old_target.fragment.retain(|id| id != &instance_id);
+                    registry.insert(old_ref_id.clone(), "Interaction", &old_target)?;
+                }
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.enclosing_interaction = None;
 
-        Ok(true)
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(true)
+        })
     }
 
     pub fn set_enclosing_operand(
@@ -360,57 +370,61 @@ impl InteractionFragment {
         instance_id: String,
         ref_id: Option<String>,
     ) -> Result<(), String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if let Some(old_ref_id) = &instance.enclosing_operand {
-            if let Some(mut old_target) = registry.get::<InteractionOperand>(&old_ref_id) {
-                old_target.fragment.retain(|id| id != &instance_id);
-                registry.insert(old_ref_id.clone(), "InteractionOperand", &old_target)?;
-            }
-        }
-
-        instance.enclosing_operand = ref_id.clone();
-
-        if let Some(new_ref_id) = &ref_id {
-            if let Some(mut new_target) = registry.get::<InteractionOperand>(&new_ref_id) {
-                if !new_target.fragment.contains(&instance_id) {
-                    new_target.fragment.push(instance_id.clone());
+            if let Some(old_ref_id) = &instance.enclosing_operand {
+                if let Some(mut old_target) = registry.get::<InteractionOperand>(&old_ref_id) {
+                    old_target.fragment.retain(|id| id != &instance_id);
+                    registry.insert(old_ref_id.clone(), "InteractionOperand", &old_target)?;
                 }
-                registry.insert(new_ref_id.clone(), "InteractionOperand", &new_target)?;
             }
-        }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.enclosing_operand = ref_id.clone();
 
-        Ok(())
+            if let Some(new_ref_id) = &ref_id {
+                if let Some(mut new_target) = registry.get::<InteractionOperand>(&new_ref_id) {
+                    if !new_target.fragment.contains(&instance_id) {
+                        new_target.fragment.push(instance_id.clone());
+                    }
+                    registry.insert(new_ref_id.clone(), "InteractionOperand", &new_target)?;
+                }
+            }
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(())
+        })
     }
 
     pub fn clear_enclosing_operand(
         registry: &mut Registry,
         instance_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.enclosing_operand.is_none() {
-            return Ok(false);
-        }
-
-        if let Some(old_ref_id) = &instance.enclosing_operand {
-            if let Some(mut old_target) = registry.get::<InteractionOperand>(&old_ref_id) {
-                old_target.fragment.retain(|id| id != &instance_id);
-                registry.insert(old_ref_id.clone(), "InteractionOperand", &old_target)?;
+            if instance.enclosing_operand.is_none() {
+                return Ok(false);
             }
-        }
 
-        instance.enclosing_operand = None;
+            if let Some(old_ref_id) = &instance.enclosing_operand {
+                if let Some(mut old_target) = registry.get::<InteractionOperand>(&old_ref_id) {
+                    old_target.fragment.retain(|id| id != &instance_id);
+                    registry.insert(old_ref_id.clone(), "InteractionOperand", &old_target)?;
+                }
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.enclosing_operand = None;
 
-        Ok(true)
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(true)
+        })
     }
 
     /// Returns whether this type can be created standalone (not nested)

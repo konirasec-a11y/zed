@@ -71,7 +71,7 @@ impl Extend {
     /// Note: Returns a snapshot. Modifications require calling update().
 
     pub fn get(registry: &Registry, id: String) -> Result<String, String> {
-        registry.get_as_string(&id)
+        registry.get_as_string_of_type(&id, TYPE_NAME)
     }
 
     /// Updates the instance in the registry
@@ -89,13 +89,13 @@ impl Extend {
     /// Deletes this instance from the registry
 
     pub fn delete(registry: &mut Registry, id: String) -> bool {
-        registry.delete(&id)
+        registry.delete_of_type(&id, TYPE_NAME)
     }
 
     /// Checks if an instance exists
 
     pub fn exists(registry: &Registry, id: String) -> bool {
-        registry.exists(&id)
+        registry.exists_of_type(&id, TYPE_NAME)
     }
 
     /// Gets all instances of this type
@@ -270,28 +270,30 @@ impl Extend {
         instance_id: String,
         ref_id: String,
     ) -> Result<(), String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let old_ref_id = instance.extension.clone();
-        if let Some(mut old_target) = registry.get::<UseCase>(&old_ref_id) {
-            old_target.extend.retain(|id| id != &instance_id);
-            registry.insert(old_ref_id.clone(), "UseCase", &old_target)?;
-        }
-
-        instance.extension = ref_id.clone();
-
-        if let Some(mut new_target) = registry.get::<UseCase>(&ref_id) {
-            if !new_target.extend.contains(&instance_id) {
-                new_target.extend.push(instance_id.clone());
+            let old_ref_id = instance.extension.clone();
+            if let Some(mut old_target) = registry.get::<UseCase>(&old_ref_id) {
+                old_target.extend.retain(|id| id != &instance_id);
+                registry.insert(old_ref_id.clone(), "UseCase", &old_target)?;
             }
-            registry.insert(ref_id.clone(), "UseCase", &new_target)?;
-        }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.extension = ref_id.clone();
 
-        Ok(())
+            if let Some(mut new_target) = registry.get::<UseCase>(&ref_id) {
+                if !new_target.extend.contains(&instance_id) {
+                    new_target.extend.push(instance_id.clone());
+                }
+                registry.insert(ref_id.clone(), "UseCase", &new_target)?;
+            }
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(())
+        })
     }
 
     /// Returns whether this type can be created standalone (not nested)

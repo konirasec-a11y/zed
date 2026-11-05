@@ -103,7 +103,7 @@ impl State {
     /// Note: Returns a snapshot. Modifications require calling update().
 
     pub fn get(registry: &Registry, id: String) -> Result<String, String> {
-        registry.get_as_string(&id)
+        registry.get_as_string_of_type(&id, TYPE_NAME)
     }
 
     /// Updates the instance in the registry
@@ -121,13 +121,13 @@ impl State {
     /// Deletes this instance from the registry
 
     pub fn delete(registry: &mut Registry, id: String) -> bool {
-        registry.delete(&id)
+        registry.delete_of_type(&id, TYPE_NAME)
     }
 
     /// Checks if an instance exists
 
     pub fn exists(registry: &Registry, id: String) -> bool {
-        registry.exists(&id)
+        registry.exists_of_type(&id, TYPE_NAME)
     }
 
     /// Gets all instances of this type
@@ -204,54 +204,58 @@ impl State {
         instance_id: String,
         ref_id: Option<String>,
     ) -> Result<(), String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if let Some(old_ref_id) = &instance.submachine {
-            if let Some(mut old_target) = registry.get::<StateMachine>(&old_ref_id) {
-                old_target.submachine_state.retain(|id| id != &instance_id);
-                registry.insert(old_ref_id.clone(), "StateMachine", &old_target)?;
-            }
-        }
-
-        instance.submachine = ref_id.clone();
-
-        if let Some(new_ref_id) = &ref_id {
-            if let Some(mut new_target) = registry.get::<StateMachine>(&new_ref_id) {
-                if !new_target.submachine_state.contains(&instance_id) {
-                    new_target.submachine_state.push(instance_id.clone());
+            if let Some(old_ref_id) = &instance.submachine {
+                if let Some(mut old_target) = registry.get::<StateMachine>(&old_ref_id) {
+                    old_target.submachine_state.retain(|id| id != &instance_id);
+                    registry.insert(old_ref_id.clone(), "StateMachine", &old_target)?;
                 }
-                registry.insert(new_ref_id.clone(), "StateMachine", &new_target)?;
             }
-        }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.submachine = ref_id.clone();
 
-        Ok(())
+            if let Some(new_ref_id) = &ref_id {
+                if let Some(mut new_target) = registry.get::<StateMachine>(&new_ref_id) {
+                    if !new_target.submachine_state.contains(&instance_id) {
+                        new_target.submachine_state.push(instance_id.clone());
+                    }
+                    registry.insert(new_ref_id.clone(), "StateMachine", &new_target)?;
+                }
+            }
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(())
+        })
     }
 
     pub fn clear_submachine(registry: &mut Registry, instance_id: String) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.submachine.is_none() {
-            return Ok(false);
-        }
-
-        if let Some(old_ref_id) = &instance.submachine {
-            if let Some(mut old_target) = registry.get::<StateMachine>(&old_ref_id) {
-                old_target.submachine_state.retain(|id| id != &instance_id);
-                registry.insert(old_ref_id.clone(), "StateMachine", &old_target)?;
+            if instance.submachine.is_none() {
+                return Ok(false);
             }
-        }
 
-        instance.submachine = None;
+            if let Some(old_ref_id) = &instance.submachine {
+                if let Some(mut old_target) = registry.get::<StateMachine>(&old_ref_id) {
+                    old_target.submachine_state.retain(|id| id != &instance_id);
+                    registry.insert(old_ref_id.clone(), "StateMachine", &old_target)?;
+                }
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.submachine = None;
 
-        Ok(true)
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(true)
+        })
     }
 
     pub fn add_connection(
@@ -259,25 +263,27 @@ impl State {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.connection.contains(&ref_id) {
-            return Ok(false);
-        }
+            if instance.connection.contains(&ref_id) {
+                return Ok(false);
+            }
 
-        instance.connection.push(ref_id.clone());
+            instance.connection.push(ref_id.clone());
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<ConnectionPointReference>(&ref_id) {
-            target.state = Some(instance_id.clone());
-            registry.insert(ref_id.clone(), "ConnectionPointReference", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<ConnectionPointReference>(&ref_id) {
+                target.state = Some(instance_id.clone());
+                registry.insert(ref_id.clone(), "ConnectionPointReference", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn remove_connection(
@@ -285,53 +291,57 @@ impl State {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.connection.len();
-        instance.connection.retain(|id| id != &ref_id);
-        let removed = instance.connection.len() < initial_len;
+            let initial_len = instance.connection.len();
+            instance.connection.retain(|id| id != &ref_id);
+            let removed = instance.connection.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<ConnectionPointReference>(&ref_id) {
-            target.state = None;
-            registry.insert(ref_id.clone(), "ConnectionPointReference", &target)?;
-        }
-
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
-
-        Ok(true)
-    }
-
-    pub fn clear_connection(registry: &mut Registry, instance_id: String) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
-
-        let count = instance.connection.len();
-
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.connection {
             // Update opposite reference
             if let Some(mut target) = registry.get::<ConnectionPointReference>(&ref_id) {
                 target.state = None;
                 registry.insert(ref_id.clone(), "ConnectionPointReference", &target)?;
             }
-        }
 
-        instance.connection.clear();
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            Ok(true)
+        })
+    }
 
-        Ok(count)
+    pub fn clear_connection(registry: &mut Registry, instance_id: String) -> Result<usize, String> {
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
+
+            let count = instance.connection.len();
+
+            if count == 0 {
+                return Ok(0);
+            }
+
+            for ref_id in &instance.connection {
+                // Update opposite reference
+                if let Some(mut target) = registry.get::<ConnectionPointReference>(&ref_id) {
+                    target.state = None;
+                    registry.insert(ref_id.clone(), "ConnectionPointReference", &target)?;
+                }
+            }
+
+            instance.connection.clear();
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     pub fn add_connection_point(
@@ -339,25 +349,27 @@ impl State {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.connection_point.contains(&ref_id) {
-            return Ok(false);
-        }
+            if instance.connection_point.contains(&ref_id) {
+                return Ok(false);
+            }
 
-        instance.connection_point.push(ref_id.clone());
+            instance.connection_point.push(ref_id.clone());
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<Pseudostate>(&ref_id) {
-            target.state = Some(instance_id.clone());
-            registry.insert(ref_id.clone(), "Pseudostate", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<Pseudostate>(&ref_id) {
+                target.state = Some(instance_id.clone());
+                registry.insert(ref_id.clone(), "Pseudostate", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn remove_connection_point(
@@ -365,56 +377,60 @@ impl State {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.connection_point.len();
-        instance.connection_point.retain(|id| id != &ref_id);
-        let removed = instance.connection_point.len() < initial_len;
+            let initial_len = instance.connection_point.len();
+            instance.connection_point.retain(|id| id != &ref_id);
+            let removed = instance.connection_point.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<Pseudostate>(&ref_id) {
-            target.state = None;
-            registry.insert(ref_id.clone(), "Pseudostate", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<Pseudostate>(&ref_id) {
+                target.state = None;
+                registry.insert(ref_id.clone(), "Pseudostate", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn clear_connection_point(
         registry: &mut Registry,
         instance_id: String,
     ) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let count = instance.connection_point.len();
+            let count = instance.connection_point.len();
 
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.connection_point {
-            // Update opposite reference
-            if let Some(mut target) = registry.get::<Pseudostate>(&ref_id) {
-                target.state = None;
-                registry.insert(ref_id.clone(), "Pseudostate", &target)?;
+            if count == 0 {
+                return Ok(0);
             }
-        }
 
-        instance.connection_point.clear();
+            for ref_id in &instance.connection_point {
+                // Update opposite reference
+                if let Some(mut target) = registry.get::<Pseudostate>(&ref_id) {
+                    target.state = None;
+                    registry.insert(ref_id.clone(), "Pseudostate", &target)?;
+                }
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.connection_point.clear();
 
-        Ok(count)
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     pub fn set_redefined_state(
@@ -651,25 +667,27 @@ impl State {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.region.contains(&ref_id) {
-            return Ok(false);
-        }
+            if instance.region.contains(&ref_id) {
+                return Ok(false);
+            }
 
-        instance.region.push(ref_id.clone());
+            instance.region.push(ref_id.clone());
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<Region>(&ref_id) {
-            target.state = Some(instance_id.clone());
-            registry.insert(ref_id.clone(), "Region", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<Region>(&ref_id) {
+                target.state = Some(instance_id.clone());
+                registry.insert(ref_id.clone(), "Region", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn remove_region(
@@ -677,53 +695,57 @@ impl State {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.region.len();
-        instance.region.retain(|id| id != &ref_id);
-        let removed = instance.region.len() < initial_len;
+            let initial_len = instance.region.len();
+            instance.region.retain(|id| id != &ref_id);
+            let removed = instance.region.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<Region>(&ref_id) {
-            target.state = None;
-            registry.insert(ref_id.clone(), "Region", &target)?;
-        }
-
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
-
-        Ok(true)
-    }
-
-    pub fn clear_region(registry: &mut Registry, instance_id: String) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
-
-        let count = instance.region.len();
-
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.region {
             // Update opposite reference
             if let Some(mut target) = registry.get::<Region>(&ref_id) {
                 target.state = None;
                 registry.insert(ref_id.clone(), "Region", &target)?;
             }
-        }
 
-        instance.region.clear();
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            Ok(true)
+        })
+    }
 
-        Ok(count)
+    pub fn clear_region(registry: &mut Registry, instance_id: String) -> Result<usize, String> {
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
+
+            let count = instance.region.len();
+
+            if count == 0 {
+                return Ok(0);
+            }
+
+            for ref_id in &instance.region {
+                // Update opposite reference
+                if let Some(mut target) = registry.get::<Region>(&ref_id) {
+                    target.state = None;
+                    registry.insert(ref_id.clone(), "Region", &target)?;
+                }
+            }
+
+            instance.region.clear();
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     /// Returns whether this type can be created standalone (not nested)

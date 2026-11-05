@@ -67,7 +67,7 @@ impl ConnectionPointReference {
     /// Note: Returns a snapshot. Modifications require calling update().
 
     pub fn get(registry: &Registry, id: String) -> Result<String, String> {
-        registry.get_as_string(&id)
+        registry.get_as_string_of_type(&id, TYPE_NAME)
     }
 
     /// Updates the instance in the registry
@@ -85,13 +85,13 @@ impl ConnectionPointReference {
     /// Deletes this instance from the registry
 
     pub fn delete(registry: &mut Registry, id: String) -> bool {
-        registry.delete(&id)
+        registry.delete_of_type(&id, TYPE_NAME)
     }
 
     /// Checks if an instance exists
 
     pub fn exists(registry: &Registry, id: String) -> bool {
-        registry.exists(&id)
+        registry.exists_of_type(&id, TYPE_NAME)
     }
 
     /// Gets all instances of this type
@@ -275,54 +275,58 @@ impl ConnectionPointReference {
         instance_id: String,
         ref_id: Option<String>,
     ) -> Result<(), String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if let Some(old_ref_id) = &instance.state {
-            if let Some(mut old_target) = registry.get::<State>(&old_ref_id) {
-                old_target.connection.retain(|id| id != &instance_id);
-                registry.insert(old_ref_id.clone(), "State", &old_target)?;
-            }
-        }
-
-        instance.state = ref_id.clone();
-
-        if let Some(new_ref_id) = &ref_id {
-            if let Some(mut new_target) = registry.get::<State>(&new_ref_id) {
-                if !new_target.connection.contains(&instance_id) {
-                    new_target.connection.push(instance_id.clone());
+            if let Some(old_ref_id) = &instance.state {
+                if let Some(mut old_target) = registry.get::<State>(&old_ref_id) {
+                    old_target.connection.retain(|id| id != &instance_id);
+                    registry.insert(old_ref_id.clone(), "State", &old_target)?;
                 }
-                registry.insert(new_ref_id.clone(), "State", &new_target)?;
             }
-        }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.state = ref_id.clone();
 
-        Ok(())
+            if let Some(new_ref_id) = &ref_id {
+                if let Some(mut new_target) = registry.get::<State>(&new_ref_id) {
+                    if !new_target.connection.contains(&instance_id) {
+                        new_target.connection.push(instance_id.clone());
+                    }
+                    registry.insert(new_ref_id.clone(), "State", &new_target)?;
+                }
+            }
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(())
+        })
     }
 
     pub fn clear_state(registry: &mut Registry, instance_id: String) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.state.is_none() {
-            return Ok(false);
-        }
-
-        if let Some(old_ref_id) = &instance.state {
-            if let Some(mut old_target) = registry.get::<State>(&old_ref_id) {
-                old_target.connection.retain(|id| id != &instance_id);
-                registry.insert(old_ref_id.clone(), "State", &old_target)?;
+            if instance.state.is_none() {
+                return Ok(false);
             }
-        }
 
-        instance.state = None;
+            if let Some(old_ref_id) = &instance.state {
+                if let Some(mut old_target) = registry.get::<State>(&old_ref_id) {
+                    old_target.connection.retain(|id| id != &instance_id);
+                    registry.insert(old_ref_id.clone(), "State", &old_target)?;
+                }
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.state = None;
 
-        Ok(true)
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(true)
+        })
     }
 
     /// Returns whether this type can be created standalone (not nested)

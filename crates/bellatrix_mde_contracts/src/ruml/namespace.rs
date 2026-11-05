@@ -66,7 +66,7 @@ impl Namespace {
     /// Note: Returns a snapshot. Modifications require calling update().
 
     pub fn get(registry: &Registry, id: String) -> Result<String, String> {
-        registry.get_as_string(&id)
+        registry.get_as_string_of_type(&id, TYPE_NAME)
     }
 
     /// Updates the instance in the registry
@@ -84,13 +84,13 @@ impl Namespace {
     /// Deletes this instance from the registry
 
     pub fn delete(registry: &mut Registry, id: String) -> bool {
-        registry.delete(&id)
+        registry.delete_of_type(&id, TYPE_NAME)
     }
 
     /// Checks if an instance exists
 
     pub fn exists(registry: &Registry, id: String) -> bool {
-        registry.exists(&id)
+        registry.exists_of_type(&id, TYPE_NAME)
     }
 
     /// Gets all instances of this type
@@ -154,25 +154,27 @@ impl Namespace {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.element_import.contains(&ref_id) {
-            return Ok(false);
-        }
+            if instance.element_import.contains(&ref_id) {
+                return Ok(false);
+            }
 
-        instance.element_import.push(ref_id.clone());
+            instance.element_import.push(ref_id.clone());
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<ElementImport>(&ref_id) {
-            target.importing_namespace = instance_id.clone();
-            registry.insert(ref_id.clone(), "ElementImport", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<ElementImport>(&ref_id) {
+                target.importing_namespace = instance_id.clone();
+                registry.insert(ref_id.clone(), "ElementImport", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn remove_element_import(
@@ -180,54 +182,58 @@ impl Namespace {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.element_import.len();
-        instance.element_import.retain(|id| id != &ref_id);
-        let removed = instance.element_import.len() < initial_len;
+            let initial_len = instance.element_import.len();
+            instance.element_import.retain(|id| id != &ref_id);
+            let removed = instance.element_import.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(target) = registry.get::<ElementImport>(&ref_id) {
-            registry.insert(ref_id.clone(), "ElementImport", &target)?;
-        }
+            // Update opposite reference
+            if let Some(target) = registry.get::<ElementImport>(&ref_id) {
+                registry.insert(ref_id.clone(), "ElementImport", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn clear_element_import(
         registry: &mut Registry,
         instance_id: String,
     ) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let count = instance.element_import.len();
+            let count = instance.element_import.len();
 
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.element_import {
-            // Update opposite reference
-            if let Some(target) = registry.get::<ElementImport>(&ref_id) {
-                registry.insert(ref_id.clone(), "ElementImport", &target)?;
+            if count == 0 {
+                return Ok(0);
             }
-        }
 
-        instance.element_import.clear();
+            for ref_id in &instance.element_import {
+                // Update opposite reference
+                if let Some(target) = registry.get::<ElementImport>(&ref_id) {
+                    registry.insert(ref_id.clone(), "ElementImport", &target)?;
+                }
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.element_import.clear();
 
-        Ok(count)
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     pub fn add_package_import(
@@ -235,25 +241,27 @@ impl Namespace {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.package_import.contains(&ref_id) {
-            return Ok(false);
-        }
+            if instance.package_import.contains(&ref_id) {
+                return Ok(false);
+            }
 
-        instance.package_import.push(ref_id.clone());
+            instance.package_import.push(ref_id.clone());
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<PackageImport>(&ref_id) {
-            target.importing_namespace = instance_id.clone();
-            registry.insert(ref_id.clone(), "PackageImport", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<PackageImport>(&ref_id) {
+                target.importing_namespace = instance_id.clone();
+                registry.insert(ref_id.clone(), "PackageImport", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn remove_package_import(
@@ -261,54 +269,58 @@ impl Namespace {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.package_import.len();
-        instance.package_import.retain(|id| id != &ref_id);
-        let removed = instance.package_import.len() < initial_len;
+            let initial_len = instance.package_import.len();
+            instance.package_import.retain(|id| id != &ref_id);
+            let removed = instance.package_import.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(target) = registry.get::<PackageImport>(&ref_id) {
-            registry.insert(ref_id.clone(), "PackageImport", &target)?;
-        }
+            // Update opposite reference
+            if let Some(target) = registry.get::<PackageImport>(&ref_id) {
+                registry.insert(ref_id.clone(), "PackageImport", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn clear_package_import(
         registry: &mut Registry,
         instance_id: String,
     ) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let count = instance.package_import.len();
+            let count = instance.package_import.len();
 
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.package_import {
-            // Update opposite reference
-            if let Some(target) = registry.get::<PackageImport>(&ref_id) {
-                registry.insert(ref_id.clone(), "PackageImport", &target)?;
+            if count == 0 {
+                return Ok(0);
             }
-        }
 
-        instance.package_import.clear();
+            for ref_id in &instance.package_import {
+                // Update opposite reference
+                if let Some(target) = registry.get::<PackageImport>(&ref_id) {
+                    registry.insert(ref_id.clone(), "PackageImport", &target)?;
+                }
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.package_import.clear();
 
-        Ok(count)
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     pub fn add_owned_rule(
@@ -316,25 +328,27 @@ impl Namespace {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.owned_rule.contains(&ref_id) {
-            return Ok(false);
-        }
+            if instance.owned_rule.contains(&ref_id) {
+                return Ok(false);
+            }
 
-        instance.owned_rule.push(ref_id.clone());
+            instance.owned_rule.push(ref_id.clone());
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<Constraint>(&ref_id) {
-            target.context = Some(instance_id.clone());
-            registry.insert(ref_id.clone(), "Constraint", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<Constraint>(&ref_id) {
+                target.context = Some(instance_id.clone());
+                registry.insert(ref_id.clone(), "Constraint", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn remove_owned_rule(
@@ -342,53 +356,57 @@ impl Namespace {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.owned_rule.len();
-        instance.owned_rule.retain(|id| id != &ref_id);
-        let removed = instance.owned_rule.len() < initial_len;
+            let initial_len = instance.owned_rule.len();
+            instance.owned_rule.retain(|id| id != &ref_id);
+            let removed = instance.owned_rule.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<Constraint>(&ref_id) {
-            target.context = None;
-            registry.insert(ref_id.clone(), "Constraint", &target)?;
-        }
-
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
-
-        Ok(true)
-    }
-
-    pub fn clear_owned_rule(registry: &mut Registry, instance_id: String) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
-
-        let count = instance.owned_rule.len();
-
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.owned_rule {
             // Update opposite reference
             if let Some(mut target) = registry.get::<Constraint>(&ref_id) {
                 target.context = None;
                 registry.insert(ref_id.clone(), "Constraint", &target)?;
             }
-        }
 
-        instance.owned_rule.clear();
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            Ok(true)
+        })
+    }
 
-        Ok(count)
+    pub fn clear_owned_rule(registry: &mut Registry, instance_id: String) -> Result<usize, String> {
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
+
+            let count = instance.owned_rule.len();
+
+            if count == 0 {
+                return Ok(0);
+            }
+
+            for ref_id in &instance.owned_rule {
+                // Update opposite reference
+                if let Some(mut target) = registry.get::<Constraint>(&ref_id) {
+                    target.context = None;
+                    registry.insert(ref_id.clone(), "Constraint", &target)?;
+                }
+            }
+
+            instance.owned_rule.clear();
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     /// Returns whether this type can be created standalone (not nested)

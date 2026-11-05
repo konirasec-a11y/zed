@@ -122,7 +122,7 @@ impl BehavioredClassifier {
     /// Note: Returns a snapshot. Modifications require calling update().
 
     pub fn get(registry: &Registry, id: String) -> Result<String, String> {
-        registry.get_as_string(&id)
+        registry.get_as_string_of_type(&id, TYPE_NAME)
     }
 
     /// Updates the instance in the registry
@@ -140,13 +140,13 @@ impl BehavioredClassifier {
     /// Deletes this instance from the registry
 
     pub fn delete(registry: &mut Registry, id: String) -> bool {
-        registry.delete(&id)
+        registry.delete_of_type(&id, TYPE_NAME)
     }
 
     /// Checks if an instance exists
 
     pub fn exists(registry: &Registry, id: String) -> bool {
-        registry.exists(&id)
+        registry.exists_of_type(&id, TYPE_NAME)
     }
 
     /// Gets all instances of this type
@@ -334,25 +334,27 @@ impl BehavioredClassifier {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.interface_realization.contains(&ref_id) {
-            return Ok(false);
-        }
+            if instance.interface_realization.contains(&ref_id) {
+                return Ok(false);
+            }
 
-        instance.interface_realization.push(ref_id.clone());
+            instance.interface_realization.push(ref_id.clone());
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<InterfaceRealization>(&ref_id) {
-            target.implementing_classifier = instance_id.clone();
-            registry.insert(ref_id.clone(), "InterfaceRealization", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<InterfaceRealization>(&ref_id) {
+                target.implementing_classifier = instance_id.clone();
+                registry.insert(ref_id.clone(), "InterfaceRealization", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn remove_interface_realization(
@@ -360,54 +362,58 @@ impl BehavioredClassifier {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.interface_realization.len();
-        instance.interface_realization.retain(|id| id != &ref_id);
-        let removed = instance.interface_realization.len() < initial_len;
+            let initial_len = instance.interface_realization.len();
+            instance.interface_realization.retain(|id| id != &ref_id);
+            let removed = instance.interface_realization.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(target) = registry.get::<InterfaceRealization>(&ref_id) {
-            registry.insert(ref_id.clone(), "InterfaceRealization", &target)?;
-        }
+            // Update opposite reference
+            if let Some(target) = registry.get::<InterfaceRealization>(&ref_id) {
+                registry.insert(ref_id.clone(), "InterfaceRealization", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn clear_interface_realization(
         registry: &mut Registry,
         instance_id: String,
     ) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let count = instance.interface_realization.len();
+            let count = instance.interface_realization.len();
 
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.interface_realization {
-            // Update opposite reference
-            if let Some(target) = registry.get::<InterfaceRealization>(&ref_id) {
-                registry.insert(ref_id.clone(), "InterfaceRealization", &target)?;
+            if count == 0 {
+                return Ok(0);
             }
-        }
 
-        instance.interface_realization.clear();
+            for ref_id in &instance.interface_realization {
+                // Update opposite reference
+                if let Some(target) = registry.get::<InterfaceRealization>(&ref_id) {
+                    registry.insert(ref_id.clone(), "InterfaceRealization", &target)?;
+                }
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.interface_realization.clear();
 
-        Ok(count)
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     pub fn add_owned_trigger(

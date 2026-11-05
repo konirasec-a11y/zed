@@ -123,7 +123,7 @@ impl Association {
     /// Note: Returns a snapshot. Modifications require calling update().
 
     pub fn get(registry: &Registry, id: String) -> Result<String, String> {
-        registry.get_as_string(&id)
+        registry.get_as_string_of_type(&id, TYPE_NAME)
     }
 
     /// Updates the instance in the registry
@@ -141,13 +141,13 @@ impl Association {
     /// Deletes this instance from the registry
 
     pub fn delete(registry: &mut Registry, id: String) -> bool {
-        registry.delete(&id)
+        registry.delete_of_type(&id, TYPE_NAME)
     }
 
     /// Checks if an instance exists
 
     pub fn exists(registry: &Registry, id: String) -> bool {
-        registry.exists(&id)
+        registry.exists_of_type(&id, TYPE_NAME)
     }
 
     /// Gets all instances of this type
@@ -250,25 +250,27 @@ impl Association {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.owned_end.contains(&ref_id) {
-            return Ok(false);
-        }
+            if instance.owned_end.contains(&ref_id) {
+                return Ok(false);
+            }
 
-        instance.owned_end.push(ref_id.clone());
+            instance.owned_end.push(ref_id.clone());
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<Property>(&ref_id) {
-            target.owning_association = Some(instance_id.clone());
-            registry.insert(ref_id.clone(), "Property", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<Property>(&ref_id) {
+                target.owning_association = Some(instance_id.clone());
+                registry.insert(ref_id.clone(), "Property", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn remove_owned_end(
@@ -276,53 +278,57 @@ impl Association {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.owned_end.len();
-        instance.owned_end.retain(|id| id != &ref_id);
-        let removed = instance.owned_end.len() < initial_len;
+            let initial_len = instance.owned_end.len();
+            instance.owned_end.retain(|id| id != &ref_id);
+            let removed = instance.owned_end.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<Property>(&ref_id) {
-            target.owning_association = None;
-            registry.insert(ref_id.clone(), "Property", &target)?;
-        }
-
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
-
-        Ok(true)
-    }
-
-    pub fn clear_owned_end(registry: &mut Registry, instance_id: String) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
-
-        let count = instance.owned_end.len();
-
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.owned_end {
             // Update opposite reference
             if let Some(mut target) = registry.get::<Property>(&ref_id) {
                 target.owning_association = None;
                 registry.insert(ref_id.clone(), "Property", &target)?;
             }
-        }
 
-        instance.owned_end.clear();
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            Ok(true)
+        })
+    }
 
-        Ok(count)
+    pub fn clear_owned_end(registry: &mut Registry, instance_id: String) -> Result<usize, String> {
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
+
+            let count = instance.owned_end.len();
+
+            if count == 0 {
+                return Ok(0);
+            }
+
+            for ref_id in &instance.owned_end {
+                // Update opposite reference
+                if let Some(mut target) = registry.get::<Property>(&ref_id) {
+                    target.owning_association = None;
+                    registry.insert(ref_id.clone(), "Property", &target)?;
+                }
+            }
+
+            instance.owned_end.clear();
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     pub fn add_member_end(
@@ -330,25 +336,27 @@ impl Association {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.member_end.contains(&ref_id) {
-            return Ok(false);
-        }
+            if instance.member_end.contains(&ref_id) {
+                return Ok(false);
+            }
 
-        instance.member_end.push(ref_id.clone());
+            instance.member_end.push(ref_id.clone());
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<Property>(&ref_id) {
-            target.association = Some(instance_id.clone());
-            registry.insert(ref_id.clone(), "Property", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<Property>(&ref_id) {
+                target.association = Some(instance_id.clone());
+                registry.insert(ref_id.clone(), "Property", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn remove_member_end(
@@ -356,53 +364,57 @@ impl Association {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.member_end.len();
-        instance.member_end.retain(|id| id != &ref_id);
-        let removed = instance.member_end.len() < initial_len;
+            let initial_len = instance.member_end.len();
+            instance.member_end.retain(|id| id != &ref_id);
+            let removed = instance.member_end.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<Property>(&ref_id) {
-            target.association = None;
-            registry.insert(ref_id.clone(), "Property", &target)?;
-        }
-
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
-
-        Ok(true)
-    }
-
-    pub fn clear_member_end(registry: &mut Registry, instance_id: String) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
-
-        let count = instance.member_end.len();
-
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.member_end {
             // Update opposite reference
             if let Some(mut target) = registry.get::<Property>(&ref_id) {
                 target.association = None;
                 registry.insert(ref_id.clone(), "Property", &target)?;
             }
-        }
 
-        instance.member_end.clear();
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            Ok(true)
+        })
+    }
 
-        Ok(count)
+    pub fn clear_member_end(registry: &mut Registry, instance_id: String) -> Result<usize, String> {
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
+
+            let count = instance.member_end.len();
+
+            if count == 0 {
+                return Ok(0);
+            }
+
+            for ref_id in &instance.member_end {
+                // Update opposite reference
+                if let Some(mut target) = registry.get::<Property>(&ref_id) {
+                    target.association = None;
+                    registry.insert(ref_id.clone(), "Property", &target)?;
+                }
+            }
+
+            instance.member_end.clear();
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     pub fn add_navigable_owned_end(

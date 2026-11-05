@@ -86,7 +86,7 @@ impl Package {
     /// Note: Returns a snapshot. Modifications require calling update().
 
     pub fn get(registry: &Registry, id: String) -> Result<String, String> {
-        registry.get_as_string(&id)
+        registry.get_as_string_of_type(&id, TYPE_NAME)
     }
 
     /// Updates the instance in the registry
@@ -104,13 +104,13 @@ impl Package {
     /// Deletes this instance from the registry
 
     pub fn delete(registry: &mut Registry, id: String) -> bool {
-        registry.delete(&id)
+        registry.delete_of_type(&id, TYPE_NAME)
     }
 
     /// Checks if an instance exists
 
     pub fn exists(registry: &Registry, id: String) -> bool {
-        registry.exists(&id)
+        registry.exists_of_type(&id, TYPE_NAME)
     }
 
     /// Gets all instances of this type
@@ -174,25 +174,27 @@ impl Package {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.package_merge.contains(&ref_id) {
-            return Ok(false);
-        }
+            if instance.package_merge.contains(&ref_id) {
+                return Ok(false);
+            }
 
-        instance.package_merge.push(ref_id.clone());
+            instance.package_merge.push(ref_id.clone());
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<PackageMerge>(&ref_id) {
-            target.receiving_package = instance_id.clone();
-            registry.insert(ref_id.clone(), "PackageMerge", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<PackageMerge>(&ref_id) {
+                target.receiving_package = instance_id.clone();
+                registry.insert(ref_id.clone(), "PackageMerge", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn remove_package_merge(
@@ -200,54 +202,58 @@ impl Package {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.package_merge.len();
-        instance.package_merge.retain(|id| id != &ref_id);
-        let removed = instance.package_merge.len() < initial_len;
+            let initial_len = instance.package_merge.len();
+            instance.package_merge.retain(|id| id != &ref_id);
+            let removed = instance.package_merge.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(target) = registry.get::<PackageMerge>(&ref_id) {
-            registry.insert(ref_id.clone(), "PackageMerge", &target)?;
-        }
+            // Update opposite reference
+            if let Some(target) = registry.get::<PackageMerge>(&ref_id) {
+                registry.insert(ref_id.clone(), "PackageMerge", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn clear_package_merge(
         registry: &mut Registry,
         instance_id: String,
     ) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let count = instance.package_merge.len();
+            let count = instance.package_merge.len();
 
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.package_merge {
-            // Update opposite reference
-            if let Some(target) = registry.get::<PackageMerge>(&ref_id) {
-                registry.insert(ref_id.clone(), "PackageMerge", &target)?;
+            if count == 0 {
+                return Ok(0);
             }
-        }
 
-        instance.package_merge.clear();
+            for ref_id in &instance.package_merge {
+                // Update opposite reference
+                if let Some(target) = registry.get::<PackageMerge>(&ref_id) {
+                    registry.insert(ref_id.clone(), "PackageMerge", &target)?;
+                }
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.package_merge.clear();
 
-        Ok(count)
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     pub fn add_packaged_element(
@@ -318,25 +324,27 @@ impl Package {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.profile_application.contains(&ref_id) {
-            return Ok(false);
-        }
+            if instance.profile_application.contains(&ref_id) {
+                return Ok(false);
+            }
 
-        instance.profile_application.push(ref_id.clone());
+            instance.profile_application.push(ref_id.clone());
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<ProfileApplication>(&ref_id) {
-            target.applying_package = instance_id.clone();
-            registry.insert(ref_id.clone(), "ProfileApplication", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<ProfileApplication>(&ref_id) {
+                target.applying_package = instance_id.clone();
+                registry.insert(ref_id.clone(), "ProfileApplication", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn remove_profile_application(
@@ -344,54 +352,58 @@ impl Package {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.profile_application.len();
-        instance.profile_application.retain(|id| id != &ref_id);
-        let removed = instance.profile_application.len() < initial_len;
+            let initial_len = instance.profile_application.len();
+            instance.profile_application.retain(|id| id != &ref_id);
+            let removed = instance.profile_application.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(target) = registry.get::<ProfileApplication>(&ref_id) {
-            registry.insert(ref_id.clone(), "ProfileApplication", &target)?;
-        }
+            // Update opposite reference
+            if let Some(target) = registry.get::<ProfileApplication>(&ref_id) {
+                registry.insert(ref_id.clone(), "ProfileApplication", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn clear_profile_application(
         registry: &mut Registry,
         instance_id: String,
     ) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let count = instance.profile_application.len();
+            let count = instance.profile_application.len();
 
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.profile_application {
-            // Update opposite reference
-            if let Some(target) = registry.get::<ProfileApplication>(&ref_id) {
-                registry.insert(ref_id.clone(), "ProfileApplication", &target)?;
+            if count == 0 {
+                return Ok(0);
             }
-        }
 
-        instance.profile_application.clear();
+            for ref_id in &instance.profile_application {
+                // Update opposite reference
+                if let Some(target) = registry.get::<ProfileApplication>(&ref_id) {
+                    registry.insert(ref_id.clone(), "ProfileApplication", &target)?;
+                }
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.profile_application.clear();
 
-        Ok(count)
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     /// Returns whether this type can be created standalone (not nested)

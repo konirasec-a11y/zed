@@ -127,7 +127,7 @@ impl ExpansionRegion {
     /// Note: Returns a snapshot. Modifications require calling update().
 
     pub fn get(registry: &Registry, id: String) -> Result<String, String> {
-        registry.get_as_string(&id)
+        registry.get_as_string_of_type(&id, TYPE_NAME)
     }
 
     /// Updates the instance in the registry
@@ -145,13 +145,13 @@ impl ExpansionRegion {
     /// Deletes this instance from the registry
 
     pub fn delete(registry: &mut Registry, id: String) -> bool {
-        registry.delete(&id)
+        registry.delete_of_type(&id, TYPE_NAME)
     }
 
     /// Checks if an instance exists
 
     pub fn exists(registry: &Registry, id: String) -> bool {
-        registry.exists(&id)
+        registry.exists_of_type(&id, TYPE_NAME)
     }
 
     /// Gets all instances of this type
@@ -254,25 +254,27 @@ impl ExpansionRegion {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.input_element.contains(&ref_id) {
-            return Ok(false);
-        }
+            if instance.input_element.contains(&ref_id) {
+                return Ok(false);
+            }
 
-        instance.input_element.push(ref_id.clone());
+            instance.input_element.push(ref_id.clone());
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<ExpansionNode>(&ref_id) {
-            target.region_as_input = Some(instance_id.clone());
-            registry.insert(ref_id.clone(), "ExpansionNode", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<ExpansionNode>(&ref_id) {
+                target.region_as_input = Some(instance_id.clone());
+                registry.insert(ref_id.clone(), "ExpansionNode", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn remove_input_element(
@@ -280,56 +282,60 @@ impl ExpansionRegion {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.input_element.len();
-        instance.input_element.retain(|id| id != &ref_id);
-        let removed = instance.input_element.len() < initial_len;
+            let initial_len = instance.input_element.len();
+            instance.input_element.retain(|id| id != &ref_id);
+            let removed = instance.input_element.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<ExpansionNode>(&ref_id) {
-            target.region_as_input = None;
-            registry.insert(ref_id.clone(), "ExpansionNode", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<ExpansionNode>(&ref_id) {
+                target.region_as_input = None;
+                registry.insert(ref_id.clone(), "ExpansionNode", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn clear_input_element(
         registry: &mut Registry,
         instance_id: String,
     ) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let count = instance.input_element.len();
+            let count = instance.input_element.len();
 
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.input_element {
-            // Update opposite reference
-            if let Some(mut target) = registry.get::<ExpansionNode>(&ref_id) {
-                target.region_as_input = None;
-                registry.insert(ref_id.clone(), "ExpansionNode", &target)?;
+            if count == 0 {
+                return Ok(0);
             }
-        }
 
-        instance.input_element.clear();
+            for ref_id in &instance.input_element {
+                // Update opposite reference
+                if let Some(mut target) = registry.get::<ExpansionNode>(&ref_id) {
+                    target.region_as_input = None;
+                    registry.insert(ref_id.clone(), "ExpansionNode", &target)?;
+                }
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.input_element.clear();
 
-        Ok(count)
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     pub fn add_output_element(
@@ -337,25 +343,27 @@ impl ExpansionRegion {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.output_element.contains(&ref_id) {
-            return Ok(false);
-        }
+            if instance.output_element.contains(&ref_id) {
+                return Ok(false);
+            }
 
-        instance.output_element.push(ref_id.clone());
+            instance.output_element.push(ref_id.clone());
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<ExpansionNode>(&ref_id) {
-            target.region_as_output = Some(instance_id.clone());
-            registry.insert(ref_id.clone(), "ExpansionNode", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<ExpansionNode>(&ref_id) {
+                target.region_as_output = Some(instance_id.clone());
+                registry.insert(ref_id.clone(), "ExpansionNode", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn remove_output_element(
@@ -363,56 +371,60 @@ impl ExpansionRegion {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.output_element.len();
-        instance.output_element.retain(|id| id != &ref_id);
-        let removed = instance.output_element.len() < initial_len;
+            let initial_len = instance.output_element.len();
+            instance.output_element.retain(|id| id != &ref_id);
+            let removed = instance.output_element.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<ExpansionNode>(&ref_id) {
-            target.region_as_output = None;
-            registry.insert(ref_id.clone(), "ExpansionNode", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<ExpansionNode>(&ref_id) {
+                target.region_as_output = None;
+                registry.insert(ref_id.clone(), "ExpansionNode", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn clear_output_element(
         registry: &mut Registry,
         instance_id: String,
     ) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let count = instance.output_element.len();
+            let count = instance.output_element.len();
 
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.output_element {
-            // Update opposite reference
-            if let Some(mut target) = registry.get::<ExpansionNode>(&ref_id) {
-                target.region_as_output = None;
-                registry.insert(ref_id.clone(), "ExpansionNode", &target)?;
+            if count == 0 {
+                return Ok(0);
             }
-        }
 
-        instance.output_element.clear();
+            for ref_id in &instance.output_element {
+                // Update opposite reference
+                if let Some(mut target) = registry.get::<ExpansionNode>(&ref_id) {
+                    target.region_as_output = None;
+                    registry.insert(ref_id.clone(), "ExpansionNode", &target)?;
+                }
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.output_element.clear();
 
-        Ok(count)
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     /// Returns whether this type can be created standalone (not nested)

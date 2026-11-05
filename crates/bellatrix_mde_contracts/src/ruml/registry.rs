@@ -126,6 +126,17 @@ impl Registry {
         Self::default()
     }
 
+    pub fn transaction<T>(
+        &mut self,
+        operation: impl FnOnce(&mut Registry) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let mut staged = self.clone();
+        let result = operation(&mut staged)?;
+        staged.validate()?;
+        *self = staged;
+        Ok(result)
+    }
+
     pub fn entries(&self) -> &BTreeMap<String, RegistryEntry> {
         &self.entries
     }
@@ -183,12 +194,49 @@ impl Registry {
         }
         let data = serde_json::to_value(instance).map_err(|error| error.to_string())?;
         let contract = Contract::from_data(type_name, data)?;
-        self.insert_entry(RegistryEntry { id, contract })
+        self.insert_projected(id, contract)
+    }
+
+    fn insert_projected(&mut self, id: String, contract: Contract) -> Result<(), String> {
+        let proposed = RegistryEntry { id, contract };
+        proposed.validate()?;
+        let Some(existing) = self.entries.get(&proposed.id) else {
+            return self.insert_entry(proposed);
+        };
+        if existing.type_name() == proposed.type_name() {
+            return self.insert_entry(proposed);
+        }
+        if !type_matches(existing.type_name(), proposed.type_name()) {
+            return Err(format!(
+                "Registry ID {} has incompatible type {} for {}",
+                proposed.id,
+                existing.type_name(),
+                proposed.type_name()
+            ));
+        }
+
+        // An inherited projection must not erase fields owned by the concrete subtype.
+        let mut data = existing.data()?;
+        let projected_data = proposed.data()?;
+        let destination = data
+            .as_object_mut()
+            .ok_or_else(|| "Expected contract object".to_owned())?;
+        let projection = projected_data
+            .as_object()
+            .ok_or_else(|| "Expected contract projection".to_owned())?;
+        for (field, value) in projection {
+            destination.insert(field.clone(), value.clone());
+        }
+        let contract = Contract::from_data(existing.type_name(), data)?;
+        self.insert_entry(RegistryEntry {
+            id: proposed.id,
+            contract,
+        })
     }
 
     pub fn get<T: for<'de> Deserialize<'de> + ContractType>(&self, id: &str) -> Option<T> {
         let entry = self.entries.get(id)?;
-        if entry.type_name() != T::TYPE_NAME {
+        if !type_matches(entry.type_name(), T::TYPE_NAME) {
             return None;
         }
         serde_json::from_value(entry.data().ok()?).ok()
@@ -207,7 +255,27 @@ impl Registry {
     ) -> Result<(), String> {
         let data = serde_json::from_str(&value).map_err(|error| error.to_string())?;
         let contract = Contract::from_data(type_name, data)?;
-        self.insert_entry(RegistryEntry { id, contract })
+        self.insert_projected(id, contract)
+    }
+
+    pub fn get_as_string_of_type(&self, id: &str, type_name: &str) -> Result<String, String> {
+        if !self.exists_of_type(id, type_name) {
+            return Err(format!("Instance {id} of type {type_name} not found"));
+        }
+        self.get_as_string(id)
+    }
+
+    pub fn exists_of_type(&self, id: &str, type_name: &str) -> bool {
+        self.entries
+            .get(id)
+            .is_some_and(|entry| type_matches(entry.type_name(), type_name))
+    }
+
+    pub fn delete_of_type(&mut self, id: &str, type_name: &str) -> bool {
+        if !self.exists_of_type(id, type_name) {
+            return false;
+        }
+        self.delete(id)
     }
 
     pub fn delete(&mut self, id: &str) -> bool {
@@ -253,4 +321,8 @@ impl Registry {
         types.dedup();
         types
     }
+}
+
+fn type_matches(concrete: &str, requested: &str) -> bool {
+    concrete == requested || crate::uml::metamodel::conforms_to(concrete, requested)
 }

@@ -141,7 +141,7 @@ impl Class {
     /// Note: Returns a snapshot. Modifications require calling update().
 
     pub fn get(registry: &Registry, id: String) -> Result<String, String> {
-        registry.get_as_string(&id)
+        registry.get_as_string_of_type(&id, TYPE_NAME)
     }
 
     /// Updates the instance in the registry
@@ -159,13 +159,13 @@ impl Class {
     /// Deletes this instance from the registry
 
     pub fn delete(registry: &mut Registry, id: String) -> bool {
-        registry.delete(&id)
+        registry.delete_of_type(&id, TYPE_NAME)
     }
 
     /// Checks if an instance exists
 
     pub fn exists(registry: &Registry, id: String) -> bool {
-        registry.exists(&id)
+        registry.exists_of_type(&id, TYPE_NAME)
     }
 
     /// Gets all instances of this type
@@ -331,25 +331,27 @@ impl Class {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.owned_operation.contains(&ref_id) {
-            return Ok(false);
-        }
+            if instance.owned_operation.contains(&ref_id) {
+                return Ok(false);
+            }
 
-        instance.owned_operation.push(ref_id.clone());
+            instance.owned_operation.push(ref_id.clone());
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<Operation>(&ref_id) {
-            target.class = Some(instance_id.clone());
-            registry.insert(ref_id.clone(), "Operation", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<Operation>(&ref_id) {
+                target.class = Some(instance_id.clone());
+                registry.insert(ref_id.clone(), "Operation", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn remove_owned_operation(
@@ -357,56 +359,60 @@ impl Class {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.owned_operation.len();
-        instance.owned_operation.retain(|id| id != &ref_id);
-        let removed = instance.owned_operation.len() < initial_len;
+            let initial_len = instance.owned_operation.len();
+            instance.owned_operation.retain(|id| id != &ref_id);
+            let removed = instance.owned_operation.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<Operation>(&ref_id) {
-            target.class = None;
-            registry.insert(ref_id.clone(), "Operation", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<Operation>(&ref_id) {
+                target.class = None;
+                registry.insert(ref_id.clone(), "Operation", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn clear_owned_operation(
         registry: &mut Registry,
         instance_id: String,
     ) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let count = instance.owned_operation.len();
+            let count = instance.owned_operation.len();
 
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.owned_operation {
-            // Update opposite reference
-            if let Some(mut target) = registry.get::<Operation>(&ref_id) {
-                target.class = None;
-                registry.insert(ref_id.clone(), "Operation", &target)?;
+            if count == 0 {
+                return Ok(0);
             }
-        }
 
-        instance.owned_operation.clear();
+            for ref_id in &instance.owned_operation {
+                // Update opposite reference
+                if let Some(mut target) = registry.get::<Operation>(&ref_id) {
+                    target.class = None;
+                    registry.insert(ref_id.clone(), "Operation", &target)?;
+                }
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.owned_operation.clear();
 
-        Ok(count)
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     pub fn add_owned_reception(

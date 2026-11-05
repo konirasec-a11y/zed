@@ -49,7 +49,7 @@ impl TemplateableElement {
     /// Note: Returns a snapshot. Modifications require calling update().
 
     pub fn get(registry: &Registry, id: String) -> Result<String, String> {
-        registry.get_as_string(&id)
+        registry.get_as_string_of_type(&id, TYPE_NAME)
     }
 
     /// Updates the instance in the registry
@@ -67,13 +67,13 @@ impl TemplateableElement {
     /// Deletes this instance from the registry
 
     pub fn delete(registry: &mut Registry, id: String) -> bool {
-        registry.delete(&id)
+        registry.delete_of_type(&id, TYPE_NAME)
     }
 
     /// Checks if an instance exists
 
     pub fn exists(registry: &Registry, id: String) -> bool {
-        registry.exists(&id)
+        registry.exists_of_type(&id, TYPE_NAME)
     }
 
     /// Gets all instances of this type
@@ -93,25 +93,27 @@ impl TemplateableElement {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.template_binding.contains(&ref_id) {
-            return Ok(false);
-        }
+            if instance.template_binding.contains(&ref_id) {
+                return Ok(false);
+            }
 
-        instance.template_binding.push(ref_id.clone());
+            instance.template_binding.push(ref_id.clone());
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<TemplateBinding>(&ref_id) {
-            target.bound_element = instance_id.clone();
-            registry.insert(ref_id.clone(), "TemplateBinding", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<TemplateBinding>(&ref_id) {
+                target.bound_element = instance_id.clone();
+                registry.insert(ref_id.clone(), "TemplateBinding", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn remove_template_binding(
@@ -119,54 +121,58 @@ impl TemplateableElement {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.template_binding.len();
-        instance.template_binding.retain(|id| id != &ref_id);
-        let removed = instance.template_binding.len() < initial_len;
+            let initial_len = instance.template_binding.len();
+            instance.template_binding.retain(|id| id != &ref_id);
+            let removed = instance.template_binding.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(target) = registry.get::<TemplateBinding>(&ref_id) {
-            registry.insert(ref_id.clone(), "TemplateBinding", &target)?;
-        }
+            // Update opposite reference
+            if let Some(target) = registry.get::<TemplateBinding>(&ref_id) {
+                registry.insert(ref_id.clone(), "TemplateBinding", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn clear_template_binding(
         registry: &mut Registry,
         instance_id: String,
     ) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let count = instance.template_binding.len();
+            let count = instance.template_binding.len();
 
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.template_binding {
-            // Update opposite reference
-            if let Some(target) = registry.get::<TemplateBinding>(&ref_id) {
-                registry.insert(ref_id.clone(), "TemplateBinding", &target)?;
+            if count == 0 {
+                return Ok(0);
             }
-        }
 
-        instance.template_binding.clear();
+            for ref_id in &instance.template_binding {
+                // Update opposite reference
+                if let Some(target) = registry.get::<TemplateBinding>(&ref_id) {
+                    registry.insert(ref_id.clone(), "TemplateBinding", &target)?;
+                }
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.template_binding.clear();
 
-        Ok(count)
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     pub fn set_owned_template_signature(
@@ -174,53 +180,57 @@ impl TemplateableElement {
         instance_id: String,
         ref_id: Option<String>,
     ) -> Result<(), String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if let Some(old_ref_id) = &instance.owned_template_signature {
-            if let Some(old_target) = registry.get::<TemplateSignature>(&old_ref_id) {
-                registry.insert(old_ref_id.clone(), "TemplateSignature", &old_target)?;
+            if let Some(old_ref_id) = &instance.owned_template_signature {
+                if let Some(old_target) = registry.get::<TemplateSignature>(&old_ref_id) {
+                    registry.insert(old_ref_id.clone(), "TemplateSignature", &old_target)?;
+                }
             }
-        }
 
-        instance.owned_template_signature = ref_id.clone();
+            instance.owned_template_signature = ref_id.clone();
 
-        if let Some(new_ref_id) = &ref_id {
-            if let Some(mut new_target) = registry.get::<TemplateSignature>(&new_ref_id) {
-                new_target.template = instance_id.clone();
-                registry.insert(new_ref_id.clone(), "TemplateSignature", &new_target)?;
+            if let Some(new_ref_id) = &ref_id {
+                if let Some(mut new_target) = registry.get::<TemplateSignature>(&new_ref_id) {
+                    new_target.template = instance_id.clone();
+                    registry.insert(new_ref_id.clone(), "TemplateSignature", &new_target)?;
+                }
             }
-        }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(())
+            Ok(())
+        })
     }
 
     pub fn clear_owned_template_signature(
         registry: &mut Registry,
         instance_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.owned_template_signature.is_none() {
-            return Ok(false);
-        }
-
-        if let Some(old_ref_id) = &instance.owned_template_signature {
-            if let Some(old_target) = registry.get::<TemplateSignature>(&old_ref_id) {
-                registry.insert(old_ref_id.clone(), "TemplateSignature", &old_target)?;
+            if instance.owned_template_signature.is_none() {
+                return Ok(false);
             }
-        }
 
-        instance.owned_template_signature = None;
+            if let Some(old_ref_id) = &instance.owned_template_signature {
+                if let Some(old_target) = registry.get::<TemplateSignature>(&old_ref_id) {
+                    registry.insert(old_ref_id.clone(), "TemplateSignature", &old_target)?;
+                }
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            instance.owned_template_signature = None;
 
-        Ok(true)
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(true)
+        })
     }
 
     /// Returns whether this type can be created standalone (not nested)

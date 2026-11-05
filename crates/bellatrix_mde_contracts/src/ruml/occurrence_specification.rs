@@ -76,7 +76,7 @@ impl OccurrenceSpecification {
     /// Note: Returns a snapshot. Modifications require calling update().
 
     pub fn get(registry: &Registry, id: String) -> Result<String, String> {
-        registry.get_as_string(&id)
+        registry.get_as_string_of_type(&id, TYPE_NAME)
     }
 
     /// Updates the instance in the registry
@@ -94,13 +94,13 @@ impl OccurrenceSpecification {
     /// Deletes this instance from the registry
 
     pub fn delete(registry: &mut Registry, id: String) -> bool {
-        registry.delete(&id)
+        registry.delete_of_type(&id, TYPE_NAME)
     }
 
     /// Checks if an instance exists
 
     pub fn exists(registry: &Registry, id: String) -> bool {
-        registry.exists(&id)
+        registry.exists_of_type(&id, TYPE_NAME)
     }
 
     /// Gets all instances of this type
@@ -164,25 +164,27 @@ impl OccurrenceSpecification {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.to_before.contains(&ref_id) {
-            return Ok(false);
-        }
+            if instance.to_before.contains(&ref_id) {
+                return Ok(false);
+            }
 
-        instance.to_before.push(ref_id.clone());
+            instance.to_before.push(ref_id.clone());
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<GeneralOrdering>(&ref_id) {
-            target.after = instance_id.clone();
-            registry.insert(ref_id.clone(), "GeneralOrdering", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<GeneralOrdering>(&ref_id) {
+                target.after = instance_id.clone();
+                registry.insert(ref_id.clone(), "GeneralOrdering", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn remove_to_before(
@@ -190,51 +192,55 @@ impl OccurrenceSpecification {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.to_before.len();
-        instance.to_before.retain(|id| id != &ref_id);
-        let removed = instance.to_before.len() < initial_len;
+            let initial_len = instance.to_before.len();
+            instance.to_before.retain(|id| id != &ref_id);
+            let removed = instance.to_before.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(target) = registry.get::<GeneralOrdering>(&ref_id) {
-            registry.insert(ref_id.clone(), "GeneralOrdering", &target)?;
-        }
-
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
-
-        Ok(true)
-    }
-
-    pub fn clear_to_before(registry: &mut Registry, instance_id: String) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
-
-        let count = instance.to_before.len();
-
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.to_before {
             // Update opposite reference
             if let Some(target) = registry.get::<GeneralOrdering>(&ref_id) {
                 registry.insert(ref_id.clone(), "GeneralOrdering", &target)?;
             }
-        }
 
-        instance.to_before.clear();
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            Ok(true)
+        })
+    }
 
-        Ok(count)
+    pub fn clear_to_before(registry: &mut Registry, instance_id: String) -> Result<usize, String> {
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
+
+            let count = instance.to_before.len();
+
+            if count == 0 {
+                return Ok(0);
+            }
+
+            for ref_id in &instance.to_before {
+                // Update opposite reference
+                if let Some(target) = registry.get::<GeneralOrdering>(&ref_id) {
+                    registry.insert(ref_id.clone(), "GeneralOrdering", &target)?;
+                }
+            }
+
+            instance.to_before.clear();
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     pub fn set_event(
@@ -258,25 +264,27 @@ impl OccurrenceSpecification {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        if instance.to_after.contains(&ref_id) {
-            return Ok(false);
-        }
+            if instance.to_after.contains(&ref_id) {
+                return Ok(false);
+            }
 
-        instance.to_after.push(ref_id.clone());
+            instance.to_after.push(ref_id.clone());
 
-        // Update opposite reference
-        if let Some(mut target) = registry.get::<GeneralOrdering>(&ref_id) {
-            target.before = instance_id.clone();
-            registry.insert(ref_id.clone(), "GeneralOrdering", &target)?;
-        }
+            // Update opposite reference
+            if let Some(mut target) = registry.get::<GeneralOrdering>(&ref_id) {
+                target.before = instance_id.clone();
+                registry.insert(ref_id.clone(), "GeneralOrdering", &target)?;
+            }
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        Ok(true)
+            Ok(true)
+        })
     }
 
     pub fn remove_to_after(
@@ -284,51 +292,55 @@ impl OccurrenceSpecification {
         instance_id: String,
         ref_id: String,
     ) -> Result<bool, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
 
-        let initial_len = instance.to_after.len();
-        instance.to_after.retain(|id| id != &ref_id);
-        let removed = instance.to_after.len() < initial_len;
+            let initial_len = instance.to_after.len();
+            instance.to_after.retain(|id| id != &ref_id);
+            let removed = instance.to_after.len() < initial_len;
 
-        if !removed {
-            return Ok(false);
-        }
+            if !removed {
+                return Ok(false);
+            }
 
-        // Update opposite reference
-        if let Some(target) = registry.get::<GeneralOrdering>(&ref_id) {
-            registry.insert(ref_id.clone(), "GeneralOrdering", &target)?;
-        }
-
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
-
-        Ok(true)
-    }
-
-    pub fn clear_to_after(registry: &mut Registry, instance_id: String) -> Result<usize, String> {
-        let mut instance: Self = registry
-            .get(&instance_id)
-            .ok_or_else(|| String::from("Instance not found"))?;
-
-        let count = instance.to_after.len();
-
-        if count == 0 {
-            return Ok(0);
-        }
-
-        for ref_id in &instance.to_after {
             // Update opposite reference
             if let Some(target) = registry.get::<GeneralOrdering>(&ref_id) {
                 registry.insert(ref_id.clone(), "GeneralOrdering", &target)?;
             }
-        }
 
-        instance.to_after.clear();
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
 
-        registry.insert(instance_id, TYPE_NAME, &instance)?;
+            Ok(true)
+        })
+    }
 
-        Ok(count)
+    pub fn clear_to_after(registry: &mut Registry, instance_id: String) -> Result<usize, String> {
+        registry.transaction(|registry| {
+            let mut instance: Self = registry
+                .get(&instance_id)
+                .ok_or_else(|| String::from("Instance not found"))?;
+
+            let count = instance.to_after.len();
+
+            if count == 0 {
+                return Ok(0);
+            }
+
+            for ref_id in &instance.to_after {
+                // Update opposite reference
+                if let Some(target) = registry.get::<GeneralOrdering>(&ref_id) {
+                    registry.insert(ref_id.clone(), "GeneralOrdering", &target)?;
+                }
+            }
+
+            instance.to_after.clear();
+
+            registry.insert(instance_id, TYPE_NAME, &instance)?;
+
+            Ok(count)
+        })
     }
 
     /// Returns whether this type can be created standalone (not nested)
