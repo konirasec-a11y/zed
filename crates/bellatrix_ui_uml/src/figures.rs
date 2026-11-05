@@ -1,26 +1,22 @@
 //! Non-classifier notations share editing, but not the classifier silhouette.
 use crate::figure_geometry::{paint_folded_paper, paint_notation, port_label_layout};
-#[cfg(feature = "legacy_editors")]
-use crate::inline_edit::UmlInlineNameEditor;
 use crate::{
     class::{MemberInteractions, MemberRow, UmlClassifier, ViewAppearance, template_signature},
+    inline_edit::UmlInlineNameEditor,
     interface_presentation::InterfaceFigure,
     timing::TimingLifeline,
 };
 use bellatrix_design_system::Palette;
-use bellatrix_mde_contracts::model::{LineMode, TimingPresentation};
-use bellatrix_mde_contracts::protocol::presentation::{
+use bellatrix_mde_cordis::presentation_contract::{
     FigurePresentation, RenderStyle, UmlHeader, UmlNotation,
 };
-use bellatrix_mde_contracts::protocol::projection::InterfaceIconProjection;
-#[cfg(feature = "legacy_editors")]
-use gpui::Entity;
+use bellatrix_mde_cordis::projection::InterfaceIconProjection;
+use bellatrix_mde_cordis::{LineMode, TimingPresentation};
 use gpui::{
-    App, InteractiveElement, IntoElement, MouseButton, PathBuilder, RenderOnce, SharedString,
-    Window, canvas, div, point, prelude::*, px,
+    App, Entity, InteractiveElement, IntoElement, MouseButton, PathBuilder, RenderOnce,
+    SharedString, Window, canvas, div, point, prelude::*, px,
 };
 use std::rc::Rc;
-#[cfg(feature = "legacy_editors")]
 use ui_input::InputField;
 type Action = Rc<dyn Fn(&mut Window, &mut App)>;
 
@@ -46,7 +42,6 @@ pub struct UmlFigure {
     view_height: f64,
     appearance: ViewAppearance,
     edit: Option<Action>,
-    #[cfg(feature = "legacy_editors")]
     editor: Option<(Entity<InputField>, Action, Action)>,
     template_parameters: Option<(Vec<MemberRow>, MemberInteractions, f64)>,
 }
@@ -114,7 +109,6 @@ impl UmlFigure {
             view_height: 180.0,
             appearance: ViewAppearance::default(),
             edit: None,
-            #[cfg(feature = "legacy_editors")]
             editor: None,
             template_parameters: None,
         }
@@ -172,7 +166,6 @@ impl UmlFigure {
         self.edit = Some(Rc::new(handler));
         self
     }
-    #[cfg(feature = "legacy_editors")]
     pub fn inline_edit(
         mut self,
         field: Entity<InputField>,
@@ -275,8 +268,6 @@ impl RenderOnce for UmlFigure {
             .map(SharedString::from);
         let font_family = appearance.0.font_family.clone();
         let border = appearance.stroke(palette, selected);
-        let title = div().child(display_name).into_any_element();
-        #[cfg(feature = "legacy_editors")]
         let title: gpui::AnyElement = if let Some((field, confirm, cancel)) = self.editor {
             UmlInlineNameEditor::new(
                 field,
@@ -285,7 +276,7 @@ impl RenderOnce for UmlFigure {
             )
             .into_any_element()
         } else {
-            title
+            div().child(display_name).into_any_element()
         };
         let edit = self.edit;
         let title_area = div()

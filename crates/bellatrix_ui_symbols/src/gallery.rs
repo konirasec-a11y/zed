@@ -1,4 +1,4 @@
-//! Public symbol gallery for GPUI applications.
+//! Public symbol gallery on the same GPUI runtime as Zed Workspace.
 use crate::{Family, count, glyph, groups};
 use bellatrix_design_system::Palette;
 use gpui::{

@@ -7,4 +7,5 @@ description = "Reusable dock panel headers: Bellatrix Design reusable GPUI compo
 
 [dependencies]
 gpui.workspace = true
+ui.workspace = true
 bellatrix_design_system = { path = "../bellatrix_design_system" }

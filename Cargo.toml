@@ -21,7 +21,6 @@ members = [
     "crates/auto_update_ui",
     "crates/aws_http_client",
     "crates/bedrock",
-    "crates/bellatrix_app",
     "crates/bellatrix_project",
     "crates/bellatrix_mde",
     "crates/bellatrix_mde_protocol",
@@ -295,8 +294,7 @@ edition = "2024"
 
 [workspace.dependencies]
 
-# Bellatrix desktop frontend, shared contracts, and legacy adapters.
-bellatrix_app = { path = "crates/bellatrix_app" }
+# Bellatrix bounded contexts and native Zed Workspace contributions.
 bellatrix_project = { path = "crates/bellatrix_project" }
 bellatrix_mde = { path = "crates/bellatrix_mde" }
 bellatrix_mde_protocol = { path = "crates/bellatrix_mde_protocol" }

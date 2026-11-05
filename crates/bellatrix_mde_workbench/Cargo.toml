@@ -18,8 +18,8 @@ workspace.workspace = true
 project.workspace = true
 language.workspace = true
 serde_json.workspace = true
-bellatrix_design_system = { path = "../bellatrix_design_system", features = ["zed_theme"] }
-bellatrix_ui_uml = { path = "../bellatrix_ui_uml", features = ["legacy_editors"] }
+bellatrix_design_system = { path = "../bellatrix_design_system" }
+bellatrix_ui_uml = { path = "../bellatrix_ui_uml" }
 bellatrix_ui_symbols = { path = "../bellatrix_ui_symbols" }
 bellatrix_ui_panels = { path = "../bellatrix_ui_panels" }
 

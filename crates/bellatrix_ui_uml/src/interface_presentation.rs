@@ -1,7 +1,7 @@
 use crate::class::ViewAppearance;
 use bellatrix_design_system::Palette;
-use bellatrix_mde_contracts::model::LineMode;
-use bellatrix_mde_contracts::protocol::projection::{InterfaceIconGlyph, InterfaceIconProjection};
+use bellatrix_mde_cordis::LineMode;
+use bellatrix_mde_cordis::projection::{InterfaceIconGlyph, InterfaceIconProjection};
 use gpui::{
     AnyElement, IntoElement, PathBuilder, SharedString, canvas, div, point, prelude::*, px,
 };

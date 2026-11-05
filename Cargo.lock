@@ -2148,26 +2148,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a8241f3ebb85c056b509d4327ad0358fbbba6ffb340bf388f26350aeda225b1"
 
 [[package]]
-name = "bellatrix_app"
-version = "0.1.0"
-dependencies = [
- "bellatrix_design_system",
- "bellatrix_mde_contracts",
- "bellatrix_ui_panels",
- "bellatrix_ui_uml",
- "dirs",
- "gpui",
- "gpui_platform",
- "serde_json",
- "unicode-segmentation",
-]
-
-[[package]]
 name = "bellatrix_design_system"
 version = "0.1.0"
 dependencies = [
  "gpui",
- "theme",
+ "ui",
 ]
 
 [[package]]
@@ -2304,6 +2289,7 @@ version = "0.1.0"
 dependencies = [
  "bellatrix_design_system",
  "gpui",
+ "ui",
 ]
 
 [[package]]
@@ -2319,7 +2305,7 @@ name = "bellatrix_ui_uml"
 version = "0.1.0"
 dependencies = [
  "bellatrix_design_system",
- "bellatrix_mde_contracts",
+ "bellatrix_mde_cordis",
  "gpui",
  "log",
  "ui",
@@ -22618,6 +22604,7 @@ dependencies = [
  "audio",
  "auto_update",
  "auto_update_ui",
+ "bellatrix_zed_host",
  "breadcrumbs",
  "call",
  "call_hierarchy",

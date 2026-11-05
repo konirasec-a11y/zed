@@ -1,19 +1,15 @@
 //! Shared classifier labels, compartments and editing. The notation selects the silhouette.
-#[cfg(feature = "legacy_editors")]
 use crate::inline_edit::UmlInlineNameEditor;
 use bellatrix_design_system::Palette;
-use bellatrix_mde_contracts::model::{LineMode, TextAlignment, TextVerticalAlignment};
-use bellatrix_mde_contracts::protocol::presentation::{
+use bellatrix_mde_cordis::presentation_contract::{
     ClassifierPresentation, MemberPresentation, RenderStyle, UmlHeader,
 };
-#[cfg(feature = "legacy_editors")]
-use gpui::Entity;
+use bellatrix_mde_cordis::{LineMode, TextAlignment, TextVerticalAlignment};
 use gpui::{
-    App, InteractiveElement, IntoElement, MouseButton, PathBuilder, RenderOnce, SharedString,
-    Window, canvas, div, point, prelude::*, px, rgb,
+    App, Entity, InteractiveElement, IntoElement, MouseButton, PathBuilder, RenderOnce,
+    SharedString, Window, canvas, div, point, prelude::*, px, rgb,
 };
 use std::rc::Rc;
-#[cfg(feature = "legacy_editors")]
 use ui_input::InputField;
 
 #[derive(Clone, Default)]
@@ -265,13 +261,10 @@ pub(crate) struct MemberRow {
 }
 #[derive(Clone)]
 pub(crate) struct MemberInteractions {
-    #[cfg(feature = "legacy_editors")]
     pub editing: Option<(String, Entity<InputField>)>,
     pub select: Option<ElementAction>,
     pub edit: Option<ElementAction>,
-    #[cfg(feature = "legacy_editors")]
     pub confirm: Option<Action>,
-    #[cfg(feature = "legacy_editors")]
     pub cancel: Option<Action>,
     pub scale: f32,
     pub appearance: ViewAppearance,
@@ -290,14 +283,11 @@ pub struct UmlClassifier {
     authored_contents: bool,
     pub(crate) template_parameters: Vec<MemberRow>,
     pub(crate) selected: bool,
-    #[cfg(feature = "legacy_editors")]
     pub(crate) editing: Option<(String, Entity<InputField>)>,
     pub(crate) select_member: Option<ElementAction>,
     pub(crate) edit_member: Option<ElementAction>,
     pub(crate) edit_title: Option<Action>,
-    #[cfg(feature = "legacy_editors")]
     pub(crate) confirm_edit: Option<Action>,
-    #[cfg(feature = "legacy_editors")]
     pub(crate) cancel_edit: Option<Action>,
     pub(crate) view_width: f64,
     pub(crate) view_height: f64,
@@ -327,14 +317,11 @@ impl UmlClassifier {
             authored_contents: false,
             template_parameters: Vec::new(),
             selected: false,
-            #[cfg(feature = "legacy_editors")]
             editing: None,
             select_member: None,
             edit_member: None,
             edit_title: None,
-            #[cfg(feature = "legacy_editors")]
             confirm_edit: None,
-            #[cfg(feature = "legacy_editors")]
             cancel_edit: None,
             view_width: 185.0,
             view_height: 112.0,
@@ -453,7 +440,6 @@ impl UmlClassifier {
         self.edit_title = Some(Rc::new(handler));
         self
     }
-    #[cfg(feature = "legacy_editors")]
     pub fn inline_edit(
         mut self,
         subject: impl Into<String>,
@@ -468,13 +454,10 @@ impl UmlClassifier {
     }
     pub(crate) fn member_interactions(&self) -> MemberInteractions {
         MemberInteractions {
-            #[cfg(feature = "legacy_editors")]
             editing: self.editing.clone(),
             select: self.select_member.clone(),
             edit: self.edit_member.clone(),
-            #[cfg(feature = "legacy_editors")]
             confirm: self.confirm_edit.clone(),
-            #[cfg(feature = "legacy_editors")]
             cancel: self.cancel_edit.clone(),
             scale: self.view_scale,
             appearance: self.appearance.clone(),
@@ -482,7 +465,6 @@ impl UmlClassifier {
     }
 }
 
-#[cfg(feature = "legacy_editors")]
 pub(crate) fn inline_field(
     field: Entity<InputField>,
     confirm: Option<Action>,
@@ -526,19 +508,9 @@ pub(crate) fn compartment(
         .children(rows.into_iter().enumerate().map(move |(index, member)| {
             let select = interactions.select.clone();
             let edit = interactions.edit.clone();
-            let inner = div()
-                .w_full()
-                .min_w_0()
-                .when(member.presentation.underlined, |element| {
-                    element.underline()
-                })
-                .child(member.title)
-                .into_any_element();
-            #[cfg(feature = "legacy_editors")]
             let field = interactions.editing.as_ref().and_then(|(subject, field)| {
                 (member.id.as_deref() == Some(subject.as_str())).then(|| field.clone())
             });
-            #[cfg(feature = "legacy_editors")]
             let inner = if let Some(field) = field {
                 inline_field(
                     field,
@@ -547,7 +519,14 @@ pub(crate) fn compartment(
                 )
                 .into_any_element()
             } else {
-                inner
+                div()
+                    .w_full()
+                    .min_w_0()
+                    .when(member.presentation.underlined, |element| {
+                        element.underline()
+                    })
+                    .child(member.title)
+                    .into_any_element()
             };
             div()
                 .id(format!("uml-{family}-{index}"))
@@ -565,13 +544,12 @@ pub(crate) fn compartment(
                         if event.click_count >= 2 {
                             if let Some(handler) = &edit {
                                 handler(id, window, cx);
-                                cx.stop_propagation();
                             }
                         } else if let Some(handler) = &select {
                             handler(id, window, cx);
-                            cx.stop_propagation();
                         }
                     }
+                    cx.stop_propagation();
                 })
                 .child(inner)
         }))
@@ -611,12 +589,9 @@ pub(crate) fn template_signature(
             .children(rows.into_iter().enumerate().map(move |(index, parameter)| {
                 let select = interactions.select.clone();
                 let edit = interactions.edit.clone();
-                let label = div().child(parameter.title).into_any_element();
-                #[cfg(feature = "legacy_editors")]
                 let field = interactions.editing.as_ref().and_then(|(subject, field)| {
                     (parameter.id.as_deref() == Some(subject.as_str())).then(|| field.clone())
                 });
-                #[cfg(feature = "legacy_editors")]
                 let label = if let Some(field) = field {
                     inline_field(
                         field,
@@ -625,7 +600,7 @@ pub(crate) fn template_signature(
                     )
                     .into_any_element()
                 } else {
-                    label
+                    div().child(parameter.title).into_any_element()
                 };
                 div()
                     .id(format!("uml-template-parameter-{index}"))
@@ -647,9 +622,9 @@ pub(crate) fn template_signature(
                             };
                             if let Some(handler) = handler {
                                 handler(id, window, cx);
-                                cx.stop_propagation();
                             }
                         }
+                        cx.stop_propagation();
                     })
                     .child(label)
             }))
@@ -671,19 +646,16 @@ impl RenderOnce for UmlClassifier {
             palette,
             self.selected,
         );
-        let title = div()
-            .when(self.presentation.name_is_italic, |title| title.italic())
-            .child(self.title)
-            .into_any_element();
-        #[cfg(feature = "legacy_editors")]
         let title_editor = self.editing.as_ref().and_then(|(subject, field)| {
             (self.class_id.as_deref() == Some(subject.as_str())).then(|| field.clone())
         });
-        #[cfg(feature = "legacy_editors")]
         let title = match title_editor {
             Some(field) => inline_field(field, self.confirm_edit.clone(), self.cancel_edit.clone())
                 .into_any_element(),
-            None => title,
+            None => div()
+                .when(self.presentation.name_is_italic, |title| title.italic())
+                .child(self.title)
+                .into_any_element(),
         };
         let edit_title = self.edit_title.clone();
         let mut header = self.header;
@@ -728,8 +700,8 @@ impl RenderOnce for UmlClassifier {
                             if event.click_count >= 2 {
                                 if let Some(handler) = &edit_title {
                                     handler(window, cx);
-                                    cx.stop_propagation();
                                 }
+                                cx.stop_propagation();
                             }
                         })
                         .child(
