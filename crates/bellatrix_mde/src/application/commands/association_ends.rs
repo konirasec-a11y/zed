@@ -55,21 +55,6 @@ fn retype(section: &mut ModelingSection, property_id: &str, type_id: &str) -> Re
         .iter_mut()
         .find(|element| element.id == property_id)
         .ok_or("Association member Property not found")?;
-    if let Some(text) = property
-        .properties
-        .get("type")
-        .filter(|value| value.is_string())
-        .cloned()
-    {
-        if property
-            .properties
-            .get("typeText")
-            .is_some_and(|preserved| preserved != &text)
-        {
-            return Err("existing typeText differs from the legacy type declaration; preserve both before choosing a Type".into());
-        }
-        property.properties.insert("typeText".into(), text);
-    }
     property.properties.insert("type".into(), value);
     Ok(())
 }
@@ -145,9 +130,6 @@ pub(super) fn apply(
                     Aggregation::Composite => "composite",
                 };
                 properties.insert("aggregation".into(), json!(aggregation));
-                if let Some(multiplicity) = &end.multiplicity {
-                    properties.insert("multiplicity".into(), json!(multiplicity));
-                }
                 section.elements.push(Element {
                     id: id.clone(),
                     kind: "uml.attribute".into(),
@@ -159,6 +141,9 @@ pub(super) fn apply(
                     implementations: Vec::new(),
                     content: None,
                 });
+                if let Some(multiplicity) = &end.multiplicity {
+                    associations::set_end_multiplicity(section, project_id, &id, multiplicity)?;
+                }
                 retype(section, &id, &end.type_id)?;
                 crate::uml::root::set_owner(section, project_id, &id, &owner_id)?;
                 member_end_ids.insert(*position, id);

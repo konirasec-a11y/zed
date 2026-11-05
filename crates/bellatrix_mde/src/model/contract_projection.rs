@@ -129,6 +129,35 @@ pub fn project_registry(
             content: None,
         });
     }
+    for relation in &mut relations {
+        let Some(entry) = registry.get_entry(&relation.id) else {
+            continue;
+        };
+        if !metamodel::conforms_to(entry.contract.type_name(), "Association") {
+            continue;
+        }
+        let Some(ends) = relation
+            .properties
+            .get("memberEnd")
+            .and_then(Value::as_array)
+        else {
+            continue;
+        };
+        let [source, target] = ends.as_slice() else {
+            continue;
+        };
+        let resolve = |value: &Value| {
+            projection_reference_id(value)
+                .and_then(|id| elements.iter().find(|element| element.id == id))
+        };
+        if let (Some(source), Some(target)) = (resolve(source), resolve(target)) {
+            relation
+                .properties
+                .extend(association_display_properties(source, target, |id| {
+                    elements.iter().find(|element| element.id == id)
+                }));
+        }
+    }
     Ok((elements, relations))
 }
 
@@ -330,4 +359,84 @@ fn snake_case(name: &str) -> String {
         previous_lowercase = character.is_lowercase() || character.is_numeric();
     }
     result
+}
+
+pub(crate) const ASSOCIATION_DISPLAY_KEYS: [&str; 6] = [
+    "sourceRole",
+    "targetRole",
+    "sourceMultiplicity",
+    "targetMultiplicity",
+    "end1Aggregation",
+    "end2Aggregation",
+];
+
+// These labels exist only in disposable projections. Both rendering and the
+// inverse adapter use this function, so stale authored aliases cannot become a
+// second semantic source. Unrenderable expressions remain in their contracts.
+pub(crate) fn association_display_properties<'a>(
+    source: &crate::Element,
+    target: &crate::Element,
+    mut lookup: impl FnMut(&str) -> Option<&'a crate::Element>,
+) -> BTreeMap<String, Value> {
+    let mut properties = BTreeMap::new();
+    for (end, role, range, diamond) in [
+        (
+            source,
+            "sourceRole",
+            "sourceMultiplicity",
+            "end2Aggregation",
+        ),
+        (
+            target,
+            "targetRole",
+            "targetMultiplicity",
+            "end1Aggregation",
+        ),
+    ] {
+        if !end.name.is_empty() {
+            properties.insert(role.into(), Value::String(end.name.clone()));
+        }
+        let aggregation = end
+            .properties
+            .get("aggregation")
+            .and_then(Value::as_str)
+            .unwrap_or("none")
+            .to_ascii_lowercase();
+        properties.insert(diamond.into(), Value::String(aggregation));
+        let has_bound = ["lowerValue", "upperValue"].iter().any(|field| {
+            end.properties
+                .get(*field)
+                .is_some_and(|value| !value.is_null())
+        });
+        if !has_bound {
+            continue;
+        }
+        let mut bound = |field: &str, expected_kind: &str| -> Option<String> {
+            let Some(reference) = end.properties.get(field).filter(|value| !value.is_null()) else {
+                return Some("1".into());
+            };
+            let id = projection_reference_id(reference)?;
+            let literal = lookup(id)?;
+            if crate::uml::root::object_metaclass(&literal.kind) != Some(expected_kind) {
+                return None;
+            }
+            match literal.properties.get("value")? {
+                Value::String(value) => Some(value.clone()),
+                Value::Number(value) => Some(value.to_string()),
+                _ => None,
+            }
+        };
+        if let Some(lower) = bound("lowerValue", "LiteralInteger")
+            && let Some(upper) = bound("upperValue", "LiteralUnlimitedNatural")
+        {
+            properties.insert(range.into(), Value::String(format!("{lower}..{upper}")));
+        }
+    }
+    properties
+}
+
+pub(crate) fn projection_reference_id(value: &Value) -> Option<&str> {
+    value
+        .as_str()
+        .or_else(|| value.get("$ref").and_then(Value::as_str))
 }

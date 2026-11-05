@@ -12,7 +12,7 @@ use super::{
     references::{ReferenceIndex, reference_id},
     root::{ElementRef, Model},
     schema,
-    types::{Integer, MultiplicityRange},
+    types::{Integer, MultiplicityRange, UnlimitedNatural},
     value_specifications::{self, EvaluationError},
 };
 use crate::{
@@ -1243,63 +1243,62 @@ fn issue(code: &'static str, id: &str, message: impl Into<String>) -> Structural
     }
 }
 
-const PROJECTION_KEYS: [&str; 6] = [
-    "sourceRole",
-    "targetRole",
-    "sourceMultiplicity",
-    "targetMultiplicity",
-    "end1Aggregation",
-    "end2Aggregation",
-];
+const PROJECTION_KEYS: [&str; 6] = crate::contract_projection::ASSOCIATION_DISPLAY_KEYS;
+
+fn materialized_ends<'a>(
+    references: &ReferenceIndex<'a>,
+    association_id: &str,
+) -> Result<Vec<&'a Element>, String> {
+    let association = references.element(association_id)?;
+    let values = association
+        .properties()
+        .get("memberEnd")
+        .and_then(Value::as_array)
+        .ok_or("Association memberEnd must be an explicit collection")?;
+    values
+        .iter()
+        .map(|value| {
+            let id = crate::contract_projection::projection_reference_id(value)
+                .ok_or("Association memberEnd requires an identity")?;
+            match references.element(id)? {
+                ElementRef::Object(element) => Ok(element),
+                _ => Err("Association end must be an object projection".into()),
+            }
+        })
+        .collect()
+}
 
 fn binary_projection(
     references: &ReferenceIndex<'_>,
     relation: &Relation,
 ) -> Result<Relation, String> {
-    let ends = member_ends(references, &relation.id)?;
+    let ends = materialized_ends(references, &relation.id)?;
     let [source, target] = ends.as_slice() else {
-        return Err("Unsupported binary Relation notation: exactly two member ends are required by this adapter".into());
+        return Err("Binary association projection requires exactly two member ends".into());
     };
     let mut result = relation.clone();
-    result.from = property_type(references, source)
-        .map_err(|error| format!("UML_ASSOCIATION_END_TYPE: {error}"))?
-        .ok_or("UML_ASSOCIATION_END_TYPE: Association source end requires a Type")?
-        .id()
-        .into();
-    result.to = property_type(references, target)
-        .map_err(|error| format!("UML_ASSOCIATION_END_TYPE: {error}"))?
-        .ok_or("UML_ASSOCIATION_END_TYPE: Association target end requires a Type")?
-        .id()
-        .into();
+    let type_id = |end: &Element| -> Result<String, String> {
+        end.properties
+            .get("type")
+            .and_then(crate::contract_projection::projection_reference_id)
+            .map(str::to_owned)
+            .ok_or_else(|| format!("{}: association endpoint type is absent", end.id))
+    };
+    result.from = type_id(source)?;
+    result.to = type_id(target)?;
     for key in PROJECTION_KEYS {
         result.properties.remove(key);
     }
-    for (end, role, range) in [
-        (source, "sourceRole", "sourceMultiplicity"),
-        (target, "targetRole", "targetMultiplicity"),
-    ] {
-        if !end.name.is_empty() {
-            result.properties.insert(role.into(), json!(end.name));
-        }
-        if value_specifications::has_bound_references(ElementRef::Object(end)) {
-            match multiplicity(references, end) {
-                Ok(bounds) => {
-                    result.properties.insert(
-                        range.into(),
-                        json!(format!(
-                            "{}..{}",
-                            bounds.lower_bound(),
-                            bounds.upper_bound()
-                        )),
-                    );
-                }
-                Err(error) if error.is_unsupported() => {}
-                Err(error) => return Err(error.to_string()),
-            }
-        } else if let Some(value) = end.properties.get("multiplicity") {
-            result.properties.insert(range.into(), value.clone());
-        }
-    }
+    result
+        .properties
+        .extend(crate::contract_projection::association_display_properties(
+            source,
+            target,
+            |id| match references.model().element(id) {
+                Some(ElementRef::Object(element)) => Some(element),
+                _ => None,
+            },
+        ));
     Ok(result)
 }
 
@@ -1359,8 +1358,18 @@ fn fresh_id(section: &ModelingSection, project_id: &str, prefix: &str) -> Result
     Err("identifier overflow".into())
 }
 
-/// Explicit, lossless migration of the existing binary adapter. Reads never mutate authored models.
 pub(crate) fn migrate(
+    section: &mut ModelingSection,
+    project_id: &str,
+    association_id: &str,
+) -> Result<(), String> {
+    let mut staged = section.clone();
+    materialize_binary(&mut staged, project_id, association_id)?;
+    *section = staged;
+    Ok(())
+}
+
+fn materialize_binary(
     section: &mut ModelingSection,
     project_id: &str,
     association_id: &str,
@@ -1377,15 +1386,27 @@ pub(crate) fn migrate(
         );
     }
     if relation.properties.contains_key("memberEnd") {
-        return validate_association(
+        // Existing display values are checked against their canonical inputs,
+        // never silently discarded as if they were unimportant metadata.
+        let projection = binary_projection(
             &ReferenceIndex::new(Model::from_section(section)),
-            ElementRef::Relationship(&relation),
-        );
+            &relation,
+        )?;
+        for key in PROJECTION_KEYS {
+            if let Some(value) = relation.properties.get(key)
+                && projection.properties.get(key) != Some(value)
+            {
+                return Err(format!(
+                    "{association_id}: {key} conflicts with canonical memberEnd data"
+                ));
+            }
+        }
+        return synchronize_projection(section, association_id);
     }
     for key in ["ownedEnd", "endType", "navigableOwnedEnd"] {
         if relation.properties.contains_key(key) {
             return Err(format!(
-                "Legacy Association already contains {key}; reconcile its authored references before migration"
+                "Association already contains {key} without memberEnd; reconcile its references explicitly"
             ));
         }
     }
@@ -1415,9 +1436,8 @@ pub(crate) fn migrate(
         };
         let id = fresh_id(section, project_id, "mde-association-end")?;
         let mut properties = BTreeMap::from([("type".into(), json!({"$ref": endpoint}))]);
-        if let Some(value) = relation.properties.get(range) {
-            properties.insert("multiplicity".into(), value.clone());
-        }
+        properties.insert("association".into(), json!({"$ref": association_id}));
+        properties.insert("owningAssociation".into(), json!({"$ref": association_id}));
         if let Some(value) = relation.properties.get(diamond) {
             properties.insert("aggregation".into(), value.clone());
         }
@@ -1432,23 +1452,40 @@ pub(crate) fn migrate(
             implementations: Vec::new(),
             content: None,
         });
+        if let Some(value) = relation.properties.get(range) {
+            set_end_multiplicity(
+                section,
+                project_id,
+                &id,
+                value
+                    .as_str()
+                    .ok_or_else(|| format!("{range} must be a multiplicity string"))?,
+            )?;
+        }
         let ownership_id = fresh_id(section, project_id, "mde-association-owns")?;
         section.relations.push(Relation {
             id: ownership_id,
             kind: "owns".into(),
             from: association_id.into(),
             to: id.clone(),
-            properties: BTreeMap::new(),
+            properties: BTreeMap::from([("role".into(), json!("ownedEnd"))]),
         });
         ends.push(json!({"$ref": id}));
     }
-    section
+    let association = section
         .relations
         .iter_mut()
         .find(|relation| relation.id == association_id)
-        .ok_or("Association disappeared")?
+        .ok_or("Association disappeared")?;
+    association
         .properties
-        .insert("memberEnd".into(), Value::Array(ends));
+        .insert("memberEnd".into(), Value::Array(ends.clone()));
+    association
+        .properties
+        .insert("ownedEnd".into(), Value::Array(ends));
+    for key in PROJECTION_KEYS {
+        association.properties.remove(key);
+    }
     synchronize_projection(section, association_id)
 }
 
@@ -1457,18 +1494,19 @@ pub(crate) fn set_member_ends(
     association_id: &str,
     ends: &[String],
 ) -> Result<(), String> {
-    let references = ReferenceIndex::new(Model::from_section(section));
-    let association = references.element(association_id)?;
-    if !association.conforms_to("Association") {
-        return Err("memberEnd owner must be an Association".into());
-    }
     let value = Value::Array(ends.iter().map(|id| json!({"$ref": id})).collect());
-    let descriptor = schema::uml_property("Association", "memberEnd")
-        .map_err(|error| error.to_string())?
-        .ok_or("Association::memberEnd contract is missing")?;
-    references.validate_many(descriptor, &value)?;
-    if matches!(association, ElementRef::Relationship(_)) && ends.len() > 2 {
-        return Err("Unsupported binary Relation notation: use an n-ary Association element for more than two member ends".into());
+    for id in ends {
+        if !section.elements.iter().any(|element| element.id == *id) {
+            return Err(format!("Association end {id} not found"));
+        }
+    }
+    if section
+        .relations
+        .iter()
+        .any(|relation| relation.id == association_id)
+        && ends.len() != 2
+    {
+        return Err("Binary association projection requires exactly two member ends; use an Association object for other arities".into());
     }
     if let Some(relation) = section
         .relations
@@ -1485,12 +1523,68 @@ pub(crate) fn set_member_ends(
             .properties
             .insert("memberEnd".into(), value);
     }
-    synchronize_projection(section, association_id)?;
-    let references = ReferenceIndex::new(Model::from_section(section));
-    validate_association(&references, references.element(association_id)?)?;
-    for end in member_ends(&references, association_id)? {
-        association_of(&references, &end.id)?;
+    let owned: Vec<String> = section
+        .relations
+        .iter()
+        .filter(|relation| {
+            relation.kind == "owns"
+                && relation.from == association_id
+                && ends.contains(&relation.to)
+        })
+        .map(|relation| relation.to.clone())
+        .collect();
+    for element in &mut section.elements {
+        if ends.contains(&element.id) {
+            element
+                .properties
+                .insert("association".into(), json!({"$ref": association_id}));
+            element.properties.insert(
+                "owningAssociation".into(),
+                if owned.contains(&element.id) {
+                    json!({"$ref": association_id})
+                } else {
+                    Value::Null
+                },
+            );
+        } else if element
+            .properties
+            .get("association")
+            .and_then(crate::contract_projection::projection_reference_id)
+            == Some(association_id)
+        {
+            element.properties.insert("association".into(), Value::Null);
+            if element
+                .properties
+                .get("owningAssociation")
+                .and_then(crate::contract_projection::projection_reference_id)
+                == Some(association_id)
+            {
+                element
+                    .properties
+                    .insert("owningAssociation".into(), Value::Null);
+            }
+        }
     }
+    let owned_value = json!(
+        owned
+            .iter()
+            .map(|id| json!({"$ref": id}))
+            .collect::<Vec<_>>()
+    );
+    if let Some(relation) = section
+        .relations
+        .iter_mut()
+        .find(|relation| relation.id == association_id)
+    {
+        relation.properties.insert("ownedEnd".into(), owned_value);
+    } else if let Some(element) = section
+        .elements
+        .iter_mut()
+        .find(|element| element.id == association_id)
+    {
+        element.properties.insert("ownedEnd".into(), owned_value);
+    }
+    synchronize_projection(section, association_id)?;
     Ok(())
 }
 
@@ -1525,25 +1619,30 @@ pub(crate) fn set_projection_property(
     {
         return Ok(false);
     }
-    let id = member_ends(&references, association_id)?
+    let id = materialized_ends(&references, association_id)?
         .get(index)
         .ok_or("Association member end is missing")?
         .id
         .clone();
-    let end = section
-        .elements
-        .iter_mut()
-        .find(|element| element.id == id)
-        .ok_or("Association member end disappeared")?;
-    if property == "multiplicity"
-        && value_specifications::has_bound_references(ElementRef::Object(end))
-    {
-        return Err("Multiplicity is derived from lowerValue/upperValue identities; edit the bound ValueSpecification instead".into());
-    }
-    if property == "name" {
-        end.name = value.as_str().ok_or("expected string")?.into();
+    if property == "multiplicity" {
+        set_end_multiplicity(
+            section,
+            "",
+            &id,
+            value.as_str().ok_or("expected multiplicity string")?,
+        )?;
     } else {
-        end.properties.insert(property.into(), value.clone());
+        let end = section
+            .elements
+            .iter_mut()
+            .find(|element| element.id == id)
+            .ok_or("Association member end disappeared")?;
+        if property == "name" {
+            end.name = value.as_str().ok_or("expected string")?.into();
+            end.properties.insert("name".into(), value.clone());
+        } else {
+            end.properties.insert(property.into(), value.clone());
+        }
     }
     synchronize_projection(section, association_id)?;
     Ok(true)
@@ -1670,35 +1769,137 @@ pub(crate) fn materialize_new(before: &Project, after: &mut ModelingSection) -> 
         .map(|relation| relation.id.clone())
         .collect::<Vec<_>>();
     for id in added {
-        let relation = after
-            .relations
-            .iter_mut()
-            .find(|relation| relation.id == id)
-            .ok_or("new Association disappeared")?;
-        if !relation.properties.contains_key("memberEnd") {
-            // Newly authored ends need distinguishable names in their Namespace.
-            // Migration of existing authored records deliberately does not invent names.
-            for role in ["sourceRole", "targetRole"] {
-                if relation.properties.contains_key(role) {
-                    continue;
-                }
-                let mut sequence = 1_u64;
-                loop {
-                    let name = format!("end{sequence}");
-                    if !["sourceRole", "targetRole"].iter().any(|role| {
-                        relation.properties.get(*role).and_then(Value::as_str)
-                            == Some(name.as_str())
-                    }) {
-                        relation.properties.insert(role.into(), json!(name));
-                        break;
-                    }
-                    sequence = sequence
-                        .checked_add(1)
-                        .ok_or("Association role name overflow")?;
-                }
-            }
-        }
         migrate(after, &before.id, &id)?;
     }
+    Ok(())
+}
+
+pub(crate) fn set_end_multiplicity(
+    section: &mut ModelingSection,
+    project_id: &str,
+    property_id: &str,
+    notation: &str,
+) -> Result<(), String> {
+    let notation = notation.trim();
+    let (lower, upper) = if notation == "*" {
+        ("0", "*")
+    } else {
+        notation.split_once("..").unwrap_or((notation, notation))
+    };
+    let lower: Integer = lower.trim().parse().map_err(|error| {
+        format!("Cannot translate lower bound {lower:?} into a LiteralInteger: {error}")
+    })?;
+    let upper: UnlimitedNatural = upper.trim().parse().map_err(|error| {
+        format!("Cannot translate upper bound {upper:?} into a LiteralUnlimitedNatural: {error}")
+    })?;
+    // Stage both identities together: rejecting a nonliteral/shared upper bound
+    // must not leave a successfully changed lower bound behind.
+    let mut staged = section.clone();
+    for (field, kind, value) in [
+        ("lowerValue", "uml.literal_integer", lower.to_string()),
+        (
+            "upperValue",
+            "uml.literal_unlimited_natural",
+            upper.to_string(),
+        ),
+    ] {
+        let end = staged
+            .elements
+            .iter()
+            .find(|element| element.id == property_id)
+            .ok_or("Association end Property not found")?;
+        if end.properties.contains_key("multiplicity") {
+            return Err(format!(
+                "{property_id}: textual multiplicity is not a contract field; reconcile it explicitly before editing bounds"
+            ));
+        }
+        let existing = end
+            .properties
+            .get(field)
+            .filter(|value| !value.is_null())
+            .map(|value| {
+                crate::contract_projection::projection_reference_id(value)
+                    .map(str::to_owned)
+                    .ok_or_else(|| format!("{property_id}.{field}: invalid bound reference"))
+            })
+            .transpose()?;
+        let id = if let Some(id) = existing {
+            let literal = staged
+                .elements
+                .iter()
+                .find(|element| element.id == id)
+                .ok_or_else(|| format!("{property_id}.{field}: missing bound {id}"))?;
+            if literal.kind != kind {
+                return Err(format!(
+                    "{property_id}.{field}: edit the existing {} expression directly; a multiplicity text edit cannot replace it",
+                    literal.kind
+                ));
+            }
+            let shared = staged.elements.iter().any(|element| {
+                ["lowerValue", "upperValue"].iter().any(|other_field| {
+                    (element.id != property_id || *other_field != field)
+                        && element
+                            .properties
+                            .get(*other_field)
+                            .and_then(crate::contract_projection::projection_reference_id)
+                            == Some(id.as_str())
+                })
+            });
+            if shared
+                || staged.relations.iter().any(|relation| {
+                    relation.kind == "owns" && relation.to == id && relation.from != property_id
+                })
+            {
+                return Err(format!(
+                    "{property_id}.{field}: bound {id} is shared; edit its literal explicitly"
+                ));
+            }
+            id
+        } else {
+            let id = fresh_id(&staged, project_id, &format!("{property_id}-{field}"))?;
+            staged.elements.push(Element {
+                id: id.clone(),
+                kind: kind.into(),
+                name: String::new(),
+                label: None,
+                description: None,
+                properties: BTreeMap::new(),
+                annotations: Vec::new(),
+                implementations: Vec::new(),
+                content: None,
+            });
+            id
+        };
+        staged
+            .elements
+            .iter_mut()
+            .find(|element| element.id == id)
+            .ok_or("Bound literal disappeared")?
+            .properties
+            .insert("value".into(), json!(value));
+        staged
+            .elements
+            .iter_mut()
+            .find(|element| element.id == property_id)
+            .ok_or("Association end Property disappeared")?
+            .properties
+            .insert(field.into(), json!({"$ref": id}));
+        if let Some(ownership) = staged.relations.iter_mut().find(|relation| {
+            relation.kind == "owns" && relation.from == property_id && relation.to == id
+        }) {
+            ownership.properties.insert("role".into(), json!(field));
+        } else {
+            let ownership_id =
+                fresh_id(&staged, project_id, &format!("{property_id}-{field}-owns"))?;
+            staged.relations.push(Relation {
+                id: ownership_id,
+                kind: "owns".into(),
+                from: property_id.into(),
+                to: id,
+                properties: BTreeMap::from([("role".into(), json!(field))]),
+            });
+        }
+    }
+    *section = staged;
     Ok(())
 }

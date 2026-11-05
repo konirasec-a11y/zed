@@ -57,9 +57,18 @@ pub fn registry_from_projection(
                     relation.id, relation.kind
                 )
             })?;
+        let properties = relation
+            .properties
+            .iter()
+            .filter(|(key, _)| {
+                !metamodel::conforms_to(metaclass, "Association")
+                    || !crate::contract_projection::ASSOCIATION_DISPLAY_KEYS.contains(&key.as_str())
+            })
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect();
         pending.insert(
             relation.id.clone(),
-            pending_contract(metaclass, &relation.id, &relation.properties)?,
+            pending_contract(metaclass, &relation.id, &properties)?,
         );
     }
     let previous_composites = clear_projected_composites(&mut pending)?;
@@ -132,6 +141,23 @@ pub fn registry_from_projection(
         }))
         .map_err(|error| format!("{} {id}: {error}", record.metaclass))?;
         registry.insert_contract(contract)?;
+    }
+    let (_, projected_relations) = crate::contract_projection::project_registry(&registry)?;
+    for relation in relations {
+        for key in crate::contract_projection::ASSOCIATION_DISPLAY_KEYS {
+            let Some(value) = relation.properties.get(key) else {
+                continue;
+            };
+            let projected = projected_relations
+                .iter()
+                .find(|projected| projected.id == relation.id);
+            if projected.and_then(|projected| projected.properties.get(key)) != Some(value) {
+                return Err(format!(
+                    "{}: {key} differs from its canonical Property/ValueSpecification projection; use the association end editing command",
+                    relation.id
+                ));
+            }
+        }
     }
     Ok(registry)
 }
