@@ -92,36 +92,6 @@ pub(crate) fn rename_parameter(
     if references.len() != 1 {
         return Err("parameter has ambiguous parameteredElement references".into());
     }
-    let signature_ids = section
-        .relations
-        .iter()
-        .filter(|relation| relation.kind == "owns" && relation.to == id)
-        .map(|relation| relation.from.as_str())
-        .collect::<HashSet<_>>();
-    let template_ids = section
-        .relations
-        .iter()
-        .filter(|relation| relation.kind == "owns" && signature_ids.contains(relation.to.as_str()))
-        .map(|relation| relation.from.as_str())
-        .collect::<HashSet<_>>();
-    let model = section.to_model("template-rename-validation", "Template rename validation");
-    if let Some(diagnostic) = validate(&model).into_iter().find(|diagnostic| {
-        diagnostic.subject_id == id
-            || ((signature_ids.contains(diagnostic.subject_id.as_str())
-                || template_ids.contains(diagnostic.subject_id.as_str()))
-                && matches!(
-                    diagnostic.code,
-                    "UML_TEMPLATE_SIGNATURE_OWNER"
-                        | "UML_TEMPLATE_CLASSIFIER_SIGNATURE"
-                        | "UML_TEMPLATE_SIGNATURE_MULTIPLICITY"
-                ))
-            || section
-                .relations
-                .iter()
-                .any(|relation| relation.from == id && relation.id == diagnostic.subject_id)
-    }) {
-        return Err(format!("{}: {}", diagnostic.code, diagnostic.message));
-    }
     let target = references
         .first()
         .ok_or("parameteredElement missing")?
