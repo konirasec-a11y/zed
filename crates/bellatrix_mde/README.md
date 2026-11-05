@@ -352,11 +352,19 @@ values are rejected. Native Rect/Ellipse geometry retains its size invariants.
 StarUML compartment arrangement can assign child width as compartment width
 minus padding. A saved negative result is not treated as a special `-9` sentinel.
 The MDJ adapter imports it as an unresolved extent and exports the original value;
-no-edit export still returns the original source bytes. Unresolved bounds do not
-become renderer coordinates: the imported preview and interface icon projection
-require resolved extents, and the inspector reports the retained original value.
-This allows importing the complete project without claiming font measurement or
-compartment relayout parity. Resolving those pending bounds remains future work.
+no-edit export still returns the original source bytes. Unresolved bounds are never passed directly to the renderer: the imported preview
+and interface icon projection require resolved extents, and the inspector reports
+the retained original value.
+The shared read projection can recover the content envelope of an automatically
+sized canonical MDJ Class, Stereotype or MetaClass from its visible, explicitly
+bound and contiguously positioned compartments. It also resolves pending label
+widths using StarUML compartment padding when position and height are already
+known. This disposable `rendered_geometry` leaves authored `geometry`, missing/null
+intent and original negative values unchanged, including after save/reopen or MDJ
+export. The canvas uses it for drawing and hit areas; inspection and commands keep
+the authored geometry. Unsupported forms, ambiguous bindings, explicit nulls and
+insufficient layout evidence remain unresolved. This is recovery from stored
+content bounds, not fresh font measurement or full StarUML relayout parity.
 
 ## Imported interface icons
 

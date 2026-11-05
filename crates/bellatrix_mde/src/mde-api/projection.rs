@@ -166,7 +166,7 @@ pub fn project_model_section(
                     .views
                     .iter()
                     .map(|view| {
-                        project_view(&section, diagram, view, &references, &paths, &render_styles)
+                        project_view(&section, diagram, view, None, &references, &paths, &render_styles)
                     })
                     .collect::<Result<_, String>>()?,
             })

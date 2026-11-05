@@ -62,7 +62,7 @@ impl Render for MdeWorkbenchItem {
                         if matches!(
                             view.geometry,
                             Geometry::Rect { .. } | Geometry::Layout { .. }
-                        ) && canvas_presentation::resolve_bounds(&view.geometry, zoom, pan)
+                        ) && canvas_presentation::resolve_bounds(view.render_geometry(), zoom, pan)
                             .is_none()
                         {
                             unresolved_presentation = true;
@@ -103,7 +103,7 @@ impl Render for MdeWorkbenchItem {
                             UmlNotation::Label | UmlNotation::Compartment | UmlNotation::Rectangle
                         ) || view.subject.is_none()
                             && view.draft.is_none()
-                            && matches!(view.geometry, Geometry::Rect { .. })
+                            && matches!(view.render_geometry(), Geometry::Rect { .. })
                         {
                             if let Some(card) = self.render_presentation_view(
                                 &snapshot.section,
@@ -511,7 +511,7 @@ impl Render for MdeWorkbenchItem {
                             y,
                             width,
                             height,
-                        } = &view.geometry
+                        } = view.render_geometry()
                         else {
                             continue;
                         };
@@ -650,7 +650,7 @@ impl Render for MdeWorkbenchItem {
                         let edit_member_view = member_view.clone();
                         // Spatial containment is presentation only, not semantic ownership validation.
                         let has_nested_views = diagram.views.iter().any(|other| {
-                            other.id != view.id && matches!(other.geometry, Geometry::Rect { x: child_x, y: child_y, width: child_width, height: child_height }
+                            other.id != view.id && matches!(*other.render_geometry(), Geometry::Rect { x: child_x, y: child_y, width: child_width, height: child_height }
                                 if child_x >= x && child_y >= y + 20.0 && child_x + child_width <= x + width && child_y + child_height <= y + height)
                         });
                         let render_style = canvas_presentation::render_style(
@@ -1418,7 +1418,7 @@ impl MdeWorkbenchItem {
             mut y,
             mut width,
             mut height,
-        } = view.geometry
+        } = *view.render_geometry()
         else {
             return None;
         };
@@ -1453,7 +1453,7 @@ impl MdeWorkbenchItem {
                             y: top,
                             width: parent_width,
                             height: parent_height,
-                        } = ancestor.geometry
+                        } = *ancestor.render_geometry()
                         {
                             if parent_width > 0.0 && parent_height > 0.0 {
                                 let horizontal = (parent_width + dx).max(minimum.0) / parent_width;

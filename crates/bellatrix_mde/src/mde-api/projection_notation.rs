@@ -10,11 +10,14 @@ mod entity;
 mod interface;
 #[path = "projection_labels.rs"]
 mod labels;
+#[path = "projection_layout.rs"]
+mod layout;
 
 pub(crate) fn project_view(
     section: &mde::ModelingSection,
     diagram: &mde::Diagram,
     view: &mde::View,
+    parent: Option<&mde::View>,
     references: &mde::uml::references::ReferenceIndex<'_>,
     paths: &BTreeMap<String, mde::Geometry>,
     render_styles: &BTreeMap<String, ProjectedRenderStyle>,
@@ -189,10 +192,13 @@ pub(crate) fn project_view(
         interface_icon: interface::project(section, diagram, view),
         entity_box,
         geometry: view.geometry.clone(),
+        rendered_geometry: layout::project(view, parent),
         children: view
             .children
             .iter()
-            .map(|child| project_view(section, diagram, child, references, paths, render_styles))
+            .map(|child| {
+                project_view(section, diagram, child, Some(view), references, paths, render_styles)
+            })
             .collect::<Result<_, _>>()?,
         presentation: projection::ViewPresentation {
             kind: view.presentation.notation_kind.clone(),

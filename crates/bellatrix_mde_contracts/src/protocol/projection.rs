@@ -177,6 +177,8 @@ pub struct View {
     pub interface_icon: Option<InterfaceIconProjection>,
     pub entity_box: Option<EntityBoxProjection>,
     pub geometry: Geometry,
+    /// Disposable layout derived from stored presentation data; never authored geometry.
+    pub rendered_geometry: Option<Geometry>,
     pub children: Vec<View>,
     pub presentation: ViewPresentation,
     pub style: Style,
@@ -188,6 +190,11 @@ pub struct View {
     pub member_labels: BTreeMap<String, String>,
     pub relationship: Option<ResolvedRelationship>,
     pub routed_geometry: Option<Geometry>,
+}
+impl View {
+    pub fn render_geometry(&self) -> &Geometry {
+        self.rendered_geometry.as_ref().unwrap_or(&self.geometry)
+    }
 }
 #[derive(Clone, Debug)]
 pub struct VisualDraftSummary {
