@@ -151,13 +151,19 @@ impl CanvasGesture {
     fn submission(&self) -> (u64, bool) {
         match self {
             Self::Move {
-                revision, submitted, ..
+                revision,
+                submitted,
+                ..
             }
             | Self::Resize {
-                revision, submitted, ..
+                revision,
+                submitted,
+                ..
             }
             | Self::EditPath {
-                revision, submitted, ..
+                revision,
+                submitted,
+                ..
             } => (*revision, *submitted),
         }
     }
@@ -1234,12 +1240,15 @@ impl MdeWorkbenchItem {
             return;
         };
         let (revision, submitted) = gesture.submission();
+        // Completion releases the pending count after publishing the document.
+        // Read it first so a completed command cannot pair with an older document.
+        let pending = self.source.is_pending();
         let retain = self.source.document().is_ok_and(|document| {
             if submitted {
                 // Keep only the existing transient preview until the canonical
                 // projection replaces it, including the gap after command completion.
                 presentation_revision == Some(revision)
-                    && (document.revision() != revision || self.source.is_pending())
+                    && (document.revision() != revision || pending)
             } else {
                 document.revision() == revision
             }
