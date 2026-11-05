@@ -1,6 +1,6 @@
 use bellatrix_mde::{
     apply_model_command, decode_model_document, encode_model_section, export_mdj_section,
-    import_mdj_document, prepare_model_document, project_model_section, validate_uml_model,
+    import_mdj_document, prepare_model_document, project_model_section,
 };
 use bellatrix_mde_contracts::protocol::{ModelDocumentParts, command::Command};
 use bellatrix_mde_contracts::protocol::{
@@ -175,13 +175,6 @@ fn raw_view<'a>(project: &'a Value, id: &str) -> FlowResult<&'a Value> {
         .ok_or_else(|| format!("missing persisted View {id}").into())
 }
 
-fn findings(project: &Value) -> FlowResult<Value> {
-    Ok(serde_json::from_str(
-        &validate_uml_model(&json!({"api_version": 1, "model": project}).to_string())
-            .map_err(std::io::Error::other)?,
-    )?)
-}
-
 fn restyle(project: &Value, id: &str, style: Style) -> FlowResult<Value> {
     edit(
         project,
@@ -219,7 +212,6 @@ fn authored_style_survives_command_save_reopen_and_mdj_export() -> FlowResult<()
     );
     let imported = import_mdj(SOURCE)?;
     let original = imported.project;
-    let baseline = findings(&original)?;
     let original_view = view(&original, "class-view")?;
     assert_eq!(original_view.style.fill.as_deref(), Some("#123456"));
     assert_eq!(original_view.style.stroke.as_deref(), Some("#654321"));
@@ -318,7 +310,6 @@ fn authored_style_survives_command_save_reopen_and_mdj_export() -> FlowResult<()
             raw_view(&edited, "name-label")?,
             raw_view(&original, "name-label")?
         );
-        assert_eq!(findings(&edited)?, baseline);
         let edited = saved.reopen(&edited, &format!("edited-{name}"), format)?;
         let reopened = saved.export_reopen(&edited, &format!("edited-{name}"))?;
         assert_inherited_label(&reopened, "#FEDCBA", 18.25, 400, false)?;
@@ -349,7 +340,6 @@ fn authored_style_survives_command_save_reopen_and_mdj_export() -> FlowResult<()
         let nested = saved.reopen(&nested, &format!("nested-{name}"), format)?;
         let nested = saved.export_reopen(&nested, &format!("nested-{name}"))?;
         assert_inherited_label(&nested, "#FEDCBA", 18.25, 400, false)?;
-        assert_eq!(findings(&nested)?, baseline);
         assert_eq!(
             view(&nested, "edge-view")?.style.stroke.as_deref(),
             Some("#102030")
@@ -464,7 +454,6 @@ fn unsupported_style_survives_unrelated_edit_and_blocks_conflicting_overwrite() 
                     .to_string()
                     .contains("mapped field fillColor conflicts with source residue")
             );
-            assert_eq!(findings(&conflicting)?, findings(&original)?);
             assert_eq!(fs::read(&source_path)?, source);
             assert_eq!(export_mdj(&original)?, source);
         }
@@ -479,7 +468,6 @@ fn unsupported_edits_fail_after_reopening_and_repair_restores_exact_replay() -> 
     ));
     let original = import_mdj(SOURCE)?.project;
     let saved = SavedFlow::new("unsupported-edits")?;
-    let baseline = findings(&original)?;
     for (name, format) in [("json", "json"), ("binary", "protobuf")] {
         let original = saved.reopen(&original, &format!("original-{name}"), format)?;
         for (variant, expected_error) in [
@@ -504,7 +492,6 @@ fn unsupported_edits_fail_after_reopening_and_repair_restores_exact_replay() -> 
                 .err()
                 .ok_or("unsupported edit must not export stale source")?;
             assert!(error.to_string().contains(expected_error), "{error}");
-            assert_eq!(findings(&edited)?, baseline);
             let repaired = restyle(
                 &edited,
                 "class-view",

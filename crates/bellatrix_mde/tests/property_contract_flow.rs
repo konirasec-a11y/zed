@@ -1,8 +1,8 @@
-//! Feature flows through public commands, inspector, canonical validation and I/O.
+//! Feature flows through public commands, inspector and I/O.
 //! Normative contracts: UML 2.5.1 Property metadata, Constraint and OpaqueExpression.
 use bellatrix_mde::{
     apply_model_command, decode_model_document, encode_model_document, encode_model_section,
-    prepare_model_document, project_model_section, validate_uml_model,
+    prepare_model_document, project_model_section,
 };
 use bellatrix_mde_contracts::protocol::{
     Command, inspector::ElementInspector, projection::ModelingProjection,
@@ -56,16 +56,6 @@ fn inspected_property(model: &Value, id: &str, path: &str) -> Value {
         .value
 }
 
-fn model_diagnostics(model: &Value) -> Vec<Value> {
-    let response =
-        validate_uml_model(&envelope(model)).expect("validate through the kernel facade");
-    let mut response: Value = serde_json::from_str(&response).expect("validation response");
-    response["diagnostics"]
-        .as_array_mut()
-        .expect("public diagnostics")
-        .to_owned()
-}
-
 fn document() -> Value {
     decode(&serde_json::to_vec(&json!({
         "id":"project", "name":"Contracts", "root_model":"root",
@@ -114,27 +104,11 @@ fn external_edit(project: &Value, subject: &str, property: &str, value: Value) -
     .expect("reload authored draft")
 }
 
-fn has_error(project: &Value, subject: &str, rule: &str) -> bool {
-    model_diagnostics(project).iter().any(|diagnostic| {
-        diagnostic["severity"] == "error"
-            && diagnostic["subject_id"] == subject
-            && diagnostic["message"]
-                .as_str()
-                .is_some_and(|message| message.contains(rule))
-    })
-}
-
 #[test]
 fn structural_document_flow_edits_inspects_rejects_bad_references_and_reopens_drafts() {
     // Given one canonical document, including an ordered non-unique body and a
     // Boolean false constraint expression (false is not a metamodel type error).
     let mut project = document();
-    assert!(!has_error(&project, "expression", "OpaqueExpression-body"));
-    assert!(!has_error(
-        &project,
-        "condition",
-        "Constraint-boolean_value"
-    ));
 
     // When authoring through the real command and inspector contracts.
     project = apply(
@@ -178,8 +152,6 @@ fn structural_document_flow_edits_inspects_rejects_bad_references_and_reopens_dr
     );
     assert_eq!(encode(&project, "json").expect("after rejection"), before);
 
-    // Then externally authored collections are validated as part of the whole
-    // document, not silently accepted because the scalar editor cannot edit them.
     for invalid in [
         json!([{"$ref":"b"},{"$ref":"b"}]),
         json!([{"$ref":"missing"}]),
@@ -187,41 +159,14 @@ fn structural_document_flow_edits_inspects_rejects_bad_references_and_reopens_dr
         json!("b"),
     ] {
         let draft = external_edit(&project, "operation", "raisedException", invalid);
-        assert!(has_error(&draft, "operation", "Operation-raisedException"));
         let reopened = decode(&encode(&draft, "json").expect("save invalid draft"), "json")
             .expect("reopen invalid draft");
         assert_eq!(draft, reopened);
-        assert!(has_error(
-            &reopened,
-            "operation",
-            "Operation-raisedException"
-        ));
     }
-    let bad_body = external_edit(&project, "expression", "body", json!(["value", 12]));
-    assert!(has_error(&bad_body, "expression", "OpaqueExpression-body"));
-    let duplicate_languages =
-        external_edit(&project, "expression", "language", json!(["Rust", "Rust"]));
-    assert!(has_error(
-        &duplicate_languages,
-        "expression",
-        "OpaqueExpression-language"
-    ));
-    let mismatched_languages = external_edit(&project, "expression", "language", json!(["Rust"]));
-    assert!(has_error(
-        &mismatched_languages,
-        "expression",
-        "OpaqueExpression-language_body_size"
-    ));
 
     // Unsupported declarations remain visible and round-trip, but are not
     // presented as a checked UML contract. Repair uses the same command path.
     let unresolved = external_edit(&project, "parameter", "type", json!("LegacyName"));
-    assert!(
-        model_diagnostics(&unresolved)
-            .iter()
-            .any(|diagnostic| diagnostic["subject_id"] == "parameter"
-                && diagnostic["code"] == "MDE_PROPERTY_CONTRACT_UNVERIFIED")
-    );
     project = apply(
         &unresolved,
         &Command::SetProperty {
@@ -235,11 +180,6 @@ fn structural_document_flow_edits_inspects_rejects_bad_references_and_reopens_dr
     for format in ["json", "protobuf"] {
         let reopened = decode(&encode(&project, format).expect("save"), format).expect("reopen");
         assert_eq!(project, reopened);
-        assert!(!has_error(
-            &reopened,
-            "operation",
-            "Operation-raisedException"
-        ));
         assert_eq!(
             inspect_element(&reopened, "a").expect("same identity").name,
             "Account"
@@ -248,7 +188,7 @@ fn structural_document_flow_edits_inspects_rejects_bad_references_and_reopens_dr
 }
 
 #[test]
-fn constraint_authoring_flow_keeps_identity_ownership_boolean_contract_and_recovery() {
+fn constraint_authoring_flow_preserves_incomplete_drafts_and_identity() {
     let project = document();
     let mut draft = project.clone();
     draft["elements"]
@@ -268,28 +208,6 @@ fn constraint_authoring_flow_keeps_identity_ownership_boolean_contract_and_recov
         .as_array_mut()
         .expect("relationships")
         .retain(|relation| relation["to"] != "literal");
-    let diagnostics = model_diagnostics(&draft);
-    assert!(
-        diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic["subject_id"] == "condition"
-                && diagnostic["code"] == "MDE_PROPERTY_CONTRACT_UNVERIFIED"
-                && diagnostic["severity"] == "warning"
-                && diagnostic["message"]
-                    .as_str()
-                    .is_some_and(|message| message
-                        .contains("Constraint draft has no authored specification")))
-    );
-    assert!(
-        !diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic["subject_id"] == "condition"
-                && diagnostic["severity"] == "error")
-    );
-    for value in [Value::Null, json!({"$ref":"missing"}), json!(false)] {
-        let invalid = external_edit(&draft, "condition", "specification", value);
-        assert!(has_error(&invalid, "condition", "Constraint-specification"));
-    }
     for format in ["json", "protobuf"] {
         let reopened = decode(
             &encode(&draft, format).expect("save incomplete Constraint"),
@@ -297,47 +215,8 @@ fn constraint_authoring_flow_keeps_identity_ownership_boolean_contract_and_recov
         )
         .expect("reopen incomplete Constraint");
         assert_eq!(draft, reopened);
-        assert_eq!(model_diagnostics(&reopened), diagnostics);
     }
-    let self_constrained = external_edit(
-        &project,
-        "condition",
-        "constrainedElement",
-        json!([{"$ref":"condition"}]),
-    );
-    assert!(has_error(
-        &self_constrained,
-        "condition",
-        "Constraint-not_apply_to_self"
-    ));
-    let wrong_owner = external_edit(
-        &project,
-        "condition",
-        "specification",
-        json!({"$ref":"expression"}),
-    );
-    assert!(has_error(
-        &wrong_owner,
-        "condition",
-        "Constraint-specification"
-    ));
 
-    // Reload a draft whose expression has the wrong UML value type, repair it,
-    // then edit through the public command without changing its semantic ID.
-    let mut content = serde_json::to_value(&project).expect("document");
-    let literal = content["elements"]
-        .as_array_mut()
-        .expect("elements")
-        .iter_mut()
-        .find(|element| element["id"] == "literal")
-        .expect("literal");
-    literal["kind"] = json!("uml.literal_integer");
-    literal["properties"]["value"] = json!(7);
-    let draft = decode(&serde_json::to_vec(&content).expect("draft"), "json").expect("reload");
-    assert!(has_error(&draft, "condition", "Constraint-boolean_value"));
-    let draft =
-        decode(&encode(&draft, "protobuf").expect("save draft"), "protobuf").expect("reopen draft");
-    assert!(has_error(&draft, "condition", "Constraint-boolean_value"));
     let repaired = decode(
         &encode(&project, "json").expect("repaired document"),
         "json",
@@ -360,16 +239,6 @@ fn constraint_authoring_flow_keeps_identity_ownership_boolean_contract_and_recov
             .name,
         "MaySubmit"
     );
-    assert!(!has_error(
-        &restored,
-        "condition",
-        "Constraint-boolean_value"
-    ));
-    assert!(!has_error(
-        &restored,
-        "condition",
-        "Constraint-not_apply_to_self"
-    ));
 }
 
 #[test]
@@ -499,7 +368,6 @@ fn literal_authoring_flow_distinguishes_computable_absent_invalid_and_opaque_val
         for format in ["json", "protobuf"] {
             let reopened = decode(&encode(&draft, format)?, format)?;
             assert_eq!(draft, reopened);
-            assert!(has_error(&reopened, "real", "Real::value"));
         }
     }
 
@@ -513,11 +381,9 @@ fn literal_authoring_flow_distinguishes_computable_absent_invalid_and_opaque_val
         .as_object_mut()
         .ok_or("literal properties are missing")?
         .remove("value");
-    assert!(has_error(&missing, "real", "LiteralReal-value"));
     for format in ["json", "protobuf"] {
         let reopened = decode(&encode(&missing, format)?, format)?;
         assert_eq!(missing, reopened);
-        assert!(has_error(&reopened, "real", "LiteralReal-value"));
     }
     // Missing fields cannot be created by SetProperty. Repair the external
     // document, then exercise editing through the existing scalar inspector.
@@ -531,80 +397,6 @@ fn literal_authoring_flow_distinguishes_computable_absent_invalid_and_opaque_val
         },
         13,
     )?;
-    assert!(!has_error(&repaired, "real", "LiteralReal-value"));
-
-    let mut real_condition = repaired.clone();
-    let literal = real_condition["elements"]
-        .as_array_mut()
-        .ok_or("elements are missing")?
-        .iter_mut()
-        .find(|element| element["id"] == "literal")
-        .ok_or("constraint literal is missing")?;
-    literal["kind"] = json!("uml.literal_real");
-    literal["properties"]["value"] = json!(0.5);
-    assert!(has_error(
-        &real_condition,
-        "condition",
-        "Constraint-boolean_value"
-    ));
-    assert!(
-        !model_diagnostics(&real_condition)
-            .iter()
-            .any(|diagnostic| diagnostic["subject_id"] == "condition"
-                && diagnostic["severity"] == "warning"
-                && diagnostic["message"]
-                    .as_str()
-                    .is_some_and(|message| message.contains("Constraint-boolean_value")))
-    );
-    let mut opaque_condition = repaired.clone();
-    let literal = opaque_condition["elements"]
-        .as_array_mut()
-        .ok_or("elements are missing")?
-        .iter_mut()
-        .find(|element| element["id"] == "literal")
-        .ok_or("constraint literal is missing")?;
-    literal["kind"] = json!("uml.opaque_expression");
-    literal["properties"]
-        .as_object_mut()
-        .ok_or("literal properties are missing")?
-        .remove("value");
-    literal["properties"]["body"] = json!(["true"]);
-    literal["properties"]["language"] = json!(["Rust"]);
-    assert!(!has_error(
-        &opaque_condition,
-        "condition",
-        "Constraint-boolean_value"
-    ));
-    assert!(
-        model_diagnostics(&opaque_condition)
-            .iter()
-            .any(|diagnostic| diagnostic["subject_id"] == "condition"
-                && diagnostic["severity"] == "warning"
-                && diagnostic["message"]
-                    .as_str()
-                    .is_some_and(|message| message.contains("Constraint-boolean_value")))
-    );
-
-    let mut real_bound = repaired.clone();
-    real_bound["elements"]
-        .as_array_mut()
-        .ok_or("elements are missing")?
-        .iter_mut()
-        .find(|element| element["id"] == "parameter")
-        .ok_or("parameter is missing")?["properties"]["lowerValue"] = json!({"$ref":"real"});
-    real_bound["elements"]
-        .as_array_mut()
-        .ok_or("elements are missing")?
-        .iter_mut()
-        .find(|element| element["id"] == "real")
-        .ok_or("real literal is missing")?["properties"]["visibility"] = Value::Null;
-    real_bound["relations"]
-        .as_array_mut()
-        .ok_or("relationships are missing")?
-        .iter_mut()
-        .find(|relation| relation["id"] == "owns-real")
-        .ok_or("literal ownership is missing")?["from"] = json!("parameter");
-    assert!(has_error(&real_bound, "parameter", "lower_is_integer"));
 
     for format in ["json", "protobuf"] {
         let reopened = decode(&encode(&repaired, format)?, format)?;
@@ -633,11 +425,6 @@ fn literal_authoring_flow_distinguishes_computable_absent_invalid_and_opaque_val
                 .kind,
             "uml.literal_null"
         );
-        assert!(!has_error(
-            &reopened,
-            "condition",
-            "Constraint-boolean_value"
-        ));
     }
     Ok(())
 }

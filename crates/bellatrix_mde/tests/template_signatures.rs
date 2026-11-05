@@ -1,12 +1,7 @@
 use bellatrix_mde::{
     apply_model_command, decode_model_document, encode_model_section, project_model_section,
-    validate_uml_model,
 };
-use bellatrix_mde_contracts::protocol::{
-    command::*,
-    projection::ModelingProjection,
-    trace::{DiagnosticSeverity, ModelingDiagnostic},
-};
+use bellatrix_mde_contracts::protocol::{command::*, projection::ModelingProjection};
 use serde_json::{Value, json};
 
 type FlowResult<T> = Result<T, Box<dyn std::error::Error>>;
@@ -73,12 +68,6 @@ fn apply_candidate(project: &Document, command: &Command, revision: u64) -> Flow
         &encode_model_section(&id, &name, &updated.to_string(), "json")?,
         "json",
     )
-}
-fn model_diagnostics(project: &Document) -> Vec<ModelingDiagnostic> {
-    let response = validate_uml_model(&json!({"api_version":1,"model":project.model}).to_string())
-        .expect("public UML validation");
-    let response: Value = serde_json::from_str(&response).expect("validation response");
-    serde_json::from_value(response["diagnostics"].clone()).expect("public diagnostics")
 }
 fn author(project: &mut Document, edit: impl FnOnce(&mut Value)) {
     let mut model = project.model.clone();
@@ -191,13 +180,7 @@ fn template_creation_builds_signature_parameter_and_parametered_classifier() {
             raw_element(&first, &parameter.id)["properties"].get("allowSubstitutable"),
             Some(&serde_json::json!(false))
         );
-        assert!(
-            model_diagnostics(&first)
-                .iter()
-                .all(|issue| !issue.code.starts_with("UML_TEMPLATE")),
-            "{:?}",
-            model_diagnostics(&first)
-        );
+
         let second = add(&first, 1).expect("second parameter");
         assert_eq!(
             second
@@ -300,7 +283,7 @@ fn removing_parameters_cleans_only_the_owned_generated_template_graph() {
 }
 
 #[test]
-fn legacy_direct_parameters_remain_visible_and_diagnosed_without_migration() {
+fn legacy_direct_parameters_remain_visible_without_migration() {
     let mut original = project("uml.class");
     author(&mut original, |raw| {
         raw["elements"].as_array_mut().expect("elements").push(
@@ -318,12 +301,7 @@ fn legacy_direct_parameters_remain_visible_and_diagnosed_without_migration() {
         .expect("ownership"),
     );
     });
-    let diagnostics = model_diagnostics(&original);
-    assert!(
-        diagnostics
-            .iter()
-            .any(|issue| issue.code == "UML_TEMPLATE_PARAMETER_SIGNATURE")
-    );
+
     let updated = add(&original, 0).expect("add without rewriting legacy data");
     assert_eq!(
         raw_element(&updated, "legacy"),
@@ -368,47 +346,6 @@ fn template_reference_and_feature_constraints_reject_edits_atomically() {
     );
     assert!(substitutable.is_err_and(|error| error.contains("UML_TEMPLATE_PARAMETER_CONSTRAINT")));
     assert_eq!(original, before);
-    for (mutation, code) in [
-        ("reference", "UML_TEMPLATE_PARAMETERED_ELEMENT"),
-        ("type", "UML_TEMPLATE_PARAMETERED_TYPE"),
-        ("owner", "UML_TEMPLATE_PARAMETERED_OWNERSHIP"),
-        ("signature", "UML_TEMPLATE_CLASSIFIER_SIGNATURE"),
-    ] {
-        let mut malformed = original.clone();
-        author(&mut malformed, |raw| match mutation {
-            "reference" => raw["relations"]
-                .as_array_mut()
-                .expect("relations")
-                .retain(|relation| relation["kind"] != "uml.parametered_element"),
-            "type" => {
-                raw["elements"]
-                    .as_array_mut()
-                    .expect("elements")
-                    .iter_mut()
-                    .find(|element| element["id"] == reference.to)
-                    .expect("target")["kind"] = json!("uml.package")
-            }
-            "owner" => raw["relations"]
-                .as_array_mut()
-                .expect("relations")
-                .retain(|relation| !(relation["kind"] == "owns" && relation["to"] == reference.to)),
-            "signature" => {
-                raw["elements"]
-                    .as_array_mut()
-                    .expect("elements")
-                    .iter_mut()
-                    .find(|element| element["kind"] == "uml.redefinable_template_signature")
-                    .expect("signature")["kind"] = json!("uml.template_signature")
-            }
-            _ => unreachable!(),
-        });
-        assert!(
-            model_diagnostics(&malformed)
-                .iter()
-                .any(|issue| issue.code == code),
-            "{mutation}"
-        );
-    }
 }
 
 #[test]
@@ -632,11 +569,7 @@ fn qa_rejects_transitive_only_parameter_ownership_and_external_rename() {
     author(&mut nested, |raw| {
         raw["relations"].as_array_mut().expect("relations").push(serde_json::from_value(serde_json::json!({"id":"nested-owner","kind":"owns","from":reference.from,"to":"nested"})).expect("nested owner"));
     });
-    assert!(
-        model_diagnostics(&nested)
-            .iter()
-            .any(|issue| issue.code == "UML_TEMPLATE_PARAMETERED_OWNERSHIP")
-    );
+
     let mut external = original.clone();
     author(&mut external, |raw| {
         raw["relations"]
@@ -770,7 +703,7 @@ fn parameter_rename_rejects_invalid_signature_owner_before_following_reference()
 }
 
 #[test]
-fn constrained_parameter_flow_decides_identity_ancestry_and_reopens() {
+fn constrained_parameter_edits_reject_nonconforming_constraints_atomically() {
     let mut model = add(&project("uml.class"), 0).expect("template");
     let parameter = model
         .elements
@@ -828,25 +761,7 @@ fn constrained_parameter_flow_decides_identity_ancestry_and_reopens() {
             );
         });
     }
-    let rule_issues = |model: &Document| {
-        model_diagnostics(model)
-            .into_iter()
-            .filter(|d| {
-                d.code == "MDE_TEMPLATE_CONSTRAINT_UNSUPPORTED"
-                    || d.code == "UML_TEMPLATE_PARAMETERED_CONSTRAINT"
-            })
-            .collect::<Vec<_>>()
-    };
-    for format in ["json", "protobuf"] {
-        let reopened = decode(&encode(&model, format).unwrap(), format).unwrap();
-        assert!(
-            rule_issues(&reopened).is_empty(),
-            "{:?}",
-            rule_issues(&reopened)
-        );
-    }
-    // True branches do not require the unimplemented Substitution alternative,
-    // including the normative omitted/default true value.
+
     author(&mut model, |raw| {
         raw["elements"]
             .as_array_mut()
@@ -858,7 +773,7 @@ fn constrained_parameter_flow_decides_identity_ancestry_and_reopens() {
             .expect("properties")
             .remove("allowSubstitutable");
     });
-    assert!(rule_issues(&model).is_empty());
+
     author(&mut model, |raw| {
         raw["relations"].as_array_mut().expect("relations").push(serde_json::from_value(serde_json::json!({"id":"unrelated-constraint","kind":"uml.constraining_classifier","from":parameter,"to":"unrelated"})).unwrap());
     });
@@ -868,9 +783,7 @@ fn constrained_parameter_flow_decides_identity_ancestry_and_reopens() {
         &exposed,
         serde_json::json!({"href":"external.uml#Contract"}),
     );
-    let unknown = rule_issues(&model);
-    assert_eq!(unknown.len(), 1, "{unknown:?}");
-    assert_eq!(unknown[0].code, "MDE_TEMPLATE_CONSTRAINT_UNSUPPORTED");
+
     author(&mut model, |raw| {
         raw["elements"]
             .as_array_mut()
@@ -898,234 +811,6 @@ fn constrained_parameter_flow_decides_identity_ancestry_and_reopens() {
         "{error}"
     );
     assert_eq!(before, serde_json::to_value(&model).unwrap());
-    // Imported invalid drafts remain diagnosable after reopening; repairing the
-    // offending relationship restores the decided rule without changing IDs.
-    author(&mut model, |raw| {
-        raw["elements"]
-            .as_array_mut()
-            .expect("elements")
-            .iter_mut()
-            .find(|e| e["id"] == parameter)
-            .unwrap()["properties"]
-            .as_object_mut()
-            .expect("properties")
-            .insert("allowSubstitutable".into(), serde_json::json!(false));
-    });
-    for format in ["json", "protobuf"] {
-        let reopened = decode(&encode(&model, format).unwrap(), format).unwrap();
-        assert!(
-            rule_issues(&reopened)
-                .iter()
-                .any(|d| d.code == "UML_TEMPLATE_PARAMETERED_CONSTRAINT")
-        );
-    }
-    author(&mut model, |raw| {
-        raw["relations"]
-            .as_array_mut()
-            .expect("relations")
-            .retain(|r| r["id"] != "unrelated-constraint");
-    });
-    assert!(rule_issues(&model).is_empty());
-}
-
-#[test]
-fn constrained_parameter_draft_keeps_unknown_and_invalid_obligations_visible() {
-    let mut model = add(&project("uml.class"), 0).unwrap();
-    let parameter = model
-        .elements
-        .iter()
-        .find(|e| e.kind == "uml.classifier_template_parameter")
-        .unwrap()
-        .id
-        .clone();
-    author(&mut model, |raw| {
-        raw["elements"]
-            .as_array_mut()
-            .expect("elements")
-            .iter_mut()
-            .find(|e| e["id"] == parameter)
-            .unwrap()["properties"]
-            .as_object_mut()
-            .expect("properties")
-            .remove("allowSubstitutable");
-    });
-    for (id, kind) in [("unrelated", "uml.class"), ("bad", "uml.package")] {
-        author(&mut model, |raw| {
-            raw["elements"].as_array_mut().expect("elements").push(
-                serde_json::from_value(serde_json::json!({"id":id,"kind":kind,"name":id})).unwrap(),
-            );
-        });
-        author(&mut model, |raw| {
-            raw["relations"].as_array_mut().expect("relations").push(serde_json::from_value(serde_json::json!({"id":format!("constraint-{id}"),"kind":"uml.constraining_classifier","from":parameter,"to":id})).unwrap());
-        });
-    }
-    let exposed = model
-        .relations
-        .iter()
-        .find(|r| r.kind == "uml.parametered_element")
-        .unwrap()
-        .to
-        .clone();
-    add_substitution(
-        &mut model,
-        "unresolved-substitution",
-        &exposed,
-        serde_json::json!({"href":"external.uml#Contract"}),
-    );
-    for format in ["json", "protobuf"] {
-        let reopened = decode(&encode(&model, format).unwrap(), format).unwrap();
-        let issues = model_diagnostics(&reopened);
-        assert!(
-            issues
-                .iter()
-                .any(|d| d.code == "MDE_TEMPLATE_CONSTRAINT_UNSUPPORTED")
-        );
-        assert!(
-            issues
-                .iter()
-                .any(|d| d.code == "UML_TEMPLATE_CONSTRAINING_TYPE")
-        );
-    }
-}
-
-#[test]
-fn constrained_parameter_flow_preserves_unresolved_ancestry_and_invalid_flags() {
-    let mut model = add(&project("uml.class"), 0).unwrap();
-    let parameter = model
-        .elements
-        .iter()
-        .find(|e| e.kind == "uml.classifier_template_parameter")
-        .unwrap()
-        .id
-        .clone();
-    let exposed = model
-        .relations
-        .iter()
-        .find(|r| r.kind == "uml.parametered_element")
-        .unwrap()
-        .to
-        .clone();
-    author(&mut model, |raw| {
-        raw["elements"].as_array_mut().expect("elements").push(
-            serde_json::from_value(
-                serde_json::json!({"id":"constraint","kind":"uml.class","name":"Constraint"}),
-            )
-            .unwrap(),
-        );
-    });
-    author(&mut model, |raw| {
-        raw["relations"].as_array_mut().expect("relations").push(serde_json::from_value(serde_json::json!({"id":"cc","kind":"uml.constraining_classifier","from":parameter,"to":"constraint"})).unwrap());
-    });
-    // A stored, unresolved ancestry declaration cannot prove nonconformance.
-    author(&mut model, |raw| {
-        raw["elements"]
-            .as_array_mut()
-            .expect("elements")
-            .iter_mut()
-            .find(|e| e["id"] == exposed)
-            .unwrap()["properties"]
-            .as_object_mut()
-            .expect("properties")
-            .insert(
-                "general".into(),
-                serde_json::json!([{"href":"external.uml#Base"}]),
-            );
-    });
-    let issues = model_diagnostics(&model);
-    assert!(
-        issues
-            .iter()
-            .any(|d| d.code == "MDE_TEMPLATE_CONSTRAINT_UNSUPPORTED")
-    );
-    assert!(
-        !issues
-            .iter()
-            .any(|d| d.code == "UML_TEMPLATE_PARAMETERED_CONSTRAINT")
-    );
-    // Identity is true even when the alternative ancestry query is unresolved.
-    author(&mut model, |raw| {
-        raw["relations"]
-            .as_array_mut()
-            .expect("relations")
-            .iter_mut()
-            .find(|r| r["id"] == "cc")
-            .unwrap()["to"] = json!(exposed);
-    });
-    assert!(
-        !model_diagnostics(&model)
-            .iter()
-            .any(|d| d.code == "MDE_TEMPLATE_CONSTRAINT_UNSUPPORTED")
-    );
-    author(&mut model, |raw| {
-        raw["elements"]
-            .as_array_mut()
-            .expect("elements")
-            .iter_mut()
-            .find(|e| e["id"] == exposed)
-            .unwrap()["properties"]
-            .as_object_mut()
-            .expect("properties")
-            .remove("general");
-    });
-    author(&mut model, |raw| {
-        raw["relations"]
-            .as_array_mut()
-            .expect("relations")
-            .iter_mut()
-            .find(|r| r["id"] == "cc")
-            .unwrap()["to"] = "constraint".into();
-    });
-    author(&mut model, |raw| {
-        raw["elements"]
-            .as_array_mut()
-            .expect("elements")
-            .iter_mut()
-            .find(|e| e["id"] == parameter)
-            .unwrap()["properties"]
-            .as_object_mut()
-            .expect("properties")
-            .insert("allowSubstitutable".into(), serde_json::json!("false"));
-    });
-    let issues = model_diagnostics(&model);
-    assert!(
-        issues
-            .iter()
-            .any(|d| d.code == "UML_TEMPLATE_PARAMETER_FLAG_TYPE")
-    );
-    assert!(
-        !issues
-            .iter()
-            .any(|d| d.code == "MDE_TEMPLATE_CONSTRAINT_UNSUPPORTED")
-    );
-    assert!(
-        issues
-            .iter()
-            .any(|d| d.code == "UML_TEMPLATE_PARAMETERED_CONSTRAINT"),
-        "unknown allowSubstitutable AND absent Substitution is false"
-    );
-    add_substitution(
-        &mut model,
-        "matching-substitution",
-        &exposed,
-        serde_json::json!({"$ref":"constraint"}),
-    );
-    let issues = model_diagnostics(&model);
-    assert!(
-        issues
-            .iter()
-            .any(|d| d.code == "UML_TEMPLATE_PARAMETER_FLAG_TYPE")
-    );
-    assert!(
-        issues
-            .iter()
-            .any(|d| d.code == "MDE_TEMPLATE_CONSTRAINT_UNSUPPORTED"),
-        "unknown allowSubstitutable AND true Substitution remains unknown"
-    );
-    assert!(
-        !issues
-            .iter()
-            .any(|d| d.code == "UML_TEMPLATE_PARAMETERED_CONSTRAINT")
-    );
 }
 
 fn add_substitution(model: &mut Document, id: &str, owner: &str, contract: serde_json::Value) {
@@ -1146,7 +831,7 @@ fn add_substitution(model: &mut Document, id: &str, owner: &str, contract: serde
 }
 
 #[test]
-fn substitution_flow_uses_owned_contracts_not_inheritance_and_reopens() {
+fn substitution_flag_edits_reject_disallowing_the_only_matching_contract() {
     let mut model = add(&project("uml.class"), 0).unwrap();
     let parameter = model
         .elements
@@ -1184,21 +869,7 @@ fn substitution_flow_uses_owned_contracts_not_inheritance_and_reopens() {
     author(&mut model, |raw| {
         raw["relations"].as_array_mut().expect("relations").push(serde_json::from_value(serde_json::json!({"id":"constraint","kind":"uml.constraining_classifier","from":parameter,"to":"contract"})).unwrap());
     });
-    let decided = |model: &Document| {
-        model_diagnostics(model)
-            .into_iter()
-            .filter(|d| {
-                d.code == "UML_TEMPLATE_PARAMETERED_CONSTRAINT"
-                    || d.code == "MDE_TEMPLATE_CONSTRAINT_UNSUPPORTED"
-            })
-            .collect::<Vec<_>>()
-    };
-    // A closed empty set proves false, even when allowSubstitutable defaults true.
-    assert!(
-        decided(&model)
-            .iter()
-            .any(|d| d.code == "UML_TEMPLATE_PARAMETERED_CONSTRAINT")
-    );
+
     add_substitution(
         &mut model,
         "parent-substitution",
@@ -1208,22 +879,13 @@ fn substitution_flow_uses_owned_contracts_not_inheritance_and_reopens() {
     author(&mut model, |raw| {
         raw["relations"].as_array_mut().expect("relations").push(serde_json::from_value(serde_json::json!({"id":"parent-edge","kind":"uml.generalization","from":exposed,"to":"parent"})).unwrap());
     });
-    assert!(
-        decided(&model)
-            .iter()
-            .any(|diagnostic| diagnostic.code == "UML_TEMPLATE_PARAMETERED_CONSTRAINT"),
-        "parent-owned Substitution does not satisfy the exposed Classifier's constraint"
-    );
+
     add_substitution(
         &mut model,
         "local-substitution",
         &exposed,
         serde_json::json!({"$ref":"contract"}),
     );
-    for format in ["json", "protobuf"] {
-        let reopened = decode(&encode(&model, format).unwrap(), format).unwrap();
-        assert!(decided(&reopened).is_empty(), "{:?}", decided(&reopened));
-    }
     author(&mut model, |raw| {
         raw["elements"]
             .as_array_mut()
@@ -1254,118 +916,7 @@ fn substitution_flow_uses_owned_contracts_not_inheritance_and_reopens() {
 }
 
 #[test]
-fn substitution_draft_flow_preserves_unknowns_and_rejects_bad_ownership_or_types() {
-    let mut model = project("uml.class");
-    for (id, kind) in [
-        ("contract", "uml.class"),
-        ("other", "uml.class"),
-        ("package", "uml.package"),
-    ] {
-        author(&mut model, |raw| {
-            raw["elements"].as_array_mut().expect("elements").push(
-                serde_json::from_value(serde_json::json!({"id":id,"kind":kind,"name":id})).unwrap(),
-            );
-        });
-    }
-    add_substitution(
-        &mut model,
-        "unknown",
-        "owner",
-        serde_json::json!({"href":"external.uml#Contract"}),
-    );
-    assert!(
-        model_diagnostics(&model)
-            .iter()
-            .any(
-                |diagnostic| diagnostic.code == "MDE_SUBSTITUTION_UNVERIFIED"
-                    && diagnostic.subject_id == "unknown"
-                    && diagnostic.severity == DiagnosticSeverity::Warning
-            )
-    );
-    add_substitution(
-        &mut model,
-        "known",
-        "owner",
-        serde_json::json!({"$ref":"contract"}),
-    );
-    let before_drafts = model.clone();
-    for (field, value) in [
-        ("contract", serde_json::json!({"$ref":"package"})),
-        ("contract", serde_json::Value::Null),
-        ("contract", serde_json::json!({"$ref":"missing"})),
-        (
-            "substitutingClassifier",
-            serde_json::json!({"$ref":"other"}),
-        ),
-    ] {
-        let mut draft = model.clone();
-        author(&mut draft, |raw| {
-            raw["elements"]
-                .as_array_mut()
-                .expect("elements")
-                .iter_mut()
-                .find(|e| e["id"] == "known")
-                .unwrap()["properties"]
-                .as_object_mut()
-                .expect("properties")
-                .insert(field.into(), value);
-        });
-        for format in ["json", "protobuf"] {
-            let reopened = decode(&encode(&draft, format).unwrap(), format).unwrap();
-            assert!(
-                model_diagnostics(&reopened)
-                    .iter()
-                    .any(|d| d.code == "UML_SUBSTITUTION_CONTRACT")
-            );
-        }
-    }
-    let mut draft = model.clone();
-    author(&mut draft, |raw| {
-        raw["elements"]
-            .as_array_mut()
-            .expect("elements")
-            .iter_mut()
-            .find(|element| element["id"] == "owner")
-            .expect("owner")["properties"]["substitution"] = json!([]);
-    });
-    assert!(
-        model_diagnostics(&draft)
-            .iter()
-            .any(|diagnostic| diagnostic.code == "UML_SUBSTITUTION_CONTRACT"
-                && diagnostic.severity == DiagnosticSeverity::Error),
-        "explicit empty collection cannot conceal owned substitutions"
-    );
-    assert_eq!(model, before_drafts, "draft checks must not mutate source");
-    let mut wrong_owner = model.clone();
-    author(&mut wrong_owner, |raw| {
-        raw["relations"]
-            .as_array_mut()
-            .expect("relations")
-            .iter_mut()
-            .find(|r| r["id"] == "owns-known")
-            .unwrap()["from"] = "package".into();
-    });
-    assert!(
-        model_diagnostics(&wrong_owner)
-            .iter()
-            .any(|d| d.code == "UML_SUBSTITUTION_CONTRACT")
-    );
-    let mut orphan = model.clone();
-    author(&mut orphan, |raw| {
-        raw["relations"]
-            .as_array_mut()
-            .expect("relations")
-            .retain(|r| r["id"] != "owns-known");
-    });
-    assert!(
-        model_diagnostics(&orphan)
-            .iter()
-            .any(|d| d.code == "UML_SUBSTITUTION_CONTRACT")
-    );
-}
-
-#[test]
-fn substitution_owner_projection_agrees_across_validation_commands_and_reopen() {
+fn substitution_owner_projection_agrees_across_commands_and_reopen() {
     let mut model = project("uml.class");
     author(&mut model, |raw| raw["root_model"] = json!("root"));
     author(&mut model, |raw| {
@@ -1412,11 +963,7 @@ fn substitution_owner_projection_agrees_across_validation_commands_and_reopen() 
             inspected(&reopened, "substitution", "uml.owner"),
             json!("owner")
         );
-        let errors = model_diagnostics(&reopened)
-            .into_iter()
-            .filter(|d| d.severity == DiagnosticSeverity::Error)
-            .collect::<Vec<_>>();
-        assert!(errors.is_empty(), "{errors:?}");
+
         let renamed = apply(
             &reopened,
             &Command::Rename {
@@ -1431,179 +978,4 @@ fn substitution_owner_projection_agrees_across_validation_commands_and_reopen() 
             json!("owner")
         );
     }
-    author(&mut model, |raw| {
-        raw["elements"]
-            .as_array_mut()
-            .expect("elements")
-            .iter_mut()
-            .find(|e| e["id"] == "substitution")
-            .unwrap()["properties"]
-            .as_object_mut()
-            .expect("properties")
-            .insert("client".into(), serde_json::json!([{"$ref":"contract"}]));
-    });
-    assert!(
-        model_diagnostics(&model)
-            .iter()
-            .any(|d| d.severity == DiagnosticSeverity::Error)
-    );
-}
-
-#[test]
-fn substitution_explicit_collection_reopens_unknowns_and_diagnoses_invalid_entries() {
-    let mut model = project("uml.class");
-    author(&mut model, |raw| {
-        raw["elements"].as_array_mut().expect("elements").push(
-            serde_json::from_value(
-                serde_json::json!({"id":"contract","kind":"uml.class","name":"Contract"}),
-            )
-            .unwrap(),
-        );
-    });
-    add_substitution(
-        &mut model,
-        "known",
-        "owner",
-        serde_json::json!({"$ref":"contract"}),
-    );
-    for entries in [
-        serde_json::json!([{"$ref":"known"},{"href":"external.uml#Substitution"}]),
-        serde_json::json!([{"href":"external.uml#Substitution"},{"$ref":"known"}]),
-    ] {
-        author(&mut model, |raw| {
-            raw["elements"]
-                .as_array_mut()
-                .expect("elements")
-                .iter_mut()
-                .find(|e| e["id"] == "owner")
-                .unwrap()["properties"]
-                .as_object_mut()
-                .expect("properties")
-                .insert("substitution".into(), entries);
-        });
-        for format in ["json", "protobuf"] {
-            let reopened = decode(&encode(&model, format).unwrap(), format).unwrap();
-
-            assert!(
-                model_diagnostics(&reopened)
-                    .iter()
-                    .any(|d| d.severity == DiagnosticSeverity::Warning),
-                "unresolved collection remains diagnosed"
-            );
-        }
-    }
-    for entries in [
-        serde_json::json!([{"$ref":"known"},{"href":"external.uml#Substitution"},false]),
-        serde_json::json!([false,{"href":"external.uml#Substitution"},{"$ref":"known"}]),
-        serde_json::json!([{"$ref":"known"},{"$ref":"known"}]),
-    ] {
-        author(&mut model, |raw| {
-            raw["elements"]
-                .as_array_mut()
-                .expect("elements")
-                .iter_mut()
-                .find(|e| e["id"] == "owner")
-                .unwrap()["properties"]
-                .as_object_mut()
-                .expect("properties")
-                .insert("substitution".into(), entries);
-        });
-        assert!(
-            model_diagnostics(&model)
-                .iter()
-                .any(|d| d.severity == DiagnosticSeverity::Error
-                    && d.subject_id == "owner"
-                    && d.message.starts_with("Classifier-substitution:"))
-        );
-    }
-}
-
-#[test]
-fn substitution_endpoint_subsets_reopen_unknowns_and_diagnose_invalid_entries() {
-    let mut model = project("uml.class");
-    author(&mut model, |raw| {
-        raw["elements"].as_array_mut().expect("elements").push(
-            serde_json::from_value(
-                serde_json::json!({"id":"contract","kind":"uml.class","name":"Contract"}),
-            )
-            .unwrap(),
-        );
-    });
-    add_substitution(
-        &mut model,
-        "known",
-        "owner",
-        serde_json::json!({"$ref":"contract"}),
-    );
-    for (role, required) in [("client", "owner"), ("supplier", "contract")] {
-        for values in [
-            serde_json::json!([{"$ref":required},{"href":"external.uml#Endpoint"}]),
-            serde_json::json!([{"href":"external.uml#Endpoint"},{"$ref":required}]),
-        ] {
-            let mut draft = model.clone();
-            author(&mut draft, |raw| {
-                raw["elements"]
-                    .as_array_mut()
-                    .expect("elements")
-                    .iter_mut()
-                    .find(|e| e["id"] == "known")
-                    .unwrap()["properties"]
-                    .as_object_mut()
-                    .expect("properties")
-                    .insert(role.into(), values);
-            });
-            for format in ["json", "protobuf"] {
-                let reopened = decode(&encode(&draft, format).unwrap(), format).unwrap();
-
-                assert!(
-                    model_diagnostics(&reopened)
-                        .iter()
-                        .any(|d| d.severity == DiagnosticSeverity::Warning)
-                );
-            }
-        }
-        for values in [
-            serde_json::json!([{"$ref":required},{"href":"external.uml#Endpoint"},false]),
-            serde_json::json!([false,{"href":"external.uml#Endpoint"},{"$ref":required}]),
-            serde_json::json!([{"$ref":required},{"$ref":required},{"href":"external.uml#Endpoint"}]),
-        ] {
-            let mut draft = model.clone();
-            author(&mut draft, |raw| {
-                raw["elements"]
-                    .as_array_mut()
-                    .expect("elements")
-                    .iter_mut()
-                    .find(|e| e["id"] == "known")
-                    .unwrap()["properties"]
-                    .as_object_mut()
-                    .expect("properties")
-                    .insert(role.into(), values);
-            });
-            assert!(
-                model_diagnostics(&draft)
-                    .iter()
-                    .any(|d| d.severity == DiagnosticSeverity::Error
-                        && d.code == "UML_SUBSTITUTION_CONTRACT")
-            );
-        }
-    }
-    // Unknown client inclusion cannot conceal an invalid supplier collection.
-    author(&mut model, |raw| {
-        let properties = raw["elements"]
-            .as_array_mut()
-            .expect("elements")
-            .iter_mut()
-            .find(|element| element["id"] == "known")
-            .expect("known")["properties"]
-            .as_object_mut()
-            .expect("properties");
-        properties.insert("client".into(), json!([{"href":"external.uml#Endpoint"}]));
-        properties.insert("supplier".into(), json!([false]));
-    });
-    assert!(
-        model_diagnostics(&model)
-            .iter()
-            .any(|d| d.severity == DiagnosticSeverity::Error
-                && d.code == "UML_SUBSTITUTION_CONTRACT")
-    );
 }

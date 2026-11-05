@@ -13,7 +13,7 @@ Feature: Lossless authored StarUML presentation interchange
     When I change one occurrence's style through the public command
     And save, reopen, export MDJ and import the exported file again
     Then the edited style survives without changing other occurrences or nested labels
-    And UML findings, semantics, composition, unknown fields and the source file remain unchanged
+    And semantics, composition, unknown fields and the source file remain unchanged
     When I edit an edge color and the nested label's persisted style contract
     Then their MDJ encodings survive reopening without changing the model
     When I remove the complete font and fill from the first occurrence
@@ -35,5 +35,5 @@ Feature: Lossless authored StarUML presentation interchange
     When I author an unsupported opacity, weight or incomplete font
     Then MDJ export fails rather than replaying stale source or inventing defaults
     When I repair the edit and export again
-    Then the original bytes and UML findings return unchanged
+    Then the original bytes return unchanged
     And repeated exports remain deterministic

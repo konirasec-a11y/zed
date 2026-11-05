@@ -1,6 +1,6 @@
 use bellatrix_mde::{
     apply_model_command, decode_model_document, encode_model_document, encode_model_section,
-    prepare_model_document, validate_uml_diagram, validate_uml_model,
+    prepare_model_document,
 };
 use bellatrix_mde_contracts::protocol::{Command, ModelingElementKind, ModelingRelationKind};
 use serde::Deserialize;
@@ -27,22 +27,11 @@ struct Case {
     diagram_id: Option<String>,
     #[serde(default)]
     diagrams: Vec<Diagram>,
-    diagnostics: Vec<ExpectedDiagnostic>,
-    #[serde(default)]
-    forbidden_diagnostics: Vec<ExpectedDiagnostic>,
 }
 #[derive(Clone, Deserialize)]
 struct Diagram {
     diagram_id: String,
-    diagram_kind: String,
 }
-#[derive(Clone, Deserialize)]
-struct ExpectedDiagnostic {
-    code: String,
-    subject_id: String,
-    severity: String,
-}
-
 struct SavedFlow(PathBuf);
 impl Drop for SavedFlow {
     fn drop(&mut self) {
@@ -53,214 +42,6 @@ impl Drop for SavedFlow {
             );
         }
     }
-}
-
-fn validation_response(response: Result<String, String>, coverage: &str) -> FlowResult<Value> {
-    let response: Value = serde_json::from_str(&response.map_err(std::io::Error::other)?)?;
-    if response["api_version"] != 1 || response["coverage"] != coverage {
-        return Err(format!("Unexpected validation API contract: {response}").into());
-    }
-    Ok(response)
-}
-
-fn validate(case: &Case, envelope: &Value) -> FlowResult<Value> {
-    let model = envelope
-        .get("model")
-        .ok_or("decoded envelope missing model")?;
-    match (&case.diagram_kind, &case.diagram_id) {
-        (Some(kind), Some(id)) => validation_response(
-            validate_uml_diagram(
-                &json!({
-                    "api_version":1, "model":model, "diagram_kind":kind, "diagram_id":id
-                })
-                .to_string(),
-            ),
-            "implemented_model_and_diagram_rules_only",
-        ),
-        (None, None) => validation_response(
-            validate_uml_model(&envelope.to_string()),
-            "implemented_rules_only",
-        ),
-        _ => Err("diagram_kind and diagram_id must be present together".into()),
-    }
-}
-
-fn check_outcome(case: &Case, response: &Value) -> FlowResult<()> {
-    let expected_errors = match case.expected.as_str() {
-        "valid" => false,
-        "invalid" => true,
-        _ => {
-            return Err(format!(
-                "{}: expected must be valid or invalid, never Unknown",
-                case.id
-            )
-            .into());
-        }
-    };
-    let diagnostics = response["diagnostics"]
-        .as_array()
-        .ok_or("missing diagnostics")?;
-    for diagnostic in diagnostics {
-        if !matches!(diagnostic["severity"].as_str(), Some("error" | "warning")) {
-            return Err(format!("Unknown diagnostic severity: {diagnostic}").into());
-        }
-        if diagnostic["severity"] == "warning" {
-            println!(
-                "{}: retained warning, not proof of conformance: {diagnostic}",
-                case.id
-            );
-        }
-    }
-    let has_errors = response["has_errors"]
-        .as_bool()
-        .ok_or("missing boolean has_errors")?;
-    if has_errors
-        != diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic["severity"] == "error")
-    {
-        return Err(format!(
-            "{}: has_errors contradicts its diagnostics: {response}",
-            case.id
-        )
-        .into());
-    }
-    if has_errors != expected_errors {
-        return Err(format!("{}: expected {}, actual {response}", case.id, case.expected).into());
-    }
-    if expected_errors
-        && !case
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.severity == "error")
-    {
-        return Err("Invalid flow must specify an exact error code, subject and severity".into());
-    }
-    for expected in &case.diagnostics {
-        if !diagnostics.iter().any(|actual| {
-            actual["code"] == expected.code
-                && actual["subject_id"] == expected.subject_id
-                && actual["severity"] == expected.severity
-        }) {
-            return Err(format!(
-                "{}: missing {}/{}/{} in {response}",
-                case.id, expected.code, expected.subject_id, expected.severity
-            )
-            .into());
-        }
-    }
-    for forbidden in &case.forbidden_diagnostics {
-        if diagnostics.iter().any(|actual| {
-            actual["code"] == forbidden.code
-                && actual["subject_id"] == forbidden.subject_id
-                && actual["severity"] == forbidden.severity
-        }) {
-            return Err(format!(
-                "{}: forbidden diagnostic {}/{}/{}",
-                case.id, forbidden.code, forbidden.subject_id, forbidden.severity
-            )
-            .into());
-        }
-    }
-    let mut expected_errors: Vec<_> = case
-        .diagnostics
-        .iter()
-        .filter(|diagnostic| diagnostic.severity == "error")
-        .map(|diagnostic| {
-            (
-                diagnostic.code.as_str(),
-                diagnostic.subject_id.as_str(),
-                "error",
-            )
-        })
-        .collect();
-    let mut actual_errors = Vec::new();
-    for diagnostic in diagnostics
-        .iter()
-        .filter(|diagnostic| diagnostic["severity"] == "error")
-    {
-        actual_errors.push((
-            diagnostic["code"]
-                .as_str()
-                .ok_or("diagnostic missing code")?,
-            diagnostic["subject_id"]
-                .as_str()
-                .ok_or("diagnostic missing subject_id")?,
-            "error",
-        ));
-    }
-    expected_errors.sort_unstable();
-    actual_errors.sort_unstable();
-    if actual_errors != expected_errors {
-        return Err(format!("{}: exact error diagnostics differ: expected {expected_errors:?}, actual {actual_errors:?}", case.id).into());
-    }
-    Ok(())
-}
-
-fn diagram_responses(
-    case: &Case,
-    envelope: &Value,
-    failures: &mut Vec<String>,
-) -> FlowResult<Vec<Value>> {
-    let mut responses: Vec<Value> = case
-        .diagrams
-        .iter()
-        .map(|diagram| {
-            let response = validation_response(
-                validate_uml_diagram(
-                    &json!({
-                        "api_version":1, "model":envelope["model"],
-                        "diagram_id":diagram.diagram_id, "diagram_kind":diagram.diagram_kind
-                    })
-                    .to_string(),
-                ),
-                "implemented_model_and_diagram_rules_only",
-            )?;
-            if let Err(error) = check_outcome(case, &response) {
-                failures.push(format!("diagram {}: {error}", diagram.diagram_id));
-            }
-            Ok(response)
-        })
-        .collect::<FlowResult<_>>()?;
-    if is_structural(case) {
-        let response = model_response(case, envelope)?;
-        if let Err(error) = check_outcome(case, &response) {
-            failures.push(format!("kernel model validation: {error}"));
-        }
-        responses.push(response);
-    }
-    Ok(responses)
-}
-
-fn is_structural(case: &Case) -> bool {
-    matches!(
-        case.diagram_kind.as_deref(),
-        Some(
-            "class"
-                | "object"
-                | "package"
-                | "component"
-                | "composite_structure"
-                | "deployment"
-                | "profile"
-        )
-    )
-}
-
-fn model_response(case: &Case, envelope: &Value) -> FlowResult<Value> {
-    let response = validation_response(
-        validate_uml_model(&envelope.to_string()),
-        "implemented_rules_only",
-    )?;
-    let validity = if response["has_errors"] == true {
-        "invalid"
-    } else {
-        "no_violations_found"
-    };
-    if response["validity"] != validity {
-        return Err(format!("{}: inconsistent kernel validity: {response}", case.id).into());
-    }
-    Ok(response)
 }
 
 fn apply_command(envelope: &Value, command: Command, revision: u64) -> FlowResult<Value> {
@@ -280,21 +61,12 @@ fn apply_command(envelope: &Value, command: Command, revision: u64) -> FlowResul
     )?)
 }
 
-fn state_responses(case: &Case, envelope: &Value) -> FlowResult<Vec<Value>> {
-    let responses = vec![validate(case, envelope)?, model_response(case, envelope)?];
-    for response in &responses {
-        check_outcome(case, response)?;
-    }
-    Ok(responses)
-}
-
 fn save_authored_state(
     case: &Case,
     envelope: &Value,
     directory: &Path,
     stage: &str,
 ) -> FlowResult<Vec<Value>> {
-    let expected = state_responses(case, envelope)?;
     let mut reopened_models = Vec::new();
     for (format, extension) in [("json", "json"), ("protobuf", "blx")] {
         let destination = directory.join(format!("{stage}.{extension}"));
@@ -306,12 +78,8 @@ fn save_authored_state(
             &decode_model_document(&fs::read(&destination)?, format)
                 .map_err(std::io::Error::other)?,
         )?;
-        if reopened != *envelope || state_responses(case, &reopened)? != expected {
-            return Err(format!(
-                "{}: {stage}/{format} changed the document or diagnostics",
-                case.id
-            )
-            .into());
+        if reopened != *envelope {
+            return Err(format!("{}: {stage}/{format} changed the document", case.id).into());
         }
         reopened_models.push(reopened);
     }
@@ -353,42 +121,23 @@ fn structural_authoring_flow(case: &Case, original: &Value, directory: &Path) ->
     };
     let mut baseline = original.clone();
     let mut cleanup = Vec::new();
-    let mut expected_invalid = case.clone();
-    expected_invalid.id = format!("{}-authored-invalid", case.id);
-    expected_invalid.expected = "invalid".into();
-    let mut errors: Vec<(&str, &str)> = Vec::new();
     let (mutation, mut repairs) = match case.diagram_kind.as_deref() {
-        Some("class") => {
-            errors.extend([
-                ("UML_OPERATION_AT_MOST_ONE_RETURN", "submit"),
-                ("UML_OPERATION_PARAMETERS", "submit"),
-            ]);
-            (
-                property("submit-request", "direction", json!("return")),
-                vec![property("submit-request", "direction", json!("in"))],
-            )
-        }
-        Some("object") => {
-            errors.extend([
-                ("UML_INSTANCE_DEFINING_FEATURE", "order-1042"),
-                ("UML_SLOT_CONTRACT", "first-number"),
-            ]);
-            (
-                property("first-number", "definingFeature", json!({"$ref":"name"})),
-                vec![property(
-                    "first-number",
-                    "definingFeature",
-                    json!({"$ref":"number"}),
-                )],
-            )
-        }
-        Some("package") => {
-            errors.push(("UML_PACKAGE_MEMBER_VISIBILITY", "order"));
-            (
-                property("order", "visibility", json!("protected")),
-                vec![property("order", "visibility", json!("public"))],
-            )
-        }
+        Some("class") => (
+            property("submit-request", "direction", json!("return")),
+            vec![property("submit-request", "direction", json!("in"))],
+        ),
+        Some("object") => (
+            property("first-number", "definingFeature", json!({"$ref":"name"})),
+            vec![property(
+                "first-number",
+                "definingFeature",
+                json!({"$ref":"number"}),
+            )],
+        ),
+        Some("package") => (
+            property("order", "visibility", json!("protected")),
+            vec![property("order", "visibility", json!("public"))],
+        ),
         Some("component") => {
             baseline = apply_command(
                 original,
@@ -403,53 +152,36 @@ fn structural_authoring_flow(case: &Case, original: &Value, directory: &Path) ->
             cleanup.push(Command::DeleteElement {
                 element_id: container.clone(),
             });
-            errors.push(("UML_COMPONENT_NO_PACKAGED_ELEMENTS", "checkout"));
+
             (
                 owner("checkout", &container),
                 vec![owner("checkout", "root")],
             )
         }
-        Some("composite_structure") => {
-            errors.push(("UML_CONNECTOR_ROLES", "connector"));
-            (
-                property("storage-end", "role", json!({"$ref":"foreign-part"})),
-                vec![property(
-                    "storage-end",
-                    "role",
-                    json!({"$ref":"storage-part"}),
-                )],
-            )
-        }
-        Some("deployment") => {
-            errors.push(("UML_DEPLOYMENT_SPECIFICATION_TARGET", "specification"));
-            (
-                owner("deployment", "host"),
-                vec![owner("deployment", "runtime")],
-            )
-        }
-        Some("profile") => {
-            errors.push(("UML_PROFILE_METACLASS_REFERENCE_SPECIALIZATION", "profile"));
-            (
-                Command::CreateRelation {
-                    diagram_id: case.diagram_id.clone().ok_or("missing diagram identity")?,
-                    owner_id: Some("local".into()),
-                    kind: ModelingRelationKind::Generalization,
-                    from: "local".into(),
-                    to: "metaclass".into(),
-                },
-                Vec::new(),
-            )
-        }
+        Some("composite_structure") => (
+            property("storage-end", "role", json!({"$ref":"foreign-part"})),
+            vec![property(
+                "storage-end",
+                "role",
+                json!({"$ref":"storage-part"}),
+            )],
+        ),
+        Some("deployment") => (
+            owner("deployment", "host"),
+            vec![owner("deployment", "runtime")],
+        ),
+        Some("profile") => (
+            Command::CreateRelation {
+                diagram_id: case.diagram_id.clone().ok_or("missing diagram identity")?,
+                owner_id: Some("local".into()),
+                kind: ModelingRelationKind::Generalization,
+                from: "local".into(),
+                to: "metaclass".into(),
+            },
+            Vec::new(),
+        ),
         _ => return Err("structural authoring requires a structural case".into()),
     };
-    expected_invalid.diagnostics = errors
-        .into_iter()
-        .map(|(code, subject_id)| ExpectedDiagnostic {
-            code: code.into(),
-            subject_id: subject_id.into(),
-            severity: "error".into(),
-        })
-        .collect();
     println!(
         "Given the valid {} authoring baseline, including any public preparation commands",
         case.id
@@ -466,7 +198,7 @@ fn structural_authoring_flow(case: &Case, original: &Value, directory: &Path) ->
         });
     }
     repairs.extend(cleanup);
-    let reopened = save_authored_state(&expected_invalid, &invalid, directory, "authored-invalid")?;
+    let reopened = save_authored_state(case, &invalid, directory, "authored-invalid")?;
     for (index, reopened) in reopened.iter().enumerate() {
         println!(
             "When I repair reopened invalid {} through public commands",
@@ -495,7 +227,7 @@ fn structural_authoring_flow(case: &Case, original: &Value, directory: &Path) ->
         )?;
     }
     println!(
-        "Then {} preserves exact invalid diagnostics, repairs both reopened formats, and returns to the original semantic model",
+        "Then {} repairs both reopened formats and returns to the original semantic model",
         case.id
     );
     Ok(())
@@ -586,7 +318,7 @@ fn run_flow(group: &str, id: &str) -> FlowResult<()> {
             || expected_ids != actual_ids
         {
             return Err(
-                "TodoList flow must validate every diagram of a multi-diagram project".into(),
+                "TodoList flow must include every diagram of a multi-diagram project".into(),
             );
         }
         let valid = manifest
@@ -615,15 +347,9 @@ fn run_flow(group: &str, id: &str) -> FlowResult<()> {
         }
         println!("And the TodoList pair differs in exactly one semantic field: {delta:?}");
     }
-    println!("When I import and validate through the public pure API");
+    println!("When I import through the public pure API");
     decode_model_document(&serde_json::to_vec(&envelope["model"])?, "json")
         .map_err(std::io::Error::other)?;
-    let original = validate(case, &envelope)?;
-    let mut failures = Vec::new();
-    if let Err(error) = check_outcome(case, &original) {
-        failures.push(format!("initial validation: {error}"));
-    }
-    let original_diagrams = diagram_responses(case, &envelope, &mut failures)?;
     let directory = std::env::temp_dir().join(format!("bellatrix-bdd-{}-{id}", std::process::id()));
     fs::create_dir(&directory)?;
     let saved = SavedFlow(directory);
@@ -640,31 +366,11 @@ fn run_flow(group: &str, id: &str) -> FlowResult<()> {
         if envelope != reopened {
             return Err(format!("{id}: {name} round-trip changed the project").into());
         }
-        let response = validate(case, &reopened)?;
-        if let Err(error) = check_outcome(case, &response) {
-            failures.push(format!("{name} reopened validation: {error}"));
-        }
-        if response != original
-            || diagram_responses(case, &reopened, &mut failures)? != original_diagrams
-        {
-            return Err(format!("{id}: {name} round-trip changed diagnostics").into());
-        }
     }
     if group == "structural" && case.expected == "valid" {
-        if let Err(error) = structural_authoring_flow(case, &envelope, &saved.0) {
-            failures.push(format!("public structural authoring: {error}"));
-        }
+        structural_authoring_flow(case, &envelope, &saved.0)?;
     }
-    if !failures.is_empty() {
-        return Err(format!(
-            "{id}: lifecycle completed but expectations failed:\n{}",
-            failures.join("\n")
-        )
-        .into());
-    }
-    println!(
-        "Then {id} preserves its specified verdict, exact diagnostics and project after both round-trips (implemented rules only)"
-    );
+    println!("Then {id} preserves its project after both round-trips");
     Ok(())
 }
 

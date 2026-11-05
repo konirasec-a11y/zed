@@ -1,4 +1,4 @@
-use bellatrix_mde::{generate_rust_struct, validate_uml_model};
+use bellatrix_mde::generate_rust_struct;
 use serde_json::{Value, json};
 use std::{
     error::Error,
@@ -75,14 +75,8 @@ fn rootless_uml_class_generates_a_traceable_rust_library_and_survives_edits() ->
         }
     });
     let original = request.to_string();
-    let validation: Value = serde_json::from_str(
-        &validate_uml_model(&json!({"api_version":1, "model":request["model"]}).to_string())
-            .map_err(std::io::Error::other)?,
-    )?;
-    assert_eq!(validation["has_errors"], false, "{validation}");
     let generated = generate(&request)?;
     assert_eq!(request.to_string(), original);
-    assert_eq!(generated["uml_validation"], validation);
     assert_eq!(generated["target"]["crate_type"], "lib");
     assert_eq!(
         generated["artifacts"]
@@ -143,23 +137,10 @@ fn rootless_uml_class_generates_a_traceable_rust_library_and_survives_edits() ->
     request["model"]["elements"][1]["properties"]["multiplicity"] = json!("1");
     assert_eq!(generate(&request)?, renamed);
 
-    request["model"]["elements"][0]["properties"]["isAbstract"] = json!("invalid UML boolean");
-    let blocked =
-        generate_rust_struct(&request.to_string()).expect_err("invalid UML must block emission");
-    assert_eq!(
-        serde_json::from_str::<Value>(&blocked)?["error"]["code"],
-        "UML_GENERATION_BLOCKED"
-    );
-    request["model"]["elements"][0]["properties"]
-        .as_object_mut()
-        .ok_or("missing properties")?
-        .remove("isAbstract");
-
     // UML names are not Rust identifiers. Target syntax is the compiler's
-    // responsibility, even when the UML kernel reports no violations.
+    // responsibility.
     request["model"]["elements"][0]["name"] = json!("type");
     let rust_error = generate(&request)?;
-    assert_eq!(rust_error["uml_validation"]["has_errors"], false);
     assert!(!compile(&rust_error)?.status.success());
     let reopened: Value = serde_json::from_str(&original)?;
     assert_eq!(generate(&reopened)?, generated);

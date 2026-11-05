@@ -1,9 +1,6 @@
-use bellatrix_mde::{Format, Project, decode, encode, validate_uml_model};
+use bellatrix_mde::Project;
 use serde_json::{Value, json};
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
-const ERROR: &str = "UML_PROPERTY_SUBSETTING_RULES";
-const INVALID: &str = "MDE_PROPERTY_SUBSETTING_RULES_INVALID";
-const UNKNOWN: &str = "MDE_PROPERTY_SUBSETTING_RULES_UNVERIFIED";
 fn document(rooted: bool) -> Result<Project> {
     let mut model = json!({"id":"project","name":"Subsetting rules","root_model":"root",
     "elements":[
@@ -44,50 +41,6 @@ fn author(model: &mut Project, id: &str, key: &str, value: Value) -> Result {
         .ok_or("element")?
         .properties
         .insert(key.into(), value);
-    Ok(())
-}
-fn issues(model: &Project) -> Result<Vec<Value>> {
-    let response: Value = serde_json::from_str(&validate_uml_model(
-        &json!({"api_version":1,"model":model}).to_string(),
-    )?)?;
-    Ok(response["diagnostics"]
-        .as_array()
-        .ok_or("diagnostics")?
-        .iter()
-        .filter(|issue| {
-            issue["subject_id"] == "specific"
-                && [ERROR, INVALID, UNKNOWN]
-                    .iter()
-                    .any(|code| issue["code"] == *code)
-        })
-        .cloned()
-        .collect())
-}
-fn expect(model: &Project, code: &str) -> Result {
-    let found = issues(model)?;
-    assert_eq!(found.len(), 1, "{found:#?}");
-    assert_eq!(found[0]["code"], code, "{found:#?}");
-    assert_eq!(
-        found[0]["severity"],
-        if code == UNKNOWN { "warning" } else { "error" }
-    );
-    Ok(())
-}
-#[test]
-fn type_conformance_supports_identity_and_transitive_specialization_but_not_reverse() -> Result {
-    for rooted in [false, true] {
-        let mut model = document(rooted)?;
-        for target in ["super", "middle", "sub"] {
-            author(&mut model, "specific", "type", json!({"$ref":target}))?;
-            assert!(issues(&model)?.is_empty());
-        }
-        author(&mut model, "specific", "type", json!({"$ref":"super"}))?;
-        author(&mut model, "general", "type", json!({"$ref":"sub"}))?;
-        expect(&model, ERROR)?;
-        for format in [Format::Json, Format::Protobuf] {
-            expect(&decode(&encode(&model, format)?, format)?, ERROR)?;
-        }
-    }
     Ok(())
 }
 

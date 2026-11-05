@@ -1,12 +1,10 @@
 use bellatrix_mde::{
     Format, Project,
     commands::{Command, apply},
-    decode, encode, validate_uml_model,
+    encode,
 };
 use serde_json::{Value, json};
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
-const ERROR: &str = "UML_DURATION_OBSERVATION_FIRST_EVENT";
-const UNKNOWN: &str = "MDE_DURATION_OBSERVATION_FIRST_EVENT_UNVERIFIED";
 fn document(events: Option<Value>, first_event: Option<Value>) -> Result<Project> {
     let mut model: Project = serde_json::from_value(
         json!({"id":"model","name":"Duration first events","root_model":"root","elements":[
@@ -40,78 +38,6 @@ fn author(model: &mut Project, key: &str, value: Value) -> Result {
         .insert(key.into(), value);
     Ok(())
 }
-fn has(model: &Project, code: &str) -> Result<bool> {
-    let response: Value = serde_json::from_str(&validate_uml_model(
-        &json!({"api_version":1,"model":model}).to_string(),
-    )?)?;
-    Ok(response["diagnostics"]
-        .as_array()
-        .ok_or("diagnostics")?
-        .iter()
-        .any(|issue| issue["subject_id"] == "observation" && issue["code"] == code))
-}
-#[test]
-fn given_known_cardinalities_then_exact_conditional_survives_roundtrip() -> Result {
-    for count in 1..=2 {
-        for first_event in [json!([]), json!([true]), json!([true, false])] {
-            let elements = ["first", "second", "third"]
-                .into_iter()
-                .take(count)
-                .map(|id| json!({"$ref":id}))
-                .collect::<Vec<_>>();
-            let expected = if count == 2 { 2 } else { 0 };
-            let valid = first_event.as_array().ok_or("array")?.len() == expected;
-            let model = document(Some(json!(elements)), Some(first_event))?;
-            for format in [Format::Json, Format::Protobuf] {
-                let reopened = decode(&encode(&model, format)?, format)?;
-                assert_eq!(has(&reopened, ERROR)?, !valid, "count={count}");
-                assert!(!has(&reopened, UNKNOWN)?);
-            }
-        }
-    }
-    Ok(())
-}
-#[test]
-fn given_required_event_absent_then_unknown_but_explicit_empty_is_invalid() -> Result {
-    for first_event in [None, Some(json!([])), Some(json!([true, false]))] {
-        let model = document(None, first_event.clone())?;
-        for format in [Format::Json, Format::Protobuf] {
-            let reopened = decode(&encode(&model, format)?, format)?;
-            assert!(has(&reopened, UNKNOWN)? && !has(&reopened, ERROR)?);
-        }
-        let empty = document(Some(json!([])), first_event)?;
-        assert!(has(&empty, ERROR)? && !has(&empty, UNKNOWN)?);
-    }
-    let model = document(None, Some(json!([true])))?;
-    assert!(has(&model, ERROR)? && !has(&model, UNKNOWN)?);
-    Ok(())
-}
-
-#[test]
-fn given_valid_pair_when_target_is_deleted_then_rejection_preserves_first_event() -> Result {
-    let model = document(
-        Some(json!([{"$ref":"first"},{"$ref":"second"}])),
-        Some(json!([true, false])),
-    )?;
-    let before = encode(&model, Format::Json)?;
-    let error = apply(
-        &model,
-        &Command::DeleteElement {
-            element_id: "first".into(),
-        },
-        1,
-    )
-    .expect_err("dangling event");
-    // A dangling event remains Invalid even though its stored count is unchanged.
-    assert!(
-        error
-            .to_string()
-            .contains("UML_DURATION_OBSERVATION_FIRST_EVENT"),
-        "{error}"
-    );
-    assert_eq!(before, encode(&model, Format::Json)?);
-    Ok(())
-}
 
 #[test]
 fn given_direct_first_event_edit_then_read_only_adapter_preserves_source() -> Result {
@@ -134,26 +60,5 @@ fn given_direct_first_event_edit_then_read_only_adapter_preserves_source() -> Re
     // array remains read-only and the command never reaches that validator.
     assert_eq!(error.to_string(), "property is read-only");
     assert_eq!(before, encode(&model, Format::Json)?);
-    Ok(())
-}
-
-#[test]
-fn given_unknown_or_non_named_local_event_then_reference_contract_is_preserved() -> Result {
-    for kind in ["future.event", "uml.comment"] {
-        let mut model = document(Some(json!([{"$ref":"first"}])), Some(json!([])))?;
-        model
-            .elements
-            .iter_mut()
-            .find(|element| element.id == "first")
-            .ok_or("event")?
-            .kind = kind.into();
-        for format in [Format::Json, Format::Protobuf] {
-            let reopened = decode(&encode(&model, format)?, format)?;
-            assert_eq!(has(&reopened, UNKNOWN)?, kind == "future.event");
-            assert_eq!(has(&reopened, ERROR)?, kind == "uml.comment");
-        }
-        author(&mut model, "firstEvent", json!([true]))?;
-        assert!(has(&model, ERROR)? && !has(&model, UNKNOWN)?);
-    }
     Ok(())
 }

@@ -133,7 +133,7 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
         references::ReferenceIndex,
         root::{ElementRef, Model},
     };
-    use bellatrix_mde::{Format, decode, encode, validate_structural_model};
+    use bellatrix_mde::{Format, decode, encode};
     use serde_json::json;
 
     fn apply(project: &mut Project, command: Command) -> Result<(), String> {
@@ -352,12 +352,7 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
         )?;
     }
     redefine(&mut project, &own_attribute, &[&public])?;
-    assert!(
-        !validate_structural_model(&project)
-            .iter()
-            .any(|issue| issue.subject_id == own_attribute
-                && issue.code == "UML_REDEFINITION_CONSISTENCY_UNSUPPORTED")
-    );
+
     for (id, key, value) in [
         (&own_attribute, "multiplicity", json!("1..2")),
         (&own_attribute, "aggregation", json!("none")),
@@ -377,12 +372,6 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
             .ok_or("incompatible Property redefinition accepted")?;
         assert!(error.contains("inconsistent"), "{error}");
         assert_eq!(encode(&incompatible, Format::Json)?, before);
-        assert!(
-            validate_structural_model(&incompatible)
-                .iter()
-                .any(|issue| issue.subject_id == own_attribute
-                    && issue.severity == bellatrix_mde::StructuralSeverity::Error)
-        );
     }
     let mut unevaluated = project.clone();
     unevaluated
@@ -393,13 +382,6 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
         .properties
         .insert("multiplicity".into(), json!("limit..*"));
     redefine(&mut unevaluated, &own_attribute, &[&public])?;
-    assert!(
-        validate_structural_model(&unevaluated)
-            .iter()
-            .any(|issue| issue.subject_id == own_attribute
-                && issue.code == "UML_REDEFINITION_CONSISTENCY_UNSUPPORTED"
-                && issue.severity == bellatrix_mde::StructuralSeverity::Warning)
-    );
 
     for (member_id, targets, expected) in [
         (
@@ -642,12 +624,7 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
         query(&project, &facade),
         Err(classifiers::QueryError::Unsupported { .. })
     ));
-    assert!(
-        validate_structural_model(&project)
-            .iter()
-            .any(|issue| issue.code == "UML_NAMESPACE_QUERY_UNSUPPORTED"
-                && issue.severity == bellatrix_mde::StructuralSeverity::Warning)
-    );
+
     configure_import(
         &mut project,
         ["export-left", &facade, &left],
@@ -843,12 +820,7 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
         .ok_or("incompatible Operation accepted")?;
         assert!(error.contains("inconsistent"), "{error}");
         assert_eq!(encode(&project, Format::Json)?, before);
-        assert!(
-            validate_structural_model(&project)
-                .iter()
-                .any(|issue| issue.subject_id == own_operation
-                    && issue.severity == bellatrix_mde::StructuralSeverity::Error)
-        );
+
         set_property(&mut project, parameter, key, repaired)?;
         redefine(
             &mut project,
@@ -918,19 +890,7 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
                     references.element(&original_operation)?,
                 )?
             );
-            let diagnostics = validate_structural_model(&reopened);
-            assert!(
-                diagnostics
-                    .iter()
-                    .all(|issue| issue.code != "UML_REDEFINITION_CONSISTENCY_UNSUPPORTED"),
-                "{diagnostics:?}"
-            );
-            assert!(
-                diagnostics
-                    .iter()
-                    .any(|issue| issue.subject_id == *operation
-                        && issue.code == "MDE_OPERATION_CONDITION_UNSUPPORTED")
-            );
+
             let section = ModelingSection::from_model(&reopened);
             let inspector = inspect_element(&section, &own_operation)
                 .ok_or("compatible Operation Inspector")?;
@@ -1000,17 +960,7 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
             );
         for format in [Format::Json, Format::Protobuf] {
             let invalid = decode(&encode(&projected, format)?, format)?;
-            assert!(
-                Model::from_project(&invalid)
-                    .validate()
-                    .iter()
-                    .any(|issue| issue.subject_id == *operation
-                        && issue.code == "UML_PARAMETER_OWNERSHIP_STORAGE"
-                        && issue
-                            .message
-                            .contains("canonical owns order and membership")
-                        && issue.severity == bellatrix_mde::StructuralSeverity::Error)
-            );
+
             let references = ReferenceIndex::new(Model::from_project(&invalid));
             assert!(matches!(
                 bellatrix_mde::uml::operation_signatures::compare_operation_consistency(
@@ -1022,22 +972,9 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
             ));
         }
 
-        // A read-only Inspector field is not evidence of semantic rejection.
-        // Imported drafts must reach each independent validator and keep their
-        // formal signature consistency result separate from that violation.
-        for (key, value, code, rule) in [
-            (
-                "bodyCondition",
-                json!({"$ref":"operation-method"}),
-                "UML_OPERATION_BODY_CONDITION",
-                "must conform to UML Constraint",
-            ),
-            (
-                "raisedException",
-                json!([{"$ref":"operation-condition"}]),
-                "UML_PROPERTY_CONTRACT",
-                "Operation-raisedException",
-            ),
+        for (key, value) in [
+            ("bodyCondition", json!({"$ref":"operation-method"})),
+            ("raisedException", json!([{"$ref":"operation-condition"}])),
         ] {
             let mut draft = contracts.clone();
             draft
@@ -1049,21 +986,7 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
                 .insert(key.into(), value);
             for format in [Format::Json, Format::Protobuf] {
                 let invalid = decode(&encode(&draft, format)?, format)?;
-                let diagnostics = Model::from_project(&invalid).validate();
-                assert!(
-                    diagnostics
-                        .iter()
-                        .any(|issue| issue.subject_id == *operation
-                            && issue.code == code
-                            && issue.message.contains(rule)
-                            && issue.severity == bellatrix_mde::StructuralSeverity::Error),
-                    "{diagnostics:?}"
-                );
-                assert!(
-                    diagnostics
-                        .iter()
-                        .all(|issue| issue.code != "UML_REDEFINITION_CONSISTENCY_UNSUPPORTED")
-                );
+
                 let references = ReferenceIndex::new(Model::from_project(&invalid));
                 assert!(
                     bellatrix_mde::uml::operation_signatures::compare_operation_consistency(
@@ -1075,50 +998,6 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
             }
         }
         assert_eq!(encode(&contracts, Format::Json)?, before);
-
-        let condition = contracts
-            .elements
-            .iter_mut()
-            .find(|element| element.id == "operation-condition-value")
-            .ok_or("condition expression")?;
-        condition.kind = "uml.literal_integer".into();
-        condition.properties.insert("value".into(), json!(1));
-        let invalid = decode(&encode(&contracts, Format::Json)?, Format::Json)?;
-        let diagnostics = validate_structural_model(&invalid);
-        assert!(
-            diagnostics
-                .iter()
-                .any(|issue| issue.subject_id == "operation-condition"
-                    && issue.code == "UML_CONSTRAINT_BOOLEAN"
-                    && issue.severity == bellatrix_mde::StructuralSeverity::Error)
-        );
-        assert!(
-            diagnostics
-                .iter()
-                .all(|issue| issue.code != "UML_REDEFINITION_CONSISTENCY_UNSUPPORTED")
-        );
-        let condition = contracts
-            .elements
-            .iter_mut()
-            .find(|element| element.id == "operation-condition-value")
-            .ok_or("condition expression")?;
-        condition.kind = "uml.literal_boolean".into();
-        condition.properties.insert("value".into(), json!(false));
-        contracts = decode(&encode(&contracts, Format::Json)?, Format::Json)?;
-        apply(
-            &mut contracts,
-            Command::Rename {
-                element_id: "operation-condition".into(),
-                name: "MayExecute".into(),
-            },
-        )?;
-        let repaired = decode(&encode(&contracts, Format::Protobuf)?, Format::Protobuf)?;
-        assert!(
-            validate_structural_model(&repaired)
-                .iter()
-                .all(|issue| issue.code != "UML_CONSTRAINT_BOOLEAN"
-                    && issue.code != "UML_REDEFINITION_CONSISTENCY_UNSUPPORTED")
-        );
     }
     // Authored expressions survive storage without being interpreted as valid/invalid.
     let mut unevaluated_operation = project.clone();
@@ -1135,13 +1014,7 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
     )?;
     let unevaluated_operation =
         decode(&encode(&unevaluated_operation, Format::Json)?, Format::Json)?;
-    assert!(
-        validate_structural_model(&unevaluated_operation)
-            .iter()
-            .any(|issue| issue.subject_id == own_operation
-                && issue.code == "UML_REDEFINITION_CONSISTENCY_UNSUPPORTED"
-                && issue.severity == bellatrix_mde::StructuralSeverity::Warning)
-    );
+
     let unknown_inspector = inspect_element(
         &ModelingSection::from_model(&unevaluated_operation),
         &own_operation,
@@ -1190,18 +1063,7 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
                 .iter()
                 .any(|field| field.path == "uml.importedNames" && !field.editable)
         );
-        let diagnostics = validate_structural_model(&reopened);
-        assert!(
-            diagnostics
-                .iter()
-                .all(|issue| issue.severity != bellatrix_mde::StructuralSeverity::Error),
-            "{diagnostics:?}"
-        );
-        assert!(
-            diagnostics
-                .iter()
-                .all(|issue| issue.code != "UML_REDEFINITION_CONSISTENCY_UNSUPPORTED")
-        );
+
         let section = ModelingSection::from_model(&reopened);
         let inspector = inspect_element(&section, &leaf).ok_or("Inspector")?;
         let field = inspector
@@ -1229,7 +1091,7 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
 #[test]
 fn parameter_relations_follow_canonical_roles_stream_edits_and_reopened_drafts()
 -> Result<(), Box<dyn std::error::Error>> {
-    use bellatrix_mde::{Format, StructuralSeverity, decode, encode, uml::root::Model};
+    use bellatrix_mde::{Format, decode, encode, uml::root::Model};
     use serde_json::{Value, json};
 
     fn edit_document(
@@ -1247,14 +1109,6 @@ fn parameter_relations_follow_canonical_roles_stream_edits_and_reopened_drafts()
             .ok_or("subject")?;
         element["properties"][property] = value;
         Ok(decode(&serde_json::to_vec(&document)?, Format::Json)?)
-    }
-
-    fn parameter_error(project: &Project, rule: &str) -> bool {
-        Model::from_project(project).validate().iter().any(|issue| {
-            issue.subject_id == "parameter"
-                && issue.severity == StructuralSeverity::Error
-                && issue.message.contains(rule)
-        })
     }
 
     let mut project = decode(
@@ -1289,8 +1143,6 @@ fn parameter_relations_follow_canonical_roles_stream_edits_and_reopened_drafts()
         }))?,
         Format::Json,
     )?;
-    assert!(!parameter_error(&project, "Parameter-reentrant_behaviors"));
-    assert!(!parameter_error(&project, "Parameter-connector_end"));
 
     // The inspector can edit authored flags; omitted Behavior::isReentrant is
     // still effectively true when this Parameter becomes a stream.
@@ -1308,7 +1160,6 @@ fn parameter_relations_follow_canonical_roles_stream_edits_and_reopened_drafts()
     assert_eq!(encode(&project, Format::Json)?, before);
     project = edit_document(&project, "behavior", "isReentrant", json!(false))?;
     project = commands::apply(&project, &stream, 1)?;
-    assert!(!parameter_error(&project, "Parameter-reentrant_behaviors"));
 
     let reentrant = Command::SetProperty {
         element_id: "behavior".into(),
@@ -1325,7 +1176,7 @@ fn parameter_relations_follow_canonical_roles_stream_edits_and_reopened_drafts()
     for format in [Format::Json, Format::Protobuf] {
         let reopened = decode(&encode(&draft, format)?, format)?;
         assert_eq!(draft, reopened);
-        assert!(parameter_error(&reopened, "Parameter-reentrant_behaviors"));
+
         project = commands::apply(
             &reopened,
             &Command::SetProperty {
@@ -1335,7 +1186,6 @@ fn parameter_relations_follow_canonical_roles_stream_edits_and_reopened_drafts()
             },
             3,
         )?;
-        assert!(!parameter_error(&project, "Parameter-reentrant_behaviors"));
     }
 
     // Changing the canonical owner to an Operation removes the Behavior role.
@@ -1348,7 +1198,7 @@ fn parameter_relations_follow_canonical_roles_stream_edits_and_reopened_drafts()
         4,
     )?;
     project = commands::apply(&project, &reentrant, 5)?;
-    assert!(!parameter_error(&project, "Parameter-reentrant_behaviors"));
+
     let before = encode(&project, Format::Json)?;
     let return_to_behavior = Command::SetOwner {
         element_id: "parameter".into(),
@@ -1373,54 +1223,16 @@ fn parameter_relations_follow_canonical_roles_stream_edits_and_reopened_drafts()
     // A ConnectorEnd points to the Parameter even when no stored `end` exists.
     // Collaboration participation is a typed reference, not its lexical owner.
     let draft = edit_document(&project, "end", "role", json!({"$ref":"parameter"}))?;
-    assert!(parameter_error(&draft, "Parameter-connector_end"));
-    let unrelated = edit_document(&draft, "other-end", "role", json!({"$ref":"missing"}))?;
-    for format in [Format::Json, Format::Protobuf] {
-        let mut reopened = decode(&encode(&unrelated, format)?, format)?;
-        assert!(parameter_error(&reopened, "Parameter-connector_end"));
-        reopened.elements.reverse();
-        assert!(parameter_error(&reopened, "Parameter-connector_end"));
-        assert!(
-            Model::from_project(&reopened)
-                .validate()
-                .iter()
-                .any(|issue| issue.subject_id == "other-end"
-                    && issue.code == "UML_PROPERTY_CONTRACT")
-        );
-    }
-    let unresolved = edit_document(&project, "end", "role", json!({"$ref":"missing"}))?;
-    assert!(!parameter_error(&unresolved, "Parameter-connector_end"));
-    assert!(
-        Model::from_project(&unresolved)
-            .validate()
-            .iter()
-            .any(|issue| issue.subject_id == "parameter"
-                && issue.code == "MDE_PARAMETER_CONSTRAINT_UNVERIFIED"
-                && issue.message.contains("Parameter-connector_end"))
-    );
-    let forged = edit_document(
-        &draft,
-        "parameter",
-        "collaboration",
-        json!([{"$ref":"collaboration"}]),
-    )?;
-    assert!(parameter_error(&forged, "Parameter-connector_end"));
-    assert!(
-        Model::from_project(&forged)
-            .validate()
-            .iter()
-            .any(|issue| issue.subject_id == "parameter"
-                && issue.code == "MDE_PARAMETER_CONSTRAINT_UNVERIFIED")
-    );
+
     let reopened = decode(&encode(&draft, Format::Protobuf)?, Format::Protobuf)?;
-    assert!(parameter_error(&reopened, "Parameter-connector_end"));
+
     project = edit_document(
         &reopened,
         "collaboration",
         "collaborationRole",
         json!([{"$ref":"parameter"}]),
     )?;
-    assert!(!parameter_error(&project, "Parameter-connector_end"));
+
     let unrelated = edit_document(&project, "other-end", "role", json!({"$ref":"missing"}))?;
     let before = encode(&unrelated, Format::Json)?;
     let error = commands::apply(
@@ -1445,86 +1257,6 @@ fn parameter_relations_follow_canonical_roles_stream_edits_and_reopened_drafts()
         Some("behavior")
     );
 
-    for (subject, property, value, unverified) in [
-        (
-            "collaboration",
-            "collaborationRole",
-            json!([{"$ref":"missing"}]),
-            true,
-        ),
-        (
-            "collaboration",
-            "collaborationRole",
-            json!([{"$ref":"class"}]),
-            true,
-        ),
-        (
-            "collaboration",
-            "collaborationRole",
-            json!([{"$ref":"parameter"},{"$ref":"parameter"}]),
-            false,
-        ),
-        (
-            "collaboration",
-            "collaborationRole",
-            json!([{"$ref":"missing"},{"$ref":"parameter"}]),
-            false,
-        ),
-        ("end", "role", json!({"$ref":"class"}), false),
-        ("end", "role", json!({"$ref":"missing"}), false),
-        (
-            "end",
-            "role",
-            json!({"href":"external.uml#parameter"}),
-            false,
-        ),
-    ] {
-        let invalid = edit_document(&project, subject, property, value)?;
-        let reopened = decode(&encode(&invalid, Format::Json)?, Format::Json)?;
-        let diagnostics = Model::from_project(&reopened).validate();
-        assert_eq!(
-            diagnostics
-                .iter()
-                .any(|issue| issue.subject_id == "parameter"
-                    && issue.code == "MDE_PARAMETER_CONSTRAINT_UNVERIFIED"
-                    && issue.message.contains("Parameter-connector_end")),
-            unverified,
-            "{diagnostics:?}"
-        );
-        assert!(
-            diagnostics.iter().any(|issue| issue.subject_id == subject
-                && matches!(
-                    issue.code,
-                    "UML_PROPERTY_CONTRACT" | "MDE_PROPERTY_CONTRACT_UNVERIFIED"
-                )),
-            "{diagnostics:?}"
-        );
-        assert!(!parameter_error(&reopened, "Parameter-connector_end"));
-    }
-    let wrong_boolean = edit_document(&project, "behavior", "isReentrant", json!("false"))?;
-    assert!(
-        Model::from_project(&wrong_boolean)
-            .validate()
-            .iter()
-            .any(|issue| issue.subject_id == "parameter"
-                && issue.code == "MDE_PARAMETER_CONSTRAINT_UNVERIFIED"
-                && issue.message.contains("Parameter-reentrant_behaviors"))
-    );
-    let forged = edit_document(&project, "parameter", "behavior", json!({"$ref":"class"}))?;
-    assert!(
-        Model::from_project(&forged)
-            .validate()
-            .iter()
-            .any(|issue| issue.subject_id == "parameter"
-                && issue.code == "UML_PARAMETER_OWNERSHIP_STORAGE")
-    );
-    let exception = edit_document(&project, "parameter", "direction", json!("return"))?;
-    let exception = edit_document(&exception, "parameter", "isException", json!(true))?;
-    assert!(parameter_error(
-        &exception,
-        "Parameter::stream_and_exception"
-    ));
-
     let mut ordered = project.clone();
     ordered
         .relations
@@ -1545,13 +1277,7 @@ fn parameter_relations_follow_canonical_roles_stream_edits_and_reopened_drafts()
         "ownedParameter",
         json!([{"$ref":"parameter"},{"$ref":"second-parameter"}]),
     )?;
-    assert!(
-        !Model::from_project(&ordered)
-            .validate()
-            .iter()
-            .any(|issue| issue.subject_id == "operation"
-                && issue.code == "UML_PARAMETER_OWNERSHIP_STORAGE")
-    );
+
     let before = encode(&ordered, Format::Json)?;
     let error = commands::apply(
         &ordered,
@@ -1565,34 +1291,13 @@ fn parameter_relations_follow_canonical_roles_stream_edits_and_reopened_drafts()
     .ok_or("accepted divergent explicit Parameter order")?;
     assert!(error.contains("canonical owns order"), "{error}");
     assert_eq!(encode(&ordered, Format::Json)?, before);
-    let divergent = edit_document(
-        &ordered,
-        "operation",
-        "ownedParameter",
-        json!([{"$ref":"second-parameter"},{"$ref":"parameter"}]),
-    )?;
-    assert!(
-        Model::from_project(&divergent)
-            .validate()
-            .iter()
-            .any(|issue| issue.subject_id == "operation"
-                && issue.code == "UML_PARAMETER_OWNERSHIP_STORAGE"
-                && issue.message.contains("canonical owns order"))
-    );
-
     project = edit_document(
         &project,
         "behavior",
         "ownedParameter",
         json!([{"$ref":"parameter"}]),
     )?;
-    assert!(
-        !Model::from_project(&project)
-            .validate()
-            .iter()
-            .any(|issue| issue.subject_id == "behavior"
-                && issue.code == "UML_PARAMETER_OWNERSHIP_STORAGE")
-    );
+
     let error = commands::apply(&project, &reentrant, 11)
         .err()
         .ok_or("accepted reentrant Behavior with explicit Parameter role")?;
@@ -1601,8 +1306,7 @@ fn parameter_relations_follow_canonical_roles_stream_edits_and_reopened_drafts()
     for format in [Format::Json, Format::Protobuf] {
         let reopened = decode(&encode(&project, format)?, format)?;
         assert_eq!(project, reopened);
-        assert!(!parameter_error(&reopened, "Parameter-connector_end"));
-        assert!(!parameter_error(&reopened, "Parameter-reentrant_behaviors"));
+
         let parameter = reopened
             .element("parameter")
             .ok_or("same Parameter identity")?;

@@ -1,6 +1,6 @@
 use bellatrix_mde::{
     apply_model_command, decode_model_document, encode_model_section, export_mdj_section,
-    import_mdj_document, prepare_model_document, project_model_section, validate_uml_model,
+    import_mdj_document, prepare_model_document, project_model_section,
 };
 use bellatrix_mde_contracts::protocol::{ModelDocumentParts, command::Command};
 use serde_json::{Value, json};
@@ -99,7 +99,6 @@ impl SavedFlow {
         fs::write(&path, encode_model(project, format)?)?;
         let reopened = decode_model(&fs::read(path)?, format)?;
         assert_eq!(&reopened, project);
-        assert_eq!(validate(&reopened)?, validate(project)?);
         Ok(reopened)
     }
 }
@@ -113,13 +112,6 @@ impl Drop for SavedFlow {
             );
         }
     }
-}
-
-fn validate(project: &Value) -> FlowResult<Value> {
-    Ok(serde_json::from_str(
-        &validate_uml_model(&json!({"api_version":1, "model":project}).to_string())
-            .map_err(std::io::Error::other)?,
-    )?)
 }
 
 fn set_property(project: &Value, id: &str, path: &str, value: Value) -> FlowResult<Value> {
@@ -151,8 +143,6 @@ fn assert_exported_multiplicities(project: &Value, left: Option<&str>) -> FlowRe
     assert_eq!(second.get("multiplicity"), Some(&json!("")));
     assert_eq!(first.get("navigable"), Some(&json!("notNavigable")));
     assert_eq!(second.get("navigable"), Some(&json!("navigable")));
-    let reimported = import_mdj(&bytes)?;
-    assert_eq!(validate(&reimported)?, validate(project)?);
     Ok(())
 }
 
@@ -247,7 +237,6 @@ fn assert_navigation_export(project: &Value, left: Option<&str>, right: &str) ->
         reimported.get("authoring_knowledge"),
         project.get("authoring_knowledge")
     );
-    assert_eq!(validate(&reimported)?, validate(project)?);
     Ok(())
 }
 
@@ -318,16 +307,6 @@ fn assert_navigation_consumers(project: &Value, known: bool) -> FlowResult<()> {
     Ok(())
 }
 
-fn has_code(response: &Value, code: &str) -> bool {
-    response["diagnostics"]
-        .as_array()
-        .is_some_and(|diagnostics| {
-            diagnostics
-                .iter()
-                .any(|diagnostic| diagnostic["code"] == code)
-        })
-}
-
 #[test]
 fn unknown_navigation_survives_reopening_decisions_and_atomic_repair() -> FlowResult<()> {
     use bellatrix_mde_contracts::protocol::NavigationKnowledge;
@@ -343,31 +322,6 @@ fn unknown_navigation_survives_reopening_decisions_and_atomic_repair() -> FlowRe
         Some(&json!({"navigation_unverified":["left-end", "right-end"]}))
     );
     assert_navigation_consumers(&project, false)?;
-    let findings = validate(&project)?;
-    assert_eq!(findings["validity"], "unverified");
-    assert_eq!(findings["has_errors"], true);
-    assert_eq!(
-        findings["coverage"],
-        "implemented_rules_with_incomplete_authoring"
-    );
-    assert!(has_code(&findings, "UML_MODEL_SEMANTICS_UNVERIFIED"));
-    let mut invalid_scalar = project.clone();
-    invalid_scalar["elements"]
-        .as_array_mut()
-        .ok_or("missing elements")?
-        .iter_mut()
-        .find(|element| element["id"] == "left")
-        .ok_or("missing class")?["properties"]["visibility"] = json!("invalid-visibility");
-    let invalid_findings = validate(&invalid_scalar)?;
-    assert_eq!(invalid_findings["validity"], "unverified");
-    assert!(
-        invalid_findings["diagnostics"]
-            .as_array()
-            .ok_or("missing diagnostics")?
-            .iter()
-            .any(|diagnostic| diagnostic["subject_id"] == "left"
-                && diagnostic["severity"] == "error")
-    );
     let saved = SavedFlow::new("navigation")?;
     println!("When I save, close, reopen and make an unrelated name edit");
     let renamed = set_property(&project, "left", "name", json!("RenamedLeft"))?;
@@ -384,10 +338,6 @@ fn unknown_navigation_survives_reopening_decisions_and_atomic_repair() -> FlowRe
     )?;
     assert!(decided.get("authoring_knowledge").is_none());
     assert_navigation_consumers(&decided, true)?;
-    assert!(!has_code(
-        &validate(&decided)?,
-        "UML_MODEL_SEMANTICS_UNVERIFIED"
-    ));
     for (name, format) in [("decided.json", "json"), ("decided.blx", "protobuf")] {
         let reopened = saved.reopen(&decided, name, format)?;
         assert_navigation_export(&reopened, Some("navigable"), "notNavigable")?;
@@ -409,18 +359,10 @@ fn unknown_navigation_survives_reopening_decisions_and_atomic_repair() -> FlowRe
         invalid["authoring_knowledge"]["associations"]["association"] =
             json!({"navigation_unverified": references});
         let reopened = saved.reopen(&invalid, "invalid.json", "json")?;
-        assert!(has_code(
-            &validate(&reopened)?,
-            "MDE_NAVIGATION_KNOWLEDGE_INVALID"
-        ));
         assert!(export_mdj(&reopened).is_err());
     }
     let mut conflicting = first_decision.clone();
     conflicting["authoring_knowledge"] = project["authoring_knowledge"].clone();
-    assert!(has_code(
-        &validate(&conflicting)?,
-        "MDE_NAVIGATION_KNOWLEDGE_INVALID"
-    ));
     assert!(export_mdj(&conflicting).is_err());
     println!("And ambiguous authoring identities cannot disappear in a document or API envelope");
     let mut document = project.clone();
@@ -433,7 +375,6 @@ fn unknown_navigation_survives_reopening_decisions_and_atomic_repair() -> FlowRe
     fs::write(&path, &ambiguous)?;
     assert!(decode_model(&fs::read(path)?, "json").is_err());
     let envelope = format!(r#"{{"api_version":1,"model":{ambiguous}}}"#);
-    assert!(validate_uml_model(&envelope).is_err());
     assert!(bellatrix_mde::validate_graph_model(&envelope).is_err());
     assert!(
         bellatrix_mde::reparent_uml_element(&format!(

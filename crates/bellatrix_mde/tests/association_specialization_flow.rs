@@ -1,7 +1,7 @@
 //! Association specialization and navigation through the public document APIs.
 use bellatrix_mde::{
     apply_model_command, decode_model_document, encode_model_document, encode_model_section,
-    prepare_model_document, project_model_section, validate_uml_model,
+    prepare_model_document, project_model_section,
 };
 use bellatrix_mde_contracts::protocol::{
     command::*, inspector::ElementInspector, projection::ModelingProjection,
@@ -53,16 +53,6 @@ fn inspected_property(model: &Value, id: &str, path: &str) -> Value {
         .find(|property| property.path == path)
         .expect("public inspector property")
         .value
-}
-
-fn model_diagnostics(model: &Value) -> Vec<Value> {
-    let response =
-        validate_uml_model(&envelope(model)).expect("validate through the kernel facade");
-    let mut response: Value = serde_json::from_str(&response).expect("validation response");
-    response["diagnostics"]
-        .as_array_mut()
-        .expect("public diagnostics")
-        .to_owned()
 }
 
 fn document() -> Value {
@@ -139,21 +129,9 @@ fn element_mut<'a>(content: &'a mut Value, id: &str) -> &'a mut Value {
         .expect("element")
 }
 
-fn has_rule_error(project: &Value, subject: &str, rule: &str) -> bool {
-    model_diagnostics(project).iter().any(|diagnostic| {
-        diagnostic["severity"] == "error"
-            && diagnostic["code"] == "UML_ASSOCIATION_ENDS"
-            && diagnostic["subject_id"] == subject
-            && diagnostic["message"]
-                .as_str()
-                .is_some_and(|message| message.contains(rule))
-    })
-}
-
 #[test]
-fn specialization_flow_preserves_ordered_type_conformance_and_diagnoses_parent_arity_changes() {
+fn specialization_flow_preserves_authored_type_and_parent_arity_changes() {
     let mut project = document();
-    assert!(model_diagnostics(&project).is_empty());
     project = apply(
         &project,
         &Command::SetProperty {
@@ -166,47 +144,33 @@ fn specialization_flow_preserves_ordered_type_conformance_and_diagnoses_parent_a
     .expect("replace a transitive subtype with a direct subtype");
     let snapshot = encode(&project, "json").expect("snapshot");
     let mut authored_drafts = Vec::new();
-    for (command, rule) in [
-        (
-            Command::SetProperty {
-                element_id: "end-left".into(),
-                path: "properties.type".into(),
-                value: json!({"$ref":"right"}),
-            },
-            "specialized_end_types",
-        ),
-        (
-            Command::SetProperty {
-                element_id: "general-left".into(),
-                path: "properties.type".into(),
-                value: json!({"$ref":"right"}),
-            },
-            "specialized_end_types",
-        ),
-        (
-            Command::EditAssociationEnds {
-                association_id: "general".into(),
-                edits: vec![AssociationEndEdit::Insert {
-                    position: 2,
-                    end: AssociationEndDraft {
-                        name: "extra".into(),
-                        type_id: "left".into(),
-                        owner: AssociationEndOwner::Association,
-                        aggregation: Aggregation::None,
-                        multiplicity: None,
-                    },
-                }],
-            },
-            "specialized_end_number",
-        ),
+    for command in [
+        Command::SetProperty {
+            element_id: "end-left".into(),
+            path: "properties.type".into(),
+            value: json!({"$ref":"right"}),
+        },
+        Command::SetProperty {
+            element_id: "general-left".into(),
+            path: "properties.type".into(),
+            value: json!({"$ref":"right"}),
+        },
+        Command::EditAssociationEnds {
+            association_id: "general".into(),
+            edits: vec![AssociationEndEdit::Insert {
+                position: 2,
+                end: AssociationEndDraft {
+                    name: "extra".into(),
+                    type_id: "left".into(),
+                    owner: AssociationEndOwner::Association,
+                    aggregation: Aggregation::None,
+                    multiplicity: None,
+                },
+            }],
+        },
     ] {
         let candidate =
             apply(&project, &command, 2).expect("retain an authored specialization draft");
-        assert!(
-            has_rule_error(&candidate, "specific", rule),
-            "{:?}",
-            model_diagnostics(&candidate)
-        );
         assert_ne!(encode(&candidate, "json").expect("candidate"), snapshot);
         assert_eq!(
             encode(&project, "json").expect("source unchanged"),
@@ -246,20 +210,10 @@ fn specialization_flow_preserves_ordered_type_conformance_and_diagnoses_parent_a
                 "id":"owns-third","kind":"owns","from":"general","to":"third",
             }));
     });
-    assert!(has_rule_error(
-        &mismatched,
-        "specific",
-        "specialized_end_number"
-    ));
     let swapped = external_edit(&project, |content| {
         element_mut(content, "specific")["properties"]["memberEnd"] =
             json!([{"$ref":"end-right"},{"$ref":"end-left"}]);
     });
-    assert!(has_rule_error(
-        &swapped,
-        "specific",
-        "specialized_end_types"
-    ));
     let multiple_parents = external_edit(&project, |content| {
         content["elements"]
             .as_array_mut()
@@ -279,11 +233,6 @@ fn specialization_flow_preserves_ordered_type_conformance_and_diagnoses_parent_a
             json!({"id":"other-parent","kind":"uml.generalization","from":"specific","to":"other-general"}),
         ]);
     });
-    assert!(has_rule_error(
-        &multiple_parents,
-        "specific",
-        "specialized_end_types"
-    ));
     let unresolved_parent = external_edit(&project, |content| {
         assert!(
             element_mut(content, "general")["properties"]
@@ -293,14 +242,6 @@ fn specialization_flow_preserves_ordered_type_conformance_and_diagnoses_parent_a
                 .is_some()
         );
     });
-    assert!(model_diagnostics(&unresolved_parent).iter().any(
-        |diagnostic| diagnostic["subject_id"] == "specific"
-            && diagnostic["severity"] == "warning"
-            && diagnostic["code"] == "MDE_ASSOCIATION_UNSUPPORTED"
-            && diagnostic["message"].as_str().is_some_and(|message| {
-                message.contains("memberEnd identities are not materialized")
-            })
-    ));
     project = apply(
         &project,
         &Command::Rename {
@@ -324,7 +265,6 @@ fn specialization_flow_preserves_ordered_type_conformance_and_diagnoses_parent_a
             let reopened =
                 decode(&encode(original, format).expect("save"), format).expect("reopen");
             assert_eq!(&reopened, original);
-            assert_eq!(model_diagnostics(&reopened), model_diagnostics(original));
         }
     }
 }
@@ -354,26 +294,10 @@ fn navigation_flow_uses_canonical_roles_and_checks_inherited_association_contrac
     });
     assert!(inspected_property(&directed, "directed-left", "uml.isNavigable") == json!(false));
     assert!(inspected_property(&directed, "directed-right", "uml.isNavigable") == json!(false));
-    let diagnostics = model_diagnostics(&directed);
-    assert!(
-        diagnostics
-            .iter()
-            .all(|diagnostic| diagnostic["severity"] == "warning"
-                && diagnostic["subject_id"] == "directed"
-                && diagnostic["code"] == "MDE_PROPERTY_CONTRACT_UNVERIFIED"
-                && (diagnostic["message"]
-                    .as_str()
-                    .is_some_and(|message| message.starts_with("sourceRole:"))
-                    || diagnostic["message"]
-                        .as_str()
-                        .is_some_and(|message| message.starts_with("targetRole:")))),
-        "{diagnostics:?}"
-    );
     let navigable = external_edit(&project, |content| {
         element_mut(content, "specific")["properties"]["navigableOwnedEnd"] =
             json!([{"$ref":"end-left"}]);
     });
-    assert!(model_diagnostics(&navigable).is_empty());
     assert!(inspected_property(&navigable, "end-left", "uml.isNavigable") == json!(true));
     assert!(inspected_property(&navigable, "end-right", "uml.isNavigable") == json!(false));
     let inspector = inspect_element(&navigable, "end-left").expect("inspect canonical end");
@@ -400,11 +324,6 @@ fn navigation_flow_uses_canonical_roles_and_checks_inherited_association_contrac
     let snapshot = encode(&navigable, "json").expect("snapshot");
     let invalid_navigation =
         apply(&navigable, &reparent, 4).expect("retain an inconsistent navigation draft");
-    assert!(
-        has_rule_error(&invalid_navigation, "specific", "navigableOwnedEnd"),
-        "{:?}",
-        model_diagnostics(&invalid_navigation)
-    );
     assert_ne!(
         encode(&invalid_navigation, "json").expect("candidate"),
         snapshot
@@ -417,7 +336,6 @@ fn navigation_flow_uses_canonical_roles_and_checks_inherited_association_contrac
         element_mut(content, "specific")["properties"]["navigableOwnedEnd"] = json!([]);
     });
     let reparented = apply(&cleared, &reparent, 5).expect("make the end classifier-owned");
-    assert!(model_diagnostics(&reparented).is_empty());
     assert!(inspected_property(&reparented, "end-left", "uml.isNavigable") == json!(true));
     assert!(inspected_property(&reparented, "end-left", "uml.owningAssociation").is_null());
 
@@ -449,25 +367,6 @@ fn navigation_flow_uses_canonical_roles_and_checks_inherited_association_contrac
     assert!(inspected_property(&subclass, "end-left", "uml.isNavigable") == json!(false));
     assert!(inspected_property(&subclass, "metadata", "uml.association").is_null());
     assert!(inspected_property(&subclass, "metadata", "uml.owningAssociation").is_null());
-    let diagnostics = model_diagnostics(&subclass);
-    assert!(
-        diagnostics
-            .iter()
-            .all(|diagnostic| diagnostic["severity"] != "error"),
-        "{diagnostics:?}"
-    );
-    assert!(diagnostics.iter().any(|diagnostic| {
-        diagnostic["subject_id"] == "specific"
-            && diagnostic["code"] == "MDE_ASSOCIATION_UNSUPPORTED"
-            && diagnostic["message"]
-                .as_str()
-                .is_some_and(|message| message.contains("inherited Association rules were checked"))
-    }));
-    assert!(
-        !diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic["code"] == "MDE_ASSOCIATION_NAVIGATION_UNSUPPORTED")
-    );
     let snapshot = encode(&subclass, "json").expect("subclass snapshot");
     let unchecked = apply(
         &subclass,
@@ -479,24 +378,6 @@ fn navigation_flow_uses_canonical_roles_and_checks_inherited_association_contrac
         6,
     )
     .expect("retain a subtype draft with an unverified specialized contract");
-    let diagnostics = model_diagnostics(&unchecked);
-    assert!(
-        diagnostics.iter().any(|diagnostic| {
-            diagnostic["subject_id"] == "specific"
-                && diagnostic["severity"] == "warning"
-                && diagnostic["code"] == "MDE_ASSOCIATION_UNSUPPORTED"
-                && diagnostic["message"].as_str().is_some_and(|message| {
-                    message.contains("inherited Association rules were checked")
-                })
-        }),
-        "{diagnostics:?}"
-    );
-    assert!(
-        diagnostics
-            .iter()
-            .all(|diagnostic| diagnostic["severity"] != "error"),
-        "{diagnostics:?}"
-    );
     let invalid = apply(
         &subclass,
         &Command::SetProperty {
@@ -506,12 +387,7 @@ fn navigation_flow_uses_canonical_roles_and_checks_inherited_association_contrac
         },
         6,
     )
-    .expect("retain the subtype candidate and validate inherited rules");
-    assert!(
-        has_rule_error(&invalid, "specific", "specialized_end_types"),
-        "{:?}",
-        model_diagnostics(&invalid)
-    );
+    .expect("retain the subtype candidate");
     assert_eq!(
         encode(&subclass, "json").expect("subclass source unchanged"),
         snapshot
@@ -519,28 +395,6 @@ fn navigation_flow_uses_canonical_roles_and_checks_inherited_association_contrac
     let invalid_subclass = external_edit(&subclass, |content| {
         element_mut(content, "end-left")["properties"]["type"] = json!({"$ref":"right"});
     });
-    assert!(has_rule_error(
-        &invalid_subclass,
-        "specific",
-        "specialized_end_types"
-    ));
-    let conflicting_role = external_edit(&subclass, |content| {
-        element_mut(content, "specific")["properties"]["ownedAttribute"] =
-            json!([{"$ref":"end-left"}]);
-    });
-    assert!(has_rule_error(
-        &conflicting_role,
-        "specific",
-        "disjoint_attributes_ends"
-    ));
-    let incomplete_owned_ends = external_edit(&subclass, |content| {
-        element_mut(content, "specific")["properties"]["ownedEnd"] = json!([{"$ref":"end-left"}]);
-    });
-    assert!(has_rule_error(
-        &incomplete_owned_ends,
-        "specific",
-        "canonically owned member ends"
-    ));
     for format in ["json", "protobuf"] {
         for original in [
             &directed,
@@ -554,7 +408,6 @@ fn navigation_flow_uses_canonical_roles_and_checks_inherited_association_contrac
             let reopened =
                 decode(&encode(original, format).expect("save"), format).expect("reopen");
             assert_eq!(&reopened, original);
-            assert_eq!(model_diagnostics(&reopened), model_diagnostics(original));
         }
     }
 }

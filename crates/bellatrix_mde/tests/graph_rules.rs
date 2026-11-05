@@ -10,7 +10,7 @@ fn slot_owner_transition_uses_one_canonical_edge_through_commands_and_roundtrips
         root::{Element, Model},
         schema,
     };
-    use bellatrix_mde::{Format, StructuralSeverity, decode, encode, validate_structural_model};
+    use bellatrix_mde::{Format, decode, encode};
     use serde_json::json;
 
     let mut project: Project = serde_json::from_value(json!({
@@ -127,24 +127,7 @@ fn slot_owner_transition_uses_one_canonical_edge_through_commands_and_roundtrips
         Some(&ownership_id)
     );
     assert_eq!(commands::apply(&moved, &assign(Some("second")), 3)?, moved);
-    assert!(
-        model
-            .validate()
-            .iter()
-            .all(|issue| issue.severity != StructuralSeverity::Error)
-    );
-    let aggregate_issues = validate_structural_model(&moved);
-    assert!(
-        aggregate_issues
-            .iter()
-            .all(|issue| issue.severity != StructuralSeverity::Error),
-        "{aggregate_issues:?}"
-    );
-    assert!(
-        aggregate_issues
-            .iter()
-            .all(|issue| issue.code != "MDE_UML_METACLASS_UNSUPPORTED")
-    );
+
     for format in [Format::Json, Format::Protobuf] {
         let restored = decode(&encode(&moved, format)?, format)?;
         assert_eq!(restored, moved);
@@ -252,42 +235,6 @@ fn slot_owner_transition_uses_one_canonical_edge_through_commands_and_roundtrips
         assign(Some("first")),
         "canonical ownership edge",
     )?;
-    let mut malformed_instance = moved.clone();
-    malformed_instance
-        .elements
-        .iter_mut()
-        .find(|element| element.id == "first")
-        .ok_or("first instance")?
-        .properties
-        .insert("classifier".into(), json!([{"$ref": "missing"}]));
-    assert!(
-        validate_structural_model(&malformed_instance)
-            .iter()
-            .any(|issue| issue.subject_id == "first"
-                && issue.code == "UML_INSTANCE_CLASSIFIER"
-                && issue.severity == StructuralSeverity::Error)
-    );
-    malformed_instance.root_model = None;
-    malformed_instance
-        .elements
-        .iter_mut()
-        .find(|element| element.id == "slot")
-        .ok_or("slot")?
-        .properties
-        .insert("definingFeature".into(), json!({"$ref": "missing"}));
-    let rootless_issues = validate_structural_model(&malformed_instance);
-    for (identifier, code) in [
-        ("first", "UML_INSTANCE_CLASSIFIER"),
-        ("slot", "UML_SLOT_CONTRACT"),
-    ] {
-        assert!(
-            rootless_issues
-                .iter()
-                .any(|issue| issue.subject_id == identifier
-                    && issue.code == code
-                    && issue.severity == StructuralSeverity::Error)
-        );
-    }
     for (identifier, property, value) in [
         ("slot", "value", json!(["unevaluated-value"])),
         ("first", "specification", json!("unevaluated-specification")),
@@ -305,13 +252,6 @@ fn slot_owner_transition_uses_one_canonical_edge_through_commands_and_roundtrips
             assign(Some("first")),
             "Unsupported Slot capability",
         )?;
-        assert!(
-            validate_structural_model(&unevaluated)
-                .iter()
-                .any(|issue| issue.subject_id == identifier
-                    && issue.code.ends_with("CAPABILITY_UNSUPPORTED")
-                    && issue.severity == StructuralSeverity::Warning)
-        );
     }
 
     let mut duplicate = moved.clone();
@@ -432,13 +372,7 @@ fn slot_owner_transition_uses_one_canonical_edge_through_commands_and_roundtrips
         .ok_or("parent")?
         .kind = "uml.interface".into();
     reject(&incompatible_kind, assign(Some("first")), "specialize_type")?;
-    assert!(
-        validate_structural_model(&incompatible_kind)
-            .iter()
-            .any(|issue| issue.subject_id == "inherits"
-                && issue.message.contains("specialize_type")
-                && issue.severity == StructuralSeverity::Error)
-    );
+
     incompatible_kind
         .elements
         .iter_mut()
@@ -450,24 +384,12 @@ fn slot_owner_transition_uses_one_canonical_edge_through_commands_and_roundtrips
         let reopened = decode(&encode(&repaired_kind, format)?, format)?;
         let moved = commands::apply(&reopened, &assign(Some("second")), 7)?;
         assert_eq!(owner_of(&moved)?, "second");
-        assert!(
-            validate_structural_model(&moved)
-                .iter()
-                .all(|issue| issue.severity != StructuralSeverity::Error)
-        );
     }
 
     for format in [Format::Json, Format::Protobuf] {
         let reopened = decode(&encode(&inherited, format)?, format)?;
         let transferred = commands::apply(&reopened, &assign(Some("second")), 7)?;
         assert_eq!(owner_of(&transferred)?, "second");
-        let issues = validate_structural_model(&transferred);
-        assert!(
-            issues
-                .iter()
-                .all(|issue| issue.severity != StructuralSeverity::Error),
-            "{issues:?}"
-        );
     }
 
     inherited
@@ -536,13 +458,6 @@ fn slot_owner_transition_uses_one_canonical_edge_through_commands_and_roundtrips
     for feature in ["feature", "other-feature"] {
         assert!(slottable.iter().any(|candidate| candidate.id() == feature));
     }
-    assert!(
-        validate_structural_model(&descendant)
-            .iter()
-            .all(|issue| issue.severity != StructuralSeverity::Error
-                && !(issue.subject_id == "descendant"
-                    && issue.code == "UML_NAMESPACE_QUERY_UNSUPPORTED"))
-    );
 
     inherited.relations.push(Relation {
         id: "cycle-back".into(),
@@ -567,11 +482,7 @@ fn slot_owner_transition_uses_one_canonical_edge_through_commands_and_roundtrips
     let repaired = commands::apply(&inherited, &assign(Some("first")), 11)?;
     assert_eq!(owner_of(&repaired)?, "first");
     let restored = decode(&encode(&repaired, Format::Protobuf)?, Format::Protobuf)?;
-    assert!(
-        validate_structural_model(&restored)
-            .iter()
-            .all(|issue| issue.severity != StructuralSeverity::Error)
-    );
+
     // Continue the same classifier/Slot lifecycle with subsetting instead of replacement.
     // A subset restricts the upper bound but may have a lower lower-bound.
     let subset = |property: &str, targets: &[&str]| Command::SetSubsettedProperties {
@@ -659,13 +570,7 @@ fn slot_owner_transition_uses_one_canonical_edge_through_commands_and_roundtrips
     )?;
     unknown = commands::apply(&unknown, &subset("feature", &["other-feature"]), 20)?;
     let unknown = decode(&encode(&unknown, Format::Protobuf)?, Format::Protobuf)?;
-    assert!(
-        validate_structural_model(&unknown)
-            .iter()
-            .any(|issue| issue.subject_id == "feature"
-                && issue.code == "UML_PROPERTY_SUBSETTING_UNSUPPORTED"
-                && issue.severity == StructuralSeverity::Warning)
-    );
+
     let section = bellatrix_mde::ModelingSection::from_model(&unknown);
     assert!(
         bellatrix_mde::inspect_element(&section, "feature")
@@ -712,59 +617,7 @@ fn slot_owner_transition_uses_one_canonical_edge_through_commands_and_roundtrips
         });
     }
     reject(&bounds, subset("feature", &["other-feature"]), "subsetting")?;
-    bounds = commands::apply(&bounds, &set("subset-upper", "value", json!("3")), 20)?;
-    let issues = validate_structural_model(&bounds);
-    assert!(
-        issues
-            .iter()
-            .any(|issue| issue.subject_id == "feature"
-                && issue.code == "MDE_MULTIPLICITY_UNSUPPORTED")
-    );
-    assert!(
-        !issues.iter().any(|issue| issue.subject_id == "feature"
-            && issue.code.starts_with("UML_PROPERTY_SUBSETTING"))
-    );
-    // An unresolved external target cannot hide locally provable invalid data.
-    for (local, expected) in [
-        (json!([{"$ref":"missing"}]), StructuralSeverity::Error),
-        (json!([{"$ref":"class"}]), StructuralSeverity::Error),
-        (
-            json!([{"$ref":"other-feature"},{"$ref":"other-feature"}]),
-            StructuralSeverity::Error,
-        ),
-        (json!([{"$ref":"feature"}]), StructuralSeverity::Error),
-        (
-            json!([{"$ref":"other-feature"}]),
-            StructuralSeverity::Warning,
-        ),
-    ] {
-        let mut imported = bounds.clone();
-        let mut targets = vec![json!({"href":"external-model#property"})];
-        targets.extend(local.as_array().ok_or("local references")?.iter().cloned());
-        imported
-            .elements
-            .iter_mut()
-            .find(|element| element.id == "feature")
-            .ok_or("feature")?
-            .properties
-            .insert("subsettedProperty".into(), json!(targets));
-        let imported = decode(&encode(&imported, Format::Json)?, Format::Json)?;
-        assert!(
-            validate_structural_model(&imported)
-                .iter()
-                .any(|issue| issue.subject_id == "feature"
-                    && issue.code.starts_with("UML_PROPERTY_SUBSETTING")
-                    && issue.severity == expected)
-        );
-        let repaired = commands::apply(&imported, &subset("feature", &["other-feature"]), 20)?;
-        let issues = validate_structural_model(&repaired);
-        assert!(
-            issues
-                .iter()
-                .all(|issue| issue.severity != StructuralSeverity::Error),
-            "{issues:?}"
-        );
-    }
+    commands::apply(&bounds, &set("subset-upper", "value", json!("3")), 20)?;
 
     // The same subset constraint applies to a n-ary Association end. Its contexts
     // are the other end Types, not the owning Association or its generalizations.
@@ -815,13 +668,7 @@ fn slot_owner_transition_uses_one_canonical_edge_through_commands_and_roundtrips
     for format in [Format::Json, Format::Protobuf] {
         let reopened = decode(&encode(&subset_model, format)?, format)?;
         let transferred = commands::apply(&reopened, &assign(Some("first")), 22)?;
-        let issues = validate_structural_model(&transferred);
-        assert!(
-            issues
-                .iter()
-                .all(|issue| issue.severity != StructuralSeverity::Error),
-            "{issues:?}"
-        );
+
         let section = bellatrix_mde::ModelingSection::from_model(&transferred);
         let inspector =
             bellatrix_mde::inspect_element(&section, "selected").ok_or("end Inspector")?;

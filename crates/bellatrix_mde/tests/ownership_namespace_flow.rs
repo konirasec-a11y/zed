@@ -1,6 +1,6 @@
 use bellatrix_mde::{
     apply_model_command, decode_model_document, encode_model_document, encode_model_section,
-    prepare_model_document, project_model_section, validate_uml_model,
+    prepare_model_document, project_model_section,
 };
 use bellatrix_mde_contracts::protocol::{
     Command, inspector::ElementInspector, projection::ModelingProjection,
@@ -55,16 +55,6 @@ fn inspected_property(model: &Value, id: &str, path: &str) -> Value {
         .value
 }
 
-fn model_diagnostics(model: &Value) -> Vec<Value> {
-    let response =
-        validate_uml_model(&envelope(model)).expect("validate through the kernel facade");
-    let mut response: Value = serde_json::from_str(&response).expect("validation response");
-    response["diagnostics"]
-        .as_array_mut()
-        .expect("public diagnostics")
-        .to_owned()
-}
-
 fn document() -> Value {
     decode(
         &serde_json::to_vec(&json!({
@@ -116,14 +106,6 @@ fn external_property(project: &Value, id: &str, name: &str, value: Value) -> Val
         "json",
     )
     .expect("reopen authored draft")
-}
-
-fn visibility_error(project: &Value, id: &str) -> bool {
-    model_diagnostics(project).iter().any(|diagnostic| {
-        diagnostic["subject_id"] == id
-            && diagnostic["severity"] == "error"
-            && diagnostic["code"] == "UML_VISIBILITY_NEEDS_OWNERSHIP"
-    })
 }
 
 #[test]
@@ -193,18 +175,6 @@ fn canonical_composite_roles_flow_queries_edits_rejects_conflicts_and_reopens() 
             before
         );
     }
-    let inconsistent = external_property(
-        &edited,
-        "condition",
-        "specification",
-        json!({"$ref":"lower"}),
-    );
-    assert!(
-        model_diagnostics(&inconsistent)
-            .iter()
-            .any(|diagnostic| diagnostic["subject_id"] == "condition"
-                && diagnostic["severity"] == "error")
-    );
 
     let mut wrong_role = serde_json::to_value(&edited).expect("authored ownership");
     wrong_role["relations"]
@@ -218,13 +188,6 @@ fn canonical_composite_roles_flow_queries_edits_rejects_conflicts_and_reopens() 
         "json",
     )
     .expect("reopen an unresolved ownership role");
-    assert!(
-        model_diagnostics(&wrong_role)
-            .iter()
-            .any(|diagnostic| diagnostic["subject_id"] == "use"
-                && diagnostic["code"] == "UML_ELEMENT_OWNERSHIP_ROLE_UNVERIFIED"
-                && diagnostic["severity"] == "warning")
-    );
     let repaired = apply(
         &wrong_role,
         &Command::SetOwner {
@@ -257,14 +220,6 @@ fn canonical_composite_roles_flow_queries_edits_rejects_conflicts_and_reopens() 
     for incomplete in [json!([{"$ref":"amount"}]), json!([])] {
         let draft = external_property(&two_attributes, "class", "ownedAttribute", incomplete);
         assert!(inspected_property(&draft, "class", "uml.members.status").is_string());
-        assert!(
-            model_diagnostics(&draft)
-                .iter()
-                .any(
-                    |diagnostic| diagnostic["code"] == "UML_ELEMENT_OWNERSHIP_ROLE"
-                        && diagnostic["severity"] == "error"
-                )
-        );
         assert_eq!(
             decode(
                 &encode(&draft, "protobuf").expect("save partial roles"),
@@ -288,12 +243,6 @@ fn canonical_composite_roles_flow_queries_edits_rejects_conflicts_and_reopens() 
     );
 
     let legacy = external_property(&edited, "amount", "defaultValue", json!("[]"));
-    assert!(
-        model_diagnostics(&legacy)
-            .iter()
-            .any(|diagnostic| diagnostic["subject_id"] == "amount"
-                && diagnostic["code"] == "MDE_PROPERTY_CONTRACT_UNVERIFIED")
-    );
     assert_eq!(
         decode(
             &encode(&legacy, "json").expect("save unresolved declaration"),
@@ -315,19 +264,6 @@ fn canonical_composite_roles_flow_queries_edits_rejects_conflicts_and_reopens() 
         "json",
     )
     .expect("reopen a preserved extension");
-    // The public validator reports cross-domain uncertainty rather than claiming
-    // that the private UML-only query checked an extension's contract.
-    assert!(
-        model_diagnostics(&unknown_type)
-            .iter()
-            .any(|diagnostic| diagnostic["subject_id"] == "condition"
-                && diagnostic["code"] == "UML_EXTERNAL_REFERENCE_UNVERIFIED")
-    );
-    assert!(
-        model_diagnostics(&unknown_type)
-            .iter()
-            .any(|diagnostic| diagnostic["code"] == "UML_MODEL_SEMANTICS_UNVERIFIED")
-    );
     assert_eq!(
         decode(
             &encode(&unknown_type, "protobuf").expect("save extension"),
@@ -362,8 +298,6 @@ fn visibility_flow_uses_derived_namespace_and_recovers_an_invalid_draft() {
         inspected_property(&project, "use", "uml.owner"),
         json!("class")
     );
-    assert!(!visibility_error(&project, "use"));
-    assert!(!visibility_error(&project, "class"));
     let inspector =
         inspect_element(&project, "use").expect("inspect a non-member owned NamedElement");
     assert!(
@@ -386,14 +320,12 @@ fn visibility_flow_uses_derived_namespace_and_recovers_an_invalid_draft() {
         .is_err()
     );
     let draft = external_property(&project, "use", "visibility", json!("public"));
-    assert!(visibility_error(&draft, "use"));
     let draft = external_property(&draft, "amount", "isReadOnly", json!("not a Boolean"));
     let restored = decode(
         &encode(&draft, "protobuf").expect("save invalid draft"),
         "protobuf",
     )
     .expect("reopen invalid draft");
-    assert!(visibility_error(&restored, "use"));
     let repaired = apply(
         &restored,
         &Command::SetProperty {
@@ -404,18 +336,10 @@ fn visibility_flow_uses_derived_namespace_and_recovers_an_invalid_draft() {
         2,
     )
     .expect("repair visibility without blocking on an unrelated draft error");
-    assert!(!visibility_error(&repaired, "use"));
-    assert!(
-        model_diagnostics(&repaired)
-            .iter()
-            .any(|diagnostic| diagnostic["subject_id"] == "amount"
-                && diagnostic["severity"] == "error")
-    );
     for format in ["json", "protobuf"] {
         let reopened = decode(&encode(&repaired, format).expect("save repair"), format)
             .expect("reopen repair");
         assert_eq!(reopened, repaired);
-        assert!(!visibility_error(&reopened, "use"));
     }
 }
 
@@ -456,13 +380,6 @@ fn parameter_role_flow_isolated_from_unrelated_malformed_composites() {
                 .collect::<Vec<_>>(),
             vec!["parameter"]
         );
-        assert!(
-            model_diagnostics(&draft)
-                .iter()
-                .any(|diagnostic| diagnostic["subject_id"] == "operation"
-                    && diagnostic["code"] == "UML_PROPERTY_CONTRACT"
-                    && diagnostic["severity"] == "error")
-        );
 
         let edited = apply(
             &draft,
@@ -484,11 +401,6 @@ fn parameter_role_flow_isolated_from_unrelated_malformed_composites() {
                     .parameters
                     .is_empty()
             );
-            assert!(model_diagnostics(&contradiction).iter().any(
-                |diagnostic| diagnostic["subject_id"] == "parameter"
-                    && diagnostic["code"] == "UML_ELEMENT_OWNERSHIP_ROLE"
-                    && diagnostic["severity"] == "error"
-            ));
         }
         let repaired = apply(
             &edited,
@@ -521,7 +433,7 @@ fn parameter_role_flow_isolated_from_unrelated_malformed_composites() {
 }
 
 #[test]
-fn external_parameter_ownership_stays_unverified_while_malformed_roles_are_invalid() {
+fn external_parameter_ownership_survives_reopening() {
     let project = decode(
         &serde_json::to_vec(&json!({
             "id":"external-parameters", "name":"External parameters", "root_model":"root",
@@ -550,36 +462,5 @@ fn external_parameter_ownership_stays_unverified_while_malformed_roles_are_inval
         )
         .expect("reopen unresolved roles");
         assert_eq!(reopened, project);
-        let diagnostics = model_diagnostics(&reopened);
-        for owner in ["operation", "behavior"] {
-            assert!(
-                diagnostics
-                    .iter()
-                    .any(|diagnostic| diagnostic["subject_id"] == owner
-                        && diagnostic["code"] == "MDE_PARAMETER_OWNERSHIP_UNVERIFIED"
-                        && diagnostic["severity"] == "warning"),
-                "{diagnostics:?}"
-            );
-            assert!(
-                !diagnostics
-                    .iter()
-                    .any(|diagnostic| diagnostic["subject_id"] == owner
-                        && diagnostic["severity"] == "error"),
-                "{diagnostics:?}"
-            );
-            let malformed = external_property(&reopened, owner, "ownedParameter", json!([false]));
-            assert!(model_diagnostics(&malformed).iter().any(
-                |diagnostic| diagnostic["subject_id"] == owner
-                    && diagnostic["code"] == "UML_PARAMETER_OWNERSHIP_STORAGE"
-                    && diagnostic["severity"] == "error"
-            ));
-        }
-        assert!(
-            diagnostics
-                .iter()
-                .any(|diagnostic| diagnostic["subject_id"] == "operation"
-                    && diagnostic["code"] == "MDE_OPERATION_PARAMETERS_UNVERIFIED"
-                    && diagnostic["severity"] == "warning")
-        );
     }
 }

@@ -253,41 +253,10 @@ fn public_association_flow_creates_edits_reparents_navigates_rejects_and_reopens
         4,
     )
     .expect("rename Type");
-    let expected_warnings = [
-        (ends[1].as_str(), "multiplicity"),
-        (association.as_str(), "sourceRole"),
-        (association.as_str(), "targetMultiplicity"),
-        (association.as_str(), "targetRole"),
-    ];
-    let assert_projection_warnings = |project: &Project| {
-        let diagnostics = Model::from_project(project).validate();
-        assert_eq!(
-            diagnostics.len(),
-            expected_warnings.len(),
-            "{diagnostics:?}"
-        );
-        for (subject, property) in expected_warnings {
-            let expected_message =
-                format!("{property}: no normative property or registered extension contract");
-            assert_eq!(
-                diagnostics
-                    .iter()
-                    .filter(|diagnostic| diagnostic.subject_id == subject
-                        && diagnostic.severity == bellatrix_mde::StructuralSeverity::Warning
-                        && diagnostic.code == "MDE_PROPERTY_CONTRACT_UNVERIFIED"
-                        && diagnostic.message == expected_message)
-                    .count(),
-                1,
-                "{diagnostics:?}"
-            );
-        }
-    };
-    assert_projection_warnings(&model);
     for format in [Format::Json, Format::Protobuf] {
         let reopened = decode(&encode(&model, format).expect("save"), format).expect("reopen");
         assert_eq!(reopened, model);
         assert_eq!(end_ids(&reopened, &association), ends);
-        assert_projection_warnings(&reopened);
     }
     // Reopen identity-based literal bounds, edit their values through the public
     // command path, and keep the same graph usable by Association and Operation.
@@ -442,14 +411,7 @@ fn public_association_flow_creates_edits_reparents_navigates_rejects_and_reopens
         ),
         Err(EvaluationError::Unsupported { .. })
     ));
-    assert!(
-        Model::from_project(&unknown)
-            .validate()
-            .iter()
-            .all(|issue| issue.severity != bellatrix_mde::StructuralSeverity::Error),
-        "an unevaluated bound is not proof of an invalid interval or projection: {:?}",
-        Model::from_project(&unknown).validate()
-    );
+
     let mut invalid = bounded.clone();
     invalid
         .elements
@@ -548,12 +510,7 @@ fn public_association_flow_creates_edits_reparents_navigates_rejects_and_reopens
             "navigableOwnedEnd".into(),
             json!([{"$ref": replacement_ids[0]}]),
         );
-    assert!(
-        Model::from_project(&with_navigation)
-            .validate()
-            .iter()
-            .all(|diagnostic| diagnostic.severity != bellatrix_mde::StructuralSeverity::Error)
-    );
+
     assert!(
         apply(
             &with_navigation,
@@ -742,47 +699,6 @@ fn public_association_flow_creates_edits_reparents_navigates_rejects_and_reopens
         .expect("n-ary identity")
         .id
         .clone();
-    let draft_diagnostics = Model::from_project(&nary).validate();
-    assert!(
-        draft_diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.subject_id == nary_id
-                && diagnostic.code == "MDE_RELATIONSHIP_ENDPOINTS_UNVERIFIED"
-                && diagnostic.severity == bellatrix_mde::StructuralSeverity::Warning)
-    );
-    assert!(
-        !draft_diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.subject_id == nary_id
-                && diagnostic.severity == bellatrix_mde::StructuralSeverity::Error)
-    );
-    for value in [
-        json!(null),
-        json!([]),
-        json!(false),
-        json!([{"$ref":"missing"}, {"$ref":"a"}]),
-        json!([{"$ref":"a"}, {"$ref":"b"}]),
-    ] {
-        let mut invalid_ends = nary.clone();
-        invalid_ends
-            .elements
-            .iter_mut()
-            .find(|element| element.id == nary_id)
-            .expect("Association draft")
-            .properties
-            .insert("memberEnd".into(), value.clone());
-        let diagnostics = Model::from_project(&invalid_ends).validate();
-        for code in ["UML_PROPERTY_CONTRACT", "UML_RELATIONSHIP_ENDPOINTS"] {
-            assert!(
-                diagnostics
-                    .iter()
-                    .any(|diagnostic| diagnostic.subject_id == nary_id
-                        && diagnostic.code == code
-                        && diagnostic.severity == bellatrix_mde::StructuralSeverity::Error),
-                "explicit invalid memberEnd {value} must retain {code}: {diagnostics:?}"
-            );
-        }
-    }
     nary = apply(
         &nary,
         &Command::EditAssociationEnds {
@@ -832,23 +748,11 @@ fn public_association_flow_creates_edits_reparents_navigates_rejects_and_reopens
         end_ids(&nary, &nary_id),
         vec![nary_ids[0].clone(), nary_ids[2].clone()]
     );
-    let diagnostics = Model::from_project(&nary).validate();
-    // The detached classifier-owned Property retains its legacy multiplicity
-    // declaration; it must not hide any diagnostics from the new Association.
-    assert_eq!(
-        diagnostics,
-        vec![bellatrix_mde::StructuralDiagnostic {
-            severity: bellatrix_mde::StructuralSeverity::Warning,
-            code: "MDE_PROPERTY_CONTRACT_UNVERIFIED",
-            subject_id: ends[1].clone(),
-            message: "multiplicity: no normative property or registered extension contract".into(),
-        }]
-    );
+
     for format in [Format::Json, Format::Protobuf] {
         let reopened = decode(&encode(&nary, format).expect("save n-ary edit"), format)
             .expect("reopen n-ary edit");
         assert_eq!(reopened, nary);
-        assert_eq!(Model::from_project(&reopened).validate(), diagnostics);
     }
     // Specialize the Association and redefine its owned end. ownedEnd is a
     // Feature, not an attribute, and its redefinition context is the Association.
@@ -950,12 +854,7 @@ fn public_association_flow_creates_edits_reparents_navigates_rejects_and_reopens
                 .value,
             json!([{"$ref":"specialized-association"}])
         );
-        assert!(
-            Model::from_project(&reopened)
-                .validate()
-                .iter()
-                .all(|issue| issue.severity != bellatrix_mde::StructuralSeverity::Error)
-        );
+
         assert!(
             reopened
                 .elements

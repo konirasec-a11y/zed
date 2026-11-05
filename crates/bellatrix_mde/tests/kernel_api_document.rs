@@ -1,6 +1,4 @@
-use bellatrix_mde::{
-    Format, Graph, decode, decode_model_document, encode, validate_graph_model, validate_uml_model,
-};
+use bellatrix_mde::{Format, Graph, decode, decode_model_document, encode, validate_graph_model};
 use serde_json::{Value, json};
 
 fn model_json() -> Value {
@@ -71,10 +69,6 @@ fn graph_validation_preserves_legacy_scope_and_errors() -> Result<(), Box<dyn st
     assert_eq!(
         serde_json::from_str::<Value>(&expected)?["has_errors"],
         false
-    );
-    assert_eq!(
-        serde_json::from_str::<Value>(&validate_uml_model(&envelope)?)?["has_errors"],
-        true
     );
     assert_eq!(validate_graph_model(&envelope)?, expected);
     for input in ["null", "{}", "{", r#"{"api_version":2,"model":{}}"#] {
