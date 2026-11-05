@@ -10,6 +10,6 @@
 
 `Project` identifies a standalone MDE model. `ModelingSection` is its payload inside the platform's `bellatrix.mde` section. The platform `ProjectDocument` is a separate shared contract under `project`, reexported by `bellatrix_project`: its identity, revision, other sections and ephemeral session are not an MDE model or a UML Model. Project services and storage stay in `bellatrix_project`.
 
-The engine owns JSON/Protobuf codecs, internal `Wire*` encoding records, mutations and validation. The existing Protobuf schema encodes the standalone MDE model, not the entire platform envelope. Moving contracts does not change field names, wire tags, missing/null semantics, duplicate-key rejection or retained source provenance.
+The engine owns JSON/Protobuf codecs, internal `Wire*` encoding records, mutations and validation. The internal Rust wire records encode the standalone MDE model, not the entire platform envelope. Moving contracts does not change field names, wire tags, missing/null semantics, duplicate-key rejection or retained source provenance.
 
 `bellatrix_mde_protocol` remains a compatibility facade that only reexports this crate's `protocol` module. New consumers should depend directly on `bellatrix_mde_contracts`.

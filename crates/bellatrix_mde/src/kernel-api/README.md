@@ -161,6 +161,31 @@ or roles without a counterexample produce
 `MDE_ASSOCIATION_NARY_END_OWNERSHIP_UNVERIFIED`. Binary associations have no
 additional ownership restriction from this particular invariant.
 
+`Property-type_of_opposite_end` compares each binary end's classifier role with
+the opposite end's Type independently of its own Type. Canonical ownership alone
+does not establish the classifier role: AssociationClass attributes and owned
+ends are distinguished through their composite roles. A known mismatch keeps
+the public `UML_ASSOCIATION_ENDS` error, even when the other comparison is
+unresolved; unknown roles or opposite Types produce `MDE_ASSOCIATION_UNSUPPORTED`.
+An absent Type is compared as absent, not converted into an unresolved reference.
+The previous Type-gated structural check is replaced, so this rule is emitted
+only once per Association.
+
+`AssociationClass-disjoint_attributes_ends` checks the intersection of owned
+attribute/end roles without first demanding complete `memberEnd` resolution.
+A known Property in both roles produces
+the existing public `UML_ASSOCIATION_ENDS` error, with
+`AssociationClass-disjoint_attributes_ends` in its message; unresolved role/ownership
+evidence without a local collision produces
+`MDE_ASSOCIATION_CLASS_DISJOINT_ATTRIBUTES_ENDS_UNVERIFIED`. Type resolution is
+not needed for this identity-based rule. The complete `owned_ends` query rejects
+proven conflicts with the same predicate after checking the collection's own
+reference and canonical ownership integrity; attribute-role uncertainty remains a
+separate validation result. Navigation uses the owned-end projection directly,
+so neither an attribute collision nor its uncertainty hides navigation knowledge
+or turns unknown disjointness into an invalid navigation declaration. The model
+report emits the disjointness rule once.
+
 Without a decisive local counterexample, unresolved evidence produces
 `MDE_ASSOCIATION_END_TYPES_UNVERIFIED` or
 `MDE_ASSOCIATION_AGGREGATION_UNVERIFIED`. Malformed collections and local values
@@ -471,8 +496,9 @@ unverified status takes precedence and does not hide those violations.
 `SetAssociationEndNavigation` updates the normative navigable set and the
 knowledge gap atomically. Reparenting, removal and other edits cannot leave new
 stale knowledge references. Model markers and the Inspector consume the kernel's
-knowledge result rather than interpreting unknown as false. The Protobuf schema
-records this typed input in Project field 13; JSON and BLX preserve the same state.
+knowledge result rather than interpreting unknown as false. The internal Rust
+wire record stores this typed input in Project field 13; JSON and BLX preserve
+the same state.
 
 The MDJ adapter translates StarUML's absent or explicit `"unspecified"`
 navigation to this knowledge gap. Source field presence is encoding metadata

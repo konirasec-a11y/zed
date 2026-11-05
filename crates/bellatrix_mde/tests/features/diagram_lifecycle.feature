@@ -6,6 +6,12 @@ Feature: Complete authored UML project lifecycle through the public kernel bound
   Document and validation responses retain API version 1 and the declared implemented-rule coverage.
   Expected error diagnostics match exactly; additional unsupported warnings are retained.
   Verdict mismatches fail the scenario after both persistence round-trips are exercised.
+  Each of the seven valid structural examples also authors a semantic violation through public commands,
+  validates the model and diagram, persists the invalid draft to JSON and BLX, repairs both reopened
+  drafts through public commands, and persists the repaired results in both formats.
+  The authored Object, Component and Deployment violations use supported commands rather than
+  claiming to edit the read-only classifier collection, absent nestedClassifier collection or kind field.
+  The seven imported invalid fixtures retain their original exact diagnostic and persistence checks.
   These flows do not exercise the graphical interface or generated application runtime.
 
   Scenario Outline: Import, validate, persist and reopen an isolated diagram
