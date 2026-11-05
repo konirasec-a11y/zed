@@ -50,14 +50,20 @@ O contrato nativo `View`/`Geometry`/`Style` preserva esses dados separadamente.
 Descrição e demais metadados de aplicação também permanecem separados; não são
 declarados como atributos UML de toda metaclasse.
 
-A exclusão semântica aceita Views folha no nível principal mesmo com bounds de
-layout ausentes: remover a ocorrência não exige resolver coordenadas. Referências
-de apresentação sobreviventes para essas ocorrências bloqueiam a operação inteira,
-sem descartar estilos ou vínculos. Views aninhadas ou com filhos continuam
-bloqueadas até haver remoção que preserve sua hierarquia e referências. O contexto `modelElement` de um diagrama é uma
-referência UMLDI, não ownership do conteúdo UML (§B.7.14); este lote mantém o
-bloqueio explícito quando a exclusão afetaria esse contexto. Um ClassDiagram
-independente permanece após a exclusão de seu conteúdo (§B.7.6.3).
+A exclusão semântica remove Views folha também quando aninhadas, preservando o
+contêiner visual sobrevivente, seus irmãos, sua ordem e a geometria autoral. Isso
+inclui bounds de layout ausentes: remover a folha não exige resolver coordenadas.
+Referências de apresentação sobreviventes para essas ocorrências bloqueiam a
+operação inteira, sem descartar estilos ou vínculos. Views afetadas que têm filhos
+continuam bloqueadas: este fluxo não promove filhos nem elimina uma subárvore
+visual. A composição visual não determina ownership UML (§7.8.6 e §B.7.14).
+
+O contexto `modelElement` de um diagrama é uma referência UMLDI, não ownership do
+conteúdo UML (§B.7.14); permanece o bloqueio explícito quando a exclusão afetaria
+esse contexto. Um ClassDiagram independente permanece após a exclusão de seu
+conteúdo (§B.7.6.3). `Remove from diagram` é uma operação distinta, por ocorrência,
+e sua remoção de Views aninhadas ainda depende de suporte próprio de referências
+e roteamento. A exclusão semântica não é usada como substituto desse comando.
 
 ### Esquema mínimo por tipo
 

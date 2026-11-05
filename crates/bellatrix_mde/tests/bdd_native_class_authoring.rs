@@ -905,7 +905,7 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
     reopen_both_formats(&flow.document, &with_layout_leaf)?;
 
     let mut with_style_dependent = with_layout_leaf.clone();
-    let mut dependent_view = layout_leaf;
+    let mut dependent_view = layout_leaf.clone();
     let layout_view_id = dependent_view.id.clone();
     dependent_view.id = "surviving-style-dependent".into();
     dependent_view.subject = None;
@@ -940,6 +940,72 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
     assert_eq!(guarded_flow.revision, flow.revision);
     assert_eq!(guarded_flow.section()?, with_style_dependent);
     reopen_both_formats(&guarded_flow.document, &with_style_dependent)?;
+
+    let mut with_nested_leaves = with_layout_leaf.clone();
+    let nested_diagram = with_nested_leaves
+        .diagrams
+        .iter_mut()
+        .find(|diagram| diagram.id == "classes")
+        .ok_or("missing class diagram for nested leaf deletion")?;
+    let mut rectangular_occurrences = nested_diagram.views.iter().filter(|view| {
+        view.subject.as_deref() == Some(exportable.as_str()) && view.id != layout_leaf.id
+    });
+    let rectangular_leaf = rectangular_occurrences
+        .next()
+        .ok_or("missing second Exportable occurrence")?
+        .clone();
+    assert!(rectangular_occurrences.next().is_none());
+    assert!(matches!(rectangular_leaf.geometry, Geometry::Rect { .. }));
+    assert!(rectangular_leaf.children.is_empty());
+    assert!(rectangular_leaf.draft.is_none());
+    nested_diagram
+        .views
+        .retain(|view| view.id != layout_leaf.id && view.id != rectangular_leaf.id);
+    let before_sibling: View = serde_json::from_value(json!({
+        "id": "surviving-sibling-before", "subject": null,
+        "geometry": {"kind": "rect", "x": 15.0, "y": 25.0, "width": 80.0, "height": 45.0},
+        "style": {"fill": "#dceeff", "stroke": "#112233", "stroke_width": 1.5}
+    }))?;
+    let after_sibling: View = serde_json::from_value(json!({
+        "id": "surviving-sibling-after", "subject": null,
+        "geometry": {"kind": "rect", "x": 350.0, "y": 210.0, "width": 110.0, "height": 75.0},
+        "style": {"fill": "#ffeedd", "stroke": "#654321", "stroke_width": 3.0}
+    }))?;
+    let mut visual_container: View = serde_json::from_value(json!({
+        "id": "surviving-visual-container", "subject": null,
+        "geometry": {"kind": "rect", "x": 10.0, "y": 20.0, "width": 900.0, "height": 600.0},
+        "style": {"fill": "#f8f8f8", "stroke": "#334455", "stroke_width": 2.0}
+    }))?;
+    visual_container.children = vec![
+        before_sibling.clone(),
+        layout_leaf,
+        rectangular_leaf,
+        after_sibling.clone(),
+    ];
+    let mut expected_container = visual_container.clone();
+    expected_container.children = vec![before_sibling, after_sibling];
+    nested_diagram.views.push(visual_container);
+    let mut expected_diagram = nested_diagram.clone();
+    expected_diagram.views = vec![expected_container];
+    let nested_bytes = encode_model_section(
+        &flow.document.id,
+        &flow.document.name,
+        &serde_json::to_string(&with_nested_leaves)?,
+        "json",
+    )?;
+    let mut nested_flow = NativeAuthoring {
+        document: prepare_model_document(&decode_model_document(&nested_bytes, "json")?)?,
+        revision: flow.revision,
+    };
+    assert_eq!(nested_flow.section()?, with_nested_leaves);
+    reopen_both_formats(&nested_flow.document, &with_nested_leaves)?;
+    let nested_deleted = nested_flow.apply(Command::DeleteElement {
+        element_id: "model".into(),
+    })?;
+    assert!(nested_deleted.root_model.is_none());
+    assert!(nested_deleted.registry.entries().is_empty());
+    assert_eq!(nested_deleted.diagrams, vec![expected_diagram]);
+    reopen_both_formats(&nested_flow.document, &nested_deleted)?;
 
     let deleted = flow.apply(Command::DeleteElement {
         element_id: "model".into(),

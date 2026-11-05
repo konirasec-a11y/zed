@@ -1443,7 +1443,8 @@ fn remove_element(section: &mut ModelingSection, id: &str) -> Result<(), String>
         })
         .cloned()
     {
-        ensure_view_deletion_supported(section, &HashSet::from([id.to_owned()]))?;
+        let affected_subjects = HashSet::from([id.to_owned()]);
+        ensure_view_deletion_supported(section, &affected_subjects, false)?;
         let (annotation_id, target_id, field) = if link.kind == "uml.note_link" {
             (&link.to, &link.from, "annotatedElement")
         } else {
@@ -1464,9 +1465,7 @@ fn remove_element(section: &mut ModelingSection, id: &str) -> Result<(), String>
         });
         section.relations.retain(|relation| relation.id != id);
         for diagram in &mut section.diagrams {
-            diagram
-                .views
-                .retain(|view| view.subject.as_deref() != Some(id));
+            remove_subject_views(&mut diagram.views, &affected_subjects);
         }
         section.hierarchy.remove(id);
         section.composition.remove(id);
@@ -1480,12 +1479,11 @@ fn remove_element(section: &mut ModelingSection, id: &str) -> Result<(), String>
                 .iter()
                 .any(|relation| relation.id == id)
         }) {
-            ensure_view_deletion_supported(section, &HashSet::from([id.to_owned()]))?;
+            let affected_subjects = HashSet::from([id.to_owned()]);
+            ensure_view_deletion_supported(section, &affected_subjects, false)?;
             section.relations.retain(|relation| relation.id != id);
             for diagram in &mut section.diagrams {
-                diagram
-                    .views
-                    .retain(|view| view.subject.as_deref() != Some(id));
+                remove_subject_views(&mut diagram.views, &affected_subjects);
             }
             return Ok(());
         }
@@ -1534,7 +1532,7 @@ fn remove_element(section: &mut ModelingSection, id: &str) -> Result<(), String>
         .map(|relation| relation.id.clone())
         .collect();
     let affected_subjects = deleted.union(&incident).cloned().collect();
-    ensure_view_deletion_supported(section, &affected_subjects)?;
+    ensure_view_deletion_supported(section, &affected_subjects, true)?;
     for element in &mut section.elements {
         if deleted.contains(&element.id) {
             continue;
@@ -1573,65 +1571,78 @@ fn remove_element(section: &mut ModelingSection, id: &str) -> Result<(), String>
         section.root_model = None;
     }
     for diagram in &mut section.diagrams {
-        diagram.views.retain(|view| {
-            view.subject
-                .as_ref()
-                .is_none_or(|subject| !deleted.contains(subject) && !incident.contains(subject))
-        });
+        remove_subject_views(&mut diagram.views, &affected_subjects);
     }
     Ok(())
+}
+
+fn remove_subject_views(views: &mut Vec<View>, affected_subjects: &HashSet<String>) {
+    views.retain_mut(|view| {
+        if view
+            .subject
+            .as_ref()
+            .is_some_and(|subject| affected_subjects.contains(subject))
+        {
+            return false;
+        }
+        remove_subject_views(&mut view.children, affected_subjects);
+        true
+    });
 }
 
 fn ensure_view_deletion_supported(
     section: &ModelingSection,
     affected_subjects: &HashSet<String>,
+    clears_affected_hierarchy_parents: bool,
 ) -> Result<(), String> {
     for diagram in &section.diagrams {
-        let mut pending: Vec<_> = diagram.views.iter().map(|view| (view, false)).collect();
-        while let Some((view, nested)) = pending.pop() {
+        for view in diagram.all_views() {
             if view
                 .subject
                 .as_ref()
                 .is_some_and(|subject| affected_subjects.contains(subject))
-                && (nested || !view.children.is_empty())
+                && !view.children.is_empty()
             {
                 return Err(format!(
-                    "deleting this element affects View {} in diagram {}, which requires hierarchy-aware deletion; no elements or authored presentation were changed",
+                    "deleting this element affects View {} in diagram {}, which has child Views; presentation subtree deletion is not supported; no elements or authored presentation were changed",
                     view.id, diagram.id
                 ));
             }
-            pending.extend(view.children.iter().map(|child| (child, true)));
         }
     }
-    ensure_layout_leaf_dependencies(section, affected_subjects)?;
+    ensure_leaf_view_dependencies(
+        section,
+        affected_subjects,
+        clears_affected_hierarchy_parents,
+    )?;
     Ok(())
 }
 
-fn ensure_layout_leaf_dependencies(
+fn ensure_leaf_view_dependencies(
     section: &ModelingSection,
     affected_subjects: &HashSet<String>,
+    clears_affected_hierarchy_parents: bool,
 ) -> Result<(), String> {
-    let removed_layout_views = section
+    let removed_leaf_views = section
         .diagrams
         .iter()
-        .flat_map(|diagram| diagram.views.iter())
+        .flat_map(|diagram| diagram.all_views())
         .filter(|view| {
             view.children.is_empty()
-                && matches!(view.geometry, Geometry::Layout { .. })
                 && view
                     .subject
                     .as_ref()
                     .is_some_and(|id| affected_subjects.contains(id))
         })
         .collect::<Vec<_>>();
-    if removed_layout_views.is_empty() {
+    if removed_leaf_views.is_empty() {
         return Ok(());
     }
-    let view_ids = removed_layout_views
+    let view_ids = removed_leaf_views
         .iter()
         .map(|view| view.id.as_str())
         .collect::<HashSet<_>>();
-    let subject_ids = removed_layout_views
+    let subject_ids = removed_leaf_views
         .iter()
         .filter_map(|view| view.subject.as_deref())
         .collect::<HashSet<_>>();
@@ -1648,7 +1659,7 @@ fn ensure_layout_leaf_dependencies(
                     && removed.contains(target)
                 {
                     return Err(format!(
-                        "Cannot delete Layout leaf: surviving View {} in diagram {} references {} through {}; no elements or presentation were changed",
+                        "Cannot delete leaf View: surviving View {} in diagram {} references {} through {}; no elements or presentation were changed",
                         view.id, diagram.id, target, role,
                     ));
                 }
@@ -1761,13 +1772,14 @@ fn ensure_layout_leaf_dependencies(
         }
     }
     for (subject, placement) in &section.hierarchy {
-        // remove_element drops affected subjects and clears occurrences whose
-        // parent is affected, so only remaining placements can become dangling.
+        // Only the normal semantic cascade clears occurrences of affected
+        // parents; the early relation paths must preserve those dependencies.
         if affected_subjects.contains(subject)
-            || placement
-                .parent_id
-                .as_ref()
-                .is_some_and(|id| affected_subjects.contains(id))
+            || (clears_affected_hierarchy_parents
+                && placement
+                    .parent_id
+                    .as_ref()
+                    .is_some_and(|id| affected_subjects.contains(id)))
         {
             continue;
         }
@@ -1779,7 +1791,7 @@ fn ensure_layout_leaf_dependencies(
                     .any(|id| subject_ids.contains(id.as_str())))
         {
             return Err(format!(
-                "Cannot delete Layout leaf: surviving hierarchy placement {} references View {} or its subject; no elements or presentation were changed",
+                "Cannot delete leaf View: surviving hierarchy placement {} references View {} or its subject; no elements or presentation were changed",
                 subject, occurrence.view_id,
             ));
         }
