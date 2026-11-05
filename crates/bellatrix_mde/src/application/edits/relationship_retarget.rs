@@ -1,5 +1,6 @@
 use crate::{
-    EndpointMarkerTarget, Geometry, ModelingSection, RelationshipRouting, View, ViewEndpoints,
+    Diagram, EndpointMarkerTarget, Geometry, ModelingSection, RelationshipRouting, View,
+    ViewEndpoints,
 };
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -56,18 +57,7 @@ pub(crate) fn set_endpoint(
     if old == target {
         return Ok(true);
     }
-    for diagram in &section.diagrams {
-        if let Some(view) = diagram.all_views().find(|view| {
-            view.subject.as_deref() == Some(id)
-                && matches!(view.geometry, Geometry::Path { .. })
-                && view.style.routing == Some(RelationshipRouting::Manual)
-        }) {
-            return Err(format!(
-                "View {} uses Manual routing: semantic endpoint retargeting requires manual-path reanchoring, which is not yet supported; the relationship and authored path were preserved",
-                view.id
-            ));
-        }
-    }
+    validate_retarget_views(section, id)?;
     let next_source = if source {
         target.as_str()
     } else {
@@ -174,7 +164,7 @@ pub(crate) fn set_endpoint(
     } else {
         relation.to = target.clone();
     }
-    retarget_views(section, id, source, &old, &target)?;
+    retarget_views(section, id, source, &old, &target, None)?;
     Ok(true)
 }
 
@@ -215,12 +205,33 @@ fn references(ids: Vec<String>) -> Value {
     Value::Array(ids.into_iter().map(|id| json!({"$ref": id})).collect())
 }
 
-fn retarget_views(
+pub(crate) fn validate_retarget_views(
+    section: &ModelingSection,
+    relation_id: &str,
+) -> Result<(), String> {
+    for diagram in &section.diagrams {
+        if let Some(view) = diagram.all_views().find(|view| {
+            view.subject.as_deref() == Some(relation_id)
+                && matches!(view.geometry, Geometry::Path { .. })
+                && view.style.routing == Some(RelationshipRouting::Manual)
+        }) {
+            return Err(format!(
+                "View {} uses Manual routing: semantic endpoint retargeting requires manual-path reanchoring, which is not yet supported; the relationship and authored path were preserved",
+                view.id
+            ));
+        }
+    }
+    Ok(())
+}
+
+// Callers stage the semantic edit and all occurrences before publishing either.
+pub(crate) fn retarget_views(
     section: &mut ModelingSection,
     relation_id: &str,
     source: bool,
     old: &str,
     target: &str,
+    member_ends: Option<&BTreeSet<String>>,
 ) -> Result<(), String> {
     let relation = section
         .relations
@@ -228,33 +239,20 @@ fn retarget_views(
         .find(|relation| relation.id == relation_id)
         .ok_or("relationship disappeared before retargeting its views")?;
     let unchanged = if source { &relation.to } else { &relation.from }.clone();
-    let target_kind = crate::uml::root::Model::from_section(section)
+    let model = crate::uml::root::Model::from_section(section);
+    let target_kind = model
         .element(target)
         .ok_or("new endpoint disappeared")?
         .kind()
         .to_owned();
+    let unchanged_kind = model
+        .element(&unchanged)
+        .ok_or("unchanged endpoint disappeared")?
+        .kind()
+        .to_owned();
     for diagram in &mut section.diagrams {
-        let candidates: Vec<_> = diagram
-            .all_views()
-            .filter(|view| {
-                view.subject.as_deref() == Some(target)
-                    && endpoint_node_view(view, &target_kind)
-                    && matches!(view.geometry, Geometry::Rect { x, y, width, height }
-                        if width > 0.0 && height > 0.0
-                            && [x, y, width, height, x + width, y + height]
-                                .iter().all(|value| value.is_finite()
-                                    && (*value as f32).is_finite()))
-            })
-            .map(|view| view.id.clone())
-            .collect();
-        let replacement = match candidates.as_slice() {
-            [view] => Some(view.clone()),
-            _ => None,
-        };
-        let unchanged_view = diagram
-            .all_views()
-            .find(|view| view.subject.as_deref() == Some(unchanged.as_str()))
-            .map(|view| view.id.clone());
+        let replacement = unique_endpoint_view(diagram, target, &target_kind);
+        let unchanged_view = unique_endpoint_view(diagram, &unchanged, &unchanged_kind);
         let subjects: std::collections::BTreeMap<_, _> = diagram
             .all_views()
             .map(|view| (view.id.clone(), view.subject.clone()))
@@ -267,9 +265,24 @@ fn retarget_views(
             replacement.as_deref(),
             unchanged_view.as_deref(),
             &subjects,
+            member_ends,
         )?;
     }
     Ok(())
+}
+
+fn unique_endpoint_view(diagram: &Diagram, subject: &str, semantic_kind: &str) -> Option<String> {
+    let mut candidates = diagram.all_views().filter(|view| {
+        view.subject.as_deref() == Some(subject)
+            && endpoint_node_view(view, semantic_kind)
+            && matches!(view.geometry, Geometry::Rect { x, y, width, height }
+                if width > 0.0 && height > 0.0
+                    && [x, y, width, height, x + width, y + height]
+                        .iter().all(|value| value.is_finite()
+                            && (*value as f32).is_finite()))
+    });
+    let candidate = candidates.next()?;
+    candidates.next().is_none().then(|| candidate.id.clone())
 }
 
 fn endpoint_node_view(view: &View, semantic_kind: &str) -> bool {
@@ -312,12 +325,25 @@ fn retarget_children(
     replacement: Option<&str>,
     unchanged_view: Option<&str>,
     subjects: &std::collections::BTreeMap<String, Option<String>>,
+    member_ends: Option<&BTreeSet<String>>,
 ) -> Result<(), String> {
     for view in views {
         if view.subject.as_deref() == Some(relation_id)
             && matches!(view.geometry, Geometry::Path { .. })
         {
             if let Some(bindings) = &mut view.presentation.relationship_endpoints {
+                if let Some(member_ends) = member_ends {
+                    for binding in [&bindings.source, &bindings.target] {
+                        if let EndpointMarkerTarget::ModelEnd { id } = &binding.target
+                            && !member_ends.contains(id)
+                        {
+                            return Err(format!(
+                                "View {}: ModelEnd marker {id} is not a memberEnd of Association {relation_id}",
+                                view.id
+                            ));
+                        }
+                    }
+                }
                 let binding = if source {
                     &mut bindings.source
                 } else {
@@ -339,12 +365,16 @@ fn retarget_children(
                         };
                     }
                     EndpointMarkerTarget::RelationshipRole { .. } => {}
-                    EndpointMarkerTarget::ModelEnd { .. } => {
+                    EndpointMarkerTarget::ModelEnd { .. } if member_ends.is_none() => {
                         return Err(format!(
                             "View {}: ModelEnd marker retargeting is unsupported for this relationship",
                             view.id
                         ));
                     }
+                    // UML 2.5.1 Association::memberEnd names a Property, not its
+                    // TypedElement::type or a UMLEdge attachment. Retyping must
+                    // preserve this authored identity and marker composition.
+                    EndpointMarkerTarget::ModelEnd { .. } => {}
                 }
             }
             // An explicit missing attachment keeps routing diagnostic instead of
@@ -375,6 +405,7 @@ fn retarget_children(
             replacement,
             unchanged_view,
             subjects,
+            member_ends,
         )?;
     }
     Ok(())

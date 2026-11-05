@@ -163,6 +163,27 @@ especificação UML. A exportação rejeita alterações sem representação rev
 em vez de descartá-las. A validação funcional deste lote depende de publicação e
 execução dos fluxos de integração, além da verificação visual no Zed.
 
+### Tipo das pontas de Association
+
+Editar **Type** de um `memberEnd` mantém a identidade da Property e atualiza a
+ponta semântica projetada junto dos attachments das Views da Association. A
+ponta intacta, os estilos, rótulos e geometria autorada são preservados. Bindings
+`ModelEnd` continuam identificando as mesmas Properties, não as figuras dos
+classificadores (§11.8.1.6 e XMI `Association-memberEnd`; §7.8.22.5 e XMI
+`TypedElement-type`).
+
+O attachment aponta para a ocorrência renderizável única do novo tipo no mesmo
+diagrama, inclusive em Views aninhadas. Sem ocorrência ou com várias candidatas,
+a ponta fica explicitamente sem attachment e a projeção informa o motivo, em vez
+de conservar a classe antiga ou escolher uma figura arbitrária. A referência
+semântica continua válida; completar o attachment gráfico exige uma escolha.
+Essas referências gráficas são separadas das identidades UML (UMLDI §B.7.16.3,
+XMI `UMLEdge-source`/`target`).
+
+Rotas Manual ainda não têm reancoragem implementada neste editor. A troca de tipo
+é rejeitada integralmente nesse caso, preservando modelo e caminho autorado.
+Essa limitação é do editor, não da especificação UML.
+
 ### Referências de Generalization e InterfaceRealization
 
 Os campos `specific`/`general` da Generalization e

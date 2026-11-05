@@ -173,6 +173,8 @@ fn assert_retargeted_view(
     );
     if has_unattached_endpoint {
         assert!(projected_view.routed_geometry.is_none());
+    } else {
+        assert!(projected_view.routed_geometry.is_some());
     }
     Ok(())
 }
@@ -558,6 +560,31 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
     let generalization_view = semantic_view(&before_retarget, &generalization)?.clone();
     let realization_view = semantic_view(&before_retarget, &realization)?.clone();
     let printable_view = semantic_view(&before_retarget, &printable)?.id.clone();
+    let association_original = semantic_view(&before_retarget, &association)?.clone();
+    let Contract::Association(binary) = contract(&before_retarget, &association)? else {
+        return Err("retargeting requires the concrete Association".into());
+    };
+    let [association_source_end, association_target_end] = binary.member_end.as_slice() else {
+        return Err("retargeting requires two memberEnds".into());
+    };
+    let association_source_end = association_source_end.clone();
+    let association_target_end = association_target_end.clone();
+    for source in [&document, &invoice] {
+        let changed = flow.apply(Command::SetProperty {
+            element_id: association_source_end.clone(),
+            path: "properties.type".into(),
+            value: json!({"$ref": source}),
+        })?;
+        assert_retargeted_view(
+            &flow,
+            &association,
+            &association_original,
+            source,
+            &document,
+            Some(&semantic_view(&changed, source)?.id),
+            Some(&semantic_view(&changed, &document)?.id),
+        )?;
+    }
     for (path, target, specific, general) in [
         ("general", &nested, &invoice, &nested),
         ("general", &document, &invoice, &document),
@@ -640,6 +667,38 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
             )?;
             reopen_both_formats(&flow.document, &changed)?;
         }
+        for target in [&exportable, &document] {
+            let changed = flow.apply(Command::SetProperty {
+                element_id: association_target_end.clone(),
+                path: "properties.type".into(),
+                value: json!({"$ref": target}),
+            })?;
+            let Contract::Association(binary) = contract(&changed, &association)? else {
+                return Err("retargeting must preserve the Association contract".into());
+            };
+            assert_eq!(
+                binary.member_end,
+                [
+                    association_source_end.clone(),
+                    association_target_end.clone()
+                ]
+            );
+            let target_view = if target == &document {
+                Some(semantic_view(&changed, &document)?.id.as_str())
+            } else {
+                exportable_view.as_deref()
+            };
+            assert_retargeted_view(
+                &flow,
+                &association,
+                &association_original,
+                &invoice,
+                target,
+                Some(&invoice_view),
+                target_view,
+            )?;
+            reopen_both_formats(&flow.document, &changed)?;
+        }
     }
     for implementer in [&document, &invoice] {
         let changed = flow.apply(Command::SetProperty {
@@ -685,35 +744,50 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
         assert_eq!(flow.revision, revision);
     }
 
-    let mut manual_view = realization_view.clone();
-    manual_view.style.routing = Some(RelationshipRouting::Manual);
-    manual_view.geometry = flow
-        .projection()?
-        .diagrams
-        .iter()
-        .flat_map(|diagram| diagram.all_views())
-        .find(|view| view.id == realization_view.id)
-        .and_then(|view| view.routed_geometry.clone())
-        .ok_or("manual path authoring requires the rendered relationship geometry")?;
-    let manual = flow.apply(Command::SetViewPath {
-        diagram_id: "classes".into(),
-        view_id: realization_view.id.clone(),
-        geometry: manual_view.geometry.clone(),
-    })?;
-    assert_eq!(semantic_view(&manual, &realization)?, &manual_view);
-    let manual_section = flow.document.section_json.clone();
-    let manual_revision = flow.revision;
-    let Err(error) = flow.apply(Command::SetProperty {
-        element_id: realization.clone(),
-        path: "properties.contract".into(),
-        value: json!({"$ref": exportable}),
-    }) else {
-        return Err("retargeting a manually routed relationship must be rejected".into());
-    };
-    assert!(error.to_string().to_ascii_lowercase().contains("manual"));
-    assert_eq!(flow.document.section_json, manual_section);
-    assert_eq!(flow.revision, manual_revision);
-    assert_eq!(semantic_view(&flow.section()?, &realization)?, &manual_view);
+    for (relationship, edited_element, path, original_view) in [
+        (
+            &realization,
+            &realization,
+            "properties.contract",
+            &realization_view,
+        ),
+        (
+            &association,
+            &association_target_end,
+            "properties.type",
+            &association_original,
+        ),
+    ] {
+        let mut manual_view = original_view.clone();
+        manual_view.style.routing = Some(RelationshipRouting::Manual);
+        manual_view.geometry = flow
+            .projection()?
+            .diagrams
+            .iter()
+            .flat_map(|diagram| diagram.all_views())
+            .find(|view| view.id == original_view.id)
+            .and_then(|view| view.routed_geometry.clone())
+            .ok_or("manual path authoring requires the rendered relationship geometry")?;
+        let manual = flow.apply(Command::SetViewPath {
+            diagram_id: "classes".into(),
+            view_id: original_view.id.clone(),
+            geometry: manual_view.geometry.clone(),
+        })?;
+        assert_eq!(semantic_view(&manual, relationship)?, &manual_view);
+        let manual_section = flow.document.section_json.clone();
+        let manual_revision = flow.revision;
+        let Err(error) = flow.apply(Command::SetProperty {
+            element_id: edited_element.clone(),
+            path: path.into(),
+            value: json!({"$ref": exportable}),
+        }) else {
+            return Err("retargeting a manually routed relationship must be rejected".into());
+        };
+        assert!(error.to_string().to_ascii_lowercase().contains("manual"));
+        assert_eq!(flow.document.section_json, manual_section);
+        assert_eq!(flow.revision, manual_revision);
+        assert_eq!(semantic_view(&flow.section()?, relationship)?, &manual_view);
+    }
 
     let before_navigation = flow.section()?;
     let Contract::Association(before_association) = contract(&before_navigation, &association)?

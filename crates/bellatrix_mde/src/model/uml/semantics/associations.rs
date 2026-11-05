@@ -1315,29 +1315,49 @@ pub(crate) fn synchronize_projection(
     };
     let projection =
         binary_projection(&ReferenceIndex::new(Model::from_section(section)), relation)?;
-    let relation = section
+    if relation.from == projection.from && relation.to == projection.to {
+        *section
+            .relations
+            .iter_mut()
+            .find(|relation| relation.id == association_id)
+            .ok_or("Association disappeared")? = projection;
+        return Ok(());
+    }
+    crate::relationship_retarget::validate_retarget_views(section, association_id)?;
+    let member_ends = member_ends(
+        &ReferenceIndex::new(Model::from_section(section)),
+        association_id,
+    )?
+    .into_iter()
+    .map(|end| end.id.clone())
+    .collect();
+    let changes = [
+        (true, relation.from.clone(), projection.from.clone()),
+        (false, relation.to.clone(), projection.to.clone()),
+    ];
+    // A later occurrence may reject its authored marker binding. Stage both the
+    // graph projection and every attachment, including outside inspector edits.
+    let mut staged = section.clone();
+    *staged
         .relations
         .iter_mut()
         .find(|relation| relation.id == association_id)
-        .ok_or("Association disappeared")?;
-    let endpoints_changed = relation.from != projection.from || relation.to != projection.to;
-    *relation = projection;
-    if endpoints_changed {
-        let diagrams = section
-            .diagrams
-            .iter()
-            .filter(|diagram| {
-                diagram
-                    .views
-                    .iter()
-                    .any(|view| view.subject.as_deref() == Some(association_id))
-            })
-            .map(|diagram| diagram.id.clone())
-            .collect::<Vec<_>>();
-        for diagram in diagrams {
-            crate::reroute_relationships(section, &diagram);
+        .ok_or("Association disappeared")? = projection;
+    for (source, old, target) in changes {
+        if old != target {
+            crate::relationship_retarget::retarget_views(
+                &mut staged,
+                association_id,
+                source,
+                &old,
+                &target,
+                Some(&member_ends),
+            )?;
         }
     }
+    // Preserve authored paths and child geometry; the canvas routes from the
+    // updated UMLEdge attachments, just like specialized relationship retargets.
+    *section = staged;
     Ok(())
 }
 
