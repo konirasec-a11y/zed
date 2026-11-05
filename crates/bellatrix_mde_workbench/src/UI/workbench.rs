@@ -256,7 +256,7 @@ fn canvas_model_position(
 impl MdeWorkbenchItem {
     pub(crate) fn tool_label(&self, tool: ModelingTool) -> String {
         self.source
-            .snapshot()
+            .presentation_snapshot()
             .ok()
             .and_then(|snapshot| snapshot.section.tools.label(tool).map(str::to_owned))
             .unwrap_or_else(|| "Tool".into())
@@ -1333,7 +1333,7 @@ impl Item for MdeWorkbenchItem {
     type Event = ();
     fn tab_content_text(&self, _: usize, _: &App) -> SharedString {
         self.source
-            .snapshot()
+            .presentation_snapshot()
             .map(|snapshot| format!("MDE · {}", snapshot.name).into())
             .unwrap_or_else(|_| "MDE Workbench".into())
     }

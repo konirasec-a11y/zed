@@ -73,19 +73,30 @@ pub(crate) fn start_feed(
             changes.borrow_and_update();
             let document = session.snapshot();
             let result = match document {
-                Ok(document) => match context
-                    .query::<ModelingReadProjection>(
-                        cordis::Routing::Unscoped,
-                        ModelingReadProjectionRequested { document },
-                    )
-                    .await
-                {
-                    Ok(cordis::event::QueryOutcome::Answer(result)) => result.map(Arc::new),
-                    Ok(cordis::event::QueryOutcome::Miss) => {
-                        Err("Project projection responder unavailable".into())
+                Ok(document) => {
+                    let result = match context
+                        .query::<ModelingReadProjection>(
+                            cordis::Routing::Unscoped,
+                            ModelingReadProjectionRequested {
+                                document: Arc::clone(&document),
+                            },
+                        )
+                        .await
+                    {
+                        Ok(cordis::event::QueryOutcome::Answer(result)) => result.map(Arc::new),
+                        Ok(cordis::event::QueryOutcome::Miss) => {
+                            Err("Project projection responder unavailable".into())
+                        }
+                        Err(error) => Err(error.to_string()),
+                    };
+                    match session.snapshot() {
+                        // A superseded result, including a stale-projection error,
+                        // must not replace the frame while the latest one is built.
+                        Ok(current) if !Arc::ptr_eq(&current, &document) => continue,
+                        Ok(_) => result,
+                        Err(error) => Err(error),
                     }
-                    Err(error) => Err(error.to_string()),
-                },
+                }
                 Err(error) => Err(error),
             };
             sender.send_replace(result);

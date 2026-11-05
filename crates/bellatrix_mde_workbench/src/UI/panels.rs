@@ -942,7 +942,7 @@ impl Render for MdeRightPanel {
             .presentation
             .selected_explorer_key()
             .map(str::to_owned);
-        let snapshot = item.read(cx).source().snapshot().ok();
+        let snapshot = item.read(cx).source().presentation_snapshot().ok();
         let inspection = snapshot.as_ref().and_then(|snapshot| {
             selected_id
                 .as_deref()

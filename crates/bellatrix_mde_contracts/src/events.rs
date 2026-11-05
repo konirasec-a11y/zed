@@ -690,6 +690,13 @@ impl ModelingSnapshot {
     pub fn matches_document(&self, document: &Arc<ProjectDocument>) -> bool {
         Arc::ptr_eq(&self.document, document)
     }
+
+    pub fn matches_session(&self, document: &Arc<ProjectDocument>) -> bool {
+        Arc::ptr_eq(
+            &self.document.session_identity(),
+            &document.session_identity(),
+        )
+    }
 }
 
 #[derive(Clone, Debug)]

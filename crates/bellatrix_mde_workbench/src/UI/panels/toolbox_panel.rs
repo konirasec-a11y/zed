@@ -232,7 +232,7 @@ impl Render for MdeLeftPanel {
             (
                 state.active_diagram().map(str::to_owned),
                 state.selected_tool(),
-                state.source().snapshot().ok(),
+                state.source().presentation_snapshot().ok(),
                 state.presentation.visual_draft_mode(),
             )
         };

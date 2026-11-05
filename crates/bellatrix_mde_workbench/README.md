@@ -35,6 +35,14 @@ The native Explorer, Inspector, diagram list and diagnostics follow the active M
 
 The bridge relays typed Cordis commands and observes model revisions. The interim host still supplies one configured model or demo fixture; per-document `ProjectPath`/Buffer integration, native save acknowledgement and `SerializableItem` restoration remain incomplete. The visible-entry recovery does not claim those later integration gates passed.
 
+Canvas, Inspector, Explorer and Toolbox rendering retain the last complete Cordis
+projection while the next revision is projected asynchronously. This read-only
+presentation must belong to the same open document session; closing or replacing
+that session invalidates it. Commands continue to require a projection matching
+the current document, so retaining a frame never makes an outdated edit current.
+Superseded projection results are discarded before publication rather than
+temporarily replacing the visible model with a stale-projection error.
+
 Implemented operation paths include Class/Interface creation, rename, view move/resize, project save and a drag-and-drop Toolbox. These use the MDE graph validation and versioned `bellatrix_project` service, rather than writing model data in the GUI.
 
 ## Limited native MDJ editing and copy export

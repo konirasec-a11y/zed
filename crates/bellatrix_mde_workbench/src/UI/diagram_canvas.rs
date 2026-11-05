@@ -4,7 +4,7 @@ use bellatrix_mde_cordis::projection::Contract;
 
 impl Render for MdeWorkbenchItem {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let snapshot = self.source.snapshot();
+        let snapshot = self.source.presentation_snapshot();
         if let Ok(snapshot) = &snapshot {
             self.reconcile_selection(&snapshot.section);
         }

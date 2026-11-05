@@ -97,6 +97,17 @@ impl MdeUiSource {
         self.presentation_suspended.load(Ordering::Acquire)
     }
 
+    pub(crate) fn presentation_snapshot(&self) -> Result<MdeSnapshot, String> {
+        let document = self.session.snapshot()?;
+        let projection = self.projections.borrow().clone()?;
+        if !projection.matches_session(&document) {
+            return Err("The project projection belongs to another document session".into());
+        }
+        // Revision publication precedes asynchronous projection. Keep the last
+        // complete frame visible; editing still requires snapshot() below.
+        Ok((*projection).clone())
+    }
+
     pub fn snapshot(&self) -> Result<MdeSnapshot, String> {
         let document = self.session.snapshot()?;
         if let Some(previews) = &self.move_previews {
