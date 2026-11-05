@@ -105,6 +105,12 @@ Selecionar uma ponta abre o Inspector do seu contrato Property, reutilizando a
 seleção global e os mesmos controles. Em AssociationClass, `ownedEnd` não aparece
 na lista Attributes; `ownedAttribute` e `ownedEnd` são disjuntos (§11.8.2.4).
 
+**Back to owner** usa a mesma projeção inspecionável para objetos e relações.
+Assim, uma Property possuída por Association retorna ao Inspector da Association,
+mesmo quando ela é projetada como uma relação binária. A navegação não altera
+ownership nem escolhe uma nova ponta (§11.8.1.6 e XMI `Association-ownedEnd` /
+`Property-owningAssociation`).
+
 O campo **Navigation knowledge** oferece `navigable`, `notNavigable` e `unverified`
 somente nas pontas possuídas pela Association. As duas primeiras escolhas
 atualizam `navigableOwnedEnd`. A terceira preserva a falta de decisão no contrato

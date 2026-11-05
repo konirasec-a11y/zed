@@ -1237,12 +1237,7 @@ fn navigate_inspector_element(
     let Ok(snapshot) = item.read(cx).source().snapshot() else {
         return;
     };
-    if !snapshot
-        .section
-        .elements
-        .iter()
-        .any(|element| element.id == target)
-    {
+    if snapshot.section.inspect_element(target).is_none() {
         return;
     }
     item.update(cx, |workbench, cx| {
