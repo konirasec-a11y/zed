@@ -18,7 +18,7 @@ pub(crate) use io::{Format, ModelIoError, decode, encode};
 mod command_executor;
 #[path = "application/commands.rs"]
 pub(crate) mod commands;
-#[path = "KERNEL/compiler/emission/construction_script.rs"]
+#[path = "application/generation/emission/construction_script.rs"]
 mod construction_script;
 #[path = "view-model/diagram/diagram_operations.rs"]
 mod diagram_operation_policy;
@@ -28,24 +28,23 @@ mod diagram_operations;
 mod execution_trace;
 pub(crate) use execution_trace::{
     ExecutionTrace, TraceOutcome, TracePhase, execution_trace_jsonl,
-    validate_structural_diagram_traced, validate_structural_model_traced,
 };
-#[path = "KERNEL/compiler/analysis/generation_graph.rs"]
+#[path = "application/generation/analysis/generation_graph.rs"]
 mod generation;
-#[path = "KERNEL/graph/graph.rs"]
+#[path = "model/graph/graph.rs"]
 mod graph;
 #[path = "view-model/hierarchy/hierarchy.rs"]
 mod hierarchy;
-#[path = "KERNEL/compiler/projection/rust_emission.rs"]
-mod kernel_rust_emission;
-#[path = "KERNEL/compiler/projection/uml_rust_struct.rs"]
-mod kernel_uml_rust_struct;
+#[path = "application/generation/projection/rust_emission.rs"]
+mod rust_emission;
+#[path = "application/generation/projection/uml_rust_struct.rs"]
+mod uml_rust_struct;
 #[path = "view-model/hierarchy/visual_consistency.rs"]
 mod visual_consistency;
 pub(crate) use visual_consistency::visual_components;
-#[path = "KERNEL/I_O/generated_files.rs"]
+#[path = "persistence/artifacts/generated_files.rs"]
 mod generated_files;
-#[path = "KERNEL/graph/index.rs"]
+#[path = "model/graph/index.rs"]
 mod index;
 #[path = "view-model/inspector/inspector.rs"]
 mod inspector;
@@ -53,11 +52,11 @@ mod inspector;
 mod instance_presentation;
 #[path = "view-model/notation/interaction_presentation.rs"]
 mod interaction_presentation;
-#[path = "KERNEL/compiler/operations/operation_graph.rs"]
+#[path = "application/generation/operations/operation_graph.rs"]
 mod operation_graph;
-#[path = "KERNEL/compiler/artifacts/path.rs"]
+#[path = "application/generation/artifacts/path.rs"]
 mod path;
-#[path = "KERNEL/compiler/artifacts/plan.rs"]
+#[path = "application/generation/artifacts/plan.rs"]
 mod plan;
 #[path = "view-model/notation/presentation.rs"]
 mod presentation;
@@ -65,7 +64,7 @@ pub(crate) use instance_presentation::{collect_instance_slot_labels, format_inst
 pub(crate) use interaction_presentation::format_operand_guard;
 #[path = "view-model/notation/endpoint_markers.rs"]
 mod endpoint_markers;
-#[path = "KERNEL/I_O/publish.rs"]
+#[path = "persistence/artifacts/publish.rs"]
 mod publish;
 #[path = "view-model/authoring/quick_edit.rs"]
 mod quick_edit;
@@ -77,21 +76,17 @@ pub(crate) use endpoint_markers::resolve_relationship_view;
 #[path = "view-model/notation/relationship_notation.rs"]
 mod relationship_notation;
 pub(crate) use relationship_notation::{format_relationship_label, resolve_relationship_style};
-#[path = "KERNEL/graph/scope.rs"]
+#[path = "model/graph/scope.rs"]
 mod scope;
-#[path = "KERNEL/uml/validation/structural_diagrams.rs"]
-mod structural_diagrams;
-#[path = "KERNEL/uml/validation/structural_rules.rs"]
-mod structural_rules;
-#[path = "KERNEL/uml/semantics/templates.rs"]
+#[path = "model/uml/semantics/templates.rs"]
 mod templates;
-#[path = "KERNEL/uml/uml.rs"]
+#[path = "model/uml/uml.rs"]
 pub(crate) mod uml;
 #[path = "view-model/diagram/uml_geometry.rs"]
 mod uml_geometry;
 #[path = "view-model/notation/uml_notation.rs"]
 mod uml_notation;
-#[path = "KERNEL/uml/capabilities.rs"]
+#[path = "model/uml/capabilities.rs"]
 mod uml_types;
 pub(crate) use templates::{template_parametered_element, template_parameters};
 
@@ -121,11 +116,11 @@ pub(crate) use relationships::{
     relationship_style_for_notation, reroute_relationships, route as route_relationship,
 };
 pub(crate) use scope::{Scope, select_elements};
-pub(crate) use structural_diagrams::{
-    RootMetaclass, StructuralDiagnostic, StructuralDiagramKind, StructuralSeverity,
-    element_root_kind, relationship_root_kind, validate_structural_diagram,
-    validate_structural_model,
+pub(crate) use bellatrix_mde_contracts::uml::validation::{
+    RootMetaclass, StructuralDiagnostic, StructuralSeverity,
 };
+pub(crate) use bellatrix_mde_contracts::protocol::command::StructuralDiagramKind;
+pub(crate) use uml::root::{element_root_kind, relationship_root_kind};
 pub(crate) use uml_geometry::{
     ClassifierContents, InterfaceLayout, classifier_contents, interface_view_layout,
 };
@@ -154,24 +149,22 @@ pub(crate) use template_presentation::template_parameter_label_with_references;
 mod hierarchy_placement;
 pub(crate) use hierarchy_placement::{validate_diagram_occurrence, validate_model_hierarchy};
 
-#[path = "KERNEL/compiler/artifacts/ownership_manifest.rs"]
+#[path = "application/generation/artifacts/ownership_manifest.rs"]
 mod ownership_manifest;
 
 mod api_contract;
 
-#[path = "kernel-api/validation.rs"]
-mod kernel_api_validation;
-pub use kernel_api_validation::{validate_graph_model, validate_uml_diagram, validate_uml_model};
+#[path = "mde-api/graph_validation.rs"]
+mod mde_api_graph_validation;
+pub use mde_api_graph_validation::validate_graph_model;
 
-#[path = "kernel-api/contract.rs"]
-mod kernel_api_contract;
-#[path = "kernel-api/graph.rs"]
-mod kernel_api_graph;
-pub use kernel_api_graph::{reachable_graph_nodes, shortest_graph_path};
+#[path = "mde-api/graph.rs"]
+mod mde_api_graph;
+pub use mde_api_graph::{reachable_graph_nodes, shortest_graph_path};
 
-#[path = "kernel-api/generation.rs"]
-mod kernel_api_generation;
-pub use kernel_api_generation::{analyze_generation_dependencies, generate_rust_struct};
+#[path = "mde-api/target_generation.rs"]
+mod mde_api_target_generation;
+pub use mde_api_target_generation::{analyze_generation_dependencies, generate_rust_struct};
 
 #[path = "mde-api/document.rs"]
 mod mde_api_document;

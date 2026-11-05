@@ -590,7 +590,6 @@ pub(crate) fn apply_with_diagram_operations(
     if !presentation_only {
         crate::uml::associations::materialize_new(project, &mut section)?;
         crate::uml::associations::synchronize_changes(&previous_section, &mut section)?;
-        crate::uml::associations::validate_authoring_changes(&previous_section, &section)?;
     }
     update_composition_placement(&previous_section, &mut section, &project.id, command)?;
     let mut updated = section.to_model(&project.id, &project.name);

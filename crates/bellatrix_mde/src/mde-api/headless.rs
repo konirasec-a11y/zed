@@ -14,7 +14,7 @@ struct Request {
 
 /// Produce the existing headless Check, Inspect or Analyze report.
 /// Input is `{api_version:1,model,operation,from?,to?,relation?}`. Operation is
-/// `check`, `inspect` or `analyze`; traversal remains in the canonical kernel.
+/// `check`, `inspect` or `analyze`; traversal remains in the shared model.
 /// Returns `{api_version:1,report}`. Graph integrity is required, not a claim of
 /// complete UML validity. No filesystem access, mutation or retained state.
 /// Errors are versioned document errors, `GRAPH_INTEGRITY` or `GRAPH_QUERY_FAILED`.

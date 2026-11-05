@@ -27,7 +27,7 @@ pub fn project_rust_generation(input_json: &str) -> Result<String, String> {
     let request: Request = serde_json::from_str(input_json).map_err(invalid_request)?;
     let model = decode_model(request.api_version, &request.model)?;
     let scope = request.element_ids.map_or(Scope::Project, Scope::Elements);
-    let emission = crate::kernel_rust_emission::project(&model, &scope, request.skeleton)
+    let emission = crate::rust_emission::project(&model, &scope, request.skeleton)
         .map_err(|error| error_response("RUST_GENERATION_PROJECTION_FAILED", error.to_string()))?;
     Ok(serde_json::json!({"api_version": API_VERSION, "emission": emission}).to_string())
 }

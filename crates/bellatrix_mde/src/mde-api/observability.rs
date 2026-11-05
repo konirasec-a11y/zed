@@ -39,40 +39,76 @@ impl MdeExecutionTrace {
     }
 }
 
-/// Validate the selected stored diagram kind. Results are diagnostics, not a
-/// certificate of complete UML conformance; unverified rules retain warnings.
+/// Check contract and presentation integrity for an existing diagram.
+/// This operation does not evaluate UML conformance.
 pub fn validate_model_section_diagram(
     project_id: &str,
     name: &str,
     section_json: &str,
     diagram_id: &str,
-    trace: Option<&mut MdeExecutionTrace>,
+    mut trace: Option<&mut MdeExecutionTrace>,
 ) -> Result<Vec<ModelingDiagnostic>, String> {
-    let section = crate::mde_api_projection::decode_section(project_id, name, section_json)?;
-    let model = section.to_model(project_id, name);
-    let diagram = model
-        .diagrams
-        .iter()
-        .find(|diagram| diagram.id == diagram_id)
-        .ok_or("diagram not found")?;
-    let kind = crate::StructuralDiagramKind::from_diagram(diagram)
-        .ok_or_else(|| format!("unsupported UMLDI diagram type: {}", diagram.uml_di_type))?;
-    let diagnostics = match trace {
-        Some(trace) => {
-            crate::validate_structural_diagram_traced(&model, diagram_id, kind, &mut trace.0)
+    if let Some(trace) = trace.as_deref_mut() {
+        trace.emit(
+            "modeling",
+            "diagram.checkPresentation",
+            TracePhase::Start,
+            Some(diagram_id),
+            &[],
+            None,
+        );
+    }
+    let result = (|| {
+        let section = crate::mde_api_projection::decode_section(project_id, name, section_json)?;
+        let model = section.to_model(project_id, name);
+        if !model.diagrams.iter().any(|diagram| diagram.id == diagram_id) {
+            return Err("diagram not found".to_owned());
         }
-        None => crate::validate_structural_diagram(&model, diagram_id, kind),
-    };
-    Ok(diagnostics
-        .into_iter()
-        .map(|diagnostic| ModelingDiagnostic {
-            severity: match diagnostic.severity {
-                crate::StructuralSeverity::Error => DiagnosticSeverity::Error,
-                crate::StructuralSeverity::Warning => DiagnosticSeverity::Warning,
-            },
-            code: diagnostic.code.into(),
-            subject_id: diagnostic.subject_id,
-            message: diagnostic.message,
+        Ok(match crate::Graph::new(&model).validate_presentation() {
+            Ok(()) => Vec::new(),
+            Err(error) => vec![ModelingDiagnostic {
+                severity: DiagnosticSeverity::Error,
+                code: "PRESENTATION_INTEGRITY".into(),
+                subject_id: diagram_id.into(),
+                message: error.to_string(),
+            }],
         })
-        .collect())
+    })();
+    if let Some(trace) = trace {
+        match &result {
+            Ok(diagnostics) => {
+                for diagnostic in diagnostics {
+                    trace.emit(
+                        "modeling",
+                        &diagnostic.code,
+                        TracePhase::Diagnostic,
+                        Some(&diagnostic.subject_id),
+                        &[],
+                        Some(TraceOutcome::Invalid),
+                    );
+                }
+                trace.emit(
+                    "modeling",
+                    "diagram.checkPresentation",
+                    TracePhase::Finish,
+                    Some(diagram_id),
+                    &[],
+                    Some(if diagnostics.is_empty() {
+                        TraceOutcome::Success
+                    } else {
+                        TraceOutcome::Invalid
+                    }),
+                );
+            }
+            Err(_) => trace.emit(
+                "modeling",
+                "diagram.checkPresentation",
+                TracePhase::Error,
+                Some(diagram_id),
+                &[],
+                Some(TraceOutcome::Error),
+            ),
+        }
+    }
+    result
 }
