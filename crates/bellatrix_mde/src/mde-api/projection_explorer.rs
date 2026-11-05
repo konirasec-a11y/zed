@@ -650,6 +650,45 @@ fn imported_kind_label(kind: &str) -> Option<String> {
     Some(label)
 }
 
+fn association_end_label(
+    references: &crate::uml::references::ReferenceIndex<'_>,
+    element: &crate::Element,
+) -> Option<String> {
+    use crate::uml::{associations, root::ElementRef};
+    if !ElementRef::Object(element).conforms_to("Property") {
+        return None;
+    }
+    let association = match associations::association_of(references, &element.id) {
+        Ok(Some(association)) => association,
+        Ok(None) => return None,
+        Err(error) => return Some(format!("Property (unresolved association: {error})")),
+    };
+    let ends = match associations::member_ends(references, association.id()) {
+        Ok(ends) => ends,
+        Err(error) => return Some(format!("Association end (unresolved: {error})")),
+    };
+    let position = ends.iter().position(|end| end.id == element.id)? + 1;
+    let role = element.name.trim();
+    let label = if role.is_empty() {
+        format!("Association end {position}")
+    } else {
+        format!("Association end {position}: {role}")
+    };
+    match associations::property_type(references, element) {
+        Ok(Some(target)) => {
+            let name = target
+                .named()
+                .and_then(|named| named.name())
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+                .unwrap_or(target.id());
+            Some(format!("{label}: {name}"))
+        }
+        Ok(None) => Some(format!("{label} (type not set)")),
+        Err(error) => Some(format!("{label} (unresolved type: {error})")),
+    }
+}
+
 fn imported_element_label(section: &ModelingSection, element: &crate::Element) -> Option<String> {
     let type_label = imported_kind_label(&element.kind)?;
     if !element.name.trim().is_empty() {
@@ -827,6 +866,8 @@ fn project_authored_composition(
 ) -> Vec<ExplorerRow> {
     use std::collections::{HashMap, HashSet};
     let semantic = crate::project_hierarchy(section);
+    let references =
+        crate::uml::references::ReferenceIndex::new(crate::uml::root::Model::from_section(section));
     let labels = semantic
         .iter()
         .map(|row| (row.element_id.clone(), row.label.clone()))
@@ -891,12 +932,15 @@ fn project_authored_composition(
             ExplorerRow {
                 key: semantic_key(id),
                 element_id: id.clone(),
-                label: imported_element_label(section, element).unwrap_or_else(|| {
-                    labels
-                        .get(id)
-                        .cloned()
-                        .unwrap_or_else(|| element.name.clone())
-                }),
+                label: association_end_label(&references, element)
+                    .or_else(|| imported_element_label(section, element))
+                    .unwrap_or_else(|| {
+                        labels
+                            .get(id)
+                            .filter(|label| !label.trim().is_empty())
+                            .cloned()
+                            .unwrap_or_else(|| explorer_type_label(&element.kind, false))
+                    }),
                 kind: element.kind.clone(),
                 depth: 0,
                 diagram: false,
