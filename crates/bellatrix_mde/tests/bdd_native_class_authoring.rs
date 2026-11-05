@@ -358,6 +358,93 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
         },
         "Operation",
     )?;
+    let input_parameter = flow.create(
+        Command::AddMember {
+            owner_id: operation.clone(),
+            kind: ModelingMemberKind::Parameter,
+        },
+        "Parameter",
+    )?;
+    let return_parameter = flow.create(
+        Command::AddMember {
+            owner_id: operation.clone(),
+            kind: ModelingMemberKind::Parameter,
+        },
+        "Parameter",
+    )?;
+    flow.apply(Command::SetProperty {
+        element_id: return_parameter.clone(),
+        path: "properties.direction".into(),
+        value: json!("return"),
+    })?;
+    for (element_id, multiplicity) in [
+        (&attribute, "0..*"),
+        (&input_parameter, "2..4"),
+        (&return_parameter, "0..1"),
+    ] {
+        flow.apply(Command::SetProperty {
+            element_id: element_id.clone(),
+            path: "properties.type".into(),
+            value: json!({"$ref": document}),
+        })?;
+        flow.apply(Command::SetProperty {
+            element_id: element_id.clone(),
+            path: "properties.multiplicity".into(),
+            value: json!(multiplicity),
+        })?;
+    }
+    let with_multiplicity = flow.section()?;
+    let projection = flow.projection()?;
+    let projected_class_view = projection
+        .diagrams
+        .iter()
+        .flat_map(|diagram| diagram.all_views())
+        .find(|view| view.id == invoice_view)
+        .ok_or("missing classifier View")?;
+    assert!(
+        projected_class_view
+            .member_labels
+            .get(&attribute)
+            .is_some_and(|label| label.contains("[0..*]"))
+    );
+    let operation_label = projected_class_view
+        .member_labels
+        .get(&operation)
+        .ok_or("missing operation label")?;
+    assert!(operation_label.contains("[2..4]"));
+    assert!(operation_label.ends_with(": Document [0..1]"));
+    let original_style = semantic_view(&with_multiplicity, &invoice)?.style.clone();
+    let mut hidden_style = original_style.clone();
+    hidden_style.uml.show_multiplicity = Some(false);
+    let hidden = flow.apply(Command::SetViewStyle {
+        diagram_id: "classes".into(),
+        view_id: invoice_view.clone(),
+        style: hidden_style,
+    })?;
+    assert_eq!(hidden.registry, with_multiplicity.registry);
+    let hidden_projection = flow.projection()?;
+    let hidden_class_view = hidden_projection
+        .diagrams
+        .iter()
+        .flat_map(|diagram| diagram.all_views())
+        .find(|view| view.id == invoice_view)
+        .ok_or("missing styled classifier View")?;
+    for member in [&attribute, &operation] {
+        assert!(
+            !hidden_class_view
+                .member_labels
+                .get(member)
+                .ok_or("missing styled member label")?
+                .contains('[')
+        );
+    }
+    flow.apply(Command::SetViewStyle {
+        diagram_id: "classes".into(),
+        view_id: invoice_view.clone(),
+        style: original_style,
+    })?;
+    reopen_both_formats(&flow.document, &flow.section()?)?;
+
     let nested = flow.create(
         Command::CreateElement {
             diagram_id: "classes".into(),

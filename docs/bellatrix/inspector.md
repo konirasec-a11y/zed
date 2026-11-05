@@ -132,6 +132,15 @@ string `multiplicity` no contrato Property. Os valores derivados aparecem no
 Inspector; sem referências, os limites seguem os defaults UML, normalmente 1..1
 (§7.8.8.6–7 e XMI `MultiplicityElement-lowerValue`/`upperValue`).
 
+O texto compartilhado pelo canvas, Explorer e Inspector resolve esses contratos
+`lowerValue`/`upperValue` para atributos, parâmetros e resultado de operações.
+Não depende de campos derivados `lower`/`upper` persistidos no objeto. O default
+1 sem limites explícitos pode ser omitido; limites diferentes ou explícitos são
+mostrados entre colchetes. Expressões não avaliáveis mantêm um marcador de
+multiplicidade não resolvida, sem serem substituídas por 1. A opção visual
+`show_multiplicity=false` oculta a notação sem alterar contratos (§§9.4.4, 9.5.4,
+9.6.4 e XMI `MultiplicityElement-lowerValue`/`upperValue`).
+
 Limpar a notação restaura a ausência dos limites. A operação só remove literais
 exclusivos sem conteúdo adicional; referências externas, apresentação associada,
 expressões não literais e ownership inconsistente bloqueiam a alteração inteira.

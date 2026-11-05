@@ -163,6 +163,10 @@ fn display_label(
             label.push_str(": ");
             label.push_str(&value_type);
         }
+        if let Some(multiplicity) = multiplicity_label(element, references, style) {
+            label.push(' ');
+            label.push_str(&multiplicity);
+        }
         return label;
     }
     if kind == Some(UmlType::Operation) {
@@ -211,20 +215,9 @@ fn display_label(
         label.push_str(": ");
         label.push_str(value_type);
     }
-    if property && style.uml.show_multiplicity != Some(false) {
-        let bound = |key| match element.properties.get(key) {
-            Some(Value::Number(value)) if value.is_u64() => Some(value.to_string()),
-            value => text(value).map(str::to_owned),
-        };
-        if let (Some(lower), Some(upper)) = (bound("lower"), bound("upper")) {
-            label.push_str(" [");
-            label.push_str(&lower);
-            if lower != upper {
-                label.push_str("..");
-                label.push_str(&upper);
-            }
-            label.push(']');
-        }
+    if property && let Some(multiplicity) = multiplicity_label(element, references, style) {
+        label.push(' ');
+        label.push_str(&multiplicity);
     }
     if property {
         if let Some(default) = text(element.properties.get("defaultValue")) {
@@ -236,6 +229,57 @@ fn display_label(
         }
     }
     label
+}
+
+fn multiplicity_label(
+    element: &Element,
+    references: Option<&crate::uml::references::ReferenceIndex<'_>>,
+    style: &Style,
+) -> Option<String> {
+    if style.uml.show_multiplicity == Some(false) {
+        return None;
+    }
+    let element_ref = crate::uml::root::ElementRef::Object(element);
+    let has_bound_references = crate::uml::value_specifications::has_bound_references(element_ref);
+    let (lower, upper) = match references {
+        Some(references) => {
+            // Absent bounds mean 1 (§7.8.8.7). An owned defaultValue has a
+            // different UML role and must not make this default unresolved.
+            if !has_bound_references && !element.properties.contains_key("multiplicity") {
+                return None;
+            }
+            match crate::uml::value_specifications::multiplicity(references, element_ref) {
+                Ok(bounds) => (
+                    bounds.lower_bound().to_string(),
+                    bounds.upper_bound().to_string(),
+                ),
+                Err(error) => {
+                    return Some(if error.is_unsupported() {
+                        "[unevaluated multiplicity]".into()
+                    } else {
+                        "[invalid multiplicity]".into()
+                    });
+                }
+            }
+        }
+        None => {
+            // Without a graph, bound identities cannot be resolved. Retain
+            // standalone legacy labels only when no canonical bound is present.
+            if has_bound_references {
+                return Some("[unresolved multiplicity]".into());
+            }
+            let bound = |key| match element.properties.get(key) {
+                Some(Value::Number(value)) if value.is_u64() => Some(value.to_string()),
+                value => text(value).map(str::to_owned),
+            };
+            (bound("lower")?, bound("upper")?)
+        }
+    };
+    Some(if lower == upper {
+        format!("[{lower}]")
+    } else {
+        format!("[{lower}..{upper}]")
+    })
 }
 
 fn type_label(
@@ -289,6 +333,7 @@ fn operation_label(
     };
     let mut label = format!("{prefix}{}(", operation.name);
     let mut result_type = None;
+    let mut result_multiplicity = None;
     if style.uml.show_operation_signature != Some(false)
         && let Some(references) = references
     {
@@ -302,30 +347,39 @@ fn operation_label(
                     .map(|parameter| display_label(parameter, Some(references), style))
                     .collect::<Vec<_>>();
                 label.push_str(&parameters.join(", "));
-                result_type =
-                    match crate::uml::operations::return_parameter(references, &operation.id) {
-                        Ok(parameter) => {
-                            parameter.and_then(|parameter| type_label(parameter, Some(references)))
-                        }
-                        Err(_) => Some("[invalid return Parameters]".into()),
-                    };
+                match crate::uml::operations::return_parameter(references, &operation.id) {
+                    Ok(Some(parameter)) => {
+                        result_type = type_label(parameter, Some(references));
+                        result_multiplicity =
+                            multiplicity_label(parameter, Some(references), style);
+                    }
+                    Ok(None) => {}
+                    Err(_) => result_type = Some("[invalid return Parameters]".into()),
+                }
             }
             Err(_) => label.push_str("[invalid Parameters]"),
         }
     }
     label.push(')');
-    if style.uml.should_show_type()
-        && let Some(result_type) = &result_type
-    {
-        label.push_str(": ");
-        label.push_str(result_type);
+    let result_type = result_type.filter(|_| style.uml.should_show_type());
+    let has_result_notation = result_type.is_some() || result_multiplicity.is_some();
+    if has_result_notation {
+        label.push(':');
+    }
+    if let Some(result_type) = result_type {
+        label.push(' ');
+        label.push_str(&result_type);
+    }
+    if let Some(result_multiplicity) = result_multiplicity {
+        label.push(' ');
+        label.push_str(&result_multiplicity);
     }
     if style.uml.should_show_property()
         && operation.properties.get("isQuery").and_then(Value::as_bool) == Some(true)
     {
         if style.uml.show_operation_signature != Some(false)
             && style.uml.should_show_type()
-            && result_type.is_none()
+            && !has_result_notation
         {
             label.push(':');
         }
