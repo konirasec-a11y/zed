@@ -22,7 +22,10 @@ fn supported(field: &str, value: &Value, end: bool) -> bool {
     match field {
         "_id" | "_type" | "name" => value.is_string(),
         "_parent" => reference(Some(value)).is_some(),
-        "visibility" => value.is_string(),
+        "visibility" => matches!(
+            value.as_str(),
+            Some("public" | "protected" | "private" | "package")
+        ),
         "stereotype" => matches!(
             crate::StereotypeValue::read(Some(value)),
             crate::StereotypeValue::Null
@@ -37,8 +40,13 @@ fn supported(field: &str, value: &Value, end: bool) -> bool {
             Some("navigable" | "notNavigable" | "unspecified")
         ),
         "aggregation" if end => matches!(value.as_str(), Some("none" | "shared" | "composite")),
-        "multiplicity" if end => value.is_string(),
-        "isReadOnly" | "isOrdered" | "isUnique" | "isID" if end => value.is_boolean(),
+        "multiplicity" if end => value.as_str().is_some_and(|text| {
+            text.is_empty()
+                || text
+                    .parse::<bellatrix_mde_contracts::uml::types::MultiplicityRange>()
+                    .is_ok()
+        }),
+        "isReadOnly" | "isOrdered" | "isUnique" if end => value.is_boolean(),
         _ => false,
     }
 }
@@ -52,8 +60,7 @@ fn ends<'a, 'document>(
     Some([index.object(first)?, index.object(second)?])
 }
 
-// This is an encoding boundary, not UML validation: dangling type references and
-// invalid multiplicity strings stay available to the kernel unchanged.
+// Unknown expressions and unresolved types remain source data, not invented UML bounds.
 pub(super) fn supported_structure(object: &mdj::Object<'_>, index: &mdj::Index<'_>) -> bool {
     if object.type_name != "UMLAssociation"
         || in_view_composition(&object.path)
@@ -107,12 +114,25 @@ fn representable(object: &mdj::Object<'_>, index: &mdj::Index<'_>) -> bool {
             return false;
         };
         if !(parent.path.is_empty() && parent.type_name == "Project")
-            && canonical_kind_for_object(parent, index).is_none()
+            && !matches!(
+                canonical_kind_for_object(parent, index),
+                Some("uml.model" | "uml.package" | "uml.class" | "uml.interface")
+            )
         {
             return false;
         }
     }
-    true
+    ends(object, index).is_some_and(|ends| {
+        ends.iter().all(|end| {
+            reference(end.properties.get("reference"))
+                .and_then(|id| index.object(id))
+                .and_then(|target| canonical_kind_for_object(target, index))
+                .and_then(crate::uml::root::object_metaclass)
+                .is_some_and(|kind| {
+                    bellatrix_mde_contracts::uml::metamodel::conforms_to(kind, "Type")
+                })
+        })
+    })
 }
 
 pub(super) fn import_associations(
@@ -150,7 +170,7 @@ pub(super) fn import_associations(
                     }
                 }
             }
-            diagnostics.push(Diagnostic { path: object.path.clone(), message: format!("association and ends remain opaque: unmapped or absent fields [{}], or unrepresentable end/ownership structure. The supported encoding requires two association-owned ends, navigable/notNavigable/unspecified declarations or the omitted unspecified default, multiplicity strings or the omitted empty-string default, and aggregation absent/none/shared/composite; ownerAttribute and qualifiers are not translated", unsupported.join(", ")) });
+            diagnostics.push(Diagnostic { path: object.path.clone(), message: format!("association and ends remain opaque: unmapped or absent fields [{}], or unrepresentable end/ownership structure. The supported encoding requires two association-owned ends, navigable/notNavigable/unspecified declarations or the omitted unspecified default, literal multiplicity ranges or the omitted empty-string UML default (1..1), and aggregation absent/none/shared/composite; ownerAttribute and qualifiers are not translated", unsupported.join(", ")) });
             continue;
         }
         let Some(ends) = ends(object, index) else {
@@ -195,9 +215,21 @@ pub(super) fn import_associations(
             project.relations.push(Relation {
                 id: ownership_relation_id(object.id, paths),
                 kind: "owns".into(),
+                properties: BTreeMap::from([(
+                    "role".into(),
+                    Value::String(
+                        if index.object(&parent).is_some_and(|owner| {
+                            matches!(owner.type_name, "UMLModel" | "UMLPackage")
+                        }) {
+                            "packagedElement"
+                        } else {
+                            "nestedClassifier"
+                        }
+                        .into(),
+                    ),
+                )]),
                 from: parent,
                 to: object.id.into(),
-                properties: BTreeMap::new(),
             });
             residue.remove("_parent");
             fields.insert("_parent".into());
@@ -237,10 +269,16 @@ pub(super) fn import_associations(
                 mapped_fields.insert("navigable".into());
             }
             let mut properties = BTreeMap::new();
+            if mapped_fields.contains("name") {
+                properties.insert("name".into(), Value::String(name.clone()));
+            }
             if let Some(value) = residual.remove("reference") {
                 properties.insert("type".into(), value);
             }
-            for field in END_FIELDS {
+            for field in END_FIELDS
+                .into_iter()
+                .filter(|field| *field != "multiplicity")
+            {
                 if let Some(value) = residual.remove(field) {
                     properties.insert(field.into(), value);
                     mapped_fields.insert(field.into());
@@ -261,11 +299,10 @@ pub(super) fn import_associations(
             properties
                 .entry("visibility".into())
                 .or_insert_with(|| Value::String("public".into()));
-            // StarUML UMLRelationshipEnd initializes missing multiplicity to an
-            // empty string. Omitting it canonically would assert UML's 1..1 default.
-            properties
-                .entry("multiplicity".into())
-                .or_insert_with(|| Value::String(String::new()));
+            if residual.remove("multiplicity").is_some() {
+                mapped_fields.insert("multiplicity".into());
+            }
+            properties.insert("association".into(), serde_json::json!({"$ref": object.id}));
             // MDJ defaults to false, UML to true. Presence metadata is encoding
             // only; the canonical false remains the sole semantic value.
             properties
@@ -273,7 +310,7 @@ pub(super) fn import_associations(
                 .or_insert(Value::Bool(false));
             let element = Element {
                 id: end.id.into(),
-                kind: "uml.attribute".into(),
+                kind: "uml.property".into(),
                 name,
                 label: None,
                 description: None,
@@ -287,7 +324,7 @@ pub(super) fn import_associations(
                 kind: "owns".into(),
                 from: object.id.into(),
                 to: end.id.into(),
-                properties: BTreeMap::new(),
+                properties: BTreeMap::from([("role".into(), Value::String("ownedEnd".into()))]),
             });
             project_endpoint(&mut relation, &element, position);
             project.elements.push(element);
@@ -311,7 +348,7 @@ pub(super) fn import_associations(
             },
         );
         mapped.insert(object.id.into());
-        diagnostics.push(Diagnostic { path: object.path.clone(), message: "binary association and Property ends mapped with original identities; StarUML aggregation is translated to the opposite UML Property, preserving diamond placement; relation endpoints, roles, multiplicities and diamonds are derived projections, not independent editable semantics".into() });
+        diagnostics.push(Diagnostic { path: object.path.clone(), message: "binary association and Property ends mapped with original identities; import policy interprets omitted/empty multiplicity as UML default 1..1, retaining source spelling; explicit literal ranges become owned lowerValue/upperValue specifications; StarUML aggregation is translated to the opposite UML Property, preserving diamond placement; relation endpoints, roles, multiplicities and diamonds are derived projections, not independent editable semantics".into() });
     }
     mapped
 }
@@ -320,22 +357,10 @@ fn project_endpoint(relation: &mut Relation, end: &Element, position: usize) {
     let target = reference(end.properties.get("type"))
         .unwrap_or_default()
         .to_owned();
-    let (role, multiplicity) = if position == 0 {
+    if position == 0 {
         relation.from = target;
-        ("sourceRole", "sourceMultiplicity")
     } else {
         relation.to = target;
-        ("targetRole", "targetMultiplicity")
-    };
-    if !end.name.is_empty() {
-        relation
-            .properties
-            .insert(role.into(), Value::String(end.name.clone()));
-    }
-    if let Some(value) = end.properties.get("multiplicity") {
-        relation
-            .properties
-            .insert(multiplicity.into(), value.clone());
     }
 }
 
@@ -343,33 +368,41 @@ pub(super) fn is_end(metadata: &MdjObjectResidual) -> bool {
     metadata.type_name == "UMLAssociationEnd" && metadata.mapped_fields.contains("_type")
 }
 
-fn preserves_omitted_default(field: &str, value: Option<&Value>) -> bool {
-    match field {
-        "isUnique" => value == Some(&Value::Bool(false)),
-        "visibility" => value.and_then(Value::as_str) == Some("public"),
-        "multiplicity" => value.and_then(Value::as_str) == Some(""),
-        _ => false,
-    }
-}
-
-pub(super) fn update_metadata(project: &Project, provenance: &mut MdjProvenance) {
+pub(super) fn update_metadata(
+    project: &Project,
+    baseline: &Project,
+    provenance: &mut MdjProvenance,
+) {
     for end in &project.elements {
         if let Some(metadata) = provenance
             .object_residuals
             .get_mut(&end.id)
             .filter(|metadata| is_end(metadata))
         {
-            for field in END_FIELDS {
-                if !metadata.mapped_fields.contains(field)
-                    && preserves_omitted_default(field, end.properties.get(field))
-                {
-                    continue;
+            let original = baseline.elements.iter().find(|value| value.id == end.id);
+            for field in END_FIELDS
+                .into_iter()
+                .filter(|field| *field != "multiplicity")
+                .chain(["name"])
+            {
+                let value = end
+                    .properties
+                    .get(field)
+                    .filter(|value| field == "stereotype" || !value.is_null());
+                let prior = original
+                    .and_then(|end| end.properties.get(field))
+                    .filter(|value| field == "stereotype" || !value.is_null());
+                if value != prior {
+                    if value.is_some() {
+                        metadata.mapped_fields.insert(field.into());
+                    } else {
+                        metadata.mapped_fields.remove(field);
+                    }
                 }
-                if end.properties.contains_key(field) {
-                    metadata.mapped_fields.insert(field.into());
-                } else {
-                    metadata.mapped_fields.remove(field);
-                }
+            }
+            if original.is_some_and(|original| bound_references(original) != bound_references(end))
+            {
+                metadata.mapped_fields.insert("multiplicity".into());
             }
         }
     }
@@ -378,11 +411,24 @@ pub(super) fn update_metadata(project: &Project, provenance: &mut MdjProvenance)
             continue;
         }
         if let Some(metadata) = provenance.object_residuals.get_mut(&relation.id) {
+            let original = baseline
+                .relations
+                .iter()
+                .find(|value| value.id == relation.id);
             for field in ASSOCIATION_FIELDS.into_iter().chain(["name"]) {
-                if relation.properties.contains_key(field) {
-                    metadata.mapped_fields.insert(field.into());
-                } else {
-                    metadata.mapped_fields.remove(field);
+                let value = relation
+                    .properties
+                    .get(field)
+                    .filter(|value| field == "stereotype" || !value.is_null());
+                let prior = original
+                    .and_then(|relation| relation.properties.get(field))
+                    .filter(|value| field == "stereotype" || !value.is_null());
+                if value != prior {
+                    if value.is_some() {
+                        metadata.mapped_fields.insert(field.into());
+                    } else {
+                        metadata.mapped_fields.remove(field);
+                    }
                 }
             }
         }
@@ -400,10 +446,15 @@ pub(super) fn update_metadata(project: &Project, provenance: &mut MdjProvenance)
                     .and_then(|id| project.elements.iter().find(|end| end.id == id))
                     .and_then(|end| end.properties.get("aggregation"));
                 if let Some(metadata) = provenance.object_residuals.get_mut(id) {
-                    if aggregation.is_some() {
-                        metadata.mapped_fields.insert("aggregation".into());
-                    } else {
-                        metadata.mapped_fields.remove("aggregation");
+                    let original = reference(Some(opposite))
+                        .and_then(|id| baseline.elements.iter().find(|end| end.id == id))
+                        .and_then(|end| end.properties.get("aggregation"));
+                    if aggregation != original {
+                        if aggregation.is_some() {
+                            metadata.mapped_fields.insert("aggregation".into());
+                        } else {
+                            metadata.mapped_fields.remove("aggregation");
+                        }
                     }
                 }
                 let unverified = project
@@ -423,6 +474,8 @@ pub(super) fn update_metadata(project: &Project, provenance: &mut MdjProvenance)
 
 pub(super) fn export_associations(
     project: &Project,
+    baseline: &Project,
+    original: &mdj::Index<'_>,
     objects: &mut BTreeMap<String, Value>,
 ) -> Result<(), MdjError> {
     let provenance = project
@@ -454,33 +507,31 @@ pub(super) fn export_associations(
             .ok_or_else(|| failure("", "missing association navigability"))?;
         let mut object = base_object(&relation.id, "UMLAssociation", &metadata.residual)?;
         for field in ASSOCIATION_FIELDS.into_iter().chain(["name"]) {
-            if let Some(value) = relation.properties.get(field) {
+            let prior = baseline
+                .relations
+                .iter()
+                .find(|value| value.id == relation.id)
+                .and_then(|value| value.properties.get(field));
+            if let Some(value) = relation
+                .properties
+                .get(field)
+                .filter(|value| field == "stereotype" || !value.is_null())
+                .filter(|value| metadata.mapped_fields.contains(field) || prior != Some(*value))
+            {
                 insert_mapped(&mut object, field, value.clone())?;
             }
         }
         export_owner(project, &relation.id, metadata, &mut object)?;
-        let mut expected = Relation {
-            id: relation.id.clone(),
-            kind: relation.kind.clone(),
-            from: String::new(),
-            to: String::new(),
-            properties: relation
-                .properties
-                .iter()
-                .filter(|(field, _)| {
-                    ASSOCIATION_FIELDS.contains(&field.as_str())
-                        || matches!(field.as_str(), "name" | "memberEnd" | "navigableOwnedEnd")
-                })
-                .map(|(field, value)| (field.clone(), value.clone()))
-                .collect(),
-        };
         for (position, member) in members.iter().enumerate() {
             let id =
                 reference(Some(member)).ok_or_else(|| failure("", "invalid memberEnd encoding"))?;
             let end = project
                 .elements
                 .iter()
-                .find(|end| end.id == id && end.kind == "uml.attribute")
+                .find(|end| {
+                    end.id == id
+                        && crate::uml::root::object_metaclass(&end.kind) == Some("Property")
+                })
                 .ok_or_else(|| failure("", "missing mapped Property end"))?;
             let end_metadata = provenance
                 .object_residuals
@@ -501,37 +552,30 @@ pub(super) fn export_associations(
                     "reordering or replacing association ends is not yet supported",
                 ));
             }
-            let mut end_object = match named_object(
-                id,
-                "UMLAssociationEnd",
-                &end.name,
-                &end_metadata.residual,
-                &end_metadata.mapped_fields,
-            )? {
-                Value::Object(object) => object,
-                _ => return Err(failure("", "invalid end object")),
-            };
+            let mut end_object = base_object(id, "UMLAssociationEnd", &end_metadata.residual)?;
+            if let Some(name) = end.properties.get("name").filter(|value| !value.is_null()) {
+                insert_mapped(&mut end_object, "name", name.clone())?;
+            }
+            let baseline_end = baseline
+                .elements
+                .iter()
+                .find(|value| value.id == end.id)
+                .ok_or_else(|| failure(&expected_path, "missing original Property end"))?;
             for (field, value) in &end.properties {
                 if field == "type" {
                     insert_mapped(&mut end_object, "reference", value.clone())?;
-                } else if field == "aggregation" {
-                    if !supported(field, value, true) {
-                        return Err(failure(&expected_path, "unsupported Property aggregation"));
-                    }
-                    // This value is emitted on the opposite source end below.
-                } else if END_FIELDS.contains(&field.as_str()) {
-                    if !end_metadata.mapped_fields.contains(field)
-                        && preserves_omitted_default(field, Some(value))
-                    {
-                        continue;
-                    }
+                } else if END_FIELDS.contains(&field.as_str())
+                    && field != "multiplicity"
+                    && (field == "stereotype" || !value.is_null())
+                    && (end_metadata.mapped_fields.contains(field)
+                        || baseline_end.properties.get(field) != Some(value))
+                {
                     insert_mapped(&mut end_object, field, value.clone())?;
-                } else {
-                    return Err(failure(
-                        "",
-                        "Property field has no lossless association-end mapping",
-                    ));
                 }
+            }
+            let notation = export_multiplicity(project, baseline, end, baseline_end, original)?;
+            if let Some(notation) = notation {
+                insert_mapped(&mut end_object, "multiplicity", Value::String(notation))?;
             }
             let opposite = members
                 .iter()
@@ -540,7 +584,15 @@ pub(super) fn export_associations(
                 .and_then(|member| reference(Some(member)))
                 .and_then(|id| project.elements.iter().find(|end| end.id == id))
                 .ok_or_else(|| failure(&expected_path, "missing opposite Property end"))?;
-            if let Some(aggregation) = opposite.properties.get("aggregation") {
+            let baseline_aggregation = baseline
+                .elements
+                .iter()
+                .find(|value| value.id == opposite.id)
+                .and_then(|value| value.properties.get("aggregation"));
+            if let Some(aggregation) = opposite.properties.get("aggregation").filter(|value| {
+                end_metadata.mapped_fields.contains("aggregation")
+                    || baseline_aggregation != Some(*value)
+            }) {
                 insert_mapped(&mut end_object, "aggregation", aggregation.clone())?;
             }
             let is_navigable = navigable
@@ -576,19 +628,12 @@ pub(super) fn export_associations(
                 )?;
             }
             export_owner(project, id, end_metadata, &mut end_object)?;
-            project_endpoint(&mut expected, end, position);
             if objects
                 .insert(id.into(), Value::Object(end_object))
                 .is_some()
             {
                 return Err(failure("", "duplicate association end identity"));
             }
-        }
-        if &expected != relation {
-            return Err(failure(
-                "",
-                "association projection conflicts with authoritative Property ends",
-            ));
         }
         if objects
             .insert(relation.id.clone(), Value::Object(object))
@@ -607,17 +652,10 @@ fn export_owner(
     object: &mut Map<String, Value>,
 ) -> Result<(), MdjError> {
     if metadata.mapped_fields.contains("_parent") {
-        let provenance = project
-            .mdj_provenance
-            .as_ref()
-            .ok_or_else(|| failure("", "missing provenance"))?;
-        let ownership_id = ownership_relation_id(id, &provenance.object_paths);
         let ownership = project
             .relations
             .iter()
-            .find(|relation| {
-                relation.id == ownership_id && relation.kind == "owns" && relation.to == id
-            })
+            .find(|relation| relation.kind == "owns" && relation.to == id)
             .ok_or_else(|| failure("", "missing mapped association ownership"))?;
         insert_mapped(
             object,
@@ -626,4 +664,149 @@ fn export_owner(
         )?;
     }
     Ok(())
+}
+
+fn bound_references(end: &Element) -> [Option<&str>; 2] {
+    ["lowerValue", "upperValue"].map(|field| reference(end.properties.get(field)))
+}
+
+pub(super) fn materialize_bounds(
+    project: &mut Project,
+    index: &mdj::Index<'_>,
+    mapped: &BTreeSet<String>,
+) -> Result<(), MdjError> {
+    let mut section = crate::ModelingSection::from_model(project);
+    // Reserve source identities not yet represented in the semantic section,
+    // so synthesized bounds cannot collide with retained interchange objects.
+    let mut reserved = BTreeSet::new();
+    for object in index.objects() {
+        if object.id != project.id
+            && !section.elements.iter().any(|value| value.id == object.id)
+            && !section.relations.iter().any(|value| value.id == object.id)
+        {
+            reserved.insert(object.id.to_owned());
+            section.elements.push(Element {
+                id: object.id.into(),
+                kind: "mdj.reserved".into(),
+                name: String::new(),
+                label: None,
+                description: None,
+                properties: BTreeMap::new(),
+                annotations: Vec::new(),
+                implementations: Vec::new(),
+                content: None,
+            });
+        }
+    }
+    for id in mapped {
+        let Some(object) = index
+            .object(id)
+            .filter(|object| object.type_name == "UMLAssociationEnd")
+        else {
+            continue;
+        };
+        let Some(notation) = object
+            .properties
+            .get("multiplicity")
+            .and_then(Value::as_str)
+            .filter(|text| !text.is_empty())
+        else {
+            continue;
+        };
+        crate::uml::associations::set_end_multiplicity(&mut section, &project.id, id, notation)
+            .map_err(|error| failure(&object.path, error))?;
+    }
+    section
+        .elements
+        .retain(|element| !reserved.contains(&element.id));
+    project.elements = section.elements;
+    project.relations = section.relations;
+    Ok(())
+}
+
+pub(super) fn bound_ids(project: &Project) -> Result<BTreeSet<String>, MdjError> {
+    let mut result = BTreeSet::new();
+    let Some(provenance) = &project.mdj_provenance else {
+        return Ok(result);
+    };
+    for end in &project.elements {
+        if !provenance.object_residuals.get(&end.id).is_some_and(is_end) {
+            continue;
+        }
+        for (field, expected_kind) in [
+            ("lowerValue", "uml.literal_integer"),
+            ("upperValue", "uml.literal_unlimited_natural"),
+        ] {
+            let Some(value) = end.properties.get(field).filter(|value| !value.is_null()) else {
+                continue;
+            };
+            let id = reference(Some(value))
+                .ok_or_else(|| failure("", "invalid multiplicity bound reference"))?;
+            let literal = project
+                .elements
+                .iter()
+                .find(|value| value.id == id)
+                .ok_or_else(|| failure("", "missing multiplicity bound"))?;
+            let owners = project
+                .relations
+                .iter()
+                .filter(|relation| relation.kind == "owns" && relation.to == id)
+                .collect::<Vec<_>>();
+            if literal.kind != expected_kind
+                || owners.len() != 1
+                || owners.first().is_none_or(|owner| {
+                    owner.from != end.id
+                        || owner.properties.get("role").and_then(Value::as_str) != Some(field)
+                })
+                || !result.insert(id.into())
+            {
+                return Err(failure(
+                    "",
+                    "MDJ multiplicity requires exclusive owned literal bounds",
+                ));
+            }
+        }
+    }
+    Ok(result)
+}
+
+fn export_multiplicity(
+    project: &Project,
+    baseline: &Project,
+    end: &Element,
+    original_end: &Element,
+    original: &mdj::Index<'_>,
+) -> Result<Option<String>, MdjError> {
+    let source = original
+        .object(&end.id)
+        .and_then(|object| object.properties.get("multiplicity"))
+        .and_then(Value::as_str);
+    let current_refs = bound_references(end);
+    let original_refs = bound_references(original_end);
+    let bound_values = |project: &Project, refs: [Option<&str>; 2]| {
+        refs.map(|id| {
+            id.and_then(|id| project.elements.iter().find(|element| element.id == id))
+                .and_then(|element| element.properties.get("value"))
+                .cloned()
+        })
+    };
+    if current_refs == original_refs
+        && bound_values(project, current_refs) == bound_values(baseline, original_refs)
+    {
+        return Ok(source.map(str::to_owned));
+    }
+    if current_refs.iter().all(Option::is_none) {
+        return Ok(Some(String::new()));
+    }
+    let references =
+        crate::uml::references::ReferenceIndex::new(crate::uml::root::Model::from_project(project));
+    let range = crate::uml::associations::multiplicity(&references, end)
+        .map_err(|error| failure("", format!("unrepresentable MDJ multiplicity: {error:?}")))?;
+    let lower = range.lower_bound().to_string();
+    let upper = range.upper_bound().to_string();
+    Ok(Some(if lower == upper {
+        lower
+    } else {
+        format!("{lower}..{upper}")
+    }))
 }

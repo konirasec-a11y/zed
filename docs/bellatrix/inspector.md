@@ -91,6 +91,37 @@ Esse editor substitui o antigo Boolean genérico `properties.navigable`, que nã
 representava a navegabilidade individual das pontas e não podia ser persistido
 como campo da Association. Abrir o Inspector não toma uma decisão de navegação.
 
+### Multiplicidade e intercâmbio MDJ
+
+O campo **Multiplicity notation** é um adaptador de edição: escreve referências
+`lowerValue`/`upperValue` para contratos `LiteralInteger` e
+`LiteralUnlimitedNatural` possuídos pelo MultiplicityElement. Não persiste uma
+string `multiplicity` no contrato Property. Os valores derivados aparecem no
+Inspector; sem referências, os limites seguem os defaults UML, normalmente 1..1
+(§7.8.8.6–7 e XMI `MultiplicityElement-lowerValue`/`upperValue`).
+
+Limpar a notação restaura a ausência dos limites. A operação só remove literais
+exclusivos sem conteúdo adicional; referências externas, apresentação associada,
+expressões não literais e ownership inconsistente bloqueiam a alteração inteira.
+Editar um intervalo também não modifica silenciosamente um literal usado por
+outro elemento. Expressões UML não avaliáveis permanecem visíveis em leitura
+apenas, com o motivo indicado, até haver um editor apropriado.
+
+A importação MDJ promove associações binárias representáveis e suas duas pontas
+possuídas para Association/Property. Multiplicidade omitida ou vazia segue a
+notação UML de exatamente 1 (§9.5.4); a diferença textual entre campo ausente e
+`""` fica na provenance de intercâmbio e é preservada na exportação. Limites
+explícitos usam os mesmos contratos e papéis de composição do editor nativo.
+Navegação não decidida conserva o contrato de autoria separado descrito acima.
+
+Essa tradução ainda não cobre toda a semântica MDJ: pontas possuídas por
+classificadores, qualifiers, expressões de multiplicidade não literais e campos
+sem representação no ruml atual, como `Property::isID`, permanecem opacos com
+diagnóstico. São capacidades pendentes do adaptador/contrato, não ausências da
+especificação UML. A exportação rejeita alterações sem representação reversível
+em vez de descartá-las. A validação funcional deste lote depende de publicação e
+execução dos fluxos de integração, além da verificação visual no Zed.
+
 ### Referências de Generalization e InterfaceRealization
 
 Os campos `specific`/`general` da Generalization e

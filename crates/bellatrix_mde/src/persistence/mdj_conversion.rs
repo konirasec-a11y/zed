@@ -141,11 +141,16 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
             diagnostics.push(Diagnostic { path: object.path.clone(), message: format!("{} presentation imported with its owned views; model semantics and diagram context are not inferred from canvas contents", object.type_name) });
         }
     }
-    // The old association adapter relies on flattened multiplicity and
-    // endpoint fields absent from ruml. Keep that encoding opaque until both
-    // directions can be represented without inventing ValueSpecifications.
+    let association_ids = associations::import_associations(
+        &index,
+        &mut project,
+        &mut residuals,
+        &paths,
+        &mut diagnostics,
+    );
     for object in objects {
-        if view_ids.contains(object.id)
+        if association_ids.contains(object.id)
+            || view_ids.contains(object.id)
             || (is_diagram(object.type_name) && !in_view_composition(&object.path))
         {
             continue;
@@ -287,6 +292,7 @@ fn project_document(document: &Value) -> Result<(Import, Residuals, Paths), MdjE
             );
         }
     }
+    associations::materialize_bounds(&mut project, &index, &association_ids)?;
     capture_composition(&index, &mut project, &residuals, &mut diagnostics)?;
     label_projection::bind(&index, &mut project);
     interface_projection::bind(&index, &mut project);
@@ -600,7 +606,7 @@ fn metadata_after_export(project: &Project, original: &Project) -> Project {
                 }
             }
         }
-        associations::update_metadata(project, provenance);
+        associations::update_metadata(project, original, provenance);
         for diagram in &project.diagrams {
             if !diagram.name.is_empty() {
                 if let Some(metadata) = provenance.object_residuals.get_mut(&diagram.id) {
@@ -636,7 +642,11 @@ fn export_document(
             &root.mapped_fields,
         )?,
     );
+    let bound_ids = associations::bound_ids(project)?;
     for element in &project.elements {
+        if bound_ids.contains(&element.id) && !provenance.object_paths.contains_key(&element.id) {
+            continue;
+        }
         let metadata = provenance
             .object_residuals
             .get(&element.id)
@@ -758,7 +768,7 @@ fn export_document(
             )?,
         );
     }
-    associations::export_associations(project, &mut objects)?;
+    associations::export_associations(project, baseline, original, &mut objects)?;
     for diagram in &project.diagrams {
         let metadata = provenance
             .object_residuals

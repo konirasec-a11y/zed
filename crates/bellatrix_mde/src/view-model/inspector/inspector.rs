@@ -1052,18 +1052,25 @@ pub(crate) fn inspect_element_with_references(
         crate::uml::root::ElementRef::Object(element),
         &mut properties,
     );
-    if crate::uml::value_specifications::has_bound_references(crate::uml::root::ElementRef::Object(
-        element,
-    )) {
+    if crate::uml::root::ElementRef::Object(element).conforms_to("MultiplicityElement") {
         if let Some(field) = properties
             .iter_mut()
             .find(|field| field.path == "properties.multiplicity")
         {
-            field.editor = PropertyEditor::ReadOnly;
-            field.editable = false;
-            field.group = "Authored text";
-            field.label =
-                "Preserved multiplicity notation (bound identities are authoritative)".into();
+            match crate::property_edit::property_contract(section, id, "properties.multiplicity") {
+                Ok(contract) => {
+                    field.editor = editor_for_value_type(contract.value_type, false);
+                    field.editable = contract.value_type != PropertyValueType::ReadOnly;
+                    field.value = contract.value;
+                }
+                Err(error) => {
+                    field.editor = PropertyEditor::ReadOnly;
+                    field.editable = false;
+                    field.value = json!(error);
+                }
+            }
+            field.group = "UML properties";
+            field.label = "Multiplicity notation (edits bound ValueSpecifications)".into();
         }
         let bounds = crate::uml::value_specifications::multiplicity(
             references,

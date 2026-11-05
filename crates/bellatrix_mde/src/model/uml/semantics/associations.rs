@@ -1350,7 +1350,7 @@ fn fresh_id(section: &ModelingSection, project_id: &str, prefix: &str) -> Result
             && !section
                 .diagrams
                 .iter()
-                .any(|diagram| diagram.id == id || diagram.views.iter().any(|view| view.id == id))
+                .any(|diagram| diagram.id == id || diagram.all_views().any(|view| view.id == id))
         {
             return Ok(id);
         }
@@ -1781,6 +1781,9 @@ pub(crate) fn set_end_multiplicity(
     notation: &str,
 ) -> Result<(), String> {
     let notation = notation.trim();
+    if notation.is_empty() {
+        return clear_bound_literals(section, property_id);
+    }
     let (lower, upper) = if notation == "*" {
         ("0", "*")
     } else {
@@ -1835,25 +1838,54 @@ pub(crate) fn set_end_multiplicity(
                     literal.kind
                 ));
             }
-            let shared = staged.elements.iter().any(|element| {
-                ["lowerValue", "upperValue"].iter().any(|other_field| {
-                    (element.id != property_id || *other_field != field)
-                        && element
-                            .properties
-                            .get(*other_field)
-                            .and_then(crate::contract_projection::projection_reference_id)
-                            == Some(id.as_str())
-                })
-            });
-            if shared
-                || staged.relations.iter().any(|relation| {
-                    relation.kind == "owns" && relation.to == id && relation.from != property_id
-                })
+            let ownerships = staged
+                .relations
+                .iter()
+                .filter(|relation| relation.kind == "owns" && relation.to == id)
+                .collect::<Vec<_>>();
+            let [ownership] = ownerships.as_slice() else {
+                return Err(format!(
+                    "{property_id}.{field}: bound must have one exclusive owner"
+                ));
+            };
+            if ownership.from != property_id
+                || ownership.properties.keys().any(|key| key != "role")
+                || ownership
+                    .properties
+                    .get("role")
+                    .is_some_and(|role| role.as_str() != Some(field))
             {
                 return Err(format!(
-                    "{property_id}.{field}: bound {id} is shared; edit its literal explicitly"
+                    "{property_id}.{field}: bound ownership is inconsistent"
                 ));
             }
+            let mut dependencies = staged.clone();
+            dependencies.elements.retain(|element| element.id != id);
+            dependencies
+                .elements
+                .iter_mut()
+                .find(|element| element.id == property_id)
+                .ok_or("MultiplicityElement disappeared")?
+                .properties
+                .remove(field);
+            let mut authorized = HashSet::from([id.clone()]);
+            dependencies.relations.retain(|relation| {
+                if relation.kind == "owns"
+                    && relation.from == property_id
+                    && relation.to == id
+                    && relation.properties.keys().all(|key| key == "role")
+                    && relation
+                        .properties
+                        .get("role")
+                        .is_none_or(|role| role.as_str() == Some(field))
+                {
+                    authorized.insert(relation.id.clone());
+                    false
+                } else {
+                    true
+                }
+            });
+            ensure_no_bound_dependents(&dependencies, &authorized)?;
             id
         } else {
             let id = fresh_id(&staged, project_id, &format!("{property_id}-{field}"))?;
@@ -1901,5 +1933,128 @@ pub(crate) fn set_end_multiplicity(
         }
     }
     *section = staged;
+    Ok(())
+}
+
+fn clear_bound_literals(section: &mut ModelingSection, property_id: &str) -> Result<(), String> {
+    let mut staged = section.clone();
+    let mut removed = HashSet::new();
+    for (field, kind) in [
+        ("lowerValue", "uml.literal_integer"),
+        ("upperValue", "uml.literal_unlimited_natural"),
+    ] {
+        let property = staged
+            .elements
+            .iter()
+            .find(|element| element.id == property_id)
+            .ok_or("MultiplicityElement not found")?;
+        if property.properties.contains_key("multiplicity") {
+            return Err(
+                "Textual multiplicity is not a contract field; reconcile it before clearing bounds"
+                    .into(),
+            );
+        }
+        let Some(id) = property
+            .properties
+            .get(field)
+            .filter(|value| !value.is_null())
+            .map(|value| reference_id(value).map(|id| id.map(str::to_owned)))
+            .transpose()?
+            .flatten()
+        else {
+            continue;
+        };
+        let literal = staged
+            .elements
+            .iter()
+            .find(|element| element.id == id)
+            .ok_or_else(|| format!("{property_id}.{field}: bound not found"))?;
+        if literal.kind != kind
+            || !literal.name.is_empty()
+            || literal.label.is_some()
+            || literal.description.is_some()
+            || !literal.annotations.is_empty()
+            || !literal.implementations.is_empty()
+            || literal.content.is_some()
+            || literal.properties.iter().any(|(key, value)| {
+                key != "value" && !value.is_null() && !value.as_array().is_some_and(Vec::is_empty)
+            })
+        {
+            return Err(format!(
+                "{property_id}.{field}: clearing multiplicity cannot discard an expression or additional literal content; edit that ValueSpecification directly"
+            ));
+        }
+        let ownerships = staged
+            .relations
+            .iter()
+            .filter(|relation| relation.kind == "owns" && relation.to == id)
+            .collect::<Vec<_>>();
+        let [ownership] = ownerships.as_slice() else {
+            return Err(format!(
+                "{property_id}.{field}: bound must have one exclusive owner"
+            ));
+        };
+        if ownership.from != property_id
+            || ownership.properties.keys().any(|key| key != "role")
+            || ownership
+                .properties
+                .get("role")
+                .is_some_and(|value| value.as_str() != Some(field))
+        {
+            return Err(format!(
+                "{property_id}.{field}: bound ownership is inconsistent"
+            ));
+        }
+        let ownership_id = ownership.id.clone();
+        staged
+            .relations
+            .retain(|relation| relation.id != ownership_id);
+        staged.elements.retain(|element| element.id != id);
+        staged
+            .elements
+            .iter_mut()
+            .find(|element| element.id == property_id)
+            .ok_or("MultiplicityElement disappeared")?
+            .properties
+            .remove(field);
+        removed.insert(id);
+        removed.insert(ownership_id);
+    }
+    ensure_no_bound_dependents(&staged, &removed)?;
+    *section = staged;
+    Ok(())
+}
+
+fn ensure_no_bound_dependents(
+    section: &ModelingSection,
+    identities: &HashSet<String>,
+) -> Result<(), String> {
+    // Provenance records the import baseline, not a live semantic dependency.
+    // Every other semantic and presentation occurrence must remain intact.
+    let remaining = serde_json::to_value((
+        &section.elements,
+        &section.relations,
+        &section.diagrams,
+        &section.root_model,
+        &section.authoring_knowledge,
+        &section.hierarchy,
+        &section.composition,
+    ))
+    .map_err(|error| format!("Cannot inspect bound dependencies: {error}"))?;
+    fn contains_identity(value: &Value, identities: &HashSet<String>) -> bool {
+        match value {
+            Value::String(value) => identities.contains(value),
+            Value::Array(values) => values
+                .iter()
+                .any(|value| contains_identity(value, identities)),
+            Value::Object(values) => values.iter().any(|(key, value)| {
+                identities.contains(key) || contains_identity(value, identities)
+            }),
+            _ => false,
+        }
+    }
+    if contains_identity(&remaining, identities) {
+        return Err("Cannot edit multiplicity notation: a bound or its ownership has another semantic or presentation reference; edit the ValueSpecification directly".into());
+    }
     Ok(())
 }

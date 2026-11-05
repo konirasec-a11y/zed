@@ -8,7 +8,8 @@ Feature: Lossless StarUML association defaults through the public document APIs
     Given an MDJ association with explicit navigation and one omitted multiplicity
     And its other end has an explicit empty multiplicity string
     When I import the MDJ into the universal document contract
-    Then both Property ends retain an empty multiplicity rather than asserting one
+    Then both Property ends use the UML default multiplicity of one with absent bound specifications
+    And the original omitted versus empty source notation is preserved separately
     And exporting without edits returns the original bytes exactly
     When I rename a class, save to JSON and BLX, close and reopen each file
     Then MDJ export preserves the omitted field and the explicit empty string separately

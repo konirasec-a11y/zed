@@ -87,6 +87,18 @@ fn set_inspected_property_inner(
     if crate::relationship_retarget::set_endpoint(section, id, path, &value)? {
         return Ok(());
     }
+    if path == "properties.multiplicity"
+        && crate::uml::root::Model::from_section(section)
+            .element(id)
+            .is_some_and(|element| element.conforms_to("MultiplicityElement"))
+    {
+        return crate::uml::associations::set_end_multiplicity(
+            section,
+            "",
+            id,
+            value.as_str().ok_or("expected multiplicity notation")?,
+        );
+    }
     if crate::uml::associations::set_projection_property(section, id, path, &value)? {
         return Ok(());
     }

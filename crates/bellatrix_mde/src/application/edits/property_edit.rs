@@ -533,19 +533,20 @@ pub(crate) fn property_contract(
     };
     let mut contract = normalize_property_contract(element, key, value_type, value);
     if matches!(element, ElementRef::Object(_)) {
-        if key == "multiplicity" && crate::uml::value_specifications::has_bound_references(element)
-        {
+        if key == "multiplicity" && element.conforms_to("MultiplicityElement") {
             let references = crate::uml::references::ReferenceIndex::new(
                 crate::uml::root::Model::from_section(section),
             );
             match crate::uml::value_specifications::multiplicity(&references, element) {
                 Ok(bounds) => {
                     contract.value_type = PropertyValueType::String;
-                    contract.value = json!(format!(
-                        "{}..{}",
-                        bounds.lower_bound(),
-                        bounds.upper_bound()
-                    ));
+                    let lower = bounds.lower_bound().to_string();
+                    let upper = bounds.upper_bound().to_string();
+                    contract.value = json!(if lower == upper {
+                        lower
+                    } else {
+                        format!("{lower}..{upper}")
+                    });
                 }
                 Err(error) => {
                     contract.value_type = PropertyValueType::ReadOnly;

@@ -2,7 +2,10 @@ use bellatrix_mde::{
     apply_model_command, decode_model_document, encode_model_section, export_mdj_section,
     import_mdj_document, prepare_model_document, project_model_section,
 };
-use bellatrix_mde_contracts::protocol::{ModelDocumentParts, command::Command};
+use bellatrix_mde_contracts::protocol::{
+    ModelDocumentParts, command::Command, projection::ModelingProjection,
+};
+use prost::Message;
 use serde_json::{Value, json};
 use std::{error::Error, fs, path::PathBuf};
 
@@ -11,6 +14,12 @@ type FlowResult<T> = Result<T, Box<dyn Error>>;
 #[derive(serde::Deserialize)]
 struct ModelResponse {
     model: Box<serde_json::value::RawValue>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct Blx2Document {
+    #[prost(bytes, tag = "1")]
+    document_json: Vec<u8>,
 }
 
 fn model_response(response: &str) -> FlowResult<Value> {
@@ -125,13 +134,130 @@ fn set_property(project: &Value, id: &str, path: &str, value: Value) -> FlowResu
     )
 }
 
-fn object<'a>(project: &'a Value, collection: &str, id: &str) -> FlowResult<&'a Value> {
-    project[collection]
-        .as_array()
-        .ok_or("missing collection")?
+fn contract_data<'a>(project: &'a Value, id: &str, metaclass: &str) -> FlowResult<&'a Value> {
+    let entry = project
+        .pointer("/model/registry/entries")
+        .and_then(|entries| entries.get(id))
+        .ok_or_else(|| format!("missing concrete {metaclass} contract {id}"))?;
+    assert_eq!(entry.get("type"), Some(&json!(metaclass)));
+    let data = entry.get("data").ok_or("missing contract data")?;
+    assert_eq!(data.get("id"), Some(&json!(id)));
+    Ok(data)
+}
+
+fn projection(project: &Value) -> FlowResult<ModelingProjection> {
+    let document = document_parts(project)?;
+    Ok(
+        project_model_section(&document.id, &document.name, &document.section_json)
+            .map_err(std::io::Error::other)?,
+    )
+}
+
+fn assert_association_contracts(project: &Value) -> FlowResult<()> {
+    contract_data(project, "model", "Model")?;
+    for id in ["left", "right"] {
+        contract_data(project, id, "Class")?;
+    }
+    let association = contract_data(project, "association", "Association")?;
+    assert_eq!(
+        association.get("memberEnd"),
+        Some(&json!(["left-end", "right-end"]))
+    );
+    assert_eq!(association.get("ownedEnd"), association.get("memberEnd"));
+    for (id, classifier) in [("left-end", "left"), ("right-end", "right")] {
+        let end = contract_data(project, id, "Property")?;
+        assert_eq!(end.get("type"), Some(&json!(classifier)));
+        assert_eq!(end.get("association"), Some(&json!("association")));
+        assert_eq!(end.get("owningAssociation"), Some(&json!("association")));
+    }
+    Ok(())
+}
+
+fn assert_property_bounds(
+    project: &Value,
+    id: &str,
+    bounds: Option<(&str, &str)>,
+) -> FlowResult<()> {
+    let end = contract_data(project, id, "Property")?;
+    assert!(end.get("multiplicity").is_none());
+    assert!(end.get("properties").is_none());
+    match bounds {
+        None => {
+            assert_eq!(end.get("lowerValue"), Some(&Value::Null));
+            assert_eq!(end.get("upperValue"), Some(&Value::Null));
+        }
+        Some((lower, upper)) => {
+            for (field, metaclass, expected) in [
+                ("lowerValue", "LiteralInteger", lower),
+                ("upperValue", "LiteralUnlimitedNatural", upper),
+            ] {
+                let literal_id = end
+                    .get(field)
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| format!("{id}.{field} must reference a concrete {metaclass}"))?;
+                let literal = contract_data(project, literal_id, metaclass)?;
+                assert_eq!(literal.get("value"), Some(&json!(expected)));
+            }
+        }
+    }
+    let snapshot = projection(project)?;
+    let inspector = snapshot
+        .inspect_element(id)
+        .ok_or("missing Property inspector")?;
+    let multiplicity = inspector
+        .properties
         .iter()
-        .find(|item| item["id"] == id)
-        .ok_or_else(|| format!("missing {collection} item {id}").into())
+        .find(|property| property.path == "properties.multiplicity")
+        .ok_or("missing multiplicity authoring adapter")?;
+    assert!(multiplicity.editable);
+    assert_eq!(
+        multiplicity.value,
+        match bounds {
+            None => json!("1"),
+            Some((lower, upper)) if lower == upper => json!(lower),
+            Some((lower, upper)) => json!(format!("{lower}..{upper}")),
+        }
+    );
+    Ok(())
+}
+
+fn assert_projected_multiplicity(project: &Value, source: Option<&str>) -> FlowResult<()> {
+    let snapshot = projection(project)?;
+    let association = snapshot
+        .relations
+        .iter()
+        .find(|relation| relation.id == "association")
+        .ok_or("missing concrete Association projection")?;
+    assert_eq!(
+        association
+            .presentation
+            .source_labels
+            .multiplicity
+            .as_deref(),
+        source
+    );
+    assert!(
+        association
+            .presentation
+            .target_labels
+            .multiplicity
+            .is_none()
+    );
+    if let Some(expected) = source {
+        let inspector = snapshot
+            .inspect_element("association")
+            .ok_or("missing Association inspector")?;
+        let multiplicity = inspector
+            .properties
+            .iter()
+            .find(|property| property.path == "properties.sourceMultiplicity")
+            .ok_or("missing derived source multiplicity")?;
+        assert_eq!(multiplicity.value, json!(expected));
+    }
+    let association = contract_data(project, "association", "Association")?;
+    assert!(association.get("sourceMultiplicity").is_none());
+    assert!(association.get("targetMultiplicity").is_none());
+    Ok(())
 }
 
 fn assert_exported_multiplicities(project: &Value, left: Option<&str>) -> FlowResult<()> {
@@ -154,16 +280,15 @@ fn omitted_multiplicity_survives_edit_save_reopen_and_restore() -> FlowResult<()
     println!("Given explicit navigation with omitted and explicit empty MDJ multiplicities");
     let original = include_bytes!("../fixtures/bdd/interchange/mdj-association-defaults.mdj");
     let project = import_mdj(original)?;
+    assert_association_contracts(&project)?;
     for id in ["left-end", "right-end"] {
-        let end = object(&project, "elements", id)?;
-        assert_eq!(end["kind"], "uml.attribute");
-        assert_eq!(end["properties"].get("multiplicity"), Some(&json!("")));
+        assert_property_bounds(&project, id, None)?;
     }
-    let association = object(&project, "relations", "association")?;
-    assert_eq!(association["kind"], "uml.association");
+    assert_projected_multiplicity(&project, None)?;
+    let association = contract_data(&project, "association", "Association")?;
     assert_eq!(
-        association["properties"].get("navigableOwnedEnd"),
-        Some(&json!([{"$ref":"right-end"}]))
+        association.get("navigableOwnedEnd"),
+        Some(&json!(["right-end"]))
     );
     assert_eq!(export_mdj(&project)?, original.as_slice());
     let saved = SavedFlow::new("multiplicity")?;
@@ -171,6 +296,8 @@ fn omitted_multiplicity_survives_edit_save_reopen_and_restore() -> FlowResult<()
     let renamed = set_property(&project, "left", "name", json!("RenamedLeft"))?;
     for (name, format) in [("renamed.json", "json"), ("renamed.blx", "protobuf")] {
         let reopened = saved.reopen(&renamed, name, format)?;
+        assert_property_bounds(&reopened, "left-end", None)?;
+        assert_property_bounds(&reopened, "right-end", None)?;
         assert_exported_multiplicities(&reopened, None)?;
     }
     println!("When a formerly omitted multiplicity is authored and reopened");
@@ -180,18 +307,47 @@ fn omitted_multiplicity_survives_edit_save_reopen_and_restore() -> FlowResult<()
         "properties.multiplicity",
         json!("0..*"),
     )?;
-    let association = object(&edited, "relations", "association")?;
-    assert_eq!(
-        association["properties"].get("sourceMultiplicity"),
-        Some(&json!("0..*"))
-    );
+    assert_property_bounds(&edited, "left-end", Some(("0", "*")))?;
+    assert_projected_multiplicity(&edited, Some("0..*"))?;
     for (name, format) in [("edited.json", "json"), ("edited.blx", "protobuf")] {
         let reopened = saved.reopen(&edited, name, format)?;
+        assert_property_bounds(&reopened, "left-end", Some(("0", "*")))?;
+        assert_property_bounds(&reopened, "right-end", None)?;
+        assert_projected_multiplicity(&reopened, Some("0..*"))?;
         assert_exported_multiplicities(&reopened, Some("0..*"))?;
     }
+    let before_invalid = encode_model(&edited, "json")?;
+    assert!(
+        set_property(
+            &edited,
+            "left-end",
+            "properties.multiplicity",
+            json!("2..1")
+        )
+        .is_err()
+    );
+    assert_eq!(encode_model(&edited, "json")?, before_invalid);
     println!("Then restoring the default preserves original absence rather than inventing a field");
     let restored = set_property(&edited, "left-end", "properties.multiplicity", json!(""))?;
+    assert_property_bounds(&restored, "left-end", None)?;
+    assert_projected_multiplicity(&restored, None)?;
+    let edited_end = contract_data(&edited, "left-end", "Property")?;
+    let restored_entries = restored
+        .pointer("/model/registry/entries")
+        .ok_or("missing restored registry")?;
+    for field in ["lowerValue", "upperValue"] {
+        let literal_id = edited_end
+            .get(field)
+            .and_then(Value::as_str)
+            .ok_or("missing authored bound identity")?;
+        assert!(restored_entries.get(literal_id).is_none());
+    }
     assert_exported_multiplicities(&restored, None)?;
+    for (name, format) in [("restored.json", "json"), ("restored.blx", "protobuf")] {
+        let reopened = saved.reopen(&restored, name, format)?;
+        assert_property_bounds(&reopened, "left-end", None)?;
+        assert_exported_multiplicities(&reopened, None)?;
+    }
     Ok(())
 }
 
@@ -233,17 +389,27 @@ fn assert_navigation_export(project: &Value, left: Option<&str>, right: &str) ->
     assert_eq!(first.get("navigable").and_then(Value::as_str), left);
     assert_eq!(second.get("navigable").and_then(Value::as_str), Some(right));
     let reimported = import_mdj(&bytes)?;
+    assert_association_contracts(&reimported)?;
     assert_eq!(
-        reimported.get("authoring_knowledge"),
-        project.get("authoring_knowledge")
+        reimported.pointer("/model/authoringKnowledge"),
+        project.pointer("/model/authoringKnowledge")
     );
     Ok(())
 }
 
 fn assert_navigation_consumers(project: &Value, known: bool) -> FlowResult<()> {
     use bellatrix_mde_contracts::protocol::presentation::EndpointMarkerGlyph;
+    let association = contract_data(project, "association", "Association")?;
+    assert_eq!(
+        association.get("navigableOwnedEnd"),
+        Some(&if known {
+            json!(["left-end"])
+        } else {
+            json!([])
+        })
+    );
     let mut document = project.clone();
-    document["diagrams"] = json!([{
+    document["model"]["diagrams"] = json!([{
         "id":"navigation-preview", "name":"Navigation preview", "uml_di_type":"UMLClassDiagram",
         "views":[{
             "id":"association-view", "subject":"association",
@@ -304,6 +470,22 @@ fn assert_navigation_consumers(project: &Value, known: bool) -> FlowResult<()> {
             json!("unverified")
         }
     );
+    let navigability = inspector
+        .properties
+        .iter()
+        .find(|property| property.path == "uml.isNavigable")
+        .ok_or("missing derived UML navigability")?;
+    assert!(!navigability.editable);
+    if known {
+        assert_eq!(navigability.value, json!(true));
+    } else {
+        assert!(
+            navigability
+                .value
+                .as_str()
+                .is_some_and(|value| value.contains("unverified"))
+        );
+    }
     Ok(())
 }
 
@@ -316,9 +498,10 @@ fn unknown_navigation_survives_reopening_decisions_and_atomic_repair() -> FlowRe
     println!("Given absent and explicit unspecified navigation in an MDJ association");
     let source = navigation_source()?;
     let project = import_mdj(&source)?;
+    assert_association_contracts(&project)?;
     assert_eq!(export_mdj(&project)?, source);
     assert_eq!(
-        project["authoring_knowledge"]["associations"].get("association"),
+        project.pointer("/model/authoringKnowledge/associations/association"),
         Some(&json!({"navigation_unverified":["left-end", "right-end"]}))
     );
     assert_navigation_consumers(&project, false)?;
@@ -336,7 +519,7 @@ fn unknown_navigation_survives_reopening_decisions_and_atomic_repair() -> FlowRe
         "right-end",
         NavigationKnowledge::Known(false),
     )?;
-    assert!(decided.get("authoring_knowledge").is_none());
+    assert!(decided.pointer("/model/authoringKnowledge").is_none());
     assert_navigation_consumers(&decided, true)?;
     for (name, format) in [("decided.json", "json"), ("decided.blx", "protobuf")] {
         let reopened = saved.reopen(&decided, name, format)?;
@@ -346,8 +529,8 @@ fn unknown_navigation_survives_reopening_decisions_and_atomic_repair() -> FlowRe
     let restored_right = choose_navigation(&decided, "right-end", NavigationKnowledge::Unverified)?;
     let restored = choose_navigation(&restored_right, "left-end", NavigationKnowledge::Unverified)?;
     assert_eq!(
-        restored.get("authoring_knowledge"),
-        renamed.get("authoring_knowledge")
+        restored.pointer("/model/authoringKnowledge"),
+        renamed.pointer("/model/authoringKnowledge")
     );
     assert_navigation_export(&restored, None, "unspecified")?;
     for references in [
@@ -356,24 +539,31 @@ fn unknown_navigation_survives_reopening_decisions_and_atomic_repair() -> FlowRe
         vec!["left"],
     ] {
         let mut invalid = project.clone();
-        invalid["authoring_knowledge"]["associations"]["association"] =
+        invalid["model"]["authoringKnowledge"]["associations"]["association"] =
             json!({"navigation_unverified": references});
         let reopened = saved.reopen(&invalid, "invalid.json", "json")?;
         assert!(export_mdj(&reopened).is_err());
     }
     let mut conflicting = first_decision.clone();
-    conflicting["authoring_knowledge"] = project["authoring_knowledge"].clone();
+    conflicting["model"]["authoringKnowledge"] = project["model"]["authoringKnowledge"].clone();
     assert!(export_mdj(&conflicting).is_err());
     println!("And ambiguous authoring identities cannot disappear in a document or API envelope");
     let mut document = project.clone();
-    document["authoring_knowledge"] = Value::Null;
+    document["model"]["authoringKnowledge"] = Value::Null;
     let ambiguous = document.to_string().replace(
-        "\"authoring_knowledge\":null",
-        r#""authoring_knowledge":{"associations":{"association":{"navigation_unverified":["left-end"]},"association":{"navigation_unverified":[]}}}"#,
+        "\"authoringKnowledge\":null",
+        r#""authoringKnowledge":{"associations":{"association":{"navigation_unverified":["left-end"]},"association":{"navigation_unverified":[]}}}"#,
     );
     let path = saved.0.join("ambiguous.json");
     fs::write(&path, &ambiguous)?;
-    assert!(decode_model(&fs::read(path)?, "json").is_err());
+    let Err(error) = decode_model(&fs::read(path)?, "json") else {
+        return Err("duplicate Association knowledge identity was accepted in JSON".into());
+    };
+    assert!(
+        error
+            .to_string()
+            .contains("duplicate Association knowledge identity")
+    );
     let envelope = format!(r#"{{"api_version":1,"model":{ambiguous}}}"#);
     assert!(bellatrix_mde::validate_graph_model(&envelope).is_err());
     assert!(
@@ -394,21 +584,40 @@ fn unknown_navigation_survives_reopening_decisions_and_atomic_repair() -> FlowRe
         ))
         .is_err()
     );
-    let mut duplicate_wire = encode_model(&project, "protobuf")?;
-    let association_id = b"association";
-    duplicate_wire.extend_from_slice(&[
-        0x6a,
-        u8::try_from(association_id.len() + 2)?,
-        0x0a,
-        u8::try_from(association_id.len())?,
-    ]);
-    duplicate_wire.extend_from_slice(association_id);
+    let original_wire = encode_model(&project, "protobuf")?;
+    let payload = original_wire
+        .strip_prefix(b"BLX2")
+        .ok_or("missing BLX2 header")?;
+    let mut wire = Blx2Document::decode(payload)?;
+    assert_eq!(
+        serde_json::from_slice::<Value>(&wire.document_json)?,
+        project
+    );
+    // BLX2 carries canonical JSON in field 1; an unknown protobuf field cannot test duplicate identities.
+    wire.document_json = ambiguous.as_bytes().to_vec();
+    let mut duplicate_wire = b"BLX2".to_vec();
+    duplicate_wire.extend(wire.encode_to_vec());
     fs::write(saved.0.join("ambiguous.blx"), &duplicate_wire)?;
-    assert!(decode_model(&fs::read(saved.0.join("ambiguous.blx"))?, "protobuf").is_err());
+    let Err(error) = decode_model(&fs::read(saved.0.join("ambiguous.blx"))?, "protobuf") else {
+        return Err("duplicate Association knowledge identity was accepted in BLX2".into());
+    };
+    assert!(
+        error
+            .to_string()
+            .contains("duplicate Association knowledge identity")
+    );
     let mut native = project.clone();
-    let native_fields = native.as_object_mut().ok_or("missing document")?;
+    let native_fields = native
+        .get_mut("model")
+        .and_then(Value::as_object_mut)
+        .ok_or("missing canonical model")?;
     native_fields.remove("composition");
-    native_fields.remove("mdj_provenance");
+    native_fields.remove("mdjProvenance");
+    assert_navigation_consumers(&native, false)?;
+    for (name, format) in [("native.json", "json"), ("native.blx", "protobuf")] {
+        let reopened = saved.reopen(&native, name, format)?;
+        assert_navigation_consumers(&reopened, false)?;
+    }
     let before = encode_model(&native, "json")?;
     assert!(
         edit(
