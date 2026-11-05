@@ -7,7 +7,7 @@ use bellatrix_mde_contracts::{
     RelationshipRouting, StyleInheritance, View, ViewEndpoints,
     protocol::{
         Command, ModelDocumentParts, ModelingElementKind, ModelingMemberKind, ModelingRelationKind,
-        inspector::PropertyEditor, projection::ModelingProjection,
+        UmlQuickCreate, inspector::PropertyEditor, projection::ModelingProjection,
     },
     ruml::{Contract, class::Class},
 };
@@ -1064,18 +1064,14 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
         revision: flow.revision,
     };
     let comment = annotation_flow.create(
-        Command::CreateModelElement {
-            owner_id: Some("model".into()),
-            kind: ModelingElementKind::Comment,
-            name: None,
+        Command::QuickEdit {
+            diagram_id: "classes".into(),
+            element_id: invoice.clone(),
+            action: UmlQuickCreate::Note,
         },
         "Comment",
     )?;
-    let annotated = annotation_flow.apply(Command::SetProperty {
-        element_id: comment.clone(),
-        path: "properties.annotatedElement".into(),
-        value: json!([{"$ref": invoice}]),
-    })?;
+    let annotated = annotation_flow.section()?;
     let Contract::Comment(annotation) = contract(&annotated, &comment)? else {
         return Err("annotation authoring must retain a concrete Comment".into());
     };
@@ -1090,7 +1086,34 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
         .id
         .clone();
     assert!(note_links.next().is_none());
-    assert!(annotated.diagrams.iter().all(|diagram| {
+    let mut link_views = annotated
+        .diagrams
+        .iter()
+        .find(|diagram| diagram.id == "classes")
+        .ok_or("missing class diagram after Quick Edit")?
+        .views
+        .iter()
+        .filter(|view| view.subject.as_deref() == Some(note_link.as_str()));
+    let link_view = link_views
+        .next()
+        .ok_or("Quick Edit must create a top-level Comment link View")?;
+    assert!(link_views.next().is_none());
+    assert!(link_view.children.is_empty());
+    assert!(matches!(&link_view.geometry, Geometry::Path { .. }));
+    let unshown = annotation_flow.apply(Command::RemoveView {
+        diagram_id: "classes".into(),
+        view_id: link_view.id.clone(),
+    })?;
+    let mut expected_unshown = annotated.clone();
+    expected_unshown
+        .diagrams
+        .iter_mut()
+        .find(|diagram| diagram.id == "classes")
+        .ok_or("missing expected class diagram")?
+        .views
+        .retain(|view| view.id != link_view.id);
+    assert_eq!(unshown, expected_unshown);
+    assert!(unshown.diagrams.iter().all(|diagram| {
         diagram
             .all_views()
             .all(|view| view.subject.as_deref() != Some(note_link.as_str()))
