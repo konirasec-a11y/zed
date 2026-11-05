@@ -209,7 +209,6 @@ impl MdeWorkbenchItem {
         cx.notify();
     }
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
-        self.gesture = None;
         if let Ok(snapshot) = self.source.snapshot() {
             self.reconcile_selection(&snapshot.section);
         }

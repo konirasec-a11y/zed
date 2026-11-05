@@ -5,6 +5,7 @@ use bellatrix_mde_cordis::projection::Contract;
 impl Render for MdeWorkbenchItem {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let snapshot = self.source.presentation_snapshot();
+        self.reconcile_gesture(snapshot.as_ref().ok().map(|snapshot| snapshot.revision));
         if let Ok(snapshot) = &snapshot {
             self.reconcile_selection(&snapshot.section);
         }
@@ -1648,7 +1649,10 @@ impl MdeWorkbenchItem {
                                 event.position,
                                 cx,
                             );
-                        } else if !internal && !item.source.is_read_only() {
+                        } else if !internal
+                            && !item.source.is_read_only()
+                            && !item.gesture_submission_pending()
+                        {
                             item.gesture = Some(CanvasGesture::Move {
                                 view_id: view_id.clone(),
                                 start: event.position,
@@ -1656,6 +1660,7 @@ impl MdeWorkbenchItem {
                                 dy: 0.0,
                                 revision,
                                 began: false,
+                                submitted: false,
                             });
                         }
                         cx.focus_self(window);
@@ -1740,7 +1745,7 @@ impl MdeWorkbenchItem {
         position: Point<Pixels>,
         cx: &mut Context<Self>,
     ) {
-        if self.presentation.selected_tool().is_some() {
+        if self.presentation.selected_tool().is_some() || self.gesture_submission_pending() {
             return;
         }
         let Ok(snapshot) = self.source.snapshot() else {
@@ -1782,6 +1787,7 @@ impl MdeWorkbenchItem {
             dy: 0.0,
             revision,
             began: false,
+            submitted: false,
         });
         self.feedback = "Editing route · endpoints stay attached · Escape cancels".into();
         cx.notify();

@@ -112,6 +112,7 @@ enum PathHandle {
     Segment(usize),
 }
 
+#[derive(Clone)]
 enum CanvasGesture {
     Move {
         view_id: String,
@@ -120,6 +121,7 @@ enum CanvasGesture {
         dy: f64,
         revision: u64,
         began: bool,
+        submitted: bool,
     },
     Resize {
         view_id: String,
@@ -130,6 +132,7 @@ enum CanvasGesture {
         dy: f64,
         revision: u64,
         began: bool,
+        submitted: bool,
     },
     EditPath {
         diagram_id: String,
@@ -141,8 +144,33 @@ enum CanvasGesture {
         dy: f64,
         revision: u64,
         began: bool,
+        submitted: bool,
     },
 }
+impl CanvasGesture {
+    fn submission(&self) -> (u64, bool) {
+        match self {
+            Self::Move {
+                revision, submitted, ..
+            }
+            | Self::Resize {
+                revision, submitted, ..
+            }
+            | Self::EditPath {
+                revision, submitted, ..
+            } => (*revision, *submitted),
+        }
+    }
+
+    fn mark_submitted(&mut self) {
+        match self {
+            Self::Move { submitted, .. }
+            | Self::Resize { submitted, .. }
+            | Self::EditPath { submitted, .. } => *submitted = true,
+        }
+    }
+}
+
 pub struct MdeWorkbenchItem {
     source: MdeUiSource,
     presentation: WorkbenchState,
@@ -282,14 +310,20 @@ impl MdeWorkbenchItem {
         let mut feedback = source.feedback.clone();
         let mut validations = source.validations.clone();
         let mut saves = source.saves.clone();
+        let mut activity = source.activity();
         let task = cx.spawn(async move |this, cx| {
             let mut projections_open = true;
+            let mut activity_open = true;
             let mut revisions_open = true;
             let mut saves_open = true;
             let mut validations_open = true;
             let mut feedback_open = true;
             loop {
                 tokio::select! {
+                    changed = activity.changed(), if activity_open => {
+                        if changed.is_err() { activity_open = false; continue; }
+                        if this.update(cx, |_, cx| cx.notify()).is_err() { break; }
+                    }
                     changed = async {
                         match &mut move_previews {
                             Some(changes) => changes.changed().await,
@@ -1095,6 +1129,9 @@ impl MdeWorkbenchItem {
         position: Point<Pixels>,
         cx: &mut Context<Self>,
     ) {
+        if self.gesture_submission_pending() {
+            return;
+        }
         if let Some(ModelingTool::Relation(kind)) = self.presentation.selected_tool() {
             self.connect_relation_view(kind, view_id, None, cx);
             return;
@@ -1110,6 +1147,7 @@ impl MdeWorkbenchItem {
             dy: 0.0,
             revision,
             began: false,
+            submitted: false,
         });
     }
     fn start_resize(
@@ -1121,7 +1159,7 @@ impl MdeWorkbenchItem {
         position: Point<Pixels>,
         cx: &mut Context<Self>,
     ) {
-        if self.source.is_read_only() {
+        if self.source.is_read_only() || self.gesture_submission_pending() {
             return;
         }
         self.gesture = Some(CanvasGesture::Resize {
@@ -1133,11 +1171,12 @@ impl MdeWorkbenchItem {
             dy: 0.0,
             revision,
             began: false,
+            submitted: false,
         });
         cx.notify();
     }
     fn update_gesture(&mut self, event: &MouseMoveEvent, cx: &mut Context<Self>) {
-        if self.source.is_read_only() {
+        if self.source.is_read_only() || self.gesture_submission_pending() {
             return;
         }
         if event.pressed_button != Some(MouseButton::Left) || !event.dragging() {
@@ -1184,7 +1223,36 @@ impl MdeWorkbenchItem {
         }
         cx.notify();
     }
+    fn gesture_submission_pending(&self) -> bool {
+        self.gesture
+            .as_ref()
+            .is_some_and(|gesture| gesture.submission().1)
+    }
+
+    fn reconcile_gesture(&mut self, presentation_revision: Option<u64>) {
+        let Some(gesture) = &self.gesture else {
+            return;
+        };
+        let (revision, submitted) = gesture.submission();
+        let retain = self.source.document().is_ok_and(|document| {
+            if submitted {
+                // Keep only the existing transient preview until the canonical
+                // projection replaces it, including the gap after command completion.
+                presentation_revision == Some(revision)
+                    && (document.revision() != revision || self.source.is_pending())
+            } else {
+                document.revision() == revision
+            }
+        });
+        if !retain {
+            self.gesture = None;
+        }
+    }
+
     fn finish_gesture(&mut self, cx: &mut Context<Self>) {
+        if self.gesture_submission_pending() {
+            return;
+        }
         let Some(gesture) = self.gesture.take() else {
             return;
         };
@@ -1232,6 +1300,7 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         }
+        let mut submitted_gesture = gesture.clone();
         let command = match gesture {
             CanvasGesture::Move {
                 view_id, dx, dy, ..
@@ -1315,7 +1384,15 @@ impl MdeWorkbenchItem {
                 })
             }
         };
-        self.submit(command, cx);
+        self.feedback = match self.source.submit(command) {
+            Ok(()) => {
+                submitted_gesture.mark_submitted();
+                self.gesture = Some(submitted_gesture);
+                "Command sent to Cordis".into()
+            }
+            Err(error) => format!("Command not sent: {error}"),
+        };
+        cx.notify();
     }
 }
 
