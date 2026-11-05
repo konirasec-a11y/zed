@@ -210,7 +210,7 @@ pub(crate) fn fields_for(kind: &str) -> impl Iterator<Item = &DeclaredProperty> 
         })
         .chain(
             match kind {
-                "rust.field" | "uml.attribute" | "uml.part" | "uml.port" => FIELD,
+                "rust.field" | "uml.attribute" | "uml.property" | "uml.part" | "uml.port" => FIELD,
                 "uml.comment" | "uml.note" => COMMENT,
                 "rust.function" | "uml.operation" => FUNCTION,
                 "uml.parameter" => PARAMETER,

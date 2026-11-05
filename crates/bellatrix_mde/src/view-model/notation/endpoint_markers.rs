@@ -95,7 +95,7 @@ fn resolve_marker(
                 ));
             }
         }
-    } else if end.kind == "uml.attribute" {
+    } else if crate::uml::root::ElementRef::Object(end).conforms_to("Property") {
         let references = crate::uml::references::ReferenceIndex::new(
             crate::uml::root::Model::from_section(section),
         );

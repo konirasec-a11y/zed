@@ -411,8 +411,18 @@ fn assert_navigation_consumers(project: &Value, known: bool) -> FlowResult<()> {
     let mut document = project.clone();
     document["model"]["diagrams"] = json!([{
         "id":"navigation-preview", "name":"Navigation preview", "uml_di_type":"UMLClassDiagram",
+        "model_elements":[],
         "views":[{
+            "id":"left-view", "subject":"left",
+            "geometry":{"kind":"rect", "x":20.0, "y":20.0, "width":100.0, "height":60.0}
+        }, {
+            "id":"right-view", "subject":"right",
+            "geometry":{"kind":"rect", "x":300.0, "y":20.0, "width":100.0, "height":60.0}
+        }, {
             "id":"association-view", "subject":"association",
+            "geometry":{"kind":"path", "start":{"x":120.0,"y":50.0},
+                "segments":[{"kind":"line","to":{"x":300.0,"y":50.0}}]},
+            "endpoints":{"source_view_id":"left-view", "target_view_id":"right-view"},
             "style":{"uml":{"association_end_convention":"star_uml"}},
             "presentation":{"relationship_endpoints":{
                 "source":{"target":{"target":"model_end", "id":"left-end"},"marker":{"source":"model"}},
@@ -430,7 +440,11 @@ fn assert_navigation_consumers(project: &Value, known: bool) -> FlowResult<()> {
         .find(|view| view.id == "association-view")
         .and_then(|view| view.relationship.as_ref())
         .ok_or("missing relationship presentation")?;
-    assert!(resolved.diagnostics.is_empty());
+    assert!(
+        resolved.diagnostics.is_empty(),
+        "{:?}",
+        resolved.diagnostics
+    );
     let (left, right) = resolved
         .markers
         .as_ref()
