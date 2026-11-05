@@ -32,8 +32,7 @@ pub(super) fn decode_model_request(input_json: &str) -> Result<Project, String> 
 /// Input is the original document byte slice and an explicit `json` or `protobuf`
 /// format string. Protobuf bytes include the existing BLX2 header.
 /// Output is `{"api_version":1,"model":...}`; it can be passed directly to
-/// `validate_graph_model` or `validate_uml_model`. Existing codec defaults and
-/// normalization apply. Decoding does not validate graph or UML semantics.
+/// `validate_graph_model`. Decoding checks storage structure, not UML semantics.
 ///
 /// # Errors
 /// Returns versioned errors: `UNSUPPORTED_FORMAT`, `INVALID_MODEL`, or
@@ -71,10 +70,8 @@ pub fn encode_model_document(input_json: &str, format: &str) -> Result<Vec<u8>, 
 
 /// Convert document bytes with the existing codec and no JSON envelope in between.
 ///
-/// Formats are `json` or `protobuf`; binary input/output uses BLX2. This retains
-/// codec behavior even for binary values that cannot enter a JSON model envelope.
-/// A non-finite diagram dimension is retained for binary output and explicitly
-/// rejected for JSON output instead of becoming null.
+/// Formats are `json` or `protobuf`; binary input/output uses BLX2.
+/// Both formats carry the same canonical JSON contract document.
 /// No UML validation, publication, filesystem access or retained state is added.
 /// Errors use the versioned `UNSUPPORTED_FORMAT`, `INVALID_MODEL` or
 /// `RESPONSE_SERIALIZATION_FAILED` envelope.
@@ -93,8 +90,8 @@ pub fn convert_model_document(
 }
 
 fn ensure_json_model(model: &Project) -> Result<(), String> {
-    // Protobuf can carry non-finite dimensions, while JSON would silently turn
-    // them into null. Reject that representation loss instead of changing data.
+    // Both encodings carry JSON; reject non-finite dimensions rather than
+    // allowing serialization to replace authored values with null.
     if model
         .diagrams
         .iter()
@@ -157,7 +154,7 @@ pub fn validate_model_section(
 
 /// Reconstitute document bytes from canonical section JSON and its platform identity.
 /// Preserves authoring knowledge, composition and original MDJ bytes in provenance.
-/// JSON output rejects non-finite dimensions; binary output uses the unchanged BLX2 codec.
+/// Both formats use the same canonical JSON contract; binary output wraps it in BLX2.
 /// No persistence, publication or UML validation occurs here.
 pub fn encode_model_section(
     project_id: &str,

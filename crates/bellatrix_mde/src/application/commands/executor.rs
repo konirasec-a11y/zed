@@ -1007,7 +1007,6 @@ fn create_element(
         ModelingElementKind::Component | ModelingElementKind::Artifact
     ) {
         properties.insert("isAbstract".into(), serde_json::json!(false));
-        properties.insert("isFinalSpecialization".into(), serde_json::json!(false));
     }
     if *kind == ModelingElementKind::Component {
         properties.insert("isIndirectlyInstantiated".into(), serde_json::json!(true));

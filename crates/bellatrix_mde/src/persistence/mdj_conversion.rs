@@ -32,7 +32,7 @@ pub struct Import {
 }
 
 /// A conservative interchange projection, not a StarUML renderer.
-/// Models, packages, classes, interfaces and a restricted binary association encoding map to UML.
+/// Supported objects map to UML contracts; unmapped source objects remain opaque.
 pub fn import(bytes: &[u8]) -> Result<Import, MdjError> {
     let document = mdj::decode(bytes)?;
     let (mut imported, residuals, paths) = project_document(&document)?;

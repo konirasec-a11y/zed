@@ -202,11 +202,10 @@ impl ModelingElementKind {
             Self::DestructionOccurrenceSpecification => "uml.destruction_occurrence_specification",
             Self::Continuation => "uml.continuation",
 
-            // Existing wire identities and Rust generator profiles remain readable.
             Self::Component => "uml.component",
             Self::Artifact => "uml.artifact",
-            Self::Class => "rust.struct",
-            Self::Interface => "rust.trait",
+            Self::Class => "uml.class",
+            Self::Interface => "uml.interface",
             Self::Signal => "uml.signal",
             Self::DataType => "uml.data_type",
             Self::PrimitiveType => "uml.primitive_type",

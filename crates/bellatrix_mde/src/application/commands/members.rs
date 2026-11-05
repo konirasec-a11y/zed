@@ -73,31 +73,14 @@ pub(super) fn append_member(
     revision: u64,
     project_id: &str,
 ) -> Result<String, String> {
-    let owner = section
+    section
         .elements
         .iter()
         .find(|element| element.id == owner_id)
         .ok_or("member owner not found")?;
-    let rust_classifier = matches!(owner.kind.as_str(), "rust.struct" | "rust.trait");
     let (model_kind, prefix, base) = match kind {
-        ModelingMemberKind::Attribute => (
-            if rust_classifier {
-                "rust.field"
-            } else {
-                "uml.attribute"
-            },
-            "attribute",
-            "Attribute",
-        ),
-        ModelingMemberKind::Operation => (
-            if rust_classifier {
-                "rust.function"
-            } else {
-                "uml.operation"
-            },
-            "operation",
-            "Operation",
-        ),
+        ModelingMemberKind::Attribute => ("uml.attribute", "attribute", "Attribute"),
+        ModelingMemberKind::Operation => ("uml.operation", "operation", "Operation"),
         ModelingMemberKind::Reception => ("uml.reception", "reception", "Reception"),
         ModelingMemberKind::Parameter => ("uml.parameter", "parameter", "Parameter"),
     };
@@ -112,17 +95,6 @@ pub(super) fn append_member(
     )?;
     let mut properties = std::collections::BTreeMap::new();
     properties.insert("visibility".into(), serde_json::json!("public"));
-    if model_kind == "rust.field" {
-        properties.insert(
-            "declaration".into(),
-            serde_json::json!(format!("pub {prefix}: String")),
-        );
-    } else if model_kind == "rust.function" {
-        properties.insert(
-            "signature".into(),
-            serde_json::json!(format!("pub fn {prefix}(&self)")),
-        );
-    }
     section.elements.push(Element {
         id: member_id.clone(),
         kind: model_kind.into(),
