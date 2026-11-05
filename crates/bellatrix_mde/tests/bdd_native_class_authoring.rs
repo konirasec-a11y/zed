@@ -597,13 +597,22 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
         assert_eq!(flow.revision, revision);
     }
 
-    let mut manual_style = realization_view.style.clone();
-    manual_style.routing = Some(RelationshipRouting::Manual);
-    flow.apply(Command::SetViewStyle {
+    let mut manual_view = realization_view.clone();
+    manual_view.style.routing = Some(RelationshipRouting::Manual);
+    manual_view.geometry = flow
+        .projection()?
+        .diagrams
+        .iter()
+        .flat_map(|diagram| diagram.all_views())
+        .find(|view| view.id == realization_view.id)
+        .and_then(|view| view.routed_geometry.clone())
+        .ok_or("manual path authoring requires the rendered relationship geometry")?;
+    let manual = flow.apply(Command::SetViewPath {
         diagram_id: "classes".into(),
         view_id: realization_view.id.clone(),
-        style: manual_style,
+        geometry: manual_view.geometry.clone(),
     })?;
+    assert_eq!(semantic_view(&manual, &realization)?, &manual_view);
     let manual_section = flow.document.section_json.clone();
     let manual_revision = flow.revision;
     let Err(error) = flow.apply(Command::SetProperty {
@@ -616,15 +625,7 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
     assert!(error.to_string().to_ascii_lowercase().contains("manual"));
     assert_eq!(flow.document.section_json, manual_section);
     assert_eq!(flow.revision, manual_revision);
-    let restored_routing = flow.apply(Command::SetViewStyle {
-        diagram_id: "classes".into(),
-        view_id: realization_view.id.clone(),
-        style: realization_view.style.clone(),
-    })?;
-    assert_eq!(
-        semantic_view(&restored_routing, &realization)?,
-        &realization_view
-    );
+    assert_eq!(semantic_view(&flow.section()?, &realization)?, &manual_view);
 
     let before_navigation = flow.section()?;
     let Contract::Association(before_association) = contract(&before_navigation, &association)?
