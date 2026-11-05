@@ -1056,7 +1056,7 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
     let annotation_bytes = encode_model_section(
         &flow.document.id,
         &flow.document.name,
-        &flow.document.section_json,
+        &serde_json::to_string(&authored)?,
         "json",
     )?;
     let mut annotation_flow = NativeAuthoring {
