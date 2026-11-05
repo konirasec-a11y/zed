@@ -56,6 +56,11 @@ const COMMON_CLASSIFIER: &[DeclaredProperty] = &[
         default: false_value,
     },
     DeclaredProperty {
+        key: "isFinalSpecialization",
+        value_type: PropertyValueType::Boolean,
+        default: false_value,
+    },
+    DeclaredProperty {
         key: "isLeaf",
         value_type: PropertyValueType::Boolean,
         default: false_value,
