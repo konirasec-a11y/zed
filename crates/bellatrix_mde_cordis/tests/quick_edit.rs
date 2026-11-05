@@ -969,6 +969,7 @@ async fn class_specializations_use_the_same_versioned_cordis_event() {
         assert!(
             matches!(
                 context.query::<ModelingQuickEdit>(Routing::Unscoped,ModelingQuickEditRequested {
+                    view_id: None,
                     project_id:project_id.clone(),diagram_id:diagram_id.clone(),
                     element_id:"type-task".into(),action,expected_revision:revision,
                 }).await.unwrap(),

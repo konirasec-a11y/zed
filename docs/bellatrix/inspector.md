@@ -174,6 +174,26 @@ não desenhar o caminho antigo como se estivesse ligado ao novo alvo. Preservar
 as curvas e reancorar apenas suas pontas exige um editor adicional; mudar a
 referência não autoriza descartar o caminho manual.
 
+### Ocorrência escolhida no Quick Edit
+
+As ações gráficas do Quick Edit transportam a identidade da View escolhida, além
+do Element e da revisão. A criação de classe relacionada, interface, nota ou
+constraint usa os limites dessa ocorrência e registra os attachments exatos da
+nova relação. Duas figuras da mesma classe não são intercambiáveis: os endpoints
+UMLDI referenciam DiagramElements, enquanto a relação UML referencia os elementos
+semânticos (§§B.7.14.5 e B.7.16.3; XMI `UMLEdge-source` e `UMLEdge-target`).
+
+A identidade deve pertencer ao mesmo diagrama e representar o Element informado.
+Sem uma View explícita, a criação gráfica exige uma única ocorrência. Trocar a
+ocorrência selecionada invalida um controle anterior sem modificar o documento.
+As demais figuras, sua ordem e seu estilo são preservados.
+
+Port e Part ainda dependem do posicionamento por proprietário e não suportam
+múltiplas ocorrências desse proprietário. Nessa situação o comando retorna um
+diagnóstico sem criar a feature na figura errada. Layout não resolvido e Views
+aninhadas continuam sujeitos à restrição de criação existente. São capacidades
+pendentes do editor, não restrições da especificação UML.
+
 ### Suporte pendente, sem alterar ruml neste lote
 
 - `Classifier::isFinalSpecialization` existe em UML 2.5.1 §9.9.4.5 e no XMI

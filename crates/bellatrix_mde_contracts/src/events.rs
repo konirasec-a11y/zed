@@ -639,6 +639,7 @@ pub struct ModelingQuickEditRequested {
     pub project_id: ProjectId,
     pub diagram_id: String,
     pub element_id: String,
+    pub view_id: Option<String>,
     pub action: UmlQuickCreate,
     pub expected_revision: u64,
 }

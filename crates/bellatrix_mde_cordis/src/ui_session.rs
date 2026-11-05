@@ -465,6 +465,7 @@ fn edit(command: MdeUiCommand) -> Result<(ProjectId, u64, Command, Option<Comple
             Command::QuickEdit {
                 diagram_id: request.diagram_id,
                 element_id: request.element_id,
+                view_id: request.view_id,
                 action: request.action,
             },
         ),

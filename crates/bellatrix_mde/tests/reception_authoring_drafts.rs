@@ -34,6 +34,7 @@ fn member_and_quick_edit_create_explicitly_incomplete_receptions_without_inventi
             kind: ModelingMemberKind::Reception,
         },
         Command::QuickEdit {
+            view_id: None,
             diagram_id: "diagram".into(),
             element_id: "class".into(),
             action: UmlQuickCreate::Reception,

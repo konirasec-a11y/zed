@@ -107,6 +107,7 @@ fn uml_root_namespace_edit_and_reopen_flow_preserves_canonical_identity() {
     project = apply(
         &project,
         Command::QuickEdit {
+            view_id: None,
             diagram_id: "diagram".into(),
             element_id: class_id.clone(),
             action: UmlQuickCreate::Note,

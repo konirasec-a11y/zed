@@ -366,6 +366,8 @@ pub enum Command {
     QuickEdit {
         diagram_id: String,
         element_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        view_id: Option<String>,
         action: UmlQuickCreate,
     },
     CreateVisualDraft {

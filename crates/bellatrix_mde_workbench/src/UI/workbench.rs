@@ -571,6 +571,11 @@ impl MdeWorkbenchItem {
         if self.project_id() != &target.project
             || self.presentation.selected_element() != Some(target.element.as_str())
             || self.presentation.active_diagram() != Some(target.diagram.as_str())
+            || target.view.as_deref().is_some_and(|view| {
+                self.presentation
+                    .selected_canvas_view()
+                    .is_some_and(|selected| selected != view)
+            })
             || self.presentation.selected_tool().is_some()
         {
             self.feedback = "Quick edit not sent: the active selection changed".into();
@@ -632,6 +637,7 @@ impl MdeWorkbenchItem {
                 project_id: target.project.clone(),
                 element_id: target.element.clone(),
                 diagram_id: target.diagram.clone(),
+                view_id: target.view.clone(),
                 action,
                 expected_revision: target.revision,
             }),

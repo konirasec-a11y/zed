@@ -1,7 +1,7 @@
 use super::ModelingElementKind;
 use crate::{
     Element, Geometry, ModelingSection, Relation, Style, UmlQuickCreate, UmlType, View,
-    quick_relation_rule, reroute_relationships, route_relationship,
+    quick_relation_rule, reroute_relationships,
 };
 
 fn fresh_id(
@@ -19,6 +19,7 @@ pub(super) fn apply(
     section: &mut ModelingSection,
     diagram_id: &str,
     element_id: &str,
+    view_id: Option<&str>,
     action: UmlQuickCreate,
     revision: u64,
     project_id: &str,
@@ -30,10 +31,7 @@ pub(super) fn apply(
         .ok_or("Quick Edit subject not found")?;
     let kind = element.kind.clone();
     let subject_type = UmlType::from_kind(&kind);
-    if matches!(
-        action,
-        UmlQuickCreate::TemplateParameter | UmlQuickCreate::Port | UmlQuickCreate::Part
-    ) {
+    if action == UmlQuickCreate::TemplateParameter {
         return super::features::insert_feature(
             section, diagram_id, element_id, action, revision, project_id,
         );
@@ -53,11 +51,27 @@ pub(super) fn apply(
         .iter()
         .find(|diagram| diagram.id == diagram_id)
         .ok_or("diagram not found")?;
-    let view = diagram
-        .views
-        .iter()
-        .find(|view| view.subject.as_deref() == Some(element_id))
-        .ok_or("Quick Edit subject has no View in the active diagram")?;
+    let view = if let Some(view_id) = view_id {
+        let view = diagram
+            .all_views()
+            .find(|view| view.id == view_id)
+            .ok_or("Quick Edit View not found in the active diagram")?;
+        if view.subject.as_deref() != Some(element_id) {
+            return Err("Quick Edit View no longer represents the selected subject".into());
+        }
+        view
+    } else {
+        let mut occurrences = diagram
+            .all_views()
+            .filter(|view| view.subject.as_deref() == Some(element_id));
+        let view = occurrences
+            .next()
+            .ok_or("Quick Edit subject has no View in the active diagram")?;
+        if occurrences.next().is_some() {
+            return Err("Quick Edit requires a View ID when the subject has multiple occurrences in the active diagram".into());
+        }
+        view
+    };
     let (left, top, width, height) = match &view.geometry {
         Geometry::Rect {
             x,
@@ -67,6 +81,20 @@ pub(super) fn apply(
         } => (*x, *y, *width, *height),
         _ => return Err("Quick Edit requires a node View".into()),
     };
+    if matches!(action, UmlQuickCreate::Port | UmlQuickCreate::Part) {
+        if diagram
+            .all_views()
+            .filter(|view| view.subject.as_deref() == Some(element_id))
+            .count()
+            > 1
+        {
+            return Err("Quick Edit Port and Part placement is not supported for multiple occurrences of the owner in the active diagram".into());
+        }
+        return super::features::insert_feature(
+            section, diagram_id, element_id, action, revision, project_id,
+        );
+    }
+    let subject_view_id = view.id.clone();
     let (child_kind, prefix, offset, child_size) = match action {
         UmlQuickCreate::Note => (
             "uml.note",
@@ -267,7 +295,7 @@ pub(super) fn apply(
             endpoints: None,
             timing: None,
             draft: None,
-            id: new_view_id,
+            id: new_view_id.clone(),
             subject: Some(new_id.clone()),
             label: None,
             geometry: Geometry::Rect {
@@ -284,7 +312,17 @@ pub(super) fn apply(
     } else {
         (element_id, new_id.as_str())
     };
-    let geometry = route_relationship(section, diagram_id, source, target)?;
+    let (source_view_id, target_view_id) = if rule.child_is_source {
+        (new_view_id, subject_view_id)
+    } else {
+        (subject_view_id, new_view_id)
+    };
+    let endpoints = crate::ViewEndpoints {
+        source_view_id: Some(source_view_id),
+        target_view_id: Some(target_view_id),
+    };
+    let geometry =
+        crate::relationships::route_at_views(section, diagram_id, source, target, &endpoints)?;
     let mut properties = std::collections::BTreeMap::new();
     if rule.kind == "uml.interface_realization" {
         // This composite role subsets ownedElement, not Namespace::ownedMember.
@@ -311,7 +349,7 @@ pub(super) fn apply(
         .push(View {
             children: Vec::new(),
             presentation: Default::default(),
-            endpoints: None,
+            endpoints: Some(endpoints),
             timing: None,
             draft: None,
             id: relation_view_id,
@@ -345,6 +383,7 @@ mod tests {
         Command::QuickEdit {
             diagram_id: "diagram-tasks".into(),
             element_id: "type-task".into(),
+            view_id: None,
             action,
         }
     }

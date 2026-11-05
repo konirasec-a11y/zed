@@ -15,6 +15,7 @@ pub(crate) struct QuickEditTarget {
     pub project: ProjectId,
     pub diagram: String,
     pub element: String,
+    pub view: Option<String>,
     pub revision: u64,
 }
 
@@ -65,6 +66,7 @@ pub(crate) fn quick_edit_for_element(
     owner: Entity<MdeWorkbenchItem>,
     project: ProjectId,
     diagram: String,
+    view: Option<String>,
     revision: u64,
 ) -> (
     Option<UmlQuickEdit>,
@@ -75,6 +77,7 @@ pub(crate) fn quick_edit_for_element(
         project,
         diagram,
         element: element.id.clone(),
+        view,
         revision,
     };
     let descriptors = &element.quick_actions;

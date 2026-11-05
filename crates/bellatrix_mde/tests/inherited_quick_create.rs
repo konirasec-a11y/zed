@@ -44,6 +44,7 @@ fn inherited_interface_creation_uses_behaviored_classifier_contract() {
             let result = commands::apply(
                 &original,
                 &Command::QuickEdit {
+                    view_id: None,
                     diagram_id: "diagram".into(),
                     element_id: "owner".into(),
                     action,
@@ -124,6 +125,7 @@ fn specialization_preserves_subject_metaclass_and_respects_final_supertype() {
             let result = commands::apply(
                 &original,
                 &Command::QuickEdit {
+                    view_id: None,
                     diagram_id: "diagram".into(),
                     element_id: "owner".into(),
                     action,
@@ -173,6 +175,7 @@ fn specialization_preserves_subject_metaclass_and_respects_final_supertype() {
         commands::apply(
             &final_component,
             &Command::QuickEdit {
+                view_id: None,
                 diagram_id: "diagram".into(),
                 element_id: "owner".into(),
                 action: UmlQuickCreate::Subtype
@@ -202,6 +205,7 @@ fn association_quick_create_uses_typed_member_ends_not_class_whitelist() {
             let result = commands::apply(
                 &original,
                 &Command::QuickEdit {
+                    view_id: None,
                     diagram_id: "diagram".into(),
                     element_id: "owner".into(),
                     action,

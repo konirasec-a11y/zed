@@ -108,6 +108,7 @@ fn add(project: &Document, revision: u64) -> Result<Document, String> {
     apply(
         project,
         &Command::QuickEdit {
+            view_id: None,
             diagram_id: "diagram".into(),
             element_id: "owner".into(),
             action: UmlQuickCreate::TemplateParameter,

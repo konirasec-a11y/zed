@@ -109,6 +109,7 @@ fn inherited_members_use_the_same_contract_in_commands_and_quick_edit() {
             let result = commands::apply(
                 &original,
                 &Command::QuickEdit {
+                    view_id: None,
                     diagram_id: "diagram-tasks".into(),
                     element_id: "type-task".into(),
                     action,
@@ -833,6 +834,7 @@ fn namespace_queries_follow_hierarchy_commands_redefinition_and_reopen()
         apply(
             &mut contracts,
             Command::QuickEdit {
+                view_id: None,
                 diagram_id: "diagram".into(),
                 element_id: operation.clone(),
                 action: UmlQuickCreate::TemplateParameter,

@@ -1087,8 +1087,45 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
         document: prepare_model_document(&decode_model_document(&annotation_bytes, "json")?)?,
         revision: flow.revision,
     };
+    let before_occurrence = annotation_flow.section()?;
+    let duplicate = annotation_flow.apply(Command::PlaceElementView {
+        diagram_id: "classes".into(),
+        element_id: invoice.clone(),
+        x: 1200.0,
+        y: 850.0,
+    })?;
+    let selected_view = duplicate
+        .diagrams
+        .iter()
+        .flat_map(|diagram| diagram.all_views())
+        .find(|view| {
+            view.subject.as_deref() == Some(invoice.as_str())
+                && !before_occurrence
+                    .diagrams
+                    .iter()
+                    .flat_map(|diagram| diagram.all_views())
+                    .any(|before| before.id == view.id)
+        })
+        .ok_or("missing second Invoice occurrence")?
+        .clone();
+    let occurrence_revision = annotation_flow.revision;
+    for view_id in [None, Some("missing-view".into())] {
+        assert!(
+            annotation_flow
+                .apply(Command::QuickEdit {
+                    diagram_id: "classes".into(),
+                    element_id: invoice.clone(),
+                    view_id,
+                    action: UmlQuickCreate::Note,
+                })
+                .is_err()
+        );
+        assert_eq!(annotation_flow.revision, occurrence_revision);
+        assert_eq!(annotation_flow.section()?, duplicate);
+    }
     let comment = annotation_flow.create(
         Command::QuickEdit {
+            view_id: Some(selected_view.id.clone()),
             diagram_id: "classes".into(),
             element_id: invoice.clone(),
             action: UmlQuickCreate::Note,
@@ -1124,6 +1161,35 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
     assert!(link_views.next().is_none());
     assert!(link_view.children.is_empty());
     assert!(matches!(&link_view.geometry, Geometry::Path { .. }));
+    let comment_view = semantic_view(&annotated, &comment)?;
+    assert_eq!(
+        link_view.endpoints,
+        Some(ViewEndpoints {
+            source_view_id: Some(selected_view.id.clone()),
+            target_view_id: Some(comment_view.id.clone()),
+        })
+    );
+    let Geometry::Rect { x, y, width, .. } = selected_view.geometry else {
+        return Err("selected Quick Edit occurrence must have bounds".into());
+    };
+    assert!(
+        matches!(comment_view.geometry, Geometry::Rect { x: comment_x, y: comment_y, .. }
+        if comment_x == x + width + 48.0 && comment_y >= y - 16.0)
+    );
+    for before in duplicate
+        .diagrams
+        .iter()
+        .flat_map(|diagram| diagram.all_views())
+    {
+        let after = annotated
+            .diagrams
+            .iter()
+            .flat_map(|diagram| diagram.all_views())
+            .find(|view| view.id == before.id)
+            .ok_or("Quick Edit removed an existing View")?;
+        assert_eq!(after, before);
+    }
+    reopen_both_formats(&annotation_flow.document, &annotated)?;
     let unshown = annotation_flow.apply(Command::RemoveView {
         diagram_id: "classes".into(),
         view_id: link_view.id.clone(),

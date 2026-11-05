@@ -406,11 +406,13 @@ pub(crate) fn apply_with_diagram_operations(
         Command::QuickEdit {
             diagram_id,
             element_id,
+            view_id,
             action,
         } => quick_edit::apply(
             &mut section,
             diagram_id,
             element_id,
+            view_id.as_deref(),
             *action,
             revision,
             &project.id,

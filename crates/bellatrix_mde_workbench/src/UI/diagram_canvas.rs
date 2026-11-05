@@ -62,8 +62,12 @@ impl Render for MdeWorkbenchItem {
                         if matches!(
                             view.geometry,
                             Geometry::Rect { .. } | Geometry::Layout { .. }
-                        ) && canvas_presentation::resolve_bounds(view.render_geometry(), zoom, pan)
-                            .is_none()
+                        ) && canvas_presentation::resolve_bounds(
+                            view.render_geometry(),
+                            zoom,
+                            pan,
+                        )
+                        .is_none()
                         {
                             unresolved_presentation = true;
                             marker_diagnostics.push(format!(
@@ -633,6 +637,7 @@ impl Render for MdeWorkbenchItem {
                                     cx.entity(),
                                     self.project_id().clone(),
                                     diagram.id.clone(),
+                                    (selected.id == subject).then(|| view.id.clone()),
                                     snapshot.revision,
                                 )
                             } else {

@@ -52,6 +52,7 @@ async fn common_quick_edit_is_revisioned_project_scoped_and_disposed() {
     let project_id = ProjectId::new("capabilities-a").unwrap();
     let untouched_id = ProjectId::new("capabilities-b").unwrap();
     let request = ModelingQuickEditRequested {
+        view_id: None,
         project_id: project_id.clone(),
         diagram_id: active_diagram.clone(),
         element_id: "type-task".into(),
@@ -80,6 +81,7 @@ async fn common_quick_edit_is_revisioned_project_scoped_and_disposed() {
     ] {
         assert!(
             matches!(context.query::<ModelingQuickEdit>(Routing::Unscoped, ModelingQuickEditRequested {
+            view_id: None,
             project_id: project_id.clone(), diagram_id: active_diagram.clone(), element_id: "type-task".into(), action, expected_revision,
         }).await.unwrap(), QueryOutcome::Answer(Ok(revision)) if revision == expected_revision + 1)
         );
@@ -126,6 +128,7 @@ async fn common_quick_edit_is_revisioned_project_scoped_and_disposed() {
             .query::<ModelingQuickEdit>(
                 Routing::Unscoped,
                 ModelingQuickEditRequested {
+                    view_id: None,
                     project_id: project_id.clone(),
                     diagram_id: active_diagram,
                     element_id: "type-task".into(),

@@ -89,6 +89,7 @@ async fn interface_quick_edit_commands_create_real_objects_and_names() {
         let revision = (index + 1) as u64;
         assert!(
             matches!(ctx.query::<ModelingQuickEdit>(Routing::Unscoped, ModelingQuickEditRequested {
+            view_id: None,
             project_id: id.clone(), diagram_id: diagram_id.clone(), element_id: interface_id.clone(), action, expected_revision: revision,
         }).await.unwrap(), QueryOutcome::Answer(Ok(updated)) if updated == revision + 1)
         );

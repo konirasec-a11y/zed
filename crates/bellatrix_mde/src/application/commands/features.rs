@@ -620,6 +620,7 @@ mod tests {
         let updated = crate::commands::apply(
             &original,
             &crate::commands::Command::QuickEdit {
+                view_id: None,
                 diagram_id,
                 element_id: "type-task".into(),
                 action: UmlQuickCreate::Port,
