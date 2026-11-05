@@ -1,15 +1,16 @@
 # Universal MDE contracts
 
-`bellatrix_mde_contracts` is the shared language used by the MDE engine, persistence, UML validation, Cordis and UI consumers. Its default feature set uses value/serialization libraries, never the engine, GPUI or project services. The optional `cordis` feature adds event bindings and asynchronous completion channels; handlers and runtime services remain outside.
+`bellatrix_mde_contracts` contains the shared contracts used by persistence, Cordis and the UI. Its default features do not depend on the engine, GPUI or project services. The optional `cordis` feature adds event bindings and asynchronous completion channels.
 
-- `model`: canonical `Project`, `ModelingSection`, `Element`, `Relation`, `Diagram`, `View`, geometry, style, composition, provenance and authoring knowledge. These exact types are used for state, JSON serialization and validation; command geometry/style are reexports, not copies.
-- `protocol`: commands, read projections, tool descriptions and trace events. Commands are the same types executed by the engine. Read projections contain calculated display data and cannot be written back as persisted state.
-- `events`: shared MDE request/response payloads, event identities, immutable snapshots and UI command messages.
-- `project`: platform document identity/envelope, error and lifecycle/save events. Save tickets carry opaque capabilities issued and verified by the project runtime; they do not expose reservation state.
-- `uml`: source-qualified OMG descriptors and generated catalog, primitive literals, structural diagnostics and pure schema queries. The engine retains graph queries, semantic validation and editing policy.
+- `ruml`: the supplied UML structs and enums, with camelCase serialization and an explicit document-local typed `Registry`. Generated accessors use this registry; they do not retain global process state.
+- `model`: canonical `Project` and `ModelingSection`, whose UML payload is that registry. Presentation, composition, provenance and authoring metadata reference its identities. They do not replace contract fields.
+- `protocol`: command intents and disposable read projections. `model_snapshot::Element` and `Relation` support existing query/render algorithms only. They are not another persistent UML representation.
+- `events`: shared requests, responses, immutable snapshots and UI command messages.
+- `project`: the platform document envelope, revision, lifecycle and save capabilities. This is separate from the UML Model and from the standalone MDE document.
+- `uml`: source-qualified descriptors and catalog metadata used for display, queries and adapters. These descriptors do not override a supplied ruml field or reintroduce the removed second UML validation pass.
 
-`Project` identifies a standalone MDE model. `ModelingSection` is its payload inside the platform's `bellatrix.mde` section. The platform `ProjectDocument` is a separate shared contract under `project`, reexported by `bellatrix_project`: its identity, revision, other sections and ephemeral session are not an MDE model or a UML Model. Project services and storage stay in `bellatrix_project`.
+Standalone documents use schema version 2 with a camelCase root envelope. JSON and BLX2 transport the same typed document; BLX2 wraps its JSON bytes in protobuf. There is no required compatibility with the old Element/Relation save format or BLX1.
 
-The engine owns JSON/Protobuf codecs, internal `Wire*` encoding records, mutations and validation. The internal Rust wire records encode the standalone MDE model, not the entire platform envelope. Moving contracts does not change field names, wire tags, missing/null semantics, duplicate-key rejection or retained source provenance.
+The engine owns command execution, disposable projections, codecs and interchange conversion. Conversion failures are explicit and atomic. Unsupported MDJ objects and fields remain in source provenance rather than becoming invented UML contracts; edits without a lossless mapping are rejected.
 
-`bellatrix_mde_protocol` remains a compatibility facade that only reexports this crate's `protocol` module. New consumers should depend directly on `bellatrix_mde_contracts`.
+`bellatrix_mde_protocol` remains a reexport-only facade. New consumers should depend directly on this crate.

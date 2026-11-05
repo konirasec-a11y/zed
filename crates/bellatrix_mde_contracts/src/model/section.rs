@@ -40,12 +40,28 @@ pub struct SubjectPresentation {
     pub label: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// Decorative notation only; this does not apply a UML Stereotype.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stereotype_label: Option<StereotypeLabel>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub annotations: Vec<Annotation>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub implementations: Vec<Implementation>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content: Option<FileContent>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    content = "value",
+    rename_all = "camelCase",
+    deny_unknown_fields
+)]
+pub enum StereotypeLabel {
+    Empty,
+    Text(String),
+    Reference(String),
 }
 
 impl ModelingSection {

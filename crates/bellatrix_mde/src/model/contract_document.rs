@@ -1,6 +1,7 @@
 use crate::{ModelingSection, Project};
 use bellatrix_mde_contracts::model::{
-    ModelingSection as StoredSection, Project as StoredProject, SubjectPresentation,
+    ModelingSection as StoredSection, Project as StoredProject, StereotypeLabel,
+    SubjectPresentation,
 };
 use std::collections::BTreeMap;
 
@@ -31,6 +32,11 @@ pub(crate) fn project_section(
     }
     for relation in &mut relations {
         if let Some(metadata) = stored.presentation.get(&relation.id) {
+            if let Some(label) = &metadata.stereotype_label {
+                relation
+                    .properties
+                    .insert("stereotype".into(), project_stereotype_label(label));
+            }
             relation.properties.insert(
                 "$presentation".into(),
                 serde_json::to_value(metadata).map_err(|error| error.to_string())?,
@@ -41,6 +47,11 @@ pub(crate) fn project_section(
         if let Some(presentation) = stored.presentation.get(&element.id) {
             element.label = presentation.label.clone();
             element.description = presentation.description.clone();
+            if let Some(label) = &presentation.stereotype_label {
+                element
+                    .properties
+                    .insert("stereotype".into(), project_stereotype_label(label));
+            }
             element.annotations = presentation.annotations.clone();
             element.implementations = presentation.implementations.clone();
             element.content = presentation.content.clone();
@@ -95,23 +106,33 @@ pub(crate) fn store_section(
             ));
         }
     }
-    let semantic_elements: Vec<_> = snapshot
+    let mut semantic_elements: Vec<_> = snapshot
         .elements
         .iter()
         .filter(|element| !opaque_ids.contains(element.id.as_str()))
         .cloned()
         .collect();
+    for element in &mut semantic_elements {
+        element.properties.remove("stereotype");
+    }
     let mut relations = snapshot.relations.clone();
     let mut presentation = BTreeMap::new();
     // Metadata travels with the disposable relation, then leaves it before the
     // semantic converter. No generated UML contract has this reserved field.
     for relation in &mut relations {
-        if let Some(value) = relation.properties.remove("$presentation") {
+        let mut metadata = relation
+            .properties
+            .remove("$presentation")
+            .map(serde_json::from_value::<SubjectPresentation>)
+            .transpose()
+            .map_err(|error| error.to_string())?
+            .unwrap_or_default();
+        metadata.stereotype_label = read_stereotype_label(relation.properties.get("stereotype"))?;
+        relation.properties.remove("stereotype");
+        if metadata != SubjectPresentation::default() {
             if relation.kind == "owns" {
                 return Err("derived ownership cannot own presentation metadata".into());
             }
-            let metadata = serde_json::from_value::<SubjectPresentation>(value)
-                .map_err(|error| error.to_string())?;
             presentation.insert(relation.id.clone(), metadata);
         }
     }
@@ -120,6 +141,11 @@ pub(crate) fn store_section(
         let metadata = SubjectPresentation {
             label: element.label.clone(),
             description: element.description.clone(),
+            stereotype_label: if opaque_ids.contains(element.id.as_str()) {
+                None
+            } else {
+                read_stereotype_label(element.properties.get("stereotype"))?
+            },
             annotations: element.annotations.clone(),
             implementations: element.implementations.clone(),
             content: element.content.clone(),
@@ -211,5 +237,27 @@ fn project_opaque_object(id: &str, source: &crate::MdjObjectResidual) -> crate::
         annotations: Vec::new(),
         implementations: Vec::new(),
         content: None,
+    }
+}
+
+fn project_stereotype_label(label: &StereotypeLabel) -> serde_json::Value {
+    match label {
+        StereotypeLabel::Empty => serde_json::Value::Null,
+        StereotypeLabel::Text(text) => serde_json::Value::String(text.clone()),
+        StereotypeLabel::Reference(id) => serde_json::json!({"$ref": id}),
+    }
+}
+
+fn read_stereotype_label(
+    value: Option<&serde_json::Value>,
+) -> Result<Option<StereotypeLabel>, String> {
+    match crate::StereotypeValue::read(value) {
+        crate::StereotypeValue::Missing => Ok(None),
+        crate::StereotypeValue::Null => Ok(Some(StereotypeLabel::Empty)),
+        crate::StereotypeValue::Text(text) => Ok(Some(StereotypeLabel::Text(text.into()))),
+        crate::StereotypeValue::Reference(id) => Ok(Some(StereotypeLabel::Reference(id.into()))),
+        crate::StereotypeValue::Unsupported(_) => {
+            Err("stereotype notation requires text or a model reference".into())
+        }
     }
 }
