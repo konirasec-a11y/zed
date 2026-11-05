@@ -307,8 +307,19 @@ fn insert_template_parameter(
     let parameter_ownership = fresh(section, "template-parameter-owns", revision, project_id)?;
     let exposed_id = fresh(section, "parametered-classifier", revision, project_id)?;
     let exposed_ownership = fresh(section, "parametered-classifier-owns", revision, project_id)?;
-    let reference_id = fresh(section, "parametered-element", revision, project_id)?;
-    let parameter_name = super::element_name(section, Some(&signature_id), "T", None)?;
+    let existing_names: HashSet<_> = crate::template_parameters(section, owner_id)
+        .into_iter()
+        .filter_map(|parameter| crate::template_parametered_element(section, parameter))
+        .map(|element| element.name.as_str())
+        .collect();
+    let mut parameter_name = "T".to_owned();
+    let mut sequence = 0_u64;
+    while existing_names.contains(parameter_name.as_str()) {
+        sequence = sequence
+            .checked_add(1)
+            .ok_or("template parameter name sequence overflow")?;
+        parameter_name = format!("T{sequence}");
+    }
     let make_element = |id: String, kind: &str, name: String, properties| Element {
         id,
         kind: kind.into(),
@@ -325,57 +336,106 @@ fn insert_template_parameter(
             signature_id.clone(),
             signature_kind,
             format!("{owner_name} template signature"),
-            std::collections::BTreeMap::from([(
-                crate::templates::GENERATED_SIGNATURE.into(),
-                serde_json::json!({"name": format!("{owner_name} template signature")}),
-            )]),
+            std::collections::BTreeMap::from([
+                ("template".into(), serde_json::json!({"$ref": owner_id})),
+                ("parameter".into(), serde_json::json!([])),
+                ("ownedParameter".into(), serde_json::json!([])),
+            ]),
         ));
         section.relations.push(Relation {
             id: signature_ownership,
             kind: "owns".into(),
             from: owner_id.into(),
             to: signature_id.clone(),
-            properties: Default::default(),
+            properties: std::collections::BTreeMap::from([(
+                "role".into(),
+                serde_json::json!("ownedTemplateSignature"),
+            )]),
         });
     }
+    let signature = section
+        .elements
+        .iter_mut()
+        .find(|element| element.id == signature_id)
+        .ok_or("template signature missing")?;
+    for field in ["parameter", "ownedParameter"] {
+        let values = signature
+            .properties
+            .entry(field.into())
+            .or_insert_with(|| serde_json::json!([]))
+            .as_array_mut()
+            .ok_or_else(|| format!("template signature {field} must be a collection"))?;
+        values.push(serde_json::json!({"$ref": parameter_id}));
+    }
+    section
+        .elements
+        .iter_mut()
+        .find(|element| element.id == owner_id)
+        .ok_or("template owner missing")?
+        .properties
+        .insert(
+            "ownedTemplateSignature".into(),
+            serde_json::json!({"$ref": signature_id}),
+        );
     section.elements.push(make_element(
         parameter_id.clone(),
         "uml.classifier_template_parameter",
-        parameter_name.clone(),
-        std::collections::BTreeMap::from([("allowSubstitutable".into(), serde_json::json!(false))]),
+        String::new(),
+        std::collections::BTreeMap::from([
+            ("allowSubstitutable".into(), serde_json::json!("false")),
+            (
+                "signature".into(),
+                serde_json::json!({"$ref": signature_id}),
+            ),
+            (
+                "parameteredElement".into(),
+                serde_json::json!({"$ref": exposed_id}),
+            ),
+            (
+                "ownedParameteredElement".into(),
+                serde_json::json!({"$ref": exposed_id}),
+            ),
+        ]),
     ));
     section.elements.push(make_element(
         exposed_id.clone(),
         "uml.class",
         parameter_name,
-        std::collections::BTreeMap::from([("visibility".into(), serde_json::Value::Null)]),
+        std::collections::BTreeMap::from([
+            ("visibility".into(), serde_json::Value::Null),
+            (
+                "owningTemplateParameter".into(),
+                serde_json::json!({"$ref": parameter_id}),
+            ),
+            (
+                "templateParameter".into(),
+                serde_json::json!({"$ref": parameter_id}),
+            ),
+        ]),
     ));
-    for (id, kind, from, to) in [
+    for (id, role, from, to) in [
         (
             parameter_ownership,
-            "owns",
+            "ownedParameter",
             signature_id,
             parameter_id.clone(),
         ),
         (
             exposed_ownership,
-            "owns",
-            parameter_id.clone(),
-            exposed_id.clone(),
-        ),
-        (
-            reference_id,
-            "uml.parametered_element",
+            "ownedParameteredElement",
             parameter_id,
             exposed_id,
         ),
     ] {
         section.relations.push(Relation {
             id,
-            kind: kind.into(),
+            kind: "owns".into(),
             from,
             to,
-            properties: Default::default(),
+            properties: std::collections::BTreeMap::from([(
+                "role".into(),
+                serde_json::json!(role),
+            )]),
         });
     }
     super::members::grow_classifier_views(section, owner_id)?;

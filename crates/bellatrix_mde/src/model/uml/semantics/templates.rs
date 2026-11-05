@@ -1,7 +1,5 @@
-use crate::{Element, ModelingSection, Project, StructuralDiagnostic, StructuralSeverity, UmlType};
+use crate::{Element, ModelingSection};
 use std::collections::HashSet;
-
-pub(crate) const GENERATED_SIGNATURE: &str = "bellatrix.generatedTemplateSignature";
 
 pub(crate) fn is_signature(kind: &str) -> bool {
     matches!(
@@ -56,17 +54,9 @@ pub fn template_parametered_element<'a>(
     if !is_parameter(&parameter.kind) {
         return None;
     }
-    let mut references = section.relations.iter().filter(|relation| {
-        relation.kind == "uml.parametered_element" && relation.from == parameter.id
-    });
-    let reference = references.next()?;
-    if references.next().is_some() {
-        return None;
-    }
-    section
-        .elements
-        .iter()
-        .find(|element| element.id == reference.to)
+    let target = parameter.properties.get("parameteredElement")?;
+    let target = crate::uml::references::reference_id(target).ok()??;
+    section.elements.iter().find(|element| element.id == target)
 }
 
 pub(crate) fn rename_parameter(
@@ -74,29 +64,20 @@ pub(crate) fn rename_parameter(
     id: &str,
     name: &str,
 ) -> Result<bool, String> {
-    if !section
+    let Some(parameter) = section
         .elements
         .iter()
-        .any(|element| element.id == id && is_parameter(&element.kind))
-    {
+        .find(|element| element.id == id && is_parameter(&element.kind))
+    else {
         return Ok(false);
-    }
-    let references = section
-        .relations
-        .iter()
-        .filter(|relation| relation.kind == "uml.parametered_element" && relation.from == id)
-        .collect::<Vec<_>>();
-    if references.is_empty() {
-        return Ok(false);
-    }
-    if references.len() != 1 {
-        return Err("parameter has ambiguous parameteredElement references".into());
-    }
-    let target = references
-        .first()
+    };
+    let target = parameter
+        .properties
+        .get("parameteredElement")
+        .ok_or("parameteredElement missing")?;
+    let target = crate::uml::references::reference_id(target)?
         .ok_or("parameteredElement missing")?
-        .to
-        .clone();
+        .to_owned();
     if name.trim().is_empty() {
         return Err("parameter name must not be blank".into());
     }
@@ -106,27 +87,7 @@ pub(crate) fn rename_parameter(
         .find(|element| element.id == target)
         .ok_or("parameteredElement missing")?
         .name = name.into();
-    section
-        .elements
-        .iter_mut()
-        .find(|element| element.id == id)
-        .ok_or("parameter missing")?
-        .name = name.into();
     Ok(true)
-}
-
-fn conforms(element: &Element, metaclass: &str) -> bool {
-    UmlType::from_kind(&element.kind)
-        .and_then(UmlType::metaclass)
-        .is_some_and(|name| crate::uml::metamodel::conforms_to(name, metaclass))
-}
-fn issue(code: &'static str, subject: &str, message: &str) -> StructuralDiagnostic {
-    StructuralDiagnostic {
-        severity: StructuralSeverity::Error,
-        code,
-        subject_id: subject.into(),
-        message: message.into(),
-    }
 }
 
 struct TemplateReferenceEvidence<'a> {
@@ -423,41 +384,7 @@ fn checked_parametered_element<'a>(
     required_metaclass: &str,
 ) -> Result<crate::uml::root::ElementRef<'a>, crate::uml::classifiers::QueryError> {
     use crate::uml::classifiers::QueryError;
-    let mut relations = references
-        .model()
-        .relationship_records()
-        .filter(|relation| {
-            relation.kind == "uml.parametered_element" && relation.from == formal.id()
-        });
-    let canonical = relations.next();
-    if relations.next().is_some() {
-        return Err(QueryError::invalid(
-            formal.id(),
-            "parameteredElement has ambiguous canonical references",
-        ));
-    }
-    let canonical = canonical
-        .map(|relation| {
-            references
-                .element(&relation.to)
-                .map_err(|error| QueryError::invalid(formal.id(), error))
-        })
-        .transpose()?;
-    let explicit = formal
-        .properties()
-        .contains_key("parameteredElement")
-        .then(|| template_reference_target(references, formal, "parameteredElement"));
-    if let Some(Err(error @ QueryError::Invalid { .. })) = &explicit {
-        return Err(error.clone());
-    }
-    if let (Some(canonical), Some(Ok(explicit))) = (canonical, &explicit)
-        && canonical.id() != explicit.id()
-    {
-        return Err(QueryError::invalid(
-            formal.id(),
-            "parameteredElement projection contradicts its canonical reference",
-        ));
-    }
+    let target = template_reference_target(references, formal, "parameteredElement")?;
     let descriptor = formal
         .metaclass()
         .ok_or_else(|| QueryError::unsupported(formal.id(), "formal metaclass is unresolved"))
@@ -469,14 +396,7 @@ fn checked_parametered_element<'a>(
             QueryError::unsupported(formal.id(), "parameteredElement contract is unavailable")
         })?;
     let mut unresolved = None;
-    for target in canonical.into_iter().chain(
-        explicit
-            .as_ref()
-            .and_then(|value| value.as_ref().ok())
-            .copied(),
-    ) {
-        // Canonical references obey the same specialized range as an authored
-        // property (e.g. OperationTemplateParameter exposes an Operation).
+    {
         match crate::uml::property_contracts::check_value(
             references,
             formal,
@@ -506,15 +426,7 @@ fn checked_parametered_element<'a>(
     if let Some(error) = unresolved {
         return Err(error);
     }
-    match explicit {
-        Some(result) => result,
-        None => canonical.ok_or_else(|| {
-            QueryError::unsupported(
-                formal.id(),
-                "parameteredElement projection is not materialized",
-            )
-        }),
-    }
+    Ok(target)
 }
 
 fn checked_parametered_classifier<'a>(
@@ -1164,39 +1076,20 @@ fn signature_redefines_parents(
 }
 
 pub(crate) fn extend_deletion(
-    section: &ModelingSection,
+    section: &mut ModelingSection,
     deleted: &mut HashSet<String>,
 ) -> Result<(), String> {
-    for signature in section
-        .elements
-        .iter()
-        .filter(|element| is_signature(&element.kind) && !deleted.contains(&element.id))
-        .collect::<Vec<_>>()
-    {
-        let children = section
-            .relations
-            .iter()
-            .filter(|relation| relation.kind == "owns" && relation.from == signature.id)
-            .map(|relation| relation.to.as_str())
-            .collect::<Vec<_>>();
-        if !children.is_empty()
-            && children.iter().all(|child| deleted.contains(*child))
-            && signature.label.is_none()
-            && signature.description.is_none()
-            && signature.content.is_none()
-            && signature.annotations.is_empty()
-            && signature.implementations.is_empty()
-            && signature.properties.len() == 1
-            && signature
-                .properties
-                .get(GENERATED_SIGNATURE)
-                .and_then(|metadata| metadata.get("name"))
-                .and_then(serde_json::Value::as_str)
-                == Some(signature.name.as_str())
-        {
-            deleted.insert(signature.id.clone());
+    fn references_target(value: &serde_json::Value, target: &str) -> bool {
+        match value {
+            serde_json::Value::Array(values) => {
+                values.iter().any(|value| references_target(value, target))
+            }
+            _ => crate::uml::references::reference_id(value).ok().flatten() == Some(target),
         }
     }
+
+    // An empty signature has no provenance in the UML contract proving that it
+    // is disposable. Preserve it rather than deleting authored information.
     for element in section
         .elements
         .iter()
@@ -1204,20 +1097,79 @@ pub(crate) fn extend_deletion(
     {
         let template_node = is_signature(&element.kind)
             || is_parameter(&element.kind)
-            || section.relations.iter().any(|relation| {
-                relation.kind == "uml.parametered_element" && relation.to == element.id
+            || section.elements.iter().any(|parameter| {
+                is_parameter(&parameter.kind)
+                    && parameter
+                        .properties
+                        .get("parameteredElement")
+                        .is_some_and(|value| references_target(value, &element.id))
             });
-        if template_node
-            && section.relations.iter().any(|relation| {
-                relation.kind != "owns"
-                    && relation.to == element.id
-                    && !deleted.contains(&relation.from)
-            })
-        {
+        if !template_node {
+            continue;
+        }
+        let relationship_reference = section.relations.iter().any(|relation| {
+            relation.kind != "owns"
+                && relation.to == element.id
+                && !deleted.contains(&relation.from)
+        });
+        let property_reference = section
+            .elements
+            .iter()
+            .filter(|source| !deleted.contains(&source.id))
+            .any(|source| {
+                source.properties.iter().any(|(field, value)| {
+                    if !references_target(value, &element.id) {
+                        return false;
+                    }
+                    let ownership = section.relations.iter().find(|relation| {
+                        relation.kind == "owns"
+                            && relation.from == source.id
+                            && relation.to == element.id
+                    });
+                    if let Some(ownership) = ownership {
+                        if ownership
+                            .properties
+                            .get("role")
+                            .and_then(serde_json::Value::as_str)
+                            == Some(field.as_str())
+                        {
+                            return false;
+                        }
+                        if is_signature(&source.kind)
+                            && is_parameter(&element.kind)
+                            && matches!(field.as_str(), "parameter" | "ownedParameter")
+                        {
+                            return false;
+                        }
+                    }
+                    true
+                })
+            });
+        if relationship_reference || property_reference {
             return Err(format!(
                 "UML_TEMPLATE_IN_USE: {} is referenced outside the deleted template graph",
                 element.id
             ));
+        }
+    }
+    for signature in section
+        .elements
+        .iter_mut()
+        .filter(|element| is_signature(&element.kind) && !deleted.contains(&element.id))
+    {
+        for field in ["parameter", "ownedParameter"] {
+            if let Some(values) = signature
+                .properties
+                .get_mut(field)
+                .and_then(serde_json::Value::as_array_mut)
+            {
+                values.retain(|value| {
+                    crate::uml::references::reference_id(value)
+                        .ok()
+                        .flatten()
+                        .is_none_or(|id| !deleted.contains(id))
+                });
+            }
         }
     }
     Ok(())
