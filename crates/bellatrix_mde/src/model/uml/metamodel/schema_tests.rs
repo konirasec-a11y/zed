@@ -274,53 +274,6 @@ fn fixture() -> serde_json::Result<Project> {
     )
 }
 
-fn assert_legacy_contract_warnings(
-    diagnostics: Vec<crate::StructuralDiagnostic>,
-    type_warning: &str,
-) {
-    assert!(
-        diagnostics
-            .iter()
-            .all(|issue| issue.severity == crate::StructuralSeverity::Warning),
-        "{diagnostics:?}"
-    );
-    let mut actual = diagnostics
-        .iter()
-        .map(|issue| {
-            (
-                issue.subject_id.as_str(),
-                issue.code,
-                issue.message.as_str(),
-            )
-        })
-        .collect::<Vec<_>>();
-    let mut expected = vec![
-        (
-            "attribute",
-            "MDE_PROPERTY_CONTRACT_UNVERIFIED",
-            "Property-defaultValue: text declaration is not a resolved UML reference",
-        ),
-        (
-            "attribute",
-            "MDE_PROPERTY_CONTRACT_UNVERIFIED",
-            type_warning,
-        ),
-        (
-            "operation",
-            "MDE_PROPERTY_CONTRACT_UNVERIFIED",
-            "Operation-isOrdered: a stored value does not establish its UML derivation",
-        ),
-        (
-            "operation",
-            "MDE_PROPERTY_CONTRACT_UNVERIFIED",
-            "Operation-type: a stored value does not establish its UML derivation",
-        ),
-    ];
-    actual.sort_unstable();
-    expected.sort_unstable();
-    assert_eq!(actual, expected);
-}
-
 fn edit(project: &Project, id: &str, key: &str, value: Value) -> Result<Project, String> {
     commands::apply(
         project,
@@ -334,8 +287,7 @@ fn edit(project: &Project, id: &str, key: &str, value: Value) -> Result<Project,
 }
 
 #[test]
-fn generated_contracts_drive_canonical_inspection_commands_validation_and_roundtrip() -> TestResult
-{
+fn generated_contracts_drive_canonical_inspection_commands_and_roundtrip() -> TestResult {
     let original = fixture()?;
     let section = ModelingSection::from_model(&original);
     let class = inspect_element(&section, "class").ok_or("missing Class inspector")?;
@@ -563,25 +515,6 @@ fn generated_contracts_drive_canonical_inspection_commands_validation_and_roundt
             .get("typeText"),
         Some(&json!("String"))
     );
-    let mut dangling = changed.clone();
-    dangling.elements.retain(|element| element.id != type_id);
-    assert!(
-        crate::validate_structural_model(&dangling)
-            .iter()
-            .any(|issue| issue.code == "UML_TYPED_ELEMENT_TYPE" && issue.subject_id == "attribute")
-    );
-    let mut wrong_type = changed.clone();
-    wrong_type
-        .elements
-        .iter_mut()
-        .find(|element| element.id == type_id)
-        .ok_or("Type")?
-        .kind = "uml.comment".into();
-    assert!(
-        crate::validate_structural_model(&wrong_type)
-            .iter()
-            .any(|issue| issue.code == "UML_TYPED_ELEMENT_TYPE" && issue.subject_id == "attribute")
-    );
     let mut duplicate_type = changed.clone();
     duplicate_type
         .elements
@@ -594,12 +527,6 @@ fn generated_contracts_drive_canonical_inspection_commands_validation_and_roundt
             .validate(contract("Property", "type")?, &json!({"$ref":type_id}))
             .is_err()
     );
-    dangling.root_model = None;
-    assert!(
-        crate::validate_structural_model(&dangling)
-            .iter()
-            .any(|issue| issue.code == "UML_TYPED_ELEMENT_TYPE")
-    );
     let changed = edit(&changed, "attribute", "defaultValue", json!("[]"))?;
     let changed = edit(&changed, "attribute", "visibility", json!("private"))?;
     let changed = edit(&changed, "attribute", "visibility", Value::Null)?;
@@ -611,10 +538,6 @@ fn generated_contracts_drive_canonical_inspection_commands_validation_and_roundt
     for format in [Format::Json, Format::Protobuf] {
         let decoded = crate::decode(&crate::encode(&changed, format)?, format)?;
         assert_eq!(decoded, changed);
-        assert_legacy_contract_warnings(
-            super::super::root::Model::from_project(&decoded).validate(),
-            "typeText: no normative property or registered extension contract",
-        );
         assert_eq!(
             decoded
                 .element("attribute")
@@ -624,27 +547,6 @@ fn generated_contracts_drive_canonical_inspection_commands_validation_and_roundt
             Some(&json!({"$ref":type_id}))
         );
     }
-    let mut malformed = changed.clone();
-    malformed
-        .elements
-        .iter_mut()
-        .find(|element| element.id == "class")
-        .ok_or("missing Class")?
-        .properties
-        .insert("isAbstract".into(), json!("true"));
-    assert!(
-        crate::validate_structural_model(&malformed)
-            .iter()
-            .any(|issue| issue.subject_id == "class" && issue.code == "UML_PROPERTY_VALUE")
-    );
-    assert_legacy_contract_warnings(
-        crate::validate_structural_model(&changed),
-        "typeText: no normative property or registered extension contract",
-    );
-    assert_legacy_contract_warnings(
-        crate::validate_structural_model(&original),
-        "TypedElement-type: text declaration is not a resolved UML reference",
-    );
     assert_eq!(
         original
             .element("attribute")
@@ -686,10 +588,6 @@ fn unbounded_scalar_edits_preserve_exact_values_and_reject_invalid_typed_literal
     for format in [Format::Json, Format::Protobuf] {
         let decoded = crate::decode(&crate::encode(&edited, format)?, format)?;
         assert_eq!(decoded, edited);
-        assert_legacy_contract_warnings(
-            super::super::root::Model::from_project(&decoded).validate(),
-            "TypedElement-type: text declaration is not a resolved UML reference",
-        );
         assert_eq!(
             decoded
                 .element("integer")

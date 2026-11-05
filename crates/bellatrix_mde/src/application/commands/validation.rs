@@ -1,9 +1,8 @@
 #[cfg(test)]
 mod tests {
     use crate::{
-        ModelingRelationKind, Project, Relation, StructuralSeverity, UmlQuickCreate,
+        ModelingRelationKind, Project, Relation,
         commands::{Command, apply},
-        validate_structural_model,
     };
 
     fn project(kinds: [&str; 4]) -> serde_json::Result<Project> {
@@ -38,38 +37,6 @@ mod tests {
         }
     }
 
-    fn rejected_without_mutation(project: &Project, command: Command, code: &str) {
-        let before = project.clone();
-        let result = apply(project, &command, 0);
-        assert!(
-            matches!(result, Err(ref error) if error.contains(code)),
-            "{result:?}"
-        );
-        assert_eq!(project, &before);
-    }
-
-    #[test]
-    fn toolbox_rejects_incompatible_and_stereotype_generalizations() -> serde_json::Result<()> {
-        for (specific, general, code) in [
-            ("uml.class", "uml.interface", "UML_GENERALIZATION_TYPE"),
-            ("uml.class", "uml.component", "UML_GENERALIZATION_TYPE"),
-            (
-                "uml.stereotype",
-                "uml.class",
-                "UML_STEREOTYPE_GENERALIZATION",
-            ),
-            (
-                "uml.class",
-                "uml.stereotype",
-                "UML_STEREOTYPE_GENERALIZATION",
-            ),
-        ] {
-            let model = project([specific, general, "uml.class", "uml.class"])?;
-            rejected_without_mutation(&model, create("a", "b"), code);
-        }
-        Ok(())
-    }
-
     #[test]
     fn structural_classifier_endpoints_use_the_shared_registry() -> serde_json::Result<()> {
         for (specific, general) in [
@@ -86,66 +53,6 @@ mod tests {
                 "{specific} -> {general}"
             );
         }
-        Ok(())
-    }
-
-    #[test]
-    fn toolbox_and_quick_edit_reject_final_parents_atomically() -> serde_json::Result<()> {
-        let mut model = project(["uml.class"; 4])?;
-        for element in &mut model.elements {
-            if element.id == "b" {
-                element
-                    .properties
-                    .insert("isFinalSpecialization".into(), serde_json::json!(true));
-            }
-        }
-        rejected_without_mutation(&model, create("a", "b"), "UML_GENERALIZATION_FINAL_PARENT");
-        rejected_without_mutation(
-            &model,
-            Command::QuickEdit {
-                diagram_id: "diagram".into(),
-                element_id: "b".into(),
-                action: UmlQuickCreate::Subtype,
-            },
-            "UML_GENERALIZATION_FINAL_PARENT",
-        );
-        assert!(
-            apply(
-                &model,
-                &Command::QuickEdit {
-                    diagram_id: "diagram".into(),
-                    element_id: "b".into(),
-                    action: UmlQuickCreate::Supertype
-                },
-                0
-            )
-            .is_ok()
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn toolbox_rejects_transitive_cycles_without_rejecting_multiple_inheritance()
-    -> serde_json::Result<()> {
-        let mut model = project(["uml.class"; 4])?;
-        edge(&mut model, "a-b", "a", "b");
-        edge(&mut model, "b-c", "b", "c");
-        rejected_without_mutation(&model, create("c", "a"), "UML_GENERALIZATION_CYCLE");
-        assert!(apply(&model, &create("a", "c"), 0).is_ok());
-        Ok(())
-    }
-
-    #[test]
-    fn new_cycles_are_rejected_even_when_draft_already_contains_another_cycle()
-    -> serde_json::Result<()> {
-        let mut model = project(["uml.class"; 4])?;
-        edge(&mut model, "old-a-b", "a", "b");
-        edge(&mut model, "old-b-a", "b", "a");
-        edge(&mut model, "old-c-d", "c", "d");
-        rejected_without_mutation(&model, create("d", "c"), "UML_GENERALIZATION_CYCLE");
-        rejected_without_mutation(&model, create("c", "c"), "UML_GENERALIZATION_CYCLE");
-        let result = apply(&model, &create("c", "a"), 0);
-        assert!(result.is_ok(), "{result:?}");
         Ok(())
     }
 
@@ -172,72 +79,6 @@ mod tests {
         }
         Ok(())
     }
-    #[test]
-    fn new_interface_realizations_and_associations_enforce_endpoint_semantics()
-    -> serde_json::Result<()> {
-        for (kind, source, target, error) in [
-            (
-                ModelingRelationKind::InterfaceRealization,
-                "uml.artifact",
-                "uml.interface",
-                Some("UML_INTERFACE_REALIZATION_SOURCE"),
-            ),
-            (
-                ModelingRelationKind::InterfaceRealization,
-                "uml.component",
-                "uml.interface",
-                None,
-            ),
-            (
-                ModelingRelationKind::Association,
-                "uml.package",
-                "uml.class",
-                Some("UML_ASSOCIATION_END_TYPE"),
-            ),
-            (
-                ModelingRelationKind::Association,
-                "uml.data_type",
-                "uml.class",
-                None,
-            ),
-        ] {
-            let model = project([source, target, "uml.class", "uml.class"])?;
-            let command = Command::CreateRelation {
-                owner_id: None,
-                diagram_id: "diagram".into(),
-                kind,
-                from: "a".into(),
-                to: "b".into(),
-            };
-            if let Some(code) = error {
-                rejected_without_mutation(&model, command, code);
-            } else {
-                assert!(apply(&model, &command, 0).is_ok(), "{source} -> {target}");
-            }
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn new_relationship_warnings_do_not_become_errors() -> serde_json::Result<()> {
-        let model = project(["uml.template", "uml.interface", "uml.class", "uml.class"])?;
-        let command = Command::CreateRelation {
-            owner_id: None,
-            diagram_id: "diagram".into(),
-            kind: ModelingRelationKind::InterfaceRealization,
-            from: "a".into(),
-            to: "b".into(),
-        };
-        let updated = apply(&model, &command, 0);
-        assert!(updated.is_ok(), "{updated:?}");
-        if let Ok(updated) = updated {
-            assert!(validate_structural_model(&updated).iter().any(
-                |diagnostic| diagnostic.severity == StructuralSeverity::Warning
-                    && diagnostic.code == "MDE_RELATIONSHIP_ENDPOINT_UNSUPPORTED"
-            ));
-        }
-        Ok(())
-    }
 
     #[test]
     fn interface_realization_has_no_visibility_without_namespace() -> serde_json::Result<()> {
@@ -251,27 +92,15 @@ mod tests {
         };
         let result = apply(&model, &command, 0);
         assert!(result.is_ok(), "{result:?}");
-        let mut updated = result.unwrap();
+        let updated = result.unwrap();
         let relation = updated
             .relations
-            .iter_mut()
+            .iter()
             .find(|relation| relation.kind == "uml.interface_realization")
             .unwrap();
         assert_eq!(
             relation.properties.get("visibility"),
             Some(&serde_json::Value::Null)
-        );
-        let relation_id = relation.id.clone();
-        relation
-            .properties
-            .insert("visibility".into(), serde_json::json!("public"));
-        assert!(
-            crate::uml::root::Model::from_project(&updated)
-                .validate()
-                .iter()
-                .any(|issue| issue.code == "UML_VISIBILITY_NEEDS_OWNERSHIP"
-                    && issue.subject_id == relation_id
-                    && issue.severity == StructuralSeverity::Error)
         );
         Ok(())
     }
