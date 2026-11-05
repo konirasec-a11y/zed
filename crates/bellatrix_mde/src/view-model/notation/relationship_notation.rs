@@ -17,6 +17,7 @@ pub fn relationship_style_for_notation(kind: &str) -> RelationshipStyle {
         | "uml.deployment"
         | "uml.manifestation"
         | "uml.abstraction"
+        | "uml.substitution"
         | "uml.profile_application"
         | "uml.element_import" => (None, OpenArrow, true),
         "uml.interface_realization" | "uml.realization" => (None, Triangle, true),
@@ -207,6 +208,7 @@ pub fn format_relationship_label(
     let text = |key: &str| properties.get(key).and_then(serde_json::Value::as_str);
     let keyword = match kind {
         "uml.usage" => Some("«use»"),
+        "uml.substitution" => Some("«substitute»"),
         "uml.include" => Some("«include»"),
         "uml.extend" => Some("«extend»"),
         "uml.package_import" | "uml.element_import" => {

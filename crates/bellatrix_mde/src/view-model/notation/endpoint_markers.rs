@@ -45,6 +45,7 @@ fn composition(navigation: NavigationDeclaration, aggregation: &str) -> Endpoint
     };
     let glyphs = match (navigation, diamond) {
         (NavigationDeclaration::Navigable, Some(diamond)) => vec![diamond, OpenArrow],
+        (NavigationDeclaration::NotNavigable, Some(diamond)) => vec![diamond, Cross],
         (_, Some(diamond)) => vec![diamond],
         (NavigationDeclaration::Navigable, None) => vec![OpenArrow],
         (NavigationDeclaration::NotNavigable, None) => vec![Cross],
@@ -199,6 +200,40 @@ pub fn resolve_relationship_view(
         presentation,
         markers: None,
     };
+    // Native binary Associations need the same Property-based projection as
+    // imported views. Derive bindings without persisting a second semantic copy.
+    let native_endpoints = if view.presentation.relationship_endpoints.is_none()
+        && relation.is_some_and(|relation| {
+            matches!(
+                relation.kind.as_str(),
+                "uml.association" | "uml.directed_association"
+            )
+        }) {
+        let references = crate::uml::references::ReferenceIndex::new(
+            crate::uml::root::Model::from_section(section),
+        );
+        match crate::uml::associations::member_ends(&references, subject) {
+            Ok(ends) => match ends.as_slice() {
+                [source, target] => {
+                    let binding = |end: &Element| EndpointMarkerBinding {
+                        target: EndpointMarkerTarget::ModelEnd { id: end.id.clone() },
+                        marker: EndpointMarkerSource::Model,
+                    };
+                    Some(crate::RelationshipEndpointPresentation {
+                        source: binding(source),
+                        target: binding(target),
+                    })
+                }
+                _ => None,
+            },
+            Err(message) => {
+                resolved.diagnostics.push(message);
+                None
+            }
+        }
+    } else {
+        None
+    };
     // Child label views own their text, placement and visibility. Do not also
     // paint generated labels at unrelated offsets over the authored subviews.
     if view.children.iter().any(|child| {
@@ -211,8 +246,17 @@ pub fn resolve_relationship_view(
         resolved.presentation.source_labels = RelationshipEndpointLabels::default();
         resolved.presentation.target_labels = RelationshipEndpointLabels::default();
     }
-    if let Some(endpoints) = &view.presentation.relationship_endpoints {
-        let convention = view.style.uml.association_end_convention;
+    if let Some(endpoints) = view
+        .presentation
+        .relationship_endpoints
+        .as_ref()
+        .or(native_endpoints.as_ref())
+    {
+        let convention = if native_endpoints.is_some() {
+            Some(AssociationEndConvention::Uml)
+        } else {
+            view.style.uml.association_end_convention
+        };
         let (source_aggregation, target_aggregation) =
             if convention == Some(AssociationEndConvention::Uml) {
                 (&endpoints.target, &endpoints.source)

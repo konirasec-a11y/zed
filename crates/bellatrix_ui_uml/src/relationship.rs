@@ -102,6 +102,41 @@ fn tangent(start: (f32, f32), end: (f32, f32)) -> (f32, f32) {
         (dx / length, dy / length)
     }
 }
+// Repeated vertices and collapsed Bézier handles do not determine a direction.
+// Use the first/last nonzero derivative so markers stay aligned after editing.
+fn endpoint_directions(from: (f32, f32), segments: &[UmlLineSegment]) -> ((f32, f32), (f32, f32)) {
+    let mut last = from;
+    let mut initial = None;
+    let mut final_direction = (1.0, 0.0);
+    for segment in segments {
+        let points = match *segment {
+            UmlLineSegment::Line { to } => [last, to, to, to],
+            UmlLineSegment::Cubic {
+                control1,
+                control2,
+                to,
+            } => [last, control1, control2, to],
+        };
+        let end = *points.last().unwrap_or(&last);
+        if let Some(next) = points
+            .iter()
+            .skip(1)
+            .find(|next| (next.0 - last.0).hypot(next.1 - last.1) > f32::EPSILON)
+        {
+            initial.get_or_insert_with(|| tangent(last, *next));
+        }
+        if let Some(previous) = points
+            .iter()
+            .rev()
+            .skip(1)
+            .find(|previous| (end.0 - previous.0).hypot(end.1 - previous.1) > f32::EPSILON)
+        {
+            final_direction = tangent(*previous, end);
+        }
+        last = end;
+    }
+    (initial.unwrap_or((1.0, 0.0)), final_direction)
+}
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct LabelAnchor {
     position: (f32, f32),
@@ -129,12 +164,11 @@ fn path_label_anchors(
     scale: f32,
 ) -> (LabelAnchor, LabelAnchor, (f32, f32), (f32, f32)) {
     let mut last = from;
-    let mut initial_direction = (1.0, 0.0);
-    let mut final_direction = initial_direction;
+    let (initial_direction, final_direction) = endpoint_directions(from, segments);
     let mut middle = from;
     let mut middle_direction = initial_direction;
     for (index, segment) in segments.iter().enumerate() {
-        let (next, start_direction, end_direction, midpoint) = match *segment {
+        let (next, start_direction, _end_direction, midpoint) = match *segment {
             UmlLineSegment::Line { to } => {
                 let direction = tangent(last, to);
                 (
@@ -158,9 +192,6 @@ fn path_label_anchors(
                 ),
             ),
         };
-        if index == 0 {
-            initial_direction = start_direction;
-        }
         if index == segments.len() / 2 {
             middle = midpoint;
             middle_direction = match *segment {
@@ -175,7 +206,6 @@ fn path_label_anchors(
                 ),
             };
         }
-        final_direction = end_direction;
         last = next;
     }
     (
@@ -660,16 +690,10 @@ impl RenderOnce for UmlRelationGlyph {
                 }
                 builder.move_to(absolute(from));
                 let mut last = from;
-                let mut initial_tangent = tangent(from, to);
-                let mut final_tangent = initial_tangent;
-                for (index, segment) in segments.iter().enumerate() {
+                let (initial_tangent, final_tangent) = endpoint_directions(from, &segments);
+                for segment in &segments {
                     match *segment {
                         UmlLineSegment::Line { to: next } => {
-                            let direction = tangent(last, next);
-                            if index == 0 {
-                                initial_tangent = direction;
-                            }
-                            final_tangent = direction;
                             builder.line_to(absolute(next));
                             last = next;
                         }
@@ -678,10 +702,6 @@ impl RenderOnce for UmlRelationGlyph {
                             control2,
                             to: next,
                         } => {
-                            if index == 0 {
-                                initial_tangent = tangent(last, control1);
-                            }
-                            final_tangent = tangent(control2, next);
                             builder.cubic_bezier_to(
                                 absolute(next),
                                 absolute(control1),
