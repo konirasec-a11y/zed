@@ -565,12 +565,13 @@ pub(crate) fn compartment(
                         if event.click_count >= 2 {
                             if let Some(handler) = &edit {
                                 handler(id, window, cx);
+                                cx.stop_propagation();
                             }
                         } else if let Some(handler) = &select {
                             handler(id, window, cx);
+                            cx.stop_propagation();
                         }
                     }
-                    cx.stop_propagation();
                 })
                 .child(inner)
         }))
@@ -646,9 +647,9 @@ pub(crate) fn template_signature(
                             };
                             if let Some(handler) = handler {
                                 handler(id, window, cx);
+                                cx.stop_propagation();
                             }
                         }
-                        cx.stop_propagation();
                     })
                     .child(label)
             }))
@@ -727,8 +728,8 @@ impl RenderOnce for UmlClassifier {
                             if event.click_count >= 2 {
                                 if let Some(handler) = &edit_title {
                                     handler(window, cx);
+                                    cx.stop_propagation();
                                 }
-                                cx.stop_propagation();
                             }
                         })
                         .child(
