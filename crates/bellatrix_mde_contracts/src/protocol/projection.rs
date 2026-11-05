@@ -1,11 +1,69 @@
 use crate::protocol::command::*;
 use crate::protocol::inspector::{ElementInspector, QuickEditAction};
 use crate::protocol::presentation::*;
+pub use crate::ruml::Contract;
+use crate::ruml::Registry;
 pub use crate::{HierarchyPlacement, InheritedStyleProperty};
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
+
+#[derive(Clone, Debug)]
+pub struct ContractProjection {
+    registry: Arc<Registry>,
+}
+
+impl ContractProjection {
+    pub fn new(registry: Registry) -> Self {
+        Self {
+            registry: Arc::new(registry),
+        }
+    }
+
+    pub fn get(&self, id: &str) -> Option<&Contract> {
+        self.registry.get_entry(id).map(|entry| &entry.contract)
+    }
+
+    pub fn conforms_to(&self, id: &str, metaclass: &str) -> bool {
+        self.get(id).is_some_and(|contract| {
+            crate::uml::metamodel::conforms_to(contract.type_name(), metaclass)
+        })
+    }
+
+    pub fn owns_attribute(&self, owner: &str, member: &str) -> bool {
+        let attributes = match self.get(owner) {
+            Some(Contract::Activity(value)) => &value.owned_attribute,
+            Some(Contract::Artifact(value)) => &value.owned_attribute,
+            Some(Contract::AssociationClass(value)) => &value.owned_attribute,
+            Some(Contract::Behavior(value)) => &value.owned_attribute,
+            Some(Contract::Class(value)) => &value.owned_attribute,
+            Some(Contract::Collaboration(value)) => &value.owned_attribute,
+            Some(Contract::Component(value)) => &value.owned_attribute,
+            Some(Contract::DataType(value)) => &value.owned_attribute,
+            Some(Contract::DeploymentSpecification(value)) => &value.owned_attribute,
+            Some(Contract::Device(value)) => &value.owned_attribute,
+            Some(Contract::EncapsulatedClassifier(value)) => &value.owned_attribute,
+            Some(Contract::Enumeration(value)) => &value.owned_attribute,
+            Some(Contract::ExecutionEnvironment(value)) => &value.owned_attribute,
+            Some(Contract::FunctionBehavior(value)) => &value.owned_attribute,
+            Some(Contract::Interaction(value)) => &value.owned_attribute,
+            Some(Contract::Interface(value)) => &value.owned_attribute,
+            Some(Contract::Node(value)) => &value.owned_attribute,
+            Some(Contract::OpaqueBehavior(value)) => &value.owned_attribute,
+            Some(Contract::PrimitiveType(value)) => &value.owned_attribute,
+            Some(Contract::ProtocolStateMachine(value)) => &value.owned_attribute,
+            Some(Contract::Signal(value)) => &value.owned_attribute,
+            Some(Contract::StateMachine(value)) => &value.owned_attribute,
+            Some(Contract::Stereotype(value)) => &value.owned_attribute,
+            Some(Contract::StructuredClassifier(value)) => &value.owned_attribute,
+            _ => return false,
+        };
+        attributes.iter().any(|attribute| attribute == member)
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct ModelingProjection {
+    pub contracts: ContractProjection,
     pub tools: crate::protocol::ToolCatalog,
     pub root_model: Option<String>,
     pub elements: Vec<Element>,
@@ -20,7 +78,15 @@ pub struct ModelingProjection {
 }
 impl ModelingProjection {
     pub fn inspect_element(&self, id: &str) -> Option<ElementInspector> {
-        self.inspections.get(id).cloned()
+        let mut inspector = self.inspections.get(id)?.clone();
+        if let Some(contract) = self.contract(id) {
+            inspector.type_label = contract.type_name().to_owned();
+        }
+        Some(inspector)
+    }
+
+    pub fn contract(&self, id: &str) -> Option<&Contract> {
+        self.contracts.get(id)
     }
     pub fn identity(&self, kind: &str) -> SemanticIdentity {
         self.identities
@@ -49,13 +115,10 @@ pub struct Element {
     pub visibility: Option<String>,
     pub quick_actions: Vec<QuickEditAction>,
     pub quick_create: Vec<UmlQuickCreate>,
-    pub is_classifier: bool,
-    pub is_comment: bool,
     pub template_parametered_id: Option<String>,
     pub members: Vec<String>,
     pub template_parameters: Vec<String>,
     pub template_label: String,
-    pub structured_classifier: bool,
     pub member: MemberPresentation,
     pub minimum_size: (f64, f64),
     pub minimum_header_height: f64,

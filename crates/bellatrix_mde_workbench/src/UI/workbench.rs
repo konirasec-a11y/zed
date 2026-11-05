@@ -638,6 +638,34 @@ impl MdeWorkbenchItem {
             cx,
         );
     }
+    fn inline_edit_content(
+        section: &bellatrix_mde_cordis::projection::ModelingProjection,
+        id: &str,
+    ) -> Option<(String, &'static str)> {
+        // Association is a Classifier, but relation names are properties rather
+        // than the object-only stereotype/name-expression command.
+        if section.relations.iter().any(|relation| relation.id == id) {
+            return selection::inline_relation_name(section, id)
+                .map(|name| (name, "properties.name"));
+        }
+        let element = section.elements.iter().find(|element| element.id == id)?;
+        if matches!(
+            section.contract(id),
+            Some(bellatrix_mde_cordis::projection::Contract::Comment(_))
+        ) {
+            Some((element.display_label.clone(), "properties.body"))
+        } else if section.contracts.conforms_to(id, "Classifier") {
+            Some((Self::name_expression_text(element), "name_expression"))
+        } else {
+            let named = element
+                .template_parametered_id
+                .as_ref()
+                .and_then(|id| section.elements.iter().find(|element| &element.id == id))
+                .unwrap_or(element);
+            Some((named.name.clone(), "name"))
+        }
+    }
+
     fn begin_inline_edit(&mut self, id: String, window: &mut Window, cx: &mut Context<Self>) {
         if self.source.is_read_only() || self.selected_view_is_inspection_only() {
             return;
@@ -645,14 +673,32 @@ impl MdeWorkbenchItem {
         let Ok(snapshot) = self.source.snapshot() else {
             return;
         };
-        let Some(target) = snapshot
-            .section
-            .elements
-            .iter()
-            .find(|element| element.id == id)
-        else {
+        let Some((display, path)) = Self::inline_edit_content(&snapshot.section, &id) else {
             return;
         };
+        if path == "properties.name" {
+            let Some(diagram) =
+                snapshot.section.diagrams.iter().find(|diagram| {
+                    Some(diagram.id.as_str()) == self.presentation.active_diagram()
+                })
+            else {
+                return;
+            };
+            let Some(view_id) =
+                canvas_presentation::ordered_views(&snapshot.section, &diagram.views)
+                    .into_iter()
+                    .filter(|view| selection::supports_inline_relation_view(view, &id))
+                    .min_by_key(|view| {
+                        Some(view.id.as_str()) != self.presentation.selected_canvas_view()
+                    })
+                    .map(|view| view.id.clone())
+            else {
+                return;
+            };
+            if self.presentation.selected_canvas_view() != Some(view_id.as_str()) {
+                self.select_view(id.clone(), view_id, cx);
+            }
+        }
         if self.presentation.editing_element() == Some(id.as_str()) {
             if let Some(field) = &self.inline_editor {
                 field.read(cx).focus_handle(cx).focus(window, cx);
@@ -660,35 +706,12 @@ impl MdeWorkbenchItem {
                 return;
             }
         }
-        let classifier = target.is_classifier;
-        let comment = target.is_comment;
-        let hint = if comment {
-            "Body"
-        } else if classifier {
-            "<< stereotype >> name"
-        } else {
-            "Name"
+        let hint = match path {
+            "properties.body" => "Body",
+            "name_expression" => "<< stereotype >> name",
+            _ => "Name",
         };
         let field = cx.new(|cx| InputField::new(window, cx, hint).label_min_width(px(96.0)));
-        let display = if comment {
-            target.display_label.clone()
-        } else if classifier {
-            Self::name_expression_text(target)
-        } else {
-            target
-                .template_parametered_id
-                .as_ref()
-                .and_then(|id| {
-                    snapshot
-                        .section
-                        .elements
-                        .iter()
-                        .find(|element| &element.id == id)
-                })
-                .unwrap_or(target)
-                .name
-                .clone()
-        };
         field.update(cx, |field, cx| field.set_text(&display, window, cx));
         if self.selected_element() != Some(id.as_str()) {
             self.select_element(id.clone(), cx);
@@ -706,7 +729,7 @@ impl MdeWorkbenchItem {
         cx.notify();
     }
     fn commit_inline_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.source.is_read_only() {
+        if self.source.is_read_only() || self.selected_view_is_inspection_only() {
             return;
         }
         let (Some(id), Some(field)) = (
@@ -715,41 +738,19 @@ impl MdeWorkbenchItem {
         ) else {
             return;
         };
+        if self.inline_draft.as_ref().is_some_and(|draft| draft.queued) {
+            return;
+        }
         let text = field.read(cx).text(cx);
         let Ok(snapshot) = self.source.snapshot() else {
             self.feedback = "Project snapshot unavailable".into();
             cx.notify();
             return;
         };
-        let Some(element) = snapshot
-            .section
-            .elements
-            .iter()
-            .find(|element| element.id == id)
-        else {
-            self.cancel_inline_edit(window, cx);
+        let Some((canonical, path)) = Self::inline_edit_content(&snapshot.section, &id) else {
+            self.feedback = "This target is no longer editable; text preserved".into();
+            cx.notify();
             return;
-        };
-        let classifier = element.is_classifier;
-        let comment = element.is_comment;
-        let canonical = if comment {
-            element.display_label.clone()
-        } else if classifier {
-            Self::name_expression_text(element)
-        } else {
-            element
-                .template_parametered_id
-                .as_ref()
-                .and_then(|id| {
-                    snapshot
-                        .section
-                        .elements
-                        .iter()
-                        .find(|element| &element.id == id)
-                })
-                .unwrap_or(element)
-                .name
-                .clone()
         };
         let Some(draft) = self.inline_draft.as_mut() else {
             self.feedback = "Edit baseline unavailable; cancel and reopen the editor".into();
@@ -764,17 +765,91 @@ impl MdeWorkbenchItem {
                 return;
             }
         };
-        let name = if comment {
+        let name = if matches!(path, "properties.body" | "properties.name") {
             reconciled
         } else {
             reconciled.trim().to_owned()
         };
         let changed = name != canonical;
+        if changed && path == "properties.name" {
+            let project_id = self.project_id().clone();
+            let diagram_id = self.presentation.active_diagram().map(str::to_owned);
+            let (completion, mut receipt) = tokio::sync::watch::channel(None);
+            if let Err(error) = self.source.submit(MdeUiCommand::SetPropertyTracked {
+                request: ModelingSetPropertyRequested {
+                    project_id: project_id.clone(),
+                    element_id: id.clone(),
+                    path: path.into(),
+                    value: serde_json::Value::String(name.clone()),
+                    expected_revision: snapshot.revision,
+                },
+                completion,
+            }) {
+                self.feedback = format!("Name not sent; text preserved: {error}");
+                cx.notify();
+                return;
+            }
+            if let Some(draft) = self.inline_draft.as_mut() {
+                draft.queued = true;
+            }
+            let submitted_text = text.to_string();
+            self.feedback = "Saving relationship name…".into();
+            cx.spawn_in(window, async move |owner, cx| {
+                let waiting = receipt.borrow().is_none();
+                if waiting && let Err(error) = receipt.changed().await {
+                    eprintln!("MDE relationship name receipt unavailable: {error}");
+                }
+                let result = receipt
+                    .borrow()
+                    .clone()
+                    .unwrap_or_else(|| Err("Name receipt unavailable; text preserved".into()));
+                if let Err(error) = owner.update_in(cx, |item, window, cx| {
+                    if item.project_id() != &project_id
+                        || item.presentation.active_diagram() != diagram_id.as_deref()
+                        || item.presentation.editing_element() != Some(id.as_str())
+                        || !item
+                            .inline_editor
+                            .as_ref()
+                            .is_some_and(|current| current.entity_id() == field.entity_id())
+                    {
+                        return;
+                    }
+                    if let Some(draft) = item.inline_draft.as_mut() {
+                        draft.queued = false;
+                        draft.acknowledge(&name, result.clone());
+                    }
+                    match result {
+                        Ok(_) => {
+                            if field.read(cx).text(cx).as_str() == submitted_text.as_str() {
+                                let focused =
+                                    field.read(cx).focus_handle(cx).contains_focused(window, cx);
+                                item.presentation.clear_edit();
+                                item.inline_editor = None;
+                                item.inline_draft = None;
+                                if focused {
+                                    item.focus_handle.focus(window, cx);
+                                }
+                            }
+                            item.feedback = "Relationship name saved".into();
+                        }
+                        Err(error) => {
+                            item.feedback = format!("Name not saved; text preserved: {error}");
+                        }
+                    }
+                    cx.notify();
+                }) {
+                    eprintln!("MDE relationship name receipt update failed: {error}");
+                }
+            })
+            .detach();
+            cx.notify();
+            return;
+        }
         self.presentation.clear_edit();
         self.inline_editor = None;
         self.inline_draft = None;
         if changed {
-            if classifier {
+            if path == "name_expression" {
                 self.submit(
                     MdeUiCommand::SetNameExpression(ModelingSetNameExpressionRequested {
                         project_id: self.project_id().clone(),
@@ -789,7 +864,7 @@ impl MdeWorkbenchItem {
                     MdeUiCommand::SetProperty(ModelingSetPropertyRequested {
                         project_id: self.project_id().clone(),
                         element_id: id,
-                        path: if comment { "properties.body" } else { "name" }.into(),
+                        path: path.into(),
                         value: serde_json::Value::String(name),
                         expected_revision: snapshot.revision,
                     }),

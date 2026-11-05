@@ -197,8 +197,8 @@ fn declared_label(kind: &str, key: &str) -> &'static str {
         (_, "isOrdered") => "Ordered",
         (_, "isUnique") => "Unique",
         (_, "direction") => "Direction",
-        (_, "lower") => "Return lower (derived)",
-        (_, "upper") => "Return upper (derived)",
+        (_, "lower") => "Lower (derived)",
+        (_, "upper") => "Upper (derived)",
         (_, "signature") => "Authored signature",
         (_, "isQuery") => "Query",
         _ => "Property",
@@ -261,8 +261,24 @@ fn apply_normative_contracts(
         );
         field.editable = contract.value_type != PropertyValueType::ReadOnly;
         field.value = contract.value;
+        if key == "navigable" && element.conforms_to("Association") {
+            field.label = "Navigability (end editor pending)".into();
+            field.value = json!("Unavailable");
+        }
         if key == "type" && contract.value_type == PropertyValueType::Reference {
             field.label = "Type reference".into();
+        }
+        if let Some(metaclass) = element.metaclass()
+            && let Ok(Some(descriptor)) = crate::uml::schema::uml_property(metaclass, key)
+            && !descriptor.is_derived
+            && !descriptor.is_read_only
+            && !matches!(
+                crate::contract_edits::field_shape(metaclass, key),
+                Ok(Some(_))
+            )
+        {
+            field.label = format!("{} (not in current contract)", field.label);
+            field.value = json!("Unavailable");
         }
     }
 }

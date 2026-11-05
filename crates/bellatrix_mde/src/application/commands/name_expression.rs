@@ -1,4 +1,4 @@
-use crate::{Element, ModelingSection, UmlType};
+use crate::{Element, ModelingSection};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct NameExpression {
@@ -60,7 +60,9 @@ pub(super) fn apply(
         .iter_mut()
         .find(|element| element.id == id)
         .ok_or("element not found")?;
-    if !UmlType::from_kind(&element.kind).is_some_and(UmlType::is_classifier) {
+    if !crate::uml::root::object_metaclass(&element.kind)
+        .is_some_and(|metaclass| crate::uml::metamodel::conforms_to(metaclass, "Classifier"))
+    {
         return Err("UML name expression requires a classifier".into());
     }
     element.name = parsed.name;

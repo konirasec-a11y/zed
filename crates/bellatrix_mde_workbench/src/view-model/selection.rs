@@ -1,6 +1,6 @@
-use bellatrix_mde_cordis::Geometry;
 use bellatrix_mde_cordis::presentation_contract::UmlNotation;
-use bellatrix_mde_cordis::projection::{Diagram, ModelingProjection as ModelingSection};
+use bellatrix_mde_cordis::projection::{Contract, Diagram, ModelingProjection as ModelingSection};
+use bellatrix_mde_cordis::{Geometry, PathSegment};
 
 pub(super) struct ReconciledSelection {
     pub active_diagram: Option<String>,
@@ -58,7 +58,71 @@ pub(super) fn reconcile_selection(
     }
 }
 
+pub(super) fn inline_relation_name(section: &ModelingSection, id: &str) -> Option<String> {
+    section
+        .relations
+        .iter()
+        .find(|relation| relation.id == id)?;
+    section.contract(id)?;
+    if !section.contracts.conforms_to(id, "NamedElement") {
+        return None;
+    }
+    let property = section
+        .inspections
+        .get(id)?
+        .properties
+        .iter()
+        .find(|property| property.path == "properties.name" && property.editable)?;
+    match &property.value {
+        serde_json::Value::String(name) => Some(name.clone()),
+        serde_json::Value::Null => Some(String::new()),
+        _ => None,
+    }
+}
+
+pub(super) fn supports_inline_relation_view(
+    view: &bellatrix_mde_cordis::projection::View,
+    target: &str,
+) -> bool {
+    if view.subject.as_deref() != Some(target) || view.relationship.is_none() {
+        return false;
+    }
+    let Geometry::Path { start, segments } =
+        view.routed_geometry.as_ref().unwrap_or(&view.geometry)
+    else {
+        return false;
+    };
+    let finite = |point: &bellatrix_mde_cordis::Point| {
+        point.x.is_finite()
+            && point.y.is_finite()
+            && (point.x as f32).is_finite()
+            && (point.y as f32).is_finite()
+    };
+    finite(start)
+        && !segments.is_empty()
+        && segments.iter().all(|segment| match segment {
+            PathSegment::Line { to } => finite(to),
+            PathSegment::Cubic {
+                control1,
+                control2,
+                to,
+            } => finite(control1) && finite(control2) && finite(to),
+        })
+}
+
 fn has_inline_representation(section: &ModelingSection, diagram: &Diagram, target: &str) -> bool {
+    if section
+        .relations
+        .iter()
+        .any(|relation| relation.id == target)
+    {
+        if inline_relation_name(section, target).is_none() {
+            return false;
+        }
+        return super::canvas_presentation::ordered_views(section, &diagram.views)
+            .into_iter()
+            .any(|view| supports_inline_relation_view(view, target));
+    }
     diagram.all_views().any(|view| {
         let Geometry::Rect {
             x,
@@ -100,14 +164,17 @@ fn has_inline_representation(section: &ModelingSection, diagram: &Diagram, targe
         }
         section.elements.iter().any(|element| {
             element.id == target
-                && match element.kind.as_str() {
-                    "rust.field" | "uml.attribute" => {
-                        view.style.uml.suppress_attributes != Some(true)
+                && match section.contract(&element.id) {
+                    Some(Contract::Property(_)) => {
+                        section.contracts.owns_attribute(&owner.id, &element.id)
+                            && view.style.uml.suppress_attributes != Some(true)
                     }
-                    "rust.function" | "uml.operation" => {
+                    Some(Contract::Operation(_)) => {
                         view.style.uml.suppress_operations != Some(true)
                     }
-                    "uml.reception" => view.style.uml.suppress_receptions != Some(true),
+                    Some(Contract::Reception(_)) => {
+                        view.style.uml.suppress_receptions != Some(true)
+                    }
                     _ => false,
                 }
         })

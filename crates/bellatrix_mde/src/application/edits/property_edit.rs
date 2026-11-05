@@ -270,11 +270,20 @@ pub(crate) fn relationship_fields(
             default: no_aggregation,
         },
     ];
-    COMMON.iter().copied().chain(
-        ENDS.iter()
-            .copied()
-            .filter(move |_| element.metaclass() == Some("Association")),
-    )
+    COMMON
+        .iter()
+        .copied()
+        .filter(move |definition| match definition.key {
+            "name" => element.conforms_to("NamedElement"),
+            "sourceMultiplicity" | "targetMultiplicity" | "sourceRole" | "targetRole"
+            | "navigable" => element.conforms_to("Association"),
+            _ => true,
+        })
+        .chain(
+            ENDS.iter()
+                .copied()
+                .filter(move |_| element.metaclass() == Some("Association")),
+        )
 }
 
 pub(crate) fn normalize_property_contract(
@@ -286,6 +295,12 @@ pub(crate) fn normalize_property_contract(
     use crate::uml::schema::{self, ScalarKind};
     use crate::uml::types::StandardPrimitiveType;
     let mut contract = PropertyContract { value_type, value };
+    if key == "navigable" && element.conforms_to("Association") {
+        // UML navigability belongs to individual ends; a single Boolean cannot
+        // represent Association::navigableOwnedEnd or classifier-owned ends.
+        contract.value_type = PropertyValueType::ReadOnly;
+        return contract;
+    }
     if key == "stereotype" {
         contract.value_type = match crate::StereotypeValue::read(Some(&contract.value)) {
             crate::StereotypeValue::Null
@@ -306,6 +321,15 @@ pub(crate) fn normalize_property_contract(
         || descriptor.is_read_only
         || descriptor.is_derived
     {
+        contract.value_type = PropertyValueType::ReadOnly;
+        return contract;
+    }
+    if !matches!(
+        crate::contract_edits::field_shape(metaclass, key),
+        Ok(Some(_))
+    ) {
+        // The normative schema can expose fields missing from the generated
+        // concrete contract. Offering an editor would lose or reject that edit.
         contract.value_type = PropertyValueType::ReadOnly;
         return contract;
     }

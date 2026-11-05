@@ -6,9 +6,11 @@ use bellatrix_mde_contracts::{
     ModelingSection, View,
     protocol::{
         Command, ModelDocumentParts, ModelingElementKind, ModelingMemberKind, ModelingRelationKind,
+        inspector::PropertyEditor, projection::ModelingProjection,
     },
     ruml::{Contract, class::Class},
 };
+use serde_json::json;
 use std::{collections::BTreeSet, error::Error};
 
 type FlowResult<T> = Result<T, Box<dyn Error>>;
@@ -21,6 +23,14 @@ struct NativeAuthoring {
 impl NativeAuthoring {
     fn section(&self) -> FlowResult<ModelingSection> {
         Ok(serde_json::from_str(&self.document.section_json)?)
+    }
+
+    fn projection(&self) -> FlowResult<ModelingProjection> {
+        Ok(project_model_section(
+            &self.document.id,
+            &self.document.name,
+            &self.document.section_json,
+        )?)
     }
 
     fn apply(&mut self, command: Command) -> FlowResult<ModelingSection> {
@@ -179,11 +189,11 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
         })?;
         assert_eq!(class(&renamed, &invoice)?.name.as_deref(), Some(name));
         assert_eq!(semantic_view(&renamed, &invoice)?.id, invoice_view);
-        let projection = project_model_section(
-            &flow.document.id,
-            &flow.document.name,
-            &flow.document.section_json,
-        )?;
+        let projection = flow.projection()?;
+        let Some(Contract::Class(projected_class)) = projection.contract(&invoice) else {
+            return Err("UI snapshot must retain the concrete Class contract".into());
+        };
+        assert_eq!(projected_class.name.as_deref(), Some(name));
         let displayed = projection
             .elements
             .iter()
@@ -206,6 +216,17 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
         },
         "Operation",
     )?;
+    let nested = flow.create(
+        Command::CreateElement {
+            diagram_id: "classes".into(),
+            owner_id: Some(invoice.clone()),
+            kind: ModelingElementKind::Class,
+            name: Some("LineItem".into()),
+            x: 100.0,
+            y: 350.0,
+        },
+        "Class",
+    )?;
     let association = flow.create(
         Command::CreateRelation {
             diagram_id: "classes".into(),
@@ -216,6 +237,35 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
         },
         "Association",
     )?;
+    let association_view = semantic_view(&flow.section()?, &association)?.id.clone();
+    for name in ["documentReference", "sourceDocument"] {
+        let renamed = flow.apply(Command::SetProperty {
+            element_id: association.clone(),
+            path: "properties.name".into(),
+            value: json!(name),
+        })?;
+        let Contract::Association(named_association) = contract(&renamed, &association)? else {
+            return Err("renaming must preserve the Association contract".into());
+        };
+        assert_eq!(named_association.name.as_deref(), Some(name));
+        assert_eq!(semantic_view(&renamed, &association)?.id, association_view);
+        let projection = flow.projection()?;
+        let Some(Contract::Association(projected_association)) = projection.contract(&association)
+        else {
+            return Err("UI snapshot must retain the concrete Association contract".into());
+        };
+        assert_eq!(projected_association.name.as_deref(), Some(name));
+        let inspector = projection
+            .inspect_element(&association)
+            .ok_or("renamed Association disappeared from the Inspector")?;
+        let name_property = inspector
+            .properties
+            .iter()
+            .find(|property| property.path == "properties.name")
+            .ok_or("Association Inspector must expose its canonical name property")?;
+        assert_eq!(name_property.value, json!(name));
+        assert!(name_property.editable);
+    }
     let generalization = flow.create(
         Command::CreateRelation {
             diagram_id: "classes".into(),
@@ -252,6 +302,7 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
     assert_eq!(invoice_class.name.as_deref(), Some("SalesInvoice"));
     assert_eq!(invoice_class.owned_attribute, vec![attribute.clone()]);
     assert_eq!(invoice_class.owned_operation, vec![operation.clone()]);
+    assert_eq!(invoice_class.nested_classifier, vec![nested.clone()]);
     assert_eq!(invoice_class.generalization, vec![generalization.clone()]);
     assert_eq!(
         invoice_class.interface_realization,
@@ -273,6 +324,54 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
         class(&authored, &document)?.name.as_deref(),
         Some("Document")
     );
+    assert_eq!(class(&authored, &nested)?.name.as_deref(), Some("LineItem"));
+
+    let projection = flow.projection()?;
+    let Some(Contract::Class(projected_class)) = projection.contract(&invoice) else {
+        return Err("authored UI snapshot must retain the concrete Class contract".into());
+    };
+    assert_eq!(projected_class, invoice_class);
+    assert!(projection.contracts.owns_attribute(&invoice, &attribute));
+    for other_member in [&operation, &nested, &association] {
+        assert!(!projection.contracts.owns_attribute(&invoice, other_member));
+    }
+    assert!(!projection.contracts.owns_attribute(&document, &attribute));
+    let inspector = projection
+        .inspect_element(&invoice)
+        .ok_or("authored Class must remain inspectable")?;
+    let final_specialization = inspector
+        .properties
+        .iter()
+        .find(|property| property.path == "properties.isFinalSpecialization")
+        .ok_or("Class Inspector must explain the unavailable final-specialization field")?;
+    assert_eq!(final_specialization.editor, PropertyEditor::ReadOnly);
+    assert!(!final_specialization.editable);
+    assert_eq!(final_specialization.value, json!("Unavailable"));
+
+    let generalization_inspector = projection
+        .inspect_element(&generalization)
+        .ok_or("authored Generalization must remain inspectable")?;
+    for unsupported_path in ["properties.name", "properties.sourceMultiplicity"] {
+        assert!(
+            generalization_inspector
+                .properties
+                .iter()
+                .all(|property| property.path != unsupported_path),
+            "Generalization must not expose {unsupported_path} as its UML property"
+        );
+    }
+    let association_inspector = projection
+        .inspect_element(&association)
+        .ok_or("authored Association must remain inspectable")?;
+    let navigability = association_inspector
+        .properties
+        .iter()
+        .find(|property| property.path == "properties.navigable")
+        .ok_or("Association Inspector must explain the pending end-navigability editor")?;
+    assert_eq!(navigability.editor, PropertyEditor::ReadOnly);
+    assert!(!navigability.editable);
+    assert_eq!(navigability.value, json!("Unavailable"));
+    assert_eq!(navigability.label, "Navigability (end editor pending)");
 
     let Contract::Model(root) = contract(&authored, "model")? else {
         return Err("authored root must remain a Model contract".into());
@@ -287,6 +386,7 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
     let Contract::Association(binary) = contract(&authored, &association)? else {
         return Err("relationship command must persist an Association contract".into());
     };
+    assert_eq!(binary.name.as_deref(), Some("sourceDocument"));
     let [source_end, target_end] = binary.member_end.as_slice() else {
         return Err("binary Association must retain two Property memberEnds".into());
     };
@@ -326,6 +426,7 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
         &invoice,
         &document,
         &printable,
+        &nested,
         &association,
         &generalization,
         &dependency,

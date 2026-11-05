@@ -1,5 +1,6 @@
 use super::*;
 use bellatrix_mde_cordis::presentation_contract::UmlNotation;
+use bellatrix_mde_cordis::projection::Contract;
 
 impl Render for MdeWorkbenchItem {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -34,6 +35,7 @@ impl Render for MdeWorkbenchItem {
         let mut cards = Vec::new();
         let node_bounds = std::rc::Rc::new(std::cell::RefCell::new(Vec::<[f32; 4]>::new()));
         let mut relationship_controls = Vec::new();
+        let mut relationship_editors = Vec::new();
         let mut path_handles = Vec::new();
         let mut unresolved_presentation = false;
         let mut marker_diagnostics = Vec::new();
@@ -56,7 +58,7 @@ impl Render for MdeWorkbenchItem {
                     title = format!("{} / {}", snapshot.name, diagram.name);
                     let views =
                         canvas_presentation::ordered_views(&snapshot.section, &diagram.views);
-                    for view in views {
+                    for view in views.iter().copied() {
                         if matches!(
                             view.geometry,
                             Geometry::Rect { .. } | Geometry::Layout { .. }
@@ -224,19 +226,27 @@ impl Render for MdeWorkbenchItem {
                                 {
                                     continue;
                                 }
-                                if self.presentation.selected_element() == Some(subject)
+                                let selected_relation_view = self.presentation.selected_element()
+                                    == Some(subject)
                                     && self.presentation.selected_canvas_view().map_or_else(
                                         || {
-                                            diagram
-                                                .views
+                                            views
                                                 .iter()
                                                 .find(|candidate| {
-                                                    candidate.subject.as_deref() == Some(subject)
+                                                    selection::supports_inline_relation_view(
+                                                        candidate, subject,
+                                                    )
                                                 })
                                                 .is_some_and(|candidate| candidate.id == view.id)
                                         },
                                         |selected| selected == view.id,
-                                    )
+                                    );
+                                let editing_relation = selected_relation_view
+                                    && self.presentation.editing_element() == Some(subject)
+                                    && self.inline_editor.is_some()
+                                    && selection::inline_relation_name(&snapshot.section, subject)
+                                        .is_some();
+                                if selected_relation_view
                                     && self.presentation.selected_tool().is_none()
                                     && let Some(relation) = relation
                                 {
@@ -270,7 +280,76 @@ impl Render for MdeWorkbenchItem {
                                         );
                                     }
                                 }
-                                let presentation = resolved.presentation.clone();
+                                let mut presentation = resolved.presentation.clone();
+                                if editing_relation {
+                                    presentation.name = None;
+                                    if let Some(field) = self.inline_editor.clone() {
+                                        let middle_index = segments.len() / 2;
+                                        let middle_start = middle_index
+                                            .checked_sub(1)
+                                            .and_then(|index| segments.get(index))
+                                            .map(|segment| match segment {
+                                                PathSegment::Line { to }
+                                                | PathSegment::Cubic { to, .. } => *to,
+                                            })
+                                            .unwrap_or(*start);
+                                        let middle = match segments.get(middle_index) {
+                                            Some(PathSegment::Line { to }) => {
+                                                bellatrix_mde_cordis::Point {
+                                                    x: (middle_start.x + to.x) * 0.5,
+                                                    y: (middle_start.y + to.y) * 0.5,
+                                                }
+                                            }
+                                            Some(PathSegment::Cubic {
+                                                control1,
+                                                control2,
+                                                to,
+                                            }) => bellatrix_mde_cordis::Point {
+                                                x: (middle_start.x
+                                                    + 3.0 * control1.x
+                                                    + 3.0 * control2.x
+                                                    + to.x)
+                                                    / 8.0,
+                                                y: (middle_start.y
+                                                    + 3.0 * control1.y
+                                                    + 3.0 * control2.y
+                                                    + to.y)
+                                                    / 8.0,
+                                            },
+                                            None => *start,
+                                        };
+                                        let confirm = cx.weak_entity();
+                                        let cancel = cx.weak_entity();
+                                        relationship_editors.push(
+                                            div()
+                                                .id(format!("mde-edge-name-editor-{}", view.id))
+                                                .absolute()
+                                                .left(px(middle.x as f32 * zoom + pan.0 - 140.0))
+                                                .top(px(middle.y as f32 * zoom + pan.1 - 40.0))
+                                                .w(px(280.0))
+                                                .px_2()
+                                                .py_1()
+                                                .bg(background)
+                                                .border_1()
+                                                .border_color(selection)
+                                                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                                                .child(bellatrix_ui_uml::UmlInlineNameEditor::new(
+                                                    field,
+                                                    move |window, cx| {
+                                                        if let Err(error) = confirm.update(cx, |item, cx| item.commit_inline_edit(window, cx)) {
+                                                            eprintln!("MDE relationship name commit failed: {error}");
+                                                        }
+                                                    },
+                                                    move |window, cx| {
+                                                        if let Err(error) = cancel.update(cx, |item, cx| item.cancel_inline_edit(window, cx)) {
+                                                            eprintln!("MDE relationship name cancel failed: {error}");
+                                                        }
+                                                    },
+                                                ))
+                                                .into_any_element(),
+                                        );
+                                    }
+                                }
                                 let local_segments = segments
                                     .iter()
                                     .map(|segment| match segment {
@@ -344,14 +423,35 @@ impl Render for MdeWorkbenchItem {
                                                 return;
                                             }
                                             if let Err(error) = edge_owner.update(cx, |item, cx| {
+                                                if item.presentation.active_diagram() != Some(edge_diagram_id.as_str()) {
+                                                    return;
+                                                }
                                                 let selected = item.presentation.selected_canvas_view() == Some(edge_view_id.as_str());
-                                                item.source.record_interaction("canvas.relationship.click", Some(&edge_view_id), bellatrix_mde_cordis::TraceOutcome::Success);
+                                                let editing_allowed = item.presentation.selected_tool().is_none();
+                                                item.source.record_interaction(
+                                                    if event.click_count >= 2 { "canvas.relationship.double_click" } else { "canvas.relationship.click" },
+                                                    Some(&edge_view_id),
+                                                    bellatrix_mde_cordis::TraceOutcome::Success,
+                                                );
                                                 item.select_or_connect_edge(
                                                     edge_id.clone(),
                                                     edge_view_id.clone(),
                                                     cx,
                                                 );
-                                                if selected && let Some(origin) = hit_origin.get() {
+                                                if editing_allowed && item.presentation.editing_element() == Some(edge_id.as_str()) {
+                                                    if let Some(field) = &item.inline_editor {
+                                                        field.read(cx).focus_handle(cx).focus(window, cx);
+                                                        item.gesture = None;
+                                                        return;
+                                                    }
+                                                }
+                                                if event.click_count >= 2 && editing_allowed {
+                                                    item.gesture = None;
+                                                    item.begin_inline_edit(edge_id.clone(), window, cx);
+                                                    if item.presentation.editing_element() == Some(edge_id.as_str()) {
+                                                        return;
+                                                    }
+                                                } else if selected && editing_allowed && let Some(origin) = hit_origin.get() {
                                                     let (x, y) = canvas_model_position(
                                                         (f64::from(event.position.x), f64::from(event.position.y)),
                                                         origin, pan, zoom,
@@ -560,7 +660,11 @@ impl Render for MdeWorkbenchItem {
                         let mut classifier = UmlClassifier::new(element.name.clone())
                             .authored_contents(authored_contents)
                             .show_internal_structure(
-                                has_nested_views && element.structured_classifier,
+                                has_nested_views
+                                    && snapshot
+                                        .section
+                                        .contracts
+                                        .conforms_to(&element.id, "StructuredClassifier"),
                             )
                             .presentation(view.classifier)
                             .view_style(&render_style)
@@ -625,16 +729,21 @@ impl Render for MdeWorkbenchItem {
                             let Some(text) = view.member_labels.get(&member.id).cloned() else {
                                 continue;
                             };
-                            match member.kind.as_str() {
-                                "rust.field" | "uml.attribute" => {
+                            match snapshot.section.contract(&member.id) {
+                                Some(Contract::Property(_))
+                                    if snapshot
+                                        .section
+                                        .contracts
+                                        .owns_attribute(&element.id, &member.id) =>
+                                {
                                     classifier =
                                         classifier.attribute_with_id(member.id.clone(), text)
                                 }
-                                "rust.function" | "uml.operation" => {
+                                Some(Contract::Operation(_)) => {
                                     classifier =
                                         classifier.operation_with_id(member.id.clone(), text)
                                 }
-                                "uml.reception" => {
+                                Some(Contract::Reception(_)) => {
                                     classifier =
                                         classifier.reception_with_id(member.id.clone(), text)
                                 }
@@ -954,6 +1063,7 @@ impl Render for MdeWorkbenchItem {
         }
         cards.extend(path_handles);
         cards.extend(relationship_controls);
+        cards.extend(relationship_editors);
         let owner = cx.weak_entity();
         let move_owner = cx.weak_entity();
         let up_owner = cx.weak_entity();
@@ -1434,7 +1544,13 @@ impl MdeWorkbenchItem {
                     eprintln!("MDE label edit failed: {error}");
                 }
             });
-        if subject.is_some() && subject.as_deref() == self.presentation.editing_element() {
+        if subject.is_some()
+            && subject.as_deref() == self.presentation.editing_element()
+            && !section
+                .relations
+                .iter()
+                .any(|relation| Some(relation.id.as_str()) == subject.as_deref())
+        {
             if let Some(field) = self.inline_editor.clone() {
                 let confirm = cx.weak_entity();
                 let cancel = cx.weak_entity();
@@ -1694,6 +1810,7 @@ impl MdeWorkbenchItem {
                 let owner = cx.weak_entity();
                 let diagram_id = diagram_id.to_owned();
                 let view_id = view.id.clone();
+                let subject = view.subject.clone();
                 let segment = matches!(handle, PathHandle::Segment(_));
                 let control = matches!(handle, PathHandle::Control1(_) | PathHandle::Control2(_));
                 let size = if segment { 7.0 } else { 9.0 };
@@ -1722,6 +1839,19 @@ impl MdeWorkbenchItem {
                         }))
                         .on_mouse_down(MouseButton::Left, move |event, window, cx| {
                             if let Err(error) = owner.update(cx, |item, cx| {
+                                if item.presentation.active_diagram() != Some(diagram_id.as_str()) {
+                                    return;
+                                }
+
+                                if event.click_count >= 2
+                                    && let Some(subject) = &subject
+                                {
+                                    item.begin_inline_edit(subject.clone(), window, cx);
+                                    if item.presentation.editing_element() == Some(subject.as_str())
+                                    {
+                                        return;
+                                    }
+                                }
                                 item.start_path_edit(
                                     diagram_id.clone(),
                                     view_id.clone(),

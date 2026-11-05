@@ -12,6 +12,14 @@ pub(crate) fn decode_section(
 ) -> Result<crate::ModelingSection, String> {
     let stored = serde_json::from_str(section_json)
         .map_err(|error| format!("invalid MDE section: {error}"))?;
+    project_decoded_section(stored, project_id, name)
+}
+
+fn project_decoded_section(
+    stored: bellatrix_mde_contracts::model::ModelingSection,
+    project_id: &str,
+    name: &str,
+) -> Result<crate::ModelingSection, String> {
     let section = crate::contract_document::project_section(stored, project_id)?;
     let project = section.to_model(project_id, name);
     crate::Graph::new(&project)
@@ -26,7 +34,12 @@ pub fn project_model_section(
     name: &str,
     section_json: &str,
 ) -> Result<ModelingProjection, String> {
-    let section = decode_section(project_id, name, section_json)?;
+    let stored: bellatrix_mde_contracts::model::ModelingSection =
+        serde_json::from_str(section_json)
+            .map_err(|error| format!("invalid MDE section: {error}"))?;
+    // Retain the exact typed source, not contracts reconstructed from disposable UI records.
+    let contracts = ContractProjection::new(stored.registry.clone());
+    let section = project_decoded_section(stored, project_id, name)?;
     let references = crate::uml::references::ReferenceIndex::new(
         crate::uml::root::Model::from_section(&section),
     );
@@ -72,9 +85,6 @@ pub fn project_model_section(
                 .into_iter()
                 .filter(|action| crate::uml_types::quick_create_accepts(*action, &element.kind))
                 .collect(),
-                is_classifier: crate::UmlType::from_kind(&element.kind)
-                    .is_some_and(crate::UmlType::is_classifier),
-                is_comment: crate::UmlType::from_kind(&element.kind) == Some(crate::UmlType::Note),
                 template_parametered_id: crate::template_parametered_element(&section, element)
                     .map(|target| target.id.clone()),
                 members: section
@@ -92,8 +102,6 @@ pub fn project_model_section(
                     element,
                     &references,
                 ),
-                structured_classifier: crate::uml::root::ElementRef::Object(element)
-                    .conforms_to("StructuredClassifier"),
                 member: MemberPresentation {
                     underlined: crate::member_presentation(element).underlined,
                 },
@@ -225,6 +233,7 @@ pub fn project_model_section(
         })
         .collect();
     Ok(ModelingProjection {
+        contracts,
         tools: crate::mde_api_projection_tools::project(&section.diagrams),
         root_model: section.root_model.clone(),
         elements,
