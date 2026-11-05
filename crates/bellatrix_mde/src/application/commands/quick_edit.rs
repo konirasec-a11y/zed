@@ -140,7 +140,21 @@ pub(super) fn apply(
         .ok_or("Quick Edit action does not create a graph relationship")?;
     let new_id = fresh_id(section, "node", revision, project_id)?;
     let new_view_id = fresh_id(section, "view", revision, project_id)?;
-    let relation_id = fresh_id(section, "relation", revision, project_id)?;
+    let annotation_link = match action {
+        UmlQuickCreate::Note => Some(
+            crate::contract_projection::annotation_link("Comment", &new_id, element_id)
+                .ok_or("Comment has no annotation link projection")?,
+        ),
+        UmlQuickCreate::Constraint => Some(
+            crate::contract_projection::annotation_link("Constraint", &new_id, element_id)
+                .ok_or("Constraint has no annotation link projection")?,
+        ),
+        _ => None,
+    };
+    let relation_id = match &annotation_link {
+        Some(link) => link.id.clone(),
+        None => fresh_id(section, "relation", revision, project_id)?,
+    };
     let relation_view_id = fresh_id(section, "relation-view", revision, project_id)?;
     let owner_id = if matches!(action, UmlQuickCreate::Note | UmlQuickCreate::Constraint) {
         Some(element_id.to_owned())
@@ -189,6 +203,46 @@ pub(super) fn apply(
     let mut child_properties = std::collections::BTreeMap::new();
     if action == UmlQuickCreate::Note {
         child_properties.insert("body".into(), serde_json::Value::String(name.clone()));
+        child_properties.insert(
+            "annotatedElement".into(),
+            serde_json::json!([{ "$ref": element_id }]),
+        );
+    } else if action == UmlQuickCreate::Constraint {
+        let specification_id = fresh_id(section, "specification", revision, project_id)?;
+        let ownership_id = fresh_id(section, "specification-owner", revision, project_id)?;
+        child_properties.insert(
+            "constrainedElement".into(),
+            serde_json::json!([{ "$ref": element_id }]),
+        );
+        child_properties.insert(
+            "specification".into(),
+            serde_json::json!({ "$ref": specification_id }),
+        );
+        // An empty authored expression records no invented predicate or language.
+        section.elements.push(Element {
+            id: specification_id.clone(),
+            kind: "uml.opaque_expression".into(),
+            name: String::new(),
+            label: Some("Constraint specification".into()),
+            description: None,
+            properties: std::collections::BTreeMap::from([
+                ("body".into(), serde_json::json!([])),
+                ("language".into(), serde_json::json!([])),
+            ]),
+            annotations: Vec::new(),
+            implementations: Vec::new(),
+            content: None,
+        });
+        section.relations.push(Relation {
+            id: ownership_id,
+            kind: "owns".into(),
+            from: new_id.clone(),
+            to: specification_id,
+            properties: std::collections::BTreeMap::from([(
+                "role".into(),
+                serde_json::json!("specification"),
+            )]),
+        });
     }
     section.elements.push(Element {
         id: new_id.clone(),
@@ -239,13 +293,15 @@ pub(super) fn apply(
     if let Some(aggregation) = rule.aggregation {
         properties.insert("end1Aggregation".into(), serde_json::json!(aggregation));
     }
-    section.relations.push(Relation {
-        id: relation_id.clone(),
-        kind: rule.kind.into(),
-        from: source.into(),
-        to: target.into(),
-        properties,
-    });
+    section
+        .relations
+        .push(annotation_link.unwrap_or_else(|| Relation {
+            id: relation_id.clone(),
+            kind: rule.kind.into(),
+            from: source.into(),
+            to: target.into(),
+            properties,
+        }));
     section
         .diagrams
         .iter_mut()

@@ -46,7 +46,9 @@ pub fn registry_from_projection(
         if !identities.insert(relation.id.clone()) {
             return Err(format!("Duplicate projection identity {}", relation.id));
         }
-        if relation.kind == "owns" {
+        if relation.kind == "owns"
+            || crate::contract_projection::is_annotation_link(&relation.kind)
+        {
             continue;
         }
         let metaclass = crate::uml::root::relationship_metaclass(&relation.kind)
@@ -109,7 +111,10 @@ pub fn registry_from_projection(
             .ok_or_else(|| format!("Missing owner {}", relation.from))?;
         add_reference(owner, &role, &relation.to)?;
     }
-    for relation in relations.iter().filter(|relation| relation.kind != "owns") {
+    for relation in relations.iter().filter(|relation| {
+        relation.kind != "owns"
+            && !crate::contract_projection::is_annotation_link(&relation.kind)
+    }) {
         apply_endpoints(&mut pending, relation)?;
     }
     restore_composite_order(&mut pending, previous_composites)?;
@@ -143,6 +148,27 @@ pub fn registry_from_projection(
         registry.insert_contract(contract)?;
     }
     let (_, projected_relations) = crate::contract_projection::project_registry(&registry)?;
+    let mut annotation_links: BTreeMap<_, _> = projected_relations
+        .iter()
+        .filter(|relation| crate::contract_projection::is_annotation_link(&relation.kind))
+        .map(|relation| (relation.id.as_str(), relation))
+        .collect();
+    for relation in relations
+        .iter()
+        .filter(|relation| crate::contract_projection::is_annotation_link(&relation.kind))
+    {
+        if annotation_links.remove(relation.id.as_str()) != Some(relation) {
+            return Err(format!(
+                "{}: annotation link differs from its canonical annotatedElement/constrainedElement projection; edit the annotation's references and regenerate its link",
+                relation.id
+            ));
+        }
+    }
+    if let Some(id) = annotation_links.keys().next() {
+        return Err(format!(
+            "{id}: missing annotation link projection; edit the annotation's references instead of deleting its derived link"
+        ));
+    }
     for relation in relations {
         for key in crate::contract_projection::ASSOCIATION_DISPLAY_KEYS {
             let Some(value) = relation.properties.get(key) else {

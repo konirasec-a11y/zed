@@ -827,6 +827,7 @@ pub struct QuickRelationRule {
 pub fn quick_relation_rule(action: crate::UmlQuickCreate) -> Option<QuickRelationRule> {
     use crate::UmlQuickCreate as A;
     let rule = match action {
+        // These drawing kinds project reference slots, not UML Relationship contracts.
         A::Note => QuickRelationRule {
             kind: "uml.note_link",
             child_is_source: false,

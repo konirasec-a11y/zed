@@ -17,7 +17,7 @@ pub fn project_registry(
     let mut elements = Vec::new();
     let mut relations = Vec::new();
     let mut classifier_properties = BTreeSet::new();
-    let mut ownership_ids = BTreeSet::new();
+    let mut projected_ids = BTreeSet::new();
 
     for entry in registry.entries().values() {
         if metamodel::conforms_to(entry.contract.type_name(), "Classifier") {
@@ -68,7 +68,7 @@ pub fn project_registry(
                             "Projection ownership ID collides with contract {ownership_id}"
                         ));
                     }
-                    if !ownership_ids.insert(ownership_id.clone()) {
+                    if !projected_ids.insert(ownership_id.clone()) {
                         continue;
                     }
                     relations.push(crate::Relation {
@@ -84,6 +84,24 @@ pub fn project_registry(
                 }
             }
             properties.insert(key.to_owned(), projected);
+        }
+        if let Some((field, _, _)) = annotation_link_slot(metaclass)
+            && let Some(targets) = object.get(field).and_then(Value::as_array)
+        {
+            for target in targets.iter().filter_map(Value::as_str) {
+                let Some(link) = annotation_link(metaclass, id, target) else {
+                    continue;
+                };
+                if registry.get_entry(&link.id).is_some() {
+                    return Err(format!(
+                        "Projection annotation ID collides with contract {}",
+                        link.id
+                    ));
+                }
+                if projected_ids.insert(link.id.clone()) {
+                    relations.push(link);
+                }
+            }
         }
         let name = object
             .get("name")
@@ -159,6 +177,48 @@ pub fn project_registry(
         }
     }
     Ok((elements, relations))
+}
+
+pub(crate) fn is_annotation_link(kind: &str) -> bool {
+    matches!(kind, "uml.note_link" | "uml.constraint_link")
+}
+
+fn annotation_link_slot(metaclass: &str) -> Option<(&'static str, &'static str, bool)> {
+    if metamodel::conforms_to(metaclass, "Comment") {
+        Some(("annotatedElement", "uml.note_link", false))
+    } else if metamodel::conforms_to(metaclass, "Constraint") {
+        Some(("constrainedElement", "uml.constraint_link", true))
+    } else {
+        None
+    }
+}
+
+pub(crate) fn annotation_link(
+    metaclass: &str,
+    annotation_id: &str,
+    target_id: &str,
+) -> Option<crate::Relation> {
+    let (field, kind, annotation_is_source) = annotation_link_slot(metaclass)?;
+    // A stable slot/target identity keeps View.subject valid after reloading.
+    // Length prefixes distinguish IDs containing the separators themselves.
+    let id = format!(
+        "ruml:link:{}:{annotation_id}:{}:{field}:{}:{target_id}",
+        annotation_id.len(),
+        field.len(),
+        target_id.len()
+    );
+    let (from, to) = if annotation_is_source {
+        (annotation_id, target_id)
+    } else {
+        (target_id, annotation_id)
+    };
+    Some(crate::Relation {
+        id,
+        kind: kind.into(),
+        from: from.into(),
+        to: to.into(),
+        properties: BTreeMap::new(),
+    })
 }
 
 fn project_value(descriptor: &PropertyDescriptor, value: &Value) -> Value {
