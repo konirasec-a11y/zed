@@ -213,7 +213,7 @@ impl BellatrixZedHost {
                         let bytes = match std::env::var_os("BELLATRIX_MODEL_FILE") {
                             Some(path) => std::fs::read(path)?,
                             None => {
-                                include_bytes!("../../bellatrix_mde/fixtures/todo.json").to_vec()
+                                include_bytes!("../../bellatrix_mde/fixtures/blank.json").to_vec()
                             }
                         };
                         let prepared = match context

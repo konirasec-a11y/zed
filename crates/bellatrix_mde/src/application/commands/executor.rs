@@ -594,6 +594,11 @@ pub(crate) fn apply_with_diagram_operations(
     update_composition_placement(&previous_section, &mut section, &project.id, command)?;
     let mut updated = section.to_model(&project.id, &project.name);
     updated.schema_version = project.schema_version;
+    // Contract conversion is part of the atomic command, so the visual-draft
+    // fallback sees missing required fields before the candidate is published.
+    let updated = crate::contract_document::project_document(
+        crate::contract_document::store_document(&updated)?,
+    )?;
     crate::composition_paths(&updated)?;
     crate::validate_model_hierarchy(&updated)?;
     // Explorer placement must not be blocked by unrelated semantic or diagram drafts.
