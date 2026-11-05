@@ -1429,6 +1429,43 @@ fn scale_child_geometry(
 }
 
 fn remove_element(section: &mut ModelingSection, id: &str) -> Result<(), String> {
+    if let Some(link) = section
+        .relations
+        .iter()
+        .find(|relation| {
+            relation.id == id && crate::contract_projection::is_annotation_link(&relation.kind)
+        })
+        .cloned()
+    {
+        ensure_view_deletion_supported(section, &HashSet::from([id.to_owned()]))?;
+        let (annotation_id, target_id, field) = if link.kind == "uml.note_link" {
+            (&link.to, &link.from, "annotatedElement")
+        } else {
+            (&link.from, &link.to, "constrainedElement")
+        };
+        let annotation = section
+            .elements
+            .iter_mut()
+            .find(|element| element.id == *annotation_id)
+            .ok_or("annotation link owner not found")?;
+        let targets = annotation
+            .properties
+            .get_mut(field)
+            .and_then(Value::as_array_mut)
+            .ok_or("annotation link has no canonical target collection")?;
+        targets.retain(|value| {
+            crate::contract_projection::projection_reference_id(value) != Some(target_id.as_str())
+        });
+        section.relations.retain(|relation| relation.id != id);
+        for diagram in &mut section.diagrams {
+            diagram
+                .views
+                .retain(|view| view.subject.as_deref() != Some(id));
+        }
+        section.hierarchy.remove(id);
+        section.composition.remove(id);
+        return Ok(());
+    }
     let semantic = crate::uml::root::Model::from_section(section);
     if semantic.element(id).is_none() {
         if section.diagrams.iter().any(|diagram| {
@@ -1492,6 +1529,19 @@ fn remove_element(section: &mut ModelingSection, id: &str) -> Result<(), String>
         .collect();
     let affected_subjects = deleted.union(&incident).cloned().collect();
     ensure_view_deletion_supported(section, &affected_subjects)?;
+    for element in &mut section.elements {
+        if deleted.contains(&element.id) {
+            continue;
+        }
+        for field in ["annotatedElement", "constrainedElement"] {
+            if let Some(Value::Array(targets)) = element.properties.get_mut(field) {
+                targets.retain(|value| {
+                    crate::contract_projection::projection_reference_id(value)
+                        .is_none_or(|target| !deleted.contains(target))
+                });
+            }
+        }
+    }
     section
         .elements
         .retain(|element| !deleted.contains(&element.id));
