@@ -496,8 +496,9 @@ unverified status takes precedence and does not hide those violations.
 `SetAssociationEndNavigation` updates the normative navigable set and the
 knowledge gap atomically. Reparenting, removal and other edits cannot leave new
 stale knowledge references. Model markers and the Inspector consume the kernel's
-knowledge result rather than interpreting unknown as false. The Protobuf schema
-records this typed input in Project field 13; JSON and BLX preserve the same state.
+knowledge result rather than interpreting unknown as false. The internal Rust
+wire record stores this typed input in Project field 13; JSON and BLX preserve
+the same state.
 
 The MDJ adapter translates StarUML's absent or explicit `"unspecified"`
 navigation to this knowledge gap. Source field presence is encoding metadata
