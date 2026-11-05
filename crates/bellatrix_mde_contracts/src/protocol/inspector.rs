@@ -80,6 +80,7 @@ pub struct ElementInspector {
     pub properties: Vec<InspectorProperty>,
     pub reference_choices_by_path: BTreeMap<String, Vec<InspectorReferenceChoice>>,
     pub attributes: Vec<InspectorMember>,
+    pub association_ends: Vec<InspectorMember>,
     pub operations: Vec<InspectorMember>,
     pub parameters: Vec<InspectorMember>,
     pub receptions: Vec<InspectorMember>,

@@ -58,6 +58,7 @@ pub struct ElementInspector {
     pub reference_choices_by_path: BTreeMap<String, Vec<InspectorReferenceChoice>>,
     /// Owned attributes/operations are model Elements, not strings in a form.
     pub attributes: Vec<InspectorMember>,
+    pub association_ends: Vec<InspectorMember>,
     pub operations: Vec<InspectorMember>,
     pub parameters: Vec<InspectorMember>,
     pub receptions: Vec<InspectorMember>,
@@ -261,10 +262,6 @@ fn apply_normative_contracts(
         );
         field.editable = contract.value_type != PropertyValueType::ReadOnly;
         field.value = contract.value;
-        if key == "navigable" && element.conforms_to("Association") {
-            field.label = "Navigability (end editor pending)".into();
-            field.value = json!("Unavailable");
-        }
         if key == "type" && contract.value_type == PropertyValueType::Reference {
             field.label = "Type reference".into();
         }
@@ -617,12 +614,48 @@ fn append_association_properties(
             "Navigable (derived)",
             associations::is_navigable(references, id).map(Value::Bool),
         );
-        append(
-            "authoring.navigation",
-            "Navigation knowledge",
-            associations::navigation_knowledge(references, id).map(|knowledge| json!(knowledge)),
-        );
+        let contract = crate::property_edit::navigation_contract(references, id);
+        let (editor, value, editable) = match contract {
+            Ok(contract) => (
+                editor_for_value_type(contract.value_type, false),
+                contract.value,
+                contract.value_type != PropertyValueType::ReadOnly,
+            ),
+            Err(error) => (PropertyEditor::ReadOnly, json!(error), false),
+        };
+        properties.push(InspectorProperty {
+            path: "authoring.navigation".into(),
+            label: "Navigation knowledge".into(),
+            group: "UML association ends",
+            editor,
+            value,
+            editable,
+        });
     }
+}
+
+fn association_end_members(
+    references: &crate::uml::references::ReferenceIndex<'_>,
+    id: &str,
+) -> Vec<InspectorMember> {
+    if !references
+        .element(id)
+        .is_ok_and(|element| element.conforms_to("Association"))
+    {
+        return Vec::new();
+    }
+    // The uml.memberEnd inspector field already exposes a failed query; no
+    // navigable member entries can be offered without verified identities.
+    crate::uml::associations::member_ends(references, id)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|member| InspectorMember {
+            id: member.id.clone(),
+            name: member.name.clone(),
+            kind: member.kind.clone(),
+            display_label: crate::element_display_label_with_references(member, references),
+        })
+        .collect()
 }
 
 pub fn inspect_element(section: &ModelingSection, id: &str) -> Option<ElementInspector> {
@@ -801,6 +834,7 @@ pub(crate) fn inspect_element_with_references(
             reference_choices_by_path,
             properties,
             attributes: Vec::new(),
+            association_ends: association_end_members(references, id),
             operations: Vec::new(),
             parameters: Vec::new(),
             receptions: Vec::new(),
@@ -891,6 +925,9 @@ pub(crate) fn inspect_element_with_references(
             editable: true,
         });
     }
+    // Object names already have one editor backed by Element.name. A second
+    // properties.name editor would be overwritten by that projection on commit.
+    known.insert("name");
     // Unknown collections remain visible but cannot be modified as scalar values.
     for (key, value) in &element.properties {
         if known.contains(key.as_str()) {
@@ -990,7 +1027,18 @@ pub(crate) fn inspect_element_with_references(
                 display_label: crate::element_display_label_with_references(member, references),
             };
             match member.kind.as_str() {
-                "rust.field" | "uml.attribute" => attributes.push(descriptor),
+                "rust.field" | "uml.attribute" => {
+                    let owner = crate::uml::root::ElementRef::Object(element);
+                    if !owner.conforms_to("Association")
+                        || crate::uml::classifiers::is_owned_attribute(
+                            owner,
+                            crate::uml::root::ElementRef::Object(member),
+                        )
+                        .is_ok_and(|is_attribute| is_attribute)
+                    {
+                        attributes.push(descriptor);
+                    }
+                }
                 "rust.function" | "uml.operation" => operations.push(descriptor),
                 "uml.reception" => receptions.push(descriptor),
 
@@ -1111,6 +1159,7 @@ pub(crate) fn inspect_element_with_references(
         reference_choices_by_path,
         properties,
         attributes,
+        association_ends: association_end_members(references, id),
         operations,
         parameters,
         receptions,

@@ -40,6 +40,11 @@ pub(crate) fn project_inspector(
             .into_iter()
             .map(project_member)
             .collect(),
+        association_ends: inspector
+            .association_ends
+            .into_iter()
+            .map(project_member)
+            .collect(),
         operations: inspector
             .operations
             .into_iter()

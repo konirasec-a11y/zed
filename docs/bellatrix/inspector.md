@@ -67,6 +67,30 @@ Os defaults não alteram o documento ao abrir o Inspector. **Nenhuma propriedade
 pode ser editada sem schema, representação no contrato e validação.** Mostrar um
 valor genérico não autoriza persistir uma propriedade arbitrária no registro.
 
+Cada objeto tem um único editor `name`. O espelho `properties.name` do registro
+não aparece como um segundo campo editável: escrever apenas nesse espelho seria
+sobrescrito pelo nome do objeto na conversão. Nas relações NamedElement, o
+caminho do editor continua `properties.name`.
+
+### Edição das pontas de Association
+
+O Inspector da Association mostra **Association ends** na ordem de `memberEnd`.
+Selecionar uma ponta abre o Inspector do seu contrato Property, reutilizando a
+seleção global e os mesmos controles. Em AssociationClass, `ownedEnd` não aparece
+na lista Attributes; `ownedAttribute` e `ownedEnd` são disjuntos (§11.8.2.4).
+
+O campo **Navigation knowledge** oferece `navigable`, `notNavigable` e `unverified`
+somente nas pontas possuídas pela Association. As duas primeiras escolhas
+atualizam `navigableOwnedEnd`. A terceira preserva a falta de decisão no contrato
+de autoria separado, sem inventar um terceiro valor Boolean UML. A operação
+reutiliza a validação de domínio e não modifica ruml. Pontas pertencentes a um
+Classifier permanecem navegáveis e em leitura apenas (§9.9.17.7,
+`Property::isNavigable()`). O resultado derivado permanece visível.
+
+Esse editor substitui o antigo Boolean genérico `properties.navigable`, que não
+representava a navegabilidade individual das pontas e não podia ser persistido
+como campo da Association. Abrir o Inspector não toma uma decisão de navegação.
+
 ### Suporte pendente, sem alterar ruml neste lote
 
 - `Classifier::isFinalSpecialization` existe em UML 2.5.1 §9.9.4.5 e no XMI
@@ -77,10 +101,12 @@ valor genérico não autoriza persistir uma propriedade arbitrária no registro.
 - `Property::class` existe em §9.9.17.6 e no XMI `Property-class`, mas não no
   contrato Property atual. O papel `Class::ownedAttribute` continua preservado;
   o adaptador não inventa um campo ausente para armazenar a referência oposta.
-- Navegabilidade pertence às pontas da Association (§11.8.1.6,
-  `navigableOwnedEnd`), não a um Boolean global `navigable`. Esse controle genérico
-  fica explícito como `Navigability (end editor pending)` / `Unavailable` até
-  existir o editor adequado. As referências concretas não são descartadas.
+- Retarget de Generalization (`specific`/`general`) e InterfaceRealization
+  (`implementingClassifier`/`contract`) exige atualizar referências, ownership,
+  opostos e ocorrências gráficas em uma operação atômica. O editor genérico
+  dessas referências ainda não faz essa sincronização; mudanças podem ser
+  rejeitadas pelo adaptador. Isso é suporte pendente da aplicação, não uma
+  restrição UML a modificar essas propriedades.
 - `Generalization` especializa DirectedRelationship, não NamedElement (§9.9.7).
   Não possui nome UML; não se deve confundir o rótulo de uma figura com `name`.
   Association, Dependency e InterfaceRealization podem editar seu nome no

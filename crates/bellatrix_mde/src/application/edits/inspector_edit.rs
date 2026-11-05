@@ -26,6 +26,27 @@ fn set_inspected_property_inner(
     if field.value_type == PropertyValueType::ReadOnly {
         return Err("property is read-only".into());
     }
+    if path == "authoring.navigation" {
+        let navigation = match value.as_str() {
+            Some("navigable") => crate::NavigationKnowledge::Known(true),
+            Some("notNavigable") => crate::NavigationKnowledge::Known(false),
+            Some("unverified") => crate::NavigationKnowledge::Unverified,
+            _ => return Err("expected navigable, notNavigable, or unverified".into()),
+        };
+        let references = crate::uml::references::ReferenceIndex::new(
+            crate::uml::root::Model::from_section(section),
+        );
+        let association_id = crate::uml::associations::owning_association(&references, id)?
+            .ok_or("navigation editing requires an Association-owned member end")?
+            .id()
+            .to_owned();
+        return crate::uml::associations::set_navigation_knowledge(
+            section,
+            &association_id,
+            id,
+            navigation,
+        );
+    }
     // Optional absence is retained; requiredness is checked by contract conversion.
     let property_null = value.is_null()
         && path.strip_prefix("properties.").is_some_and(|key| {

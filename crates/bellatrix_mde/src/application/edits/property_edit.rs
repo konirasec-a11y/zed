@@ -245,11 +245,6 @@ pub(crate) fn relationship_fields(
             default: empty,
         },
         DeclaredProperty {
-            key: "navigable",
-            value_type: PropertyValueType::Boolean,
-            default: false_value,
-        },
-        DeclaredProperty {
             key: "stereotype",
             value_type: PropertyValueType::Stereotype,
             default: empty,
@@ -275,8 +270,9 @@ pub(crate) fn relationship_fields(
         .copied()
         .filter(move |definition| match definition.key {
             "name" => element.conforms_to("NamedElement"),
-            "sourceMultiplicity" | "targetMultiplicity" | "sourceRole" | "targetRole"
-            | "navigable" => element.conforms_to("Association"),
+            "sourceMultiplicity" | "targetMultiplicity" | "sourceRole" | "targetRole" => {
+                element.conforms_to("Association")
+            }
             _ => true,
         })
         .chain(
@@ -295,6 +291,11 @@ pub(crate) fn normalize_property_contract(
     use crate::uml::schema::{self, ScalarKind};
     use crate::uml::types::StandardPrimitiveType;
     let mut contract = PropertyContract { value_type, value };
+    if key == "name" && matches!(element, ElementRef::Object(_)) {
+        // Objects edit the authoritative name projection through the name path.
+        contract.value_type = PropertyValueType::ReadOnly;
+        return contract;
+    }
     if key == "navigable" && element.conforms_to("Association") {
         // UML navigability belongs to individual ends; a single Boolean cannot
         // represent Association::navigableOwnedEnd or classifier-owned ends.
@@ -388,11 +389,40 @@ fn authored_value_type(value: &Value) -> PropertyValueType {
     }
 }
 
+pub(crate) fn navigation_contract(
+    references: &crate::uml::references::ReferenceIndex<'_>,
+    id: &str,
+) -> Result<PropertyContract, String> {
+    use crate::uml::associations;
+    let knowledge = associations::navigation_knowledge(references, id)?;
+    let editable = associations::owning_association(references, id)?.is_some();
+    Ok(PropertyContract {
+        value_type: if editable {
+            PropertyValueType::Choice(&["navigable", "notNavigable", "unverified"])
+        } else {
+            PropertyValueType::ReadOnly
+        },
+        value: json!(match knowledge {
+            crate::NavigationKnowledge::Known(true) => "navigable",
+            crate::NavigationKnowledge::Known(false) => "notNavigable",
+            crate::NavigationKnowledge::Unverified => "unverified",
+        }),
+    })
+}
+
 pub(crate) fn property_contract(
     section: &ModelingSection,
     id: &str,
     path: &str,
 ) -> Result<PropertyContract, String> {
+    if path == "authoring.navigation" {
+        return navigation_contract(
+            &crate::uml::references::ReferenceIndex::new(crate::uml::root::Model::from_section(
+                section,
+            )),
+            id,
+        );
+    }
     let element = if let Some(relation) = section.relations.iter().find(|relation| {
         relation.id == id
             && (crate::uml::root::relationship_metaclass(&relation.kind).is_some()

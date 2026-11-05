@@ -902,6 +902,7 @@ fn is_general(path: &str) -> bool {
             | "properties.sourceRole"
             | "properties.targetRole"
             | "properties.navigable"
+            | "authoring.navigation"
             | "properties.isAbstract"
             | "properties.isFinalSpecialization"
             | "properties.isLeaf"
@@ -1073,6 +1074,7 @@ pub(crate) fn render_inspector(
         ));
     }
     for (title, members) in [
+        ("Association ends", &inspector.association_ends),
         ("Attributes", &inspector.attributes),
         ("Operations", &inspector.operations),
         ("Parameters", &inspector.parameters),

@@ -182,11 +182,53 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
         "Interface",
     )?;
 
-    for name in ["CustomerInvoice", "SalesInvoice"] {
-        let renamed = flow.apply(Command::Rename {
-            element_id: invoice.clone(),
-            name: name.into(),
-        })?;
+    for (name, command) in [
+        (
+            "CustomerInvoice",
+            Command::Rename {
+                element_id: invoice.clone(),
+                name: "CustomerInvoice".into(),
+            },
+        ),
+        (
+            "SalesInvoice",
+            Command::Rename {
+                element_id: invoice.clone(),
+                name: "SalesInvoice".into(),
+            },
+        ),
+        (
+            "CustomerInvoice",
+            Command::SetProperty {
+                element_id: invoice.clone(),
+                path: "name".into(),
+                value: json!("CustomerInvoice"),
+            },
+        ),
+        (
+            "SalesInvoice",
+            Command::SetProperty {
+                element_id: invoice.clone(),
+                path: "name".into(),
+                value: json!("SalesInvoice"),
+            },
+        ),
+        (
+            "CustomerInvoice",
+            Command::SetNameExpression {
+                element_id: invoice.clone(),
+                expression: "+ CustomerInvoice".into(),
+            },
+        ),
+        (
+            "SalesInvoice",
+            Command::SetNameExpression {
+                element_id: invoice.clone(),
+                expression: "+ SalesInvoice".into(),
+            },
+        ),
+    ] {
+        let renamed = flow.apply(command)?;
         assert_eq!(class(&renamed, &invoice)?.name.as_deref(), Some(name));
         assert_eq!(semantic_view(&renamed, &invoice)?.id, invoice_view);
         let projection = flow.projection()?;
@@ -200,6 +242,22 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
             .find(|element| element.id == invoice)
             .ok_or("renamed Class disappeared from the public UI projection")?;
         assert_eq!(displayed.name, name);
+        let inspector = projection
+            .inspect_element(&invoice)
+            .ok_or("renamed Class disappeared from the Inspector")?;
+        let name_properties: Vec<_> = inspector
+            .properties
+            .iter()
+            .filter(|property| matches!(property.path.as_str(), "name" | "properties.name"))
+            .collect();
+        let [name_property] = name_properties.as_slice() else {
+            return Err(
+                "Class must expose one name editor without a properties.name duplicate".into(),
+            );
+        };
+        assert_eq!(name_property.path, "name");
+        assert!(name_property.editable);
+        assert_eq!(name_property.value, json!(name));
     }
 
     let attribute = flow.create(
@@ -297,6 +355,100 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
         "InterfaceRealization",
     )?;
 
+    let before_navigation = flow.section()?;
+    let Contract::Association(before_association) = contract(&before_navigation, &association)?
+    else {
+        return Err("Association must retain its contract before editing its ends".into());
+    };
+    let member_ends = before_association.member_end.clone();
+    let association_inspector = flow
+        .projection()?
+        .inspect_element(&association)
+        .ok_or("Association must expose its member ends in the Inspector")?;
+    assert_eq!(
+        association_inspector
+            .association_ends
+            .iter()
+            .map(|member| member.id.clone())
+            .collect::<Vec<_>>(),
+        member_ends
+    );
+    let selected_end = association_inspector
+        .association_ends
+        .first()
+        .ok_or("Association must offer an end to inspect")?
+        .id
+        .clone();
+    for navigation in ["navigable", "notNavigable", "unverified", "navigable"] {
+        let changed = flow.apply(Command::SetProperty {
+            element_id: selected_end.clone(),
+            path: "authoring.navigation".into(),
+            value: json!(navigation),
+        })?;
+        let Contract::Association(changed_association) = contract(&changed, &association)? else {
+            return Err("editing a member end must preserve the Association contract".into());
+        };
+        assert_eq!(changed_association.member_end, member_ends);
+        assert_eq!(
+            changed_association.navigable_owned_end,
+            if navigation == "navigable" {
+                vec![selected_end.clone()]
+            } else {
+                Vec::<String>::new()
+            }
+        );
+        assert_eq!(
+            changed
+                .authoring_knowledge
+                .associations
+                .get(&association)
+                .is_some_and(|knowledge| knowledge.navigation_unverified.contains(&selected_end)),
+            navigation == "unverified"
+        );
+        assert_eq!(semantic_view(&changed, &association)?.id, association_view);
+        let projection = flow.projection()?;
+        let end_inspector = projection
+            .inspect_element(&selected_end)
+            .ok_or("selecting an Association member end must expose its Property Inspector")?;
+        assert!(matches!(
+            projection.contract(&selected_end),
+            Some(Contract::Property(_))
+        ));
+        let navigation_editor = end_inspector
+            .properties
+            .iter()
+            .find(|property| property.path == "authoring.navigation")
+            .ok_or("Association-owned Property must expose navigation knowledge")?;
+        assert_eq!(
+            navigation_editor.editor,
+            PropertyEditor::Choice(vec![
+                "navigable".into(),
+                "notNavigable".into(),
+                "unverified".into()
+            ])
+        );
+        assert!(navigation_editor.editable);
+        assert_eq!(navigation_editor.value, json!(navigation));
+        let derived_navigation = end_inspector
+            .properties
+            .iter()
+            .find(|property| property.path == "uml.isNavigable")
+            .ok_or("Property must retain its derived isNavigable result")?;
+        assert_eq!(derived_navigation.editor, PropertyEditor::ReadOnly);
+        assert!(!derived_navigation.editable);
+        if navigation == "unverified" {
+            assert!(
+                derived_navigation
+                    .value
+                    .as_str()
+                    .is_some_and(|message| message.contains("unverified"))
+            );
+        } else {
+            assert_eq!(derived_navigation.value, json!(navigation == "navigable"));
+        }
+        reopen_both_formats(&flow.document, &changed)?;
+    }
+
     let authored = flow.section()?;
     let invoice_class = class(&authored, &invoice)?;
     assert_eq!(invoice_class.name.as_deref(), Some("SalesInvoice"));
@@ -363,15 +515,20 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
     let association_inspector = projection
         .inspect_element(&association)
         .ok_or("authored Association must remain inspectable")?;
-    let navigability = association_inspector
-        .properties
-        .iter()
-        .find(|property| property.path == "properties.navigable")
-        .ok_or("Association Inspector must explain the pending end-navigability editor")?;
-    assert_eq!(navigability.editor, PropertyEditor::ReadOnly);
-    assert!(!navigability.editable);
-    assert_eq!(navigability.value, json!("Unavailable"));
-    assert_eq!(navigability.label, "Navigability (end editor pending)");
+    assert!(
+        association_inspector
+            .properties
+            .iter()
+            .all(|property| property.path != "properties.navigable")
+    );
+    assert_eq!(
+        association_inspector
+            .association_ends
+            .iter()
+            .map(|member| member.id.clone())
+            .collect::<Vec<_>>(),
+        member_ends
+    );
 
     let Contract::Model(root) = contract(&authored, "model")? else {
         return Err("authored root must remain a Model contract".into());

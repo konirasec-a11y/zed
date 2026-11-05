@@ -299,9 +299,9 @@ fn assert_navigation_consumers(project: &Value, known: bool) -> FlowResult<()> {
     assert_eq!(
         knowledge.value,
         if known {
-            json!({"status":"known", "value":true})
+            json!("navigable")
         } else {
-            json!({"status":"unverified"})
+            json!("unverified")
         }
     );
     Ok(())
