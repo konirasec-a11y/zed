@@ -899,7 +899,7 @@ impl MdeUiSource {
     pub fn save_project(&self, path: std::path::PathBuf) -> Result<(), String> {
         let document = self.document()?;
         self.submit(MdeUiCommand::SaveProject(
-            bellatrix_project::ProjectSaveRequested { document, path },
+            bellatrix_project::ProjectSaveRequested { expected_bytes: None, document, path },
         ))
     }
 

@@ -64,6 +64,10 @@ impl Event for ProjectReplaceSnapshot {
 
 #[derive(Clone)]
 pub struct ProjectSaveRequested {
+    /// Previously verified destination bytes, when saving back to a known file.
+    /// Without a baseline, the writer captures the destination before staging.
+    /// The late comparison mitigates external edits; it is not a filesystem CAS.
+    pub expected_bytes: Option<Arc<[u8]>>,
     pub document: Arc<ProjectDocument>,
     pub path: PathBuf,
 }

@@ -12,7 +12,11 @@ pub(crate) fn load(path: &Path) -> Result<ProjectDocument, ProjectError> {
     Ok(doc)
 }
 
-pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), ProjectError> {
+pub(crate) fn atomic_write(
+    path: &Path,
+    bytes: &[u8],
+    expected_bytes: Option<&[u8]>,
+) -> Result<(), ProjectError> {
     let parent = path
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
@@ -25,16 +29,36 @@ pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), ProjectError
         )));
     }
     let (temporary, mut file) = create_temporary(parent)?;
-    let outcome = (|| -> std::io::Result<()> {
+    let outcome = (|| -> Result<(), ProjectError> {
         file.write_all(bytes)?;
         file.sync_all()?;
         drop(file);
-        fs::rename(&temporary, path)
+        // Compare after staging and syncing to minimize the external-write window.
+        // Another process can still write between this check and rename: this is not CAS.
+        match fs::symlink_metadata(path) {
+            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
+                return Err(ProjectError::DestinationChanged(path.display().to_string()));
+            }
+            Ok(_) => {
+                let current = fs::read(path)?;
+                if expected_bytes != Some(current.as_slice()) {
+                    return Err(ProjectError::DestinationChanged(path.display().to_string()));
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                if expected_bytes.is_some() {
+                    return Err(ProjectError::DestinationChanged(path.display().to_string()));
+                }
+            }
+            Err(error) => return Err(error.into()),
+        }
+        fs::rename(&temporary, path)?;
+        Ok(())
     })();
     if outcome.is_err() {
         let _ = fs::remove_file(&temporary);
     }
-    outcome.map_err(ProjectError::Io)
+    outcome
 }
 
 pub(crate) fn publish_new(path: &Path, bytes: &[u8]) -> Result<Option<String>, ProjectError> {

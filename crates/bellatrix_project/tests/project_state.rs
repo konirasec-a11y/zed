@@ -84,6 +84,7 @@ async fn unknown_engine_state_survives_and_identical_write_is_not_an_event() {
         .query::<ProjectSave>(
             Routing::Unscoped,
             ProjectSaveRequested {
+                expected_bytes: None,
                 document: service.snapshot(&id).unwrap(),
                 path: target.clone(),
             },
@@ -146,6 +147,7 @@ async fn one_project_cannot_overwrite_another_projects_file() {
         .query::<ProjectSave>(
             Routing::Unscoped,
             ProjectSaveRequested {
+                expected_bytes: None,
                 document: service.snapshot(&a).unwrap(),
                 path: destination.clone(),
             },
@@ -157,6 +159,7 @@ async fn one_project_cannot_overwrite_another_projects_file() {
         .query::<ProjectSave>(
             Routing::Unscoped,
             ProjectSaveRequested {
+                expected_bytes: None,
                 document: service.snapshot(&b).unwrap(),
                 path: destination.clone(),
             },

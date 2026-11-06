@@ -60,7 +60,7 @@ impl NativeDocumentImporter {
 
 type DocumentWriteFuture = Pin<Box<dyn Future<Output = Result<Option<String>, String>> + Send>>;
 type DocumentWrite =
-    Arc<dyn Fn(Arc<ProjectDocument>, PathBuf) -> DocumentWriteFuture + Send + Sync>;
+    Arc<dyn Fn(Arc<ProjectDocument>, PathBuf, Option<Arc<[u8]>>) -> DocumentWriteFuture + Send + Sync>;
 
 pub struct NativeDocumentLease {
     save: Option<DocumentWrite>,
@@ -83,7 +83,10 @@ impl NativeDocumentLease {
 impl NativeDocumentLease {
     pub fn with_save(
         mut self,
-        save: impl Fn(Arc<ProjectDocument>, PathBuf) -> DocumentWriteFuture + Send + Sync + 'static,
+        save: impl Fn(Arc<ProjectDocument>, PathBuf, Option<Arc<[u8]>>) -> DocumentWriteFuture
+        + Send
+        + Sync
+        + 'static,
     ) -> Self {
         self.save = Some(Arc::new(save));
         self
@@ -93,7 +96,7 @@ impl NativeDocumentLease {
         mut self,
         export: impl Fn(Arc<ProjectDocument>, PathBuf) -> DocumentWriteFuture + Send + Sync + 'static,
     ) -> Self {
-        self.mdj_export = Some(Arc::new(export));
+        self.mdj_export = Some(Arc::new(move |document, path, _| export(document, path)));
         self
     }
 }
@@ -537,12 +540,14 @@ impl NativeMdeDocumentItem {
                     } else { dirty == &path };
                     anyhow::ensure!(!equivalent, "The destination has unsaved text edits; choose another filename");
                 }
+                let mut expected_bytes = None;
                 if !export_mdj && let (Some(previous), Some(bytes)) = (&previous_path, &previous_bytes) {
                     let same_destination = if let (Some(parent), Some(name)) = (previous.parent(), previous.file_name()) {
                         fs.canonicalize(parent).await?.join(name) == destination
                     } else { previous == &path };
                     if same_destination {
                         anyhow::ensure!(fs.load_bytes(previous).await? == *bytes, "The native project changed on disk; save to a new filename to preserve both versions");
+                        expected_bytes = Some(Arc::from(bytes.as_slice()));
                     }
                 }
                 let binding = if export_mdj { None } else {
@@ -558,7 +563,7 @@ impl NativeMdeDocumentItem {
                     Ok::<_, anyhow::Error>(())
                 })??;
                 let bytes = if export_mdj { None } else { Some(serde_json::to_vec_pretty(document.as_ref())?) };
-                let mut warning = write(Arc::clone(&document), path.clone()).await.map_err(anyhow::Error::msg)?;
+                let mut warning = write(Arc::clone(&document), path.clone(), expected_bytes).await.map_err(anyhow::Error::msg)?;
                 if let Some((worktree, relative_path)) = binding {
                     let refresh = worktree.update(cx, |worktree, cx| worktree.as_local().map(|local| local.refresh_entry(relative_path, None, cx)));
                     if let Some(refresh) = refresh && let Err(error) = refresh.await {

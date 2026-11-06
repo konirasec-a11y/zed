@@ -190,11 +190,12 @@ fn register_save(ctx: &Context, service: &Arc<ProjectService>) -> Result<(), io:
                 let id = args.document.id().clone();
                 let document = args.document;
                 let path = args.path;
+                let expected_bytes = args.expected_bytes;
                 let saved = tokio::task::spawn_blocking({
                     let service = Arc::clone(&service);
                     let document = Arc::clone(&document);
                     let path = path.clone();
-                    move || service.save(&document, &path)
+                    move || service.save(&document, &path, expected_bytes.as_deref())
                 })
                 .await
                 .map_err(|e| ProjectError::Io(io::Error::other(e.to_string())));

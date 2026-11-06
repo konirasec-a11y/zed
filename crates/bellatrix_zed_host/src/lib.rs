@@ -124,7 +124,7 @@ impl BellatrixZedHost {
                                     Err(error) => eprintln!("Document cleanup skipped a closed or replaced session: {error}"),
                                 }
                             });
-                        }).with_save(move |document, path| {
+                        }).with_save(move |document, path, expected_bytes| {
                             let context = save_context.clone();
                             let runtime = save_runtime.clone();
                             let lock = Arc::clone(&save_lock);
@@ -137,7 +137,7 @@ impl BellatrixZedHost {
                                     let _guard = lock.lock().await;
                                     let revision = document.revision();
                                     match context.query::<bellatrix_project::ProjectSave>(Routing::Unscoped,
-                                        bellatrix_project::ProjectSaveRequested { document, path }).await.map_err(|error| error.to_string())? {
+                                        bellatrix_project::ProjectSaveRequested { expected_bytes, document, path }).await.map_err(|error| error.to_string())? {
                                         QueryOutcome::Answer(Ok(saved)) if saved == revision => Ok(None),
                                         QueryOutcome::Answer(Ok(_)) => Err("Save completed for a different revision; the document remains unsaved".into()),
                                         QueryOutcome::Answer(Err(error)) => Err(error.to_string()),

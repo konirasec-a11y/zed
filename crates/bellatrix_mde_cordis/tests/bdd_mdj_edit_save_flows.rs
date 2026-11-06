@@ -290,12 +290,36 @@ async fn native_edits_save_natively_and_experimental_export_preserves_dirty_stat
     assert_eq!(fs::read(&destination)?, reopened);
     assert!(service.is_dirty(&id)?);
     let native_path = saved.0.join("edited.bellatrix.json");
+    let baseline = serde_json::to_vec_pretty(opened.as_ref())?;
+    let external = serde_json::to_vec_pretty(native_edit.as_ref())?;
+    fs::write(&native_path, &external)?;
+    let conflicted = context
+        .query::<ProjectSave>(
+            Routing::Unscoped,
+            ProjectSaveRequested {
+                expected_bytes: Some(baseline.into()),
+                document: Arc::clone(&edited),
+                path: native_path.clone(),
+            },
+        )
+        .await?;
+    assert!(matches!(
+        conflicted,
+        QueryOutcome::Answer(Err(ProjectError::DestinationChanged(_)))
+    ));
+    assert_eq!(fs::read(&native_path)?, external);
+    assert!(service.is_dirty(&id)?);
+    assert_eq!(saved_events.load(Ordering::SeqCst), 0);
+    for entry in fs::read_dir(&saved.0)? {
+        assert!(!entry?.file_name().to_string_lossy().starts_with(".bellatrix-"));
+    }
     assert_eq!(
         answer(
             context
                 .query::<ProjectSave>(
                     Routing::Unscoped,
                     ProjectSaveRequested {
+                        expected_bytes: Some(external.into()),
                         document: Arc::clone(&edited),
                         path: native_path.clone()
                     }
@@ -482,6 +506,7 @@ async fn mdj_interchange_rejects_extra_sections_without_restricting_native_docum
                 .query::<ProjectSave>(
                     Routing::Unscoped,
                     ProjectSaveRequested {
+                        expected_bytes: None,
                         document: Arc::clone(&edited),
                         path: path.clone()
                     }

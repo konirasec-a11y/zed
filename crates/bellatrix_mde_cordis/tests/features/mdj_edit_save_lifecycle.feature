@@ -14,7 +14,9 @@ Feature: Native editing after MDJ conversion and separate experimental export
     When I publish the reserved bytes to a new file and read it again
     Then the native project remains dirty and the original MDJ source stays unchanged
     And publishing over an existing destination is rejected without changing its bytes
-    When I save the complete native project
+    When the native destination changes after its baseline was captured
+    Then native save rejects the stale baseline without changing the file or clearing dirty state
+    And native save with the current baseline overwrites the same file successfully
     Then only that snapshot becomes clean and a native saved notification is emitted
 
   Scenario: Preserve newer edits and reject receipts from a closed document session

@@ -388,6 +388,7 @@ impl ProjectService {
         &self,
         expected: &Arc<ProjectDocument>,
         path: &Path,
+        expected_bytes: Option<&[u8]>,
     ) -> Result<u64, ProjectError> {
         let id = expected.id();
         let parent = path
@@ -446,22 +447,27 @@ impl ProjectService {
             }
             Arc::clone(&current.document)
         };
-        match std::fs::symlink_metadata(path) {
+        let destination_bytes = match std::fs::symlink_metadata(path) {
             Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
                 return Err(ProjectError::PathConflict(path.display().to_string()));
             }
             Ok(_) => {
-                let previous = crate::file::load(path)
+                let bytes = std::fs::read(path)?;
+                let previous: ProjectDocument = serde_json::from_slice(&bytes)
+                    .map_err(|_| ProjectError::PathConflict(path.display().to_string()))?;
+                previous.validate()
                     .map_err(|_| ProjectError::PathConflict(path.display().to_string()))?;
                 if previous.id() != id {
                     return Err(ProjectError::PathConflict(path.display().to_string()));
                 }
+                Some(bytes)
             }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
             Err(error) => return Err(error.into()),
-        }
+        };
+        let baseline = expected_bytes.or(destination_bytes.as_deref());
         let bytes = serde_json::to_vec_pretty(&*document)?;
-        crate::file::atomic_write(path, &bytes)?;
+        crate::file::atomic_write(path, &bytes, baseline)?;
         let mut map = self
             .projects
             .write()
