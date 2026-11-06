@@ -906,6 +906,98 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
     }
 
     let authored = flow.section()?;
+    let explorer = flow.projection()?.explorer.added;
+    let invoice_rows = explorer
+        .iter()
+        .filter(|row| row.element_id == invoice)
+        .collect::<Vec<_>>();
+    assert_eq!(invoice_rows.len(), 1);
+    let nested_row = explorer
+        .iter()
+        .find(|row| row.element_id == nested)
+        .ok_or("missing owned classifier in Explorer")?;
+    assert_eq!(nested_row.depth, invoice_rows[0].depth + 1);
+    assert_eq!(
+        explorer
+            .iter()
+            .filter(|row| row.element_id == exportable)
+            .count(),
+        1,
+        "one semantic ID has one Explorer row even with multiple authored views"
+    );
+
+    let mut multi_diagram = NativeAuthoring {
+        document: flow.document.clone(),
+        revision: flow.revision,
+    };
+    let with_diagram = multi_diagram.apply(Command::CreateDiagram {
+        kind: bellatrix_mde_contracts::protocol::StructuralDiagramKind::Class,
+        name: "Other diagram".into(),
+        model_elements: vec!["model".into()],
+    })?;
+    let extra_diagram = with_diagram
+        .diagrams
+        .iter()
+        .find(|diagram| diagram.id != "classes")
+        .ok_or("missing second diagram")?
+        .id
+        .clone();
+    multi_diagram.apply(Command::PlaceElementView {
+        diagram_id: extra_diagram.clone(),
+        element_id: invoice.clone(),
+        x: 20.0,
+        y: 20.0,
+    })?;
+    let same_name = multi_diagram.create(
+        Command::CreateElement {
+            diagram_id: extra_diagram,
+            owner_id: None,
+            kind: ModelingElementKind::Class,
+            name: Some("SalesInvoice".into()),
+            x: 350.0,
+            y: 20.0,
+        },
+        "Class",
+    )?;
+    assert_ne!(same_name, invoice);
+    let before_projection = multi_diagram.document.section_json.clone();
+    let projection = multi_diagram.projection()?;
+    for rows in [&projection.explorer.added, &projection.explorer.name] {
+        let mut identities = BTreeSet::new();
+        for row in rows.iter().filter(|row| {
+            !row.diagram
+                && row
+                    .view
+                    .as_ref()
+                    .is_none_or(|view| view.subject_id.is_some())
+        }) {
+            assert!(
+                identities.insert(row.element_id.clone()),
+                "duplicated Explorer ID {}",
+                row.element_id
+            );
+        }
+        assert_eq!(
+            rows.iter().filter(|row| row.element_id == invoice).count(),
+            1
+        );
+        assert_eq!(
+            rows.iter()
+                .filter(|row| row.element_id == same_name)
+                .count(),
+            1
+        );
+    }
+    assert_eq!(multi_diagram.document.section_json, before_projection);
+    assert_eq!(
+        projection
+            .diagrams
+            .iter()
+            .flat_map(|diagram| diagram.all_views())
+            .filter(|view| view.subject.as_deref() == Some(invoice.as_str()))
+            .count(),
+        2
+    );
     let invoice_class = class(&authored, &invoice)?;
     assert_eq!(invoice_class.name.as_deref(), Some("SalesInvoice"));
     assert_eq!(invoice_class.owned_attribute, vec![attribute.clone()]);

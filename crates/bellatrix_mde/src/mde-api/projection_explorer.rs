@@ -275,6 +275,35 @@ fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrder) -> Vec<E
         ancestors.push(row);
     }
     let semantic = crate::uml::root::Model::from_section(section);
+    // Explorer groups semantic references by UML ownership, not by canvas
+    // geometry. A Comment or Constraint can be drawn outside its owner's shape
+    // while still belonging beneath that owner in the model tree. Keep the
+    // original parent_view_id on every occurrence for presentation consumers.
+    let mut explorer_parents = HashMap::new();
+    for view in &components {
+        let owner = view
+            .subject_id
+            .as_deref()
+            .and_then(|subject| semantic.element(subject))
+            .and_then(|element| semantic.owner(element).ok().flatten());
+        let owner_views = owner
+            .map(|owner| {
+                components
+                    .iter()
+                    .filter(|candidate| {
+                        candidate.diagram_id == view.diagram_id
+                            && candidate.subject_id.as_deref() == Some(owner.id())
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let parent = if let [owner_view] = owner_views.as_slice() {
+            Some(owner_view.view_id.clone())
+        } else {
+            view.parent_view_id.clone()
+        };
+        explorer_parents.insert((view.diagram_id.clone(), view.view_id.clone()), parent);
+    }
     let mut diagram_ancestors = HashMap::new();
     let mut ancestors = Vec::new();
     for row in &authored {
@@ -298,7 +327,9 @@ fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrder) -> Vec<E
             .iter()
             .filter(|view| view.subject_id.as_deref() == Some(subject))
             .all(|view| {
-                let mut parent = view.parent_view_id.as_deref();
+                let mut parent = explorer_parents
+                    .get(&(view.diagram_id.clone(), view.view_id.clone()))
+                    .and_then(Option::as_deref);
                 let mut visited = HashSet::new();
                 while let Some(parent_id) = parent {
                     if !visited.insert(parent_id) {
@@ -312,7 +343,9 @@ fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrder) -> Vec<E
                     if parent_view.subject_id.as_deref() == Some(owner.id()) {
                         return true;
                     }
-                    parent = parent_view.parent_view_id.as_deref();
+                    parent = explorer_parents
+                        .get(&(parent_view.diagram_id.clone(), parent_view.view_id.clone()))
+                        .and_then(Option::as_deref);
                 }
                 diagram_ancestors
                     .get(view.diagram_id.as_str())
@@ -457,13 +490,11 @@ fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrder) -> Vec<E
             .collect::<HashSet<_>>();
         let mut parents = HashMap::new();
         for view in &views {
-            let parent = view
-                .parent_view_id
-                .as_ref()
+            let parent = explorer_parents
+                .get(&(view.diagram_id.clone(), view.view_id.clone()))
+                .and_then(Option::as_ref)
                 .filter(|parent| views.iter().any(|candidate| &candidate.view_id == *parent))
                 .cloned();
-            // UML ownership does not imply UMLDI containment. Only the authored
-            // view parent determines where an occurrence belongs in the diagram.
             parents.insert(view.view_id.clone(), parent);
         }
         let mut seen = HashSet::new();
@@ -496,7 +527,134 @@ fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrder) -> Vec<E
             );
         }
     }
-    place_diagrams_at_occurrences(section, rows)
+    unique_semantic_rows(section, place_diagrams_at_occurrences(section, rows))
+}
+
+fn unique_semantic_rows(section: &ModelingSection, rows: Vec<ExplorerRow>) -> Vec<ExplorerRow> {
+    use std::collections::{HashMap, HashSet};
+    let occurrence_order = section
+        .diagrams
+        .iter()
+        .flat_map(|diagram| {
+            diagram
+                .all_views()
+                .map(|view| format!("view:{}:{}", diagram.id, view.id))
+        })
+        .enumerate()
+        .map(|(index, key)| (key, index))
+        .collect::<HashMap<_, _>>();
+    let identity = |row: &ExplorerRow| {
+        (!row.diagram
+            && row
+                .view
+                .as_ref()
+                .is_none_or(|view| view.subject_id.is_some()))
+        .then(|| row.element_id.clone())
+    };
+    let rank = |row: &ExplorerRow| {
+        // A retained semantic branch carries ownership that cannot safely be
+        // hidden. Otherwise use document occurrence order, independent of sorting.
+        if row.key == semantic_key(&row.element_id) {
+            (0, 0)
+        } else if let Some(order) = occurrence_order.get(&row.key) {
+            (1, *order)
+        } else {
+            (2, 0)
+        }
+    };
+    let mut selected: HashMap<String, &ExplorerRow> = HashMap::new();
+    for row in &rows {
+        if let Some(id) = identity(row) {
+            match selected.entry(id) {
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    entry.insert(row);
+                }
+                std::collections::hash_map::Entry::Occupied(mut entry) => {
+                    if rank(row) < rank(entry.get()) {
+                        entry.insert(row);
+                    }
+                }
+            }
+        }
+    }
+    let aliases = rows
+        .iter()
+        .map(|row| {
+            let key = identity(row)
+                .and_then(|id| selected.get(&id).map(|selected| selected.key.clone()))
+                .unwrap_or_else(|| row.key.clone());
+            (row.key.clone(), key)
+        })
+        .collect::<HashMap<_, _>>();
+    let mut original_parents = HashMap::new();
+    let mut ancestors: Vec<String> = Vec::new();
+    for row in &rows {
+        ancestors.truncate(row.depth);
+        original_parents.insert(row.key.clone(), ancestors.last().cloned());
+        ancestors.push(row.key.clone());
+    }
+    let nodes = rows
+        .iter()
+        .filter(|row| aliases.get(&row.key) == Some(&row.key))
+        .map(|row| (row.key.clone(), row))
+        .collect::<HashMap<_, _>>();
+    let mut children: HashMap<Option<String>, Vec<String>> = HashMap::new();
+    for row in &rows {
+        if !nodes.contains_key(&row.key) {
+            continue;
+        }
+        let mut parent = original_parents.get(&row.key).cloned().flatten();
+        let mut seen = HashSet::new();
+        while let Some(key) = parent.clone() {
+            if !seen.insert(key.clone()) {
+                parent = None;
+                break;
+            }
+            let resolved = aliases.get(&key).cloned();
+            if resolved.as_deref() != Some(&row.key) {
+                parent = resolved;
+                break;
+            }
+            parent = original_parents.get(&key).cloned().flatten();
+        }
+        children.entry(parent).or_default().push(row.key.clone());
+    }
+    fn visit(
+        key: &str,
+        depth: usize,
+        nodes: &HashMap<String, &ExplorerRow>,
+        children: &HashMap<Option<String>, Vec<String>>,
+        seen: &mut HashSet<String>,
+        result: &mut Vec<ExplorerRow>,
+    ) {
+        if !seen.insert(key.to_owned()) {
+            return;
+        }
+        let Some(row) = nodes.get(key) else {
+            return;
+        };
+        let mut row = (**row).clone();
+        row.depth = depth;
+        result.push(row);
+        if let Some(descendants) = children.get(&Some(key.to_owned())) {
+            for child in descendants {
+                visit(child, depth + 1, nodes, children, seen, result);
+            }
+        }
+    }
+    let mut result = Vec::new();
+    let mut seen = HashSet::new();
+    if let Some(roots) = children.get(&None) {
+        for root in roots {
+            visit(root, 0, &nodes, &children, &mut seen, &mut result);
+        }
+    }
+    for row in &rows {
+        if nodes.contains_key(&row.key) {
+            visit(&row.key, 0, &nodes, &children, &mut seen, &mut result);
+        }
+    }
+    result
 }
 
 fn place_diagrams_at_occurrences(

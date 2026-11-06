@@ -91,6 +91,35 @@ pub(crate) fn selection_occurrence(
     diagram: Option<&str>,
     preferred_view: Option<&str>,
 ) -> Option<(String, ViewOccurrence)> {
+    // Canvas selection keeps its exact occurrence even when the Explorer has
+    // just one row for a subject pictured in several diagrams or views.
+    if let Some(diagram) = diagram.and_then(|id| section.diagrams.iter().find(|item| item.id == id))
+    {
+        let mut views = diagram
+            .all_views()
+            .filter(|view| view.subject.as_deref() == Some(subject));
+        let chosen = if let Some(preferred) = preferred_view {
+            views.find(|view| view.id == preferred)
+        } else {
+            let first = views.next();
+            if views.next().is_some() { None } else { first }
+        };
+        if let Some(view) = chosen {
+            let row = section
+                .explorer
+                .added
+                .iter()
+                .find(|row| !row.diagram && row.element_id == subject)?;
+            return Some((
+                row.key.clone(),
+                ViewOccurrence {
+                    diagram_id: diagram.id.clone(),
+                    view_id: view.id.clone(),
+                    member_path: Vec::new(),
+                },
+            ));
+        }
+    }
     let candidates = section
         .explorer
         .added
