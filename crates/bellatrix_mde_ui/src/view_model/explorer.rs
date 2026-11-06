@@ -95,15 +95,19 @@ pub(crate) fn selection_occurrence(
     // just one row for a subject pictured in several diagrams or views.
     if let Some(diagram) = diagram.and_then(|id| section.diagrams.iter().find(|item| item.id == id))
     {
-        let mut views = diagram
+        let views = diagram
             .all_views()
-            .filter(|view| view.subject.as_deref() == Some(subject));
-        let chosen = if let Some(preferred) = preferred_view {
-            views.find(|view| view.id == preferred)
-        } else {
-            let first = views.next();
-            if views.next().is_some() { None } else { first }
-        };
+            .filter(|view| view.subject.as_deref() == Some(subject))
+            .collect::<Vec<_>>();
+        let chosen = preferred_view
+            .and_then(|preferred| views.iter().copied().find(|view| view.id == preferred))
+            .or_else(|| match views.as_slice() {
+                [view] => Some(*view),
+                _ => None,
+            });
+        if !views.is_empty() && chosen.is_none() {
+            return None;
+        }
         if let Some(view) = chosen {
             let row = section
                 .explorer
