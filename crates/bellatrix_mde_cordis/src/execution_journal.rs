@@ -81,6 +81,8 @@ impl ExecutionJournal {
             identity: identity.map(str::to_owned),
             dependencies: Vec::new(),
             outcome: Some(outcome),
+            message: None,
+            context: Default::default(),
         };
         if state.events.len() == CAPACITY {
             state.events.pop_front();

@@ -15,6 +15,7 @@ pub struct ExecutionTrace {
     dropped: u64,
     events: Vec<ExecutionEvent>,
     sink: Option<EventSink>,
+    context: std::collections::BTreeMap<String, String>,
 }
 
 impl ExecutionTrace {
@@ -28,6 +29,7 @@ impl ExecutionTrace {
             dropped: 0,
             events: Vec::new(),
             sink: None,
+            context: Default::default(),
         }
     }
     /// The sink must not block; hosts can enqueue events to a bounded channel.
@@ -46,6 +48,31 @@ impl ExecutionTrace {
     pub fn dropped(&self) -> u64 {
         self.dropped
     }
+    /// Callers must allowlist structural metadata, not serialize command payloads.
+    pub fn set_context(&mut self, key: &str, value: &str) {
+        if self.context.len() < 16 || self.context.contains_key(key) {
+            self.context
+                .insert(bounded_text(key, 64), bounded_text(value, 256));
+        }
+    }
+    pub fn diagnostic(
+        &mut self,
+        component: &str,
+        action: &str,
+        identity: Option<&str>,
+        message: &str,
+        outcome: TraceOutcome,
+    ) {
+        self.emit_event(
+            component,
+            action,
+            TracePhase::Diagnostic,
+            identity,
+            &[],
+            Some(outcome),
+            Some(message),
+        );
+    }
     pub fn emit(
         &mut self,
         component: &str,
@@ -54,6 +81,26 @@ impl ExecutionTrace {
         identity: Option<&str>,
         dependencies: &[String],
         outcome: Option<TraceOutcome>,
+    ) {
+        self.emit_event(
+            component,
+            action,
+            phase,
+            identity,
+            dependencies,
+            outcome,
+            None,
+        );
+    }
+    fn emit_event(
+        &mut self,
+        component: &str,
+        action: &str,
+        phase: TracePhase,
+        identity: Option<&str>,
+        dependencies: &[String],
+        outcome: Option<TraceOutcome>,
+        message: Option<&str>,
     ) {
         let sequence = self.next_sequence;
         self.next_sequence = self.next_sequence.saturating_add(1);
@@ -68,6 +115,8 @@ impl ExecutionTrace {
             identity: identity.map(str::to_owned),
             dependencies: dependencies.to_vec(),
             outcome,
+            message: message.map(|message| bounded_text(message, 2048)),
+            context: self.context.clone(),
         };
         if let Some(sink) = &self.sink {
             sink(&event);
@@ -88,4 +137,23 @@ pub fn execution_trace_jsonl(trace: &ExecutionTrace) -> Result<String, serde_jso
         output.push('\n');
     }
     Ok(output)
+}
+
+fn bounded_text(value: &str, limit: usize) -> String {
+    let mut characters = value.chars();
+    let mut text: String = characters
+        .by_ref()
+        .take(limit)
+        .map(|character| {
+            if character.is_control() {
+                ' '
+            } else {
+                character
+            }
+        })
+        .collect();
+    if characters.next().is_some() {
+        text.push_str("… [truncated]");
+    }
+    text
 }

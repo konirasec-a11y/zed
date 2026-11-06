@@ -62,6 +62,7 @@ async fn execute_with_snapshot(
         NEXT_MUTATION_RUN.fetch_add(1, Ordering::Relaxed)
     );
     let mut trace = ExecutionTrace::new(run_id, Some(expected_revision.to_string()), 1000);
+    record_command_context(&mut trace, &command);
     let forwarder = crate::trace_output::start(context.clone(), &mut trace, project_id.clone());
     trace.emit(
         "cordis",
@@ -81,6 +82,15 @@ async fn execute_with_snapshot(
         &mut trace,
     )
     .await;
+    if let Err(error) = &result {
+        trace.diagnostic(
+            "cordis",
+            "command.execute",
+            Some(name),
+            error,
+            TraceOutcome::Error,
+        );
+    }
     let (phase, outcome) = if result.is_ok() {
         (TracePhase::Finish, TraceOutcome::Success)
     } else {
@@ -165,6 +175,9 @@ async fn execute_inner(
         &[],
         Some(outcome),
     );
+    if let Err(error) = &applied {
+        trace.diagnostic("kernel", "command.apply", Some(name), error, outcome);
+    }
     let state = applied?;
     // Bind publication to the exact source, including native documents: a close
     // and reopen may reuse an ID and revision while changing the model entirely.
@@ -229,5 +242,86 @@ fn command_name(command: &Command) -> &'static str {
         Command::SetProperty { .. } => "SetProperty",
         Command::SetNameExpression { .. } => "SetNameExpression",
         Command::Rename { .. } => "Rename",
+    }
+}
+
+fn record_command_context(trace: &mut ExecutionTrace, command: &Command) {
+    // Never serialize the command: names, expressions, property values and generated
+    // text are user content. Only the explicitly selected structural fields go here.
+    match command {
+        Command::CreateModelElement { owner_id, kind, .. } => {
+            trace.set_context("owner_id", owner_id.as_deref().unwrap_or("<root>"));
+            trace.set_context("element_kind", &format!("{kind:?}"));
+        }
+        Command::CreateElement {
+            diagram_id,
+            owner_id,
+            kind,
+            ..
+        }
+        | Command::CreateElementOrVisualDraft {
+            diagram_id,
+            owner_id,
+            kind,
+            ..
+        }
+        | Command::CreateElementVisualDraft {
+            diagram_id,
+            owner_id,
+            kind,
+            ..
+        } => {
+            trace.set_context("diagram_id", diagram_id);
+            trace.set_context("owner_id", owner_id.as_deref().unwrap_or("<root>"));
+            trace.set_context("element_kind", &format!("{kind:?}"));
+        }
+        Command::CreateRelation {
+            diagram_id,
+            owner_id,
+            kind,
+            ..
+        }
+        | Command::CreateRelationAtViews {
+            diagram_id,
+            owner_id,
+            kind,
+            ..
+        }
+        | Command::CreateRelationOrVisualDraft {
+            diagram_id,
+            owner_id,
+            kind,
+            ..
+        }
+        | Command::CreateRelationAtViewsOrVisualDraft {
+            diagram_id,
+            owner_id,
+            kind,
+            ..
+        } => {
+            trace.set_context("diagram_id", diagram_id);
+            trace.set_context("owner_id", owner_id.as_deref().unwrap_or("<root>"));
+            trace.set_context("relation_kind", &format!("{kind:?}"));
+        }
+        Command::SetOwner {
+            element_id,
+            owner_id,
+        } => {
+            trace.set_context("element_id", element_id);
+            trace.set_context("owner_id", owner_id.as_deref().unwrap_or("<root>"));
+        }
+        Command::SetExplorerParent {
+            subject_id,
+            parent_id,
+            ..
+        } => {
+            trace.set_context("subject_id", subject_id);
+            trace.set_context("parent_id", parent_id.as_deref().unwrap_or("<root>"));
+        }
+        Command::AddMember { owner_id, kind } => {
+            trace.set_context("owner_id", owner_id);
+            trace.set_context("member_kind", &format!("{kind:?}"));
+        }
+        _ => {}
     }
 }

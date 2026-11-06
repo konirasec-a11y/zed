@@ -54,9 +54,13 @@ impl MdeExecutionDashboard {
         cx: &mut Context<Self>,
     ) -> Self {
         let search = cx.new(|cx| {
-            InputField::new(window, cx, "Filter run, function, identity or dependency…")
-                .start_icon(IconName::MagnifyingGlass)
-                .label_min_width(px(0.0))
+            InputField::new(
+                window,
+                cx,
+                "Filter run, function, identity, context or error…",
+            )
+            .start_icon(IconName::MagnifyingGlass)
+            .label_min_width(px(0.0))
         });
         let owner = cx.weak_entity();
         let editor = search.read(cx).editor().clone();
@@ -127,7 +131,7 @@ impl MdeExecutionDashboard {
     }
     fn event_line(event: &bellatrix_mde_cordis::ExecutionEvent) -> String {
         format!(
-            "{}  #{}  t+{}ns  rev={}  {}::{}  {:?}  id={}  recorded deps=[{}]  outcome={:?}",
+            "{}  #{}  t+{}ns  rev={}  {}::{}  {:?}  id={}  recorded deps=[{}]  outcome={:?}  context={:?}  message={:?}",
             event.run_id,
             event.sequence,
             event.elapsed_ns,
@@ -137,7 +141,9 @@ impl MdeExecutionDashboard {
             event.phase,
             event.identity.as_deref().unwrap_or("unknown"),
             event.dependencies.join(", "),
-            event.outcome
+            event.outcome,
+            event.context,
+            event.message
         )
     }
     fn refresh_snapshot(&mut self, cx: &mut Context<Self>) {
@@ -174,17 +180,7 @@ impl Render for MdeExecutionDashboard {
             .events
             .iter()
             .filter(|event| {
-                let text = format!(
-                    "{} {} {} {} {:?} {:?} {}",
-                    event.run_id,
-                    event.component,
-                    event.action,
-                    event.identity.as_deref().unwrap_or(""),
-                    event.phase,
-                    event.outcome,
-                    event.dependencies.join(" ")
-                )
-                .to_lowercase();
+                let text = Self::event_line(event).to_lowercase();
                 text.contains(&query)
                     && (!self.errors_only
                         || matches!(event.phase, bellatrix_mde_cordis::TracePhase::Error)
@@ -301,7 +297,7 @@ impl Render for MdeExecutionDashboard {
                 .child(Label::new("Logs & diagnostics"))
                 .child(div().flex_1().min_w_0().overflow_hidden().text_xs().text_color(palette.muted).child(self.project_label.clone().unwrap_or_else(|| "No active MDE document".to_owned())))
                 .child(CopyButton::new("mde-execution-copy", copied_logs)
-                    .tooltip_label("Copy diagnostics, latest feedback and all logs in this snapshot (ignores filters)")
+                    .tooltip_label("Copy diagnostics and all logs (ignores filters; review model data before sharing)")
                     .disabled(copy_disabled))
                 .child(IconButton::new("mde-execution-pause", if self.paused { IconName::PlayFilled } else { IconName::DebugPause })
                     .aria_label(if self.paused { "Resume logs" } else { "Pause logs" })

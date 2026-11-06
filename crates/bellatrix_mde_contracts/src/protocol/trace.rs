@@ -32,6 +32,10 @@ pub struct ExecutionEvent {
     pub identity: Option<String>,
     pub dependencies: Vec<String>,
     pub outcome: Option<TraceOutcome>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub context: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

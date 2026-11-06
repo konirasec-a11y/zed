@@ -25,6 +25,21 @@ impl MdeExecutionTrace {
     pub fn dropped(&self) -> u64 {
         self.0.dropped()
     }
+    pub fn set_context(&mut self, key: &str, value: &str) {
+        self.0.set_context(key, value);
+    }
+    /// Messages may contain model data; hosts should disclose that before sharing logs.
+    pub fn diagnostic(
+        &mut self,
+        component: &str,
+        action: &str,
+        identity: Option<&str>,
+        message: &str,
+        outcome: TraceOutcome,
+    ) {
+        self.0
+            .diagnostic(component, action, identity, message, outcome);
+    }
     pub fn emit(
         &mut self,
         component: &str,
@@ -82,13 +97,12 @@ pub fn validate_model_section_diagram(
         match &result {
             Ok(diagnostics) => {
                 for diagnostic in diagnostics {
-                    trace.emit(
+                    trace.diagnostic(
                         "modeling",
                         &diagnostic.code,
-                        TracePhase::Diagnostic,
                         Some(&diagnostic.subject_id),
-                        &[],
-                        Some(TraceOutcome::Invalid),
+                        &diagnostic.message,
+                        TraceOutcome::Invalid,
                     );
                 }
                 trace.emit(
@@ -104,14 +118,23 @@ pub fn validate_model_section_diagram(
                     }),
                 );
             }
-            Err(_) => trace.emit(
-                "modeling",
-                "diagram.checkPresentation",
-                TracePhase::Error,
-                Some(diagram_id),
-                &[],
-                Some(TraceOutcome::Error),
-            ),
+            Err(error) => {
+                trace.diagnostic(
+                    "modeling",
+                    "diagram.checkPresentation",
+                    Some(diagram_id),
+                    error,
+                    TraceOutcome::Error,
+                );
+                trace.emit(
+                    "modeling",
+                    "diagram.checkPresentation",
+                    TracePhase::Error,
+                    Some(diagram_id),
+                    &[],
+                    Some(TraceOutcome::Error),
+                );
+            }
         }
     }
     result

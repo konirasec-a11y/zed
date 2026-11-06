@@ -211,6 +211,15 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
                         None,
                     );
                     let result = validate_inner(&projects, traced.request, Some(&mut trace));
+                    if let Err(error) = &result {
+                        trace.diagnostic(
+                            "cordis",
+                            "diagram.validate.request",
+                            None,
+                            error,
+                            TraceOutcome::Error,
+                        );
+                    }
                     let (phase, outcome) = if result.is_ok() {
                         (TracePhase::Finish, TraceOutcome::Success)
                     } else {
@@ -272,6 +281,15 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
                         Err(error) => (fallback.clone(), Err(error.to_string())),
                     };
                     drop(fallback);
+                    if let Err(error) = &result {
+                        trace.diagnostic(
+                            "cordis",
+                            "diagram.validate.request",
+                            None,
+                            error,
+                            TraceOutcome::Error,
+                        );
+                    }
                     let (phase, outcome) = if result.is_ok() {
                         (TracePhase::Finish, TraceOutcome::Success)
                     } else {

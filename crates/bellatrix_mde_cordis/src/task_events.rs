@@ -48,6 +48,9 @@ pub fn register(context: &Context, projects: Arc<ProjectService>) -> Result<(), 
                     );
                     trace.emit("cordis", action, TracePhase::Start, None, &[], None);
                     let outcome = execute(projects, request).await;
+                    if let Err(error) = &outcome {
+                        trace.diagnostic("cordis", action, None, error, TraceOutcome::Error);
+                    }
                     let (phase, status) = if outcome.is_ok() {
                         (TracePhase::Finish, TraceOutcome::Success)
                     } else {
