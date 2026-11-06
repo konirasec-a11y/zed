@@ -229,6 +229,47 @@ impl MdeUiSource {
         })
     }
 
+    pub fn create_interface_presentation(
+        &self,
+        diagram_id: &str,
+        tool: bellatrix_mde_cordis::ModelingTool,
+        position: (f64, f64),
+        expected_revision: u64,
+    ) -> Result<(), String> {
+        let snapshot = self.editable_snapshot(expected_revision)?;
+        let metadata = snapshot
+            .section
+            .tools
+            .interface_forms
+            .iter()
+            .find(|metadata| metadata.tool == tool)
+            .ok_or("Interface presentation metadata unavailable")?;
+        if !snapshot.section.tools.allows_tool(Some(diagram_id), tool) {
+            return Err("This tool is not available for the target diagram's domain".into());
+        }
+        // These tools author notation only. A semantic provided/required
+        // Interface also needs its InterfaceRealization/Usage relationship.
+        self.create_visual_draft(
+            diagram_id,
+            "uml.interface",
+            Some("Interface".into()),
+            bellatrix_mde_cordis::Geometry::Rect {
+                x: position.0,
+                y: position.1,
+                width: 112.0,
+                height: 68.0,
+            },
+            std::collections::BTreeMap::from([(
+                "interface_presentation".into(),
+                serde_json::json!(metadata.presentation),
+            )]),
+            None,
+            None,
+            None,
+            expected_revision,
+        )
+    }
+
     pub fn create_model_element(
         &self,
         kind: bellatrix_mde_cordis::ModelingElementKind,

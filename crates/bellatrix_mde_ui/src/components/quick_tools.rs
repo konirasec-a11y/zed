@@ -239,7 +239,6 @@ pub(crate) fn quick_edit_for_relationship(
     use ui::{ContextMenu, DropdownMenu, Icon, IconButton, Label, Tooltip, prelude::*};
 
     let inspection = section.inspect_element(&relation.id)?;
-    let presentation = &relation.presentation;
     let type_label = inspection.type_label.as_str();
     let palette = WorkbenchPalette::current(cx);
     let mut controls = Vec::new();

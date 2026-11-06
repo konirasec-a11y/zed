@@ -261,16 +261,6 @@ impl MdeWorkbenchItem {
                 return;
             }
         };
-        let Some(presentation) = snapshot
-            .section
-            .tools
-            .interface_forms
-            .iter()
-            .find(|metadata| metadata.tool == tool)
-            .map(|metadata| metadata.presentation.as_str())
-        else {
-            return;
-        };
         let Some(diagram) = snapshot
             .section
             .diagrams
@@ -281,28 +271,14 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
-        let result = self.source.create_visual_draft(
-            &diagram.id,
-            "uml.interface",
-            Some("Interface".into()),
-            Geometry::Rect {
-                x,
-                y,
-                width: 112.0,
-                height: 68.0,
-            },
-            std::collections::BTreeMap::from([(
-                "interface_presentation".into(),
-                serde_json::json!(presentation),
-            )]),
-            None,
-            None,
-            None,
-            snapshot.revision,
-        );
+        let result =
+            self.source
+                .create_interface_presentation(&diagram.id, tool, (x, y), snapshot.revision);
+        let sent = result.is_ok();
         self.report_command_result(result, cx);
-        self.presentation.cancel_tool();
-        cx.notify();
+        if sent {
+            self.presentation.cancel_tool();
+        }
     }
 
     pub fn create_element(
