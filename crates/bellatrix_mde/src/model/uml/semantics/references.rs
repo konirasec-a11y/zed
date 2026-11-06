@@ -3,7 +3,6 @@ use super::{
     schema::{self, ClassifierDescriptor, PropertyDescriptor, UnsupportedContract},
     types::{Integer, MultiplicityRange},
 };
-use crate::StructuralDiagnostic;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 

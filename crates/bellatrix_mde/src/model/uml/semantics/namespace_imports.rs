@@ -12,7 +12,7 @@ use super::{
     root::{ElementRef, Model, VisibilityKind},
     schema,
 };
-use crate::{ModelingSection, Relation, StructuralDiagnostic, StructuralSeverity};
+use crate::{ModelingSection, Relation};
 use petgraph::{algo::kosaraju_scc, graphmap::DiGraphMap};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};

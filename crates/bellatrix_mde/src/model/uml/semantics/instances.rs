@@ -13,7 +13,6 @@ use super::{
     schema,
     value_specifications::{self, EvaluationError, LiteralValue, ResolvedValue},
 };
-use crate::{StructuralDiagnostic, StructuralSeverity};
 use serde_json::Value;
 use std::collections::HashSet;
 

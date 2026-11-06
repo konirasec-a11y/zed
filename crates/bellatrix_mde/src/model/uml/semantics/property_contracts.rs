@@ -7,12 +7,11 @@
 //! constraints of its metaclass were evaluated.
 
 use super::{
-    associations, operations,
+    operations,
     references::{ReferenceIndex, external_reference_href, reference_id},
     root::ElementRef,
     schema::{self, Aggregation, PropertyDescriptor, ScalarKind, UnsupportedContract},
     types::{Integer, MultiplicityRange, StandardPrimitiveType, UnlimitedNatural},
-    value_specifications::{self, LiteralValue},
 };
 use crate::{StructuralDiagnostic, StructuralSeverity};
 use serde_json::{Value, json};

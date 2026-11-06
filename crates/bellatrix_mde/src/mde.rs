@@ -1,6 +1,5 @@
 //! Single MDE domain: persisted objects, UML semantics, commands and validation.
 //! Adapters own transport/presentation, never another implementation of the model.
-pub(crate) use bellatrix_mde_contracts::MODELING_NAMESPACE;
 
 pub(crate) use bellatrix_mde_contracts::protocol::model_snapshot as contracts;
 pub(crate) use contracts::*;

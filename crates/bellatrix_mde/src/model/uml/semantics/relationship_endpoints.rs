@@ -5,7 +5,6 @@ use super::{
     root::ElementRef,
     schema::{self, PropertyDescriptor},
 };
-use crate::{StructuralDiagnostic, StructuralSeverity};
 use serde_json::{Value, json};
 use std::collections::HashSet;
 

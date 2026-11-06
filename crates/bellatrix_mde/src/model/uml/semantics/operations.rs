@@ -15,7 +15,7 @@ use super::{
     schema,
     types::{Integer, MultiplicityRange, UnlimitedNatural},
 };
-use crate::{Element, ModelingSection, StructuralDiagnostic, StructuralSeverity};
+use crate::{Element, ModelingSection};
 use serde_json::Value;
 
 /// UML 9.9.2/9.9.11/13.2.3: canonical parameter ownership is an ordered set.
