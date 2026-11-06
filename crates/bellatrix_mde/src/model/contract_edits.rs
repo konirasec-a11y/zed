@@ -481,41 +481,7 @@ fn apply_endpoints(
         .get(&relation.id)
         .ok_or_else(|| format!("Missing relationship {}", relation.id))?;
     let metaclass = record.metaclass;
-    let endpoints = match metaclass {
-        "Generalization" => Some(("specific", "general", Some("generalization"))),
-        "Include" => Some(("includingCase", "addition", Some("include"))),
-        "Extend" => Some(("extension", "extendedCase", Some("extend"))),
-        "ElementImport" => Some((
-            "importingNamespace",
-            "importedElement",
-            Some("elementImport"),
-        )),
-        "PackageImport" => Some((
-            "importingNamespace",
-            "importedPackage",
-            Some("packageImport"),
-        )),
-        "PackageMerge" => Some(("receivingPackage", "mergedPackage", Some("packageMerge"))),
-        "TemplateBinding" => Some(("boundElement", "signature", Some("templateBinding"))),
-        "InterfaceRealization" => Some((
-            "implementingClassifier",
-            "contract",
-            Some("interfaceRealization"),
-        )),
-        "Substitution" => Some(("substitutingClassifier", "contract", Some("substitution"))),
-        "ProfileApplication" => Some((
-            "applyingPackage",
-            "appliedProfile",
-            Some("profileApplication"),
-        )),
-        _ if metamodel::conforms_to(metaclass, "Dependency") => Some(("client", "supplier", None)),
-        _ if metamodel::conforms_to(metaclass, "ActivityEdge")
-            || metamodel::conforms_to(metaclass, "Transition") =>
-        {
-            Some(("source", "target", None))
-        }
-        _ => None,
-    };
+    let endpoints = crate::contract_projection::direct_endpoint_fields(metaclass);
     if let Some((source, target, opposite)) = endpoints {
         let new_source = !record.data.contains_key(source);
         // A projected source may be derived from an owner's slot. Preserve that
@@ -551,6 +517,9 @@ fn apply_endpoints(
         }
         return Ok(());
     }
+    // AssociationClass inherits Association::memberEnd (UML 2.5.1, 11.8.2).
+    // Reconcile explicit relation edits here even though automatic projection
+    // keeps AssociationClass as an object to preserve its classifier identity.
     if metamodel::conforms_to(metaclass, "Association") {
         let ends = record
             .data

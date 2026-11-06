@@ -334,13 +334,16 @@ fn opposite_endpoint(
     })
 }
 
-fn endpoints(
-    registry: &ruml::Registry,
-    id: &str,
+// These are projection slots, not a binary restriction on UML relationships:
+// Dependency ends are 1..* (UML 2.5.1, 7.8.4), and Association uses memberEnd
+// Properties (11.8.1). Keep cardinality and fallback policy at the call sites.
+// The specialized ends and their owner opposites follow UML.xmi (20161101)
+// and UML 2.5.1 sections 7.8.7, 7.8.11, 7.8.16, 9.9.7, 9.9.22, 10.5.6,
+// 12.4.6, 12.4.8, 14.5.11, 15.7.2, 18.2.2 and 18.2.4.
+pub(crate) fn direct_endpoint_fields(
     metaclass: &str,
-    object: &Map<String, Value>,
-) -> Result<Option<(String, String)>, String> {
-    let fields = match metaclass {
+) -> Option<(&'static str, &'static str, Option<&'static str>)> {
+    match metaclass {
         "Generalization" => Some(("specific", "general", Some("generalization"))),
         "Include" => Some(("includingCase", "addition", Some("include"))),
         "Extend" => Some(("extension", "extendedCase", Some("extend"))),
@@ -367,7 +370,6 @@ fn endpoints(
             "appliedProfile",
             Some("profileApplication"),
         )),
-        "AssociationClass" => return Ok(None),
         _ if metamodel::conforms_to(metaclass, "Dependency") => Some(("client", "supplier", None)),
         _ if metamodel::conforms_to(metaclass, "ActivityEdge")
             || metamodel::conforms_to(metaclass, "Transition") =>
@@ -375,7 +377,22 @@ fn endpoints(
             Some(("source", "target", None))
         }
         _ => None,
-    };
+    }
+}
+
+fn endpoints(
+    registry: &ruml::Registry,
+    id: &str,
+    metaclass: &str,
+    object: &Map<String, Value>,
+) -> Result<Option<(String, String)>, String> {
+    // AssociationClass is also a Class (UML 2.5.1, 11.8.2; UML.xmi
+    // AssociationClass generalizations). Preserve its classifier identity as an
+    // object here; editing may still reconcile its inherited memberEnd Properties.
+    if metaclass == "AssociationClass" {
+        return Ok(None);
+    }
+    let fields = direct_endpoint_fields(metaclass);
     if let Some((source, target, opposite)) = fields {
         let mut from = endpoint(object, source);
         let source_absent = match object.get(source) {
