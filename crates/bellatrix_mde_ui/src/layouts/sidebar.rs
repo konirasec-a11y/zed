@@ -740,6 +740,45 @@ pub struct MdeRightPanel {
     pub(crate) inspector_advanced_open: bool,
 }
 impl MdeRightPanel {
+    fn reveal_explorer_selection(
+        &mut self,
+        tree: &[bellatrix_mde_cordis::ExplorerRow],
+        selected_index: Option<usize>,
+        root_key: &str,
+        item_id: gpui::EntityId,
+        searching: bool,
+    ) -> bool {
+        let selected = selected_index.and_then(|index| tree.get(index).map(|row| (index, row)));
+        let reveal = selected.map(|(index, row)| {
+            let mut path = vec![row.key.clone()];
+            let mut depth = row.depth;
+            for ancestor in tree[..index].iter().rev() {
+                if ancestor.depth < depth {
+                    path.push(ancestor.key.clone());
+                    depth = ancestor.depth;
+                }
+                if depth == 0 {
+                    break;
+                }
+            }
+            path.push(root_key.to_owned());
+            (item_id, path)
+        });
+        if searching || reveal == self.last_revealed_row {
+            return false;
+        }
+        if let Some((_, path)) = &reveal {
+            for key in path.iter().skip(1) {
+                self.collapsed_elements.remove(key);
+            }
+            if let Some((_, row)) = selected.filter(|(_, row)| row.diagram) {
+                self.collapsed_elements.remove(&row.key);
+            }
+        }
+        self.last_revealed_row = reveal;
+        selected.is_some()
+    }
+
     pub(crate) fn bound_item(&self) -> Option<Entity<MdeWorkbenchItem>> {
         self.state.item.as_ref().and_then(gpui::WeakEntity::upgrade)
     }
@@ -1007,41 +1046,13 @@ impl Render for MdeRightPanel {
             can_reveal_selection = selected_id.is_some() || active_diagram.is_some();
             let selected_index = selected_row
                 .and_then(|selected| tree.iter().position(|row| row.key == selected.key));
-            let reveal = selected_index.map(|index| {
-                let mut path = vec![tree[index].key.clone()];
-                let mut depth = tree[index].depth;
-                for ancestor in tree[..index].iter().rev() {
-                    if ancestor.depth < depth {
-                        path.push(ancestor.key.clone());
-                        depth = ancestor.depth;
-                    }
-                    if depth == 0 {
-                        break;
-                    }
-                }
-                path.push(root_key.clone());
-                (item.entity_id(), path)
-            });
-            if !searching && reveal != self.last_revealed_row {
-                self.last_revealed_row = reveal;
-                reveal_selected = selected_row.is_some();
-                if let Some(index) = selected_index {
-                    self.collapsed_elements.remove(&root_key);
-                    if tree[index].diagram {
-                        self.collapsed_elements.remove(&tree[index].key);
-                    }
-                    let mut depth = tree[index].depth;
-                    for ancestor in tree[..index].iter().rev() {
-                        if ancestor.depth < depth {
-                            self.collapsed_elements.remove(&ancestor.key);
-                            depth = ancestor.depth;
-                        }
-                        if depth == 0 {
-                            break;
-                        }
-                    }
-                }
-            }
+            reveal_selected = self.reveal_explorer_selection(
+                &tree,
+                selected_index,
+                &root_key,
+                item.entity_id(),
+                searching,
+            );
             let root_expanded = searching || !self.collapsed_elements.contains(&root_key);
             let root_panel = cx.weak_entity();
             let root_disclosure_key = root_key.clone();
