@@ -168,10 +168,16 @@ impl MdeWorkbenchItem {
             }
             let submitted_text = text.to_string();
             self.feedback = "Saving relationship name…".into();
+            let journal = self.source.journal.clone();
             cx.spawn_in(window, async move |owner, cx| {
                 let waiting = receipt.borrow().is_none();
-                if waiting && let Err(error) = receipt.changed().await {
-                    eprintln!("MDE relationship name receipt unavailable: {error}");
+                if waiting && receipt.changed().await.is_err() {
+                    journal.record_interaction(
+                        snapshot.revision,
+                        "relationship_name.receipt_unavailable",
+                        Some(&id),
+                        bellatrix_mde_cordis::TraceOutcome::Uncertain,
+                    );
                 }
                 let result = receipt
                     .borrow()

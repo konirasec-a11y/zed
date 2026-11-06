@@ -508,11 +508,17 @@ pub(crate) fn flush_property_edits(
             Ok(mut completion) => {
                 draft.pending = Some((text, completion.clone()));
                 let item = item.clone();
+                let journal = item.read(cx).source().journal.clone();
+                let submitted_revision = snapshot.revision;
                 cx.spawn(async move |owner, cx| {
-                    if completion.borrow().is_none() {
-                        if let Err(error) = completion.changed().await {
-                            eprintln!("MDE property receipt unavailable: {error}");
-                        }
+                    let waiting = completion.borrow().is_none();
+                    if waiting && completion.changed().await.is_err() {
+                        journal.record_interaction(
+                            submitted_revision,
+                            "property.receipt_unavailable",
+                            Some(&key.element),
+                            bellatrix_mde_cordis::TraceOutcome::Uncertain,
+                        );
                     }
                     if let Err(error) = owner.update(cx, |panel, cx| {
                         let receipt = completion

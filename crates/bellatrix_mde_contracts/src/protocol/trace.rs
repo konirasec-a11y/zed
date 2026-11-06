@@ -16,6 +16,8 @@ pub enum TraceOutcome {
     Success,
     Invalid,
     Unsupported,
+    /// Completion could not be observed; the command may have been applied.
+    Uncertain,
     Error,
 }
 

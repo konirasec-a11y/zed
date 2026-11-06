@@ -190,6 +190,7 @@ impl Render for MdeExecutionDashboard {
                                 bellatrix_mde_cordis::TraceOutcome::Error
                                     | bellatrix_mde_cordis::TraceOutcome::Invalid
                                     | bellatrix_mde_cordis::TraceOutcome::Unsupported
+                                    | bellatrix_mde_cordis::TraceOutcome::Uncertain
                             )
                         ))
             })

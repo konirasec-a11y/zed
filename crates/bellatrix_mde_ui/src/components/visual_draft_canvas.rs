@@ -468,10 +468,16 @@ impl MdeWorkbenchItem {
         }
         self.presentation.view_label_sent();
         self.feedback = "Saving view label…".into();
+        let journal = self.source.journal.clone();
         cx.spawn(async move |owner, cx| {
             let waiting = receipt.borrow().is_none();
-            if waiting && let Err(error) = receipt.changed().await {
-                eprintln!("MDE label receipt unavailable: {error}");
+            if waiting && receipt.changed().await.is_err() {
+                journal.record_interaction(
+                    expected_revision,
+                    "view_label.receipt_unavailable",
+                    Some(&view_id),
+                    bellatrix_mde_cordis::TraceOutcome::Uncertain,
+                );
             }
             let result = receipt
                 .borrow()

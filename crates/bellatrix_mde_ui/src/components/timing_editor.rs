@@ -405,10 +405,16 @@ fn flush_timing_edits(
     });
     let item = item.clone();
     let key = key.clone();
+    let journal = item.read(cx).source().journal.clone();
     cx.spawn(async move |owner, cx| {
         let awaiting_receipt = receiver.borrow().is_none();
-        if awaiting_receipt && let Err(error) = receiver.changed().await {
-            eprintln!("MDE timing receipt unavailable: {error}");
+        if awaiting_receipt && receiver.changed().await.is_err() {
+            journal.record_interaction(
+                expected_revision,
+                "view_timing.receipt_unavailable",
+                Some(&key.2),
+                bellatrix_mde_cordis::TraceOutcome::Uncertain,
+            );
         }
         if let Err(error) = owner.update(cx, |panel, cx| {
             if let Some(draft) = panel.timing_drafts.get_mut(&key) {

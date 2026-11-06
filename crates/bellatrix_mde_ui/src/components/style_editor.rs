@@ -325,11 +325,17 @@ pub(crate) fn flush_style_edits(
     }
     draft.completion = Some(completion.clone());
     let item = item.clone();
+    let journal = item.read(cx).source().journal.clone();
+    let submitted_revision = snapshot.revision;
     cx.spawn(async move |owner, cx| {
-        if completion.borrow().is_none() {
-            if let Err(error) = completion.changed().await {
-                eprintln!("MDE style receipt unavailable: {error}");
-            }
+        let waiting = completion.borrow().is_none();
+        if waiting && completion.changed().await.is_err() {
+            journal.record_interaction(
+                submitted_revision,
+                "view_style.receipt_unavailable",
+                Some(&key.2),
+                bellatrix_mde_cordis::TraceOutcome::Uncertain,
+            );
         }
         if let Err(error) = owner.update(cx, |panel, cx| {
             if let Some(draft) = panel.style_drafts.get_mut(&key) {
