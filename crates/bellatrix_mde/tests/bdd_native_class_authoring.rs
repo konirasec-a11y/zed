@@ -222,7 +222,11 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
     };
     assert_eq!(initial_diagram.id, "classes");
     assert_eq!(initial_diagram.uml_di_type, "UMLClassDiagram");
-    assert!(initial_diagram.model_elements.is_empty());
+    assert_eq!(initial_diagram.model_elements, vec!["model"]);
+    assert_eq!(
+        initial.hierarchy["classes"].parent_id.as_deref(),
+        Some("model")
+    );
     assert!(initial_diagram.views.is_empty());
 
     // The native toolbar has no selected owner; adding one here would hide the regression.
@@ -244,6 +248,24 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
         return Err("native root must remain a Model contract".into());
     };
     assert_eq!(root.packaged_element, vec![invoice.clone()]);
+
+    let explorer = flow.projection()?.explorer.added;
+    let invoice_rows = explorer
+        .iter()
+        .filter(|row| row.element_id == invoice)
+        .collect::<Vec<_>>();
+    assert_eq!(invoice_rows.len(), 1);
+    assert_eq!(invoice_rows[0].depth, 2);
+    assert_eq!(explorer[0].element_id, "model");
+    assert_eq!(explorer[1].element_id, "classes");
+    let before_delete = flow.document.section_json.clone();
+    let error = flow
+        .apply(Command::DeleteElement {
+            element_id: "model".into(),
+        })
+        .expect_err("a diagram's model context cannot be deleted while still referenced");
+    assert!(error.to_string().contains("UMLDI_CONTEXT_IN_USE"));
+    assert_eq!(flow.document.section_json, before_delete);
 
     let document = flow.create(
         Command::CreateElement {

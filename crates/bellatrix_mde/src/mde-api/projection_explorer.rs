@@ -320,14 +320,8 @@ fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrder) -> Vec<E
             })
     };
     let mut hidden = HashSet::new();
-    for (index, row) in authored
-        .iter()
-        .enumerate()
-        .filter(|(_, row)| !row.diagram)
-    {
-        if !represented.contains(row.element_id.as_str())
-            || !owner_is_visible(&row.element_id)
-        {
+    for (index, row) in authored.iter().enumerate().filter(|(_, row)| !row.diagram) {
+        if !represented.contains(row.element_id.as_str()) || !owner_is_visible(&row.element_id) {
             continue;
         }
         let branch = authored[index..]
