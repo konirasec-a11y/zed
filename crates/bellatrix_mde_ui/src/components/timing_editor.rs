@@ -371,7 +371,7 @@ fn flush_timing_edits(
         .diagrams
         .iter()
         .find(|diagram| diagram.id == key.1)
-        .and_then(|diagram| diagram.views.iter().find(|view| view.id == key.2))
+        .and_then(|diagram| diagram.all_views().find(|view| view.id == key.2))
     else {
         draft.state.error = Some("The original timing View no longer exists".into());
         return;
@@ -460,7 +460,7 @@ fn edit_timing(
                 .diagrams
                 .iter()
                 .find(|diagram| diagram.id == key.1)
-                .and_then(|diagram| diagram.views.iter().find(|view| view.id == key.2))
+                .and_then(|diagram| diagram.all_views().find(|view| view.id == key.2))
             else {
                 return;
             };

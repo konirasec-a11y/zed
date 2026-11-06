@@ -499,7 +499,7 @@ impl MdeWorkbenchItem {
                     Err(error) => {
                         item.presentation.view_label_completed(None);
                         if let Ok(latest) = item.source.snapshot()
-                            && latest.section.diagrams.iter().flat_map(|diagram| &diagram.views).any(|view| view.id == view_id && view.draft.is_some())
+                            && latest.section.diagrams.iter().flat_map(|diagram| diagram.all_views()).any(|view| view.id == view_id && view.draft.is_some())
                         {
                             item.presentation.view_label_completed(Some(latest.revision));
                             item.feedback = format!("Label not saved; text preserved: {error}. Press Enter to replace the current label at revision {}", latest.revision);
@@ -547,7 +547,7 @@ pub(crate) fn resolve_message_anchor(
     view_id: &str,
     point: bellatrix_mde_cordis::Point,
 ) -> Option<bellatrix_mde_cordis::Point> {
-    let view = diagram.views.iter().find(|view| view.id == view_id)?;
+    let view = diagram.all_views().find(|view| view.id == view_id)?;
     let Geometry::Rect {
         x,
         y,

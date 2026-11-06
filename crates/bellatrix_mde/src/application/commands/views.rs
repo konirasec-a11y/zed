@@ -85,7 +85,7 @@ pub(super) fn place(
     let source = section
         .diagrams
         .iter()
-        .flat_map(|diagram| &diagram.views)
+        .flat_map(|diagram| diagram.all_views())
         .find(|view| view.subject.as_deref() == Some(element_id));
     let (geometry, style, label) = if let Some(view) = source {
         let (left, top) = match &view.geometry {
