@@ -12,7 +12,7 @@ pub(crate) enum ValidationMode {
 }
 
 impl ValidationMode {
-    pub(super) fn load(project_id: &str) -> Result<Self, String> {
+    pub(crate) fn load(project_id: &str) -> Result<Self, String> {
         let value = db::kvp::GlobalKeyValueStore::global()
             .read_kvp(&Self::key(project_id))
             .map_err(|error| error.to_string())?;
@@ -35,14 +35,14 @@ impl ValidationMode {
 }
 
 impl MdeWorkbenchItem {
-    pub(super) fn validation_mode_label(&self) -> &'static str {
+    pub(crate) fn validation_mode_label(&self) -> &'static str {
         match self.validation_mode {
             ValidationMode::Manual => "Validation: manual",
             ValidationMode::OnSave => "Validation: on save",
             ValidationMode::OnChange => "Validation: on change",
         }
     }
-    pub(super) fn cycle_validation_mode(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn cycle_validation_mode(&mut self, cx: &mut Context<Self>) {
         self.validation_mode = match self.validation_mode {
             ValidationMode::Manual => ValidationMode::OnSave,
             ValidationMode::OnSave => ValidationMode::OnChange,
@@ -68,7 +68,7 @@ impl MdeWorkbenchItem {
         .detach();
         cx.notify();
     }
-    pub(super) fn validate_after_change(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn validate_after_change(&mut self, cx: &mut Context<Self>) {
         if self.validation_mode == ValidationMode::OnChange {
             self.validate_diagram(cx);
         } else {
@@ -76,7 +76,7 @@ impl MdeWorkbenchItem {
             cx.notify();
         }
     }
-    pub(super) fn validate_after_save(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn validate_after_save(&mut self, cx: &mut Context<Self>) {
         let saved = *self.source.saves.borrow();
         if self.validation_mode == ValidationMode::OnSave
             && self
@@ -88,7 +88,7 @@ impl MdeWorkbenchItem {
             self.validate_diagram(cx);
         }
     }
-    pub(super) fn accept_validation(
+    pub(crate) fn accept_validation(
         &mut self,
         result: Option<
             Result<

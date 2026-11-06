@@ -1,7 +1,25 @@
-use super::*;
+use crate::components::canvas_interaction::CanvasGesture;
+use crate::components::canvas_interaction::PathHandle;
+use crate::pages::mde_page::MdeWorkbenchItem;
+use crate::view_model::canvas_presentation;
+use crate::view_model::snapshot;
+use bellatrix_mde_cordis::Geometry;
+use bellatrix_mde_cordis::ModelingTool;
+use gpui::AppContext;
+use gpui::Context;
+use gpui::IntoElement;
+use gpui::MouseButton;
+use gpui::MouseMoveEvent;
+use gpui::Pixels;
+use gpui::Point;
+use gpui::ScrollEvent;
+use gpui::prelude::*;
+use gpui::px;
+use ui::Clickable;
+use ui::LabelCommon;
 
 #[derive(Clone, Copy)]
-pub(super) enum PathHandle {
+pub(crate) enum PathHandle {
     Vertex(usize),
     Control1(usize),
     Control2(usize),
@@ -9,7 +27,7 @@ pub(super) enum PathHandle {
 }
 
 #[derive(Clone)]
-pub(super) enum CanvasGesture {
+pub(crate) enum CanvasGesture {
     Move {
         view_id: String,
         start: Point<Pixels>,
@@ -44,7 +62,7 @@ pub(super) enum CanvasGesture {
     },
 }
 impl CanvasGesture {
-    pub(super) fn submission(&self) -> (u64, bool) {
+    pub(crate) fn submission(&self) -> (u64, bool) {
         match self {
             Self::Move {
                 revision,
@@ -64,7 +82,7 @@ impl CanvasGesture {
         }
     }
 
-    pub(super) fn mark_submitted(&mut self) {
+    pub(crate) fn mark_submitted(&mut self) {
         match self {
             Self::Move { submitted, .. }
             | Self::Resize { submitted, .. }
@@ -84,7 +102,7 @@ impl MdeWorkbenchItem {
         self.pan_origin = None;
         cx.notify();
     }
-    pub(super) fn scroll_viewport(&mut self, event: &ScrollEvent, cx: &mut Context<Self>) {
+    pub(crate) fn scroll_viewport(&mut self, event: &ScrollEvent, cx: &mut Context<Self>) {
         let delta = event.delta.pixel_delta(px(20.0));
         let delta_x = f32::from(delta.x);
         let delta_y = f32::from(delta.y);
@@ -99,10 +117,10 @@ impl MdeWorkbenchItem {
             cx.notify();
         }
     }
-    pub(super) fn start_pan(&mut self, position: Point<Pixels>) {
+    pub(crate) fn start_pan(&mut self, position: Point<Pixels>) {
         self.pan_origin = Some((position, self.pan));
     }
-    pub(super) fn update_pan(&mut self, event: &MouseMoveEvent, cx: &mut Context<Self>) {
+    pub(crate) fn update_pan(&mut self, event: &MouseMoveEvent, cx: &mut Context<Self>) {
         if event.pressed_button != Some(MouseButton::Middle) {
             return;
         }
@@ -114,7 +132,7 @@ impl MdeWorkbenchItem {
             cx.notify();
         }
     }
-    pub(super) fn start_move(
+    pub(crate) fn start_move(
         &mut self,
         view_id: String,
         subject: String,
@@ -143,7 +161,7 @@ impl MdeWorkbenchItem {
             submitted: false,
         });
     }
-    pub(super) fn start_resize(
+    pub(crate) fn start_resize(
         &mut self,
         view_id: String,
         width: f64,
@@ -168,7 +186,7 @@ impl MdeWorkbenchItem {
         });
         cx.notify();
     }
-    pub(super) fn update_gesture(&mut self, event: &MouseMoveEvent, cx: &mut Context<Self>) {
+    pub(crate) fn update_gesture(&mut self, event: &MouseMoveEvent, cx: &mut Context<Self>) {
         if self.source.is_read_only() || self.gesture_submission_pending() {
             return;
         }
@@ -216,13 +234,13 @@ impl MdeWorkbenchItem {
         }
         cx.notify();
     }
-    pub(super) fn gesture_submission_pending(&self) -> bool {
+    pub(crate) fn gesture_submission_pending(&self) -> bool {
         self.gesture
             .as_ref()
             .is_some_and(|gesture| gesture.submission().1)
     }
 
-    pub(super) fn reconcile_gesture(&mut self, presentation_revision: Option<u64>) {
+    pub(crate) fn reconcile_gesture(&mut self, presentation_revision: Option<u64>) {
         let Some(gesture) = &self.gesture else {
             return;
         };
@@ -245,7 +263,7 @@ impl MdeWorkbenchItem {
         }
     }
 
-    pub(super) fn finish_gesture(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn finish_gesture(&mut self, cx: &mut Context<Self>) {
         if self.gesture_submission_pending() {
             return;
         }
@@ -359,7 +377,7 @@ impl MdeWorkbenchItem {
                 dy,
                 ..
             } => {
-                let edited = diagram_canvas::edited_path_geometry(&geometry, handle, dx, dy);
+                let edited = crate::layouts::body::edited_path_geometry(&geometry, handle, dx, dy);
                 if edited == geometry {
                     cx.notify();
                     return;

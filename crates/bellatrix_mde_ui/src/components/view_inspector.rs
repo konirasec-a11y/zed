@@ -1,8 +1,19 @@
-use super::*;
+use crate::layouts::sidebar::MdeRightPanel;
+use crate::pages::mde_page::MdeWorkbenchItem;
 use bellatrix_mde_cordis::Geometry;
+use gpui::Context;
+use gpui::Entity;
+use gpui::IntoElement;
+use gpui::Window;
+use gpui::div;
+use gpui::prelude::*;
+use ui::IconButton;
+use ui::IconName;
+use ui::Label;
+use ui::prelude::*;
 
 impl MdeRightPanel {
-    pub(super) fn render_view_presentation(
+    pub(crate) fn render_view_presentation(
         &mut self,
         item: Entity<MdeWorkbenchItem>,
         snapshot: &Option<crate::view_model::snapshot::MdeSnapshot>,
@@ -80,7 +91,7 @@ impl MdeRightPanel {
         }
         if !read_only {
             if let Some((diagram_id, view, _)) = style_target {
-                crate::pages::mde_page::style_editor::reconcile_style_inputs(
+                crate::components::style_editor::reconcile_style_inputs(
                     &mut self.style_drafts,
                     &item,
                     diagram_id,
@@ -91,7 +102,7 @@ impl MdeRightPanel {
                 );
             }
         }
-        let mut inspector_rows = crate::pages::mde_page::style_editor::render_styles(
+        let mut inspector_rows = crate::components::style_editor::render_styles(
             style_target,
             item.clone(),
             if read_only {
@@ -281,7 +292,7 @@ impl MdeRightPanel {
                 timing_diagram && kind == Some("uml.lifeline")
             });
             if is_timing_lifeline {
-                let key = crate::pages::mde_page::timing_editor::reconcile_timing_inputs(
+                let key = crate::components::timing_editor::reconcile_timing_inputs(
                     &mut self.timing_drafts,
                     &item,
                     diagram_id,
@@ -291,11 +302,9 @@ impl MdeRightPanel {
                     cx,
                 );
                 if let Some(draft) = self.timing_drafts.get(&key) {
-                    inspector_rows.push(
-                        crate::pages::mde_page::timing_editor::render_timing_editor(
-                            draft, &key, &item, cx,
-                        ),
-                    );
+                    inspector_rows.push(crate::components::timing_editor::render_timing_editor(
+                        draft, &key, &item, cx,
+                    ));
                 }
             }
         }
@@ -304,7 +313,7 @@ impl MdeRightPanel {
 }
 
 fn presentation_row(name: &str, value: &str) -> AnyElement {
-    crate::pages::mde_page::property_editor::compact_row(
+    crate::components::inspector::compact_row(
         name.to_owned(),
         Label::new(value.to_owned()).size(LabelSize::Small),
     )

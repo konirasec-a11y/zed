@@ -1,8 +1,14 @@
-use crate::pages::mde_page::integration::OpenMdeWorkbench;
-use crate::pages::mde_page::native_document::OpenMdeDocument;
+use crate::api::native_document::OpenMdeDocument;
+use crate::routes::workspace::OpenMdeWorkbench;
 use gpui::App;
-use ui::{ContextMenu, DropdownMenu, DropdownStyle, Tooltip, prelude::*};
-use workspace::{HideStatusItem, ItemHandle, StatusItemView};
+use ui::ContextMenu;
+use ui::DropdownMenu;
+use ui::DropdownStyle;
+use ui::Tooltip;
+use ui::prelude::*;
+use workspace::HideStatusItem;
+use workspace::ItemHandle;
+use workspace::StatusItemView;
 
 pub(crate) struct MdeStatusEntry;
 

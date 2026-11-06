@@ -1,30 +1,54 @@
 //! Panels owned by the Zed Workspace Dock, consuming the single MDE domain.
-#[path = "../components/toolbox.rs"]
-mod toolbox_panel;
-#[path = "../components/view_inspector.rs"]
-mod view_inspector;
+use crate::components::inspector::render_inspector;
+use crate::components::model_explorer::ExplorerSortOrder;
+use crate::components::model_explorer::filter_explorer;
+use crate::components::model_explorer::project_explorer;
 use crate::components::pane_header::PaneHeader;
-use crate::pages::mde_page::{
-    MdeToolDrag, MdeWorkbenchItem, WorkbenchPalette,
-    hierarchy::{ExplorerSortOrder, filter_explorer, project_explorer},
-    integration::{OpenMdeSymbols, OpenMdeWorkbench},
-    property_editor::render_inspector,
-};
+pub use crate::components::toolbox::MdeLeftPanel;
+use crate::pages::mde_page::MdeToolDrag;
+use crate::pages::mde_page::MdeWorkbenchItem;
+use crate::pages::mde_page::WorkbenchPalette;
+use crate::routes::workspace::OpenMdeSymbols;
+use crate::routes::workspace::OpenMdeWorkbench;
+use bellatrix_mde_cordis::ModelingElementKind;
 use bellatrix_mde_cordis::ModelingRelationKind;
-use bellatrix_mde_cordis::{ModelingElementKind, ModelingTool};
-use gpui::{
-    Action, App, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Render,
-    StatefulInteractiveElement, Subscription, Window, actions, div, prelude::*, px, svg,
-};
-use std::collections::{HashMap, HashSet};
-pub use toolbox_panel::MdeLeftPanel;
-use ui::{IconButton, IconName, Label, TreeViewItem, prelude::*};
-use ui_input::{ErasedEditorEvent, InputField};
-use workspace::{
-    Workspace,
-    dock::{DockPosition, Panel, PanelEvent},
-};
+use bellatrix_mde_cordis::ModelingTool;
+use gpui::Action;
+use gpui::App;
+use gpui::Context;
+use gpui::Entity;
+use gpui::EventEmitter;
+use gpui::FocusHandle;
+use gpui::Focusable;
+use gpui::InteractiveElement;
+use gpui::IntoElement;
+use gpui::MouseButton;
+use gpui::MouseDownEvent;
+use gpui::MouseMoveEvent;
+use gpui::MouseUpEvent;
+use gpui::Pixels;
+use gpui::Render;
+use gpui::StatefulInteractiveElement;
+use gpui::Subscription;
+use gpui::Window;
+use gpui::actions;
+use gpui::div;
+use gpui::prelude::*;
+use gpui::px;
+use gpui::svg;
+use std::collections::HashMap;
+use std::collections::HashSet;
+use ui::IconButton;
+use ui::IconName;
+use ui::Label;
+use ui::TreeViewItem;
+use ui::prelude::*;
+use ui_input::ErasedEditorEvent;
+use ui_input::InputField;
+use workspace::Workspace;
+use workspace::dock::DockPosition;
+use workspace::dock::Panel;
+use workspace::dock::PanelEvent;
 
 actions!(
     bellatrix_mde,
@@ -37,7 +61,7 @@ actions!(
 );
 
 // Dock priorities must be distinct even when panels occupy different sides.
-const MDE_LEFT_PRIORITY: u32 = 10_000;
+pub(crate) const MDE_LEFT_PRIORITY: u32 = 10_000;
 const MDE_RIGHT_PRIORITY: u32 = 10_001;
 const MDE_BOTTOM_PRIORITY: u32 = 10_002;
 
@@ -45,10 +69,10 @@ fn explorer_move_menu(
     menu: ui::ContextMenu,
     owner: &Entity<MdeWorkbenchItem>,
     snapshot: &crate::pages::mde_page::MdeSnapshot,
-    target: crate::pages::mde_page::hierarchy::ExplorerMoveTarget,
+    target: crate::components::model_explorer::ExplorerMoveTarget,
     _panel: gpui::WeakEntity<MdeRightPanel>,
 ) -> ui::ContextMenu {
-    use crate::pages::mde_page::hierarchy::ExplorerMoveTarget;
+    use crate::components::model_explorer::ExplorerMoveTarget;
     let current_parent = match &target {
         ExplorerMoveTarget::Element(id) => snapshot
             .section
@@ -187,7 +211,7 @@ fn explorer_menu(
                 menu,
                 &owner,
                 snapshot,
-                crate::pages::mde_page::hierarchy::ExplorerMoveTarget::Element(subject.clone()),
+                crate::components::model_explorer::ExplorerMoveTarget::Element(subject.clone()),
                 panel.clone(),
             );
         }
@@ -574,7 +598,7 @@ fn explorer_diagram_menu(
             menu,
             &owner,
             &snapshot,
-            crate::pages::mde_page::hierarchy::ExplorerMoveTarget::Diagram(diagram_id.clone()),
+            crate::components::model_explorer::ExplorerMoveTarget::Diagram(diagram_id.clone()),
             panel.clone(),
         );
         [true, false].into_iter().fold(menu, |menu, rename| {
@@ -626,7 +650,7 @@ fn explorer_diagram_menu(
     })
 }
 
-struct PanelState {
+pub(crate) struct PanelState {
     item: Option<gpui::WeakEntity<MdeWorkbenchItem>>,
     focus: FocusHandle,
     position: DockPosition,
@@ -680,31 +704,31 @@ impl PanelState {
     }
 }
 pub struct MdeRightPanel {
-    state: PanelState,
-    editing_id: Option<String>,
-    explorer_action: Option<ExplorerActionDraft>,
+    pub(crate) state: PanelState,
+    pub(crate) editing_id: Option<String>,
+    pub(crate) explorer_action: Option<ExplorerActionDraft>,
     pub(crate) property_drafts: HashMap<
         crate::view_model::inspector_drafts::DraftKey,
-        crate::pages::mde_page::property_editor::InspectorDraft,
+        crate::components::inspector::InspectorDraft,
     >,
-    style_target_id: Option<crate::pages::mde_page::style_editor::StyleKey>,
+    pub(crate) style_target_id: Option<crate::components::style_editor::StyleKey>,
     pub(crate) style_drafts: HashMap<
-        crate::pages::mde_page::style_editor::StyleKey,
-        crate::pages::mde_page::style_editor::StyleDraft,
+        crate::components::style_editor::StyleKey,
+        crate::components::style_editor::StyleDraft,
     >,
     pub(crate) inspector_styles_open: bool,
     pub(crate) timing_drafts:
-        HashMap<(String, String, String), crate::pages::mde_page::timing_editor::TimingDraft>,
-    collapsed_elements: HashSet<String>,
-    last_revealed_row: Option<(gpui::EntityId, Vec<String>)>,
-    explorer_scroll: gpui::ScrollHandle,
-    collapsed_by_document: HashMap<gpui::EntityId, HashSet<String>>,
-    explorer_open: bool,
-    explorer_search_open: bool,
-    explorer_search: Entity<InputField>,
-    explorer_sort: ExplorerSortOrder,
-    _explorer_search_listener: Subscription,
-    inspector_open: bool,
+        HashMap<(String, String, String), crate::components::timing_editor::TimingDraft>,
+    pub(crate) collapsed_elements: HashSet<String>,
+    pub(crate) last_revealed_row: Option<(gpui::EntityId, Vec<String>)>,
+    pub(crate) explorer_scroll: gpui::ScrollHandle,
+    pub(crate) collapsed_by_document: HashMap<gpui::EntityId, HashSet<String>>,
+    pub(crate) explorer_open: bool,
+    pub(crate) explorer_search_open: bool,
+    pub(crate) explorer_search: Entity<InputField>,
+    pub(crate) explorer_sort: ExplorerSortOrder,
+    pub(crate) _explorer_search_listener: Subscription,
+    pub(crate) inspector_open: bool,
     pub(crate) inspector_documentation_open: bool,
     pub(crate) inspector_advanced_open: bool,
 }
@@ -718,7 +742,7 @@ impl MdeRightPanel {
             .is_some_and(|bound| bound.entity_id() == item.entity_id())
     }
 
-    fn commit_explorer_action(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn commit_explorer_action(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(draft) = self.explorer_action.as_ref() else {
             return;
         };
@@ -1026,9 +1050,9 @@ impl Render for MdeRightPanel {
             let root_element_parent = snapshot.section.root_model.clone();
             rows.push(div().id("mde-explorer-project").flex().items_center().gap_1()
                 .can_drop(move |drag, _, cx| {
-                    let project_id = if let Some(drag) = drag.downcast_ref::<crate::pages::mde_page::hierarchy::ExplorerElementDrag>() {
+                    let project_id = if let Some(drag) = drag.downcast_ref::<crate::components::model_explorer::ExplorerElementDrag>() {
                         &drag.project_id
-                    } else if let Some(drag) = drag.downcast_ref::<crate::pages::mde_page::hierarchy::ExplorerDiagramDrag>() {
+                    } else if let Some(drag) = drag.downcast_ref::<crate::components::model_explorer::ExplorerDiagramDrag>() {
                         &drag.project_id
                     } else { return false; };
                     let workbench = root_filter_owner.read(cx);
@@ -1036,19 +1060,19 @@ impl Render for MdeRightPanel {
                         && !workbench.source.is_read_only()
                         && !workbench.source.is_presentation_suspended()
                 })
-                .on_drop(move |drag: &crate::pages::mde_page::hierarchy::ExplorerElementDrag, _, cx| {
+                .on_drop(move |drag: &crate::components::model_explorer::ExplorerElementDrag, _, cx| {
                     root_element_owner.update(cx, |workbench, cx| workbench.move_explorer_item(
                         &drag.project_id, drag.revision,
-                        &crate::pages::mde_page::hierarchy::ExplorerMoveTarget::Element(drag.element_id.clone()),
+                        &crate::components::model_explorer::ExplorerMoveTarget::Element(drag.element_id.clone()),
                         root_element_parent.clone(), None, cx));
                 })
-                .on_drop(move |drag: &crate::pages::mde_page::hierarchy::ExplorerDiagramDrag, _, cx| {
+                .on_drop(move |drag: &crate::components::model_explorer::ExplorerDiagramDrag, _, cx| {
                     root_diagram_owner.update(cx, |workbench, cx| workbench.move_explorer_item(
                         &drag.project_id, drag.revision,
-                        &crate::pages::mde_page::hierarchy::ExplorerMoveTarget::Diagram(drag.diagram_id.clone()),
+                        &crate::components::model_explorer::ExplorerMoveTarget::Diagram(drag.diagram_id.clone()),
                         None, None, cx));
                 })
-                .child(crate::pages::mde_page::hierarchy::explorer_project_icon(&palette))
+                .child(crate::components::model_explorer::explorer_project_icon(&palette))
                 .child(ui::right_click_menu("mde-explorer-project-menu")
                     .trigger(move |_, _, _| TreeViewItem::new(project_row_key, project_row_name)
                     .root_item(project_has_children).expanded(root_expanded)
@@ -1074,7 +1098,7 @@ impl Render for MdeRightPanel {
                 let has_children = tree
                     .get(index + 1)
                     .is_some_and(|next| next.depth > row.depth);
-                let type_label = crate::pages::mde_page::hierarchy::explorer_type_label(
+                let type_label = crate::components::model_explorer::explorer_type_label(
                     &snapshot.section,
                     &row.kind,
                     snapshot.section.relations.iter().any(|relation| {
@@ -1104,7 +1128,7 @@ impl Render for MdeRightPanel {
                                 .any(|element| element.id == *id)
                         })
                         .map(
-                            |element_id| crate::pages::mde_page::hierarchy::ExplorerElementDrag {
+                            |element_id| crate::components::model_explorer::ExplorerElementDrag {
                                 project_id: snapshot.project_id.clone(),
                                 element_id: element_id.to_owned(),
                                 target_diagram_id: active_diagram.clone(),
@@ -1163,7 +1187,7 @@ impl Render for MdeRightPanel {
                     let view_row_label = row.label.clone();
                     let view_accessible_label = format!("{}: {}", type_label, row.label);
                     rows.push(div().id(format!("mde-explorer-view-{}", row.key))
-                        .when_some(element_drag, |row, drag| row.on_drag(drag, |drag: &crate::pages::mde_page::hierarchy::ExplorerElementDrag, _, _, cx| cx.new(|_| drag.clone())))
+                        .when_some(element_drag, |row, drag| row.on_drag(drag, |drag: &crate::components::model_explorer::ExplorerElementDrag, _, _, cx| cx.new(|_| drag.clone())))
                         .when_some(ownership_target, |row, target| {
                             let diagram_target = target.clone();
                             let diagram_occurrence = ownership_occurrence.clone();
@@ -1174,18 +1198,18 @@ impl Render for MdeRightPanel {
                             let hover_target = target.clone();
                             let hover_owner = ownership_filter_owner.clone();
                             let highlight = palette.selection;
-                            row.drag_over::<crate::pages::mde_page::hierarchy::ExplorerElementDrag>(move |style, drag, _, cx| {
+                            row.drag_over::<crate::components::model_explorer::ExplorerElementDrag>(move |style, drag, _, cx| {
                                 if hover_owner.read(cx).validate_explorer_reparent(drag, &hover_target).is_ok() {
                                     style.border_1().border_color(highlight)
                                 } else {
                                     style
                                 }
-                            }).drag_over::<crate::pages::mde_page::hierarchy::ExplorerDiagramDrag>(move |style, drag, _, cx| {
+                            }).drag_over::<crate::components::model_explorer::ExplorerDiagramDrag>(move |style, drag, _, cx| {
                                 if diagram_hover_owner.read(cx).validate_explorer_diagram_reparent(drag, Some(&diagram_hover_target), diagram_hover_occurrence.as_ref()).is_ok() {
                                     style.border_1().border_color(highlight)
                                 } else { style }
                             }).can_drop(move |drag, _, cx| {
-                                if let Some(drag) = drag.downcast_ref::<crate::pages::mde_page::hierarchy::ExplorerDiagramDrag>() {
+                                if let Some(drag) = drag.downcast_ref::<crate::components::model_explorer::ExplorerDiagramDrag>() {
                                     let workbench = ownership_filter_owner.read(cx);
                                     return workbench.project_id() == &drag.project_id
                                         && !workbench.source.is_read_only()
@@ -1193,28 +1217,28 @@ impl Render for MdeRightPanel {
                                 }
                                 // GPUI checks every row here, including unhovered rows.
                                 // Hover previews use the kernel; Cordis validates the submitted drop.
-                                drag.downcast_ref::<crate::pages::mde_page::hierarchy::ExplorerElementDrag>()
+                                drag.downcast_ref::<crate::components::model_explorer::ExplorerElementDrag>()
                                     .is_some_and(|drag| {
                                         let workbench = ownership_filter_owner.read(cx);
                                         workbench.project_id() == &drag.project_id
                                             && !workbench.source.is_read_only()
                                             && !workbench.source.is_presentation_suspended()
                                     })
-                            }).on_drop(move |drag: &crate::pages::mde_page::hierarchy::ExplorerElementDrag, _, cx| {
+                            }).on_drop(move |drag: &crate::components::model_explorer::ExplorerElementDrag, _, cx| {
                                 ownership_drop_owner.update(cx, |workbench, cx| {
                                     workbench.reparent_explorer_element(drag, target.clone(), cx)
                                 });
-                            }).on_drop(move |drag: &crate::pages::mde_page::hierarchy::ExplorerDiagramDrag, _, cx| {
+                            }).on_drop(move |drag: &crate::components::model_explorer::ExplorerDiagramDrag, _, cx| {
                                 diagram_drop_owner.update(cx, |workbench, cx| workbench.move_explorer_item(
                                     &drag.project_id, drag.revision,
-                                    &crate::pages::mde_page::hierarchy::ExplorerMoveTarget::Diagram(drag.diagram_id.clone()),
+                                    &crate::components::model_explorer::ExplorerMoveTarget::Diagram(drag.diagram_id.clone()),
                                     Some(diagram_target.clone()), diagram_occurrence.clone(), cx));
                             })
                         })
                         .tooltip(ui::Tooltip::text(format!("Visual component · {type_label}. Drag onto an owner to move its semantic element; the view stays in this diagram.")))
                         .pl(px((row.depth.min(15) + 2) as f32 * 14.0)).flex().items_center().gap_1()
                         .when(selected, |row| row.bg(palette.surface))
-                        .child(crate::pages::mde_page::hierarchy::explorer_view_icon(&row.key, &row.kind, &snapshot.section.identity(&row.kind), selected, &palette))
+                        .child(crate::components::model_explorer::explorer_view_icon(&row.key, &row.kind, &snapshot.section.identity(&row.kind), selected, &palette))
                         .child(div().flex_1().min_w_0().overflow_hidden().child(
                             ui::right_click_menu(format!("mde-explorer-view-menu-{}", row.key))
                             .trigger(move |_, _, _| TreeViewItem::new(view_row_key, view_row_label)
@@ -1249,7 +1273,7 @@ impl Render for MdeRightPanel {
                 }
                 if row.diagram {
                     let diagram_drag = (!read_only).then(|| {
-                        crate::pages::mde_page::hierarchy::ExplorerDiagramDrag {
+                        crate::components::model_explorer::ExplorerDiagramDrag {
                             project_id: snapshot.project_id.clone(),
                             diagram_id: row.element_id.clone(),
                             revision: snapshot.revision,
@@ -1294,8 +1318,8 @@ impl Render for MdeRightPanel {
                     rows.push(
                         div()
                             .id(format!("mde-explorer-diagram-{id}"))
-                            .when_some(diagram_drag, |row, drag| row.on_drag(drag, |drag: &crate::pages::mde_page::hierarchy::ExplorerDiagramDrag, _, _, cx| cx.new(|_| drag.clone())))
-                            .on_drop(move |drag: &crate::pages::mde_page::hierarchy::ExplorerElementDrag, _, cx| {
+                            .when_some(diagram_drag, |row, drag| row.on_drag(drag, |drag: &crate::components::model_explorer::ExplorerDiagramDrag, _, _, cx| cx.new(|_| drag.clone())))
+                            .on_drop(move |drag: &crate::components::model_explorer::ExplorerElementDrag, _, cx| {
                                 diagram_element_drop_owner.update(cx, |workbench, cx| {
                                     workbench.drop_explorer_element_on_diagram(drag, &diagram_element_drop_target, cx);
                                 });
@@ -1304,7 +1328,7 @@ impl Render for MdeRightPanel {
                             .pl(px((row.depth.min(15) + 2) as f32 * 14.0))
                             .flex().items_center().gap_1()
                             .when(selected, |row| row.bg(palette.surface))
-                            .child(crate::pages::mde_page::hierarchy::explorer_diagram_icon(&row.kind, &palette))
+                            .child(crate::components::model_explorer::explorer_diagram_icon(&row.kind, &palette))
                             .child(div().flex_1().min_w_0().overflow_hidden().child(
                                 ui::right_click_menu(format!("mde-explorer-diagram-menu-{id}"))
                                 .trigger(move |_, _, _| TreeViewItem::new(diagram_row_key, diagram_row_label.clone())
@@ -1416,7 +1440,7 @@ impl Render for MdeRightPanel {
                 rows.push(
                     div()
                         .id(format!("mde-explorer-row-{}", row.key))
-                        .when_some(element_drag, |row, drag| row.on_drag(drag, |drag: &crate::pages::mde_page::hierarchy::ExplorerElementDrag, _, _, cx| cx.new(|_| drag.clone())))
+                        .when_some(element_drag, |row, drag| row.on_drag(drag, |drag: &crate::components::model_explorer::ExplorerElementDrag, _, _, cx| cx.new(|_| drag.clone())))
                         .when_some(ownership_target, |row, target| {
                             let diagram_target = target.clone();
                             let diagram_occurrence = ownership_occurrence.clone();
@@ -1427,18 +1451,18 @@ impl Render for MdeRightPanel {
                             let hover_target = target.clone();
                             let hover_owner = ownership_filter_owner.clone();
                             let highlight = palette.selection;
-                            row.drag_over::<crate::pages::mde_page::hierarchy::ExplorerElementDrag>(move |style, drag, _, cx| {
+                            row.drag_over::<crate::components::model_explorer::ExplorerElementDrag>(move |style, drag, _, cx| {
                                 if hover_owner.read(cx).validate_explorer_reparent(drag, &hover_target).is_ok() {
                                     style.border_1().border_color(highlight)
                                 } else {
                                     style
                                 }
-                            }).drag_over::<crate::pages::mde_page::hierarchy::ExplorerDiagramDrag>(move |style, drag, _, cx| {
+                            }).drag_over::<crate::components::model_explorer::ExplorerDiagramDrag>(move |style, drag, _, cx| {
                                 if diagram_hover_owner.read(cx).validate_explorer_diagram_reparent(drag, Some(&diagram_hover_target), diagram_hover_occurrence.as_ref()).is_ok() {
                                     style.border_1().border_color(highlight)
                                 } else { style }
                             }).can_drop(move |drag, _, cx| {
-                                if let Some(drag) = drag.downcast_ref::<crate::pages::mde_page::hierarchy::ExplorerDiagramDrag>() {
+                                if let Some(drag) = drag.downcast_ref::<crate::components::model_explorer::ExplorerDiagramDrag>() {
                                     let workbench = ownership_filter_owner.read(cx);
                                     return workbench.project_id() == &drag.project_id
                                         && !workbench.source.is_read_only()
@@ -1446,21 +1470,21 @@ impl Render for MdeRightPanel {
                                 }
                                 // GPUI checks every row here, including unhovered rows.
                                 // Hover previews use the kernel; Cordis validates the submitted drop.
-                                drag.downcast_ref::<crate::pages::mde_page::hierarchy::ExplorerElementDrag>()
+                                drag.downcast_ref::<crate::components::model_explorer::ExplorerElementDrag>()
                                     .is_some_and(|drag| {
                                         let workbench = ownership_filter_owner.read(cx);
                                         workbench.project_id() == &drag.project_id
                                             && !workbench.source.is_read_only()
                                             && !workbench.source.is_presentation_suspended()
                                     })
-                            }).on_drop(move |drag: &crate::pages::mde_page::hierarchy::ExplorerElementDrag, _, cx| {
+                            }).on_drop(move |drag: &crate::components::model_explorer::ExplorerElementDrag, _, cx| {
                                 ownership_drop_owner.update(cx, |workbench, cx| {
                                     workbench.reparent_explorer_element(drag, target.clone(), cx)
                                 });
-                            }).on_drop(move |drag: &crate::pages::mde_page::hierarchy::ExplorerDiagramDrag, _, cx| {
+                            }).on_drop(move |drag: &crate::components::model_explorer::ExplorerDiagramDrag, _, cx| {
                                 diagram_drop_owner.update(cx, |workbench, cx| workbench.move_explorer_item(
                                     &drag.project_id, drag.revision,
-                                    &crate::pages::mde_page::hierarchy::ExplorerMoveTarget::Diagram(drag.diagram_id.clone()),
+                                    &crate::components::model_explorer::ExplorerMoveTarget::Diagram(drag.diagram_id.clone()),
                                     Some(diagram_target.clone()), diagram_occurrence.clone(), cx));
                             })
                         })
@@ -1471,7 +1495,7 @@ impl Render for MdeRightPanel {
                         .gap_1()
                         .when(selected, |row| row.bg(palette.surface))
                         .child(
-                            crate::pages::mde_page::hierarchy::explorer_element_icon(&row.kind, &snapshot.section.identity(&row.kind), &palette),
+                            crate::components::model_explorer::explorer_element_icon(&row.kind, &snapshot.section.identity(&row.kind), &palette),
                         )
                         .child(
                             div().flex_1().min_w_0().overflow_hidden().child(
@@ -1509,7 +1533,7 @@ impl Render for MdeRightPanel {
         }
         let inspector_project = item.read(cx).project_id().clone();
         if !read_only {
-            crate::pages::mde_page::property_editor::reconcile_inputs(
+            crate::components::inspector::reconcile_inputs(
                 &mut self.property_drafts,
                 item.clone(),
                 inspector_project.as_str(),
@@ -1647,7 +1671,7 @@ impl Render for MdeRightPanel {
                                         .tooltip(ui::Tooltip::text("Save project as…"))
                                         .on_click(move |_, window, cx| {
                                             window.dispatch_action(
-                                                Box::new(crate::pages::mde_page::integration::SaveMdeProjectAs), cx,
+                                                Box::new(crate::routes::workspace::SaveMdeProjectAs), cx,
                                             );
                                         })
                                 ))),
@@ -1813,9 +1837,9 @@ enum BottomTab {
     Thumbnails,
 }
 pub struct MdeBottomPanel {
-    state: PanelState,
-    active: BottomTab,
-    execution: Entity<crate::pages::mde_page::execution_dashboard::MdeExecutionDashboard>,
+    pub(crate) state: PanelState,
+    pub(crate) active: BottomTab,
+    pub(crate) execution: Entity<crate::components::execution_dashboard::MdeExecutionDashboard>,
 }
 impl MdeBottomPanel {
     pub fn new(
@@ -1824,7 +1848,7 @@ impl MdeBottomPanel {
         cx: &mut Context<Self>,
     ) -> Self {
         let execution = cx.new(|cx| {
-            crate::pages::mde_page::execution_dashboard::MdeExecutionDashboard::new(
+            crate::components::execution_dashboard::MdeExecutionDashboard::new(
                 item.clone(),
                 window,
                 cx,
@@ -2065,12 +2089,8 @@ pub(crate) fn bind_panels(
                     };
                     if let Err(error) = owner.update(cx, |panel, cx| {
                         if panel.is_bound_to(&item) && !item.read(cx).source().is_read_only() {
-                            crate::pages::mde_page::property_editor::flush_property_edits(
-                                panel, &item, cx,
-                            );
-                            crate::pages::mde_page::style_editor::flush_style_edits(
-                                panel, &item, cx,
-                            );
+                            crate::components::inspector::flush_property_edits(panel, &item, cx);
+                            crate::components::style_editor::flush_style_edits(panel, &item, cx);
                         }
                     }) {
                         eprintln!("MDE document queue resume failed: {error}");
@@ -2110,7 +2130,7 @@ pub fn attach_panels(
     }
     workspace.register_action(
         |workspace,
-         _: &crate::pages::mde_page::execution_dashboard::ToggleMdeExecutionDashboard,
+         _: &crate::components::execution_dashboard::ToggleMdeExecutionDashboard,
          window,
          cx| {
             show_logs_and_diagnostics(workspace, window, cx);

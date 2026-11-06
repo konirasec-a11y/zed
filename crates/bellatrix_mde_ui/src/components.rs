@@ -1,2 +1,14 @@
+pub(crate) mod canvas_interaction;
+pub(crate) mod execution_dashboard;
+pub(crate) mod inline_editor;
+pub(crate) mod inspector;
+pub(crate) mod model_explorer;
 pub mod pane_header;
+pub(crate) mod quick_tools;
+pub(crate) mod style_editor;
 pub mod symbol_gallery;
+pub(crate) mod symbol_library;
+pub(crate) mod timing_editor;
+pub(crate) mod toolbox;
+pub(crate) mod view_inspector;
+pub(crate) mod visual_draft_canvas;

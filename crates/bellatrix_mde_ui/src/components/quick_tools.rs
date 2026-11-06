@@ -1,10 +1,15 @@
 //! Map domain action descriptors to controls; no action semantics belong to a shape.
-use crate::elements::uml::{UmlQuickAction, UmlQuickEdit, UmlVisibilityPicker};
+use crate::elements::uml::UmlQuickAction;
+use crate::elements::uml::UmlQuickEdit;
+use crate::elements::uml::UmlVisibilityPicker;
 use crate::pages::mde_page::MdeWorkbenchItem;
-use bellatrix_mde_cordis::{
-    QuickEditAction, QuickEditAvailability, QuickEditControl, QuickEditSide,
-    projection::{Element, ModelingProjection, Relation},
-};
+use bellatrix_mde_cordis::QuickEditAction;
+use bellatrix_mde_cordis::QuickEditAvailability;
+use bellatrix_mde_cordis::QuickEditControl;
+use bellatrix_mde_cordis::QuickEditSide;
+use bellatrix_mde_cordis::projection::Element;
+use bellatrix_mde_cordis::projection::ModelingProjection;
+use bellatrix_mde_cordis::projection::Relation;
 use bellatrix_project::ProjectId;
 use gpui::Entity;
 use ui::IconName;

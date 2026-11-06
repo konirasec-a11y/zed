@@ -1,78 +1,73 @@
 //! Engine-MDE as a native Zed Workspace Item.
 //! Zed owns presentation; bellatrix_mde owns semantics; Cordis publishes revisions.
 use crate::view_model::workbench_state;
-use workbench_state::{PendingRelationEndpoint, SelectionChange, WorkbenchState};
+use crate::view_model::workbench_state::PendingRelationEndpoint;
+use crate::view_model::workbench_state::SelectionChange;
+use crate::view_model::workbench_state::WorkbenchState;
 
-#[path = "../components/canvas_interaction.rs"]
-mod canvas_interaction;
-use crate::view_model::canvas_presentation;
-use canvas_interaction::{CanvasGesture, PathHandle};
-#[path = "../layouts/body.rs"]
-mod diagram_canvas;
-#[path = "../components/execution_dashboard.rs"]
-mod execution_dashboard;
-use crate::view_model::explorer;
-#[path = "../components/model_explorer.rs"]
-mod hierarchy;
-#[path = "../components/inline_editor.rs"]
-mod inline_editor;
-use crate::view_model::inspector_drafts;
-#[path = "../routes/workspace.rs"]
-mod integration;
-#[path = "../api/model_editing.rs"]
-mod model_editing;
-#[path = "../api/native_document.rs"]
-mod native_document;
-use crate::view_model::native_document_guard;
-#[path = "../layouts/sidebar.rs"]
-pub mod panels;
-#[path = "../components/inspector.rs"]
-mod property_editor;
-#[path = "../components/quick_tools.rs"]
-mod quick_edit_view;
-#[path = "../api/relationship_creation.rs"]
-mod relationship_creation;
-use crate::view_model::selection;
-#[path = "../api/selection_actions.rs"]
-mod selection_actions;
-use crate::view_model::snapshot;
-#[path = "../api/source.rs"]
-mod source;
-#[path = "../layouts/footer.rs"]
-mod status_entry;
-use crate::view_model::style_drafts;
-#[path = "../components/style_editor.rs"]
-mod style_editor;
-#[path = "../components/symbol_library.rs"]
-mod symbol_library;
+pub use crate::api::native_document::NativeDocumentImporter;
+pub use crate::api::native_document::NativeDocumentLease;
+pub use crate::api::source::MdeUiSource;
 use crate::assets::theme;
-#[path = "../components/timing_editor.rs"]
-mod timing_editor;
-#[path = "../api/validation.rs"]
-mod validation;
-#[path = "../components/visual_draft_canvas.rs"]
-mod visual_draft_canvas;
+pub use crate::assets::theme::WorkbenchPalette;
+use crate::components::canvas_interaction::CanvasGesture;
+use crate::components::canvas_interaction::PathHandle;
+pub use crate::components::symbol_library::MdeSymbolLibraryItem;
+pub use crate::routes::workspace::register_mde_workspace;
+use crate::view_model::canvas_presentation;
+use crate::view_model::explorer;
+use crate::view_model::inspector_drafts;
+use crate::view_model::native_document_guard;
+use crate::view_model::selection;
+use crate::view_model::snapshot;
+pub use crate::view_model::snapshot::MdeSnapshot;
+use crate::view_model::style_drafts;
 pub use bellatrix_mde_cordis::MODELING_NAMESPACE;
-pub use integration::register_mde_workspace;
-pub use native_document::{NativeDocumentImporter, NativeDocumentLease};
-pub use snapshot::MdeSnapshot;
-pub use source::MdeUiSource;
-pub use symbol_library::MdeSymbolLibraryItem;
-pub use theme::WorkbenchPalette;
 
-use crate::elements::uml::{UmlClassifier, UmlFigure, UmlLineSegment, UmlRelationGlyph};
-use bellatrix_mde_cordis::{Geometry, ModelingRelationKind, PathSegment};
-use bellatrix_mde_cordis::{ModelingElementKind, ModelingMemberKind, ModelingTool};
+use crate::components::quick_tools::ParameterAction;
+use crate::components::quick_tools::QuickEditTarget;
+use crate::components::quick_tools::quick_edit_for_element;
+use crate::elements::uml::UmlClassifier;
+use crate::elements::uml::UmlFigure;
+use crate::elements::uml::UmlLineSegment;
+use crate::elements::uml::UmlRelationGlyph;
+use bellatrix_mde_cordis::Geometry;
+use bellatrix_mde_cordis::ModelingElementKind;
+use bellatrix_mde_cordis::ModelingMemberKind;
+use bellatrix_mde_cordis::ModelingRelationKind;
+use bellatrix_mde_cordis::ModelingTool;
+use bellatrix_mde_cordis::PathSegment;
 use bellatrix_project::ProjectId;
-use gpui::{
-    App, AppContext, Context, DragMoveEvent, Entity, EventEmitter, FocusHandle, Focusable,
-    IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
-    Point, Render, ScrollEvent, SharedString, Task, Window, div, prelude::*, px,
-};
-use quick_edit_view::{ParameterAction, QuickEditTarget, quick_edit_for_element};
-use ui::{Clickable, Label, LabelCommon};
+use gpui::App;
+use gpui::AppContext;
+use gpui::Context;
+use gpui::DragMoveEvent;
+use gpui::Entity;
+use gpui::EventEmitter;
+use gpui::FocusHandle;
+use gpui::Focusable;
+use gpui::IntoElement;
+use gpui::KeyDownEvent;
+use gpui::MouseButton;
+use gpui::MouseDownEvent;
+use gpui::MouseMoveEvent;
+use gpui::MouseUpEvent;
+use gpui::Pixels;
+use gpui::Point;
+use gpui::Render;
+use gpui::ScrollEvent;
+use gpui::SharedString;
+use gpui::Task;
+use gpui::Window;
+use gpui::div;
+use gpui::prelude::*;
+use gpui::px;
+use ui::Clickable;
+use ui::Label;
+use ui::LabelCommon;
 use ui_input::InputField;
-use workspace::{Workspace, item::Item};
+use workspace::Workspace;
+use workspace::item::Item;
 
 #[derive(Clone)]
 pub struct MdeToolDrag {
@@ -97,20 +92,20 @@ impl Render for MdeToolDrag {
     }
 }
 pub struct MdeWorkbenchItem {
-    source: MdeUiSource,
-    presentation: WorkbenchState,
-    focus_handle: FocusHandle,
-    inline_editor: Option<Entity<InputField>>,
-    inline_draft: Option<inspector_drafts::DraftState>,
-    gesture: Option<CanvasGesture>,
-    drop_point: Option<(f64, f64)>,
-    zoom: f32,
-    pan: (f32, f32),
-    pan_origin: Option<(Point<Pixels>, (f32, f32))>,
-    feedback: String,
-    validation_mode: validation::ValidationMode,
-    validation_status: String,
-    _watch_task: Task<()>,
+    pub(crate) source: MdeUiSource,
+    pub(crate) presentation: WorkbenchState,
+    pub(crate) focus_handle: FocusHandle,
+    pub(crate) inline_editor: Option<Entity<InputField>>,
+    pub(crate) inline_draft: Option<inspector_drafts::DraftState>,
+    pub(crate) gesture: Option<CanvasGesture>,
+    pub(crate) drop_point: Option<(f64, f64)>,
+    pub(crate) zoom: f32,
+    pub(crate) pan: (f32, f32),
+    pub(crate) pan_origin: Option<(Point<Pixels>, (f32, f32))>,
+    pub(crate) feedback: String,
+    pub(crate) validation_mode: crate::api::validation::ValidationMode,
+    pub(crate) validation_status: String,
+    pub(crate) _watch_task: Task<()>,
 }
 pub(crate) fn diagram_kind_label(
     kind: bellatrix_mde_cordis::StructuralDiagramKind,
@@ -138,7 +133,7 @@ fn selected_view_target(diagram: Option<&str>, view: Option<&str>) -> Option<(St
     Some((diagram?.to_owned(), view?.to_owned()))
 }
 
-fn canvas_delete_action_allowed(canvas_focused: bool, editing: bool) -> bool {
+pub(crate) fn canvas_delete_action_allowed(canvas_focused: bool, editing: bool) -> bool {
     canvas_focused && !editing
 }
 
@@ -150,12 +145,12 @@ fn next_diagram_grid_position(view_count: usize) -> (f64, f64) {
 }
 
 #[derive(Debug, PartialEq)]
-enum ElementViewPlacement {
+pub(crate) enum ElementViewPlacement {
     Existing(String),
     NewAt(f64, f64),
 }
 
-fn element_view_placement(
+pub(crate) fn element_view_placement(
     diagram: &bellatrix_mde_cordis::projection::Diagram,
     element_id: &str,
 ) -> ElementViewPlacement {
@@ -170,7 +165,7 @@ fn element_view_placement(
     }
 }
 
-fn canvas_model_position(
+pub(crate) fn canvas_model_position(
     position: (f64, f64),
     origin: (f64, f64),
     pan: (f32, f32),
@@ -192,7 +187,8 @@ impl MdeWorkbenchItem {
     }
 
     pub fn new(source: MdeUiSource, cx: &mut Context<Self>) -> Self {
-        let validation_mode = validation::ValidationMode::load(source.project_id.as_str());
+        let validation_mode =
+            crate::api::validation::ValidationMode::load(source.project_id.as_str());
         let initial_validation_feedback = validation_mode
             .as_ref()
             .err()
@@ -273,7 +269,8 @@ impl MdeWorkbenchItem {
             pan: (0.0, 0.0),
             pan_origin: None,
             feedback: initial_validation_feedback,
-            validation_mode: validation_mode.unwrap_or(validation::ValidationMode::Manual),
+            validation_mode: validation_mode
+                .unwrap_or(crate::api::validation::ValidationMode::Manual),
             validation_status: "Not yet validated".into(),
             _watch_task: task,
         }
@@ -308,7 +305,12 @@ impl MdeWorkbenchItem {
         self.remove_view(diagram_id, view_id, cx);
     }
 
-    fn remove_view(&mut self, diagram_id: String, view_id: String, cx: &mut Context<Self>) {
+    pub(crate) fn remove_view(
+        &mut self,
+        diagram_id: String,
+        view_id: String,
+        cx: &mut Context<Self>,
+    ) {
         if self.source.is_read_only() {
             return;
         }
@@ -330,7 +332,7 @@ impl MdeWorkbenchItem {
         self.report_command_result(result, cx);
     }
 
-    fn view_context_menu(
+    pub(crate) fn view_context_menu(
         owner: Entity<Self>,
         diagram_id: String,
         view_id: String,
@@ -350,7 +352,7 @@ impl MdeWorkbenchItem {
             let remove_owner = owner.clone();
             menu.entry(
                 "Remove from diagram",
-                Some(Box::new(integration::RemoveFromDiagram)),
+                Some(Box::new(crate::routes::workspace::RemoveFromDiagram)),
                 move |_, cx| {
                     remove_owner.update(cx, |item, cx| {
                         item.remove_view(diagram_id.clone(), view_id.clone(), cx)
@@ -359,7 +361,7 @@ impl MdeWorkbenchItem {
             )
             .entry(
                 "Delete from model",
-                Some(Box::new(integration::DeleteFromModel)),
+                Some(Box::new(crate::routes::workspace::DeleteFromModel)),
                 move |_, cx| {
                     owner.update(cx, |item, cx| {
                         item.select_element(subject.clone(), cx);
@@ -425,7 +427,7 @@ impl MdeWorkbenchItem {
         self.feedback = "Selection tool active".into();
         cx.notify();
     }
-    pub(super) fn allows_modeling_tool(
+    pub(crate) fn allows_modeling_tool(
         &mut self,
         tool: ModelingTool,
         cx: &mut Context<Self>,

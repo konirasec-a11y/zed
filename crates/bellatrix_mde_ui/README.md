@@ -35,8 +35,10 @@
   another kernel.
 
 The real `pages::mde_page` module owns the native MDE item, while root
-reexports preserve the crate API. `pages.rs` and `view_model.rs` declare their
-child modules using Rust's normal file layout. The pure view-model files still belong
+reexports preserve the crate API. `pages.rs`, `components.rs`, `layouts.rs`, `routes.rs`, `api.rs` and
+`view_model.rs` declare their child modules using Rust's normal file layout,
+without path overrides. Cross-component imports name the actual owning module;
+shared helpers are crate-visible rather than relying on inherited privacy. The pure view-model files still belong
 to this GPUI-dependent crate; this layout does not provide a separately
 compilable view-model package or claim that every MDE dependency is one-way.
 

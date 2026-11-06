@@ -3,11 +3,20 @@
 //! preview, not a second Dock and not a substitute for domain commands.
 use crate::assets::symbols::Family;
 use crate::components::symbol_gallery::SymbolGallery;
-use gpui::{
-    App, Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, SharedString, Window,
-    div, prelude::*, px,
-};
-use ui::{Button, Clickable};
+use gpui::App;
+use gpui::Context;
+use gpui::EventEmitter;
+use gpui::FocusHandle;
+use gpui::Focusable;
+use gpui::IntoElement;
+use gpui::Render;
+use gpui::SharedString;
+use gpui::Window;
+use gpui::div;
+use gpui::prelude::*;
+use gpui::px;
+use ui::Button;
+use ui::Clickable;
 use workspace::item::Item;
 
 pub struct MdeSymbolLibraryItem {

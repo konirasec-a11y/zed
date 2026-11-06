@@ -3,15 +3,24 @@
 //! Zed owns tabs, docks and focus. The native action remains available
 //! to focus or reopen the MDE tab without creating a parallel window.
 
-use crate::pages::home_page::{Page, navigate};
-use crate::pages::mde_page::status_entry::{MdeStatusEntry, status_button_enabled};
-use crate::pages::mde_page::{MdeSymbolLibraryItem, MdeUiSource, MdeWorkbenchItem, panels};
-use gpui::{App, AppContext, Entity, TaskExt, Window, actions};
+use crate::layouts::footer::MdeStatusEntry;
+use crate::layouts::footer::status_button_enabled;
+use crate::layouts::sidebar;
+use crate::pages::home_page::Page;
+use crate::pages::home_page::navigate;
+use crate::pages::mde_page::MdeSymbolLibraryItem;
+use crate::pages::mde_page::MdeUiSource;
+use crate::pages::mde_page::MdeWorkbenchItem;
+use gpui::App;
+use gpui::AppContext;
+use gpui::Entity;
+use gpui::TaskExt;
+use gpui::Window;
+use gpui::actions;
 use project::DirectoryLister;
-use std::{
-    cell::{Cell, RefCell},
-    rc::Rc,
-};
+use std::cell::Cell;
+use std::cell::RefCell;
+use std::rc::Rc;
 use workspace::Workspace;
 
 actions!(
@@ -73,7 +82,7 @@ pub fn register_mde_workspace(
         move |workspace: &mut Workspace, mut window: Option<&mut Window>, cx| {
             let source = source.for_workspace();
             source.set_preview_context(Some("No active MDE document".into()));
-            crate::pages::mde_page::native_document::register_preview_action(
+            crate::api::native_document::register_preview_action(
                 workspace,
                 importer.clone(),
                 source.clone(),
@@ -105,22 +114,18 @@ pub fn register_mde_workspace(
                             workspace::Event::ActiveItemChanged
                                 | workspace::Event::ItemRemoved { .. }
                         ) {
-                            let item = crate::pages::mde_page::native_document::active_workbench(
-                                workspace, cx,
-                            );
+                            let item = crate::api::native_document::active_workbench(workspace, cx);
                             let inactive_context =
-                                crate::pages::mde_page::native_document::active_preview_label(
-                                    workspace, cx,
-                                )
-                                .or_else(|| {
-                                    item.is_none().then(|| "No active MDE document".to_owned())
-                                });
+                                crate::api::native_document::active_preview_label(workspace, cx)
+                                    .or_else(|| {
+                                        item.is_none().then(|| "No active MDE document".to_owned())
+                                    });
                             if presentation_source.set_preview_context(inactive_context) {
                                 if let Some(item) = observed_item.borrow().clone() {
                                     item.update(cx, |item, cx| item.refresh(cx));
                                 }
                             }
-                            panels::bind_panels(workspace, item, window, cx);
+                            crate::layouts::sidebar::bind_panels(workspace, item, window, cx);
                         }
                     },
                 )
@@ -130,9 +135,8 @@ pub fn register_mde_workspace(
             let save_prompt_pending = Rc::new(Cell::new(false));
             workspace.register_action(move |workspace, _: &SaveMdeProjectAs, window, cx| {
                 if let Some(item) = workspace
-                    .active_item_as::<crate::pages::mde_page::native_document::NativeMdeDocumentItem>(
-                    cx,
-                ) {
+                    .active_item_as::<crate::api::native_document::NativeMdeDocumentItem>(cx)
+                {
                     item.update(cx, |item, cx| item.save_project_as(cx))
                         .detach_and_log_err(cx);
                     return;

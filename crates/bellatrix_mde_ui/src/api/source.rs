@@ -1,11 +1,14 @@
 //! A typed, lifecycle-owned source for Zed Items and Panels.
 use crate::pages::mde_page::MdeSnapshot;
-use bellatrix_mde_cordis::{MdeSession, MdeUiBridge, MdeUiCommand};
-use bellatrix_project::{ProjectDocument, ProjectId, ProjectService};
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
+use bellatrix_mde_cordis::MdeSession;
+use bellatrix_mde_cordis::MdeUiBridge;
+use bellatrix_mde_cordis::MdeUiCommand;
+use bellatrix_project::ProjectDocument;
+use bellatrix_project::ProjectId;
+use bellatrix_project::ProjectService;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use tokio::sync::watch;
 
 #[derive(Clone)]
@@ -501,7 +504,7 @@ impl MdeUiSource {
         }
         let locate = |view: Option<&bellatrix_mde_cordis::projection::View>, point| match view {
             Some(view) => {
-                crate::pages::mde_page::visual_draft_canvas::resolve_visual_center(&view.geometry)
+                crate::components::visual_draft_canvas::resolve_visual_center(&view.geometry)
             }
             None => point,
         };
@@ -517,7 +520,7 @@ impl MdeUiSource {
             for (key, (view_id, point)) in [("source_anchor", source), ("target_anchor", target)] {
                 if let Some(view_id) = view_id
                     && let Some(anchor) = point.and_then(|point| {
-                        crate::pages::mde_page::visual_draft_canvas::resolve_message_anchor(
+                        crate::components::visual_draft_canvas::resolve_message_anchor(
                             &snapshot.section,
                             diagram,
                             view_id,

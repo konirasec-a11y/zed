@@ -1,4 +1,25 @@
-use super::*;
+use crate::api::source::MdeUiSource;
+use crate::components::quick_tools::ParameterAction;
+use crate::components::quick_tools::QuickEditTarget;
+use crate::pages::mde_page::ElementViewPlacement;
+use crate::pages::mde_page::MdeWorkbenchItem;
+use crate::pages::mde_page::element_view_placement;
+use crate::view_model::explorer;
+use crate::view_model::selection;
+use crate::view_model::snapshot;
+use crate::view_model::snapshot::MdeSnapshot;
+use bellatrix_mde_cordis::ModelingElementKind;
+use bellatrix_mde_cordis::ModelingMemberKind;
+use bellatrix_mde_cordis::ModelingTool;
+use bellatrix_project::ProjectId;
+use gpui::AppContext;
+use gpui::Context;
+use gpui::IntoElement;
+use gpui::Point;
+use gpui::Window;
+use gpui::prelude::*;
+use ui::Clickable;
+use ui::LabelCommon;
 
 impl MdeWorkbenchItem {
     pub(crate) fn quick_edit_snapshot(
@@ -190,7 +211,7 @@ impl MdeWorkbenchItem {
         cx.notify();
     }
 
-    pub(super) fn reconcile_selection(
+    pub(crate) fn reconcile_selection(
         &mut self,
         section: &bellatrix_mde_cordis::projection::ModelingProjection,
     ) {
@@ -228,7 +249,7 @@ impl MdeWorkbenchItem {
         };
         cx.notify();
     }
-    pub(super) fn click_modeling_tool(
+    pub(crate) fn click_modeling_tool(
         &mut self,
         tool: ModelingTool,
         x: f64,
@@ -244,7 +265,7 @@ impl MdeWorkbenchItem {
             self.place_modeling_tool(tool, x, y, cx);
         }
     }
-    pub(super) fn place_modeling_tool(
+    pub(crate) fn place_modeling_tool(
         &mut self,
         tool: ModelingTool,
         x: f64,
@@ -262,7 +283,7 @@ impl MdeWorkbenchItem {
             }
         }
     }
-    fn create_interface_view(
+    pub(crate) fn create_interface_view(
         &mut self,
         tool: ModelingTool,
         x: f64,
@@ -348,9 +369,9 @@ impl MdeWorkbenchItem {
             self.presentation.cancel_tool();
         }
     }
-    pub(super) fn validate_explorer_drop(
+    pub(crate) fn validate_explorer_drop(
         &self,
-        drag: &hierarchy::ExplorerElementDrag,
+        drag: &crate::components::model_explorer::ExplorerElementDrag,
     ) -> Result<(), String> {
         if self.source.is_read_only() || self.source.is_presentation_suspended() {
             return Err("The active document is not editable".into());
@@ -395,7 +416,7 @@ impl MdeWorkbenchItem {
         Ok(())
     }
 
-    pub(super) fn submit_explorer_operation(
+    pub(crate) fn submit_explorer_operation(
         &mut self,
         project_id: &ProjectId,
         expected_revision: u64,
@@ -439,11 +460,11 @@ impl MdeWorkbenchItem {
         sent
     }
 
-    pub(super) fn validate_explorer_move(
+    pub(crate) fn validate_explorer_move(
         &self,
         project_id: &ProjectId,
         revision: u64,
-        target: &hierarchy::ExplorerMoveTarget,
+        target: &crate::components::model_explorer::ExplorerMoveTarget,
         parent_id: Option<&str>,
         parent_occurrence: Option<&bellatrix_mde_cordis::ViewOccurrence>,
     ) -> Result<(), String> {
@@ -458,8 +479,8 @@ impl MdeWorkbenchItem {
             return Err("The model changed; reopen the menu or drag the item again".into());
         }
         let subject = match target {
-            hierarchy::ExplorerMoveTarget::Element(id)
-            | hierarchy::ExplorerMoveTarget::Diagram(id) => id,
+            crate::components::model_explorer::ExplorerMoveTarget::Element(id)
+            | crate::components::model_explorer::ExplorerMoveTarget::Diagram(id) => id,
         };
         if snapshot.section.composed_subjects.contains(subject) {
             return Err("Document composition moves are not yet supported losslessly".into());
@@ -470,23 +491,26 @@ impl MdeWorkbenchItem {
                 subject,
                 parent_id,
                 parent_occurrence,
-                matches!(target, hierarchy::ExplorerMoveTarget::Diagram(_)),
+                matches!(
+                    target,
+                    crate::components::model_explorer::ExplorerMoveTarget::Diagram(_)
+                ),
             )
             .unwrap_or_else(|| Err(bellatrix_mde_cordis::MOVE_PREVIEW_PENDING.into()))
     }
 
-    pub(super) fn move_explorer_item(
+    pub(crate) fn move_explorer_item(
         &mut self,
         project_id: &ProjectId,
         revision: u64,
-        target: &hierarchy::ExplorerMoveTarget,
+        target: &crate::components::model_explorer::ExplorerMoveTarget,
         parent_id: Option<String>,
         parent_occurrence: Option<bellatrix_mde_cordis::ViewOccurrence>,
         cx: &mut Context<Self>,
     ) -> bool {
         let subject = match target {
-            hierarchy::ExplorerMoveTarget::Element(id)
-            | hierarchy::ExplorerMoveTarget::Diagram(id) => id,
+            crate::components::model_explorer::ExplorerMoveTarget::Element(id)
+            | crate::components::model_explorer::ExplorerMoveTarget::Diagram(id) => id,
         };
         if self
             .source
@@ -508,10 +532,10 @@ impl MdeWorkbenchItem {
             project_id,
             revision,
             |source| match target {
-                hierarchy::ExplorerMoveTarget::Element(element_id) => {
+                crate::components::model_explorer::ExplorerMoveTarget::Element(element_id) => {
                     source.set_owner(element_id, parent_id, revision)
                 }
-                hierarchy::ExplorerMoveTarget::Diagram(diagram_id) => {
+                crate::components::model_explorer::ExplorerMoveTarget::Diagram(diagram_id) => {
                     source.set_explorer_parent(diagram_id, parent_id, parent_occurrence, revision)
                 }
             },
@@ -519,9 +543,9 @@ impl MdeWorkbenchItem {
         )
     }
 
-    pub(super) fn validate_explorer_diagram_reparent(
+    pub(crate) fn validate_explorer_diagram_reparent(
         &self,
-        drag: &hierarchy::ExplorerDiagramDrag,
+        drag: &crate::components::model_explorer::ExplorerDiagramDrag,
         parent_id: Option<&str>,
         parent_occurrence: Option<&bellatrix_mde_cordis::ViewOccurrence>,
     ) -> Result<(), String> {
@@ -535,15 +559,17 @@ impl MdeWorkbenchItem {
         self.validate_explorer_move(
             &drag.project_id,
             drag.revision,
-            &hierarchy::ExplorerMoveTarget::Diagram(drag.diagram_id.clone()),
+            &crate::components::model_explorer::ExplorerMoveTarget::Diagram(
+                drag.diagram_id.clone(),
+            ),
             parent_id,
             parent_occurrence,
         )
     }
 
-    pub(super) fn validate_explorer_reparent(
+    pub(crate) fn validate_explorer_reparent(
         &self,
-        drag: &hierarchy::ExplorerElementDrag,
+        drag: &crate::components::model_explorer::ExplorerElementDrag,
         owner_id: &str,
     ) -> Result<(), String> {
         if self.source.is_read_only() || self.source.is_presentation_suspended() {
@@ -566,31 +592,35 @@ impl MdeWorkbenchItem {
         self.validate_explorer_move(
             &drag.project_id,
             drag.revision,
-            &hierarchy::ExplorerMoveTarget::Element(drag.element_id.clone()),
+            &crate::components::model_explorer::ExplorerMoveTarget::Element(
+                drag.element_id.clone(),
+            ),
             Some(owner_id),
             None,
         )
     }
 
-    pub(super) fn reparent_explorer_element(
+    pub(crate) fn reparent_explorer_element(
         &mut self,
-        drag: &hierarchy::ExplorerElementDrag,
+        drag: &crate::components::model_explorer::ExplorerElementDrag,
         owner_id: String,
         cx: &mut Context<Self>,
     ) -> bool {
         self.move_explorer_item(
             &drag.project_id,
             drag.revision,
-            &hierarchy::ExplorerMoveTarget::Element(drag.element_id.clone()),
+            &crate::components::model_explorer::ExplorerMoveTarget::Element(
+                drag.element_id.clone(),
+            ),
             Some(owner_id),
             None,
             cx,
         )
     }
 
-    pub(super) fn drop_explorer_element_on_diagram(
+    pub(crate) fn drop_explorer_element_on_diagram(
         &mut self,
-        drag: &hierarchy::ExplorerElementDrag,
+        drag: &crate::components::model_explorer::ExplorerElementDrag,
         diagram_id: &str,
         cx: &mut Context<Self>,
     ) {
@@ -657,9 +687,9 @@ impl MdeWorkbenchItem {
         cx.notify();
     }
 
-    pub(super) fn drop_explorer_element(
+    pub(crate) fn drop_explorer_element(
         &mut self,
-        drag: &hierarchy::ExplorerElementDrag,
+        drag: &crate::components::model_explorer::ExplorerElementDrag,
         position: (f64, f64),
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -703,7 +733,7 @@ impl MdeWorkbenchItem {
         self.show_element_in_active_diagram_at(element_id, None, None, None, window, cx);
     }
 
-    fn show_element_in_active_diagram_at(
+    pub(crate) fn show_element_in_active_diagram_at(
         &mut self,
         element_id: String,
         position: Option<(f64, f64)>,
@@ -755,7 +785,9 @@ impl MdeWorkbenchItem {
                         .all_views()
                         .find(|view| view.id == view_id)
                         .and_then(|view| {
-                            super::visual_draft_canvas::resolve_visual_center(&view.geometry)
+                            crate::components::visual_draft_canvas::resolve_visual_center(
+                                &view.geometry,
+                            )
                         })
                 {
                     // Reveal the existing occurrence at the drop point without moving its geometry.

@@ -1,6 +1,43 @@
-use super::*;
+use crate::assets::theme;
+use crate::assets::theme::WorkbenchPalette;
+use crate::components::canvas_interaction::CanvasGesture;
+use crate::components::canvas_interaction::PathHandle;
+use crate::components::quick_tools::quick_edit_for_element;
+use crate::elements::uml::UmlFigure;
+use crate::elements::uml::UmlLineSegment;
+use crate::pages::mde_page::MdeToolDrag;
+use crate::pages::mde_page::MdeWorkbenchItem;
+use crate::pages::mde_page::canvas_delete_action_allowed;
+use crate::pages::mde_page::canvas_model_position;
+use crate::view_model::canvas_presentation;
+use crate::view_model::selection;
+use crate::view_model::snapshot;
+use bellatrix_mde_cordis::Geometry;
+use bellatrix_mde_cordis::ModelingMemberKind;
+use bellatrix_mde_cordis::ModelingTool;
+use bellatrix_mde_cordis::PathSegment;
 use bellatrix_mde_cordis::presentation_contract::UmlNotation;
 use bellatrix_mde_cordis::projection::Contract;
+use gpui::AppContext;
+use gpui::Context;
+use gpui::DragMoveEvent;
+use gpui::IntoElement;
+use gpui::KeyDownEvent;
+use gpui::MouseButton;
+use gpui::MouseDownEvent;
+use gpui::MouseMoveEvent;
+use gpui::MouseUpEvent;
+use gpui::Pixels;
+use gpui::Point;
+use gpui::Render;
+use gpui::ScrollEvent;
+use gpui::Window;
+use gpui::div;
+use gpui::prelude::*;
+use gpui::px;
+use ui::Clickable;
+use ui::Label;
+use ui::LabelCommon;
 
 impl Render for MdeWorkbenchItem {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -256,7 +293,7 @@ impl Render for MdeWorkbenchItem {
                                     && let Some(relation) = relation
                                 {
                                     if let Some(controls) =
-                                        quick_edit_view::quick_edit_for_relationship(
+                                        crate::components::quick_tools::quick_edit_for_relationship(
                                             &snapshot.section,
                                             relation,
                                             cx.entity(),
@@ -1117,7 +1154,7 @@ impl Render for MdeWorkbenchItem {
             .track_focus(&self.focus_handle)
             .key_context("BellatrixMde")
             .on_action(
-                cx.listener(|item, _: &integration::RemoveFromDiagram, window, cx| {
+                cx.listener(|item, _: &crate::routes::workspace::RemoveFromDiagram, window, cx| {
                     if canvas_delete_action_allowed(
                         item.focus_handle.is_focused(window),
                         item.presentation.is_editing(),
@@ -1129,7 +1166,7 @@ impl Render for MdeWorkbenchItem {
                 }),
             )
             .on_action(
-                cx.listener(|item, _: &integration::DeleteFromModel, window, cx| {
+                cx.listener(|item, _: &crate::routes::workspace::DeleteFromModel, window, cx| {
                     if canvas_delete_action_allowed(
                         item.focus_handle.is_focused(window),
                         item.presentation.is_editing(),
@@ -1219,7 +1256,7 @@ impl Render for MdeWorkbenchItem {
                                             eprintln!("MDE diagram validation failed: {error}");
                                         }
                                         window.dispatch_action(
-                                            Box::new(panels::ShowMdeDiagnostics),
+                                            Box::new(crate::layouts::sidebar::ShowMdeDiagnostics),
                                             cx,
                                         );
                                     },
@@ -1352,13 +1389,13 @@ impl Render for MdeWorkbenchItem {
                         }
                     })
                     .can_drop(move |drag, _, cx| {
-                        if let Some(drag) = drag.downcast_ref::<hierarchy::ExplorerElementDrag>() {
+                        if let Some(drag) = drag.downcast_ref::<crate::components::model_explorer::ExplorerElementDrag>() {
                             return element_drop_filter.upgrade()
                                 .is_some_and(|owner| owner.read(cx).validate_explorer_drop(drag).is_ok());
                         }
                         drag.is::<MdeToolDrag>()
                     })
-                    .on_drop(move |drag: &hierarchy::ExplorerElementDrag, window, cx| {
+                    .on_drop(move |drag: &crate::components::model_explorer::ExplorerElementDrag, window, cx| {
                         let Some(origin) = element_drop_origin.get() else { return; };
                         let position = window.mouse_position();
                         if let Err(error) = element_drop_owner.update(cx, |item, cx| {
@@ -1430,7 +1467,7 @@ impl Render for MdeWorkbenchItem {
 }
 
 impl MdeWorkbenchItem {
-    fn preview_rectangle(
+    pub(crate) fn preview_rectangle(
         &self,
         section: &bellatrix_mde_cordis::projection::ModelingProjection,
         diagram: &bellatrix_mde_cordis::projection::Diagram,
@@ -1505,7 +1542,7 @@ impl MdeWorkbenchItem {
         Some((x, y, width, height))
     }
 
-    fn render_presentation_view(
+    pub(crate) fn render_presentation_view(
         &self,
         section: &bellatrix_mde_cordis::projection::ModelingProjection,
         diagram: &bellatrix_mde_cordis::projection::Diagram,
@@ -1721,7 +1758,7 @@ impl MdeWorkbenchItem {
 }
 
 impl MdeWorkbenchItem {
-    pub(super) fn path_preview_geometry(
+    pub(crate) fn path_preview_geometry(
         &self,
         view: &bellatrix_mde_cordis::projection::View,
     ) -> Geometry {
@@ -1743,7 +1780,7 @@ impl MdeWorkbenchItem {
             .clone()
     }
 
-    fn path_is_editable(&self, view: &bellatrix_mde_cordis::projection::View) -> bool {
+    pub(crate) fn path_is_editable(&self, view: &bellatrix_mde_cordis::projection::View) -> bool {
         if self.source.is_read_only() || view.relationship.is_none() {
             return false;
         }
@@ -1753,7 +1790,7 @@ impl MdeWorkbenchItem {
         !segments.is_empty()
     }
 
-    pub(super) fn start_path_edit(
+    pub(crate) fn start_path_edit(
         &mut self,
         diagram_id: String,
         view_id: String,
@@ -1810,7 +1847,7 @@ impl MdeWorkbenchItem {
         cx.notify();
     }
 
-    fn render_path_handles(
+    pub(crate) fn render_path_handles(
         &self,
         diagram_id: &str,
         view: &bellatrix_mde_cordis::projection::View,
@@ -1901,7 +1938,7 @@ impl MdeWorkbenchItem {
     }
 }
 
-pub(super) fn path_segment_at_position(
+pub(crate) fn path_segment_at_position(
     geometry: &Geometry,
     position: bellatrix_mde_cordis::Point,
     zoom: f32,
@@ -1991,7 +2028,7 @@ fn path_handle_positions(geometry: &Geometry) -> Vec<(PathHandle, bellatrix_mde_
     handles
 }
 
-pub(super) fn edited_path_geometry(
+pub(crate) fn edited_path_geometry(
     geometry: &Geometry,
     handle: PathHandle,
     dx: f64,
@@ -2104,7 +2141,7 @@ fn translate_path_vertex(segments: &mut [PathSegment], index: usize, dx: f64, dy
     }
 }
 
-pub(super) fn relationship_hit_test(
+pub(crate) fn relationship_hit_test(
     geometry: &Geometry,
     position: gpui::Point<gpui::Pixels>,
     origin: Option<(f64, f64)>,

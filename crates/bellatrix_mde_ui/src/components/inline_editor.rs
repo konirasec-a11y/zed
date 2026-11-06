@@ -1,7 +1,20 @@
-use super::*;
+use crate::pages::mde_page::MdeWorkbenchItem;
+use crate::view_model::canvas_presentation;
+use crate::view_model::inspector_drafts;
+use crate::view_model::selection;
+use crate::view_model::snapshot;
+use gpui::AppContext;
+use gpui::Context;
+use gpui::IntoElement;
+use gpui::Window;
+use gpui::prelude::*;
+use gpui::px;
+use ui::Clickable;
+use ui::LabelCommon;
+use ui_input::InputField;
 
 impl MdeWorkbenchItem {
-    fn inline_edit_content(
+    pub(crate) fn inline_edit_content(
         section: &bellatrix_mde_cordis::projection::ModelingProjection,
         id: &str,
     ) -> Option<(String, &'static str)> {
@@ -29,7 +42,7 @@ impl MdeWorkbenchItem {
         }
     }
 
-    pub(super) fn begin_inline_edit(
+    pub(crate) fn begin_inline_edit(
         &mut self,
         id: String,
         window: &mut Window,
@@ -96,7 +109,7 @@ impl MdeWorkbenchItem {
         text_editor.select_all(window, cx);
         cx.notify();
     }
-    pub(super) fn commit_inline_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn commit_inline_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.source.is_read_only() || self.selected_view_is_inspection_only() {
             return;
         }
@@ -232,7 +245,7 @@ impl MdeWorkbenchItem {
         self.focus_handle.focus(window, cx);
         cx.notify();
     }
-    pub(super) fn cancel_inline_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn cancel_inline_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.presentation.clear_edit();
         self.inline_editor = None;
         self.inline_draft = None;

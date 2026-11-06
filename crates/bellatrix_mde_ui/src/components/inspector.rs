@@ -1,21 +1,38 @@
 //! Native Zed controls driven by the Cordis inspector projection.
-use crate::pages::mde_page::{
-    MdeWorkbenchItem, WorkbenchPalette,
-    inspector_drafts::{DraftKey, DraftState},
-    panels::MdeRightPanel,
-    quick_edit_view::parameter_actions,
-};
-use bellatrix_mde_cordis::{
-    ElementInspector, InspectorProperty, InspectorReferenceChoice, PropertyEditor,
-};
+use crate::components::quick_tools::parameter_actions;
+use crate::layouts::sidebar::MdeRightPanel;
+use crate::pages::mde_page::MdeWorkbenchItem;
+use crate::pages::mde_page::WorkbenchPalette;
+use crate::view_model::inspector_drafts::DraftKey;
+use crate::view_model::inspector_drafts::DraftState;
+use bellatrix_mde_cordis::ElementInspector;
+use bellatrix_mde_cordis::InspectorProperty;
+use bellatrix_mde_cordis::InspectorReferenceChoice;
+use bellatrix_mde_cordis::PropertyEditor;
 use bellatrix_project::ProjectId;
-use gpui::{AnyElement, Context, Entity, Focusable, IntoElement, Window, div, prelude::*, px, svg};
+use gpui::AnyElement;
+use gpui::Context;
+use gpui::Entity;
+use gpui::Focusable;
+use gpui::IntoElement;
+use gpui::Window;
+use gpui::div;
+use gpui::prelude::*;
+use gpui::px;
+use gpui::svg;
 use serde_json::Value;
 use std::collections::HashMap;
-use ui::{
-    Button, Checkbox, ContextMenu, DropdownMenu, IconName, Label, ToggleState, Tooltip, prelude::*,
-};
-use ui_input::{ErasedEditorEvent, InputField};
+use ui::Button;
+use ui::Checkbox;
+use ui::ContextMenu;
+use ui::DropdownMenu;
+use ui::IconName;
+use ui::Label;
+use ui::ToggleState;
+use ui::Tooltip;
+use ui::prelude::*;
+use ui_input::ErasedEditorEvent;
+use ui_input::InputField;
 
 fn display(value: &Value) -> String {
     value
@@ -175,7 +192,7 @@ pub(crate) fn reconcile_inputs(
         cx.defer(move |cx| {
             if let Err(error) = owner.update(cx, |panel, cx| {
                 flush_property_edits(panel, &item, cx);
-                crate::pages::mde_page::style_editor::flush_style_edits(panel, &item, cx);
+                crate::components::style_editor::flush_style_edits(panel, &item, cx);
             }) {
                 eprintln!("MDE property queue refresh failed: {error}");
             }
@@ -366,7 +383,7 @@ pub(crate) fn flush_property_edits(
     cx: &mut Context<MdeRightPanel>,
 ) {
     if property_command_pending(panel)
-        || crate::pages::mde_page::style_editor::style_command_pending(panel)
+        || crate::components::style_editor::style_command_pending(panel)
     {
         return;
     }
@@ -515,7 +532,7 @@ pub(crate) fn flush_property_edits(
                             }
                         }
                         flush_property_edits(panel, &item, cx);
-                        crate::pages::mde_page::style_editor::flush_style_edits(panel, &item, cx);
+                        crate::components::style_editor::flush_style_edits(panel, &item, cx);
                         cx.notify();
                     }) {
                         eprintln!("MDE property completion refresh failed: {error}");
@@ -1027,9 +1044,7 @@ pub(crate) fn render_inspector(
                                     return;
                                 }
                                 if property_command_pending(panel)
-                                    || crate::pages::mde_page::style_editor::style_command_pending(
-                                        panel,
-                                    )
+                                    || crate::components::style_editor::style_command_pending(panel)
                                     || panel.property_drafts.iter().any(|(key, draft)| {
                                         key.project == project.as_str() && draft.state.queued
                                     })

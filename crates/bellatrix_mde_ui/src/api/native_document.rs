@@ -1,18 +1,40 @@
-use crate::pages::mde_page::{MdeUiSource, MdeWorkbenchItem};
-use crate::view_model::native_document_guard::{NativeBufferState, NativeDocumentGuard};
+use crate::pages::mde_page::MdeUiSource;
+use crate::pages::mde_page::MdeWorkbenchItem;
+use crate::view_model::native_document_guard::NativeBufferState;
+use crate::view_model::native_document_guard::NativeDocumentGuard;
 use bellatrix_project::ProjectDocument;
-use gpui::{
-    App, AppContext, Context, Entity, EntityId, EventEmitter, FocusHandle, Focusable,
-    PathPromptOptions, Subscription, Window, actions,
-};
-use language::{Buffer, BufferSnapshot, DiskState};
-use project::{DirectoryLister, ProjectPath};
-use std::{cell::Cell, future::Future, path::PathBuf, pin::Pin, rc::Rc, sync::Arc};
-use ui::{ContextMenu, DropdownMenu, DropdownStyle, prelude::*};
-use workspace::{
-    Workspace,
-    item::{Item, ItemBufferKind, ItemEvent, SaveOptions},
-};
+use gpui::App;
+use gpui::AppContext;
+use gpui::Context;
+use gpui::Entity;
+use gpui::EntityId;
+use gpui::EventEmitter;
+use gpui::FocusHandle;
+use gpui::Focusable;
+use gpui::PathPromptOptions;
+use gpui::Subscription;
+use gpui::Window;
+use gpui::actions;
+use language::Buffer;
+use language::BufferSnapshot;
+use language::DiskState;
+use project::DirectoryLister;
+use project::ProjectPath;
+use std::cell::Cell;
+use std::future::Future;
+use std::path::PathBuf;
+use std::pin::Pin;
+use std::rc::Rc;
+use std::sync::Arc;
+use ui::ContextMenu;
+use ui::DropdownMenu;
+use ui::DropdownStyle;
+use ui::prelude::*;
+use workspace::Workspace;
+use workspace::item::Item;
+use workspace::item::ItemBufferKind;
+use workspace::item::ItemEvent;
+use workspace::item::SaveOptions;
 
 type ImportFuture = Pin<Box<dyn Future<Output = Result<NativeDocumentLease, String>> + Send>>;
 type PrepareFuture =
@@ -169,7 +191,7 @@ fn prepare_preview_panels(
         }
     }
     let workbench = preview.read(cx).workbench.clone();
-    crate::pages::mde_page::panels::attach_panels(workspace, workbench, window, cx);
+    crate::layouts::sidebar::attach_panels(workspace, workbench, window, cx);
 }
 
 pub(crate) fn register_preview_action(

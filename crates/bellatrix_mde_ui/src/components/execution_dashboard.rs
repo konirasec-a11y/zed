@@ -1,13 +1,34 @@
 //! Native, bounded view of execution events emitted by the MDE runtime.
-use crate::pages::mde_page::{MdeWorkbenchItem, WorkbenchPalette};
-use bellatrix_mde_cordis::{ExecutionJournal, ExecutionJournalSnapshot};
-use gpui::{
-    App, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement, Render,
-    Subscription, Task, WeakEntity, Window, actions, div, prelude::*, px, relative,
-};
-use std::{sync::Arc, time::Duration};
-use ui::{CopyButton, IconButton, IconName, Label, prelude::*};
-use ui_input::{ErasedEditorEvent, InputField};
+use crate::pages::mde_page::MdeWorkbenchItem;
+use crate::pages::mde_page::WorkbenchPalette;
+use bellatrix_mde_cordis::ExecutionJournal;
+use bellatrix_mde_cordis::ExecutionJournalSnapshot;
+use gpui::App;
+use gpui::Context;
+use gpui::Entity;
+use gpui::FocusHandle;
+use gpui::Focusable;
+use gpui::InteractiveElement;
+use gpui::IntoElement;
+use gpui::Render;
+use gpui::Subscription;
+use gpui::Task;
+use gpui::WeakEntity;
+use gpui::Window;
+use gpui::actions;
+use gpui::div;
+use gpui::prelude::*;
+use gpui::px;
+use gpui::relative;
+use std::sync::Arc;
+use std::time::Duration;
+use ui::CopyButton;
+use ui::IconButton;
+use ui::IconName;
+use ui::Label;
+use ui::prelude::*;
+use ui_input::ErasedEditorEvent;
+use ui_input::InputField;
 
 actions!(bellatrix_mde, [ToggleMdeExecutionDashboard]);
 

@@ -1,10 +1,36 @@
 //! View-only notation uses the same canvas figures and styles without pretending to be UML.
-use super::*;
+use crate::assets::theme::WorkbenchPalette;
+use crate::components::canvas_interaction::CanvasGesture;
+use crate::elements::uml::UmlClassifier;
+use crate::elements::uml::UmlFigure;
+use crate::elements::uml::UmlLineSegment;
+use crate::elements::uml::UmlRelationGlyph;
+use crate::pages::mde_page::MdeWorkbenchItem;
+use crate::pages::mde_page::canvas_model_position;
+use crate::view_model::snapshot;
+use bellatrix_mde_cordis::Geometry;
+use bellatrix_mde_cordis::ModelingTool;
+use bellatrix_mde_cordis::PathSegment;
 use bellatrix_mde_cordis::presentation_contract::UmlNotation;
-pub(super) type CanvasOrigin = std::rc::Rc<std::cell::Cell<Option<(f64, f64)>>>;
+use gpui::AppContext;
+use gpui::Context;
+use gpui::IntoElement;
+use gpui::MouseButton;
+use gpui::MouseDownEvent;
+use gpui::Pixels;
+use gpui::Point;
+use gpui::Window;
+use gpui::div;
+use gpui::prelude::*;
+use gpui::px;
+use ui::Clickable;
+use ui::Label;
+use ui::LabelCommon;
+use ui_input::InputField;
+pub(crate) type CanvasOrigin = std::rc::Rc<std::cell::Cell<Option<(f64, f64)>>>;
 
 impl MdeWorkbenchItem {
-    pub(super) fn render_validation_mode(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(crate) fn render_validation_mode(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let owner = cx.weak_entity();
         ui::Button::new("mde-validation-mode", self.validation_mode_label()).on_click(
             move |_, _, cx| {
@@ -15,7 +41,7 @@ impl MdeWorkbenchItem {
         )
     }
 
-    pub(super) fn select_or_connect_edge(
+    pub(crate) fn select_or_connect_edge(
         &mut self,
         subject: String,
         view_id: String,
@@ -28,7 +54,7 @@ impl MdeWorkbenchItem {
         }
     }
 
-    pub(super) fn render_visual_draft(
+    pub(crate) fn render_visual_draft(
         &self,
         view: &bellatrix_mde_cordis::projection::View,
         diagram: &bellatrix_mde_cordis::projection::Diagram,
@@ -241,7 +267,7 @@ impl MdeWorkbenchItem {
                     MouseButton::Left,
                     move |event: &MouseDownEvent, window, cx| {
                         if hit_geometry.as_ref().is_some_and(|geometry| {
-                            !super::diagram_canvas::relationship_hit_test(
+                            !crate::layouts::body::relationship_hit_test(
                                 geometry,
                                 event.position,
                                 click_origin.get(),
@@ -285,7 +311,7 @@ impl MdeWorkbenchItem {
                                             zoom,
                                         );
                                         if let Some(handle) =
-                                            super::diagram_canvas::path_segment_at_position(
+                                            crate::layouts::body::path_segment_at_position(
                                                 geometry,
                                                 bellatrix_mde_cordis::Point { x, y },
                                                 zoom,
@@ -364,7 +390,7 @@ impl MdeWorkbenchItem {
 }
 
 impl MdeWorkbenchItem {
-    pub(super) fn begin_view_label_edit(
+    pub(crate) fn begin_view_label_edit(
         &mut self,
         view_id: String,
         window: &mut Window,
@@ -404,7 +430,7 @@ impl MdeWorkbenchItem {
         field.read(cx).editor().clone().select_all(window, cx);
         cx.notify();
     }
-    pub(super) fn commit_view_label(
+    pub(crate) fn commit_view_label(
         &mut self,
         target: &str,
         editor_id: gpui::EntityId,
@@ -494,7 +520,7 @@ impl MdeWorkbenchItem {
 }
 
 impl MdeWorkbenchItem {
-    pub(super) fn connect_view_at_pointer(
+    pub(crate) fn connect_view_at_pointer(
         &mut self,
         view_id: String,
         position: Point<Pixels>,
@@ -516,7 +542,7 @@ impl MdeWorkbenchItem {
         self.connect_relation_view(kind, view_id, point, cx);
     }
 }
-pub(super) fn resolve_message_anchor(
+pub(crate) fn resolve_message_anchor(
     _section: &bellatrix_mde_cordis::projection::ModelingProjection,
     diagram: &bellatrix_mde_cordis::projection::Diagram,
     view_id: &str,
@@ -545,7 +571,7 @@ pub(super) fn resolve_message_anchor(
     })
 }
 
-pub(super) fn resolve_visual_center(geometry: &Geometry) -> Option<bellatrix_mde_cordis::Point> {
+pub(crate) fn resolve_visual_center(geometry: &Geometry) -> Option<bellatrix_mde_cordis::Point> {
     use bellatrix_mde_cordis::Point as ModelPoint;
     match geometry {
         Geometry::Layout { .. } => None,

@@ -1,17 +1,34 @@
-use crate::pages::mde_page::property_editor::compact_row;
-use crate::pages::mde_page::{MdeWorkbenchItem, panels::MdeRightPanel};
-use crate::view_model::style_drafts::{
-    FIELDS, StyleEditState, StyleSubmission, field_error, style_value,
-};
-use bellatrix_mde_cordis::projection::{
-    InheritedStyleProperty, StyleInheritanceDiagnostic, StyleInheritanceSource,
-    StyleInheritanceStatus, View,
-};
-use bellatrix_mde_cordis::{RelationshipRouting, ViewOrder};
-use gpui::{AnyElement, Context, Entity, IntoElement, Window, div, prelude::*, px};
+use crate::components::inspector::compact_row;
+use crate::layouts::sidebar::MdeRightPanel;
+use crate::pages::mde_page::MdeWorkbenchItem;
+use crate::view_model::style_drafts::FIELDS;
+use crate::view_model::style_drafts::StyleEditState;
+use crate::view_model::style_drafts::StyleSubmission;
+use crate::view_model::style_drafts::field_error;
+use crate::view_model::style_drafts::style_value;
+use bellatrix_mde_cordis::RelationshipRouting;
+use bellatrix_mde_cordis::ViewOrder;
+use bellatrix_mde_cordis::projection::InheritedStyleProperty;
+use bellatrix_mde_cordis::projection::StyleInheritanceDiagnostic;
+use bellatrix_mde_cordis::projection::StyleInheritanceSource;
+use bellatrix_mde_cordis::projection::StyleInheritanceStatus;
+use bellatrix_mde_cordis::projection::View;
+use gpui::AnyElement;
+use gpui::Context;
+use gpui::Entity;
+use gpui::IntoElement;
+use gpui::Window;
+use gpui::div;
+use gpui::prelude::*;
+use gpui::px;
 use std::collections::HashMap;
-use ui::{Button, IconButton, Label, Tooltip, prelude::*};
-use ui_input::{ErasedEditorEvent, InputField};
+use ui::Button;
+use ui::IconButton;
+use ui::Label;
+use ui::Tooltip;
+use ui::prelude::*;
+use ui_input::ErasedEditorEvent;
+use ui_input::InputField;
 
 type Completion = tokio::sync::watch::Receiver<Option<Result<u64, String>>>;
 pub(crate) type StyleKey = (String, String, String);
@@ -105,7 +122,7 @@ fn target_is_active(
         && item_state.source().snapshot().ok().is_some_and(|snapshot| {
             snapshot.section.diagrams.iter().any(|diagram| {
                 diagram.id == key.1
-                    && super::selection::supports_view_style_editing(diagram, &key.2)
+                    && crate::view_model::selection::supports_view_style_editing(diagram, &key.2)
             })
         })
 }
@@ -179,7 +196,7 @@ pub(crate) fn reconcile_style_inputs(
                                 if let Some(draft) = panel.style_drafts.get_mut(&key) {
                                     draft.capture_inputs(Some(field), cx);
                                 }
-                                crate::pages::mde_page::property_editor::flush_property_edits(
+                                crate::components::inspector::flush_property_edits(
                                     panel, &item, cx,
                                 );
                                 flush_style_edits(panel, &item, cx);
@@ -215,7 +232,7 @@ pub(crate) fn reconcile_style_inputs(
         let item = item.clone();
         cx.defer(move |cx| {
             if let Err(error) = owner.update(cx, |panel, cx| {
-                crate::pages::mde_page::property_editor::flush_property_edits(panel, &item, cx);
+                crate::components::inspector::flush_property_edits(panel, &item, cx);
                 flush_style_edits(panel, &item, cx);
             }) {
                 eprintln!("MDE style synchronization failed: {error}");
@@ -239,7 +256,7 @@ pub(crate) fn flush_style_edits(
     if !panel.is_bound_to(item)
         || item.read(cx).source().is_read_only()
         || style_command_pending(panel)
-        || crate::pages::mde_page::property_editor::property_command_pending(panel)
+        || crate::components::inspector::property_command_pending(panel)
     {
         return;
     }
@@ -318,7 +335,7 @@ pub(crate) fn flush_style_edits(
             if let Some(draft) = panel.style_drafts.get_mut(&key) {
                 draft.acknowledge(&completion, cx);
             }
-            crate::pages::mde_page::property_editor::flush_property_edits(panel, &item, cx);
+            crate::components::inspector::flush_property_edits(panel, &item, cx);
             flush_style_edits(panel, &item, cx);
             cx.notify();
         }) {
@@ -592,7 +609,7 @@ pub(crate) fn render_styles(
         .is_some_and(|snapshot| {
             snapshot.section.diagrams.iter().any(|diagram| {
                 diagram.id == diagram_id
-                    && super::selection::supports_view_layout_editing(diagram, &view.id)
+                    && crate::view_model::selection::supports_view_layout_editing(diagram, &view.id)
             })
         });
     let key = (
@@ -1228,7 +1245,7 @@ fn routing_label(routing: Option<RelationshipRouting>) -> &'static str {
 }
 
 impl MdeWorkbenchItem {
-    fn submit_style_edit(
+    pub(crate) fn submit_style_edit(
         &mut self,
         key: &StyleKey,
         submission: &StyleSubmission,

@@ -1,16 +1,32 @@
 //! Authored timing samples are View presentation, not evaluated UML occurrences.
-use crate::pages::mde_page::{
-    MdeWorkbenchItem, inspector_drafts::DraftState, panels::MdeRightPanel,
-};
+use crate::layouts::sidebar::MdeRightPanel;
+use crate::pages::mde_page::MdeWorkbenchItem;
+use crate::view_model::inspector_drafts::DraftState;
+use bellatrix_mde_cordis::TimingMode;
+use bellatrix_mde_cordis::TimingPoint;
+use bellatrix_mde_cordis::TimingPresentation;
 use bellatrix_mde_cordis::projection::View;
-use bellatrix_mde_cordis::{TimingMode, TimingPoint, TimingPresentation};
-use gpui::{
-    AnyElement, Context, Entity, EntityId, Focusable, IntoElement, Subscription, Window, div,
-    prelude::*, px,
-};
+use gpui::AnyElement;
+use gpui::Context;
+use gpui::Entity;
+use gpui::EntityId;
+use gpui::Focusable;
+use gpui::IntoElement;
+use gpui::Subscription;
+use gpui::Window;
+use gpui::div;
+use gpui::prelude::*;
+use gpui::px;
 use std::collections::HashMap;
-use ui::{Button, Icon, IconName, IconSize, Label, Tooltip, prelude::*};
-use ui_input::{ErasedEditorEvent, InputField};
+use ui::Button;
+use ui::Icon;
+use ui::IconName;
+use ui::IconSize;
+use ui::Label;
+use ui::Tooltip;
+use ui::prelude::*;
+use ui_input::ErasedEditorEvent;
+use ui_input::InputField;
 
 type TimingKey = (String, String, String);
 type Completion = tokio::sync::watch::Receiver<Option<Result<u64, String>>>;
@@ -336,7 +352,7 @@ fn flush_timing_edits(
         }
     };
     if !snapshot.section.diagrams.iter().any(|diagram| {
-        diagram.id == key.1 && super::selection::supports_view_editing(diagram, &key.2)
+        diagram.id == key.1 && crate::view_model::selection::supports_view_editing(diagram, &key.2)
     }) {
         let error = format!(
             "Timing View {} is unavailable or inspection-only; admitted edits are preserved",

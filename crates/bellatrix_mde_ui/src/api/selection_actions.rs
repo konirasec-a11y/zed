@@ -1,4 +1,13 @@
-use super::*;
+use crate::pages::mde_page::MdeWorkbenchItem;
+use crate::view_model::selection;
+use crate::view_model::snapshot;
+use crate::view_model::workbench_state::SelectionChange;
+use gpui::AppContext;
+use gpui::Context;
+use gpui::IntoElement;
+use gpui::prelude::*;
+use ui::Clickable;
+use ui::LabelCommon;
 
 impl MdeWorkbenchItem {
     pub fn select_element(&mut self, id: String, cx: &mut Context<Self>) {
@@ -29,7 +38,7 @@ impl MdeWorkbenchItem {
         self.apply_selection_change(change, cx);
     }
 
-    pub(super) fn apply_selection_change(
+    pub(crate) fn apply_selection_change(
         &mut self,
         change: SelectionChange,
         cx: &mut Context<Self>,
@@ -44,7 +53,7 @@ impl MdeWorkbenchItem {
         }
     }
 
-    pub(super) fn select_view(&mut self, subject: String, view_id: String, cx: &mut Context<Self>) {
+    pub(crate) fn select_view(&mut self, subject: String, view_id: String, cx: &mut Context<Self>) {
         self.source.record_interaction(
             "selection.view",
             Some(&view_id),
@@ -108,7 +117,7 @@ impl MdeWorkbenchItem {
         cx.notify();
     }
 
-    pub(super) fn selected_view_is_inspection_only(&self) -> bool {
+    pub(crate) fn selected_view_is_inspection_only(&self) -> bool {
         let Some(view_id) = self.presentation.selected_view() else {
             return false;
         };

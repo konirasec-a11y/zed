@@ -1,12 +1,54 @@
-use super::*;
+use crate::components::pane_header::PaneHeader;
+use crate::components::toolbox::MdeLeftPanel;
+use crate::layouts::sidebar::MDE_LEFT_PRIORITY;
+use crate::layouts::sidebar::PanelState;
+use crate::pages::mde_page::MdeToolDrag;
+use crate::pages::mde_page::MdeWorkbenchItem;
+use crate::pages::mde_page::WorkbenchPalette;
+use crate::routes::workspace::OpenMdeSymbols;
+use crate::routes::workspace::OpenMdeWorkbench;
+use bellatrix_mde_cordis::ModelingElementKind;
+use bellatrix_mde_cordis::ModelingRelationKind;
+use bellatrix_mde_cordis::ModelingTool;
+use gpui::Action;
+use gpui::App;
+use gpui::Context;
+use gpui::Entity;
+use gpui::EventEmitter;
+use gpui::FocusHandle;
+use gpui::Focusable;
+use gpui::IntoElement;
+use gpui::MouseButton;
+use gpui::MouseDownEvent;
+use gpui::MouseMoveEvent;
+use gpui::MouseUpEvent;
+use gpui::Pixels;
+use gpui::Render;
+use gpui::Subscription;
+use gpui::Window;
+use gpui::div;
+use gpui::prelude::*;
+use gpui::px;
+use gpui::svg;
+use std::collections::HashSet;
+use ui::IconButton;
+use ui::IconName;
+use ui::Label;
+use ui::TreeViewItem;
+use ui::prelude::*;
+use ui_input::ErasedEditorEvent;
+use ui_input::InputField;
+use workspace::dock::DockPosition;
+use workspace::dock::Panel;
+use workspace::dock::PanelEvent;
 
 pub struct MdeLeftPanel {
-    pub(super) state: PanelState,
+    pub(crate) state: PanelState,
     diagrams_open: bool,
     toolbox_open: bool,
     search_open: bool,
     library_open: bool,
-    pub(super) search_input: Entity<InputField>,
+    pub(crate) search_input: Entity<InputField>,
     expanded_tool_groups: HashSet<usize>,
     _search_listener: Subscription,
 }
@@ -149,7 +191,7 @@ impl Render for MdeLeftPanel {
                         .when(active.as_deref() == Some(diagram_id.as_str()), |row| {
                             row.bg(palette.surface)
                         })
-                        .child(crate::pages::mde_page::hierarchy::explorer_diagram_icon(
+                        .child(crate::components::model_explorer::explorer_diagram_icon(
                             &diagram.uml_di_type,
                             &palette,
                         ))
@@ -640,7 +682,7 @@ impl Render for MdeLeftPanel {
     }
 }
 
-pub(super) fn tool_matches_query(label: &str, query: &str) -> bool {
+pub(crate) fn tool_matches_query(label: &str, query: &str) -> bool {
     label.to_lowercase().contains(&query.trim().to_lowercase())
 }
 
