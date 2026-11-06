@@ -1,8 +1,8 @@
 use crate::assets::icons::{IconCategory, uml_icon};
 use crate::elements::uml::{UmlClassifier, UmlFigure, UmlRelationGlyph};
-use bellatrix_mde_cordis::ModelingTool;
 use bellatrix_mde_cordis::presentation_contract::{FigurePresentation, RelationshipStyle};
 use bellatrix_mde_cordis::projection::SemanticIdentity;
+use bellatrix_mde_cordis::{ModelingMemberKind, ModelingTool, QuickEditIntent, UmlQuickCreate};
 use gpui::SharedString;
 
 #[derive(Clone, Copy)]
@@ -68,28 +68,42 @@ impl UmlVisualDefinition {
     }
 
     pub fn for_quick_action(id: &str) -> Option<Self> {
-        let name = match id {
-            "uml.add-parameter" => "Parameter",
-            "uml.add-attribute" => "Attribute",
-            "uml.add-operation" => "Operation",
-            "uml.add-reception" => "Reception",
-            "uml.add-note" => "Note",
-            "uml.add-constraint" => "Constraint",
-            "uml.add-subinterface" | "uml.add-superinterface" => "Interface",
-            "uml.add-subclass" | "uml.add-superclass" | "uml.add-realizing-class" => "Class",
-            "uml.add-template-parameter" => "TemplateParameter",
-            "uml.add-provided-interface" => {
-                return Some(Self::for_tool(ModelingTool::ProvidedInterface));
+        let name = match QuickEditIntent::from_id(id)? {
+            QuickEditIntent::AddMember(kind) => match kind {
+                ModelingMemberKind::Parameter => "Parameter",
+                ModelingMemberKind::Attribute => "Attribute",
+                ModelingMemberKind::Operation => "Operation",
+                ModelingMemberKind::Reception => "Reception",
+            },
+            QuickEditIntent::QuickCreate(action) => match action {
+                UmlQuickCreate::Note => "Note",
+                UmlQuickCreate::Constraint => "Constraint",
+                UmlQuickCreate::Subtype | UmlQuickCreate::Supertype => {
+                    // Routing shares the intent; the interface aliases retain their own icon.
+                    if matches!(id, "uml.add-subinterface" | "uml.add-superinterface") {
+                        "Interface"
+                    } else {
+                        "Class"
+                    }
+                }
+                UmlQuickCreate::RealizingClass => "Class",
+                UmlQuickCreate::TemplateParameter => "TemplateParameter",
+                UmlQuickCreate::ProvidedInterface => {
+                    return Some(Self::for_tool(ModelingTool::ProvidedInterface));
+                }
+                UmlQuickCreate::RequiredInterface => {
+                    return Some(Self::for_tool(ModelingTool::RequiredInterface));
+                }
+                UmlQuickCreate::AssociatedClass => "Association",
+                UmlQuickCreate::AggregatedClass => "Aggregation",
+                UmlQuickCreate::CompositedClass => "Composition",
+                UmlQuickCreate::Port => "Port",
+                UmlQuickCreate::Part => "Part",
+                UmlQuickCreate::Reception => return None,
+            },
+            QuickEditIntent::DeleteParameter | QuickEditIntent::MoveParameter { .. } => {
+                return None;
             }
-            "uml.add-required-interface" => {
-                return Some(Self::for_tool(ModelingTool::RequiredInterface));
-            }
-            "uml.add-associated-class" => "Association",
-            "uml.add-aggregated-class" => "Aggregation",
-            "uml.add-composited-class" => "Composition",
-            "uml.add-port" => "Port",
-            "uml.add-part" => "Part",
-            _ => return None,
         };
         Some(Self::for_kind("", name, false))
     }
