@@ -6,7 +6,6 @@ use gpui::AppContext;
 use gpui::Context;
 use gpui::Focusable;
 use gpui::Window;
-use gpui::prelude::*;
 use gpui::px;
 use ui_input::InputField;
 

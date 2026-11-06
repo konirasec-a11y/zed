@@ -704,7 +704,7 @@ impl PanelState {
 pub struct MdeRightPanel {
     pub(crate) state: PanelState,
     pub(crate) editing_id: Option<String>,
-    pub(crate) explorer_action: Option<ExplorerActionDraft>,
+    explorer_action: Option<ExplorerActionDraft>,
     pub(crate) property_drafts: HashMap<
         crate::view_model::inspector_drafts::DraftKey,
         crate::components::inspector::InspectorDraft,
@@ -1835,9 +1835,9 @@ enum BottomTab {
     Thumbnails,
 }
 pub struct MdeBottomPanel {
-    pub(crate) state: PanelState,
-    pub(crate) active: BottomTab,
-    pub(crate) execution: Entity<crate::components::execution_dashboard::MdeExecutionDashboard>,
+    state: PanelState,
+    active: BottomTab,
+    execution: Entity<crate::components::execution_dashboard::MdeExecutionDashboard>,
 }
 impl MdeBottomPanel {
     pub fn new(

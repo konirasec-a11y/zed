@@ -48,7 +48,7 @@ This first migration moves existing implementations without changing their Rust
 module identities or public exports. Header and navigation controls remain in
 `layout/body.rs`; Working Diagrams and panel composition remain in
 `layout/sidebar.rs`. Extracting those smaller components is still pending.
-Presentation-only drafts, selection and snapshots stay in `view-model/`; they
+Presentation-only drafts, selection and snapshots stay in `view_model/`; they
 are not an independent authoritative UML store. This directory migration does
 not claim that all command paths have already been normalized.
 
@@ -310,7 +310,7 @@ behavior diagrams still require their supported UMLDI contexts. Commands
 pass through Cordis and the kernel with the captured project revision. Rename
 changes the semantic name; Explorer occurrences show that name even when their
 canvas view has a separately authored label. Projection and menu capabilities
-live in view-model/explorer.rs, while panels and hierarchy render the controls.
+live in view_model/explorer.rs, while panels and hierarchy render the controls.
 
 When Add Diagram is invoked on a visual occurrence or an unpictured descendant,
 `hierarchy[diagram_id]` stores `parent_id` and an optional `occurrence` referencing

@@ -9,7 +9,6 @@ pub use crate::assets::theme::WorkbenchPalette;
 use crate::components::canvas_interaction::CanvasGesture;
 pub use crate::components::symbol_library::MdeSymbolLibraryItem;
 pub use crate::routes::workspace::register_mde_workspace;
-use crate::view_model::explorer;
 use crate::view_model::inspector_drafts;
 use crate::view_model::selection;
 pub use crate::view_model::snapshot::MdeSnapshot;
