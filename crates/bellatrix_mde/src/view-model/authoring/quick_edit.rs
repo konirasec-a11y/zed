@@ -1,33 +1,10 @@
 //! Shared action definitions with type-specific composition, independent of the renderer.
 use crate::UmlType;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum QuickEditControl {
-    Input,
-    Visibility,
-    Button,
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum QuickEditAvailability {
-    Implemented,
-    NeedsDomainContract,
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum QuickEditSide {
-    Main,
-    Left,
-    Right,
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct QuickEditAction {
-    pub id: &'static str,
-    pub title: &'static str,
-    pub control: QuickEditControl,
-    pub side: QuickEditSide,
-    pub row: u8,
-    pub availability: QuickEditAvailability,
-    pub shortcut: Option<&'static str>,
-}
+pub use bellatrix_mde_contracts::protocol::inspector::{
+    QuickEditAction, QuickEditAvailability, QuickEditControl, QuickEditSide,
+};
+
 use QuickEditAvailability::{Implemented as Ready, NeedsDomainContract as Pending};
 use QuickEditControl::{Button, Input, Visibility};
 use QuickEditSide::{Left, Main, Right};

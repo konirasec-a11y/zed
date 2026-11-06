@@ -72,30 +72,6 @@ pub(crate) fn project_inspector(
 
 pub(crate) fn project_quick_actions(kind: &str) -> Vec<QuickEditAction> {
     crate::quick_edit_for(kind)
-        .into_iter()
-        .map(|action| QuickEditAction {
-            id: action.id,
-            title: action.title,
-            control: match action.control {
-                crate::QuickEditControl::Input => QuickEditControl::Input,
-                crate::QuickEditControl::Visibility => QuickEditControl::Visibility,
-                crate::QuickEditControl::Button => QuickEditControl::Button,
-            },
-            side: match action.side {
-                crate::QuickEditSide::Main => QuickEditSide::Main,
-                crate::QuickEditSide::Left => QuickEditSide::Left,
-                crate::QuickEditSide::Right => QuickEditSide::Right,
-            },
-            row: action.row,
-            availability: match action.availability {
-                crate::QuickEditAvailability::Implemented => QuickEditAvailability::Implemented,
-                crate::QuickEditAvailability::NeedsDomainContract => {
-                    QuickEditAvailability::NeedsDomainContract
-                }
-            },
-            shortcut: action.shortcut,
-        })
-        .collect()
 }
 
 fn project_property(property: crate::InspectorProperty) -> InspectorProperty {
