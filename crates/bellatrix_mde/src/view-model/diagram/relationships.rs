@@ -821,67 +821,30 @@ pub fn relation_kind_for_creation(
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct QuickRelationRule {
-    pub kind: &'static str,
+    pub kind: ModelingRelationKind,
     pub child_is_source: bool,
-    pub aggregation: Option<&'static str>,
 }
 pub fn quick_relation_rule(action: crate::UmlQuickCreate) -> Option<QuickRelationRule> {
     use crate::UmlQuickCreate as A;
-    let rule = match action {
+    use ModelingRelationKind as R;
+    let (kind, child_is_source) = match action {
         // These drawing kinds project reference slots, not UML Relationship contracts.
-        A::Note => QuickRelationRule {
-            kind: "uml.note_link",
-            child_is_source: false,
-            aggregation: None,
-        },
-        A::Constraint => QuickRelationRule {
-            kind: "uml.constraint_link",
-            child_is_source: true,
-            aggregation: None,
-        },
-        A::Subtype => QuickRelationRule {
-            kind: "uml.generalization",
-            child_is_source: true,
-            aggregation: None,
-        },
-        A::Supertype => QuickRelationRule {
-            kind: "uml.generalization",
-            child_is_source: false,
-            aggregation: None,
-        },
-        A::RealizingClass => QuickRelationRule {
-            kind: "uml.interface_realization",
-            child_is_source: true,
-            aggregation: None,
-        },
-        A::ProvidedInterface => QuickRelationRule {
-            kind: "uml.interface_realization",
-            child_is_source: false,
-            aggregation: None,
-        },
-        A::RequiredInterface => QuickRelationRule {
-            kind: "uml.usage",
-            child_is_source: false,
-            aggregation: None,
-        },
-        A::AssociatedClass => QuickRelationRule {
-            kind: "uml.association",
-            child_is_source: false,
-            aggregation: None,
-        },
-        A::AggregatedClass => QuickRelationRule {
-            kind: "uml.association",
-            child_is_source: false,
-            aggregation: Some("shared"),
-        },
-        A::CompositedClass => QuickRelationRule {
-            kind: "uml.association",
-            child_is_source: false,
-            aggregation: Some("composite"),
-        },
+        A::Note => (R::NoteLink, false),
+        A::Constraint => (R::ConstraintLink, true),
+        A::Subtype => (R::Generalization, true),
+        A::Supertype => (R::Generalization, false),
+        A::RealizingClass => (R::InterfaceRealization, true),
+        A::ProvidedInterface => (R::InterfaceRealization, false),
+        A::RequiredInterface => (R::Usage, false),
+        A::AssociatedClass => (R::Association, false),
+        A::AggregatedClass => (R::Aggregation, false),
+        A::CompositedClass => (R::Composition, false),
         _ => return None,
     };
-    Some(rule)
+    Some(QuickRelationRule {
+        kind,
+        child_is_source,
+    })
 }
 
 #[cfg(test)]

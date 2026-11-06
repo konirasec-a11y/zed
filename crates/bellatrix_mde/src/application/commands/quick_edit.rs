@@ -179,6 +179,7 @@ pub(super) fn apply(
     };
     let rule = quick_relation_rule(action)
         .ok_or("Quick Edit action does not create a graph relationship")?;
+    let (semantic_kind, aggregation) = crate::relation_kind_for_creation(rule.kind);
     let new_id = fresh_id(section, "node", revision, project_id)?;
     let new_view_id = fresh_id(section, "view", revision, project_id)?;
     let annotation_link = match action {
@@ -364,26 +365,13 @@ pub(super) fn apply(
         source_view_id: Some(source_view_id),
         target_view_id: Some(target_view_id),
     };
-    let relation_kind = match action {
-        UmlQuickCreate::Subtype | UmlQuickCreate::Supertype => {
-            Some(super::ModelingRelationKind::Generalization)
-        }
-        UmlQuickCreate::RealizingClass | UmlQuickCreate::ProvidedInterface => {
-            Some(super::ModelingRelationKind::InterfaceRealization)
-        }
-        UmlQuickCreate::RequiredInterface => Some(super::ModelingRelationKind::Usage),
-        UmlQuickCreate::AssociatedClass => Some(super::ModelingRelationKind::Association),
-        UmlQuickCreate::AggregatedClass => Some(super::ModelingRelationKind::Aggregation),
-        UmlQuickCreate::CompositedClass => Some(super::ModelingRelationKind::Composition),
-        _ => None,
-    };
-    if let Some(kind) = relation_kind {
+    if !rule.kind.is_visual_only() {
         if canonical_kind.is_none()
             && let Some(owner_id) = &owner_id
         {
             crate::uml::root::set_owner(section, project_id, &new_id, owner_id)?;
         }
-        let relation_owner = if matches!(rule.kind, "uml.association" | "uml.usage") {
+        let relation_owner = if matches!(semantic_kind, "uml.association" | "uml.usage") {
             owner_id.as_deref()
         } else {
             None
@@ -391,7 +379,7 @@ pub(super) fn apply(
         return super::create_relation(
             section,
             diagram_id,
-            kind,
+            rule.kind,
             source,
             target,
             relation_owner,
@@ -403,18 +391,18 @@ pub(super) fn apply(
     let geometry =
         crate::relationships::route_at_views(section, diagram_id, source, target, &endpoints)?;
     let mut properties = std::collections::BTreeMap::new();
-    if rule.kind == "uml.interface_realization" {
+    if semantic_kind == "uml.interface_realization" {
         // This composite role subsets ownedElement, not Namespace::ownedMember.
         properties.insert("visibility".into(), serde_json::Value::Null);
     }
-    if let Some(aggregation) = rule.aggregation {
+    if let Some(aggregation) = aggregation {
         properties.insert("end1Aggregation".into(), serde_json::json!(aggregation));
     }
     section
         .relations
         .push(annotation_link.unwrap_or_else(|| Relation {
             id: relation_id.clone(),
-            kind: rule.kind.into(),
+            kind: semantic_kind.into(),
             from: source.into(),
             to: target.into(),
             properties,
@@ -443,7 +431,7 @@ pub(super) fn apply(
         });
     if let Some(owner_id) = owner_id {
         crate::uml::root::set_owner(section, project_id, &new_id, &owner_id)?;
-        if matches!(rule.kind, "uml.association" | "uml.usage") {
+        if matches!(semantic_kind, "uml.association" | "uml.usage") {
             crate::uml::root::set_owner(section, project_id, &relation_id, &owner_id)?;
         }
     }

@@ -10,7 +10,7 @@ use bellatrix_mde_contracts::{
         inspector::{PropertyEditor, QuickEditAvailability, QuickEditControl, QuickEditIntent},
         projection::ModelingProjection,
     },
-    ruml::{Contract, class::Class},
+    ruml::{Contract, aggregation_kind::AggregationKind, class::Class},
 };
 use serde_json::json;
 use std::{collections::BTreeSet, error::Error};
@@ -499,6 +499,68 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
         style: original_style,
     })?;
     reopen_both_formats(&flow.document, &flow.section()?)?;
+
+    for (action_id, aggregation) in [
+        ("uml.add-associated-class", AggregationKind::None),
+        ("uml.add-aggregated-class", AggregationKind::Shared),
+        ("uml.add-composited-class", AggregationKind::Composite),
+    ] {
+        let mut quick_flow = NativeAuthoring {
+            document: flow.document.clone(),
+            revision: flow.revision,
+        };
+        let QuickEditIntent::QuickCreate(action) = quick_flow.quick_intent(&invoice, action_id)?
+        else {
+            return Err("association quick action must resolve to quick creation".into());
+        };
+        let association_id = quick_flow.create(
+            Command::QuickEdit {
+                diagram_id: "classes".into(),
+                element_id: invoice.clone(),
+                view_id: Some(invoice_view.clone()),
+                action,
+            },
+            "Association",
+        )?;
+        let section = quick_flow.section()?;
+        let Contract::Association(association) = contract(&section, &association_id)? else {
+            return Err("association quick action must retain an Association contract".into());
+        };
+        let [source, target] = association.member_end.as_slice() else {
+            return Err("association quick action must retain two member ends".into());
+        };
+        let (Contract::Property(source), Contract::Property(target)) =
+            (contract(&section, source)?, contract(&section, target)?)
+        else {
+            return Err("association quick action must persist Property ends".into());
+        };
+        assert_eq!(source.type_.as_deref(), Some(invoice.as_str()));
+        assert_eq!(source.aggregation, AggregationKind::None);
+        assert_eq!(target.aggregation, aggregation);
+        let child_id = target
+            .type_
+            .as_deref()
+            .ok_or("missing quick-created end type")?;
+        class(&section, child_id)?;
+        let projection = quick_flow.projection()?;
+        let inspector = projection
+            .inspect_element(&target.id)
+            .ok_or("quick-created member end must be inspectable")?;
+        let aggregation_property = inspector
+            .properties
+            .iter()
+            .find(|property| property.path == "properties.aggregation")
+            .ok_or("quick-created member end must expose aggregation")?;
+        assert_eq!(
+            aggregation_property.value,
+            json!(match aggregation {
+                AggregationKind::None => "none",
+                AggregationKind::Shared => "shared",
+                AggregationKind::Composite => "composite",
+            })
+        );
+        reopen_both_formats(&quick_flow.document, &section)?;
+    }
 
     let nested = flow.create(
         Command::CreateElement {
