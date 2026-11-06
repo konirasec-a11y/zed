@@ -177,15 +177,8 @@ fn edit(command: MdeUiCommand) -> Result<(ProjectId, u64, Command, Option<Comple
             request,
             completion,
         } => {
-            return Ok((
-                request.project_id,
-                request.expected_revision,
-                Command::SetViewTiming {
-                    view_id: request.view_id,
-                    timing: request.timing,
-                },
-                Some(completion),
-            ));
+            let (id, revision, command) = crate::view_style::set_view_timing_command(request);
+            return Ok((id, revision, command, Some(completion)));
         }
         MdeUiCommand::SetViewStyleTracked {
             request,
@@ -203,16 +196,8 @@ fn edit(command: MdeUiCommand) -> Result<(ProjectId, u64, Command, Option<Comple
             request,
             completion,
         } => {
-            return Ok((
-                request.project_id,
-                request.expected_revision,
-                Command::ReorderView {
-                    diagram_id: request.diagram_id,
-                    view_id: request.view_id,
-                    order: request.order,
-                },
-                Some(completion),
-            ));
+            let (id, revision, command) = crate::view_style::reorder_view_command(request);
+            return Ok((id, revision, command, Some(completion)));
         }
         MdeUiCommand::SetPropertyTracked {
             request,
@@ -221,41 +206,12 @@ fn edit(command: MdeUiCommand) -> Result<(ProjectId, u64, Command, Option<Comple
         command => (command, None),
     };
     let (id, revision, command) = match command {
-        MdeUiCommand::SetViewLabel(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::SetViewLabel {
-                view_id: request.view_id,
-                label: request.label,
-            },
-        ),
-        MdeUiCommand::SetViewStyle(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::SetViewStyle {
-                diagram_id: request.diagram_id,
-                view_id: request.view_id,
-                style: request.style,
-            },
-        ),
-        MdeUiCommand::SetViewPath(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::SetViewPath {
-                diagram_id: request.diagram_id,
-                view_id: request.view_id,
-                geometry: request.geometry,
-            },
-        ),
-        MdeUiCommand::SetViewRouting(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::SetViewRouting {
-                diagram_id: request.diagram_id,
-                view_id: request.view_id,
-                routing: request.routing,
-            },
-        ),
+        MdeUiCommand::SetViewLabel(request) => crate::view_style::set_view_label_command(request),
+        MdeUiCommand::SetViewStyle(request) => crate::view_style::set_view_style_command(request),
+        MdeUiCommand::SetViewPath(request) => crate::view_style::set_view_path_command(request),
+        MdeUiCommand::SetViewRouting(request) => {
+            crate::view_style::set_view_routing_command(request)
+        }
         MdeUiCommand::CreateDiagram(request) => (
             request.project_id,
             request.expected_revision,

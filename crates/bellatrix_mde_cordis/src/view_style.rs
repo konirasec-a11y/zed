@@ -5,9 +5,91 @@ pub use bellatrix_mde_contracts::events::{
     ModelingSetViewRouting, ModelingSetViewRoutingRequested, ModelingSetViewStyle,
     ModelingSetViewStyleRequested, ModelingSetViewTiming, ModelingSetViewTimingRequested,
 };
-use bellatrix_project::ProjectService;
+use bellatrix_project::{ProjectId, ProjectService};
 use cordis::{Context, event::responder};
 use std::{convert::Infallible, io, sync::Arc};
+
+pub(crate) fn set_view_label_command(
+    request: ModelingSetViewLabelRequested,
+) -> (ProjectId, u64, Command) {
+    (
+        request.project_id,
+        request.expected_revision,
+        Command::SetViewLabel {
+            view_id: request.view_id,
+            label: request.label,
+        },
+    )
+}
+
+pub(crate) fn set_view_timing_command(
+    request: ModelingSetViewTimingRequested,
+) -> (ProjectId, u64, Command) {
+    (
+        request.project_id,
+        request.expected_revision,
+        Command::SetViewTiming {
+            view_id: request.view_id,
+            timing: request.timing,
+        },
+    )
+}
+
+pub(crate) fn set_view_style_command(
+    request: ModelingSetViewStyleRequested,
+) -> (ProjectId, u64, Command) {
+    (
+        request.project_id,
+        request.expected_revision,
+        Command::SetViewStyle {
+            diagram_id: request.diagram_id,
+            view_id: request.view_id,
+            style: request.style,
+        },
+    )
+}
+
+pub(crate) fn set_view_path_command(
+    request: ModelingSetViewPathRequested,
+) -> (ProjectId, u64, Command) {
+    (
+        request.project_id,
+        request.expected_revision,
+        Command::SetViewPath {
+            diagram_id: request.diagram_id,
+            view_id: request.view_id,
+            geometry: request.geometry,
+        },
+    )
+}
+
+pub(crate) fn set_view_routing_command(
+    request: ModelingSetViewRoutingRequested,
+) -> (ProjectId, u64, Command) {
+    (
+        request.project_id,
+        request.expected_revision,
+        Command::SetViewRouting {
+            diagram_id: request.diagram_id,
+            view_id: request.view_id,
+            routing: request.routing,
+        },
+    )
+}
+
+pub(crate) fn reorder_view_command(
+    request: ModelingReorderViewRequested,
+) -> (ProjectId, u64, Command) {
+    (
+        request.project_id,
+        request.expected_revision,
+        Command::ReorderView {
+            diagram_id: request.diagram_id,
+            view_id: request.view_id,
+            order: request.order,
+        },
+    )
+}
 
 pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Result<(), io::Error> {
     let label_projects = Arc::clone(&projects);
@@ -16,15 +98,13 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
             move |context: Context, request: ModelingSetViewLabelRequested| {
                 let projects = Arc::clone(&label_projects);
                 async move {
+                    let (project_id, expected_revision, command) = set_view_label_command(request);
                     let result = crate::mutation::execute(
                         &context,
                         &projects,
-                        request.project_id,
-                        request.expected_revision,
-                        Command::SetViewLabel {
-                            view_id: request.view_id,
-                            label: request.label,
-                        },
+                        project_id,
+                        expected_revision,
+                        command,
                     )
                     .await;
                     Ok::<_, Infallible>(Some(result))
@@ -38,16 +118,13 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
             move |context: Context, request: ModelingSetViewTimingRequested| {
                 let projects = Arc::clone(&service);
                 async move {
-                    let timing = request.timing;
+                    let (project_id, expected_revision, command) = set_view_timing_command(request);
                     let result = crate::mutation::execute(
                         &context,
                         &projects,
-                        request.project_id,
-                        request.expected_revision,
-                        Command::SetViewTiming {
-                            view_id: request.view_id,
-                            timing,
-                        },
+                        project_id,
+                        expected_revision,
+                        command,
                     )
                     .await;
                     Ok::<_, Infallible>(Some(result))
@@ -61,17 +138,13 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
             move |context: Context, request: ModelingSetViewStyleRequested| {
                 let projects = Arc::clone(&service);
                 async move {
-                    let style = request.style;
+                    let (project_id, expected_revision, command) = set_view_style_command(request);
                     let result = crate::mutation::execute(
                         &context,
                         &projects,
-                        request.project_id,
-                        request.expected_revision,
-                        Command::SetViewStyle {
-                            diagram_id: request.diagram_id,
-                            view_id: request.view_id,
-                            style,
-                        },
+                        project_id,
+                        expected_revision,
+                        command,
                     )
                     .await;
                     Ok::<_, Infallible>(Some(result))
@@ -85,16 +158,13 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
             move |context: Context, request: ModelingSetViewPathRequested| {
                 let projects = Arc::clone(&service);
                 async move {
+                    let (project_id, expected_revision, command) = set_view_path_command(request);
                     let result = crate::mutation::execute(
                         &context,
                         &projects,
-                        request.project_id,
-                        request.expected_revision,
-                        Command::SetViewPath {
-                            diagram_id: request.diagram_id,
-                            view_id: request.view_id,
-                            geometry: request.geometry,
-                        },
+                        project_id,
+                        expected_revision,
+                        command,
                     )
                     .await;
                     Ok::<_, Infallible>(Some(result))
@@ -108,17 +178,14 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
             move |context: Context, request: ModelingSetViewRoutingRequested| {
                 let projects = Arc::clone(&service);
                 async move {
-                    let routing = request.routing;
+                    let (project_id, expected_revision, command) =
+                        set_view_routing_command(request);
                     let result = crate::mutation::execute(
                         &context,
                         &projects,
-                        request.project_id,
-                        request.expected_revision,
-                        Command::SetViewRouting {
-                            diagram_id: request.diagram_id,
-                            view_id: request.view_id,
-                            routing,
-                        },
+                        project_id,
+                        expected_revision,
+                        command,
                     )
                     .await;
                     Ok::<_, Infallible>(Some(result))
@@ -132,16 +199,13 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
             move |context: Context, request: ModelingReorderViewRequested| {
                 let projects = Arc::clone(&service);
                 async move {
+                    let (project_id, expected_revision, command) = reorder_view_command(request);
                     let result = crate::mutation::execute(
                         &context,
                         &projects,
-                        request.project_id,
-                        request.expected_revision,
-                        Command::ReorderView {
-                            diagram_id: request.diagram_id,
-                            view_id: request.view_id,
-                            order: request.order,
-                        },
+                        project_id,
+                        expected_revision,
+                        command,
                     )
                     .await;
                     Ok::<_, Infallible>(Some(result))
