@@ -534,7 +534,7 @@ async fn mdj_interchange_rejects_extra_sections_without_restricting_native_docum
     Ok(())
 }
 
-async fn dispatch_creation(
+async fn dispatch_authoring(
     context: &Context,
     bridge: &MdeUiBridge,
     through_ui: bool,
@@ -597,7 +597,35 @@ async fn dispatch_creation(
                     .await?,
             )?;
         }
-        _ => return Err("unsupported creation scenario command".into()),
+        MdeUiCommand::QuickEdit(request) => {
+            answer(
+                context
+                    .query::<ModelingQuickEdit>(Routing::Unscoped, request)
+                    .await?,
+            )?;
+        }
+        MdeUiCommand::SetProperty(request) => {
+            answer(
+                context
+                    .query::<ModelingSetProperty>(Routing::Unscoped, request)
+                    .await?,
+            )?;
+        }
+        MdeUiCommand::AddMember(request) => {
+            answer(
+                context
+                    .query::<ModelingAddMember>(Routing::Unscoped, request)
+                    .await?,
+            )?;
+        }
+        MdeUiCommand::MoveParameter(request) => {
+            answer(
+                context
+                    .query::<ModelingMoveParameter>(Routing::Unscoped, request)
+                    .await?,
+            )?;
+        }
+        _ => return Err("unsupported authoring scenario command".into()),
     }
     Ok(())
 }
@@ -645,7 +673,7 @@ async fn class_authoring_matches_between_cordis_events_and_ui_session() -> FlowR
             y: 100.0,
             expected_revision: 0,
         };
-        dispatch_creation(
+        dispatch_authoring(
             &context,
             &bridge,
             through_ui,
@@ -658,14 +686,14 @@ async fn class_authoring_matches_between_cordis_events_and_ui_session() -> FlowR
             expected_revision: 1,
             ..first.clone()
         };
-        dispatch_creation(
+        dispatch_authoring(
             &context,
             &bridge,
             through_ui,
             MdeUiCommand::CreateElementOrVisualDraft(second),
         )
         .await?;
-        dispatch_creation(
+        dispatch_authoring(
             &context,
             &bridge,
             through_ui,
@@ -723,14 +751,14 @@ async fn class_authoring_matches_between_cordis_events_and_ui_session() -> FlowR
             to: target.clone(),
             expected_revision: 3,
         };
-        dispatch_creation(
+        dispatch_authoring(
             &context,
             &bridge,
             through_ui,
             MdeUiCommand::CreateRelation(relationship.clone()),
         )
         .await?;
-        dispatch_creation(
+        dispatch_authoring(
             &context,
             &bridge,
             through_ui,
@@ -742,7 +770,7 @@ async fn class_authoring_matches_between_cordis_events_and_ui_session() -> FlowR
             }),
         )
         .await?;
-        dispatch_creation(
+        dispatch_authoring(
             &context,
             &bridge,
             through_ui,
@@ -761,8 +789,105 @@ async fn class_authoring_matches_between_cordis_events_and_ui_session() -> FlowR
             ),
         )
         .await?;
+        dispatch_authoring(
+            &context,
+            &bridge,
+            through_ui,
+            MdeUiCommand::SetProperty(ModelingSetPropertyRequested {
+                project_id: id.clone(),
+                element_id: invoice.clone(),
+                path: "name".into(),
+                value: json!("Invoice edited"),
+                expected_revision: 6,
+            }),
+        )
+        .await?;
+        dispatch_authoring(
+            &context,
+            &bridge,
+            through_ui,
+            MdeUiCommand::AddMember(ModelingAddMemberRequested {
+                project_id: id.clone(),
+                owner_id: invoice.clone(),
+                kind: ModelingMemberKind::Operation,
+                expected_revision: 7,
+            }),
+        )
+        .await?;
+        let operation_section: bellatrix_mde_contracts::ModelingSection = serde_json::from_value(
+            service
+                .snapshot(&id)?
+                .section(MODELING_NAMESPACE)
+                .ok_or("missing operation section")?
+                .clone(),
+        )?;
+        let operation_id = operation_section
+            .registry
+            .entries()
+            .values()
+            .find(|entry| entry.type_name() == "Operation")
+            .ok_or("added Operation missing")?
+            .id
+            .clone();
+        for expected_revision in [8, 9] {
+            dispatch_authoring(
+                &context,
+                &bridge,
+                through_ui,
+                MdeUiCommand::AddMember(ModelingAddMemberRequested {
+                    project_id: id.clone(),
+                    owner_id: operation_id.clone(),
+                    kind: ModelingMemberKind::Parameter,
+                    expected_revision,
+                }),
+            )
+            .await?;
+        }
+        let parameter_section: bellatrix_mde_contracts::ModelingSection = serde_json::from_value(
+            service
+                .snapshot(&id)?
+                .section(MODELING_NAMESPACE)
+                .ok_or("missing parameter section")?
+                .clone(),
+        )?;
+        let Some(bellatrix_mde_contracts::ruml::Contract::Operation(operation)) = parameter_section
+            .registry
+            .get_entry(&operation_id)
+            .map(|entry| &entry.contract)
+        else {
+            return Err("parameter owner must remain an Operation".into());
+        };
+        let [first_parameter, second_parameter] = operation.owned_parameter.as_slice() else {
+            return Err("Operation must own two Parameters".into());
+        };
+        dispatch_authoring(
+            &context,
+            &bridge,
+            through_ui,
+            MdeUiCommand::MoveParameter(ModelingMoveParameterRequested {
+                project_id: id.clone(),
+                parameter_id: second_parameter.clone(),
+                up: true,
+                expected_revision: 10,
+            }),
+        )
+        .await?;
+        dispatch_authoring(
+            &context,
+            &bridge,
+            through_ui,
+            MdeUiCommand::QuickEdit(ModelingQuickEditRequested {
+                project_id: id.clone(),
+                diagram_id: "classes".into(),
+                element_id: invoice.clone(),
+                view_id: Some(view_id(&invoice)?),
+                action: UmlQuickCreate::Note,
+                expected_revision: 11,
+            }),
+        )
+        .await?;
         let authored = service.snapshot(&id)?;
-        assert_eq!(authored.revision(), 6);
+        assert_eq!(authored.revision(), 12);
         let section = authored
             .section(MODELING_NAMESPACE)
             .ok_or("missing authored section")?;
@@ -774,6 +899,9 @@ async fn class_authoring_matches_between_cordis_events_and_ui_session() -> FlowR
             ("Association", 1),
             ("Generalization", 1),
             ("Dependency", 1),
+            ("Operation", 1),
+            ("Parameter", 2),
+            ("Comment", 1),
         ] {
             assert_eq!(
                 typed
@@ -792,6 +920,46 @@ async fn class_authoring_matches_between_cordis_events_and_ui_session() -> FlowR
                 .flat_map(|diagram| diagram.all_views())
                 .all(|view| view.draft.is_none())
         );
+        let Some(bellatrix_mde_contracts::ruml::Contract::Operation(operation)) = typed
+            .registry
+            .get_entry(&operation_id)
+            .map(|entry| &entry.contract)
+        else {
+            return Err("edited Operation missing".into());
+        };
+        assert_eq!(
+            operation.owned_parameter,
+            vec![second_parameter.clone(), first_parameter.clone()]
+        );
+        let Some(bellatrix_mde_contracts::ruml::Contract::Class(class)) = typed
+            .registry
+            .get_entry(&invoice)
+            .map(|entry| &entry.contract)
+        else {
+            return Err("edited Class missing".into());
+        };
+        assert_eq!(class.name.as_deref(), Some("Invoice edited"));
+        if through_ui {
+            let (completion, receipt) = tokio::sync::watch::channel(None);
+            dispatch_authoring(
+                &context,
+                &bridge,
+                through_ui,
+                MdeUiCommand::SetPropertyTracked {
+                    request: ModelingSetPropertyRequested {
+                        project_id: id.clone(),
+                        element_id: invoice.clone(),
+                        path: "name".into(),
+                        value: json!("Invoice edited"),
+                        expected_revision: 12,
+                    },
+                    completion,
+                },
+            )
+            .await?;
+            assert_eq!(*receipt.borrow(), Some(Ok(12)));
+            assert!(Arc::ptr_eq(&authored, &service.snapshot(&id)?));
+        }
         for format in ["json", "protobuf"] {
             let bytes = bellatrix_mde::encode_model_section(
                 id.as_str(),
@@ -806,7 +974,7 @@ async fn class_authoring_matches_between_cordis_events_and_ui_session() -> FlowR
                 serde_json::from_str(&reopened.section_json)?;
             assert_eq!(restored, typed);
         }
-        let stale = dispatch_creation(
+        let stale = dispatch_authoring(
             &context,
             &bridge,
             through_ui,

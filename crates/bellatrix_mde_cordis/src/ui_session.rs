@@ -384,41 +384,12 @@ fn edit(command: MdeUiCommand) -> Result<(ProjectId, u64, Command, Option<Comple
                 element_id: request.element_id,
             },
         ),
-        MdeUiCommand::SetProperty(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::SetProperty {
-                element_id: request.element_id,
-                path: request.path,
-                value: request.value,
-            },
-        ),
-        MdeUiCommand::AddMember(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::AddMember {
-                owner_id: request.owner_id,
-                kind: request.kind,
-            },
-        ),
-        MdeUiCommand::MoveParameter(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::MoveParameter {
-                parameter_id: request.parameter_id,
-                up: request.up,
-            },
-        ),
-        MdeUiCommand::QuickEdit(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::QuickEdit {
-                diagram_id: request.diagram_id,
-                element_id: request.element_id,
-                view_id: request.view_id,
-                action: request.action,
-            },
-        ),
+        MdeUiCommand::SetProperty(request) => crate::set_property::set_property_command(request),
+        MdeUiCommand::AddMember(request) => crate::add_member::add_member_command(request),
+        MdeUiCommand::MoveParameter(request) => crate::add_member::move_parameter_command(request),
+        MdeUiCommand::QuickEdit(request) => {
+            crate::quick_edit_commands::execute_quick_edit_command(request)
+        }
         MdeUiCommand::SetNameExpression(request) => (
             request.project_id,
             request.expected_revision,

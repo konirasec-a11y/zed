@@ -3,17 +3,11 @@ pub use bellatrix_mde_contracts::events::{
     ModelingAddMember, ModelingAddMemberRequested, ModelingMoveParameter,
     ModelingMoveParameterRequested,
 };
-use bellatrix_project::ProjectService;
+use bellatrix_project::{ProjectId, ProjectService};
 use cordis::Context;
 
-pub(crate) async fn add_member(
-    context: &Context,
-    projects: &ProjectService,
-    request: ModelingAddMemberRequested,
-) -> Result<u64, String> {
-    crate::mutation::execute(
-        context,
-        projects,
+pub(crate) fn add_member_command(request: ModelingAddMemberRequested) -> (ProjectId, u64, Command) {
+    (
         request.project_id,
         request.expected_revision,
         Command::AddMember {
@@ -21,17 +15,20 @@ pub(crate) async fn add_member(
             kind: request.kind,
         },
     )
-    .await
 }
 
-pub(crate) async fn move_parameter(
+pub(crate) async fn add_member(
     context: &Context,
     projects: &ProjectService,
-    request: ModelingMoveParameterRequested,
+    request: ModelingAddMemberRequested,
 ) -> Result<u64, String> {
-    crate::mutation::execute(
-        context,
-        projects,
+    let (project_id, expected_revision, command) = add_member_command(request);
+    crate::mutation::execute(context, projects, project_id, expected_revision, command).await
+}
+pub(crate) fn move_parameter_command(
+    request: ModelingMoveParameterRequested,
+) -> (ProjectId, u64, Command) {
+    (
         request.project_id,
         request.expected_revision,
         Command::MoveParameter {
@@ -39,5 +36,13 @@ pub(crate) async fn move_parameter(
             up: request.up,
         },
     )
-    .await
+}
+
+pub(crate) async fn move_parameter(
+    context: &Context,
+    projects: &ProjectService,
+    request: ModelingMoveParameterRequested,
+) -> Result<u64, String> {
+    let (project_id, expected_revision, command) = move_parameter_command(request);
+    crate::mutation::execute(context, projects, project_id, expected_revision, command).await
 }

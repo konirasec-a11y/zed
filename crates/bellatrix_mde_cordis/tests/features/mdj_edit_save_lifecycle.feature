@@ -38,6 +38,8 @@ Feature: Native editing after MDJ conversion and separate experimental export
   Scenario: Create identical classes and relationships through events and the UI session
     Given the same blank native Class diagram in separate project sessions
     When I create Classes, an Interface, an Association, a Generalization and a Dependency
+    And I rename a Class, add an Operation and Parameters, reorder them and create a quick Note
     Then direct Cordis events and UI commands produce identical canonical snapshots
+    And a tracked Inspector no-op reports the current revision without replacing the snapshot
     And selected View endpoints and semantic ownership survive JSON and Protobuf reopening
     And replaying the first request at its old revision leaves the authored snapshot unchanged
