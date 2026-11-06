@@ -439,6 +439,37 @@ pub(crate) fn move_parameter(
     };
     let first = edge(parameter_id)?;
     let second = edge(&adjacent.id)?;
+    let owner_id = owner.id().to_owned();
+    let mut values = match owner.properties().get("ownedParameter") {
+        Some(value) => value
+            .as_array()
+            .ok_or("Operation ownedParameter must be a reference collection")?
+            .clone(),
+        None => parameters
+            .iter()
+            .map(|parameter| serde_json::json!({ "$ref": parameter.id }))
+            .collect(),
+    };
+    let slot = |id: &str| -> Result<usize, String> {
+        for (index, value) in values.iter().enumerate() {
+            if super::references::reference_id(value)? == Some(id) {
+                return Ok(index);
+            }
+        }
+        Err("Parameter is missing from Operation ownedParameter".into())
+    };
+    let first_slot = slot(parameter_id)?;
+    let second_slot = slot(&adjacent.id)?;
+    values.swap(first_slot, second_slot);
+    // UML 2.5.1 9.9.11.5 defines ownedParameter as ordered. Persistence retains
+    // that canonical order; swapping only its owns projection is a no-op.
+    section
+        .elements
+        .iter_mut()
+        .find(|element| element.id == owner_id)
+        .ok_or("Operation owner not found")?
+        .properties
+        .insert("ownedParameter".into(), Value::Array(values));
     section.relations.swap(first, second);
     Ok(())
 }
