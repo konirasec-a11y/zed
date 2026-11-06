@@ -236,9 +236,14 @@ fn clear_projected_composites(
             else {
                 continue;
             };
+            // Inspect the referenced type independently of multiplicity: the
+            // scalar adapter rejects collections before resolving their type.
+            // Otherwise old composite members survive a move or deletion.
+            let mut scalar = *descriptor;
+            scalar.upper = "1";
             if descriptor.aggregation != Aggregation::Composite
                 || !matches!(
-                    schema::scalar_kind(descriptor),
+                    schema::scalar_kind(&scalar),
                     Err(UnsupportedContract::Reference)
                 )
                 || (shape == "v") == matches!(descriptor.upper, "0" | "1")
