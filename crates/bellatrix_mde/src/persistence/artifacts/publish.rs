@@ -21,8 +21,9 @@ use std::{
 /// existing staging/backup path. Filesystem/permission/storage failures propagate.
 /// An error does not guarantee an unchanged filesystem: created parent directories
 /// can remain, failed cleanup can leave staging/backup trees, and backup deletion
-/// can fail after the new output has already been installed. Rollback attempts
-/// after installation failure are best-effort and their errors are not reported.
+/// can fail after the new output has already been installed. Failed rollback or
+/// staging cleanup is reported alongside the original error. A failed rollback
+/// retains the backup and reports its path for manual recovery.
 /// Preflight checks and separate renames are not a lock or an all-or-nothing
 /// filesystem transaction. The caller must prevent concurrent modification of
 /// the destination and its ancestors; ancestor symlinks are not rejected here.
@@ -51,7 +52,7 @@ pub fn publish_new(plan: &Plan, destination: &Path) -> io::Result<()> {
 /// nonregular entry, so the manifest is not proof that the entire tree is safe
 /// to discard. Callers must review the target and exclude concurrent writers.
 /// Filesystem failures may leave partial external effects, including an installed
-/// new output with a retained backup; cleanup/rollback errors may be suppressed.
+/// new output with a retained backup; cleanup/rollback errors are reported.
 /// The race, ancestor-symlink and non-transactional limitations of [`publish_new`]
 /// apply. This function is not pure or deterministic from the plan alone.
 pub fn publish_replace(plan: &Plan, destination: &Path) -> io::Result<()> {
@@ -101,9 +102,8 @@ fn publish(plan: &Plan, destination: &Path, replace: bool) -> io::Result<()> {
     }
     fs::create_dir(&stage)?;
     let build = materialize(plan, &stage);
-    if let Err(err) = build {
-        let _ = fs::remove_dir_all(&stage);
-        return Err(err);
+    if let Err(error) = build {
+        return Err(cleanup_stage(&stage, error));
     }
     if exists {
         fs::rename(destination, &backup)?;
@@ -115,13 +115,34 @@ fn publish(plan: &Plan, destination: &Path, replace: bool) -> io::Result<()> {
             }
             Ok(())
         }
-        Err(err) => {
-            let _ = fs::remove_dir_all(&stage);
+        Err(mut error) => {
             if exists {
-                let _ = fs::rename(&backup, destination);
+                if let Err(rollback_error) = fs::rename(&backup, destination) {
+                    error = io::Error::new(
+                        error.kind(),
+                        format!(
+                            "{error}; rollback to {} failed: {rollback_error}; backup retained at {}",
+                            destination.display(),
+                            backup.display(),
+                        ),
+                    );
+                }
             }
-            Err(err)
+            Err(cleanup_stage(&stage, error))
         }
+    }
+}
+
+fn cleanup_stage(stage: &Path, error: io::Error) -> io::Error {
+    match fs::remove_dir_all(stage) {
+        Ok(()) => error,
+        Err(cleanup_error) => io::Error::new(
+            error.kind(),
+            format!(
+                "{error}; staging cleanup at {} failed: {cleanup_error}",
+                stage.display(),
+            ),
+        ),
     }
 }
 
