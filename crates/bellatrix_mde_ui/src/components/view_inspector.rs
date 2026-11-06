@@ -5,7 +5,7 @@ impl MdeRightPanel {
     pub(super) fn render_view_presentation(
         &mut self,
         item: Entity<MdeWorkbenchItem>,
-        snapshot: &Option<crate::workbench_ui::snapshot::MdeSnapshot>,
+        snapshot: &Option<crate::view_model::snapshot::MdeSnapshot>,
         active_diagram: &Option<String>,
         read_only: bool,
         window: &mut Window,
@@ -43,7 +43,7 @@ impl MdeRightPanel {
                         .iter()
                         .find(|diagram| diagram.id == diagram_id)
                         .is_none_or(|diagram| {
-                            !crate::workbench_ui::selection::supports_view_style_editing(
+                            !crate::view_model::selection::supports_view_style_editing(
                                 diagram, &view.id,
                             )
                         })
@@ -80,7 +80,7 @@ impl MdeRightPanel {
         }
         if !read_only {
             if let Some((diagram_id, view, _)) = style_target {
-                crate::workbench_ui::style_editor::reconcile_style_inputs(
+                crate::pages::mde_page::style_editor::reconcile_style_inputs(
                     &mut self.style_drafts,
                     &item,
                     diagram_id,
@@ -91,7 +91,7 @@ impl MdeRightPanel {
                 );
             }
         }
-        let mut inspector_rows = crate::workbench_ui::style_editor::render_styles(
+        let mut inspector_rows = crate::pages::mde_page::style_editor::render_styles(
             style_target,
             item.clone(),
             if read_only {
@@ -262,7 +262,7 @@ impl MdeRightPanel {
                     .find(|diagram| diagram.id == diagram_id)
                     .is_some_and(|diagram| {
                         diagram.interaction_kind.as_deref() == Some("timing")
-                            && crate::workbench_ui::selection::supports_view_editing(
+                            && crate::view_model::selection::supports_view_editing(
                                 diagram, &view.id,
                             )
                     });
@@ -281,7 +281,7 @@ impl MdeRightPanel {
                 timing_diagram && kind == Some("uml.lifeline")
             });
             if is_timing_lifeline {
-                let key = crate::workbench_ui::timing_editor::reconcile_timing_inputs(
+                let key = crate::pages::mde_page::timing_editor::reconcile_timing_inputs(
                     &mut self.timing_drafts,
                     &item,
                     diagram_id,
@@ -291,9 +291,11 @@ impl MdeRightPanel {
                     cx,
                 );
                 if let Some(draft) = self.timing_drafts.get(&key) {
-                    inspector_rows.push(crate::workbench_ui::timing_editor::render_timing_editor(
-                        draft, &key, &item, cx,
-                    ));
+                    inspector_rows.push(
+                        crate::pages::mde_page::timing_editor::render_timing_editor(
+                            draft, &key, &item, cx,
+                        ),
+                    );
                 }
             }
         }
@@ -302,7 +304,7 @@ impl MdeRightPanel {
 }
 
 fn presentation_row(name: &str, value: &str) -> AnyElement {
-    crate::workbench_ui::property_editor::compact_row(
+    crate::pages::mde_page::property_editor::compact_row(
         name.to_owned(),
         Label::new(value.to_owned()).size(LabelSize::Small),
     )
@@ -324,7 +326,7 @@ fn view_label(view: &bellatrix_mde_cordis::projection::View) -> &str {
 
 fn subject_label<'a>(
     view: &bellatrix_mde_cordis::projection::View,
-    snapshot: Option<&'a crate::workbench_ui::snapshot::MdeSnapshot>,
+    snapshot: Option<&'a crate::view_model::snapshot::MdeSnapshot>,
 ) -> &'a str {
     let Some(subject) = view.subject.as_deref() else {
         return "None";

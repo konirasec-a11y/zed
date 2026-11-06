@@ -3,14 +3,14 @@ use bellatrix_mde_cordis::Geometry;
 use bellatrix_mde_cordis::presentation_contract::{RenderStyle, UmlNotation};
 use bellatrix_mde_cordis::projection::{ModelingProjection, View};
 
-pub(super) struct CanvasBounds {
+pub(crate) struct CanvasBounds {
     pub x: f32,
     pub y: f32,
     pub width: f32,
     pub height: f32,
 }
 
-pub(super) fn resolve_bounds(
+pub(crate) fn resolve_bounds(
     geometry: &Geometry,
     zoom: f32,
     pan: (f32, f32),
@@ -64,7 +64,7 @@ pub(super) fn resolve_bounds(
     })
 }
 
-pub(super) fn render_style(view: &View, palette: Palette) -> RenderStyle {
+pub(crate) fn render_style(view: &View, palette: Palette) -> RenderStyle {
     let mut style = view.render_style.clone();
     let matches_color = |color: Option<&str>, expected: &str| {
         color.is_some_and(|color| {
@@ -98,7 +98,7 @@ pub(super) fn render_style(view: &View, palette: Palette) -> RenderStyle {
     style
 }
 
-pub(super) fn ordered_views<'a>(section: &ModelingProjection, views: &'a [View]) -> Vec<&'a View> {
+pub(crate) fn ordered_views<'a>(section: &ModelingProjection, views: &'a [View]) -> Vec<&'a View> {
     let mut siblings = views.iter().collect::<Vec<_>>();
     siblings.sort_by_key(|view| view.z_index);
     let mut pending = siblings
@@ -190,7 +190,7 @@ fn uses_native_contents(section: &ModelingProjection, view: &View) -> bool {
     true
 }
 
-pub(super) fn has_authored_contents(section: &ModelingProjection, view: &View) -> bool {
+pub(crate) fn has_authored_contents(section: &ModelingProjection, view: &View) -> bool {
     !uses_native_contents(section, view)
         && view
             .children
@@ -202,7 +202,7 @@ fn visible_on_canvas(view: &View) -> bool {
     view.presentation.visible
 }
 
-pub(super) fn minimum_size(
+pub(crate) fn minimum_size(
     section: &bellatrix_mde_cordis::projection::ModelingProjection,
     view: &View,
 ) -> (f64, f64) {

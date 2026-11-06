@@ -1,5 +1,5 @@
-use crate::workbench_ui::integration::OpenMdeWorkbench;
-use crate::workbench_ui::native_document::OpenMdeDocument;
+use crate::pages::mde_page::integration::OpenMdeWorkbench;
+use crate::pages::mde_page::native_document::OpenMdeDocument;
 use gpui::App;
 use ui::{ContextMenu, DropdownMenu, DropdownStyle, Tooltip, prelude::*};
 use workspace::{HideStatusItem, ItemHandle, StatusItemView};

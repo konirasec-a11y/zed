@@ -27,15 +27,16 @@
   `src/assets/symbols/` own the multi-diagram catalog and SVGs. All Bellatrix
   visual code belongs to this crate; the former design-system, panel and symbol
   crates have been removed. Their design references live in `docs/`.
-- `src/view-model/` contains renderer-independent inspector/style drafts,
+- `src/view_model/` contains renderer-independent inspector/style drafts,
   snapshots and document guards. These files do not depend on GPUI. The UI
-  composes them through explicit module paths; they do not own another model.
+  imports them from `crate::view_model`; they do not own another model.
 - Persisted data and commands remain in `bellatrix_mde`, with its `KERNEL/` and
   `view-model/` source boundaries. The workbench is the native UI adapter, not
   another kernel.
 
-The private `workbench_ui` module keeps widget implementation and state together, while
-root reexports preserve the crate API. The pure view-model files still belong
+The real `pages::mde_page` module owns the native MDE item, while root
+reexports preserve the crate API. `pages.rs` and `view_model.rs` declare their
+child modules using Rust's normal file layout. The pure view-model files still belong
 to this GPUI-dependent crate; this layout does not provide a separately
 compilable view-model package or claim that every MDE dependency is one-way.
 

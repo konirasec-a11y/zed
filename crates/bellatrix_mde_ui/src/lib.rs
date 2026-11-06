@@ -1,8 +1,9 @@
 mod index;
+pub(crate) mod pages;
+pub(crate) mod view_model;
 
 pub mod assets;
 pub mod components;
 pub mod elements;
 
-pub(crate) use index::workbench_ui;
 pub use index::*;

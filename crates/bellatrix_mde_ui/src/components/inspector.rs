@@ -1,5 +1,5 @@
 //! Native Zed controls driven by the Cordis inspector projection.
-use crate::workbench_ui::{
+use crate::pages::mde_page::{
     MdeWorkbenchItem, WorkbenchPalette,
     inspector_drafts::{DraftKey, DraftState},
     panels::MdeRightPanel,
@@ -175,7 +175,7 @@ pub(crate) fn reconcile_inputs(
         cx.defer(move |cx| {
             if let Err(error) = owner.update(cx, |panel, cx| {
                 flush_property_edits(panel, &item, cx);
-                crate::workbench_ui::style_editor::flush_style_edits(panel, &item, cx);
+                crate::pages::mde_page::style_editor::flush_style_edits(panel, &item, cx);
             }) {
                 eprintln!("MDE property queue refresh failed: {error}");
             }
@@ -366,7 +366,7 @@ pub(crate) fn flush_property_edits(
     cx: &mut Context<MdeRightPanel>,
 ) {
     if property_command_pending(panel)
-        || crate::workbench_ui::style_editor::style_command_pending(panel)
+        || crate::pages::mde_page::style_editor::style_command_pending(panel)
     {
         return;
     }
@@ -515,7 +515,7 @@ pub(crate) fn flush_property_edits(
                             }
                         }
                         flush_property_edits(panel, &item, cx);
-                        crate::workbench_ui::style_editor::flush_style_edits(panel, &item, cx);
+                        crate::pages::mde_page::style_editor::flush_style_edits(panel, &item, cx);
                         cx.notify();
                     }) {
                         eprintln!("MDE property completion refresh failed: {error}");
@@ -1027,7 +1027,7 @@ pub(crate) fn render_inspector(
                                     return;
                                 }
                                 if property_command_pending(panel)
-                                    || crate::workbench_ui::style_editor::style_command_pending(
+                                    || crate::pages::mde_page::style_editor::style_command_pending(
                                         panel,
                                     )
                                     || panel.property_drafts.iter().any(|(key, draft)| {
@@ -1244,7 +1244,7 @@ fn navigate_inspector_element(
         return;
     }
     item.update(cx, |workbench, cx| {
-        let occurrence = crate::workbench_ui::explorer::selection_occurrence(
+        let occurrence = crate::view_model::explorer::selection_occurrence(
             &snapshot.section,
             target,
             workbench.presentation.active_diagram(),

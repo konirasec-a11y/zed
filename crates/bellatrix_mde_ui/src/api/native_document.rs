@@ -1,5 +1,5 @@
-use crate::workbench_ui::native_document_guard::{NativeBufferState, NativeDocumentGuard};
-use crate::workbench_ui::{MdeUiSource, MdeWorkbenchItem};
+use crate::pages::mde_page::{MdeUiSource, MdeWorkbenchItem};
+use crate::view_model::native_document_guard::{NativeBufferState, NativeDocumentGuard};
 use bellatrix_project::ProjectDocument;
 use gpui::{
     App, AppContext, Context, Entity, EntityId, EventEmitter, FocusHandle, Focusable,
@@ -169,7 +169,7 @@ fn prepare_preview_panels(
         }
     }
     let workbench = preview.read(cx).workbench.clone();
-    crate::workbench_ui::panels::attach_panels(workspace, workbench, window, cx);
+    crate::pages::mde_page::panels::attach_panels(workspace, workbench, window, cx);
 }
 
 pub(crate) fn register_preview_action(

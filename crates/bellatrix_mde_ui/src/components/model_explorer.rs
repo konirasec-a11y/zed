@@ -1,4 +1,4 @@
-pub(crate) use crate::workbench_ui::explorer::*;
+pub(crate) use crate::view_model::explorer::*;
 
 #[derive(Clone)]
 pub(crate) enum ExplorerMoveTarget {
@@ -30,7 +30,7 @@ impl gpui::Render for ExplorerDiagramDrag {
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
         use gpui::prelude::*;
-        let palette = crate::workbench_ui::WorkbenchPalette::current(cx);
+        let palette = crate::pages::mde_page::WorkbenchPalette::current(cx);
         gpui::div()
             .px_2()
             .py_1()
@@ -59,7 +59,7 @@ impl gpui::Render for ExplorerElementDrag {
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
         use gpui::prelude::*;
-        let palette = crate::workbench_ui::WorkbenchPalette::current(cx);
+        let palette = crate::pages::mde_page::WorkbenchPalette::current(cx);
         gpui::div()
             .px_2()
             .py_1()
@@ -74,7 +74,7 @@ pub(crate) fn explorer_view_icon(
     kind: &str,
     identity: &bellatrix_mde_cordis::projection::SemanticIdentity,
     selected: bool,
-    palette: &crate::workbench_ui::WorkbenchPalette,
+    palette: &crate::pages::mde_page::WorkbenchPalette,
 ) -> impl gpui::IntoElement {
     use gpui::{div, prelude::*};
     div()
@@ -98,7 +98,7 @@ pub(crate) fn explorer_view_icon(
 pub(crate) fn explorer_element_icon(
     kind: &str,
     identity: &bellatrix_mde_cordis::projection::SemanticIdentity,
-    palette: &crate::workbench_ui::WorkbenchPalette,
+    palette: &crate::pages::mde_page::WorkbenchPalette,
 ) -> impl gpui::IntoElement {
     let visual = crate::elements::uml::UmlVisualDefinition::for_element(kind, identity);
     explorer_colored_icon(visual.icon(), visual.category(), palette)
@@ -106,7 +106,7 @@ pub(crate) fn explorer_element_icon(
 
 pub(crate) fn explorer_diagram_icon(
     kind: &str,
-    palette: &crate::workbench_ui::WorkbenchPalette,
+    palette: &crate::pages::mde_page::WorkbenchPalette,
 ) -> impl gpui::IntoElement {
     use crate::assets::uml::staruml::{ExplorerIconCategory, explorer_glyph};
     let name = match kind {
@@ -123,7 +123,7 @@ pub(crate) fn explorer_diagram_icon(
 }
 
 pub(crate) fn explorer_project_icon(
-    palette: &crate::workbench_ui::WorkbenchPalette,
+    palette: &crate::pages::mde_page::WorkbenchPalette,
 ) -> impl gpui::IntoElement {
     use crate::assets::uml::staruml::{ExplorerIconCategory, explorer_glyph};
     let data = explorer_glyph("Project")
@@ -137,7 +137,7 @@ pub(crate) fn explorer_project_icon(
 fn explorer_colored_icon(
     data: &'static [u8],
     category: crate::assets::uml::staruml::ExplorerIconCategory,
-    palette: &crate::workbench_ui::WorkbenchPalette,
+    palette: &crate::pages::mde_page::WorkbenchPalette,
 ) -> impl gpui::IntoElement {
     use crate::assets::uml::staruml::ExplorerIconCategory;
     use gpui::{prelude::*, px, rgb, svg};

@@ -3,9 +3,9 @@
 //! Zed owns tabs, docks and focus. The native action remains available
 //! to focus or reopen the MDE tab without creating a parallel window.
 
-use crate::index::home_page::{Page, navigate};
-use crate::workbench_ui::status_entry::{MdeStatusEntry, status_button_enabled};
-use crate::workbench_ui::{MdeSymbolLibraryItem, MdeUiSource, MdeWorkbenchItem, panels};
+use crate::pages::home_page::{Page, navigate};
+use crate::pages::mde_page::status_entry::{MdeStatusEntry, status_button_enabled};
+use crate::pages::mde_page::{MdeSymbolLibraryItem, MdeUiSource, MdeWorkbenchItem, panels};
 use gpui::{App, AppContext, Entity, TaskExt, Window, actions};
 use project::DirectoryLister;
 use std::{
@@ -49,7 +49,7 @@ impl Drop for SavePathPromptGuard {
 pub fn register_mde_workspace(
     cx: &mut App,
     source: MdeUiSource,
-    importer: crate::workbench_ui::NativeDocumentImporter,
+    importer: crate::pages::mde_page::NativeDocumentImporter,
 ) {
     let auto_open_configured_source = std::env::var_os("BELLATRIX_PROJECT_FILE").is_some()
         || std::env::var_os("BELLATRIX_MODEL_FILE").is_some();
@@ -73,7 +73,7 @@ pub fn register_mde_workspace(
         move |workspace: &mut Workspace, mut window: Option<&mut Window>, cx| {
             let source = source.for_workspace();
             source.set_preview_context(Some("No active MDE document".into()));
-            crate::workbench_ui::native_document::register_preview_action(
+            crate::pages::mde_page::native_document::register_preview_action(
                 workspace,
                 importer.clone(),
                 source.clone(),
@@ -105,11 +105,11 @@ pub fn register_mde_workspace(
                             workspace::Event::ActiveItemChanged
                                 | workspace::Event::ItemRemoved { .. }
                         ) {
-                            let item = crate::workbench_ui::native_document::active_workbench(
+                            let item = crate::pages::mde_page::native_document::active_workbench(
                                 workspace, cx,
                             );
                             let inactive_context =
-                                crate::workbench_ui::native_document::active_preview_label(
+                                crate::pages::mde_page::native_document::active_preview_label(
                                     workspace, cx,
                                 )
                                 .or_else(|| {
@@ -130,7 +130,7 @@ pub fn register_mde_workspace(
             let save_prompt_pending = Rc::new(Cell::new(false));
             workspace.register_action(move |workspace, _: &SaveMdeProjectAs, window, cx| {
                 if let Some(item) = workspace
-                    .active_item_as::<crate::workbench_ui::native_document::NativeMdeDocumentItem>(
+                    .active_item_as::<crate::pages::mde_page::native_document::NativeMdeDocumentItem>(
                     cx,
                 ) {
                     item.update(cx, |item, cx| item.save_project_as(cx))

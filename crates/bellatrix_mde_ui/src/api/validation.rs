@@ -1,5 +1,5 @@
 //! Schedules engine validation without changing the semantic or presentation model.
-use crate::workbench_ui::MdeWorkbenchItem;
+use crate::pages::mde_page::MdeWorkbenchItem;
 use gpui::Context;
 
 static PREFERENCE_WRITES: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());

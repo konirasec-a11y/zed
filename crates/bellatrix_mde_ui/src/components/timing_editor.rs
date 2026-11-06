@@ -1,5 +1,7 @@
 //! Authored timing samples are View presentation, not evaluated UML occurrences.
-use crate::workbench_ui::{MdeWorkbenchItem, inspector_drafts::DraftState, panels::MdeRightPanel};
+use crate::pages::mde_page::{
+    MdeWorkbenchItem, inspector_drafts::DraftState, panels::MdeRightPanel,
+};
 use bellatrix_mde_cordis::projection::View;
 use bellatrix_mde_cordis::{TimingMode, TimingPoint, TimingPresentation};
 use gpui::{

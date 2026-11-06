@@ -3,7 +3,7 @@ use bellatrix_mde_cordis::ModelingTool;
 use bellatrix_project::ProjectId;
 
 #[derive(Clone)]
-pub(super) struct PendingRelationEndpoint {
+pub(crate) struct PendingRelationEndpoint {
     pub project_id: ProjectId,
     pub diagram_id: String,
     pub view_id: Option<String>,
@@ -22,13 +22,13 @@ enum InlineEditTarget {
     },
 }
 
-pub(super) struct SelectionChange {
+pub(crate) struct SelectionChange {
     pub diagram_changed: bool,
     pub selection_changed: bool,
     pub preserve_editor: bool,
 }
 
-pub(super) struct WorkbenchState {
+pub(crate) struct WorkbenchState {
     active_diagram: Option<String>,
     selected_element: Option<String>,
     selected_view: Option<String>,
@@ -339,7 +339,7 @@ impl WorkbenchState {
     }
 }
 
-pub(super) fn switch_diagram_selection(
+pub(crate) fn switch_diagram_selection(
     active: &mut Option<String>,
     selected: &mut Option<String>,
     id: String,

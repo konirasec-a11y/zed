@@ -1,6 +1,6 @@
 //! Map domain action descriptors to controls; no action semantics belong to a shape.
 use crate::elements::uml::{UmlQuickAction, UmlQuickEdit, UmlVisibilityPicker};
-use crate::workbench_ui::MdeWorkbenchItem;
+use crate::pages::mde_page::MdeWorkbenchItem;
 use bellatrix_mde_cordis::{
     QuickEditAction, QuickEditAvailability, QuickEditControl, QuickEditSide,
     projection::{Element, ModelingProjection, Relation},
@@ -188,7 +188,7 @@ pub(crate) fn quick_edit_for_relationship(
     window: &mut gpui::Window,
     cx: &mut gpui::App,
 ) -> Option<gpui::AnyElement> {
-    use crate::workbench_ui::WorkbenchPalette;
+    use crate::pages::mde_page::WorkbenchPalette;
     use bellatrix_mde_cordis::PropertyEditor;
     use gpui::{MouseButton, div, prelude::*, px, svg};
     use ui::{ContextMenu, DropdownMenu, Icon, IconButton, Label, Tooltip, prelude::*};

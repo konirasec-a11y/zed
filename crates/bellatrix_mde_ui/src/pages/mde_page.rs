@@ -1,34 +1,29 @@
 //! Engine-MDE as a native Zed Workspace Item.
 //! Zed owns presentation; bellatrix_mde owns semantics; Cordis publishes revisions.
-#[path = "../view-model/workbench_state.rs"]
-mod workbench_state;
+use crate::view_model::workbench_state;
 use workbench_state::{PendingRelationEndpoint, SelectionChange, WorkbenchState};
 
 #[path = "../components/canvas_interaction.rs"]
 mod canvas_interaction;
+use crate::view_model::canvas_presentation;
 use canvas_interaction::{CanvasGesture, PathHandle};
-#[path = "../view-model/canvas_presentation.rs"]
-mod canvas_presentation;
 #[path = "../layouts/body.rs"]
 mod diagram_canvas;
 #[path = "../components/execution_dashboard.rs"]
 mod execution_dashboard;
-#[path = "../view-model/explorer.rs"]
-mod explorer;
+use crate::view_model::explorer;
 #[path = "../components/model_explorer.rs"]
 mod hierarchy;
 #[path = "../components/inline_editor.rs"]
 mod inline_editor;
-#[path = "../view-model/inspector_drafts.rs"]
-mod inspector_drafts;
+use crate::view_model::inspector_drafts;
 #[path = "../routes/workspace.rs"]
 mod integration;
 #[path = "../api/model_editing.rs"]
 mod model_editing;
 #[path = "../api/native_document.rs"]
 mod native_document;
-#[path = "../view-model/native_document_guard.rs"]
-mod native_document_guard;
+use crate::view_model::native_document_guard;
 #[path = "../layouts/sidebar.rs"]
 pub mod panels;
 #[path = "../components/inspector.rs"]
@@ -37,18 +32,15 @@ mod property_editor;
 mod quick_edit_view;
 #[path = "../api/relationship_creation.rs"]
 mod relationship_creation;
-#[path = "../view-model/selection.rs"]
-mod selection;
+use crate::view_model::selection;
 #[path = "../api/selection_actions.rs"]
 mod selection_actions;
-#[path = "../view-model/snapshot.rs"]
-mod snapshot;
+use crate::view_model::snapshot;
 #[path = "../api/source.rs"]
 mod source;
 #[path = "../layouts/footer.rs"]
 mod status_entry;
-#[path = "../view-model/style_drafts.rs"]
-mod style_drafts;
+use crate::view_model::style_drafts;
 #[path = "../components/style_editor.rs"]
 mod style_editor;
 #[path = "../components/symbol_library.rs"]

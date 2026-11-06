@@ -1,5 +1,5 @@
 //! A typed, lifecycle-owned source for Zed Items and Panels.
-use crate::workbench_ui::MdeSnapshot;
+use crate::pages::mde_page::MdeSnapshot;
 use bellatrix_mde_cordis::{MdeSession, MdeUiBridge, MdeUiCommand};
 use bellatrix_project::{ProjectDocument, ProjectId, ProjectService};
 use std::sync::{
@@ -501,7 +501,7 @@ impl MdeUiSource {
         }
         let locate = |view: Option<&bellatrix_mde_cordis::projection::View>, point| match view {
             Some(view) => {
-                crate::workbench_ui::visual_draft_canvas::resolve_visual_center(&view.geometry)
+                crate::pages::mde_page::visual_draft_canvas::resolve_visual_center(&view.geometry)
             }
             None => point,
         };
@@ -517,7 +517,7 @@ impl MdeUiSource {
             for (key, (view_id, point)) in [("source_anchor", source), ("target_anchor", target)] {
                 if let Some(view_id) = view_id
                     && let Some(anchor) = point.and_then(|point| {
-                        crate::workbench_ui::visual_draft_canvas::resolve_message_anchor(
+                        crate::pages::mde_page::visual_draft_canvas::resolve_message_anchor(
                             &snapshot.section,
                             diagram,
                             view_id,
@@ -845,7 +845,7 @@ impl MdeUiSource {
             kind,
             name: format!(
                 "{} diagram {}",
-                crate::workbench_ui::diagram_kind_label(kind),
+                crate::pages::mde_page::diagram_kind_label(kind),
                 snapshot.section.diagrams.len().saturating_add(1)
             ),
             model_elements: if uses_context {
@@ -999,11 +999,10 @@ impl MdeUiSource {
             .iter()
             .find(|diagram| diagram.id == diagram_id)
             .ok_or("The original diagram is no longer available")?;
-        if !crate::workbench_ui::selection::supports_view_style_editing(diagram, view_id) {
+        if !crate::view_model::selection::supports_view_style_editing(diagram, view_id) {
             return Err("This view supports inspection only".into());
         }
-        if layout && !crate::workbench_ui::selection::supports_view_layout_editing(diagram, view_id)
-        {
+        if layout && !crate::view_model::selection::supports_view_layout_editing(diagram, view_id) {
             return Err("Routing and stacking changes require a supported editable view".into());
         }
         Ok(())

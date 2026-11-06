@@ -1,9 +1,6 @@
-use crate::workbench_ui::{MdeUiSource, MdeWorkbenchItem, open_in_workspace, panels};
+use crate::pages::mde_page::{MdeUiSource, MdeWorkbenchItem, open_in_workspace, panels};
 use gpui::{Context, Entity, Window};
 use workspace::Workspace;
-
-#[path = "mde_page.rs"]
-pub(crate) mod mde_page;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Page {

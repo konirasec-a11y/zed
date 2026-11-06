@@ -2,14 +2,14 @@ use bellatrix_mde_cordis::presentation_contract::UmlNotation;
 use bellatrix_mde_cordis::projection::{Contract, Diagram, ModelingProjection as ModelingSection};
 use bellatrix_mde_cordis::{Geometry, PathSegment};
 
-pub(super) struct ReconciledSelection {
+pub(crate) struct ReconciledSelection {
     pub active_diagram: Option<String>,
     pub selected_view: Option<String>,
     pub selected_element: Option<String>,
     pub preserve_editor: bool,
 }
 
-pub(super) fn reconcile_selection(
+pub(crate) fn reconcile_selection(
     section: &ModelingSection,
     active_diagram: Option<&str>,
     selected_view: Option<&str>,
@@ -58,7 +58,7 @@ pub(super) fn reconcile_selection(
     }
 }
 
-pub(super) fn inline_relation_name(section: &ModelingSection, id: &str) -> Option<String> {
+pub(crate) fn inline_relation_name(section: &ModelingSection, id: &str) -> Option<String> {
     section
         .relations
         .iter()
@@ -80,7 +80,7 @@ pub(super) fn inline_relation_name(section: &ModelingSection, id: &str) -> Optio
     }
 }
 
-pub(super) fn supports_inline_relation_view(
+pub(crate) fn supports_inline_relation_view(
     view: &bellatrix_mde_cordis::projection::View,
     target: &str,
 ) -> bool {
@@ -181,17 +181,17 @@ fn has_inline_representation(section: &ModelingSection, diagram: &Diagram, targe
     })
 }
 
-pub(super) fn supports_view_editing(diagram: &Diagram, view_id: &str) -> bool {
+pub(crate) fn supports_view_editing(diagram: &Diagram, view_id: &str) -> bool {
     diagram.all_views().any(|view| {
         view.id == view_id && matches!(view.geometry, Geometry::Rect { .. } | Geometry::Path { .. })
     })
 }
 
-pub(super) fn supports_view_style_editing(diagram: &Diagram, view_id: &str) -> bool {
+pub(crate) fn supports_view_style_editing(diagram: &Diagram, view_id: &str) -> bool {
     // Appearance changes do not reposition a nested View or resolve its layout.
     diagram.all_views().any(|view| view.id == view_id)
 }
 
-pub(super) fn supports_view_layout_editing(diagram: &Diagram, view_id: &str) -> bool {
+pub(crate) fn supports_view_layout_editing(diagram: &Diagram, view_id: &str) -> bool {
     supports_view_editing(diagram, view_id)
 }

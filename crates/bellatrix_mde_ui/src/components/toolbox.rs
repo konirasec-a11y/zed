@@ -133,7 +133,7 @@ impl Render for MdeLeftPanel {
                 let owner = item.clone();
                 let diagram_kind = diagram
                     .kind
-                    .map(|kind| crate::workbench_ui::diagram_kind_label(kind).to_owned())
+                    .map(|kind| crate::pages::mde_page::diagram_kind_label(kind).to_owned())
                     .unwrap_or_else(|| diagram.type_label.clone());
                 let display_name = diagram
                     .owner_label
@@ -149,7 +149,7 @@ impl Render for MdeLeftPanel {
                         .when(active.as_deref() == Some(diagram_id.as_str()), |row| {
                             row.bg(palette.surface)
                         })
-                        .child(crate::workbench_ui::hierarchy::explorer_diagram_icon(
+                        .child(crate::pages::mde_page::hierarchy::explorer_diagram_icon(
                             &diagram.uml_di_type,
                             &palette,
                         ))
@@ -181,7 +181,7 @@ impl Render for MdeLeftPanel {
         let create_menu = ui::ContextMenu::build(window, cx, move |menu, _, _| {
             diagram_kinds.into_iter().fold(menu, |menu, kind| {
                 let owner = create_item.clone();
-                let label = crate::workbench_ui::diagram_kind_label(kind).to_owned();
+                let label = crate::pages::mde_page::diagram_kind_label(kind).to_owned();
                 menu.entry(label, None, move |window, cx| {
                     if owner.read(cx).source().is_read_only() {
                         return;
