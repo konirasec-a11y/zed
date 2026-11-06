@@ -1,6 +1,63 @@
 use super::*;
 
 impl MdeWorkbenchItem {
+    pub(crate) fn quick_edit_snapshot(
+        &mut self,
+        target: &QuickEditTarget,
+        cx: &mut Context<Self>,
+    ) -> Option<MdeSnapshot> {
+        if self.source.is_read_only() || self.selected_view_is_inspection_only() {
+            return None;
+        }
+        if self.project_id() != &target.project
+            || self.presentation.selected_element() != Some(target.element.as_str())
+            || self.presentation.active_diagram() != Some(target.diagram.as_str())
+            || target.view.as_deref().is_some_and(|view| {
+                self.presentation
+                    .selected_canvas_view()
+                    .is_some_and(|selected| selected != view)
+            })
+            || self.presentation.selected_tool().is_some()
+        {
+            self.feedback = "Quick edit not sent: the active selection changed".into();
+            cx.notify();
+            return None;
+        }
+        let snapshot = match self.source.snapshot() {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                self.feedback = format!("Quick edit not sent: {error}");
+                cx.notify();
+                return None;
+            }
+        };
+        if snapshot.revision != target.revision {
+            self.feedback = "Quick edit not sent: the model changed; try again".into();
+            cx.notify();
+            return None;
+        }
+        Some(snapshot)
+    }
+
+    pub(crate) fn run_quick_action(
+        &mut self,
+        action: &str,
+        target: &QuickEditTarget,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(snapshot) = self.quick_edit_snapshot(target, cx) else {
+            return;
+        };
+        let result = self.source.execute_quick_action(
+            &target.element,
+            action,
+            Some(&target.diagram),
+            target.view.as_deref(),
+            snapshot.revision,
+        );
+        self.report_command_result(result, cx);
+    }
+
     pub fn add_member_to_selected(&mut self, kind: ModelingMemberKind, cx: &mut Context<Self>) {
         if !self.source.allows_creation() {
             self.feedback = "Member creation is not available for this document".into();
