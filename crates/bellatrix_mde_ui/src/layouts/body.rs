@@ -1137,11 +1137,6 @@ impl Render for MdeWorkbenchItem {
         let pan_out_owner = cx.weak_entity();
         let f2_owner = cx.weak_entity();
         let member_shortcut_owner = cx.weak_entity();
-        let zoom_in_owner = cx.weak_entity();
-        let zoom_out_owner = cx.weak_entity();
-        let reset_owner = cx.weak_entity();
-        let validate_owner = cx.weak_entity();
-        let cancel_relation_owner = cx.weak_entity();
         let escape_relation_owner = cx.weak_entity();
         let measured_canvas_origin = canvas_origin.clone();
         div()
@@ -1227,79 +1222,7 @@ impl Render for MdeWorkbenchItem {
             })
             .bg(background)
             .text_color(palette.text)
-            .child(
-                div()
-                    .h(px(39.0))
-                    .flex_none()
-                    .flex()
-                    .gap_3()
-                    .items_center()
-                    .justify_between()
-                    .px_3()
-                    .border_b_1()
-                    .border_color(border)
-                    .child(div().flex_1().min_w_0().child(Label::new(title).truncate()))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_none()
-                            .gap_2()
-                            .items_center()
-                            .child(
-                                ui::Button::new("mde-validate-diagram", "Validate").on_click(
-                                    move |_, window, cx| {
-                                        if let Err(error) = validate_owner
-                                            .update(cx, |item, cx| item.validate_diagram(cx))
-                                        {
-                                            eprintln!("MDE diagram validation failed: {error}");
-                                        }
-                                        window.dispatch_action(
-                                            Box::new(crate::layouts::sidebar::ShowMdeDiagnostics),
-                                            cx,
-                                        );
-                                    },
-                                ),
-                            )
-                            .child(self.render_validation_mode(cx))
-                            .when_some(relation_hint, |header, hint| {
-                                header.child(
-                                    div()
-                                        .flex()
-                                        .gap_1()
-                                        .items_center()
-                                        .child(Label::new(hint))
-                                        .child(
-                                            ui::Button::new("mde-cancel-relation", "Cancel")
-                                                .on_click(move |_, _, cx| {
-                                                    let _ = cancel_relation_owner
-                                                        .update(cx, |item, cx| {
-                                                            item.cancel_tool(cx)
-                                                        });
-                                                }),
-                                        ),
-                                )
-                            })
-                            .child(ui::Button::new("mde-zoom-out", "-").on_click(
-                                move |_, _, cx| {
-                                    let _ = zoom_out_owner
-                                        .update(cx, |item, cx| item.set_zoom(item.zoom / 1.2, cx));
-                                },
-                            ))
-                            .child(Label::new(format!("{:.0}%", zoom * 100.0)))
-                            .child(
-                                ui::Button::new("mde-zoom-in", "+").on_click(move |_, _, cx| {
-                                    let _ = zoom_in_owner
-                                        .update(cx, |item, cx| item.set_zoom(item.zoom * 1.2, cx));
-                                }),
-                            )
-                            .child(ui::Button::new("mde-reset-view", "Reset view").on_click(
-                                move |_, _, cx| {
-                                    let _ =
-                                        reset_owner.update(cx, |item, cx| item.reset_viewport(cx));
-                                },
-                            )),
-                    ),
-            )
+            .child(self.render_workbench_header(title, relation_hint, border, zoom, cx))
             .when(unresolved_presentation, |workbench| {
                 workbench.child(
                     div()
@@ -1465,6 +1388,92 @@ impl Render for MdeWorkbenchItem {
 }
 
 impl MdeWorkbenchItem {
+    fn render_workbench_header(
+        &self,
+        title: String,
+        relation_hint: Option<String>,
+        border: gpui::Hsla,
+        zoom: f32,
+        cx: &mut Context<Self>,
+    ) -> gpui::Div {
+        let zoom_in_owner = cx.weak_entity();
+        let zoom_out_owner = cx.weak_entity();
+        let reset_owner = cx.weak_entity();
+        let validate_owner = cx.weak_entity();
+        let cancel_relation_owner = cx.weak_entity();
+        div()
+            .h(px(39.0))
+            .flex_none()
+            .flex()
+            .gap_3()
+            .items_center()
+            .justify_between()
+            .px_3()
+            .border_b_1()
+            .border_color(border)
+            .child(div().flex_1().min_w_0().child(Label::new(title).truncate()))
+            .child(
+                div()
+                    .flex()
+                    .flex_none()
+                    .gap_2()
+                    .items_center()
+                    .child(
+                        ui::Button::new("mde-validate-diagram", "Validate").on_click(
+                            move |_, window, cx| {
+                                if let Err(error) = validate_owner
+                                    .update(cx, |item, cx| item.validate_diagram(cx))
+                                {
+                                    eprintln!("MDE diagram validation failed: {error}");
+                                }
+                                window.dispatch_action(
+                                    Box::new(crate::layouts::sidebar::ShowMdeDiagnostics),
+                                    cx,
+                                );
+                            },
+                        ),
+                    )
+                    .child(self.render_validation_mode(cx))
+                    .when_some(relation_hint, |header, hint| {
+                        header.child(
+                            div()
+                                .flex()
+                                .gap_1()
+                                .items_center()
+                                .child(Label::new(hint))
+                                .child(
+                                    ui::Button::new("mde-cancel-relation", "Cancel")
+                                        .on_click(move |_, _, cx| {
+                                            let _ = cancel_relation_owner
+                                                .update(cx, |item, cx| {
+                                                    item.cancel_tool(cx)
+                                                });
+                                        }),
+                                ),
+                        )
+                    })
+                    .child(ui::Button::new("mde-zoom-out", "-").on_click(
+                        move |_, _, cx| {
+                            let _ = zoom_out_owner
+                                .update(cx, |item, cx| item.set_zoom(item.zoom / 1.2, cx));
+                        },
+                    ))
+                    .child(Label::new(format!("{:.0}%", zoom * 100.0)))
+                    .child(
+                        ui::Button::new("mde-zoom-in", "+").on_click(move |_, _, cx| {
+                            let _ = zoom_in_owner
+                                .update(cx, |item, cx| item.set_zoom(item.zoom * 1.2, cx));
+                        }),
+                    )
+                    .child(ui::Button::new("mde-reset-view", "Reset view").on_click(
+                        move |_, _, cx| {
+                            let _ =
+                                reset_owner.update(cx, |item, cx| item.reset_viewport(cx));
+                        },
+                    )),
+            )
+    }
+
     pub(crate) fn preview_rectangle(
         &self,
         section: &bellatrix_mde_cordis::projection::ModelingProjection,
