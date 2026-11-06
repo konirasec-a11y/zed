@@ -31,9 +31,8 @@ members = [
     "crates/bellatrix_mde_html_exporter",
     "crates/bellatrix_mde_cli",
     "crates/bellatrix_zed_host",
-    "crates/bellatrix_mde_workbench",
+    "crates/bellatrix_mde_ui",
     "crates/bellatrix_design_system",
-    "crates/bellatrix_ui_uml",
     "crates/bellatrix_ui_symbols",
     "crates/bellatrix_ui_panels",
     "crates/bench_metrics",
@@ -305,9 +304,8 @@ bellatrix_mde_templates = { path = "crates/bellatrix_mde_templates" }
 bellatrix_mde_html_exporter = { path = "crates/bellatrix_mde_html_exporter" }
 bellatrix_mde_cli = { path = "crates/bellatrix_mde_cli" }
 bellatrix_zed_host = { path = "crates/bellatrix_zed_host" }
-bellatrix_mde_workbench = { path = "crates/bellatrix_mde_workbench" }
+bellatrix_mde_ui = { path = "crates/bellatrix_mde_ui" }
 bellatrix_design_system = { path = "crates/bellatrix_design_system" }
-bellatrix_ui_uml = { path = "crates/bellatrix_ui_uml" }
 bellatrix_ui_symbols = { path = "crates/bellatrix_ui_symbols" }
 bellatrix_ui_panels = { path = "crates/bellatrix_ui_panels" }
 # Cordis is the sole lifecycle/composition runtime for Bellatrix engines.

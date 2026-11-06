@@ -20,9 +20,8 @@ CRATES = [
     "bellatrix_mde_html_exporter",
     "bellatrix_mde_cli",
     "bellatrix_zed_host",
-    "bellatrix_mde_workbench",
+    "bellatrix_mde_ui",
     "bellatrix_design_system",
-    "bellatrix_ui_uml",
     "bellatrix_ui_symbols",
     "bellatrix_ui_panels",
 ]
@@ -117,7 +116,7 @@ def check() -> None:
 
     # RightClickMenu inserts an auto-height layout node: size_full on its trigger
     # alone collapses figures to their title or zero when children are absolute.
-    workbench = (ROOT / "crates/bellatrix_mde_workbench/src/layout/body.rs").read_text(encoding="utf-8")
+    workbench = (ROOT / "crates/bellatrix_mde_ui/src/layouts/body.rs").read_text(encoding="utf-8")
     figure_trigger = re.search(
         r'ui::right_click_menu\(format!\("mde-view-menu-.*?\.trigger\(move \|_, _, _\| \{(.*?)\}\)',
         workbench,
@@ -129,9 +128,9 @@ def check() -> None:
     assert ".h(px(local_height * zoom))" in trigger
     assert ".child(figure)" in trigger
     for filename in ["class.rs", "figures.rs"]:
-        renderer = (ROOT / "crates/bellatrix_ui_uml/src" / filename).read_text(encoding="utf-8")
+        renderer = (ROOT / "crates/bellatrix_mde_ui/src/elements/uml" / filename).read_text(encoding="utf-8")
         assert "appearance.stroke(" in renderer, filename
-    shared_style = (ROOT / "crates/bellatrix_ui_uml/src/class.rs").read_text(encoding="utf-8")
+    shared_style = (ROOT / "crates/bellatrix_mde_ui/src/elements/uml/class.rs").read_text(encoding="utf-8")
     assert "palette.diagram_outline(false)" in shared_style
     assert "rgb(palette.selection)" in shared_style
     assert workbench.count(".view_style(&view.style)") == 3, "Every native shape/edge renderer must receive its View style"

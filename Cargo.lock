@@ -2246,7 +2246,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "bellatrix_mde_workbench"
+name = "bellatrix_mde_ui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -2255,11 +2255,11 @@ dependencies = [
  "bellatrix_project",
  "bellatrix_ui_panels",
  "bellatrix_ui_symbols",
- "bellatrix_ui_uml",
  "db",
  "dugong",
  "gpui",
  "language",
+ "log",
  "manatee",
  "merman-core",
  "merman-render",
@@ -2301,24 +2301,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "bellatrix_ui_uml"
-version = "0.1.0"
-dependencies = [
- "bellatrix_design_system",
- "bellatrix_mde_cordis",
- "bellatrix_ui_symbols",
- "gpui",
- "log",
- "ui",
- "ui_input",
-]
-
-[[package]]
 name = "bellatrix_zed_host"
 version = "0.1.0"
 dependencies = [
  "bellatrix_mde_cordis",
- "bellatrix_mde_workbench",
+ "bellatrix_mde_ui",
  "bellatrix_project",
  "cordis-rs",
  "gpui",

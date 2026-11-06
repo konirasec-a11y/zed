@@ -1,7 +1,7 @@
 //! Bellatrix services embedded in Zed's existing application lifecycle.
 //! No GPUI Kit, separate Workspace, or parallel event bus is created here.
 use bellatrix_mde_cordis::{MdePlugin, MdeUiBridge};
-use bellatrix_mde_workbench::{
+use bellatrix_mde_ui::{
     MdeUiSource, NativeDocumentImporter, NativeDocumentLease, register_mde_workspace,
 };
 use bellatrix_project::{

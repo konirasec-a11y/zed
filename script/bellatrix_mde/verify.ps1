@@ -8,7 +8,7 @@ try {
     foreach ($name in @(
         'bellatrix_project', 'bellatrix_mde', 'bellatrix_mde_templates',
         'bellatrix_mde_cordis', 'bellatrix_mde_rust_generator',
-        'bellatrix_mde_html_exporter', 'bellatrix_mde_workbench', 'bellatrix_zed_host'
+        'bellatrix_mde_html_exporter', 'bellatrix_mde_ui', 'bellatrix_zed_host'
     )) {
         & cargo +1.98.1 check -p $name
         if ($LASTEXITCODE -ne 0) { throw "Cargo check failed: $name" }
