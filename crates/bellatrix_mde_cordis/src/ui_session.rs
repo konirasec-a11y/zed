@@ -294,18 +294,9 @@ fn edit(command: MdeUiCommand) -> Result<(ProjectId, u64, Command, Option<Comple
                 target_view_id: request.target_view_id,
             },
         ),
-        MdeUiCommand::CreateElementOrVisualDraft(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::CreateElementOrVisualDraft {
-                diagram_id: request.diagram_id,
-                owner_id: request.owner_id,
-                kind: request.kind,
-                name: request.name,
-                x: request.x,
-                y: request.y,
-            },
-        ),
+        MdeUiCommand::CreateElementOrVisualDraft(request) => {
+            crate::create_element::create_element_or_visual_draft_command(request)
+        }
         MdeUiCommand::CreateElementVisualDraft(request) => (
             request.project_id,
             request.expected_revision,
@@ -318,62 +309,21 @@ fn edit(command: MdeUiCommand) -> Result<(ProjectId, u64, Command, Option<Comple
                 y: request.y,
             },
         ),
-        MdeUiCommand::CreateElement(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::CreateElement {
-                diagram_id: request.diagram_id,
-                owner_id: request.owner_id,
-                kind: request.kind,
-                name: request.name,
-                x: request.x,
-                y: request.y,
-            },
-        ),
-        MdeUiCommand::CreateModelElement(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::CreateModelElement {
-                owner_id: request.owner_id,
-                kind: request.kind,
-                name: request.name,
-            },
-        ),
-        MdeUiCommand::CreateRelationOrVisualDraft(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::CreateRelationOrVisualDraft {
-                diagram_id: request.diagram_id,
-                owner_id: request.owner_id,
-                kind: request.kind,
-                from: request.from,
-                to: request.to,
-            },
-        ),
-        MdeUiCommand::CreateRelation(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::CreateRelation {
-                diagram_id: request.diagram_id,
-                owner_id: request.owner_id,
-                kind: request.kind,
-                from: request.from,
-                to: request.to,
-            },
-        ),
-        MdeUiCommand::CreateRelationAtViewsOrVisualDraft(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::CreateRelationAtViewsOrVisualDraft {
-                diagram_id: request.diagram_id,
-                owner_id: request.owner_id,
-                kind: request.kind,
-                source_view_id: request.source_view_id,
-                target_view_id: request.target_view_id,
-                from: request.from,
-                to: request.to,
-            },
-        ),
+        MdeUiCommand::CreateElement(request) => {
+            crate::create_element::create_element_command(request)
+        }
+        MdeUiCommand::CreateModelElement(request) => {
+            crate::create_element::create_model_element_command(request)
+        }
+        MdeUiCommand::CreateRelationOrVisualDraft(request) => {
+            crate::create_relation::create_relation_or_visual_draft_command(request)
+        }
+        MdeUiCommand::CreateRelation(request) => {
+            crate::create_relation::create_relation_command(request)
+        }
+        MdeUiCommand::CreateRelationAtViewsOrVisualDraft(request) => {
+            crate::create_relation::create_relation_at_views_or_visual_draft_command(request)
+        }
         MdeUiCommand::MoveView(request) => (
             request.project_id,
             request.expected_revision,

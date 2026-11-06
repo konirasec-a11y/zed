@@ -4,17 +4,13 @@ pub use bellatrix_mde_contracts::events::{
     ModelingCreateRelationAtViewsRequested, ModelingCreateRelationOrVisualDraft,
     ModelingCreateRelationRequested,
 };
-use bellatrix_project::ProjectService;
+use bellatrix_project::{ProjectId, ProjectService};
 use cordis::Context;
 
-pub(crate) async fn create_relation_at_views_or_visual_draft(
-    context: &Context,
-    projects: &ProjectService,
+pub(crate) fn create_relation_at_views_or_visual_draft_command(
     request: ModelingCreateRelationAtViewsRequested,
-) -> Result<u64, String> {
-    crate::mutation::execute(
-        context,
-        projects,
+) -> (ProjectId, u64, Command) {
+    (
         request.project_id,
         request.expected_revision,
         Command::CreateRelationAtViewsOrVisualDraft {
@@ -27,17 +23,21 @@ pub(crate) async fn create_relation_at_views_or_visual_draft(
             target_view_id: request.target_view_id,
         },
     )
-    .await
 }
 
-pub(crate) async fn create_relation_or_visual_draft(
+pub(crate) async fn create_relation_at_views_or_visual_draft(
     context: &Context,
     projects: &ProjectService,
-    request: ModelingCreateRelationRequested,
+    request: ModelingCreateRelationAtViewsRequested,
 ) -> Result<u64, String> {
-    crate::mutation::execute(
-        context,
-        projects,
+    let (project_id, expected_revision, command) =
+        create_relation_at_views_or_visual_draft_command(request);
+    crate::mutation::execute(context, projects, project_id, expected_revision, command).await
+}
+pub(crate) fn create_relation_or_visual_draft_command(
+    request: ModelingCreateRelationRequested,
+) -> (ProjectId, u64, Command) {
+    (
         request.project_id,
         request.expected_revision,
         Command::CreateRelationOrVisualDraft {
@@ -48,16 +48,20 @@ pub(crate) async fn create_relation_or_visual_draft(
             to: request.to,
         },
     )
-    .await
 }
-pub(crate) async fn create_relation(
+
+pub(crate) async fn create_relation_or_visual_draft(
     context: &Context,
     projects: &ProjectService,
     request: ModelingCreateRelationRequested,
 ) -> Result<u64, String> {
-    crate::mutation::execute(
-        context,
-        projects,
+    let (project_id, expected_revision, command) = create_relation_or_visual_draft_command(request);
+    crate::mutation::execute(context, projects, project_id, expected_revision, command).await
+}
+pub(crate) fn create_relation_command(
+    request: ModelingCreateRelationRequested,
+) -> (ProjectId, u64, Command) {
+    (
         request.project_id,
         request.expected_revision,
         Command::CreateRelation {
@@ -68,5 +72,13 @@ pub(crate) async fn create_relation(
             to: request.to,
         },
     )
-    .await
+}
+
+pub(crate) async fn create_relation(
+    context: &Context,
+    projects: &ProjectService,
+    request: ModelingCreateRelationRequested,
+) -> Result<u64, String> {
+    let (project_id, expected_revision, command) = create_relation_command(request);
+    crate::mutation::execute(context, projects, project_id, expected_revision, command).await
 }

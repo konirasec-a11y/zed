@@ -34,3 +34,10 @@ Feature: Native editing after MDJ conversion and separate experimental export
     When I request experimental MDJ export
     Then the unsupported platform section is explicitly rejected without mutation
     And native authoring still accepts edits and preserves that section in a complete native file
+
+  Scenario: Create identical classes and relationships through events and the UI session
+    Given the same blank native Class diagram in separate project sessions
+    When I create Classes, an Interface, an Association, a Generalization and a Dependency
+    Then direct Cordis events and UI commands produce identical canonical snapshots
+    And selected View endpoints and semantic ownership survive JSON and Protobuf reopening
+    And replaying the first request at its old revision leaves the authored snapshot unchanged

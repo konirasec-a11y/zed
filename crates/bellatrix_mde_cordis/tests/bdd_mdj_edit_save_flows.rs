@@ -311,7 +311,12 @@ async fn native_edits_save_natively_and_experimental_export_preserves_dirty_stat
     assert!(service.is_dirty(&id)?);
     assert_eq!(saved_events.load(Ordering::SeqCst), 0);
     for entry in fs::read_dir(&saved.0)? {
-        assert!(!entry?.file_name().to_string_lossy().starts_with(".bellatrix-"));
+        assert!(
+            !entry?
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".bellatrix-")
+        );
     }
     assert_eq!(
         answer(
@@ -526,5 +531,299 @@ async fn mdj_interchange_rejects_extra_sections_without_restricting_native_docum
     drop(bridge);
     plugin.dispose().await?;
     provider.dispose().await?;
+    Ok(())
+}
+
+async fn dispatch_creation(
+    context: &Context,
+    bridge: &MdeUiBridge,
+    through_ui: bool,
+    command: MdeUiCommand,
+) -> FlowResult<()> {
+    if through_ui {
+        let session = bridge.session();
+        let mut activity = session.activity();
+        session.submit(command)?;
+        tokio::time::timeout(std::time::Duration::from_secs(30), async {
+            while session.is_pending() {
+                activity.changed().await?;
+            }
+            Ok::<_, Box<dyn Error>>(())
+        })
+        .await??;
+        return Ok(());
+    }
+    use bellatrix_mde_cordis::*;
+    match command {
+        MdeUiCommand::CreateElement(request) => {
+            answer(
+                context
+                    .query::<ModelingCreateElement>(Routing::Unscoped, request)
+                    .await?,
+            )?;
+        }
+        MdeUiCommand::CreateElementOrVisualDraft(request) => {
+            answer(
+                context
+                    .query::<ModelingCreateElementOrVisualDraft>(Routing::Unscoped, request)
+                    .await?,
+            )?;
+        }
+        MdeUiCommand::CreateModelElement(request) => {
+            answer(
+                context
+                    .query::<ModelingCreateModelElement>(Routing::Unscoped, request)
+                    .await?,
+            )?;
+        }
+        MdeUiCommand::CreateRelation(request) => {
+            answer(
+                context
+                    .query::<ModelingCreateRelation>(Routing::Unscoped, request)
+                    .await?,
+            )?;
+        }
+        MdeUiCommand::CreateRelationOrVisualDraft(request) => {
+            answer(
+                context
+                    .query::<ModelingCreateRelationOrVisualDraft>(Routing::Unscoped, request)
+                    .await?,
+            )?;
+        }
+        MdeUiCommand::CreateRelationAtViewsOrVisualDraft(request) => {
+            answer(
+                context
+                    .query::<ModelingCreateRelationAtViewsOrVisualDraft>(Routing::Unscoped, request)
+                    .await?,
+            )?;
+        }
+        _ => return Err("unsupported creation scenario command".into()),
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn class_authoring_matches_between_cordis_events_and_ui_session() -> FlowResult<()> {
+    use bellatrix_mde_cordis::*;
+    assert!(SPECIFICATION.contains(
+        "Scenario: Create identical classes and relationships through events and the UI session"
+    ));
+    let mut snapshots = Vec::new();
+    for through_ui in [false, true] {
+        let (context, service, provider, plugin) = start().await?;
+        let prepared = answer(
+            context
+                .query::<ModelingPrepareDocument>(
+                    Routing::Unscoped,
+                    ModelingPrepareDocumentRequested {
+                        bytes: include_bytes!("../../bellatrix_mde/fixtures/blank.json").to_vec(),
+                        format: ModelingDocumentFormat::ModelJson,
+                    },
+                )
+                .await?,
+        )?;
+        let opened = answer(
+            context
+                .query::<ProjectImport>(
+                    Routing::Unscoped,
+                    ProjectImportRequested {
+                        document: prepared.document,
+                        is_saved: false,
+                    },
+                )
+                .await?,
+        )?;
+        let id = opened.id().clone();
+        let bridge = MdeUiBridge::start(&context, id.clone())?;
+        let first = ModelingCreateElementRequested {
+            project_id: id.clone(),
+            diagram_id: "classes".into(),
+            owner_id: None,
+            kind: ModelingElementKind::Class,
+            name: Some("Invoice".into()),
+            x: 100.0,
+            y: 100.0,
+            expected_revision: 0,
+        };
+        dispatch_creation(
+            &context,
+            &bridge,
+            through_ui,
+            MdeUiCommand::CreateElement(first.clone()),
+        )
+        .await?;
+        let second = ModelingCreateElementRequested {
+            name: Some("Document".into()),
+            x: 400.0,
+            expected_revision: 1,
+            ..first.clone()
+        };
+        dispatch_creation(
+            &context,
+            &bridge,
+            through_ui,
+            MdeUiCommand::CreateElementOrVisualDraft(second),
+        )
+        .await?;
+        dispatch_creation(
+            &context,
+            &bridge,
+            through_ui,
+            MdeUiCommand::CreateModelElement(ModelingCreateModelElementRequested {
+                project_id: id.clone(),
+                owner_id: Some("model".into()),
+                kind: ModelingElementKind::Interface,
+                name: Some("Exportable".into()),
+                expected_revision: 2,
+            }),
+        )
+        .await?;
+        let document = service.snapshot(&id)?;
+        assert_eq!(document.revision(), 3);
+        let projection = answer(
+            context
+                .query::<ModelingReadProjection>(
+                    Routing::Unscoped,
+                    ModelingReadProjectionRequested {
+                        document: Arc::clone(&document),
+                    },
+                )
+                .await?,
+        )?
+        .section;
+        let invoice = projection
+            .elements
+            .iter()
+            .find(|element| element.name == "Invoice")
+            .ok_or("created Invoice missing")?
+            .id
+            .clone();
+        let target = projection
+            .elements
+            .iter()
+            .find(|element| element.name == "Document")
+            .ok_or("created Document missing")?
+            .id
+            .clone();
+        let view_id = |subject: &str| -> FlowResult<String> {
+            projection
+                .diagrams
+                .iter()
+                .flat_map(|diagram| diagram.all_views())
+                .find(|view| view.subject.as_deref() == Some(subject))
+                .map(|view| view.id.clone())
+                .ok_or_else(|| "created Class View missing".into())
+        };
+        let relationship = ModelingCreateRelationRequested {
+            project_id: id.clone(),
+            diagram_id: "classes".into(),
+            owner_id: Some("model".into()),
+            kind: ModelingRelationKind::Association,
+            from: invoice.clone(),
+            to: target.clone(),
+            expected_revision: 3,
+        };
+        dispatch_creation(
+            &context,
+            &bridge,
+            through_ui,
+            MdeUiCommand::CreateRelation(relationship.clone()),
+        )
+        .await?;
+        dispatch_creation(
+            &context,
+            &bridge,
+            through_ui,
+            MdeUiCommand::CreateRelationOrVisualDraft(ModelingCreateRelationRequested {
+                kind: ModelingRelationKind::Generalization,
+                owner_id: Some(invoice.clone()),
+                expected_revision: 4,
+                ..relationship
+            }),
+        )
+        .await?;
+        dispatch_creation(
+            &context,
+            &bridge,
+            through_ui,
+            MdeUiCommand::CreateRelationAtViewsOrVisualDraft(
+                ModelingCreateRelationAtViewsRequested {
+                    project_id: id.clone(),
+                    diagram_id: "classes".into(),
+                    owner_id: Some("model".into()),
+                    kind: ModelingRelationKind::Dependency,
+                    from: Some(invoice.clone()),
+                    to: Some(target.clone()),
+                    source_view_id: view_id(&invoice)?,
+                    target_view_id: view_id(&target)?,
+                    expected_revision: 5,
+                },
+            ),
+        )
+        .await?;
+        let authored = service.snapshot(&id)?;
+        assert_eq!(authored.revision(), 6);
+        let section = authored
+            .section(MODELING_NAMESPACE)
+            .ok_or("missing authored section")?;
+        let typed: bellatrix_mde_contracts::ModelingSection =
+            serde_json::from_value(section.clone())?;
+        for (metaclass, expected) in [
+            ("Class", 2),
+            ("Interface", 1),
+            ("Association", 1),
+            ("Generalization", 1),
+            ("Dependency", 1),
+        ] {
+            assert_eq!(
+                typed
+                    .registry
+                    .entries()
+                    .values()
+                    .filter(|entry| entry.type_name() == metaclass)
+                    .count(),
+                expected
+            );
+        }
+        assert!(
+            typed
+                .diagrams
+                .iter()
+                .flat_map(|diagram| diagram.all_views())
+                .all(|view| view.draft.is_none())
+        );
+        for format in ["json", "protobuf"] {
+            let bytes = bellatrix_mde::encode_model_section(
+                id.as_str(),
+                authored.name(),
+                &section.to_string(),
+                format,
+            )?;
+            let reopened = bellatrix_mde::prepare_model_document(
+                &bellatrix_mde::decode_model_document(&bytes, format)?,
+            )?;
+            let restored: bellatrix_mde_contracts::ModelingSection =
+                serde_json::from_str(&reopened.section_json)?;
+            assert_eq!(restored, typed);
+        }
+        let stale = dispatch_creation(
+            &context,
+            &bridge,
+            through_ui,
+            MdeUiCommand::CreateElement(first),
+        )
+        .await;
+        if through_ui {
+            stale?;
+        } else {
+            assert!(stale.is_err());
+        }
+        assert!(Arc::ptr_eq(&authored, &service.snapshot(&id)?));
+        snapshots.push(section.clone());
+        drop(bridge);
+        plugin.dispose().await?;
+        provider.dispose().await?;
+    }
+    assert_eq!(snapshots.first(), snapshots.get(1));
     Ok(())
 }
