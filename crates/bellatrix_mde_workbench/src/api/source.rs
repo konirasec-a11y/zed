@@ -416,6 +416,445 @@ impl MdeUiSource {
         ))
     }
 
+    pub fn move_view(
+        &self,
+        view_id: &str,
+        dx: f64,
+        dy: f64,
+        expected_revision: u64,
+    ) -> Result<(), String> {
+        self.editable_snapshot(expected_revision)?;
+        self.submit(MdeUiCommand::MoveView(
+            bellatrix_mde_cordis::ModelingMoveViewRequested {
+                project_id: self.project_id.clone(),
+                view_id: view_id.into(),
+                dx,
+                dy,
+                expected_revision,
+            },
+        ))
+    }
+
+    pub fn resize_view(
+        &self,
+        view_id: &str,
+        width: f64,
+        height: f64,
+        expected_revision: u64,
+    ) -> Result<(), String> {
+        self.editable_snapshot(expected_revision)?;
+        self.submit(MdeUiCommand::ResizeView(
+            bellatrix_mde_cordis::ModelingResizeViewRequested {
+                project_id: self.project_id.clone(),
+                view_id: view_id.into(),
+                width,
+                height,
+                expected_revision,
+            },
+        ))
+    }
+
+    pub fn set_view_path(
+        &self,
+        diagram_id: &str,
+        view_id: &str,
+        geometry: bellatrix_mde_cordis::Geometry,
+        expected_revision: u64,
+    ) -> Result<(), String> {
+        self.editable_snapshot(expected_revision)?;
+        self.submit(MdeUiCommand::SetViewPath(
+            bellatrix_mde_cordis::ModelingSetViewPathRequested {
+                project_id: self.project_id.clone(),
+                diagram_id: diagram_id.into(),
+                view_id: view_id.into(),
+                geometry,
+                expected_revision,
+            },
+        ))
+    }
+
+    pub fn remove_view(
+        &self,
+        diagram_id: &str,
+        view_id: &str,
+        expected_revision: u64,
+    ) -> Result<(), String> {
+        self.editable_snapshot(expected_revision)?;
+        self.submit(MdeUiCommand::RemoveView(
+            bellatrix_mde_cordis::ModelingRemoveViewRequested {
+                project_id: self.project_id.clone(),
+                diagram_id: diagram_id.into(),
+                view_id: view_id.into(),
+                expected_revision,
+            },
+        ))
+    }
+
+    pub fn place_element_view(
+        &self,
+        diagram_id: &str,
+        element_id: &str,
+        x: f64,
+        y: f64,
+        expected_revision: u64,
+    ) -> Result<(), String> {
+        self.editable_snapshot(expected_revision)?;
+        self.submit(MdeUiCommand::PlaceElementView(
+            bellatrix_mde_cordis::ModelingPlaceElementViewRequested {
+                project_id: self.project_id.clone(),
+                diagram_id: diagram_id.into(),
+                element_id: element_id.into(),
+                x,
+                y,
+                expected_revision,
+            },
+        ))
+    }
+
+    pub fn rename_element(
+        &self,
+        element_id: &str,
+        new_name: String,
+        expected_revision: u64,
+    ) -> Result<(), String> {
+        self.editable_snapshot(expected_revision)?;
+        self.submit(MdeUiCommand::Rename(
+            bellatrix_mde_cordis::ModelingRenameRequested {
+                project_id: self.project_id.clone(),
+                element_id: element_id.into(),
+                new_name,
+                expected_revision,
+            },
+        ))
+    }
+
+    pub fn rename_diagram(
+        &self,
+        diagram_id: &str,
+        name: String,
+        expected_revision: u64,
+    ) -> Result<(), String> {
+        self.editable_snapshot(expected_revision)?;
+        self.submit(MdeUiCommand::RenameDiagram(
+            bellatrix_mde_cordis::ModelingRenameDiagramRequested {
+                project_id: self.project_id.clone(),
+                diagram_id: diagram_id.into(),
+                name,
+                expected_revision,
+            },
+        ))
+    }
+
+    pub fn delete_diagram(&self, diagram_id: &str, expected_revision: u64) -> Result<(), String> {
+        self.editable_snapshot(expected_revision)?;
+        self.submit(MdeUiCommand::DeleteDiagram(
+            bellatrix_mde_cordis::ModelingDeleteDiagramRequested {
+                project_id: self.project_id.clone(),
+                diagram_id: diagram_id.into(),
+                expected_revision,
+            },
+        ))
+    }
+
+    pub fn set_name_expression(
+        &self,
+        element_id: &str,
+        expression: String,
+        expected_revision: u64,
+    ) -> Result<(), String> {
+        self.editable_snapshot(expected_revision)?;
+        self.submit(MdeUiCommand::SetNameExpression(
+            bellatrix_mde_cordis::ModelingSetNameExpressionRequested {
+                project_id: self.project_id.clone(),
+                element_id: element_id.into(),
+                expression,
+                expected_revision,
+            },
+        ))
+    }
+
+    pub fn set_owner(
+        &self,
+        element_id: &str,
+        owner_id: Option<String>,
+        expected_revision: u64,
+    ) -> Result<(), String> {
+        self.editable_snapshot(expected_revision)?;
+        self.submit(MdeUiCommand::SetOwner(
+            bellatrix_mde_cordis::ModelingSetOwnerRequested {
+                project_id: self.project_id.clone(),
+                element_id: element_id.into(),
+                owner_id,
+                expected_revision,
+            },
+        ))
+    }
+
+    pub fn set_explorer_parent(
+        &self,
+        subject_id: &str,
+        parent_id: Option<String>,
+        parent_occurrence: Option<bellatrix_mde_cordis::ViewOccurrence>,
+        expected_revision: u64,
+    ) -> Result<(), String> {
+        self.editable_snapshot(expected_revision)?;
+        self.submit(MdeUiCommand::SetExplorerParent(
+            bellatrix_mde_cordis::ModelingSetExplorerParentRequested {
+                project_id: self.project_id.clone(),
+                subject_id: subject_id.into(),
+                parent_id,
+                parent_occurrence,
+                expected_revision,
+            },
+        ))
+    }
+
+    fn diagram_creation_request(
+        &self,
+        kind: bellatrix_mde_cordis::StructuralDiagramKind,
+        selected: Option<&str>,
+        expected_revision: u64,
+    ) -> Result<bellatrix_mde_cordis::ModelingCreateDiagramRequested, String> {
+        let snapshot = self.editable_snapshot(expected_revision)?;
+        let uses_context = kind == bellatrix_mde_cordis::StructuralDiagramKind::CompositeStructure
+            || snapshot
+                .section
+                .tools
+                .diagram(kind)
+                .is_some_and(|metadata| metadata.context_metaclass.is_some());
+        Ok(bellatrix_mde_cordis::ModelingCreateDiagramRequested {
+            project_id: self.project_id.clone(),
+            expected_revision,
+            kind,
+            name: format!(
+                "{} diagram {}",
+                crate::workbench_ui::diagram_kind_label(kind),
+                snapshot.section.diagrams.len().saturating_add(1)
+            ),
+            model_elements: if uses_context {
+                selected.map(str::to_owned).into_iter().collect()
+            } else {
+                Vec::new()
+            },
+        })
+    }
+
+    pub fn create_diagram(
+        &self,
+        kind: bellatrix_mde_cordis::StructuralDiagramKind,
+        selected: Option<&str>,
+        expected_revision: u64,
+    ) -> Result<(), String> {
+        let request = self.diagram_creation_request(kind, selected, expected_revision)?;
+        self.submit(MdeUiCommand::CreateDiagram(request))
+    }
+
+    pub fn create_explorer_diagram(
+        &self,
+        kind: bellatrix_mde_cordis::StructuralDiagramKind,
+        parent_id: Option<&str>,
+        parent_occurrence: Option<bellatrix_mde_cordis::ViewOccurrence>,
+        expected_revision: u64,
+    ) -> Result<(), String> {
+        let diagram = self.diagram_creation_request(kind, parent_id, expected_revision)?;
+        self.submit(MdeUiCommand::CreateExplorerDiagram(
+            bellatrix_mde_cordis::ModelingCreateExplorerDiagramRequested {
+                diagram,
+                parent_id: parent_id.map(str::to_owned),
+                parent_occurrence,
+            },
+        ))
+    }
+
+    pub fn validate_diagram(&self, diagram_id: &str, expected_revision: u64) -> Result<(), String> {
+        self.submit(MdeUiCommand::ValidateDiagram(
+            bellatrix_mde_cordis::ModelingValidateDiagramRequested {
+                project_id: self.project_id.clone(),
+                diagram_id: diagram_id.into(),
+                expected_revision,
+            },
+        ))
+    }
+
+    pub fn save_project(&self, path: std::path::PathBuf) -> Result<(), String> {
+        let document = self.document()?;
+        self.submit(MdeUiCommand::SaveProject(
+            bellatrix_project::ProjectSaveRequested { document, path },
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_visual_draft(
+        &self,
+        diagram_id: &str,
+        notation_kind: &str,
+        label: Option<String>,
+        geometry: bellatrix_mde_cordis::Geometry,
+        properties: std::collections::BTreeMap<String, serde_json::Value>,
+        parent_view_id: Option<String>,
+        source_view_id: Option<String>,
+        target_view_id: Option<String>,
+        expected_revision: u64,
+    ) -> Result<(), String> {
+        self.editable_snapshot(expected_revision)?;
+        self.submit(MdeUiCommand::CreateVisualDraft(
+            bellatrix_mde_cordis::ModelingCreateVisualDraftRequested {
+                project_id: self.project_id.clone(),
+                diagram_id: diagram_id.into(),
+                notation_kind: notation_kind.into(),
+                label,
+                geometry,
+                properties,
+                parent_view_id,
+                source_view_id,
+                target_view_id,
+                expected_revision,
+            },
+        ))
+    }
+
+    pub fn set_property_tracked(
+        &self,
+        element_id: &str,
+        path: &str,
+        value: serde_json::Value,
+        expected_revision: u64,
+        completion: watch::Sender<Option<Result<u64, String>>>,
+    ) -> Result<(), String> {
+        self.submit(MdeUiCommand::SetPropertyTracked {
+            request: bellatrix_mde_cordis::ModelingSetPropertyRequested {
+                project_id: self.project_id.clone(),
+                element_id: element_id.into(),
+                path: path.into(),
+                value,
+                expected_revision,
+            },
+            completion,
+        })
+    }
+
+    pub fn set_view_label_tracked(
+        &self,
+        view_id: &str,
+        label: Option<String>,
+        expected_revision: u64,
+        completion: watch::Sender<Option<Result<u64, String>>>,
+    ) -> Result<(), String> {
+        self.submit(MdeUiCommand::SetViewLabelTracked {
+            request: bellatrix_mde_cordis::ModelingSetViewLabelRequested {
+                project_id: self.project_id.clone(),
+                view_id: view_id.into(),
+                label,
+                expected_revision,
+            },
+            completion,
+        })
+    }
+
+    pub fn set_view_timing_tracked(
+        &self,
+        view_id: &str,
+        timing: Option<bellatrix_mde_cordis::TimingPresentation>,
+        expected_revision: u64,
+        completion: watch::Sender<Option<Result<u64, String>>>,
+    ) -> Result<(), String> {
+        self.submit(MdeUiCommand::SetViewTimingTracked {
+            request: bellatrix_mde_cordis::ModelingSetViewTimingRequested {
+                project_id: self.project_id.clone(),
+                view_id: view_id.into(),
+                timing,
+                expected_revision,
+            },
+            completion,
+        })
+    }
+
+    fn admit_view_style_edit(
+        &self,
+        diagram_id: &str,
+        view_id: &str,
+        layout: bool,
+    ) -> Result<(), String> {
+        let snapshot = self.snapshot()?;
+        let diagram = snapshot
+            .section
+            .diagrams
+            .iter()
+            .find(|diagram| diagram.id == diagram_id)
+            .ok_or("The original diagram is no longer available")?;
+        if !crate::workbench_ui::selection::supports_view_style_editing(diagram, view_id) {
+            return Err("This view supports inspection only".into());
+        }
+        if layout && !crate::workbench_ui::selection::supports_view_layout_editing(diagram, view_id)
+        {
+            return Err("Routing and stacking changes require a supported editable view".into());
+        }
+        Ok(())
+    }
+
+    pub fn set_view_style_tracked(
+        &self,
+        diagram_id: &str,
+        view_id: &str,
+        style: bellatrix_mde_cordis::Style,
+        expected_revision: u64,
+        completion: watch::Sender<Option<Result<u64, String>>>,
+    ) -> Result<(), String> {
+        self.admit_view_style_edit(diagram_id, view_id, false)?;
+        self.submit(MdeUiCommand::SetViewStyleTracked {
+            request: bellatrix_mde_cordis::ModelingSetViewStyleRequested {
+                project_id: self.project_id.clone(),
+                diagram_id: diagram_id.into(),
+                view_id: view_id.into(),
+                style,
+                expected_revision,
+            },
+            completion,
+        })
+    }
+
+    pub fn set_view_routing_tracked(
+        &self,
+        diagram_id: &str,
+        view_id: &str,
+        routing: bellatrix_mde_cordis::RelationshipRouting,
+        expected_revision: u64,
+        completion: watch::Sender<Option<Result<u64, String>>>,
+    ) -> Result<(), String> {
+        self.admit_view_style_edit(diagram_id, view_id, true)?;
+        self.submit(MdeUiCommand::SetViewRoutingTracked {
+            request: bellatrix_mde_cordis::ModelingSetViewRoutingRequested {
+                project_id: self.project_id.clone(),
+                diagram_id: diagram_id.into(),
+                view_id: view_id.into(),
+                routing,
+                expected_revision,
+            },
+            completion,
+        })
+    }
+
+    pub fn reorder_view_tracked(
+        &self,
+        diagram_id: &str,
+        view_id: &str,
+        order: bellatrix_mde_cordis::ViewOrder,
+        expected_revision: u64,
+        completion: watch::Sender<Option<Result<u64, String>>>,
+    ) -> Result<(), String> {
+        self.admit_view_style_edit(diagram_id, view_id, true)?;
+        self.submit(MdeUiCommand::ReorderViewTracked {
+            request: bellatrix_mde_cordis::ModelingReorderViewRequested {
+                project_id: self.project_id.clone(),
+                diagram_id: diagram_id.into(),
+                view_id: view_id.into(),
+                order,
+                expected_revision,
+            },
+            completion,
+        })
+    }
+
     pub fn submit(&self, command: MdeUiCommand) -> Result<(), String> {
         let revision = self.interaction_revision();
         let identity = match &command {

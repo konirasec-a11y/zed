@@ -7,10 +7,7 @@ use bellatrix_mde_cordis::projection::{
     InheritedStyleProperty, StyleInheritanceDiagnostic, StyleInheritanceSource,
     StyleInheritanceStatus, View,
 };
-use bellatrix_mde_cordis::{
-    MdeUiCommand, ModelingReorderViewRequested, ModelingSetViewRoutingRequested,
-    ModelingSetViewStyleRequested, RelationshipRouting, ViewOrder,
-};
+use bellatrix_mde_cordis::{RelationshipRouting, ViewOrder};
 use gpui::{AnyElement, Context, Entity, IntoElement, Window, div, prelude::*, px};
 use std::collections::HashMap;
 use ui::{Button, IconButton, Label, Tooltip, prelude::*};
@@ -1243,55 +1240,31 @@ impl MdeWorkbenchItem {
                 "Select the original editable diagram view before changing its style".into(),
             );
         }
-        let snapshot = self.source().snapshot()?;
-        if !snapshot.section.diagrams.iter().any(|diagram| {
-            diagram.id == key.1 && super::selection::supports_view_style_editing(diagram, &key.2)
-        }) {
-            return Err("This view supports inspection only".into());
-        }
-        if (submission.order.is_some() || submission.routing.is_some())
-            && !snapshot.section.diagrams.iter().any(|diagram| {
-                diagram.id == key.1
-                    && super::selection::supports_view_layout_editing(diagram, &key.2)
-            })
-        {
-            return Err("Routing and stacking changes require a supported editable view".into());
-        }
-        let command = if let Some(order) = submission.order {
-            MdeUiCommand::ReorderViewTracked {
-                request: ModelingReorderViewRequested {
-                    project_id: self.project_id().clone(),
-                    expected_revision: submission.expected_revision,
-                    diagram_id: key.1.clone(),
-                    view_id: key.2.clone(),
-                    order,
-                },
+        if let Some(order) = submission.order {
+            self.source.reorder_view_tracked(
+                &key.1,
+                &key.2,
+                order,
+                submission.expected_revision,
                 completion,
-            }
+            )?;
         } else if let Some(routing) = submission.routing {
-            MdeUiCommand::SetViewRoutingTracked {
-                request: ModelingSetViewRoutingRequested {
-                    project_id: self.project_id().clone(),
-                    expected_revision: submission.expected_revision,
-                    diagram_id: key.1.clone(),
-                    view_id: key.2.clone(),
-                    routing,
-                },
+            self.source.set_view_routing_tracked(
+                &key.1,
+                &key.2,
+                routing,
+                submission.expected_revision,
                 completion,
-            }
+            )?;
         } else {
-            MdeUiCommand::SetViewStyleTracked {
-                request: ModelingSetViewStyleRequested {
-                    project_id: self.project_id().clone(),
-                    expected_revision: submission.expected_revision,
-                    diagram_id: key.1.clone(),
-                    view_id: key.2.clone(),
-                    style: submission.style.clone(),
-                },
+            self.source.set_view_style_tracked(
+                &key.1,
+                &key.2,
+                submission.style.clone(),
+                submission.expected_revision,
                 completion,
-            }
-        };
-        self.source.submit(command)?;
+            )?;
+        }
         cx.notify();
         Ok(())
     }

@@ -214,26 +214,21 @@ impl MdeWorkbenchItem {
         } else {
             None
         };
-        self.submit(
-            MdeUiCommand::CreateVisualDraft(
-                bellatrix_mde_cordis::ModelingCreateVisualDraftRequested {
-                    project_id: self.project_id().clone(),
-                    diagram_id: diagram.id.clone(),
-                    notation_kind: metadata.model_kind.clone(),
-                    label,
-                    geometry: Geometry::Path {
-                        start,
-                        segments: vec![PathSegment::Line { to }],
-                    },
-                    properties,
-                    parent_view_id: None,
-                    source_view_id: from,
-                    target_view_id: target,
-                    expected_revision: snapshot.revision,
-                },
-            ),
-            cx,
+        let result = self.source.create_visual_draft(
+            &diagram.id,
+            &metadata.model_kind,
+            label,
+            Geometry::Path {
+                start,
+                segments: vec![PathSegment::Line { to }],
+            },
+            properties,
+            None,
+            from,
+            target,
+            snapshot.revision,
         );
+        self.report_command_result(result, cx);
         self.presentation.cancel_tool();
         cx.notify();
     }

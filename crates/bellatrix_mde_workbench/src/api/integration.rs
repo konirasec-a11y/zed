@@ -7,8 +7,6 @@ use crate::workbench_ui::status_entry::{MdeStatusEntry, status_button_enabled};
 use crate::workbench_ui::{
     MdeSymbolLibraryItem, MdeUiSource, MdeWorkbenchItem, open_in_workspace, panels,
 };
-use bellatrix_mde_cordis::MdeUiCommand;
-use bellatrix_project::ProjectSaveRequested;
 use gpui::{App, AppContext, Entity, TaskExt, Window, actions};
 use project::DirectoryLister;
 use std::{
@@ -200,21 +198,8 @@ pub fn register_mde_workspace(
                         item.update(cx, |item, cx| {
                             // Keep the native PathBuf intact, including non-UTF-8 names.
                             // The existing bridge reports the actual ProjectSave outcome.
-                            match item.source().document() {
-                                Ok(document) => {
-                                    item.submit(
-                                        MdeUiCommand::SaveProject(ProjectSaveRequested {
-                                            document,
-                                            path,
-                                        }),
-                                        cx,
-                                    );
-                                }
-                                Err(error) => {
-                                    item.feedback = error;
-                                    cx.notify();
-                                }
-                            }
+                            let result = item.source().save_project(path);
+                            item.report_command_result(result, cx);
                         });
                     }) {
                         eprintln!("Bellatrix save dialog workspace unavailable: {error}");

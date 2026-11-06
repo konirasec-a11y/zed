@@ -314,45 +314,24 @@ fn explorer_creation_menus(
                 let owner = owner.clone();
                 let project_id = snapshot.project_id.clone();
                 let revision = snapshot.revision;
-                let model_elements = if snapshot
-                    .section
-                    .tools
-                    .diagram(kind)
-                    .is_some_and(|metadata| metadata.context_metaclass.is_some())
-                    || kind == bellatrix_mde_cordis::StructuralDiagramKind::CompositeStructure
-                {
-                    subject.iter().cloned().collect::<Vec<_>>()
-                } else {
-                    Vec::new()
-                };
                 let parent_id = subject.clone();
                 let parent_occurrence = parent_occurrence.clone();
                 let label = crate::workbench_ui::diagram_kind_label(kind).to_owned();
-                let name = format!(
-                    "{} diagram {}",
-                    label,
-                    snapshot.section.diagrams.len().saturating_add(1)
-                );
                 let panel = panel.clone();
                 let row_key = row_key.clone();
                 menu = menu.entry(label, None, move |_, cx| {
                     let sent = owner.update(cx, |workbench, cx| {
-                        workbench.submit_explorer_command(
-                            bellatrix_mde_cordis::MdeUiCommand::CreateExplorerDiagram(
-                                bellatrix_mde_cordis::ModelingCreateExplorerDiagramRequested {
-                                    diagram: bellatrix_mde_cordis::ModelingCreateDiagramRequested {
-                                        project_id: project_id.clone(),
-                                        kind,
-                                        name: name.clone(),
-                                        model_elements: model_elements.clone(),
-                                        expected_revision: revision,
-                                    },
-                                    parent_id: parent_id.clone(),
-                                    parent_occurrence: parent_occurrence.clone(),
-                                },
-                            ),
+                        workbench.submit_explorer_operation(
                             &project_id,
                             revision,
+                            |source| {
+                                source.create_explorer_diagram(
+                                    kind,
+                                    parent_id.as_deref(),
+                                    parent_occurrence.clone(),
+                                    revision,
+                                )
+                            },
                             cx,
                         )
                     });
@@ -752,7 +731,7 @@ impl MdeRightPanel {
             self.explorer_action = None;
             return;
         }
-        let command = if let Some(input) = &draft.rename {
+        let name = if let Some(input) = &draft.rename {
             let name = input.read(cx).text(cx).trim().to_owned();
             if name.is_empty() {
                 owner.update(cx, |workbench, cx| {
@@ -761,39 +740,30 @@ impl MdeRightPanel {
                 });
                 return;
             }
-            match &draft.target {
-                ExplorerActionTarget::Diagram(id) => {
-                    bellatrix_mde_cordis::MdeUiCommand::RenameDiagram(
-                        bellatrix_mde_cordis::ModelingRenameDiagramRequested {
-                            project_id: draft.project_id.clone(),
-                            diagram_id: id.clone(),
-                            name,
-                            expected_revision: draft.revision,
-                        },
-                    )
-                }
-                ExplorerActionTarget::Element(id) => bellatrix_mde_cordis::MdeUiCommand::Rename(
-                    bellatrix_mde_cordis::ModelingRenameRequested {
-                        project_id: draft.project_id.clone(),
-                        element_id: id.clone(),
-                        new_name: name,
-                        expected_revision: draft.revision,
-                    },
-                ),
-            }
-        } else if let ExplorerActionTarget::Diagram(id) = &draft.target {
-            bellatrix_mde_cordis::MdeUiCommand::DeleteDiagram(
-                bellatrix_mde_cordis::ModelingDeleteDiagramRequested {
-                    project_id: draft.project_id.clone(),
-                    diagram_id: id.clone(),
-                    expected_revision: draft.revision,
-                },
-            )
+            Some(name)
+        } else if matches!(&draft.target, ExplorerActionTarget::Diagram(_)) {
+            None
         } else {
             return;
         };
         if owner.update(cx, |workbench, cx| {
-            workbench.submit_explorer_command(command, &draft.project_id, draft.revision, cx)
+            workbench.submit_explorer_operation(
+                &draft.project_id,
+                draft.revision,
+                |source| match (&draft.target, name) {
+                    (ExplorerActionTarget::Diagram(id), Some(name)) => {
+                        source.rename_diagram(id, name, draft.revision)
+                    }
+                    (ExplorerActionTarget::Element(id), Some(name)) => {
+                        source.rename_element(id, name, draft.revision)
+                    }
+                    (ExplorerActionTarget::Diagram(id), None) => {
+                        source.delete_diagram(id, draft.revision)
+                    }
+                    _ => Err("Unsupported Explorer action".into()),
+                },
+                cx,
+            )
         }) {
             self.explorer_action = None;
             window.focus(&self.state.focus, cx);

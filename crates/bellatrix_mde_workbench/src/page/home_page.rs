@@ -63,10 +63,6 @@ pub use symbol_library::MdeSymbolLibraryItem;
 pub use theme::WorkbenchPalette;
 
 use bellatrix_mde_cordis::{Geometry, ModelingRelationKind, PathSegment, UmlQuickCreate};
-use bellatrix_mde_cordis::{
-    MdeUiCommand, ModelingMoveViewRequested, ModelingResizeViewRequested,
-    ModelingSetNameExpressionRequested, ModelingSetPropertyRequested, ModelingSetViewPathRequested,
-};
 use bellatrix_mde_cordis::{ModelingElementKind, ModelingMemberKind, ModelingTool};
 use bellatrix_project::ProjectId;
 use bellatrix_ui_uml::{UmlClassifier, UmlFigure, UmlLineSegment, UmlRelationGlyph};
@@ -210,22 +206,6 @@ pub(crate) fn diagram_kind_label(
         Communication => "Communication",
         InteractionOverview => "Interaction overview",
         Timing => "Timing",
-    }
-}
-
-fn diagram_creation_context(
-    catalog: &bellatrix_mde_cordis::ToolCatalog,
-    kind: bellatrix_mde_cordis::StructuralDiagramKind,
-    selected: Option<&str>,
-) -> Vec<String> {
-    if kind == bellatrix_mde_cordis::StructuralDiagramKind::CompositeStructure
-        || catalog
-            .diagram(kind)
-            .is_some_and(|metadata| metadata.context_metaclass.is_some())
-    {
-        selected.map(str::to_owned).into_iter().collect()
-    } else {
-        Vec::new()
     }
 }
 
@@ -536,15 +516,10 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         }
-        self.submit(
-            MdeUiCommand::RemoveView(bellatrix_mde_cordis::ModelingRemoveViewRequested {
-                project_id: self.project_id().clone(),
-                diagram_id,
-                view_id,
-                expected_revision: snapshot.revision,
-            }),
-            cx,
-        );
+        let result = self
+            .source
+            .remove_view(&diagram_id, &view_id, snapshot.revision);
+        self.report_command_result(result, cx);
     }
 
     fn view_context_menu(
@@ -789,16 +764,13 @@ impl MdeWorkbenchItem {
             let project_id = self.project_id().clone();
             let diagram_id = self.presentation.active_diagram().map(str::to_owned);
             let (completion, mut receipt) = tokio::sync::watch::channel(None);
-            if let Err(error) = self.source.submit(MdeUiCommand::SetPropertyTracked {
-                request: ModelingSetPropertyRequested {
-                    project_id: project_id.clone(),
-                    element_id: id.clone(),
-                    path: path.into(),
-                    value: serde_json::Value::String(name.clone()),
-                    expected_revision: snapshot.revision,
-                },
+            if let Err(error) = self.source.set_property_tracked(
+                &id,
+                path,
+                serde_json::Value::String(name.clone()),
+                snapshot.revision,
                 completion,
-            }) {
+            ) {
                 self.feedback = format!("Name not sent; text preserved: {error}");
                 cx.notify();
                 return;
@@ -864,15 +836,10 @@ impl MdeWorkbenchItem {
         self.inline_draft = None;
         if changed {
             if path == "name_expression" {
-                self.submit(
-                    MdeUiCommand::SetNameExpression(ModelingSetNameExpressionRequested {
-                        project_id: self.project_id().clone(),
-                        element_id: id,
-                        expression: name,
-                        expected_revision: snapshot.revision,
-                    }),
-                    cx,
-                );
+                let result = self
+                    .source
+                    .set_name_expression(&id, name, snapshot.revision);
+                self.report_command_result(result, cx);
             } else {
                 let result = self.source.set_property(
                     &id,
@@ -915,26 +882,12 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
-        let name = format!(
-            "{} diagram {}",
-            diagram_kind_label(kind),
-            snapshot.section.diagrams.len().saturating_add(1)
-        );
-        let model_elements = diagram_creation_context(
-            &snapshot.section.tools,
+        let result = self.source.create_diagram(
             kind,
             self.presentation.selected_element(),
+            snapshot.revision,
         );
-        self.submit(
-            MdeUiCommand::CreateDiagram(bellatrix_mde_cordis::ModelingCreateDiagramRequested {
-                project_id: self.project_id().clone(),
-                expected_revision: snapshot.revision,
-                kind,
-                name,
-                model_elements,
-            }),
-            cx,
-        );
+        self.report_command_result(result, cx);
     }
 
     pub fn select_diagram(&mut self, id: String, cx: &mut Context<Self>) {
@@ -1275,7 +1228,7 @@ impl MdeWorkbenchItem {
             return;
         }
         let mut submitted_gesture = gesture.clone();
-        let command = match gesture {
+        let result = match gesture {
             CanvasGesture::Move {
                 view_id, dx, dy, ..
             } => {
@@ -1288,13 +1241,7 @@ impl MdeWorkbenchItem {
                     cx.notify();
                     return;
                 }
-                MdeUiCommand::MoveView(ModelingMoveViewRequested {
-                    project_id: self.project_id().clone(),
-                    view_id,
-                    dx,
-                    dy,
-                    expected_revision,
-                })
+                self.source.move_view(&view_id, dx, dy, expected_revision)
             }
             CanvasGesture::Resize {
                 view_id,
@@ -1327,13 +1274,12 @@ impl MdeWorkbenchItem {
                             .map(|view| canvas_presentation::minimum_size(&snapshot.section, view))
                     })
                     .unwrap_or((80.0, 48.0));
-                MdeUiCommand::ResizeView(ModelingResizeViewRequested {
-                    project_id: self.project_id().clone(),
-                    view_id,
-                    width: (width + dx).max(minimum.0),
-                    height: (height + dy).max(minimum.1),
+                self.source.resize_view(
+                    &view_id,
+                    (width + dx).max(minimum.0),
+                    (height + dy).max(minimum.1),
                     expected_revision,
-                })
+                )
             }
             CanvasGesture::EditPath {
                 diagram_id,
@@ -1349,16 +1295,11 @@ impl MdeWorkbenchItem {
                     cx.notify();
                     return;
                 }
-                MdeUiCommand::SetViewPath(ModelingSetViewPathRequested {
-                    project_id: self.project_id().clone(),
-                    diagram_id,
-                    view_id,
-                    geometry: edited,
-                    expected_revision,
-                })
+                self.source
+                    .set_view_path(&diagram_id, &view_id, edited, expected_revision)
             }
         };
-        self.feedback = match self.source.submit(command) {
+        self.feedback = match result {
             Ok(()) => {
                 submitted_gesture.mark_submitted();
                 self.gesture = Some(submitted_gesture);

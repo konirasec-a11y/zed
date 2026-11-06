@@ -1,7 +1,6 @@
 //! Authored timing samples are View presentation, not evaluated UML occurrences.
 use crate::workbench_ui::{MdeWorkbenchItem, inspector_drafts::DraftState, panels::MdeRightPanel};
 use bellatrix_mde_cordis::projection::View;
-use bellatrix_mde_cordis::{MdeUiCommand, ModelingSetViewTimingRequested};
 use bellatrix_mde_cordis::{TimingMode, TimingPoint, TimingPresentation};
 use gpui::{
     AnyElement, Context, Entity, EntityId, Focusable, IntoElement, Subscription, Window, div,
@@ -379,21 +378,12 @@ fn flush_timing_edits(
     draft.state.queued = false;
     draft.queued_values = None;
     let (sender, mut receiver) = tokio::sync::watch::channel(None);
-    let request = ModelingSetViewTimingRequested {
-        project_id: item.read(cx).project_id().clone(),
-        view_id: key.2.clone(),
-        timing: Some(timing),
-        expected_revision,
-    };
     draft.pending = Some((submitted, receiver.clone()));
     item.update(cx, |item, cx| {
-        item.submit(
-            MdeUiCommand::SetViewTimingTracked {
-                request,
-                completion: sender,
-            },
-            cx,
-        )
+        let result =
+            item.source
+                .set_view_timing_tracked(&key.2, Some(timing), expected_revision, sender);
+        item.report_command_result(result, cx);
     });
     let item = item.clone();
     let key = key.clone();

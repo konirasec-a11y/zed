@@ -103,16 +103,13 @@ impl MdeWorkbenchItem {
             return Err("Inspector project changed; draft preserved".into());
         }
         let (completion, receipt) = tokio::sync::watch::channel(None);
-        self.source.submit(MdeUiCommand::SetPropertyTracked {
-            request: ModelingSetPropertyRequested {
-                project_id,
-                element_id,
-                path,
-                value,
-                expected_revision,
-            },
+        self.source.set_property_tracked(
+            &element_id,
+            &path,
+            value,
+            expected_revision,
             completion,
-        })?;
+        )?;
         self.feedback = "Updating inspected property…".into();
         cx.notify();
         Ok(receipt)
@@ -201,11 +198,6 @@ impl MdeWorkbenchItem {
         }
     }
 
-    pub(super) fn submit(&mut self, command: MdeUiCommand, cx: &mut Context<Self>) {
-        let result = self.source.submit(command);
-        self.report_command_result(result, cx);
-    }
-
     pub(crate) fn report_command_result(
         &mut self,
         result: Result<(), String>,
@@ -289,31 +281,26 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
-        self.submit(
-            MdeUiCommand::CreateVisualDraft(
-                bellatrix_mde_cordis::ModelingCreateVisualDraftRequested {
-                    project_id: self.project_id().clone(),
-                    diagram_id: diagram.id.clone(),
-                    notation_kind: "uml.interface".into(),
-                    label: Some("Interface".into()),
-                    geometry: Geometry::Rect {
-                        x,
-                        y,
-                        width: 112.0,
-                        height: 68.0,
-                    },
-                    properties: std::collections::BTreeMap::from([(
-                        "interface_presentation".into(),
-                        serde_json::json!(presentation),
-                    )]),
-                    parent_view_id: None,
-                    source_view_id: None,
-                    target_view_id: None,
-                    expected_revision: snapshot.revision,
-                },
-            ),
-            cx,
+        let result = self.source.create_visual_draft(
+            &diagram.id,
+            "uml.interface",
+            Some("Interface".into()),
+            Geometry::Rect {
+                x,
+                y,
+                width: 112.0,
+                height: 68.0,
+            },
+            std::collections::BTreeMap::from([(
+                "interface_presentation".into(),
+                serde_json::json!(presentation),
+            )]),
+            None,
+            None,
+            None,
+            snapshot.revision,
         );
+        self.report_command_result(result, cx);
         self.presentation.cancel_tool();
         cx.notify();
     }
@@ -411,21 +398,6 @@ impl MdeWorkbenchItem {
             return Err("The dragged occurrence no longer matches its element".into());
         }
         Ok(())
-    }
-
-    pub(super) fn submit_explorer_command(
-        &mut self,
-        command: MdeUiCommand,
-        project_id: &ProjectId,
-        expected_revision: u64,
-        cx: &mut Context<Self>,
-    ) -> bool {
-        self.submit_explorer_operation(
-            project_id,
-            expected_revision,
-            |source| source.submit(command),
-            cx,
-        )
     }
 
     pub(super) fn submit_explorer_operation(
@@ -537,26 +509,19 @@ impl MdeWorkbenchItem {
         }
         // Preview validation is advisory. Dispatch the captured intent so Cordis
         // reports the authoritative kernel rejection as well as successful moves.
-        let command = match target {
-            hierarchy::ExplorerMoveTarget::Element(element_id) => {
-                MdeUiCommand::SetOwner(bellatrix_mde_cordis::ModelingSetOwnerRequested {
-                    project_id: project_id.clone(),
-                    element_id: element_id.clone(),
-                    owner_id: parent_id,
-                    expected_revision: revision,
-                })
-            }
-            hierarchy::ExplorerMoveTarget::Diagram(diagram_id) => MdeUiCommand::SetExplorerParent(
-                bellatrix_mde_cordis::ModelingSetExplorerParentRequested {
-                    project_id: project_id.clone(),
-                    subject_id: diagram_id.clone(),
-                    parent_id,
-                    parent_occurrence,
-                    expected_revision: revision,
-                },
-            ),
-        };
-        self.submit_explorer_command(command, project_id, revision, cx)
+        self.submit_explorer_operation(
+            project_id,
+            revision,
+            |source| match target {
+                hierarchy::ExplorerMoveTarget::Element(element_id) => {
+                    source.set_owner(element_id, parent_id, revision)
+                }
+                hierarchy::ExplorerMoveTarget::Diagram(diagram_id) => {
+                    source.set_explorer_parent(diagram_id, parent_id, parent_occurrence, revision)
+                }
+            },
+            cx,
+        )
     }
 
     pub(super) fn validate_explorer_diagram_reparent(
@@ -684,19 +649,12 @@ impl MdeWorkbenchItem {
                 self.feedback = "Selected existing view; model ownership is unchanged".into();
             }
             Ok(ElementViewPlacement::NewAt(x, y)) => {
-                self.submit_explorer_command(
-                    MdeUiCommand::PlaceElementView(
-                        bellatrix_mde_cordis::ModelingPlaceElementViewRequested {
-                            project_id: drag.project_id.clone(),
-                            diagram_id: diagram_id.to_owned(),
-                            element_id: drag.element_id.clone(),
-                            x,
-                            y,
-                            expected_revision: drag.revision,
-                        },
-                    ),
+                self.submit_explorer_operation(
                     &drag.project_id,
                     drag.revision,
+                    |source| {
+                        source.place_element_view(diagram_id, &drag.element_id, x, y, drag.revision)
+                    },
                     cx,
                 );
             }
@@ -832,19 +790,14 @@ impl MdeWorkbenchItem {
                 }
                 let (x, y) = position.unwrap_or((x, y));
                 self.select_element(element_id.clone(), cx);
-                self.submit(
-                    MdeUiCommand::PlaceElementView(
-                        bellatrix_mde_cordis::ModelingPlaceElementViewRequested {
-                            project_id: self.project_id().clone(),
-                            diagram_id: diagram.id.clone(),
-                            element_id,
-                            x: x.max(0.0),
-                            y: y.max(0.0),
-                            expected_revision: expected_revision.unwrap_or(snapshot.revision),
-                        },
-                    ),
-                    cx,
+                let result = self.source.place_element_view(
+                    &diagram.id,
+                    &element_id,
+                    x.max(0.0),
+                    y.max(0.0),
+                    expected_revision.unwrap_or(snapshot.revision),
                 );
+                self.report_command_result(result, cx);
             }
         }
         self.focus_handle.focus(window, cx);

@@ -198,15 +198,23 @@ must reuse its operations rather than assemble their own creation requests.
 The source is not a second store: it validates the captured revision and tool
 capabilities, then sends the command to the same Cordis session and UML kernel.
 
-The first migrated operations are `create_element`, `create_model_element`,
-`create_relation`, `quick_create`, `add_member`, `set_property`, `delete_element`
-and `move_parameter`. Quick Edit selection guards and Explorer project guards
+The API covers element/model creation, relationships, atomic Quick Edit,
+members, properties, deletion, parameters, diagrams, ownership, occurrence
+placement, geometry, tracked labels/styles/timing, validation and saving. Quick Edit selection guards and Explorer project guards
 remain at the interaction boundary. A quick creation stays one atomic kernel
 command; creating its node and relationship must not become separate queued
 commands with intermediate revisions.
 
-Visual-only drafts, tracked editor completions, diagram operations and gesture
-commands still use the existing lower-level `submit` API. These are live paths,
-not unused code, and require incremental migration while preserving their
-completion and cancellation contracts. A semantic creation and an explicitly
-visual draft must not be made interchangeable merely to remove a branch.
+Components now submit these intents through source operations instead of
+constructing `MdeUiCommand` requests. The source assembles protocol requests and
+uses its existing `submit` transport. Tracked completion channels, captured
+selection/project guards, gesture previews and presentation-only editor drafts
+remain intact; they are not additional semantic stores. Visual draft geometry
+and interaction policies still need focused review where they differ from
+semantic creation. A semantic creation and an explicitly visual draft must not
+be made interchangeable merely to remove a branch.
+
+The UML 2.5.1 XML (`standards/uml/20161101/UML.xmi`) and clauses 11.5.3.1 and
+11.8.1 specify Association member ends, ownership and navigation. This frontend
+migration does not change those semantic contracts or infer new owners from the
+Explorer hierarchy. The kernel remains authoritative for their validation.

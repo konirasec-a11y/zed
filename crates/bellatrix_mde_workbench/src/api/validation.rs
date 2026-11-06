@@ -1,5 +1,5 @@
 //! Schedules engine validation without changing the semantic or presentation model.
-use crate::workbench_ui::{MdeUiCommand, MdeWorkbenchItem};
+use crate::workbench_ui::MdeWorkbenchItem;
 use gpui::Context;
 
 static PREFERENCE_WRITES: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
@@ -190,13 +190,7 @@ impl MdeWorkbenchItem {
             return;
         }
         self.validation_status = format!("Validation pending for revision {}", snapshot.revision);
-        if let Err(error) = self.source.submit(MdeUiCommand::ValidateDiagram(
-            bellatrix_mde_cordis::ModelingValidateDiagramRequested {
-                project_id: self.project_id().clone(),
-                diagram_id: diagram.id.clone(),
-                expected_revision: snapshot.revision,
-            },
-        )) {
+        if let Err(error) = self.source.validate_diagram(&diagram.id, snapshot.revision) {
             self.validation_status = format!("Validation not sent: {error}");
         }
         cx.notify();

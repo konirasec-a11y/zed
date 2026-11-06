@@ -431,16 +431,12 @@ impl MdeWorkbenchItem {
         let label = field.read(cx).text(cx).to_string();
         let project_id = self.project_id().clone();
         let (completion, mut receipt) = tokio::sync::watch::channel(None);
-        let request = bellatrix_mde_cordis::ModelingSetViewLabelRequested {
-            project_id: project_id.clone(),
-            view_id: view_id.clone(),
-            label: Some(label.clone()),
+        if let Err(error) = self.source.set_view_label_tracked(
+            &view_id,
+            Some(label.clone()),
             expected_revision,
-        };
-        if let Err(error) = self.source.submit(MdeUiCommand::SetViewLabelTracked {
-            request,
             completion,
-        }) {
+        ) {
             self.feedback = format!("Label not sent; draft preserved: {error}");
             cx.notify();
             return;
