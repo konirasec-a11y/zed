@@ -559,7 +559,13 @@ fn unique_semantic_rows(section: &ModelingSection, rows: Vec<ExplorerRow>) -> Ve
         } else if let Some(order) = occurrence_order.get(&row.key) {
             (1, *order)
         } else {
-            (2, 0)
+            let order = row
+                .key
+                .split_once("/member:")
+                .and_then(|(occurrence, _)| occurrence_order.get(occurrence))
+                .copied()
+                .unwrap_or(usize::MAX);
+            (2, order)
         }
     };
     let mut selected: HashMap<String, &ExplorerRow> = HashMap::new();

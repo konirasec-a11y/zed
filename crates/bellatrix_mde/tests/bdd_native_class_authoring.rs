@@ -988,6 +988,24 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
             1
         );
     }
+    for row in &projection.explorer.added {
+        if !row.diagram
+            && row
+                .view
+                .as_ref()
+                .is_none_or(|view| view.subject_id.is_some())
+        {
+            assert_eq!(
+                projection
+                    .explorer
+                    .name
+                    .iter()
+                    .find(|candidate| candidate.element_id == row.element_id)
+                    .map(|candidate| &candidate.key),
+                Some(&row.key)
+            );
+        }
+    }
     assert_eq!(multi_diagram.document.section_json, before_projection);
     assert_eq!(
         projection
