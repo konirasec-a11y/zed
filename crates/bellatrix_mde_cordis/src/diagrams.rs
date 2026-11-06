@@ -11,9 +11,9 @@ pub use bellatrix_mde_contracts::events::{
     ModelingValidateDiagramTracedRequested, ModelingValidateSnapshot,
     ModelingValidateSnapshotRequested, TracedDiagramValidationResult,
 };
-use bellatrix_project::ProjectService;
-use cordis::event::responder;
+use bellatrix_project::{ProjectId, ProjectService};
 use cordis::Context;
+use cordis::event::responder;
 use std::{
     convert::Infallible,
     io,
@@ -56,6 +56,61 @@ fn validate_inner(
         revision: document.revision(),
         diagnostics,
     })
+}
+
+pub(crate) fn create_diagram_command(
+    request: ModelingCreateDiagramRequested,
+) -> (ProjectId, u64, Command) {
+    (
+        request.project_id,
+        request.expected_revision,
+        Command::CreateDiagram {
+            kind: request.kind,
+            name: request.name,
+            model_elements: request.model_elements,
+        },
+    )
+}
+
+pub(crate) fn create_explorer_diagram_command(
+    request: ModelingCreateExplorerDiagramRequested,
+) -> (ProjectId, u64, Command) {
+    (
+        request.diagram.project_id,
+        request.diagram.expected_revision,
+        Command::CreateExplorerDiagram {
+            kind: request.diagram.kind,
+            name: request.diagram.name,
+            model_elements: request.diagram.model_elements,
+            parent_id: request.parent_id,
+            parent_occurrence: request.parent_occurrence,
+        },
+    )
+}
+
+pub(crate) fn rename_diagram_command(
+    request: ModelingRenameDiagramRequested,
+) -> (ProjectId, u64, Command) {
+    (
+        request.project_id,
+        request.expected_revision,
+        Command::RenameDiagram {
+            diagram_id: request.diagram_id,
+            name: request.name,
+        },
+    )
+}
+
+pub(crate) fn delete_diagram_command(
+    request: ModelingDeleteDiagramRequested,
+) -> (ProjectId, u64, Command) {
+    (
+        request.project_id,
+        request.expected_revision,
+        Command::DeleteDiagram {
+            diagram_id: request.diagram_id,
+        },
+    )
 }
 
 pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Result<(), io::Error> {
@@ -105,16 +160,13 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
             move |context: Context, request: ModelingCreateDiagramRequested| {
                 let projects = Arc::clone(&create_projects);
                 async move {
+                    let (project_id, expected_revision, command) = create_diagram_command(request);
                     let result = crate::mutation::execute(
                         &context,
                         &projects,
-                        request.project_id,
-                        request.expected_revision,
-                        Command::CreateDiagram {
-                            kind: request.kind,
-                            name: request.name,
-                            model_elements: request.model_elements,
-                        },
+                        project_id,
+                        expected_revision,
+                        command,
                     )
                     .await;
                     Ok::<_, Infallible>(Some(result))
@@ -128,19 +180,14 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
             move |context: Context, request: ModelingCreateExplorerDiagramRequested| {
                 let projects = Arc::clone(&explorer_projects);
                 async move {
-                    let diagram = request.diagram;
+                    let (project_id, expected_revision, command) =
+                        create_explorer_diagram_command(request);
                     let result = crate::mutation::execute(
                         &context,
                         &projects,
-                        diagram.project_id,
-                        diagram.expected_revision,
-                        Command::CreateExplorerDiagram {
-                            kind: diagram.kind,
-                            name: diagram.name,
-                            model_elements: diagram.model_elements,
-                            parent_id: request.parent_id,
-                            parent_occurrence: request.parent_occurrence,
-                        },
+                        project_id,
+                        expected_revision,
+                        command,
                     )
                     .await;
                     Ok::<_, Infallible>(Some(result))
@@ -154,15 +201,13 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
             move |context: Context, request: ModelingRenameDiagramRequested| {
                 let projects = Arc::clone(&rename_projects);
                 async move {
+                    let (project_id, expected_revision, command) = rename_diagram_command(request);
                     let result = crate::mutation::execute(
                         &context,
                         &projects,
-                        request.project_id,
-                        request.expected_revision,
-                        Command::RenameDiagram {
-                            diagram_id: request.diagram_id,
-                            name: request.name,
-                        },
+                        project_id,
+                        expected_revision,
+                        command,
                     )
                     .await;
                     Ok::<_, Infallible>(Some(result))
@@ -176,14 +221,13 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
             move |context: Context, request: ModelingDeleteDiagramRequested| {
                 let projects = Arc::clone(&delete_projects);
                 async move {
+                    let (project_id, expected_revision, command) = delete_diagram_command(request);
                     let result = crate::mutation::execute(
                         &context,
                         &projects,
-                        request.project_id,
-                        request.expected_revision,
-                        Command::DeleteDiagram {
-                            diagram_id: request.diagram_id,
-                        },
+                        project_id,
+                        expected_revision,
+                        command,
                     )
                     .await;
                     Ok::<_, Infallible>(Some(result))

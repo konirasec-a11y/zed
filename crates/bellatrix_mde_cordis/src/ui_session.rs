@@ -212,44 +212,12 @@ fn edit(command: MdeUiCommand) -> Result<(ProjectId, u64, Command, Option<Comple
         MdeUiCommand::SetViewRouting(request) => {
             crate::view_style::set_view_routing_command(request)
         }
-        MdeUiCommand::CreateDiagram(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::CreateDiagram {
-                kind: request.kind,
-                name: request.name,
-                model_elements: request.model_elements,
-            },
-        ),
-        MdeUiCommand::RenameDiagram(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::RenameDiagram {
-                diagram_id: request.diagram_id,
-                name: request.name,
-            },
-        ),
-        MdeUiCommand::DeleteDiagram(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::DeleteDiagram {
-                diagram_id: request.diagram_id,
-            },
-        ),
-        MdeUiCommand::CreateVisualDraft(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::CreateVisualDraft {
-                diagram_id: request.diagram_id,
-                notation_kind: request.notation_kind,
-                label: request.label,
-                geometry: request.geometry,
-                properties: request.properties,
-                parent_view_id: request.parent_view_id,
-                source_view_id: request.source_view_id,
-                target_view_id: request.target_view_id,
-            },
-        ),
+        MdeUiCommand::CreateDiagram(request) => crate::diagrams::create_diagram_command(request),
+        MdeUiCommand::RenameDiagram(request) => crate::diagrams::rename_diagram_command(request),
+        MdeUiCommand::DeleteDiagram(request) => crate::diagrams::delete_diagram_command(request),
+        MdeUiCommand::CreateVisualDraft(request) => {
+            crate::views::create_visual_draft_command(request)
+        }
         MdeUiCommand::CreateElementOrVisualDraft(request) => {
             crate::create_element::create_element_or_visual_draft_command(request)
         }
@@ -298,24 +266,10 @@ fn edit(command: MdeUiCommand) -> Result<(ProjectId, u64, Command, Option<Comple
                 height: request.height,
             },
         ),
-        MdeUiCommand::RemoveView(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::RemoveView {
-                diagram_id: request.diagram_id,
-                view_id: request.view_id,
-            },
-        ),
-        MdeUiCommand::PlaceElementView(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::PlaceElementView {
-                diagram_id: request.diagram_id,
-                element_id: request.element_id,
-                x: request.x,
-                y: request.y,
-            },
-        ),
+        MdeUiCommand::RemoveView(request) => crate::views::remove_view_command(request),
+        MdeUiCommand::PlaceElementView(request) => {
+            crate::views::place_element_view_command(request)
+        }
         MdeUiCommand::SetOwner(request) => (
             request.project_id,
             request.expected_revision,
@@ -362,17 +316,9 @@ fn edit(command: MdeUiCommand) -> Result<(ProjectId, u64, Command, Option<Comple
                 name: request.new_name,
             },
         ),
-        MdeUiCommand::CreateExplorerDiagram(request) => (
-            request.diagram.project_id,
-            request.diagram.expected_revision,
-            Command::CreateExplorerDiagram {
-                kind: request.diagram.kind,
-                name: request.diagram.name,
-                model_elements: request.diagram.model_elements,
-                parent_id: request.parent_id,
-                parent_occurrence: request.parent_occurrence,
-            },
-        ),
+        MdeUiCommand::CreateExplorerDiagram(request) => {
+            crate::diagrams::create_explorer_diagram_command(request)
+        }
         command => {
             reject(command, "This request is not a model mutation");
             return Err("This request is not a model mutation".into());
