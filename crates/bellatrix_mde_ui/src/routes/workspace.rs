@@ -3,10 +3,9 @@
 //! Zed owns tabs, docks and focus. The native action remains available
 //! to focus or reopen the MDE tab without creating a parallel window.
 
+use crate::index::home_page::{Page, navigate};
 use crate::workbench_ui::status_entry::{MdeStatusEntry, status_button_enabled};
-use crate::workbench_ui::{
-    MdeSymbolLibraryItem, MdeUiSource, MdeWorkbenchItem, open_in_workspace, panels,
-};
+use crate::workbench_ui::{MdeSymbolLibraryItem, MdeUiSource, MdeWorkbenchItem, panels};
 use gpui::{App, AppContext, Entity, TaskExt, Window, actions};
 use project::DirectoryLister;
 use std::{
@@ -210,20 +209,15 @@ pub fn register_mde_workspace(
             let action_item = Rc::clone(&cached_item);
             let action_source = source.clone();
             workspace.register_action(move |workspace, _: &OpenMdeWorkbench, window, cx| {
-                action_source.set_preview_context(None);
-                if let Some(item) = workspace.item_of_type::<MdeWorkbenchItem>(cx) {
-                    panels::attach_panels(workspace, item.clone(), window, cx);
-                    workspace.activate_item(&item, true, true, window, cx);
-                    return;
-                }
-                if let Some(item) = action_item.borrow().clone() {
-                    panels::attach_panels(workspace, item.clone(), window, cx);
-                    workspace.add_item_to_active_pane(Box::new(item), None, true, window, cx);
-                    return;
-                }
-
-                let item = open_in_workspace(workspace, action_source.clone(), window, cx);
-                panels::attach_panels(workspace, item.clone(), window, cx);
+                let cached = action_item.borrow().clone();
+                let item = navigate(
+                    Page::Mde,
+                    workspace,
+                    action_source.clone(),
+                    cached,
+                    window,
+                    cx,
+                );
                 *action_item.borrow_mut() = Some(item);
             });
 
@@ -242,23 +236,14 @@ pub fn register_mde_workspace(
                     // Only an explicitly configured startup source authorizes
                     // auto-opening; an empty/restoring Workspace is not intent.
                     if auto_open_configured_source {
-                        startup_source.set_preview_context(None);
                         let cached = startup_item.borrow().clone();
-                        if let Some(item) = workspace.item_of_type::<MdeWorkbenchItem>(cx) {
-                            *startup_item.borrow_mut() = Some(item);
-                        } else if let Some(item) = cached {
-                            workspace.add_item_to_active_pane(
-                                Box::new(item),
-                                None,
-                                true,
-                                window,
-                                cx,
-                            );
-                        } else {
-                            let item = open_in_workspace(workspace, startup_source, window, cx);
-                            panels::attach_panels(workspace, item.clone(), window, cx);
-                            *startup_item.borrow_mut() = Some(item);
-                        }
+                        startup_source.set_preview_context(None);
+                        let item = workspace
+                            .item_of_type::<MdeWorkbenchItem>(cx)
+                            .unwrap_or_else(|| {
+                                navigate(Page::Mde, workspace, startup_source, cached, window, cx)
+                            });
+                        *startup_item.borrow_mut() = Some(item);
                     }
                 });
             }
