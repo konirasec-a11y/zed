@@ -32,11 +32,11 @@ pub(crate) enum ParameterAction {
 
 impl ParameterAction {
     pub(crate) fn from_id(id: &str) -> Option<Self> {
-        match id {
-            "uml.add-parameter" => Some(Self::Add),
-            "uml.delete-parameter" => Some(Self::Delete),
-            "uml.move-parameter-up" => Some(Self::Move { up: true }),
-            "uml.move-parameter-down" => Some(Self::Move { up: false }),
+        use bellatrix_mde_cordis::{ModelingMemberKind, QuickEditIntent};
+        match QuickEditIntent::from_id(id)? {
+            QuickEditIntent::AddMember(ModelingMemberKind::Parameter) => Some(Self::Add),
+            QuickEditIntent::DeleteParameter => Some(Self::Delete),
+            QuickEditIntent::MoveParameter { up } => Some(Self::Move { up }),
             _ => None,
         }
     }

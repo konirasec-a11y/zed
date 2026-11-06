@@ -362,21 +362,21 @@ pub fn quick_edit_for(kind: &str) -> Vec<QuickEditAction> {
             .iter()
             .copied()
             .filter(|action| {
-                use crate::UmlCapability::*;
-                let capability = match action.id {
-                    "uml.name-expression" | "uml.visibility" => return true,
-                    "uml.add-note" | "uml.add-constraint" => Annotation,
-                    "uml.add-attribute" => Attribute,
-                    "uml.add-operation" => Operation,
-                    "uml.add-reception" => Reception,
-                    "uml.add-template-parameter" => TemplateParameter,
-                    "uml.add-subclass" | "uml.add-superclass" => Specialization,
-                    "uml.add-provided-interface" | "uml.add-required-interface" => ClassInterfaces,
-                    "uml.add-associated-class"
-                    | "uml.add-aggregated-class"
-                    | "uml.add-composited-class" => ClassAssociation,
-                    "uml.add-port" => Port,
-                    "uml.add-part" => Part,
+                use bellatrix_mde_contracts::protocol::command::ModelingMemberKind;
+                use bellatrix_mde_contracts::protocol::inspector::QuickEditIntent;
+                if matches!(action.id, "uml.name-expression" | "uml.visibility") {
+                    return true;
+                }
+                let capability = match QuickEditIntent::from_id(action.id) {
+                    Some(QuickEditIntent::AddMember(member)) => match member {
+                        ModelingMemberKind::Attribute => crate::UmlCapability::Attribute,
+                        ModelingMemberKind::Operation => crate::UmlCapability::Operation,
+                        ModelingMemberKind::Reception => crate::UmlCapability::Reception,
+                        ModelingMemberKind::Parameter => crate::UmlCapability::Parameter,
+                    },
+                    Some(QuickEditIntent::QuickCreate(action)) => {
+                        crate::uml_types::quick_create_capability(action)
+                    }
                     _ => return false,
                 };
                 kind.supports(capability)

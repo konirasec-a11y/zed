@@ -1,3 +1,4 @@
+use super::command::{ModelingMemberKind, UmlQuickCreate};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
@@ -30,6 +31,47 @@ pub struct QuickEditAction {
     pub row: u8,
     pub availability: QuickEditAvailability,
     pub shortcut: Option<&'static str>,
+}
+
+/// UI action routing only; support and mutation checks remain in MDE.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QuickEditIntent {
+    AddMember(ModelingMemberKind),
+    QuickCreate(UmlQuickCreate),
+    DeleteParameter,
+    MoveParameter { up: bool },
+}
+
+impl QuickEditIntent {
+    pub fn from_id(id: &str) -> Option<Self> {
+        Some(match id {
+            "uml.add-attribute" => Self::AddMember(ModelingMemberKind::Attribute),
+            "uml.add-operation" => Self::AddMember(ModelingMemberKind::Operation),
+            "uml.add-reception" => Self::AddMember(ModelingMemberKind::Reception),
+            "uml.add-parameter" => Self::AddMember(ModelingMemberKind::Parameter),
+            "uml.delete-parameter" => Self::DeleteParameter,
+            "uml.move-parameter-up" => Self::MoveParameter { up: true },
+            "uml.move-parameter-down" => Self::MoveParameter { up: false },
+            "uml.add-note" => Self::QuickCreate(UmlQuickCreate::Note),
+            "uml.add-constraint" => Self::QuickCreate(UmlQuickCreate::Constraint),
+            "uml.add-subinterface" | "uml.add-subclass" => {
+                Self::QuickCreate(UmlQuickCreate::Subtype)
+            }
+            "uml.add-superinterface" | "uml.add-superclass" => {
+                Self::QuickCreate(UmlQuickCreate::Supertype)
+            }
+            "uml.add-realizing-class" => Self::QuickCreate(UmlQuickCreate::RealizingClass),
+            "uml.add-template-parameter" => Self::QuickCreate(UmlQuickCreate::TemplateParameter),
+            "uml.add-provided-interface" => Self::QuickCreate(UmlQuickCreate::ProvidedInterface),
+            "uml.add-required-interface" => Self::QuickCreate(UmlQuickCreate::RequiredInterface),
+            "uml.add-associated-class" => Self::QuickCreate(UmlQuickCreate::AssociatedClass),
+            "uml.add-aggregated-class" => Self::QuickCreate(UmlQuickCreate::AggregatedClass),
+            "uml.add-composited-class" => Self::QuickCreate(UmlQuickCreate::CompositedClass),
+            "uml.add-port" => Self::QuickCreate(UmlQuickCreate::Port),
+            "uml.add-part" => Self::QuickCreate(UmlQuickCreate::Part),
+            _ => return None,
+        })
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

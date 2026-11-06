@@ -299,9 +299,7 @@ impl MdeUiSource {
         view_id: Option<&str>,
         expected_revision: u64,
     ) -> Result<(), String> {
-        use bellatrix_mde_cordis::{
-            ModelingMemberKind, QuickEditAvailability, QuickEditControl, UmlQuickCreate,
-        };
+        use bellatrix_mde_cordis::{QuickEditAvailability, QuickEditControl, QuickEditIntent};
         let snapshot = self.editable_snapshot(expected_revision)?;
         let element = snapshot
             .section
@@ -316,53 +314,32 @@ impl MdeUiSource {
         }) {
             return Err("This element does not support the quick action".into());
         }
-        match action_id {
-            "uml.delete-parameter" => return self.delete_element(element_id, expected_revision),
-            "uml.move-parameter-up" | "uml.move-parameter-down" => {
-                return self.move_parameter(
-                    element_id,
-                    action_id == "uml.move-parameter-up",
-                    expected_revision,
-                );
+        let intent = QuickEditIntent::from_id(action_id);
+        match intent {
+            Some(QuickEditIntent::DeleteParameter) => {
+                return self.delete_element(element_id, expected_revision);
+            }
+            Some(QuickEditIntent::MoveParameter { up }) => {
+                return self.move_parameter(element_id, up, expected_revision);
             }
             _ => {}
         }
         if !self.allows_creation() {
             return Err("Quick creation is not available for this document".into());
         }
-        let member = match action_id {
-            "uml.add-attribute" => Some(ModelingMemberKind::Attribute),
-            "uml.add-operation" => Some(ModelingMemberKind::Operation),
-            "uml.add-reception" => Some(ModelingMemberKind::Reception),
-            "uml.add-parameter" => Some(ModelingMemberKind::Parameter),
-            _ => None,
-        };
-        if let Some(kind) = member {
-            return self.add_member(element_id, kind, expected_revision);
+        match intent {
+            Some(QuickEditIntent::AddMember(kind)) => {
+                self.add_member(element_id, kind, expected_revision)
+            }
+            Some(QuickEditIntent::QuickCreate(action)) => self.quick_create(
+                diagram_id.ok_or("Select a diagram for quick creation")?,
+                element_id,
+                view_id,
+                action,
+                expected_revision,
+            ),
+            _ => Err("Quick action has no registered command".into()),
         }
-        let action = match action_id {
-            "uml.add-note" => UmlQuickCreate::Note,
-            "uml.add-constraint" => UmlQuickCreate::Constraint,
-            "uml.add-subinterface" | "uml.add-subclass" => UmlQuickCreate::Subtype,
-            "uml.add-superinterface" | "uml.add-superclass" => UmlQuickCreate::Supertype,
-            "uml.add-realizing-class" => UmlQuickCreate::RealizingClass,
-            "uml.add-template-parameter" => UmlQuickCreate::TemplateParameter,
-            "uml.add-provided-interface" => UmlQuickCreate::ProvidedInterface,
-            "uml.add-required-interface" => UmlQuickCreate::RequiredInterface,
-            "uml.add-associated-class" => UmlQuickCreate::AssociatedClass,
-            "uml.add-aggregated-class" => UmlQuickCreate::AggregatedClass,
-            "uml.add-composited-class" => UmlQuickCreate::CompositedClass,
-            "uml.add-port" => UmlQuickCreate::Port,
-            "uml.add-part" => UmlQuickCreate::Part,
-            _ => return Err("Quick action has no registered command".into()),
-        };
-        self.quick_create(
-            diagram_id.ok_or("Select a diagram for quick creation")?,
-            element_id,
-            view_id,
-            action,
-            expected_revision,
-        )
     }
 
     pub fn quick_create(
@@ -899,7 +876,11 @@ impl MdeUiSource {
     pub fn save_project(&self, path: std::path::PathBuf) -> Result<(), String> {
         let document = self.document()?;
         self.submit(MdeUiCommand::SaveProject(
-            bellatrix_project::ProjectSaveRequested { expected_bytes: None, document, path },
+            bellatrix_project::ProjectSaveRequested {
+                expected_bytes: None,
+                document,
+                path,
+            },
         ))
     }
 

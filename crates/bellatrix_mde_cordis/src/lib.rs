@@ -161,7 +161,7 @@ pub use bellatrix_mde_contracts::protocol::presentation as presentation_contract
 pub use explorer_projection::{ExplorerProjection, ExplorerRow, VisualComponent};
 pub use inspector_contract::{
     ElementInspector, InspectorMember, InspectorProperty, InspectorReferenceChoice, PropertyEditor,
-    QuickEditAction, QuickEditAvailability, QuickEditControl, QuickEditSide,
+    QuickEditAction, QuickEditAvailability, QuickEditControl, QuickEditIntent, QuickEditSide,
 };
 #[path = "read_projection.rs"]
 pub mod projection;

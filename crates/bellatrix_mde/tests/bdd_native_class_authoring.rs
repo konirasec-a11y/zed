@@ -6,8 +6,9 @@ use bellatrix_mde_contracts::{
     Authored, Geometry, InheritedStyleProperty, ModelingSection, PresentationReference,
     RelationshipRouting, StyleInheritance, View, ViewEndpoints,
     protocol::{
-        Command, ModelDocumentParts, ModelingElementKind, ModelingMemberKind, ModelingRelationKind,
-        UmlQuickCreate, inspector::PropertyEditor, projection::ModelingProjection,
+        Command, ModelDocumentParts, ModelingElementKind, ModelingRelationKind, UmlQuickCreate,
+        inspector::{PropertyEditor, QuickEditAvailability, QuickEditControl, QuickEditIntent},
+        projection::ModelingProjection,
     },
     ruml::{Contract, class::Class},
 };
@@ -22,6 +23,45 @@ struct NativeAuthoring {
 }
 
 impl NativeAuthoring {
+    fn quick_intent(&self, element_id: &str, action_id: &str) -> FlowResult<QuickEditIntent> {
+        let projection = self.projection()?;
+        let element = projection
+            .elements
+            .iter()
+            .find(|element| element.id == element_id)
+            .ok_or("missing quick action subject")?;
+        let action = element
+            .quick_actions
+            .iter()
+            .find(|action| action.id == action_id)
+            .ok_or("missing projected quick action")?;
+        assert_eq!(action.availability, QuickEditAvailability::Implemented);
+        assert_eq!(action.control, QuickEditControl::Button);
+        let inspector = projection
+            .inspect_element(element_id)
+            .ok_or("missing quick action Inspector")?;
+        assert!(inspector.quick_actions.contains(action));
+        QuickEditIntent::from_id(action.id).ok_or_else(|| "quick action has no intent".into())
+    }
+
+    fn create_member_from_action(
+        &mut self,
+        owner_id: &str,
+        action_id: &str,
+        metaclass: &str,
+    ) -> FlowResult<String> {
+        let QuickEditIntent::AddMember(kind) = self.quick_intent(owner_id, action_id)? else {
+            return Err("quick action must add a member".into());
+        };
+        self.create(
+            Command::AddMember {
+                owner_id: owner_id.into(),
+                kind,
+            },
+            metaclass,
+        )
+    }
+
     fn section(&self) -> FlowResult<ModelingSection> {
         Ok(serde_json::from_str(&self.document.section_json)?)
     }
@@ -381,34 +421,12 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
         assert_eq!(name_property.value, json!(name));
     }
 
-    let attribute = flow.create(
-        Command::AddMember {
-            owner_id: invoice.clone(),
-            kind: ModelingMemberKind::Attribute,
-        },
-        "Property",
-    )?;
-    let operation = flow.create(
-        Command::AddMember {
-            owner_id: invoice.clone(),
-            kind: ModelingMemberKind::Operation,
-        },
-        "Operation",
-    )?;
-    let input_parameter = flow.create(
-        Command::AddMember {
-            owner_id: operation.clone(),
-            kind: ModelingMemberKind::Parameter,
-        },
-        "Parameter",
-    )?;
-    let return_parameter = flow.create(
-        Command::AddMember {
-            owner_id: operation.clone(),
-            kind: ModelingMemberKind::Parameter,
-        },
-        "Parameter",
-    )?;
+    let attribute = flow.create_member_from_action(&invoice, "uml.add-attribute", "Property")?;
+    let operation = flow.create_member_from_action(&invoice, "uml.add-operation", "Operation")?;
+    let input_parameter =
+        flow.create_member_from_action(&operation, "uml.add-parameter", "Parameter")?;
+    let return_parameter =
+        flow.create_member_from_action(&operation, "uml.add-parameter", "Parameter")?;
     flow.apply(Command::SetProperty {
         element_id: return_parameter.clone(),
         path: "properties.direction".into(),
@@ -1433,6 +1451,12 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
         })
         .ok_or("missing second Invoice occurrence")?
         .clone();
+    let QuickEditIntent::QuickCreate(note_action) =
+        annotation_flow.quick_intent(&invoice, "uml.add-note")?
+    else {
+        return Err("annotation quick action must resolve to quick creation".into());
+    };
+    assert_eq!(note_action, UmlQuickCreate::Note);
     let occurrence_revision = annotation_flow.revision;
     for view_id in [None, Some("missing-view".into())] {
         assert!(
@@ -1441,7 +1465,7 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
                     diagram_id: "classes".into(),
                     element_id: invoice.clone(),
                     view_id,
-                    action: UmlQuickCreate::Note,
+                    action: note_action,
                 })
                 .is_err()
         );
@@ -1453,7 +1477,7 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
             view_id: Some(selected_view.id.clone()),
             diagram_id: "classes".into(),
             element_id: invoice.clone(),
-            action: UmlQuickCreate::Note,
+            action: note_action,
         },
         "Comment",
     )?;
