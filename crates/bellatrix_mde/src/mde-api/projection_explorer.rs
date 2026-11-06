@@ -274,17 +274,60 @@ fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrder) -> Vec<E
         }
         ancestors.push(row);
     }
-    // A subject already visible through a diagram occurrence does not need a
-    // second semantic branch, even beneath a Model or Package. Its unrepresented
-    // members are projected below the occurrence; authored composition and diagram
-    // owners must remain reachable at their original location.
+    let semantic = crate::uml::root::Model::from_section(section);
+    let mut diagram_ancestors = HashMap::new();
+    let mut ancestors = Vec::new();
+    for row in &authored {
+        ancestors.truncate(row.depth);
+        if row.diagram {
+            diagram_ancestors.insert(row.element_id.as_str(), ancestors.clone());
+        }
+        ancestors.push(row.element_id.as_str());
+    }
+    // Coalescing a model element with its occurrences must not hide its real
+    // owner. Otherwise a visibly empty Model can still delete those occurrences
+    // through the legitimate UML ownership cascade.
+    let owner_is_visible = |subject: &str| {
+        let Some(owner) = semantic
+            .element(subject)
+            .and_then(|element| semantic.owner(element).ok().flatten())
+        else {
+            return false;
+        };
+        components
+            .iter()
+            .filter(|view| view.subject_id.as_deref() == Some(subject))
+            .all(|view| {
+                let mut parent = view.parent_view_id.as_deref();
+                let mut visited = HashSet::new();
+                while let Some(parent_id) = parent {
+                    if !visited.insert(parent_id) {
+                        return false;
+                    }
+                    let Some(parent_view) = components.iter().find(|candidate| {
+                        candidate.diagram_id == view.diagram_id && candidate.view_id == parent_id
+                    }) else {
+                        return false;
+                    };
+                    if parent_view.subject_id.as_deref() == Some(owner.id()) {
+                        return true;
+                    }
+                    parent = parent_view.parent_view_id.as_deref();
+                }
+                diagram_ancestors
+                    .get(view.diagram_id.as_str())
+                    .is_some_and(|ancestors| ancestors.contains(&owner.id()))
+            })
+    };
     let mut hidden = HashSet::new();
     for (index, row) in authored
         .iter()
         .enumerate()
         .filter(|(_, row)| !row.diagram)
     {
-        if !represented.contains(row.element_id.as_str()) {
+        if !represented.contains(row.element_id.as_str())
+            || !owner_is_visible(&row.element_id)
+        {
             continue;
         }
         let branch = authored[index..]
@@ -292,7 +335,10 @@ fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrder) -> Vec<E
             .take_while(|candidate| candidate.key == row.key || candidate.depth > row.depth)
             .collect::<Vec<_>>();
         if branch.iter().any(|candidate| {
-            candidate.diagram || section.composition.contains_key(&candidate.element_id)
+            candidate.diagram
+                || section.composition.contains_key(&candidate.element_id)
+                || (represented.contains(candidate.element_id.as_str())
+                    && !owner_is_visible(&candidate.element_id))
         }) {
             continue;
         }
