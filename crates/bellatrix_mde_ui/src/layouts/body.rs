@@ -98,7 +98,7 @@ impl Render for MdeWorkbenchItem {
                         if matches!(
                             view.geometry,
                             Geometry::Rect { .. } | Geometry::Layout { .. }
-                        ) && canvas_presentation::resolve_bounds(
+                        ) && canvas_presentation::validate_bounds(
                             view.render_geometry(),
                             zoom,
                             pan,
@@ -1536,7 +1536,7 @@ impl MdeWorkbenchItem {
             }
             _ => {}
         }
-        canvas_presentation::resolve_bounds(
+        canvas_presentation::validate_bounds(
             &Geometry::Rect {
                 x,
                 y,

@@ -12,15 +12,6 @@ pub(crate) struct ExplorerDiagramDrag {
     pub diagram_id: String,
     pub revision: u64,
     pub label: String,
-    pub parent_checks: std::rc::Rc<
-        std::cell::RefCell<
-            Vec<(
-                Option<String>,
-                Option<bellatrix_mde_cordis::ViewOccurrence>,
-                Result<(), String>,
-            )>,
-        >,
-    >,
 }
 
 impl gpui::Render for ExplorerDiagramDrag {
@@ -48,8 +39,6 @@ pub(crate) struct ExplorerElementDrag {
     pub source_view_id: Option<String>,
     pub revision: u64,
     pub label: String,
-    pub ownership_checks:
-        std::rc::Rc<std::cell::RefCell<std::collections::HashMap<String, Result<(), String>>>>,
 }
 
 impl gpui::Render for ExplorerElementDrag {

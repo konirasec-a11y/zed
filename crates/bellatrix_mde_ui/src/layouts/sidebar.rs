@@ -1158,7 +1158,6 @@ impl Render for MdeRightPanel {
                                     .map(|view| view.view_id.clone()),
                                 revision: snapshot.revision,
                                 label: row.label.clone(),
-                                ownership_checks: Default::default(),
                             },
                         )
                 };
@@ -1310,7 +1309,6 @@ impl Render for MdeRightPanel {
                             diagram_id: row.element_id.clone(),
                             revision: snapshot.revision,
                             label: row.label.clone(),
-                            parent_checks: Default::default(),
                         }
                     });
                     let id = row.element_id.clone();

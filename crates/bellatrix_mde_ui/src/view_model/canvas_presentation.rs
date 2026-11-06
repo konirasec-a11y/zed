@@ -3,18 +3,11 @@ use bellatrix_mde_cordis::Geometry;
 use bellatrix_mde_cordis::presentation_contract::{RenderStyle, UmlNotation};
 use bellatrix_mde_cordis::projection::{ModelingProjection, View};
 
-pub(crate) struct CanvasBounds {
-    pub x: f32,
-    pub y: f32,
-    pub width: f32,
-    pub height: f32,
-}
-
-pub(crate) fn resolve_bounds(
+pub(crate) fn validate_bounds(
     geometry: &Geometry,
     zoom: f32,
     pan: (f32, f32),
-) -> Option<CanvasBounds> {
+) -> Option<()> {
     let (x, y, width, height) = match geometry {
         Geometry::Rect {
             x,
@@ -56,12 +49,7 @@ pub(crate) fn resolve_bounds(
     if !(x + width).is_finite() || !(y + height).is_finite() {
         return None;
     }
-    Some(CanvasBounds {
-        x,
-        y,
-        width,
-        height,
-    })
+    Some(())
 }
 
 pub(crate) fn render_style(view: &View, palette: Palette) -> RenderStyle {
