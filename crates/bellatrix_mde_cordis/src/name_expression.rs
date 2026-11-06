@@ -2,8 +2,8 @@ use crate::Command;
 pub use bellatrix_mde_contracts::events::{
     ModelingSetNameExpression, ModelingSetNameExpressionRequested,
 };
-use bellatrix_project::{ProjectId, ProjectService};
-use cordis::{Context, Event};
+use bellatrix_project::ProjectService;
+use cordis::Context;
 
 pub(crate) async fn set_name_expression(
     context: &Context,

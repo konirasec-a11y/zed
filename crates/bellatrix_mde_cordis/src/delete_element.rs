@@ -1,7 +1,7 @@
 use crate::Command;
 pub use bellatrix_mde_contracts::events::{ModelingDeleteElement, ModelingDeleteElementRequested};
-use bellatrix_project::{ProjectId, ProjectService};
-use cordis::{Context, Event};
+use bellatrix_project::ProjectService;
+use cordis::Context;
 
 pub(crate) async fn delete_element(
     context: &Context,

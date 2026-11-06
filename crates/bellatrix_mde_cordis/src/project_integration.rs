@@ -5,9 +5,9 @@ pub use bellatrix_mde_contracts::events::{
     ModelingRename, ModelingRenameRequested, ModelingSetExplorerParent,
     ModelingSetExplorerParentRequested, ModelingSetOwner, ModelingSetOwnerRequested,
 };
-use bellatrix_project::{ProjectDocument, ProjectId, ProjectService};
+use bellatrix_project::{ProjectDocument, ProjectService};
 use cordis::event::responder;
-use cordis::{Context, Event, InjectSpec, Plugin, Service};
+use cordis::{Context, InjectSpec, Plugin, Service};
 use std::{convert::Infallible, io, sync::Arc};
 
 /// Serialize the existing canonical section for an MDE application API.

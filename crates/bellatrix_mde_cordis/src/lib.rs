@@ -92,7 +92,7 @@ mod ui_session;
 pub use ui_session::MdeSession;
 mod ui_bridge;
 use cordis::event::{ListenerRegistrationError, observer_sync};
-use cordis::{Context, Event, Plugin};
+use cordis::{Context, Plugin};
 pub use create_element::{
     ModelingCreateElement, ModelingCreateElementOrVisualDraft, ModelingCreateElementRequested,
     ModelingCreateModelElement, ModelingCreateModelElementRequested,

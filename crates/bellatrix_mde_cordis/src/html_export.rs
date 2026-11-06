@@ -4,8 +4,8 @@ pub use bellatrix_mde_contracts::events::{
     ModelingRenderHtmlRequested,
 };
 use cordis::event::{ListenerRegistrationError, responder};
-use cordis::{Context, Event};
-use std::{convert::Infallible, path::PathBuf};
+use cordis::Context;
+use std::convert::Infallible;
 
 fn render_document(bytes: &[u8], format: &str) -> Result<String, String> {
     let model = bellatrix_mde::decode_model_document(bytes, format)?;

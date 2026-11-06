@@ -1,6 +1,6 @@
 //! Diagram lifecycle requests share the same revision-checked mutation boundary as element edits.
 use crate::Command;
-use crate::{ExecutionEvent, ModelingDiagnostic, StructuralDiagramKind, TraceOutcome, TracePhase};
+use crate::{TraceOutcome, TracePhase};
 use bellatrix_mde::MdeExecutionTrace as ExecutionTrace;
 pub use bellatrix_mde_contracts::events::{
     DiagramValidationResult, ModelingCreateDiagram, ModelingCreateDiagramRequested,
@@ -11,9 +11,9 @@ pub use bellatrix_mde_contracts::events::{
     ModelingValidateDiagramTracedRequested, ModelingValidateSnapshot,
     ModelingValidateSnapshotRequested, TracedDiagramValidationResult,
 };
-use bellatrix_project::{ProjectDocument, ProjectId, ProjectService};
+use bellatrix_project::ProjectService;
 use cordis::event::responder;
-use cordis::{Context, Event};
+use cordis::Context;
 use std::{
     convert::Infallible,
     io,

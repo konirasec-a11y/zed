@@ -1,9 +1,8 @@
 //! One lifecycle-owned transport for every native modeling document.
-use crate::*;
 pub use bellatrix_mde_contracts::events::{DiagramValidationFailure, MdeUiCommand};
 use bellatrix_project::{
-    ProjectClosed, ProjectClosedEvent, ProjectId, ProjectSaveRequested, ProjectSaved,
-    ProjectSavedEvent, ProjectService, ProjectStateChanged, ProjectStateChangedEvent,
+    ProjectClosed, ProjectClosedEvent, ProjectId, ProjectSaved, ProjectSavedEvent, ProjectService,
+    ProjectStateChanged, ProjectStateChangedEvent,
 };
 use cordis::{
     Context,

@@ -1,13 +1,12 @@
-use crate::{Command, Geometry};
-use crate::{RelationshipRouting, Style, TimingPresentation, ViewOrder};
+use crate::Command;
 pub use bellatrix_mde_contracts::events::{
     ModelingReorderView, ModelingReorderViewRequested, ModelingSetViewLabel,
     ModelingSetViewLabelRequested, ModelingSetViewPath, ModelingSetViewPathRequested,
     ModelingSetViewRouting, ModelingSetViewRoutingRequested, ModelingSetViewStyle,
     ModelingSetViewStyleRequested, ModelingSetViewTiming, ModelingSetViewTimingRequested,
 };
-use bellatrix_project::{ProjectId, ProjectService};
-use cordis::{Context, Event, event::responder};
+use bellatrix_project::ProjectService;
+use cordis::{Context, event::responder};
 use std::{convert::Infallible, io, sync::Arc};
 
 pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Result<(), io::Error> {

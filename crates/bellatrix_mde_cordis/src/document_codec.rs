@@ -2,7 +2,7 @@ pub use bellatrix_mde_contracts::events::{
     ModelingConvertDocument, ModelingConvertDocumentRequested,
 };
 use cordis::event::{ListenerRegistrationError, responder};
-use cordis::{Context, Event};
+use cordis::Context;
 use std::convert::Infallible;
 
 pub(crate) fn register(context: &Context) -> Result<(), ListenerRegistrationError> {

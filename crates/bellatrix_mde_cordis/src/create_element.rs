@@ -1,11 +1,10 @@
 use crate::Command;
-use crate::ModelingElementKind;
 pub use bellatrix_mde_contracts::events::{
     ModelingCreateElement, ModelingCreateElementOrVisualDraft, ModelingCreateElementRequested,
     ModelingCreateModelElement, ModelingCreateModelElementRequested,
 };
-use bellatrix_project::{ProjectId, ProjectService};
-use cordis::{Context, Event};
+use bellatrix_project::ProjectService;
+use cordis::Context;
 
 pub(crate) async fn create_element_or_visual_draft(
     context: &Context,

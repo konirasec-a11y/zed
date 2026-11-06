@@ -1,12 +1,11 @@
 use crate::Command;
-use crate::ModelingRelationKind;
 pub use bellatrix_mde_contracts::events::{
     ModelingCreateRelation, ModelingCreateRelationAtViewsOrVisualDraft,
     ModelingCreateRelationAtViewsRequested, ModelingCreateRelationOrVisualDraft,
     ModelingCreateRelationRequested,
 };
-use bellatrix_project::{ProjectId, ProjectService};
-use cordis::{Context, Event};
+use bellatrix_project::ProjectService;
+use cordis::Context;
 
 pub(crate) async fn create_relation_at_views_or_visual_draft(
     context: &Context,

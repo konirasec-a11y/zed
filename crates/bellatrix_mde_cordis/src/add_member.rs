@@ -3,10 +3,8 @@ pub use bellatrix_mde_contracts::events::{
     ModelingAddMember, ModelingAddMemberRequested, ModelingMoveParameter,
     ModelingMoveParameterRequested,
 };
-use bellatrix_project::{ProjectId, ProjectService};
-use cordis::{Context, Event};
-
-use crate::ModelingMemberKind;
+use bellatrix_project::ProjectService;
+use cordis::Context;
 
 pub(crate) async fn add_member(
     context: &Context,

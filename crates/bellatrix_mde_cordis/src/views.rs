@@ -3,9 +3,9 @@ pub use bellatrix_mde_contracts::events::{
     ModelingCreateVisualDraft, ModelingCreateVisualDraftRequested, ModelingPlaceElementView,
     ModelingPlaceElementViewRequested, ModelingRemoveView, ModelingRemoveViewRequested,
 };
-use bellatrix_project::{ProjectId, ProjectService};
+use bellatrix_project::ProjectService;
 use cordis::event::responder;
-use cordis::{Context, Event};
+use cordis::Context;
 use std::{convert::Infallible, io, sync::Arc};
 
 pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Result<(), io::Error> {

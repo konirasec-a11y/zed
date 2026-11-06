@@ -5,13 +5,12 @@ pub use bellatrix_mde_contracts::events::{
     ModelingRun, ModelingRunRequested, ModelingTaskCompleted, ModelingTaskCompletedEvent,
     ModelingTaskKind, ModelingTaskSummary,
 };
-use bellatrix_project::{ProjectId, ProjectService};
+use bellatrix_project::ProjectService;
 use cordis::event::responder;
-use cordis::{Context, Event, Routing};
+use cordis::{Context, Routing};
 use std::{
     convert::Infallible,
     io,
-    path::PathBuf,
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering},

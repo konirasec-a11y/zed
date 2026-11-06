@@ -1,7 +1,7 @@
 use crate::ModelingOperation;
 pub use bellatrix_mde_contracts::events::ModelingExecute;
 use cordis::event::{ListenerRegistrationError, responder};
-use cordis::{Context, Event};
+use cordis::Context;
 use serde_json::Value;
 use std::{convert::Infallible, fs, path::Path};
 

@@ -1,8 +1,7 @@
 use crate::Command;
-use crate::UmlQuickCreate;
 pub use bellatrix_mde_contracts::events::{ModelingQuickEdit, ModelingQuickEditRequested};
-use bellatrix_project::{ProjectId, ProjectService};
-use cordis::{Context, Event};
+use bellatrix_project::ProjectService;
+use cordis::Context;
 
 pub(crate) async fn execute_quick_edit(
     context: &Context,

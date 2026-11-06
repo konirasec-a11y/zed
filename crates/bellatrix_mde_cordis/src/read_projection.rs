@@ -2,9 +2,9 @@ pub use bellatrix_mde_contracts::events::{
     ModelingReadProjection, ModelingReadProjectionRequested, ModelingSnapshot,
 };
 pub use bellatrix_mde_contracts::protocol::projection::*;
-use bellatrix_project::{ProjectDocument, ProjectId, ProjectService};
+use bellatrix_project::{ProjectDocument, ProjectService};
 use cordis::event::responder;
-use cordis::{Context, Event};
+use cordis::Context;
 use std::{convert::Infallible, sync::Arc};
 
 pub(crate) fn register(
@@ -99,7 +99,7 @@ pub(crate) fn start_feed(
                 }
                 Err(error) => Err(error),
             };
-            sender.send_replace(result);
+            drop(sender.send_replace(result));
             if changes.changed().await.is_err() {
                 break;
             }

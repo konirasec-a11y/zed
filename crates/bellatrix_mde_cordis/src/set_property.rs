@@ -1,8 +1,7 @@
 use crate::Command;
 pub use bellatrix_mde_contracts::events::{ModelingSetProperty, ModelingSetPropertyRequested};
-use bellatrix_project::{ProjectId, ProjectService};
-use cordis::{Context, Event};
-use serde_json::Value;
+use bellatrix_project::ProjectService;
+use cordis::Context;
 
 pub(crate) async fn set_property(
     context: &Context,
