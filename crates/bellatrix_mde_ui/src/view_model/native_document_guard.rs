@@ -14,7 +14,6 @@ pub(crate) enum NativeDocumentConflict {
     SaveStateChanged,
     FileConflict,
     CapabilityChanged,
-    ReloadPending,
 }
 
 impl NativeDocumentConflict {
@@ -35,16 +34,12 @@ impl NativeDocumentConflict {
             Self::CapabilityChanged => {
                 "The source buffer permissions changed. Close and reopen this preview to refresh."
             }
-            Self::ReloadPending => {
-                "The source file changed externally and needs a reload. This preview has not replaced your source text."
-            }
         }
     }
 }
 
 pub(crate) struct NativeDocumentGuard<Version, Identity> {
     baseline: NativeBufferState<Version, Identity>,
-    invalidated: Option<NativeDocumentConflict>,
 }
 
 impl<Version: PartialEq, Identity: PartialEq> NativeDocumentGuard<Version, Identity> {
@@ -54,29 +49,13 @@ impl<Version: PartialEq, Identity: PartialEq> NativeDocumentGuard<Version, Ident
         if baseline.conflict {
             return Err(NativeDocumentConflict::FileConflict);
         }
-        Ok(Self {
-            baseline,
-            invalidated: None,
-        })
-    }
-
-    pub(crate) fn is_saved(&self) -> bool {
-        !self.baseline.dirty
-    }
-
-    pub(crate) fn invalidate(&mut self, reason: NativeDocumentConflict) {
-        // A later undo or save must not silently bless a projection imported
-        // from an earlier native buffer state.
-        self.invalidated.get_or_insert(reason);
+        Ok(Self { baseline })
     }
 
     pub(crate) fn check(
         &self,
         current: &NativeBufferState<Version, Identity>,
     ) -> Result<(), NativeDocumentConflict> {
-        if let Some(reason) = self.invalidated {
-            return Err(reason);
-        }
         if current.conflict {
             return Err(NativeDocumentConflict::FileConflict);
         }
