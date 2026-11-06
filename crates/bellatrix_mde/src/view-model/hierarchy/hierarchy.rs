@@ -115,11 +115,7 @@ pub fn project_hierarchy(section: &ModelingSection) -> Vec<HierarchyRow> {
     }
     for row in &mut result {
         if let Some(ElementRef::Relationship(relation)) = elements.get(row.element_id.as_str()) {
-            row.label = crate::visual_consistency::relationship_display_label(
-                section,
-                relation,
-                &references,
-            );
+            row.label = crate::visual_consistency::relationship_display_label(section, relation);
         }
         if let Some(ElementRef::Object(element)) = elements.get(row.element_id.as_str())
             && crate::templates::is_parameter(&element.kind)

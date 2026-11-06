@@ -15,26 +15,82 @@ pub struct VisualComponent {
 pub(crate) fn relationship_display_label(
     section: &ModelingSection,
     relation: &crate::Relation,
-    references: &crate::uml::references::ReferenceIndex<'_>,
 ) -> String {
-    crate::format_relationship_label(&relation.kind, &relation.properties)
-        .filter(|label| !label.trim().is_empty())
-        .unwrap_or_else(|| {
-            let endpoint = |id: &str| {
-                section
-                    .elements
-                    .iter()
-                    .find(|element| element.id == id)
-                    .map(|element| {
-                        let exposed = crate::template_parametered_element(section, element)
-                            .unwrap_or(element);
-                        crate::element_display_label_with_references(exposed, references)
-                    })
-                    .filter(|label| !label.trim().is_empty())
-                    .unwrap_or_else(|| "Unnamed element".into())
-            };
-            format!("{} → {}", endpoint(&relation.from), endpoint(&relation.to))
-        })
+    use crate::RelationshipMarker;
+    let endpoint = |id: &str| {
+        section
+            .elements
+            .iter()
+            .find(|element| element.id == id)
+            .map(|element| element.name.trim())
+            .filter(|name| !name.is_empty())
+            .unwrap_or(id)
+            .to_owned()
+    };
+    let presentation = crate::relationship_presentation(section, relation);
+    let relation_type = crate::semantic_identity(&presentation.notation).type_label;
+    let name = presentation
+        .name
+        .as_deref()
+        .filter(|name| !name.trim().is_empty())
+        .map(|name| format!("{relation_type}: {name}"))
+        .unwrap_or_else(|| relation_type.to_owned());
+    let marker = |marker, source| match marker {
+        RelationshipMarker::None => "",
+        RelationshipMarker::OpenArrow => {
+            if source {
+                "<"
+            } else {
+                ">"
+            }
+        }
+        RelationshipMarker::Triangle => {
+            if source {
+                "◁"
+            } else {
+                "▷"
+            }
+        }
+        RelationshipMarker::FilledTriangle => {
+            if source {
+                "◀"
+            } else {
+                "▶"
+            }
+        }
+        RelationshipMarker::Diamond => "◇",
+        RelationshipMarker::FilledDiamond => "◆",
+        RelationshipMarker::FilledCircle => "●",
+        RelationshipMarker::OpenArrowAndCircle => {
+            if source {
+                "○<"
+            } else {
+                ">○"
+            }
+        }
+        RelationshipMarker::FilledTriangleAndCircle => {
+            if source {
+                "○◀"
+            } else {
+                "▶○"
+            }
+        }
+        RelationshipMarker::Containment => "⊕",
+    };
+    let line = match presentation.style.line_mode {
+        crate::LineMode::Solid => "─",
+        crate::LineMode::Dashed => "┄",
+        crate::LineMode::Dotted => "··",
+    };
+    format!(
+        "{} {}{line} {} {}{line}{} {}",
+        endpoint(&relation.from),
+        marker(presentation.style.source_marker, true),
+        name,
+        marker(presentation.style.middle_marker, false),
+        marker(presentation.style.target_marker, false),
+        endpoint(&relation.to)
+    )
 }
 
 /// Derive the cross-view inventory from persisted diagram views, without creating model elements.
@@ -69,7 +125,11 @@ pub fn visual_components(section: &ModelingSection) -> Vec<VisualComponent> {
                 .as_ref()
                 .map(|draft| draft.notation_kind.clone())
                 .or_else(|| element.map(|element| element.kind.clone()))
-                .or_else(|| relation.map(|relation| relation.kind.clone()))
+                .or_else(|| {
+                    relation.map(|relation| {
+                        crate::relationship_presentation(section, relation).notation
+                    })
+                })
                 .unwrap_or_else(|| "visual component".into());
             let label = view
                 .label
@@ -83,10 +143,7 @@ pub fn visual_components(section: &ModelingSection) -> Vec<VisualComponent> {
                         crate::format_element_label_for_view(exposed, &references, &view.style)
                     })
                 })
-                .or_else(|| {
-                    relation
-                        .map(|relation| relationship_display_label(section, relation, &references))
-                })
+                .or_else(|| relation.map(|relation| relationship_display_label(section, relation)))
                 .unwrap_or_else(|| kind.clone());
             components.push(VisualComponent {
                 diagram_id: diagram.id.clone(),

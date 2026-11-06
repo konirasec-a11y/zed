@@ -164,84 +164,6 @@ fn diagram_key(id: &str) -> String {
     format!("diagram:{id}")
 }
 
-fn relationship_label(section: &ModelingSection, relation: &crate::Relation) -> String {
-    use crate::RelationshipMarker;
-    let endpoint = |id: &str| {
-        section
-            .elements
-            .iter()
-            .find(|element| element.id == id)
-            .map(|element| element.name.trim())
-            .filter(|name| !name.is_empty())
-            .unwrap_or(id)
-            .to_owned()
-    };
-    let presentation = crate::relationship_presentation(section, relation);
-    let relation_type = crate::semantic_identity(&presentation.notation).type_label;
-    let name = presentation
-        .name
-        .as_deref()
-        .filter(|name| !name.trim().is_empty())
-        .map(|name| format!("{relation_type}: {name}"))
-        .unwrap_or_else(|| relation_type.to_owned());
-    let marker = |marker, source| match marker {
-        RelationshipMarker::None => "",
-        RelationshipMarker::OpenArrow => {
-            if source {
-                "<"
-            } else {
-                ">"
-            }
-        }
-        RelationshipMarker::Triangle => {
-            if source {
-                "◁"
-            } else {
-                "▷"
-            }
-        }
-        RelationshipMarker::FilledTriangle => {
-            if source {
-                "◀"
-            } else {
-                "▶"
-            }
-        }
-        RelationshipMarker::Diamond => "◇",
-        RelationshipMarker::FilledDiamond => "◆",
-        RelationshipMarker::FilledCircle => "●",
-        RelationshipMarker::OpenArrowAndCircle => {
-            if source {
-                "○<"
-            } else {
-                ">○"
-            }
-        }
-        RelationshipMarker::FilledTriangleAndCircle => {
-            if source {
-                "○◀"
-            } else {
-                "▶○"
-            }
-        }
-        RelationshipMarker::Containment => "⊕",
-    };
-    let line = match presentation.style.line_mode {
-        crate::LineMode::Solid => "─",
-        crate::LineMode::Dashed => "┄",
-        crate::LineMode::Dotted => "··",
-    };
-    format!(
-        "{} {}{line} {} {}{line}{} {}",
-        endpoint(&relation.from),
-        marker(presentation.style.source_marker, true),
-        name,
-        marker(presentation.style.middle_marker, false),
-        marker(presentation.style.target_marker, false),
-        endpoint(&relation.to)
-    )
-}
-
 fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrder) -> Vec<ExplorerRow> {
     use std::collections::{HashMap, HashSet};
     let authored = project_authored_composition(section, sort);
@@ -952,7 +874,7 @@ fn project_authored_composition(
             ExplorerRow {
                 key: semantic_key(id),
                 element_id: id.clone(),
-                label: relationship_label(section, relation),
+                label: crate::visual_consistency::relationship_display_label(section, relation),
                 kind: crate::relationship_presentation(section, relation).notation,
                 depth: 0,
                 diagram: false,
