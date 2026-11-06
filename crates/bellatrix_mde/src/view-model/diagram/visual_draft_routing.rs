@@ -1,4 +1,4 @@
-use crate::{Diagram, Geometry, PathSegment, Point, RelationshipRouting, View};
+use crate::{Diagram, Geometry, PathSegment, Point, RelationshipRouting};
 
 pub fn resolve_visual_center(geometry: &Geometry) -> Option<Point> {
     match geometry {
@@ -123,7 +123,7 @@ pub fn reroute_visual_drafts(diagram: &mut Diagram) {
         .collect();
     let order = resolve_routing_order(diagram);
     for identifier in order {
-        let Some(view) = find_view_mut(&mut diagram.views, &identifier) else {
+        let Some(view) = diagram.view_mut(&identifier) else {
             continue;
         };
         let manual = view.style.routing == Some(RelationshipRouting::Manual);
@@ -296,17 +296,6 @@ pub fn reroute_visual_drafts(diagram: &mut Diagram) {
     }
 }
 
-fn find_view_mut<'a>(views: &'a mut [View], identifier: &str) -> Option<&'a mut View> {
-    let mut pending: Vec<_> = views.iter_mut().rev().collect();
-    while let Some(view) = pending.pop() {
-        if view.id == identifier {
-            return Some(view);
-        }
-        pending.extend(view.children.iter_mut().rev());
-    }
-    None
-}
-
 fn resolve_routing_order(diagram: &Diagram) -> Vec<String> {
     let lookup: std::collections::HashMap<_, _> = diagram
         .all_views()
@@ -363,7 +352,7 @@ pub(crate) fn translate_message_anchors(diagram: &mut Diagram, view_id: &str, dy
             _ => None,
         })
         .collect();
-    let Some(view) = find_view_mut(&mut diagram.views, view_id) else {
+    let Some(view) = diagram.view_mut(view_id) else {
         return;
     };
     let Some(draft) = view

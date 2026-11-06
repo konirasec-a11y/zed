@@ -159,8 +159,7 @@ pub(super) fn set_timing(
     let view = section
         .diagrams
         .iter_mut()
-        .flat_map(|diagram| &mut diagram.views)
-        .find(|view| view.id == view_id)
+        .find_map(|diagram| diagram.view_mut(view_id))
         .ok_or("view not found")?;
     view.timing = timing.clone();
     Ok(())
@@ -339,8 +338,7 @@ pub(super) fn set_endpoints(
         .find(|diagram| diagram.id == diagram_id)
         .ok_or("diagram not found")?;
     let view = diagram
-        .views
-        .iter()
+        .all_views()
         .find(|view| view.id == view_id)
         .ok_or("view not found in diagram")?;
     if !matches!(view.geometry, Geometry::Path { .. }) {
@@ -374,9 +372,7 @@ pub(super) fn set_endpoints(
         .find(|diagram| diagram.id == diagram_id)
         .ok_or("diagram not found")?;
     let view = diagram
-        .views
-        .iter_mut()
-        .find(|view| view.id == view_id)
+        .view_mut(view_id)
         .ok_or("view not found in diagram")?;
     view.endpoints = Some(endpoints.clone());
     crate::reroute_visual_drafts(diagram);

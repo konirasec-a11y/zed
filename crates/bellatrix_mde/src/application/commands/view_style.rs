@@ -174,8 +174,7 @@ pub(super) fn set_routing(
             .as_deref()
             .ok_or("routing projection has an unattached endpoint")?;
         let endpoint_view = diagram
-            .views
-            .iter()
+            .all_views()
             .find(|view| view.id == endpoint)
             .ok_or("routing projection endpoint is not in the diagram")?;
         if endpoint_view.subject.as_deref() != Some(subject) {
