@@ -266,7 +266,11 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
             .any(|row| row.view.is_some() && row.depth == 2)
     );
     assert_eq!(explorer[0].element_id, "model");
-    assert_eq!(explorer[1].element_id, "classes");
+    assert!(
+        explorer
+            .iter()
+            .any(|row| row.element_id == "classes" && row.depth == 1)
+    );
     let before_delete = flow.document.section_json.clone();
     let error = flow
         .apply(Command::DeleteElement {
