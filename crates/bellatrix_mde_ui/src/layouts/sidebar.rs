@@ -5,14 +5,9 @@ use crate::components::model_explorer::filter_explorer;
 use crate::components::model_explorer::project_explorer;
 use crate::components::pane_header::PaneHeader;
 pub use crate::components::toolbox::MdeLeftPanel;
-use crate::pages::mde_page::MdeToolDrag;
 use crate::pages::mde_page::MdeWorkbenchItem;
 use crate::pages::mde_page::WorkbenchPalette;
-use crate::routes::workspace::OpenMdeSymbols;
 use crate::routes::workspace::OpenMdeWorkbench;
-use bellatrix_mde_cordis::ModelingElementKind;
-use bellatrix_mde_cordis::ModelingRelationKind;
-use bellatrix_mde_cordis::ModelingTool;
 use gpui::Action;
 use gpui::App;
 use gpui::Context;
@@ -35,7 +30,6 @@ use gpui::actions;
 use gpui::div;
 use gpui::prelude::*;
 use gpui::px;
-use gpui::svg;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use ui::IconButton;
@@ -317,7 +311,7 @@ fn explorer_creation_menus(
     row_key: &str,
     cx: &App,
 ) -> ui::ContextMenu {
-    use crate::pages::mde_page::explorer;
+    use crate::view_model::explorer;
     if !owner.read(cx).source().allows_creation() {
         return menu.header("Creation is not available for this document");
     }
@@ -651,15 +645,15 @@ fn explorer_diagram_menu(
 }
 
 pub(crate) struct PanelState {
-    item: Option<gpui::WeakEntity<MdeWorkbenchItem>>,
-    focus: FocusHandle,
-    position: DockPosition,
-    top_height: f32,
+    pub(crate) item: Option<gpui::WeakEntity<MdeWorkbenchItem>>,
+    pub(crate) focus: FocusHandle,
+    pub(crate) position: DockPosition,
+    pub(crate) top_height: f32,
     split_start: Option<(Pixels, f32)>,
     _listener: Option<Subscription>,
 }
 impl PanelState {
-    fn new<T: 'static>(
+    pub(crate) fn new<T: 'static>(
         item: Entity<MdeWorkbenchItem>,
         position: DockPosition,
         top_height: f32,
@@ -675,17 +669,21 @@ impl PanelState {
             _listener: Some(listener),
         }
     }
-    fn bind<T: 'static>(&mut self, item: Option<&Entity<MdeWorkbenchItem>>, cx: &mut Context<T>) {
+    pub(crate) fn bind<T: 'static>(
+        &mut self,
+        item: Option<&Entity<MdeWorkbenchItem>>,
+        cx: &mut Context<T>,
+    ) {
         self._listener = item.map(|item| cx.observe(item, |_, _, cx| cx.notify()));
         self.item = item.map(Entity::downgrade);
         self.split_start = None;
         cx.notify();
     }
 
-    fn start_split(&mut self, y: Pixels) {
+    pub(crate) fn start_split(&mut self, y: Pixels) {
         self.split_start = Some((y, self.top_height));
     }
-    fn move_split(&mut self, y: Pixels, dragging: bool) -> bool {
+    pub(crate) fn move_split(&mut self, y: Pixels, dragging: bool) -> bool {
         let Some((start, original)) = self.split_start else {
             return false;
         };
@@ -699,7 +697,7 @@ impl PanelState {
         self.top_height = next;
         true
     }
-    fn finish_split(&mut self) {
+    pub(crate) fn finish_split(&mut self) {
         self.split_start = None;
     }
 }

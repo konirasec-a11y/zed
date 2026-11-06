@@ -1,15 +1,8 @@
 use crate::api::source::MdeUiSource;
 use crate::pages::mde_page::MdeWorkbenchItem;
-use crate::view_model::snapshot;
 use crate::view_model::workbench_state::PendingRelationEndpoint;
 use bellatrix_mde_cordis::ModelingRelationKind;
-use gpui::AppContext;
 use gpui::Context;
-use gpui::IntoElement;
-use gpui::Point;
-use gpui::prelude::*;
-use ui::Clickable;
-use ui::LabelCommon;
 
 impl MdeWorkbenchItem {
     pub(crate) fn connect_relation_view(

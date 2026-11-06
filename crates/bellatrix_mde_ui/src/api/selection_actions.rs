@@ -1,13 +1,7 @@
 use crate::pages::mde_page::MdeWorkbenchItem;
 use crate::view_model::selection;
-use crate::view_model::snapshot;
 use crate::view_model::workbench_state::SelectionChange;
-use gpui::AppContext;
 use gpui::Context;
-use gpui::IntoElement;
-use gpui::prelude::*;
-use ui::Clickable;
-use ui::LabelCommon;
 
 impl MdeWorkbenchItem {
     pub fn select_element(&mut self, id: String, cx: &mut Context<Self>) {

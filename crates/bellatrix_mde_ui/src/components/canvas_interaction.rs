@@ -1,22 +1,14 @@
-use crate::components::canvas_interaction::CanvasGesture;
-use crate::components::canvas_interaction::PathHandle;
 use crate::pages::mde_page::MdeWorkbenchItem;
 use crate::view_model::canvas_presentation;
-use crate::view_model::snapshot;
 use bellatrix_mde_cordis::Geometry;
 use bellatrix_mde_cordis::ModelingTool;
-use gpui::AppContext;
 use gpui::Context;
-use gpui::IntoElement;
 use gpui::MouseButton;
 use gpui::MouseMoveEvent;
 use gpui::Pixels;
 use gpui::Point;
 use gpui::ScrollEvent;
-use gpui::prelude::*;
 use gpui::px;
-use ui::Clickable;
-use ui::LabelCommon;
 
 #[derive(Clone, Copy)]
 pub(crate) enum PathHandle {

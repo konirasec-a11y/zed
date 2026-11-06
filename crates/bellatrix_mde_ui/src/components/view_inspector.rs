@@ -3,6 +3,7 @@ use crate::pages::mde_page::MdeWorkbenchItem;
 use bellatrix_mde_cordis::Geometry;
 use gpui::Context;
 use gpui::Entity;
+use gpui::Focusable;
 use gpui::IntoElement;
 use gpui::Window;
 use gpui::div;

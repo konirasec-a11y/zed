@@ -1,4 +1,3 @@
-use crate::layouts::sidebar;
 use crate::pages::mde_page::MdeUiSource;
 use crate::pages::mde_page::MdeWorkbenchItem;
 use crate::pages::mde_page::open_in_workspace;

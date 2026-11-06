@@ -4,22 +4,14 @@ use crate::components::quick_tools::QuickEditTarget;
 use crate::pages::mde_page::ElementViewPlacement;
 use crate::pages::mde_page::MdeWorkbenchItem;
 use crate::pages::mde_page::element_view_placement;
-use crate::view_model::explorer;
 use crate::view_model::selection;
-use crate::view_model::snapshot;
 use crate::view_model::snapshot::MdeSnapshot;
 use bellatrix_mde_cordis::ModelingElementKind;
 use bellatrix_mde_cordis::ModelingMemberKind;
 use bellatrix_mde_cordis::ModelingTool;
 use bellatrix_project::ProjectId;
-use gpui::AppContext;
 use gpui::Context;
-use gpui::IntoElement;
-use gpui::Point;
 use gpui::Window;
-use gpui::prelude::*;
-use ui::Clickable;
-use ui::LabelCommon;
 
 impl MdeWorkbenchItem {
     pub(crate) fn quick_edit_snapshot(

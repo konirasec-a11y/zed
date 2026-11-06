@@ -5,7 +5,6 @@
 
 use crate::layouts::footer::MdeStatusEntry;
 use crate::layouts::footer::status_button_enabled;
-use crate::layouts::sidebar;
 use crate::pages::home_page::Page;
 use crate::pages::home_page::navigate;
 use crate::pages::mde_page::MdeSymbolLibraryItem;

@@ -1,7 +1,7 @@
 use crate::components::pane_header::PaneHeader;
-use crate::components::toolbox::MdeLeftPanel;
 use crate::layouts::sidebar::MDE_LEFT_PRIORITY;
 use crate::layouts::sidebar::PanelState;
+use crate::layouts::sidebar::ToggleMdeLeft;
 use crate::pages::mde_page::MdeToolDrag;
 use crate::pages::mde_page::MdeWorkbenchItem;
 use crate::pages::mde_page::WorkbenchPalette;
@@ -31,7 +31,6 @@ use gpui::prelude::*;
 use gpui::px;
 use gpui::svg;
 use std::collections::HashSet;
-use ui::IconButton;
 use ui::IconName;
 use ui::Label;
 use ui::TreeViewItem;

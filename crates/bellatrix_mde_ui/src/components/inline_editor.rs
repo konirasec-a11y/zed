@@ -2,15 +2,12 @@ use crate::pages::mde_page::MdeWorkbenchItem;
 use crate::view_model::canvas_presentation;
 use crate::view_model::inspector_drafts;
 use crate::view_model::selection;
-use crate::view_model::snapshot;
 use gpui::AppContext;
 use gpui::Context;
-use gpui::IntoElement;
+use gpui::Focusable;
 use gpui::Window;
 use gpui::prelude::*;
 use gpui::px;
-use ui::Clickable;
-use ui::LabelCommon;
 use ui_input::InputField;
 
 impl MdeWorkbenchItem {
