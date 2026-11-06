@@ -1645,7 +1645,7 @@ fn ensure_leaf_view_dependencies(
     affected_subjects: &HashSet<String>,
     clears_affected_hierarchy_parents: bool,
 ) -> Result<(), String> {
-    let removed_leaf_views = section
+    let view_ids = section
         .diagrams
         .iter()
         .flat_map(|diagram| diagram.all_views())
@@ -1656,9 +1656,6 @@ fn ensure_leaf_view_dependencies(
                     .as_ref()
                     .is_some_and(|id| affected_subjects.contains(id))
         })
-        .collect::<Vec<_>>();
-    let view_ids = removed_leaf_views
-        .iter()
         .map(|view| view.id.as_str())
         .collect::<HashSet<_>>();
     ensure_removed_view_dependencies(
@@ -1677,20 +1674,21 @@ fn ensure_removed_view_dependencies(
     clears_affected_hierarchy_parents: bool,
     allow_orphaned_draft_endpoints: bool,
 ) -> Result<(), String> {
-    let subject_ids = affected_subjects
-        .iter()
-        .map(String::as_str)
-        .collect::<HashSet<_>>();
     for diagram in &section.diagrams {
         for view in diagram
             .all_views()
             .filter(|view| !view_ids.contains(view.id.as_str()))
         {
             let check = |target: Option<&str>, role: &str, model: bool| -> Result<(), String> {
-                let removed = if model { &subject_ids } else { view_ids };
-                if let Some(target) = target
-                    && removed.contains(target)
-                {
+                let Some(target) = target else {
+                    return Ok(());
+                };
+                let removed = if model {
+                    affected_subjects.contains(target)
+                } else {
+                    view_ids.contains(target)
+                };
+                if removed {
                     return Err(format!(
                         "Cannot delete leaf View: surviving View {} in diagram {} references {} through {}; no elements or presentation were changed",
                         view.id, diagram.id, target, role,
@@ -1832,7 +1830,7 @@ fn ensure_removed_view_dependencies(
                 || occurrence
                     .member_path
                     .iter()
-                    .any(|id| subject_ids.contains(id.as_str())))
+                    .any(|id| affected_subjects.contains(id)))
         {
             return Err(format!(
                 "Cannot delete leaf View: surviving hierarchy placement {} references View {} or its subject; no elements or presentation were changed",
