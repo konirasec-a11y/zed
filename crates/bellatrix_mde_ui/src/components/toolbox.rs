@@ -29,7 +29,6 @@ use gpui::Window;
 use gpui::div;
 use gpui::prelude::*;
 use gpui::px;
-use gpui::svg;
 use std::collections::HashSet;
 use ui::IconName;
 use ui::Label;
@@ -508,7 +507,7 @@ impl Render for MdeLeftPanel {
                                         .flex()
                                         .items_center()
                                         .gap_2()
-                                        .child(ui::Icon::new(IconName::Folder))
+                                        .child(crate::elements::uml::UmlVisualDefinition::for_project().render_icon(20.0, palette.panel))
                                         .child(
                                             div()
                                                 .min_w_0()
@@ -715,14 +714,8 @@ fn tool_entry(
             owner.update(cx, |workbench, cx| workbench.select_tool(tool, cx));
         })
         .child(
-            svg()
-                .data(crate::elements::uml::UmlVisualDefinition::for_tool(tool).icon())
-                .size(px(20.0))
-                .text_color(if chosen == Some(tool) {
-                    palette.selection
-                } else {
-                    palette.muted
-                }),
+            crate::elements::uml::UmlVisualDefinition::for_tool(tool)
+                .render_icon(20.0, palette.panel),
         )
         .child(Label::new(label.clone()));
     if !matches!(tool, ModelingTool::Relation(_)) {

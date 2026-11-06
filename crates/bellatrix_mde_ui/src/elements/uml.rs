@@ -13,7 +13,7 @@ pub use figure_geometry::{TemplateSignatureLayout, template_signature_layout};
 pub use figures::UmlFigure;
 pub use inline_edit::UmlInlineNameEditor;
 pub use interface_presentation::render_interface_icon;
-pub use quick_edit::{UmlQuickAction, UmlQuickEdit, UmlVisibilityPicker};
+pub use quick_edit::{UmlQuickAction, UmlQuickActionIcon, UmlQuickEdit, UmlVisibilityPicker};
 pub use relationship::{UmlLineSegment, UmlRelationGlyph};
 
 mod visual_definition;

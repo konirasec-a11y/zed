@@ -1,9 +1,10 @@
 //! Public symbol gallery on the same GPUI runtime as Zed Workspace.
-use crate::assets::symbols::{Family, count, glyph, groups};
+use crate::assets::symbols::{Family, count, groups};
 use crate::assets::theme::Palette;
 use gpui::{
     App, IntoElement, RenderOnce, StatefulInteractiveElement, Window, div, prelude::*, px, rgb, svg,
 };
+use ui::prelude::ActiveTheme;
 
 #[derive(IntoElement)]
 pub struct SymbolGallery {
@@ -80,13 +81,19 @@ impl RenderOnce for SymbolGallery {
                                     .items_center()
                                     .justify_center()
                                     .gap_2()
-                                    .child(
+                                    .child(if self.family == Family::Uml {
+                                        crate::elements::uml::UmlVisualDefinition::for_kind(
+                                            "",
+                                            symbol.label,
+                                            false,
+                                        )
+                                        .render_icon(24.0, cx.theme().colors().panel_background)
+                                    } else {
                                         svg()
-                                            .data(glyph(symbol.kind))
-                                            .w(px(24.0))
-                                            .h(px(24.0))
-                                            .text_color(rgb(p.muted)),
-                                    )
+                                            .data(crate::assets::icons::glyph(symbol.kind))
+                                            .size(px(24.0))
+                                            .text_color(rgb(p.muted))
+                                    })
                                     .child(
                                         div()
                                             .text_xs()

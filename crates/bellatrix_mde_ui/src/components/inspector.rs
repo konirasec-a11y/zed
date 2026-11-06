@@ -19,7 +19,6 @@ use gpui::Window;
 use gpui::div;
 use gpui::prelude::*;
 use gpui::px;
-use gpui::svg;
 use serde_json::Value;
 use std::collections::HashMap;
 use ui::Button;
@@ -967,18 +966,12 @@ pub(crate) fn render_inspector(
             .border_b_1()
             .border_color(palette.border)
             .child(
-                svg()
-                    .data(
-                        crate::elements::uml::UmlVisualDefinition::for_kind(
-                            &inspector.presentation_kind,
-                            &inspector.type_label,
-                            false,
-                        )
-                        .icon(),
-                    )
-                    .size(px(20.0))
-                    .flex_none()
-                    .text_color(palette.muted),
+                crate::elements::uml::UmlVisualDefinition::for_kind(
+                    &inspector.presentation_kind,
+                    &inspector.type_label,
+                    false,
+                )
+                .render_icon(20.0, palette.panel),
             )
             .child(
                 div()
@@ -1037,7 +1030,14 @@ pub(crate) fn render_inspector(
                     .px_3()
                     .child(
                         Button::new(format!("mde-inspector-{}", descriptor.id), descriptor.title)
-                            .start_icon(Icon::new(action.icon()).size(IconSize::Small))
+                            .start_icon(match action.icon() {
+                                crate::elements::uml::UmlQuickActionIcon::Element(visual) => {
+                                    visual.control_icon(IconSize::Small, palette.panel)
+                                }
+                                crate::elements::uml::UmlQuickActionIcon::Action(icon) => {
+                                    Icon::new(icon).size(IconSize::Small)
+                                }
+                            })
                             .disabled(pending)
                             .on_click(cx.listener(move |panel, _, _, cx| {
                                 if !panel.is_bound_to(&target) {

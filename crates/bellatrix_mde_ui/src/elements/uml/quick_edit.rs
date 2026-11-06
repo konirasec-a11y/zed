@@ -15,10 +15,15 @@ type ActionHandler = Rc<dyn Fn(&str, &mut Window, &mut App)>;
 pub struct UmlQuickAction {
     pub id: &'static str,
     pub label: &'static str,
-    pub icon: IconName,
-    pub visual: Option<crate::elements::uml::UmlVisualDefinition>,
+    pub icon: UmlQuickActionIcon,
     pub row: u8,
     pub shortcut: Option<&'static str>,
+}
+
+#[derive(Clone, Copy)]
+pub enum UmlQuickActionIcon {
+    Element(crate::elements::uml::UmlVisualDefinition),
+    Action(IconName),
 }
 
 /// A small set of *available* icon buttons beside an active UML element.
@@ -54,20 +59,18 @@ impl RenderOnce for UmlQuickEdit {
         let mut rows: [Vec<gpui::AnyElement>; 4] = std::array::from_fn(|_| Vec::new());
         for action in self.actions {
             let handler = self.handler.clone();
-            let button = if let Some(visual) = action.visual {
-                ui::ButtonLike::new(format!("uml-action-{}", action.id))
-                    .width(ui::IconSize::default().square(window, cx))
-                    .height(ui::IconSize::default().square(window, cx).into())
-                    .child(
-                        gpui::svg()
-                            .data(visual.icon())
-                            .size(gpui::px(16.0))
-                            .text_color(ui::Color::Default.color(cx)),
-                    )
-            } else {
-                IconButton::new(format!("uml-action-{}", action.id), action.icon)
-                    .shape(IconButtonShape::Square)
-                    .render(window, cx)
+            let button = match action.icon {
+                UmlQuickActionIcon::Element(visual) => {
+                    ui::ButtonLike::new(format!("uml-action-{}", action.id))
+                        .width(ui::IconSize::default().square(window, cx))
+                        .height(ui::IconSize::default().square(window, cx).into())
+                        .child(visual.render_icon(16.0, cx.theme().colors().panel_background))
+                }
+                UmlQuickActionIcon::Action(icon) => {
+                    IconButton::new(format!("uml-action-{}", action.id), icon)
+                        .shape(IconButtonShape::Square)
+                        .render(window, cx)
+                }
             }
             .aria_label(action.label)
             .tooltip(Tooltip::text(match action.shortcut {

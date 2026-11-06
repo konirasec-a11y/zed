@@ -50,12 +50,15 @@ impl ParameterAction {
         }
     }
 
-    pub(crate) fn icon(self) -> IconName {
+    pub(crate) fn icon(self) -> crate::elements::uml::UmlQuickActionIcon {
+        use crate::elements::uml::{UmlQuickActionIcon, UmlVisualDefinition};
         match self {
-            Self::Add => IconName::SquarePlus,
-            Self::Delete => IconName::Trash,
-            Self::Move { up: true } => IconName::ArrowUp,
-            Self::Move { up: false } => IconName::ArrowDown,
+            Self::Add => {
+                UmlQuickActionIcon::Element(UmlVisualDefinition::for_kind("", "Parameter", false))
+            }
+            Self::Delete => UmlQuickActionIcon::Action(IconName::Trash),
+            Self::Move { up: true } => UmlQuickActionIcon::Action(IconName::ArrowUp),
+            Self::Move { up: false } => UmlQuickActionIcon::Action(IconName::ArrowDown),
         }
     }
 }
@@ -101,28 +104,14 @@ pub(crate) fn quick_edit_for_element(
                 && action.control == QuickEditControl::Button
         })
         .filter_map(|action| {
-            let icon = if let Some(action) = ParameterAction::from_id(action.id) {
+            let icon = if let Some(visual) =
+                crate::elements::uml::UmlVisualDefinition::for_quick_action(action.id)
+            {
+                crate::elements::uml::UmlQuickActionIcon::Element(visual)
+            } else if let Some(action) = ParameterAction::from_id(action.id) {
                 action.icon()
             } else {
-                match action.id {
-                    "uml.add-attribute" => IconName::SquarePlus,
-                    "uml.add-operation" => IconName::Code,
-                    "uml.add-reception" => IconName::Bell,
-                    "uml.add-note" => IconName::Notepad,
-                    "uml.add-constraint" => IconName::Warning,
-                    "uml.add-subinterface" | "uml.add-subclass" => IconName::ArrowDown,
-                    "uml.add-superinterface" | "uml.add-superclass" => IconName::ArrowUp,
-                    "uml.add-realizing-class" => IconName::GitBranchPlus,
-                    "uml.add-template-parameter" => IconName::Box,
-                    "uml.add-provided-interface" => IconName::Circle,
-                    "uml.add-required-interface" => IconName::CircleHelp,
-                    "uml.add-associated-class" => IconName::Link,
-                    "uml.add-aggregated-class" => IconName::GitBranch,
-                    "uml.add-composited-class" => IconName::GitCommit,
-                    "uml.add-port" => IconName::SquareDot,
-                    "uml.add-part" => IconName::BoxOpen,
-                    _ => return None,
-                }
+                return None;
             };
             Some((
                 action.side,
@@ -130,7 +119,6 @@ pub(crate) fn quick_edit_for_element(
                     id: action.id,
                     label: action.title,
                     icon,
-                    visual: crate::elements::uml::UmlVisualDefinition::for_quick_action(action.id),
                     row: action.row,
                     shortcut: action.shortcut,
                 },
@@ -195,7 +183,7 @@ pub(crate) fn quick_edit_for_relationship(
 ) -> Option<gpui::AnyElement> {
     use crate::pages::mde_page::WorkbenchPalette;
     use bellatrix_mde_cordis::PropertyEditor;
-    use gpui::{MouseButton, div, prelude::*, px, svg};
+    use gpui::{MouseButton, div, prelude::*};
     use ui::{ContextMenu, DropdownMenu, Icon, IconButton, Label, Tooltip, prelude::*};
 
     let inspection = section.inspect_element(&relation.id)?;
@@ -341,18 +329,12 @@ pub(crate) fn quick_edit_for_relationship(
                     .items_center()
                     .gap_2()
                     .child(
-                        svg()
-                            .data(
-                                crate::elements::uml::UmlVisualDefinition::for_kind(
-                                    &inspection.presentation_kind,
-                                    &inspection.type_label,
-                                    true,
-                                )
-                                .icon(),
-                            )
-                            .size(px(16.0))
-                            .flex_none()
-                            .text_color(palette.muted),
+                        crate::elements::uml::UmlVisualDefinition::for_kind(
+                            &inspection.presentation_kind,
+                            &inspection.type_label,
+                            true,
+                        )
+                        .render_icon(16.0, palette.panel),
                     )
                     .child(Label::new(type_label.to_owned()).truncate()),
             )

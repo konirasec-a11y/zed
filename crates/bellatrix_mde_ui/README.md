@@ -22,9 +22,12 @@
 - `src/elements/uml.rs` and `src/elements/uml/` own the MDE UML figures, geometry,
   inline editors, quick edits and shared visual definitions.
 - `src/assets/theme.rs` owns the shared design-system theme.
-  `src/assets/uml/staruml.rs` owns MDE explorer glyphs; `assets/staruml/` keeps their
-  notice and reproduction script. `src/assets/symbols.rs` and
-  `src/assets/symbols/` own the multi-diagram catalog and SVGs. All Bellatrix
+  `src/assets/icons.rs` is the only SVG registry, backed by the independent
+  artwork in `src/assets/icons/svg/`. `UmlVisualDefinition` resolves semantic
+  identities and supplies consistent category colors to every MDE surface.
+  `src/assets/symbols.rs` and `src/assets/symbols/` contain catalog metadata only.
+  The old StarUML outlines and provenance remain in `assets/staruml/` as
+  historical reference and are not part of the runtime. All Bellatrix
   visual code belongs to this crate; the former design-system, panel and symbol
   crates have been removed. Their design references live in `docs/`.
 - `src/view_model/` contains renderer-independent inspector/style drafts,

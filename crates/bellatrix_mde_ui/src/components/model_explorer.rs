@@ -100,62 +100,19 @@ pub(crate) fn explorer_element_icon(
     identity: &bellatrix_mde_cordis::projection::SemanticIdentity,
     palette: &crate::pages::mde_page::WorkbenchPalette,
 ) -> impl gpui::IntoElement {
-    let visual = crate::elements::uml::UmlVisualDefinition::for_element(kind, identity);
-    explorer_colored_icon(visual.icon(), visual.category(), palette)
+    crate::elements::uml::UmlVisualDefinition::for_element(kind, identity)
+        .render_icon(20.0, palette.panel)
 }
 
 pub(crate) fn explorer_diagram_icon(
     kind: &str,
     palette: &crate::pages::mde_page::WorkbenchPalette,
 ) -> impl gpui::IntoElement {
-    use crate::assets::uml::staruml::{ExplorerIconCategory, explorer_glyph};
-    let name = match kind {
-        "UMLStateMachineDiagram" => "StatechartDiagram",
-        "UMLInteractionDiagram" => "SequenceDiagram",
-        _ => kind.strip_prefix("UML").unwrap_or(kind),
-    };
-    let data = explorer_glyph(name)
-        .map(|(data, _)| data)
-        .unwrap_or_else(|| {
-            crate::assets::symbols::glyph(crate::assets::symbols::ShapeKind::Document)
-        });
-    explorer_colored_icon(data, ExplorerIconCategory::Diagram, palette)
+    crate::elements::uml::UmlVisualDefinition::for_diagram(kind).render_icon(20.0, palette.panel)
 }
 
 pub(crate) fn explorer_project_icon(
     palette: &crate::pages::mde_page::WorkbenchPalette,
 ) -> impl gpui::IntoElement {
-    use crate::assets::uml::staruml::{ExplorerIconCategory, explorer_glyph};
-    let data = explorer_glyph("Project")
-        .map(|(data, _)| data)
-        .unwrap_or_else(|| {
-            crate::assets::symbols::glyph(crate::assets::symbols::ShapeKind::Package)
-        });
-    explorer_colored_icon(data, ExplorerIconCategory::Project, palette)
-}
-
-fn explorer_colored_icon(
-    data: &'static [u8],
-    category: crate::assets::uml::staruml::ExplorerIconCategory,
-    palette: &crate::pages::mde_page::WorkbenchPalette,
-) -> impl gpui::IntoElement {
-    use crate::assets::uml::staruml::ExplorerIconCategory;
-    use gpui::{prelude::*, px, rgb, svg};
-    // The source colors are adjusted for contrast instead of becoming muted on dark themes.
-    let dark = palette.panel.l < 0.5;
-    let color = match (category, dark) {
-        (ExplorerIconCategory::Project, true) => 0xf28b67,
-        (ExplorerIconCategory::Project, false) => 0xb6432b,
-        (ExplorerIconCategory::Element, true) => 0xe4be55,
-        (ExplorerIconCategory::Element, false) => 0x896d00,
-        (ExplorerIconCategory::Relation, true) => 0x63b9f2,
-        (ExplorerIconCategory::Relation, false) => 0x0876b2,
-        (ExplorerIconCategory::Diagram, true) => 0x5aca8b,
-        (ExplorerIconCategory::Diagram, false) => 0x00833c,
-    };
-    svg()
-        .data(data)
-        .size(px(20.0))
-        .flex_none()
-        .text_color(rgb(color))
+    crate::elements::uml::UmlVisualDefinition::for_project().render_icon(20.0, palette.panel)
 }

@@ -48,5 +48,5 @@ for name, codepoint in icons:
         f'(br#"{svg}"#, ExplorerIconCategory::{category}),'
     )
 lines.extend(["        _ => return None,", "    })", "}"])
-(root / "crates/bellatrix_mde_ui/src/assets/uml/staruml.rs").write_text("\n".join(lines) + "\n")
+(root / "crates/bellatrix_mde_ui/assets/staruml/legacy-outlines.rs").write_text("\n".join(lines) + "\n")
 print(f"Extracted {len(icons)} icons.")
