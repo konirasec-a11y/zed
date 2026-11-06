@@ -416,14 +416,19 @@ fn flush_timing_edits(
                 bellatrix_mde_cordis::TraceOutcome::Uncertain,
             );
         }
-        if let Err(error) = owner.update(cx, |panel, cx| {
+        if let Err(_error) = owner.update(cx, |panel, cx| {
             if let Some(draft) = panel.timing_drafts.get_mut(&key) {
                 draft.acknowledge();
             }
             flush_timing_edits(panel, &item, &key, cx);
             cx.notify();
         }) {
-            eprintln!("MDE timing completion update failed: {error}");
+            journal.record_interaction(
+                expected_revision,
+                "view_timing.ui_refresh_failed",
+                Some(&key.2),
+                bellatrix_mde_cordis::TraceOutcome::Error,
+            );
         }
     })
     .detach();

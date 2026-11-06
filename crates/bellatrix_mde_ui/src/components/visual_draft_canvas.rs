@@ -483,7 +483,7 @@ impl MdeWorkbenchItem {
                 .borrow()
                 .clone()
                 .unwrap_or_else(|| Err("Label receipt unavailable; draft preserved".into()));
-            if let Err(error) = owner.update(cx, |item, cx| {
+            if let Err(_error) = owner.update(cx, |item, cx| {
                 let same_editor = item.project_id() == &project_id
                     && item.presentation.editing_view() == Some(view_id.as_str())
                     && item
@@ -516,7 +516,12 @@ impl MdeWorkbenchItem {
                 }
                 cx.notify();
             }) {
-                eprintln!("MDE label receipt update failed: {error}");
+                journal.record_interaction(
+                    expected_revision,
+                    "view_label.ui_refresh_failed",
+                    Some(&view_id),
+                    bellatrix_mde_cordis::TraceOutcome::Error,
+                );
             }
         })
         .detach();

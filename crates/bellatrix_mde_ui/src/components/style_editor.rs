@@ -337,7 +337,7 @@ pub(crate) fn flush_style_edits(
                 bellatrix_mde_cordis::TraceOutcome::Uncertain,
             );
         }
-        if let Err(error) = owner.update(cx, |panel, cx| {
+        if let Err(_error) = owner.update(cx, |panel, cx| {
             if let Some(draft) = panel.style_drafts.get_mut(&key) {
                 draft.acknowledge(&completion, cx);
             }
@@ -345,7 +345,12 @@ pub(crate) fn flush_style_edits(
             flush_style_edits(panel, &item, cx);
             cx.notify();
         }) {
-            eprintln!("MDE style completion refresh failed: {error}");
+            journal.record_interaction(
+                submitted_revision,
+                "view_style.ui_refresh_failed",
+                Some(&key.2),
+                bellatrix_mde_cordis::TraceOutcome::Error,
+            );
         }
     })
     .detach();

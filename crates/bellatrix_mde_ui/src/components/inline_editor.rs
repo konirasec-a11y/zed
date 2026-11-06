@@ -183,7 +183,7 @@ impl MdeWorkbenchItem {
                     .borrow()
                     .clone()
                     .unwrap_or_else(|| Err("Name receipt unavailable; text preserved".into()));
-                if let Err(error) = owner.update_in(cx, |item, window, cx| {
+                if let Err(_error) = owner.update_in(cx, |item, window, cx| {
                     if item.project_id() != &project_id
                         || item.presentation.active_diagram() != diagram_id.as_deref()
                         || item.presentation.editing_element() != Some(id.as_str())
@@ -218,7 +218,12 @@ impl MdeWorkbenchItem {
                     }
                     cx.notify();
                 }) {
-                    eprintln!("MDE relationship name receipt update failed: {error}");
+                    journal.record_interaction(
+                        snapshot.revision,
+                        "relationship_name.ui_refresh_failed",
+                        Some(&id),
+                        bellatrix_mde_cordis::TraceOutcome::Error,
+                    );
                 }
             })
             .detach();

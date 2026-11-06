@@ -520,7 +520,7 @@ pub(crate) fn flush_property_edits(
                             bellatrix_mde_cordis::TraceOutcome::Uncertain,
                         );
                     }
-                    if let Err(error) = owner.update(cx, |panel, cx| {
+                    if let Err(_error) = owner.update(cx, |panel, cx| {
                         let receipt = completion
                             .borrow()
                             .clone()
@@ -540,7 +540,12 @@ pub(crate) fn flush_property_edits(
                         crate::components::style_editor::flush_style_edits(panel, &item, cx);
                         cx.notify();
                     }) {
-                        eprintln!("MDE property completion refresh failed: {error}");
+                        journal.record_interaction(
+                            submitted_revision,
+                            "property.ui_refresh_failed",
+                            Some(&key.element),
+                            bellatrix_mde_cordis::TraceOutcome::Error,
+                        );
                     }
                 })
                 .detach();
