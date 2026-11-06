@@ -1,21 +1,25 @@
 use crate::Command;
 pub use bellatrix_mde_contracts::events::{ModelingDeleteElement, ModelingDeleteElementRequested};
-use bellatrix_project::ProjectService;
+use bellatrix_project::{ProjectId, ProjectService};
 use cordis::Context;
 
-pub(crate) async fn delete_element(
-    context: &Context,
-    projects: &ProjectService,
+pub(crate) fn delete_element_command(
     request: ModelingDeleteElementRequested,
-) -> Result<u64, String> {
-    crate::mutation::execute(
-        context,
-        projects,
+) -> (ProjectId, u64, Command) {
+    (
         request.project_id,
         request.expected_revision,
         Command::DeleteElement {
             element_id: request.element_id,
         },
     )
-    .await
+}
+
+pub(crate) async fn delete_element(
+    context: &Context,
+    projects: &ProjectService,
+    request: ModelingDeleteElementRequested,
+) -> Result<u64, String> {
+    let (project_id, expected_revision, command) = delete_element_command(request);
+    crate::mutation::execute(context, projects, project_id, expected_revision, command).await
 }

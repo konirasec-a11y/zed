@@ -1,16 +1,10 @@
 use crate::Command;
 pub use bellatrix_mde_contracts::events::{ModelingMoveView, ModelingMoveViewRequested};
-use bellatrix_project::ProjectService;
+use bellatrix_project::{ProjectId, ProjectService};
 use cordis::Context;
 
-pub(crate) async fn move_view(
-    context: &Context,
-    projects: &ProjectService,
-    request: ModelingMoveViewRequested,
-) -> Result<u64, String> {
-    crate::mutation::execute(
-        context,
-        projects,
+pub(crate) fn move_view_command(request: ModelingMoveViewRequested) -> (ProjectId, u64, Command) {
+    (
         request.project_id,
         request.expected_revision,
         Command::MoveView {
@@ -19,5 +13,13 @@ pub(crate) async fn move_view(
             dy: request.dy,
         },
     )
-    .await
+}
+
+pub(crate) async fn move_view(
+    context: &Context,
+    projects: &ProjectService,
+    request: ModelingMoveViewRequested,
+) -> Result<u64, String> {
+    let (project_id, expected_revision, command) = move_view_command(request);
+    crate::mutation::execute(context, projects, project_id, expected_revision, command).await
 }

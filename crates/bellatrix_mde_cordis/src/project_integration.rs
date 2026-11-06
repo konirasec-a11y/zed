@@ -5,7 +5,7 @@ pub use bellatrix_mde_contracts::events::{
     ModelingRename, ModelingRenameRequested, ModelingSetExplorerParent,
     ModelingSetExplorerParentRequested, ModelingSetOwner, ModelingSetOwnerRequested,
 };
-use bellatrix_project::{ProjectDocument, ProjectService};
+use bellatrix_project::{ProjectDocument, ProjectId, ProjectService};
 use cordis::event::responder;
 use cordis::{Context, InjectSpec, Plugin, Service};
 use std::{convert::Infallible, io, sync::Arc};
@@ -15,6 +15,42 @@ pub(crate) fn section_json(document: &ProjectDocument) -> Result<String, String>
     let section = document.section(MODELING_NAMESPACE)
         .ok_or("unsupported or missing MDE section: expected bellatrix.mde; beta documents in other namespaces are not supported")?;
     serde_json::to_string(section).map_err(|error| error.to_string())
+}
+
+pub(crate) fn set_owner_command(request: ModelingSetOwnerRequested) -> (ProjectId, u64, Command) {
+    (
+        request.project_id,
+        request.expected_revision,
+        Command::SetOwner {
+            element_id: request.element_id,
+            owner_id: request.owner_id,
+        },
+    )
+}
+
+pub(crate) fn set_explorer_parent_command(
+    request: ModelingSetExplorerParentRequested,
+) -> (ProjectId, u64, Command) {
+    (
+        request.project_id,
+        request.expected_revision,
+        Command::SetExplorerParent {
+            subject_id: request.subject_id,
+            parent_id: request.parent_id,
+            parent_occurrence: request.parent_occurrence,
+        },
+    )
+}
+
+pub(crate) fn rename_command(request: ModelingRenameRequested) -> (ProjectId, u64, Command) {
+    (
+        request.project_id,
+        request.expected_revision,
+        Command::Rename {
+            element_id: request.element_id,
+            name: request.new_name,
+        },
+    )
 }
 
 pub struct MdePlugin;
@@ -226,15 +262,13 @@ impl Plugin for MdePlugin {
                 move |ctx: Context, request: ModelingSetOwnerRequested| {
                     let projects = Arc::clone(&ownership_projects);
                     async move {
+                        let (project_id, expected_revision, command) = set_owner_command(request);
                         let result = crate::mutation::execute(
                             &ctx,
                             &projects,
-                            request.project_id,
-                            request.expected_revision,
-                            Command::SetOwner {
-                                element_id: request.element_id,
-                                owner_id: request.owner_id,
-                            },
+                            project_id,
+                            expected_revision,
+                            command,
                         )
                         .await;
                         Ok::<_, Infallible>(Some(result))
@@ -248,16 +282,14 @@ impl Plugin for MdePlugin {
                 move |ctx: Context, request: ModelingSetExplorerParentRequested| {
                     let projects = Arc::clone(&explorer_projects);
                     async move {
+                        let (project_id, expected_revision, command) =
+                            set_explorer_parent_command(request);
                         let result = crate::mutation::execute(
                             &ctx,
                             &projects,
-                            request.project_id,
-                            request.expected_revision,
-                            Command::SetExplorerParent {
-                                subject_id: request.subject_id,
-                                parent_id: request.parent_id,
-                                parent_occurrence: request.parent_occurrence,
-                            },
+                            project_id,
+                            expected_revision,
+                            command,
                         )
                         .await;
                         Ok::<_, Infallible>(Some(result))
@@ -284,15 +316,6 @@ async fn rename(
     projects: &ProjectService,
     request: ModelingRenameRequested,
 ) -> Result<u64, String> {
-    crate::mutation::execute(
-        context,
-        projects,
-        request.project_id,
-        request.expected_revision,
-        Command::Rename {
-            element_id: request.element_id,
-            name: request.new_name,
-        },
-    )
-    .await
+    let (project_id, expected_revision, command) = rename_command(request);
+    crate::mutation::execute(context, projects, project_id, expected_revision, command).await
 }

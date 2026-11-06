@@ -248,74 +248,29 @@ fn edit(command: MdeUiCommand) -> Result<(ProjectId, u64, Command, Option<Comple
         MdeUiCommand::CreateRelationAtViewsOrVisualDraft(request) => {
             crate::create_relation::create_relation_at_views_or_visual_draft_command(request)
         }
-        MdeUiCommand::MoveView(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::MoveView {
-                view_id: request.view_id,
-                dx: request.dx,
-                dy: request.dy,
-            },
-        ),
-        MdeUiCommand::ResizeView(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::ResizeView {
-                view_id: request.view_id,
-                width: request.width,
-                height: request.height,
-            },
-        ),
+        MdeUiCommand::MoveView(request) => crate::view_edits::move_view_command(request),
+        MdeUiCommand::ResizeView(request) => crate::resize_view::resize_view_command(request),
         MdeUiCommand::RemoveView(request) => crate::views::remove_view_command(request),
         MdeUiCommand::PlaceElementView(request) => {
             crate::views::place_element_view_command(request)
         }
-        MdeUiCommand::SetOwner(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::SetOwner {
-                element_id: request.element_id,
-                owner_id: request.owner_id,
-            },
-        ),
-        MdeUiCommand::SetExplorerParent(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::SetExplorerParent {
-                subject_id: request.subject_id,
-                parent_id: request.parent_id,
-                parent_occurrence: request.parent_occurrence,
-            },
-        ),
-        MdeUiCommand::DeleteElement(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::DeleteElement {
-                element_id: request.element_id,
-            },
-        ),
+        MdeUiCommand::SetOwner(request) => crate::project_integration::set_owner_command(request),
+        MdeUiCommand::SetExplorerParent(request) => {
+            crate::project_integration::set_explorer_parent_command(request)
+        }
+        MdeUiCommand::DeleteElement(request) => {
+            crate::delete_element::delete_element_command(request)
+        }
         MdeUiCommand::SetProperty(request) => crate::set_property::set_property_command(request),
         MdeUiCommand::AddMember(request) => crate::add_member::add_member_command(request),
         MdeUiCommand::MoveParameter(request) => crate::add_member::move_parameter_command(request),
         MdeUiCommand::QuickEdit(request) => {
             crate::quick_edit_commands::execute_quick_edit_command(request)
         }
-        MdeUiCommand::SetNameExpression(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::SetNameExpression {
-                element_id: request.element_id,
-                expression: request.expression,
-            },
-        ),
-        MdeUiCommand::Rename(request) => (
-            request.project_id,
-            request.expected_revision,
-            Command::Rename {
-                element_id: request.element_id,
-                name: request.new_name,
-            },
-        ),
+        MdeUiCommand::SetNameExpression(request) => {
+            crate::name_expression::set_name_expression_command(request)
+        }
+        MdeUiCommand::Rename(request) => crate::project_integration::rename_command(request),
         MdeUiCommand::CreateExplorerDiagram(request) => {
             crate::diagrams::create_explorer_diagram_command(request)
         }
