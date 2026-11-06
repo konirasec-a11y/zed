@@ -274,14 +274,15 @@ fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrder) -> Vec<E
         }
         ancestors.push(row);
     }
-    // A free-standing subject already visible through a diagram occurrence does
-    // not need a second root. Explicitly authored branches and diagram owners
-    // remain available in their original location.
+    // A subject already visible through a diagram occurrence does not need a
+    // second semantic branch, even beneath a Model or Package. Its unrepresented
+    // members are projected below the occurrence; authored composition and diagram
+    // owners must remain reachable at their original location.
     let mut hidden = HashSet::new();
     for (index, row) in authored
         .iter()
         .enumerate()
-        .filter(|(_, row)| row.depth == 0 && !row.diagram)
+        .filter(|(_, row)| !row.diagram)
     {
         if !represented.contains(row.element_id.as_str()) {
             continue;
@@ -420,21 +421,9 @@ fn project_explorer(section: &ModelingSection, sort: ExplorerSortOrder) -> Vec<E
                 .parent_view_id
                 .as_ref()
                 .filter(|parent| views.iter().any(|candidate| &candidate.view_id == *parent))
-                .cloned()
-                .or_else(|| {
-                    view.subject_id.as_ref().and_then(|subject| {
-                        let owner = semantic_children.iter().find_map(|(owner, children)| {
-                            children
-                                .iter()
-                                .any(|child| &child.element_id == subject)
-                                .then_some(owner)
-                        })?;
-                        views
-                            .iter()
-                            .find(|candidate| candidate.subject_id.as_ref() == Some(owner))
-                            .map(|candidate| candidate.view_id.clone())
-                    })
-                });
+                .cloned();
+            // UML ownership does not imply UMLDI containment. Only the authored
+            // view parent determines where an occurrence belongs in the diagram.
             parents.insert(view.view_id.clone(), parent);
         }
         let mut seen = HashSet::new();
