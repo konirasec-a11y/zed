@@ -977,7 +977,6 @@ impl Render for MdeRightPanel {
         let searching = !explorer_query.is_empty();
         let mut explorer_has_rows = false;
         let mut rows = Vec::new();
-        let mut reveal_selected = false;
         let mut explorer_branch_keys = Vec::new();
         let mut can_reveal_selection = false;
         if let Some(snapshot) = &snapshot {
@@ -1046,7 +1045,7 @@ impl Render for MdeRightPanel {
             can_reveal_selection = selected_id.is_some() || active_diagram.is_some();
             let selected_index = selected_row
                 .and_then(|selected| tree.iter().position(|row| row.key == selected.key));
-            reveal_selected = self.reveal_explorer_selection(
+            let reveal_selected = self.reveal_explorer_selection(
                 &tree,
                 selected_index,
                 &root_key,
