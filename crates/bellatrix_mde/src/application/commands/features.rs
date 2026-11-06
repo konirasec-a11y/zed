@@ -520,9 +520,6 @@ pub(super) fn insert_feature(
     if action == UmlQuickCreate::Port {
         properties.insert("isService".into(), serde_json::json!(false));
     }
-    if action == UmlQuickCreate::Part {
-        properties.insert("type".into(), serde_json::json!(""));
-    }
     section.elements.push(Element {
         id: node_id.clone(),
         kind: kind.into(),
@@ -562,7 +559,10 @@ pub(super) fn insert_feature(
             .views
             .push(View {
                 children: Vec::new(),
-                presentation: Default::default(),
+                presentation: crate::ViewPresentation {
+                    notation_kind: Some(kind.into()),
+                    ..Default::default()
+                },
                 endpoints: None,
                 timing: None,
                 draft: None,

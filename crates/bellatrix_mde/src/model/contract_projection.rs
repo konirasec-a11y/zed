@@ -112,7 +112,12 @@ pub fn project_registry(
         if metaclass == "Comment" {
             kind = "uml.note".into();
         } else if metaclass == "Property" && classifier_properties.contains(id) {
-            kind = "uml.attribute".into();
+            kind = if properties.get("aggregation").and_then(Value::as_str) == Some("composite") {
+                "uml.part"
+            } else {
+                "uml.attribute"
+            }
+            .into();
         }
         let association =
             metamodel::conforms_to(metaclass, "Association") && metaclass != "AssociationClass";
