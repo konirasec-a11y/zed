@@ -189,3 +189,24 @@ mantenedor. Não abrir PR nem disparar CI como substituto dessa validação.
 - [Inspector e Property Editor](inspector.md)
 - [Projeção UMLClass e menus](quick-edit-class.svg)
 - Referências do mantenedor: `starUml.zip` e screenshots de Quick Edit/Model Explorer/Property Editor enviados na conversa. A documentação de domínio é independente do armazenamento de arquivos do Project Panel do Zed.
+
+## Shared frontend command API
+
+`MdeUiSource` is the public command API for the native frontend and owns the
+existing document session. Toolbox, Quick Edit, Explorer and property editing
+must reuse its operations rather than assemble their own creation requests.
+The source is not a second store: it validates the captured revision and tool
+capabilities, then sends the command to the same Cordis session and UML kernel.
+
+The first migrated operations are `create_element`, `create_model_element`,
+`create_relation`, `quick_create`, `add_member`, `set_property`, `delete_element`
+and `move_parameter`. Quick Edit selection guards and Explorer project guards
+remain at the interaction boundary. A quick creation stays one atomic kernel
+command; creating its node and relationship must not become separate queued
+commands with intermediate revisions.
+
+Visual-only drafts, tracked editor completions, diagram operations and gesture
+commands still use the existing lower-level `submit` API. These are live paths,
+not unused code, and require incremental migration while preserving their
+completion and cancellation contracts. A semantic creation and an explicitly
+visual draft must not be made interchangeable merely to remove a branch.

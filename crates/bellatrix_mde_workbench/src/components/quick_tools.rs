@@ -1,8 +1,8 @@
 //! Map domain action descriptors to controls; no action semantics belong to a shape.
 use crate::workbench_ui::MdeWorkbenchItem;
 use bellatrix_mde_cordis::{
-    MdeUiCommand, ModelingAddMemberRequested, ModelingMemberKind, ModelingSetPropertyRequested,
-    QuickEditAction, QuickEditAvailability, QuickEditControl, QuickEditSide, UmlQuickCreate,
+    ModelingMemberKind, QuickEditAction, QuickEditAvailability, QuickEditControl, QuickEditSide,
+    UmlQuickCreate,
     projection::{Element, ModelingProjection, Relation},
 };
 use bellatrix_project::ProjectId;
@@ -162,15 +162,10 @@ pub(crate) fn quick_edit_for_element(
                             _ => ModelingMemberKind::Reception,
                         };
                         owner.update(cx, |item, cx| {
-                            item.submit(
-                                MdeUiCommand::AddMember(ModelingAddMemberRequested {
-                                    project_id: target.project.clone(),
-                                    owner_id: target.element.clone(),
-                                    kind,
-                                    expected_revision: target.revision,
-                                }),
-                                cx,
-                            );
+                            let result =
+                                item.source
+                                    .add_member(&target.element, kind, target.revision);
+                            item.report_command_result(result, cx);
                         });
                     }
                     id => {
@@ -214,16 +209,13 @@ pub(crate) fn quick_edit_for_element(
                     if item.quick_edit_snapshot(&target, cx).is_none() {
                         return;
                     }
-                    item.submit(
-                        MdeUiCommand::SetProperty(ModelingSetPropertyRequested {
-                            project_id: target.project.clone(),
-                            element_id: target.element.clone(),
-                            path: "properties.visibility".into(),
-                            value: serde_json::Value::String(value.into()),
-                            expected_revision: target.revision,
-                        }),
-                        cx,
-                    )
+                    let result = item.source.set_property(
+                        &target.element,
+                        "properties.visibility",
+                        serde_json::Value::String(value.into()),
+                        target.revision,
+                    );
+                    item.report_command_result(result, cx);
                 });
             })
         });
@@ -241,7 +233,7 @@ pub(crate) fn quick_edit_for_relationship(
     cx: &mut gpui::App,
 ) -> Option<gpui::AnyElement> {
     use crate::workbench_ui::{WorkbenchPalette, panels::element_glyph};
-    use bellatrix_mde_cordis::{MdeUiCommand, ModelingSetPropertyRequested, PropertyEditor};
+    use bellatrix_mde_cordis::PropertyEditor;
     use bellatrix_ui_symbols::glyph;
     use gpui::{MouseButton, div, prelude::*, px, svg};
     use ui::{ContextMenu, DropdownMenu, Icon, IconButton, Label, Tooltip, prelude::*};
@@ -337,16 +329,13 @@ pub(crate) fn quick_edit_for_relationship(
                             }
                             // Keep the revision displayed by the menu; stale choices must not
                             // overwrite newer endpoint or relationship edits.
-                            item.submit(
-                                MdeUiCommand::SetProperty(ModelingSetPropertyRequested {
-                                    project_id: project.clone(),
-                                    element_id: element_id.clone(),
-                                    path: path.clone(),
-                                    value: value.clone(),
-                                    expected_revision: revision,
-                                }),
-                                cx,
+                            let result = item.source.set_property(
+                                &element_id,
+                                &path,
+                                value.clone(),
+                                revision,
                             );
+                            item.report_command_result(result, cx);
                         });
                     })
                 })

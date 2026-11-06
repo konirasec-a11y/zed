@@ -391,18 +391,12 @@ fn explorer_creation_menus(
                     None,
                     move |_, cx| {
                         let sent = owner.update(cx, |workbench, cx| {
-                            workbench.submit_explorer_command(
-                                bellatrix_mde_cordis::MdeUiCommand::CreateModelElement(
-                                    bellatrix_mde_cordis::ModelingCreateModelElementRequested {
-                                        project_id: project_id.clone(),
-                                        kind,
-                                        name: None,
-                                        owner_id: owner_id.clone(),
-                                        expected_revision: revision,
-                                    },
-                                ),
+                            workbench.submit_explorer_operation(
                                 &project_id,
                                 revision,
+                                |source| {
+                                    source.create_model_element(kind, owner_id.as_deref(), revision)
+                                },
                                 cx,
                             )
                         });
@@ -422,17 +416,10 @@ fn explorer_creation_menus(
                     let row_key = row_key.clone();
                     menu = menu.entry(label, None, move |_, cx| {
                         let sent = owner.update(cx, |workbench, cx| {
-                            workbench.submit_explorer_command(
-                                bellatrix_mde_cordis::MdeUiCommand::AddMember(
-                                    bellatrix_mde_cordis::ModelingAddMemberRequested {
-                                        project_id: project_id.clone(),
-                                        owner_id: owner_id.clone(),
-                                        kind,
-                                        expected_revision: revision,
-                                    },
-                                ),
+                            workbench.submit_explorer_operation(
                                 &project_id,
                                 revision,
+                                |source| source.add_member(&owner_id, kind, revision),
                                 cx,
                             )
                         });

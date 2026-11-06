@@ -64,10 +64,8 @@ pub use theme::WorkbenchPalette;
 
 use bellatrix_mde_cordis::{Geometry, ModelingRelationKind, PathSegment, UmlQuickCreate};
 use bellatrix_mde_cordis::{
-    MdeUiCommand, ModelingAddMemberRequested, ModelingCreateElementRequested,
-    ModelingDeleteElementRequested, ModelingMoveParameterRequested, ModelingMoveViewRequested,
-    ModelingQuickEditRequested, ModelingResizeViewRequested, ModelingSetNameExpressionRequested,
-    ModelingSetPropertyRequested, ModelingSetViewPathRequested,
+    MdeUiCommand, ModelingMoveViewRequested, ModelingResizeViewRequested,
+    ModelingSetNameExpressionRequested, ModelingSetPropertyRequested, ModelingSetViewPathRequested,
 };
 use bellatrix_mde_cordis::{ModelingElementKind, ModelingMemberKind, ModelingTool};
 use bellatrix_project::ProjectId;
@@ -228,14 +226,6 @@ fn diagram_creation_context(
         selected.map(str::to_owned).into_iter().collect()
     } else {
         Vec::new()
-    }
-}
-
-fn creation_owner(requires_owner: bool, selected: Option<&str>) -> Option<String> {
-    if requires_owner {
-        selected.map(str::to_owned)
-    } else {
-        None
     }
 }
 
@@ -652,38 +642,16 @@ impl MdeWorkbenchItem {
         let Some(snapshot) = self.quick_edit_snapshot(target, cx) else {
             return;
         };
-        let Some(element) = snapshot
-            .section
-            .elements
-            .iter()
-            .find(|element| element.id == target.element)
-        else {
-            self.feedback = "Element was removed from the model".into();
-            cx.notify();
-            return;
-        };
-        if !element.quick_create.contains(&action) {
-            self.feedback = format!("{} does not support this action", element.kind);
-            cx.notify();
-            return;
-        }
-        if !snapshot.section.tools.allows_new_views(&target.diagram) {
-            self.feedback = "Quick creation is not available for this diagram's domain".into();
-            cx.notify();
-            return;
-        }
-        self.submit(
-            MdeUiCommand::QuickEdit(ModelingQuickEditRequested {
-                project_id: target.project.clone(),
-                element_id: target.element.clone(),
-                diagram_id: target.diagram.clone(),
-                view_id: target.view.clone(),
-                action,
-                expected_revision: target.revision,
-            }),
-            cx,
+        let result = self.source.quick_create(
+            &target.diagram,
+            &target.element,
+            target.view.as_deref(),
+            action,
+            snapshot.revision,
         );
+        self.report_command_result(result, cx);
     }
+
     fn inline_edit_content(
         section: &bellatrix_mde_cordis::projection::ModelingProjection,
         id: &str,
@@ -906,16 +874,13 @@ impl MdeWorkbenchItem {
                     cx,
                 );
             } else {
-                self.submit(
-                    MdeUiCommand::SetProperty(ModelingSetPropertyRequested {
-                        project_id: self.project_id().clone(),
-                        element_id: id,
-                        path: path.into(),
-                        value: serde_json::Value::String(name),
-                        expected_revision: snapshot.revision,
-                    }),
-                    cx,
+                let result = self.source.set_property(
+                    &id,
+                    path,
+                    serde_json::Value::String(name),
+                    snapshot.revision,
                 );
+                self.report_command_result(result, cx);
             }
         }
         self.focus_handle.focus(window, cx);

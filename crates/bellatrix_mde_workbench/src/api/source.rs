@@ -168,6 +168,254 @@ impl MdeUiSource {
             .unwrap_or_else(|_| *self.revisions.borrow())
     }
 
+    fn editable_snapshot(&self, expected_revision: u64) -> Result<MdeSnapshot, String> {
+        if self.is_read_only() {
+            return Err("The active document is not editable".into());
+        }
+        let snapshot = self.snapshot()?;
+        if snapshot.revision != expected_revision {
+            return Err("The model changed; try again with the current selection".into());
+        }
+        Ok(snapshot)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_element(
+        &self,
+        diagram_id: &str,
+        kind: bellatrix_mde_cordis::ModelingElementKind,
+        selected_owner: Option<&str>,
+        position: (f64, f64),
+        visual_draft: bool,
+        expected_revision: u64,
+    ) -> Result<(), String> {
+        let snapshot = self.editable_snapshot(expected_revision)?;
+        if !snapshot.section.tools.allows_tool(
+            Some(diagram_id),
+            bellatrix_mde_cordis::ModelingTool::Element(kind),
+        ) {
+            return Err("This tool is not available for the target diagram's domain".into());
+        }
+        let metadata = snapshot
+            .section
+            .tools
+            .element(kind)
+            .ok_or("Element tool metadata unavailable")?;
+        let request = bellatrix_mde_cordis::ModelingCreateElementRequested {
+            project_id: self.project_id.clone(),
+            diagram_id: diagram_id.into(),
+            owner_id: metadata
+                .requires_owner
+                .then(|| selected_owner.map(str::to_owned))
+                .flatten(),
+            kind,
+            name: None,
+            x: if visual_draft {
+                position.0
+            } else {
+                position.0.max(0.0)
+            },
+            y: if visual_draft {
+                position.1
+            } else {
+                position.1.max(0.0)
+            },
+            expected_revision,
+        };
+        self.submit(if visual_draft {
+            MdeUiCommand::CreateElementVisualDraft(request)
+        } else {
+            MdeUiCommand::CreateElementOrVisualDraft(request)
+        })
+    }
+
+    pub fn create_model_element(
+        &self,
+        kind: bellatrix_mde_cordis::ModelingElementKind,
+        owner_id: Option<&str>,
+        expected_revision: u64,
+    ) -> Result<(), String> {
+        self.editable_snapshot(expected_revision)?;
+        self.submit(MdeUiCommand::CreateModelElement(
+            bellatrix_mde_cordis::ModelingCreateModelElementRequested {
+                project_id: self.project_id.clone(),
+                kind,
+                name: None,
+                owner_id: owner_id.map(str::to_owned),
+                expected_revision,
+            },
+        ))
+    }
+
+    pub fn quick_create(
+        &self,
+        diagram_id: &str,
+        element_id: &str,
+        view_id: Option<&str>,
+        action: bellatrix_mde_cordis::UmlQuickCreate,
+        expected_revision: u64,
+    ) -> Result<(), String> {
+        let snapshot = self.editable_snapshot(expected_revision)?;
+        let element = snapshot
+            .section
+            .elements
+            .iter()
+            .find(|element| element.id == element_id)
+            .ok_or("Element was removed from the model")?;
+        if !element.quick_create.contains(&action) {
+            return Err(format!("{} does not support this action", element.kind));
+        }
+        if !snapshot.section.tools.allows_new_views(diagram_id) {
+            return Err("Quick creation is not available for this diagram's domain".into());
+        }
+        self.submit(MdeUiCommand::QuickEdit(
+            bellatrix_mde_cordis::ModelingQuickEditRequested {
+                project_id: self.project_id.clone(),
+                diagram_id: diagram_id.into(),
+                element_id: element_id.into(),
+                view_id: view_id.map(str::to_owned),
+                action,
+                expected_revision,
+            },
+        ))
+    }
+
+    pub fn create_relation(
+        &self,
+        diagram_id: &str,
+        kind: bellatrix_mde_cordis::ModelingRelationKind,
+        source_view_id: &str,
+        target_view_id: &str,
+        expected_revision: u64,
+    ) -> Result<(), String> {
+        use bellatrix_mde_cordis::ModelingRelationKind as Kind;
+        let snapshot = self.editable_snapshot(expected_revision)?;
+        if !snapshot.section.tools.allows_tool(
+            Some(diagram_id),
+            bellatrix_mde_cordis::ModelingTool::Relation(kind),
+        ) {
+            return Err("This tool is not available for the target diagram's domain".into());
+        }
+        let diagram = snapshot
+            .section
+            .diagrams
+            .iter()
+            .find(|diagram| diagram.id == diagram_id)
+            .ok_or("diagram not found")?;
+        let source = diagram
+            .all_views()
+            .find(|view| view.id == source_view_id)
+            .ok_or("source View not found in diagram")?;
+        let target = diagram
+            .all_views()
+            .find(|view| view.id == target_view_id)
+            .ok_or("target View not found in diagram")?;
+        let owner_id = match kind {
+            Kind::Generalization
+            | Kind::InterfaceRealization
+            | Kind::TemplateBinding
+            | Kind::Include
+            | Kind::Extend
+            | Kind::ElementImport
+            | Kind::PackageImport
+            | Kind::PackageMerge
+            | Kind::Manifestation
+            | Kind::Deployment => source.subject.clone(),
+            // A diagram or root is not an explicit choice of semantic owner.
+            _ => None,
+        };
+        self.submit(MdeUiCommand::CreateRelationAtViewsOrVisualDraft(
+            bellatrix_mde_cordis::ModelingCreateRelationAtViewsRequested {
+                project_id: self.project_id.clone(),
+                diagram_id: diagram_id.into(),
+                owner_id,
+                kind,
+                source_view_id: source_view_id.into(),
+                target_view_id: target_view_id.into(),
+                from: source.subject.clone(),
+                to: target.subject.clone(),
+                expected_revision,
+            },
+        ))
+    }
+
+    pub fn add_member(
+        &self,
+        owner_id: &str,
+        kind: bellatrix_mde_cordis::ModelingMemberKind,
+        expected_revision: u64,
+    ) -> Result<(), String> {
+        self.editable_snapshot(expected_revision)?;
+        self.submit(MdeUiCommand::AddMember(
+            bellatrix_mde_cordis::ModelingAddMemberRequested {
+                project_id: self.project_id.clone(),
+                owner_id: owner_id.into(),
+                kind,
+                expected_revision,
+            },
+        ))
+    }
+
+    pub fn delete_element(&self, element_id: &str, expected_revision: u64) -> Result<(), String> {
+        let snapshot = self.editable_snapshot(expected_revision)?;
+        let context_diagrams = snapshot
+            .section
+            .diagrams
+            .iter()
+            .filter(|diagram| diagram.model_elements.iter().any(|id| id == element_id))
+            .map(|diagram| diagram.name.as_str())
+            .collect::<Vec<_>>();
+        if !context_diagrams.is_empty() {
+            return Err(format!(
+                "Cannot delete this model element: it is the model context of {}. Remove those diagrams or change their model context first.",
+                context_diagrams.join(", ")
+            ));
+        }
+        self.submit(MdeUiCommand::DeleteElement(
+            bellatrix_mde_cordis::ModelingDeleteElementRequested {
+                project_id: self.project_id.clone(),
+                element_id: element_id.into(),
+                expected_revision,
+            },
+        ))
+    }
+
+    pub fn move_parameter(
+        &self,
+        parameter_id: &str,
+        up: bool,
+        expected_revision: u64,
+    ) -> Result<(), String> {
+        self.editable_snapshot(expected_revision)?;
+        self.submit(MdeUiCommand::MoveParameter(
+            bellatrix_mde_cordis::ModelingMoveParameterRequested {
+                project_id: self.project_id.clone(),
+                parameter_id: parameter_id.into(),
+                up,
+                expected_revision,
+            },
+        ))
+    }
+
+    pub fn set_property(
+        &self,
+        element_id: &str,
+        path: &str,
+        value: serde_json::Value,
+        expected_revision: u64,
+    ) -> Result<(), String> {
+        self.editable_snapshot(expected_revision)?;
+        self.submit(MdeUiCommand::SetProperty(
+            bellatrix_mde_cordis::ModelingSetPropertyRequested {
+                project_id: self.project_id.clone(),
+                element_id: element_id.into(),
+                path: path.into(),
+                value,
+                expected_revision,
+            },
+        ))
+    }
+
     pub fn submit(&self, command: MdeUiCommand) -> Result<(), String> {
         let revision = self.interaction_revision();
         let identity = match &command {

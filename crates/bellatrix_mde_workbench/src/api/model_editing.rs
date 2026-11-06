@@ -17,15 +17,8 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
-        self.submit(
-            MdeUiCommand::AddMember(ModelingAddMemberRequested {
-                project_id: self.project_id().clone(),
-                owner_id,
-                kind,
-                expected_revision: snapshot.revision,
-            }),
-            cx,
-        );
+        let result = self.source.add_member(&owner_id, kind, snapshot.revision);
+        self.report_command_result(result, cx);
     }
     pub(crate) fn run_parameter_action(
         &mut self,
@@ -77,30 +70,19 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         }
-        let command = match action {
-            ParameterAction::Add => MdeUiCommand::AddMember(ModelingAddMemberRequested {
-                project_id,
-                owner_id: element_id,
-                kind: ModelingMemberKind::Parameter,
+        let result = match action {
+            ParameterAction::Add => self.source.add_member(
+                &element_id,
+                ModelingMemberKind::Parameter,
                 expected_revision,
-            }),
-            ParameterAction::Delete => {
-                MdeUiCommand::DeleteElement(ModelingDeleteElementRequested {
-                    project_id,
-                    element_id,
-                    expected_revision,
-                })
-            }
+            ),
+            ParameterAction::Delete => self.source.delete_element(&element_id, expected_revision),
             ParameterAction::Move { up } => {
-                MdeUiCommand::MoveParameter(ModelingMoveParameterRequested {
-                    project_id,
-                    parameter_id: element_id,
-                    up,
-                    expected_revision,
-                })
+                self.source
+                    .move_parameter(&element_id, up, expected_revision)
             }
         };
-        self.submit(command, cx);
+        self.report_command_result(result, cx);
     }
 
     pub(crate) fn submit_admitted_inspector_property(
@@ -155,16 +137,10 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
-        self.submit(
-            MdeUiCommand::SetProperty(ModelingSetPropertyRequested {
-                project_id: self.project_id().clone(),
-                element_id,
-                path,
-                value,
-                expected_revision: snapshot.revision,
-            }),
-            cx,
-        );
+        let result = self
+            .source
+            .set_property(&element_id, &path, value, snapshot.revision);
+        self.report_command_result(result, cx);
     }
     pub fn delete_selected_from_model(&mut self, cx: &mut Context<Self>) {
         if self.source.is_read_only() {
@@ -180,29 +156,12 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
-        let context_diagrams = snapshot
-            .section
-            .diagrams
-            .iter()
-            .filter(|diagram| diagram.model_elements.contains(&element_id))
-            .map(|diagram| diagram.name.as_str())
-            .collect::<Vec<_>>();
-        if !context_diagrams.is_empty() {
-            self.feedback = format!(
-                "Cannot delete this model element: it is the model context of {}. Remove those diagrams or change their model context first.",
-                context_diagrams.join(", ")
-            );
-            cx.notify();
+        let result = self.source.delete_element(&element_id, snapshot.revision);
+        let sent = result.is_ok();
+        self.report_command_result(result, cx);
+        if !sent {
             return;
         }
-        self.submit(
-            MdeUiCommand::DeleteElement(ModelingDeleteElementRequested {
-                project_id: self.project_id().clone(),
-                element_id,
-                expected_revision: snapshot.revision,
-            }),
-            cx,
-        );
         // Submission only queues the command. Reconciliation clears a selection
         // after deletion succeeds, keeping the inspector available on rejection.
         self.gesture = None;
@@ -243,7 +202,16 @@ impl MdeWorkbenchItem {
     }
 
     pub(super) fn submit(&mut self, command: MdeUiCommand, cx: &mut Context<Self>) {
-        self.feedback = match self.source.submit(command) {
+        let result = self.source.submit(command);
+        self.report_command_result(result, cx);
+    }
+
+    pub(crate) fn report_command_result(
+        &mut self,
+        result: Result<(), String>,
+        cx: &mut Context<Self>,
+    ) {
+        self.feedback = match result {
             Ok(()) => "Command sent to Cordis".into(),
             Err(error) => format!("Command not sent: {error}"),
         };
@@ -384,55 +352,19 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         };
-        if !snapshot
-            .section
-            .tools
-            .allows_tool(Some(&diagram_id), ModelingTool::Element(kind))
-        {
-            self.feedback = "This tool is not available for the target diagram's domain".into();
-            cx.notify();
-            return;
-        }
-        let Some(metadata) = snapshot.section.tools.element(kind) else {
-            self.feedback = "Element tool metadata unavailable".into();
-            cx.notify();
-            return;
-        };
-        let owner_id = creation_owner(
-            metadata.requires_owner,
+        let result = self.source.create_element(
+            &diagram_id,
+            kind,
             self.presentation.selected_element(),
+            (x, y),
+            self.presentation.visual_draft_mode(),
+            snapshot.revision,
         );
-        if self.presentation.visual_draft_mode() {
-            self.submit(
-                MdeUiCommand::CreateElementVisualDraft(ModelingCreateElementRequested {
-                    project_id: self.project_id().clone(),
-                    diagram_id,
-                    owner_id,
-                    kind,
-                    name: None,
-                    x,
-                    y,
-                    expected_revision: snapshot.revision,
-                }),
-                cx,
-            );
+        let sent = result.is_ok();
+        self.report_command_result(result, cx);
+        if sent {
             self.presentation.cancel_tool();
-            return;
         }
-        self.submit(
-            MdeUiCommand::CreateElementOrVisualDraft(ModelingCreateElementRequested {
-                project_id: self.project_id().clone(),
-                diagram_id,
-                owner_id,
-                kind,
-                name: None,
-                x: x.max(0.0),
-                y: y.max(0.0),
-                expected_revision: snapshot.revision,
-            }),
-            cx,
-        );
-        self.presentation.cancel_tool();
     }
     pub(super) fn validate_explorer_drop(
         &self,
@@ -488,6 +420,21 @@ impl MdeWorkbenchItem {
         expected_revision: u64,
         cx: &mut Context<Self>,
     ) -> bool {
+        self.submit_explorer_operation(
+            project_id,
+            expected_revision,
+            |source| source.submit(command),
+            cx,
+        )
+    }
+
+    pub(super) fn submit_explorer_operation(
+        &mut self,
+        project_id: &ProjectId,
+        expected_revision: u64,
+        operation: impl FnOnce(&MdeUiSource) -> Result<(), String>,
+        cx: &mut Context<Self>,
+    ) -> bool {
         let allowed = if self.source.is_read_only() || self.source.is_presentation_suspended() {
             Err("The active document is not editable".to_owned())
         } else if self.project_id() != project_id {
@@ -511,7 +458,7 @@ impl MdeWorkbenchItem {
             cx.notify();
             return false;
         }
-        let sent = match self.source.submit(command) {
+        let sent = match operation(&self.source) {
             Ok(()) => {
                 self.feedback = "Command sent to Cordis".into();
                 true
