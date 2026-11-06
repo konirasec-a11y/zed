@@ -65,7 +65,7 @@ impl BellatrixZedHost {
                         .map_err(|error| error.to_string())?
                 })
             },
-            move |document, is_saved| {
+            move |document, is_saved, attempt| {
                 let runtime = runtime.clone();
                 let context = context.clone();
                 let projects = Arc::clone(&projects);
@@ -80,20 +80,23 @@ impl BellatrixZedHost {
                             QueryOutcome::Answer(Err(error)) => return Err(format!("Cannot open Bellatrix document: {error}. An existing tab may already own this project identity.")),
                             QueryOutcome::Miss => return Err("Project import service unavailable".into()),
                         };
+                        attempt.enter(bellatrix_mde_cordis::OpeningStage::Projection);
                         let prepared = context.query::<bellatrix_mde_cordis::ModelingReadProjection>(
                             Routing::Unscoped,
                             bellatrix_mde_cordis::ModelingReadProjectionRequested { document: Arc::clone(&imported) },
                         ).await;
                         let bridge = match prepared {
-                            Ok(QueryOutcome::Answer(Ok(_))) => MdeUiBridge::start(&context, imported.id().clone()).map_err(|error| error.to_string()),
+                            Ok(QueryOutcome::Answer(Ok(_))) => {
+                                attempt.enter(bellatrix_mde_cordis::OpeningStage::Bridge);
+                                MdeUiBridge::start(&context, imported.id().clone()).map_err(|error| error.to_string())
+                            },
                             result => Err(format!("Cannot prepare the native document projection: {result:?}")),
                         };
                         let bridge = match bridge {
                             Ok(bridge) => bridge,
                             Err(error) => {
-                                if let Err(cleanup) = close_snapshot(&context, imported).await {
-                                    eprintln!("Document opening cleanup retained state: {cleanup}");
-                                }
+                                let cleanup = close_snapshot(&context, imported).await;
+                                attempt.cleanup_result(cleanup.is_ok());
                                 return Err(error);
                             }
                         };

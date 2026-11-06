@@ -68,16 +68,23 @@ pub(crate) fn start(
     })
 }
 
-static OUTPUT: OnceLock<Option<SyncSender<crate::ModelingExecutionTrace>>> = OnceLock::new();
+#[derive(Clone)]
+pub(crate) struct ScopedTrace {
+    pub scope: crate::ExecutionScope,
+    pub run_id: String,
+    pub events: Vec<ExecutionEvent>,
+    pub dropped: u64,
+}
+static OUTPUT: OnceLock<Option<SyncSender<ScopedTrace>>> = OnceLock::new();
 static OUTPUT_DROPPED: AtomicU64 = AtomicU64::new(0);
 
 /// Terminal I/O must not hold up GPUI or retention when stderr is a slow pipe.
-pub(crate) fn write(batch: &crate::ModelingExecutionTrace) {
+pub(crate) fn write(batch: &ScopedTrace) {
     if std::env::var_os("BELLATRIX_MDE_TRACE").is_some_and(|value| value == "off") {
         return;
     }
     let sender = OUTPUT.get_or_init(|| {
-        let (sender, receiver) = sync_channel::<crate::ModelingExecutionTrace>(1024);
+        let (sender, receiver) = sync_channel::<ScopedTrace>(1024);
         match std::thread::Builder::new()
             .name("mde-trace-output".into())
             .spawn(move || {
@@ -112,15 +119,23 @@ pub(crate) fn write(batch: &crate::ModelingExecutionTrace) {
     }
 }
 
-fn write_batch(batch: &crate::ModelingExecutionTrace) {
+fn write_batch(batch: &ScopedTrace) {
     for event in &batch.events {
         match serde_json::to_value(event) {
             Ok(mut value) => {
                 if let Some(fields) = value.as_object_mut() {
-                    fields.insert(
-                        "project_id".into(),
-                        serde_json::json!(batch.project_id.as_str()),
-                    );
+                    match &batch.scope {
+                        crate::ExecutionScope::Document(project_id) => {
+                            fields.insert(
+                                "project_id".into(),
+                                serde_json::json!(project_id.as_str()),
+                            );
+                        }
+                        crate::ExecutionScope::Workspace(workspace_id) => {
+                            fields.insert("scope".into(), serde_json::json!("workspace"));
+                            fields.insert("workspace_id".into(), serde_json::json!(workspace_id));
+                        }
+                    }
                 }
                 eprintln!("MDE_TRACE {value}");
             }
@@ -128,12 +143,16 @@ fn write_batch(batch: &crate::ModelingExecutionTrace) {
         }
     }
     if batch.dropped > 0 {
-        eprintln!(
-            "MDE_TRACE {}",
-            serde_json::json!({
-                "record_type": "dropped", "project_id": batch.project_id.as_str(),
-                "run_id": batch.run_id, "count": batch.dropped
-            })
-        );
+        let mut notice = serde_json::json!({"record_type": "dropped", "run_id": batch.run_id, "count": batch.dropped});
+        match &batch.scope {
+            crate::ExecutionScope::Document(id) => {
+                notice["project_id"] = serde_json::json!(id.as_str())
+            }
+            crate::ExecutionScope::Workspace(id) => {
+                notice["scope"] = serde_json::json!("workspace");
+                notice["workspace_id"] = serde_json::json!(id);
+            }
+        }
+        eprintln!("MDE_TRACE {notice}");
     }
 }

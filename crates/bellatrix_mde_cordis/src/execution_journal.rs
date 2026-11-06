@@ -16,6 +16,14 @@ static NEXT_UI_SESSION: AtomicU64 = AtomicU64::new(1);
 
 const CAPACITY: usize = 2_000;
 const LOSS_NOTICE_CAPACITY: usize = 100;
+const WORKSPACE_ATTEMPT_CAPACITY: usize = 32;
+static NEXT_WORKSPACE: AtomicU64 = AtomicU64::new(1);
+
+#[derive(Clone, Debug)]
+pub enum ExecutionScope {
+    Document(bellatrix_project::ProjectId),
+    Workspace(u64),
+}
 
 #[derive(Default)]
 pub(crate) struct ExecutionJournals {
@@ -62,7 +70,7 @@ pub(crate) fn register(context: &cordis::Context) -> Result<(), std::io::Error> 
 }
 
 pub struct ExecutionJournal {
-    project_id: bellatrix_project::ProjectId,
+    scope: ExecutionScope,
     state: Mutex<ExecutionJournalSnapshot>,
     changes: watch::Sender<u64>,
     interaction_run: String,
@@ -71,9 +79,20 @@ pub struct ExecutionJournal {
 }
 impl ExecutionJournal {
     pub fn new(project_id: bellatrix_project::ProjectId) -> Self {
+        Self::with_scope(ExecutionScope::Document(project_id))
+    }
+    pub fn new_workspace() -> Self {
+        Self::with_scope(ExecutionScope::Workspace(
+            NEXT_WORKSPACE.fetch_add(1, Ordering::Relaxed),
+        ))
+    }
+    pub fn scope(&self) -> &ExecutionScope {
+        &self.scope
+    }
+    fn with_scope(scope: ExecutionScope) -> Self {
         let (changes, _) = watch::channel(0);
         Self {
-            project_id,
+            scope,
             state: Mutex::new(ExecutionJournalSnapshot::default()),
             changes,
             interaction_run: format!("ui-{}", NEXT_UI_SESSION.fetch_add(1, Ordering::Relaxed)),
@@ -84,6 +103,14 @@ impl ExecutionJournal {
 }
 impl ExecutionJournal {
     pub fn append(&self, batch: ModelingExecutionTrace) {
+        self.append_scoped(crate::trace_output::ScopedTrace {
+            scope: ExecutionScope::Document(batch.project_id),
+            run_id: batch.run_id,
+            events: batch.events,
+            dropped: batch.dropped,
+        });
+    }
+    fn append_scoped(&self, batch: crate::trace_output::ScopedTrace) {
         let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
         // Every producer reaches this boundary once; the panel and stderr are consumers,
         // not independent histories. Keep publication in the same order as retention.
@@ -97,6 +124,27 @@ impl ExecutionJournal {
             state.producer_loss.push_back((batch.run_id, batch.dropped));
         }
         for event in batch.events {
+            if matches!(self.scope, ExecutionScope::Workspace(_))
+                && !state
+                    .events
+                    .iter()
+                    .any(|existing| existing.run_id == event.run_id)
+            {
+                let runs = state
+                    .events
+                    .iter()
+                    .map(|existing| existing.run_id.as_str())
+                    .collect::<std::collections::BTreeSet<_>>();
+                if runs.len() >= WORKSPACE_ATTEMPT_CAPACITY {
+                    if let Some(oldest) = state.events.front().map(|event| event.run_id.clone()) {
+                        let before = state.events.len();
+                        state.events.retain(|event| event.run_id != oldest);
+                        state.evicted_events = state
+                            .evicted_events
+                            .saturating_add((before - state.events.len()) as u64);
+                    }
+                }
+            }
             if state.events.len() == CAPACITY {
                 state.events.pop_front();
                 state.evicted_events = state.evicted_events.saturating_add(1);
@@ -132,8 +180,8 @@ impl ExecutionJournal {
             message: None,
             context: Default::default(),
         };
-        self.append(ModelingExecutionTrace {
-            project_id: self.project_id.clone(),
+        self.append_scoped(crate::trace_output::ScopedTrace {
+            scope: self.scope.clone(),
             run_id: self.interaction_run.clone(),
             events: vec![event],
             dropped: 0,
@@ -204,5 +252,124 @@ impl ExecutionJournal {
             ..Default::default()
         };
         self.changes.send_replace(version);
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum OpeningStage {
+    Eligibility,
+    Prompt,
+    Capture,
+    Prepare,
+    SourceGuard,
+    Import,
+    Projection,
+    Bridge,
+    Cleanup,
+    Attach,
+    Cancelled,
+    Existing,
+    Complete,
+}
+impl OpeningStage {
+    fn action(self) -> &'static str {
+        match self {
+            Self::Eligibility => "document.open.eligibility",
+            Self::Prompt => "document.open.prompt",
+            Self::Capture => "document.open.capture",
+            Self::Prepare => "document.open.prepare",
+            Self::SourceGuard => "document.open.source_guard",
+            Self::Import => "document.open.import",
+            Self::Projection => "document.open.projection",
+            Self::Bridge => "document.open.bridge",
+            Self::Cleanup => "document.open.cleanup",
+            Self::Attach => "document.open.attach",
+            Self::Cancelled => "document.open.cancelled",
+            Self::Existing => "document.open.existing",
+            Self::Complete => "document.open.complete",
+        }
+    }
+}
+
+/// The attempt owns only its journal, never a Workspace, document payload or file path.
+pub struct OpeningAttempt {
+    journal: Arc<ExecutionJournal>,
+    run_id: String,
+    started: Instant,
+    sequence: AtomicU64,
+    stage: Mutex<OpeningStage>,
+}
+impl OpeningAttempt {
+    pub fn begin(journal: Arc<ExecutionJournal>) -> Arc<Self> {
+        let attempt = Arc::new(Self {
+            run_id: format!(
+                "{}-open-{}",
+                journal.interaction_run,
+                journal.interaction_sequence.fetch_add(1, Ordering::Relaxed)
+            ),
+            journal,
+            started: Instant::now(),
+            sequence: AtomicU64::new(0),
+            stage: Mutex::new(OpeningStage::Prompt),
+        });
+        attempt.enter(OpeningStage::Prompt);
+        attempt
+    }
+    pub fn enter(&self, stage: OpeningStage) {
+        *self.stage.lock().unwrap_or_else(|error| error.into_inner()) = stage;
+        self.record(stage, TracePhase::Start, None);
+    }
+    pub fn finish(&self, success: bool) {
+        let stage = *self.stage.lock().unwrap_or_else(|error| error.into_inner());
+        self.record(
+            stage,
+            if success {
+                TracePhase::Finish
+            } else {
+                TracePhase::Error
+            },
+            Some(if success {
+                TraceOutcome::Success
+            } else {
+                TraceOutcome::Error
+            }),
+        );
+    }
+    pub fn cleanup_result(&self, success: bool) {
+        self.record(
+            OpeningStage::Cleanup,
+            if success {
+                TracePhase::Finish
+            } else {
+                TracePhase::Error
+            },
+            Some(if success {
+                TraceOutcome::Success
+            } else {
+                TraceOutcome::Error
+            }),
+        );
+    }
+    fn record(&self, stage: OpeningStage, phase: TracePhase, outcome: Option<TraceOutcome>) {
+        self.journal
+            .append_scoped(crate::trace_output::ScopedTrace {
+                scope: self.journal.scope.clone(),
+                run_id: self.run_id.clone(),
+                dropped: 0,
+                events: vec![ExecutionEvent {
+                    run_id: self.run_id.clone(),
+                    revision: None,
+                    sequence: self.sequence.fetch_add(1, Ordering::Relaxed),
+                    elapsed_ns: self.started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64,
+                    component: "host".into(),
+                    action: stage.action().into(),
+                    phase,
+                    identity: None,
+                    dependencies: Vec::new(),
+                    outcome,
+                    message: None,
+                    context: Default::default(),
+                }],
+            });
     }
 }

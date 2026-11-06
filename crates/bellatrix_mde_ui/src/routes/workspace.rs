@@ -80,11 +80,35 @@ pub fn register_mde_workspace(
     cx.observe_new(
         move |workspace: &mut Workspace, mut window: Option<&mut Window>, cx| {
             let source = source.for_workspace();
+            let opening_journal =
+                std::sync::Arc::new(bellatrix_mde_cordis::ExecutionJournal::new_workspace());
+            let logs = std::sync::Arc::clone(&opening_journal);
+            workspace.register_action(
+                move |workspace,
+                      _: &crate::components::execution_dashboard::OpenMdeWorkspaceLogs,
+                      window,
+                      cx| {
+                    use crate::components::execution_dashboard::MdeExecutionDashboard;
+                    if let Some(item) = workspace.item_of_type::<MdeExecutionDashboard>(cx) {
+                        workspace.activate_item(&item, true, true, window, cx);
+                    } else {
+                        let item = cx.new(|cx| {
+                            MdeExecutionDashboard::for_workspace(
+                                std::sync::Arc::clone(&logs),
+                                window,
+                                cx,
+                            )
+                        });
+                        workspace.add_item_to_active_pane(Box::new(item), None, true, window, cx);
+                    }
+                },
+            );
             source.set_preview_context(Some("No active MDE document".into()));
             crate::api::native_document::register_preview_action(
                 workspace,
                 importer.clone(),
                 source.clone(),
+                opening_journal,
             );
             // The full Bellatrix catalog is a native Zed Item. The Workbench
             // remains focused on supported Class and Interface editing gestures.

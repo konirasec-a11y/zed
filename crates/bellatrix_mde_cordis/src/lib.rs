@@ -12,7 +12,9 @@ pub use bellatrix_mde_contracts::protocol::MODELING_NAMESPACE;
 use bellatrix_mde_contracts::protocol::command as command_contract;
 use bellatrix_mde_contracts::protocol::tools as tool_catalog;
 pub use command_contract::*;
-pub use execution_journal::{ExecutionJournal, ExecutionJournalSnapshot};
+pub use execution_journal::{
+    ExecutionJournal, ExecutionJournalSnapshot, ExecutionScope, OpeningAttempt, OpeningStage,
+};
 pub use tool_catalog::{
     DiagramToolMetadata, ElementToolMetadata, InterfaceToolMetadata, RelationToolMetadata,
     ToolCatalog, ToolGroup,

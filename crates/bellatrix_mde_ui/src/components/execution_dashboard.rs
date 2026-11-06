@@ -30,7 +30,10 @@ use ui::prelude::*;
 use ui_input::ErasedEditorEvent;
 use ui_input::InputField;
 
-actions!(bellatrix_mde, [ToggleMdeExecutionDashboard]);
+actions!(
+    bellatrix_mde,
+    [ToggleMdeExecutionDashboard, OpenMdeWorkspaceLogs]
+);
 
 pub struct MdeExecutionDashboard {
     focus: FocusHandle,
@@ -50,6 +53,22 @@ pub struct MdeExecutionDashboard {
 impl MdeExecutionDashboard {
     pub fn new(
         item: Entity<MdeWorkbenchItem>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let journal = Arc::clone(&item.read(cx).source().journal);
+        Self::with_journal(Some(item), journal, window, cx)
+    }
+    pub(crate) fn for_workspace(
+        journal: Arc<ExecutionJournal>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        Self::with_journal(None, journal, window, cx)
+    }
+    fn with_journal(
+        item: Option<Entity<MdeWorkbenchItem>>,
+        journal: Arc<ExecutionJournal>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -75,7 +94,6 @@ impl MdeExecutionDashboard {
             window,
             cx,
         );
-        let journal = Arc::clone(&item.read(cx).source().journal);
         let snapshot = journal.snapshot();
         let executor = cx.background_executor().clone();
         let receive_task = cx.spawn(async move |this, cx| {
@@ -91,15 +109,22 @@ impl MdeExecutionDashboard {
         });
         Self {
             focus: cx.focus_handle(),
-            item: Some(item.downgrade()),
+            item: item.as_ref().map(Entity::downgrade),
             search,
+            project_label: Some(match journal.scope() {
+                bellatrix_mde_cordis::ExecutionScope::Document(id) => id.as_str().to_owned(),
+                bellatrix_mde_cordis::ExecutionScope::Workspace(id) => {
+                    format!("Workspace {id} · up to 32 attempts · memory only")
+                }
+            }),
             journal: Some(journal),
-            project_label: Some(item.read(cx).source().project_id.as_str().to_owned()),
             snapshot,
             paused: false,
             errors_only: false,
             details_open: false,
-            _item_listener: Some(cx.observe(&item, |_, _, cx| cx.notify())),
+            _item_listener: item
+                .as_ref()
+                .map(|item| cx.observe(item, |_, _, cx| cx.notify())),
             _search_listener: search_listener,
             _receive_task: receive_task,
         }
@@ -276,8 +301,16 @@ impl Render for MdeExecutionDashboard {
             .collect::<Vec<_>>()
             .join("\n");
         let copied_logs = format!(
-            "MDE logs and diagnostics\nproject_id={}\npaused={} (events only; validation and latest feedback are current)\nretained={} evicted={} dropped={}\ncopied_events={} (all retained events in this snapshot, unfiltered, received order)\n\nValidation\n{}\n\nLatest operation\n{}\n\nExecution events\n{}",
-            self.project_label.as_deref().unwrap_or("none"),
+            "MDE logs and diagnostics\nscope={}\npaused={} (events only; validation and latest feedback are current)\nretained={} evicted={} dropped={}\ncopied_events={} (all retained events in this snapshot, unfiltered, received order)\n\nValidation\n{}\n\nLatest operation\n{}\n\nExecution events\n{}",
+            self.journal
+                .as_ref()
+                .map(|journal| match journal.scope() {
+                    bellatrix_mde_cordis::ExecutionScope::Document(id) =>
+                        format!("document:{}", id.as_str()),
+                    bellatrix_mde_cordis::ExecutionScope::Workspace(id) =>
+                        format!("workspace:{id}"),
+                })
+                .unwrap_or_else(|| "none".into()),
             self.paused,
             self.snapshot.events.len(),
             self.snapshot.evicted_events,
@@ -297,6 +330,9 @@ impl Render for MdeExecutionDashboard {
             .child(div().h(px(36.0)).flex_none().px_2().flex().items_center().gap_2().border_b_1().border_color(palette.border)
                 .child(Label::new("Logs & diagnostics"))
                 .child(div().flex_1().min_w_0().overflow_hidden().text_xs().text_color(palette.muted).child(self.project_label.clone().unwrap_or_else(|| "No active MDE document".to_owned())))
+                .child(IconButton::new("mde-workspace-logs", IconName::ListTree)
+                    .tooltip(ui::Tooltip::text("Open workspace logs, including failed document openings"))
+                    .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenMdeWorkspaceLogs), cx)))
                 .child(CopyButton::new("mde-execution-copy", copied_logs)
                     .tooltip_label("Copy diagnostics and all logs (ignores filters; review model data before sharing)")
                     .disabled(copy_disabled))
@@ -342,5 +378,16 @@ impl Render for MdeExecutionDashboard {
                     "No matching events. Adjust the search or turn off Errors only."
                 })))
                 .children(rows))
+    }
+}
+
+impl gpui::EventEmitter<()> for MdeExecutionDashboard {}
+impl workspace::item::Item for MdeExecutionDashboard {
+    type Event = ();
+    fn tab_content_text(&self, _: usize, _: &App) -> gpui::SharedString {
+        "Bellatrix · Workspace logs".into()
+    }
+    fn show_toolbar(&self) -> bool {
+        false
     }
 }

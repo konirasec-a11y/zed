@@ -43,13 +43,24 @@ type PrepareFuture =
 #[derive(Clone)]
 pub struct NativeDocumentImporter {
     prepare: Arc<dyn Fn(Vec<u8>, bool) -> PrepareFuture + Send + Sync>,
-    import: Arc<dyn Fn(ProjectDocument, bool) -> ImportFuture + Send + Sync>,
+    import: Arc<
+        dyn Fn(ProjectDocument, bool, Arc<bellatrix_mde_cordis::OpeningAttempt>) -> ImportFuture
+            + Send
+            + Sync,
+    >,
 }
 
 impl NativeDocumentImporter {
     pub fn new(
         prepare: impl Fn(Vec<u8>, bool) -> PrepareFuture + Send + Sync + 'static,
-        import: impl Fn(ProjectDocument, bool) -> ImportFuture + Send + Sync + 'static,
+        import: impl Fn(
+            ProjectDocument,
+            bool,
+            Arc<bellatrix_mde_cordis::OpeningAttempt>,
+        ) -> ImportFuture
+        + Send
+        + Sync
+        + 'static,
     ) -> Self {
         Self {
             prepare: Arc::new(prepare),
@@ -59,8 +70,9 @@ impl NativeDocumentImporter {
 }
 
 type DocumentWriteFuture = Pin<Box<dyn Future<Output = Result<Option<String>, String>> + Send>>;
-type DocumentWrite =
-    Arc<dyn Fn(Arc<ProjectDocument>, PathBuf, Option<Arc<[u8]>>) -> DocumentWriteFuture + Send + Sync>;
+type DocumentWrite = Arc<
+    dyn Fn(Arc<ProjectDocument>, PathBuf, Option<Arc<[u8]>>) -> DocumentWriteFuture + Send + Sync,
+>;
 
 pub struct NativeDocumentLease {
     save: Option<DocumentWrite>,
@@ -201,10 +213,14 @@ pub(crate) fn register_preview_action(
     workspace: &mut Workspace,
     importer: NativeDocumentImporter,
     presentation_source: MdeUiSource,
+    opening_journal: Arc<bellatrix_mde_cordis::ExecutionJournal>,
 ) {
     let pending = Rc::new(Cell::new(false));
     workspace.register_action(move |workspace, _: &OpenMdeDocument, window, cx| {
         if !workspace.project().read(cx).is_local() {
+            let attempt = bellatrix_mde_cordis::OpeningAttempt::begin(Arc::clone(&opening_journal));
+            attempt.enter(bellatrix_mde_cordis::OpeningStage::Eligibility);
+            attempt.finish(false);
             workspace.show_error(
                 "Opening a Bellatrix document currently requires a local workspace",
                 cx,
@@ -214,6 +230,7 @@ pub(crate) fn register_preview_action(
         if pending.replace(true) {
             return;
         }
+        let attempt = bellatrix_mde_cordis::OpeningAttempt::begin(Arc::clone(&opening_journal));
         let guard = OpenPromptGuard(Rc::clone(&pending));
         let paths = workspace.prompt_for_open_path(
             PathPromptOptions {
@@ -239,8 +256,10 @@ pub(crate) fn register_preview_action(
                     .map_err(|error| error.to_string())?
                     .and_then(|paths| paths.into_iter().next())
                 else {
+                    attempt.enter(bellatrix_mde_cordis::OpeningStage::Cancelled);
                     return Ok(());
                 };
+                attempt.enter(bellatrix_mde_cordis::OpeningStage::Capture);
                 let source_path = path.clone();
                 let is_mdj = path
                     .extension()
@@ -287,6 +306,7 @@ pub(crate) fn register_preview_action(
                     })
                     .map_err(|error| error.to_string())?;
                 if existing {
+                    attempt.enter(bellatrix_mde_cordis::OpeningStage::Existing);
                     return Ok(());
                 }
                 let state = workspace
@@ -308,17 +328,21 @@ pub(crate) fn register_preview_action(
                 let protected_source = if native_saved { None } else { Some(fs.canonicalize(&source_path).await.unwrap_or_else(|_| source_path.clone())) };
                 let baseline = NativeDocumentGuard::new(state).map_err(|error| error.message().to_owned())?;
                 let bytes = raw.unwrap_or_else(|| buffer_snapshot.text().into_bytes());
+                attempt.enter(bellatrix_mde_cordis::OpeningStage::Prepare);
                 let (document, import_diagnostics) = (importer.prepare)(bytes, is_mdj).await?;
                 let mut diagnostics = if is_mdj {
                     vec!["Imported into a native Bellatrix document. Save stores the complete Bellatrix project; the source is preserved. MDJ export is experimental and may reject unsupported mappings.".to_owned()]
                 } else { Vec::new() };
                 diagnostics.extend(read_diagnostic);
                 diagnostics.extend(import_diagnostics);
+                attempt.enter(bellatrix_mde_cordis::OpeningStage::SourceGuard);
                 workspace
                     .update(cx, |_, cx| baseline.check(&buffer_state(&buffer, cx)))
                     .map_err(|error| error.to_string())?
                     .map_err(|error| error.message().to_owned())?;
-                let lease = (importer.import)(document, native_saved).await?;
+                attempt.enter(bellatrix_mde_cordis::OpeningStage::Import);
+                let lease = (importer.import)(document, native_saved, Arc::clone(&attempt)).await?;
+                attempt.enter(bellatrix_mde_cordis::OpeningStage::Attach);
                 workspace
                     .update_in(cx, |workspace, window, cx| {
                         baseline
@@ -333,9 +357,11 @@ pub(crate) fn register_preview_action(
                         Ok::<(), String>(())
                     })
                     .map_err(|error| error.to_string())??;
+                attempt.enter(bellatrix_mde_cordis::OpeningStage::Complete);
                 Ok(())
             }
             .await;
+            attempt.finish(result.is_ok());
             if let Err(error) = result {
                 if let Err(unavailable) =
                     workspace.update(cx, |workspace, cx| workspace.show_error(error, cx))
