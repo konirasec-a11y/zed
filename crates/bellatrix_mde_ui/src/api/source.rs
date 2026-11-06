@@ -1141,7 +1141,10 @@ impl MdeUiSource {
                 identity,
                 bellatrix_mde_cordis::TraceOutcome::Invalid,
             );
-            return Err("This Workbench is not the active MDE document. Select its MDE tab before editing or saving its model.".into());
+            let result = Err("This Workbench is not the active MDE document. Select its MDE tab before editing or saving its model.".into());
+            self.journal
+                .record_result(self.project_id.clone(), revision, action, &result);
+            return result;
         }
         if self.is_read_only() && !matches!(&command, MdeUiCommand::ValidateDiagram(_)) {
             self.journal.record_interaction(
@@ -1150,10 +1153,17 @@ impl MdeUiSource {
                 identity,
                 bellatrix_mde_cordis::TraceOutcome::Invalid,
             );
-            return Err("The document is temporarily unavailable for editing; finish its pending write or reopen the native document if its session closed".into());
+            let result = Err("The document is temporarily unavailable for editing; finish its pending write or reopen the native document if its session closed".into());
+            self.journal
+                .record_result(self.project_id.clone(), revision, action, &result);
+            return result;
         }
         let identity = identity.map(str::to_owned);
         let result = self.session.submit(command);
+        if result.is_err() {
+            self.journal
+                .record_result(self.project_id.clone(), revision, action, &result);
+        }
         self.journal.record_interaction(
             revision,
             action,

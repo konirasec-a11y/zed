@@ -92,6 +92,47 @@ impl ExecutionJournal {
         state.version = state.version.saturating_add(1);
         self.changes.send_replace(state.version);
     }
+    /// Retain host operation results through the same bounded trace formatter and journal.
+    /// Result messages may contain model data; never pass document bytes or payloads here.
+    pub fn record_result<T>(
+        &self,
+        project_id: bellatrix_project::ProjectId,
+        revision: u64,
+        action: &'static str,
+        result: &Result<T, String>,
+    ) {
+        let run_id = format!(
+            "{}-result-{}",
+            self.interaction_run,
+            self.interaction_sequence.fetch_add(1, Ordering::Relaxed)
+        );
+        let mut trace =
+            bellatrix_mde::MdeExecutionTrace::new(run_id.clone(), Some(revision.to_string()), 2);
+        let outcome = if let Err(error) = result {
+            trace.diagnostic("host", action, None, error, TraceOutcome::Error);
+            TraceOutcome::Error
+        } else {
+            TraceOutcome::Success
+        };
+        trace.emit(
+            "host",
+            action,
+            if result.is_ok() {
+                TracePhase::Finish
+            } else {
+                TracePhase::Error
+            },
+            None,
+            &[],
+            Some(outcome),
+        );
+        self.append(ModelingExecutionTrace {
+            project_id,
+            run_id,
+            events: trace.events(),
+            dropped: trace.dropped(),
+        });
+    }
     pub fn version(&self) -> u64 {
         self.state
             .lock()

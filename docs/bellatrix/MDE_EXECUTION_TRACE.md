@@ -77,10 +77,19 @@ copy is a snapshot, not a durable log archive.
 - `trace_output.rs` remains the sole Cordis forwarding/stderr adapter;
   `execution_journal.rs` remains the host's retained history, including UI interactions.
 
-This does not intercept arbitrary `eprintln!`/`log` output, native project
-open/save/import failures, or every UI precondition. Observer transport failures
+Host `ExecutionJournal::record_result` uses the same trace formatter for
+session edit/validate/save results, native save/MDJ-export outcomes (including
+worker join failure), successful native document opening, and UI enqueue
+rejections. These host-local events enter the document journal directly, like
+UI interactions; they do not stream to stderr. Session events summarize the
+result, while command events preserve the detailed command/run context.
+
+This does not intercept arbitrary `eprintln!`/`log` output, opening/import failures
+before a document bridge exists, or every UI precondition. Observer transport failures
 remain stderr diagnostics plus loss counters, since forwarding them through the
 failing transport would recurse. Rendering and kernel calculations are not
 newly instrumented. Latest UI feedback is still copied separately and can be
-replaced by the next operation; it is not a historical error journal. No parallel
+replaced by the next operation; only the explicitly observed result boundaries
+above retain their errors in history. Import diagnostics returned before bridge
+creation and successful export cleanup warnings are not newly retained. No parallel
 logger, global collector or instrumentation inside `KERNEL` was introduced.

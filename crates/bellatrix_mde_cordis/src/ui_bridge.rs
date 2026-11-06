@@ -108,6 +108,7 @@ impl MdeUiBridge {
             submissions,
             feedback_tx,
             validation_tx,
+            Arc::clone(&journal),
         ));
         let (projections, projection_task) =
             crate::projection::start_feed(context.clone(), changes.clone(), session.clone());

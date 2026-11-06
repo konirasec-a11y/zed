@@ -98,6 +98,9 @@ impl BellatrixZedHost {
                             }
                         };
                         let session = bridge.session();
+                        let save_journal = bridge.execution_journal();
+                        let export_journal = bridge.execution_journal();
+                        save_journal.record_result(imported.id().clone(), imported.revision(), "document.open", &Ok::<(), String>(()));
                         let source = MdeUiSource::from_bridge(projects, &bridge);
                         let save_context = context.clone();
                         let export_context = context.clone();
@@ -125,9 +128,12 @@ impl BellatrixZedHost {
                             let context = save_context.clone();
                             let runtime = save_runtime.clone();
                             let lock = Arc::clone(&save_lock);
+                            let journal = Arc::clone(&save_journal);
+                            let project_id = document.id().clone();
+                            let revision = document.revision();
                             Box::pin(async move {
                                 let outcome_path = path.clone();
-                                runtime.spawn(async move {
+                                let result = runtime.spawn(async move {
                                     let _guard = lock.lock().await;
                                     let revision = document.revision();
                                     match context.query::<bellatrix_project::ProjectSave>(Routing::Unscoped,
@@ -137,15 +143,20 @@ impl BellatrixZedHost {
                                         QueryOutcome::Answer(Err(error)) => Err(error.to_string()),
                                         QueryOutcome::Miss => Err("Project save service unavailable".into()),
                                     }
-                                }).await.map_err(|error| format!("Save task failed for {}: {error}. Inspect the destination before retrying.", outcome_path.display()))?
+                                }).await.map_err(|error| format!("Save task failed for {}: {error}. Inspect the destination before retrying.", outcome_path.display())).and_then(|result| result);
+                                journal.record_result(project_id, revision, "document.save", &result);
+                                result
                             })
                         }).with_mdj_export(move |document, path| {
                             let context = export_context.clone();
                             let runtime = export_runtime.clone();
                             let lock = Arc::clone(&export_lock);
+                            let journal = Arc::clone(&export_journal);
+                            let project_id = document.id().clone();
+                            let revision = document.revision();
                             Box::pin(async move {
                                 let outcome_path = path.clone();
-                                runtime.spawn(async move {
+                                let result = runtime.spawn(async move {
                                     let _guard = lock.lock().await;
                                     let exported = match context.query::<bellatrix_mde_cordis::ModelingExportMdj>(Routing::Unscoped,
                                         bellatrix_mde_cordis::ModelingExportMdjRequested { document: Arc::clone(&document) }).await.map_err(|error| error.to_string())? {
@@ -165,7 +176,9 @@ impl BellatrixZedHost {
                                     };
                                     // Export is not a native save. Dropping the publication releases its reservation without clearing dirty state.
                                     Ok(published.cleanup_warning().map(str::to_owned))
-                                }).await.map_err(|error| format!("MDJ export task failed for {}: {error}. Publication outcome is uncertain; inspect the destination before retrying.", outcome_path.display()))?
+                                }).await.map_err(|error| format!("MDJ export task failed for {}: {error}. Publication outcome is uncertain; inspect the destination before retrying.", outcome_path.display())).and_then(|result| result);
+                                journal.record_result(project_id, revision, "document.export_mdj", &result);
+                                result
                             })
                         }))
                     }).await.map_err(|error| error.to_string())?

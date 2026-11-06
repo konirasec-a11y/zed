@@ -510,6 +510,7 @@ pub(crate) async fn run(
     mut submissions: mpsc::Receiver<Submission>,
     feedback: watch::Sender<String>,
     validations: watch::Sender<Validation>,
+    journal: Arc<crate::ExecutionJournal>,
 ) {
     let mut shutdown = session.shutdown.subscribe();
     loop {
@@ -532,6 +533,8 @@ pub(crate) async fn run(
                 continue;
             }
         };
+        let project_id = document.id().clone();
+        let revision = document.revision();
         if let MdeUiCommand::ValidateDiagram(request) = command {
             let result = if request.project_id != *document.id()
                 || request.expected_revision != document.revision()
@@ -553,6 +556,7 @@ pub(crate) async fn run(
                     Err(error) => Err(error.to_string()),
                 }
             };
+            journal.record_result(project_id, revision, "session.validate", &result);
             validations.send_replace(Some(result.map_err(|message| DiagramValidationFailure {
                 diagram_id: request.diagram_id,
                 revision: request.expected_revision,
@@ -573,6 +577,7 @@ pub(crate) async fn run(
                     Err(error) => Err(error.to_string()),
                 }
             };
+            journal.record_result(project_id, revision, "session.save", &result);
             feedback.send_replace(match result {
                 Ok(revision) => format!("Project saved: revision {revision}"),
                 Err(error) => format!("Project save failed: {error}"),
@@ -600,6 +605,7 @@ pub(crate) async fn run(
             }
             Err(error) => Err(error),
         };
+        journal.record_result(project_id, revision, "session.edit", &result);
         feedback.send_replace(match result {
             Ok(revision) => format!("Edit confirmed: revision {revision}"),
             Err(error) => format!("Edit rejected: {error}"),
