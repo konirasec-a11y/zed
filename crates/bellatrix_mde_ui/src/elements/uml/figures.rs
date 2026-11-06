@@ -1,4 +1,5 @@
 //! Non-classifier notations share editing, but not the classifier silhouette.
+use crate::assets::theme::Palette;
 use crate::elements::uml::figure_geometry::{
     paint_folded_paper, paint_notation, port_label_layout,
 };
@@ -8,7 +9,6 @@ use crate::elements::uml::{
     interface_presentation::InterfaceFigure,
     timing::TimingLifeline,
 };
-use bellatrix_design_system::Palette;
 use bellatrix_mde_cordis::presentation_contract::{
     FigurePresentation, RenderStyle, UmlHeader, UmlNotation,
 };

@@ -321,7 +321,7 @@ one subject can have different appearances. Every visual family uses the same
 not depend on metaclass property descriptors or kernel coverage.
 
 Reference behavior and icon meaning are taken from
-`crates/bellatrix_design_system/docs/ref/staruml/src/static/html-contents/style-editor-view.html`
+`crates/bellatrix_mde_ui/docs/ref/staruml/src/static/html-contents/style-editor-view.html`
 and `src/views/style-editor-view.js` in the same StarUML tree. The supplied
 Bellatrix design provides composition and reusable components through
 `docs/design/src/components/panels/PropertyInspectorPane.tsx`,

@@ -4,9 +4,9 @@ Este contrato pertence à engine MDE. Ele não redefine Bellatrix como editor UM
 
 ## Referências consultadas
 
-- `crates/bellatrix_design_system/docs/design/src/components/diagrams/SvgNodes.tsx`: compartments e contorno de seleção separado da figura.
-- `crates/bellatrix_design_system/docs/ref/staruml/extensions/essential/uml/metamodel.json`: Class e Interface especializam UMLClassifier; Package tem outra linhagem; Constraint tem semântica própria.
-- `crates/bellatrix_design_system/docs/ref/staruml/extensions/essential/uml/quickedits/uml.json`: ações compartilhadas e ações específicas por tipo.
+- `crates/bellatrix_mde_ui/docs/design/src/components/diagrams/SvgNodes.tsx`: compartments e contorno de seleção separado da figura.
+- `crates/bellatrix_mde_ui/docs/ref/staruml/extensions/essential/uml/metamodel.json`: Class e Interface especializam UMLClassifier; Package tem outra linhagem; Constraint tem semântica própria.
+- `crates/bellatrix_mde_ui/docs/ref/staruml/extensions/essential/uml/quickedits/uml.json`: ações compartilhadas e ações específicas por tipo.
 - `crates/gpui/src/elements/canvas.rs`, `crates/gpui/src/path_builder.rs` e `crates/gpui/examples/painting.rs`: desenho vetorial nativo no host Zed.
 
 ## Responsabilidades
@@ -37,7 +37,7 @@ Esses contratos não constituem uma prova formal em teoria das categorias. São 
 
 ## Especialização de Class: Quick Edit completo
 
-Referência comportamental: `crates/bellatrix_design_system/docs/ref/staruml/extensions/essential/uml/quickedits/uml.json` (bloco `uml.class`) e `uml-commands.js` (os handlers originais); referência visual da engine: `crates/bellatrix_design_system/docs/design/`. O comportamento é reimplementado em Rust, não copiado do Electron.
+Referência comportamental: `crates/bellatrix_mde_ui/docs/ref/staruml/extensions/essential/uml/quickedits/uml.json` (bloco `uml.class`) e `uml-commands.js` (os handlers originais); referência visual da engine: `crates/bellatrix_mde_ui/docs/design/`. O comportamento é reimplementado em Rust, não copiado do Electron.
 
 As **17 entradas** de Class são compostas a partir dos tipos/capacidades; não há outro `ClassEngine` concorrendo com o executor comum. A base contém `Name Expression`, `Visibility`, `Add Note`, `Add Constraint`, `Add Attribute`, `Add Operation`, `Add Reception`. As especializações de Class são:
 

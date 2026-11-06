@@ -1,7 +1,8 @@
 //! Bellatrix symbol catalog as a normal Zed Workspace Item.
-//! The public catalog and its SVGs live in bellatrix_ui_symbols; this is a
+//! The public catalog and its SVGs live in crate::assets::symbols; this is a
 //! preview, not a second Dock and not a substitute for domain commands.
-use bellatrix_ui_symbols::{Family, SymbolGallery};
+use crate::assets::symbols::Family;
+use crate::components::symbol_gallery::SymbolGallery;
 use gpui::{
     App, Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, SharedString, Window,
     div, prelude::*, px,

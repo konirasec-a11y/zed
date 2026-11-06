@@ -53,8 +53,7 @@ mod style_drafts;
 mod style_editor;
 #[path = "../components/symbol_library.rs"]
 mod symbol_library;
-#[path = "../assets/theme.rs"]
-mod theme;
+use crate::assets::theme;
 #[path = "../components/timing_editor.rs"]
 mod timing_editor;
 #[path = "../api/validation.rs"]

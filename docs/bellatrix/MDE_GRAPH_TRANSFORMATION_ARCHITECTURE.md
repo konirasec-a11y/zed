@@ -222,9 +222,9 @@ não o limite de cobertura**; os exemplos/tabelas de notação do anexo B.6
 não são exaustivos nem definem obrigatoriedade/opcionalidade.
 
 Reutilizar o contrato visual existente nos
-[painéis React](../../crates/bellatrix_design_system/docs/design/src/components/panels/)
+[painéis React](../../crates/bellatrix_mde_ui/docs/design/src/components/panels/)
 e nas variantes `preview/v3*.png` do
-[preview](../../crates/bellatrix_design_system/docs/design/preview/).
+[preview](../../crates/bellatrix_mde_ui/docs/design/preview/).
 Mockup visual, implementação GPUI nativa, comportamento em runtime e gates
 verificados são evidências distintas. Funcionalidades apenas ilustradas
 no protótipo não autorizam mutações silenciosas do modelo. Símbolo na
@@ -296,9 +296,9 @@ de origem/IR/destino com traces bidirecionais.
   triple graph grammars: correctness, completeness and invertibility*,
   DOI: 10.1007/s10270-012-0309-1.
 - StarUML (referência **apenas da UI e comportamento MDE**):
-  `crates/bellatrix_design_system/docs/ref/staruml/`.
+  `crates/bellatrix_mde_ui/docs/ref/staruml/`.
 - React (contrato visual **apenas da MDE**):
-  `crates/bellatrix_design_system/docs/design/`.
+  `crates/bellatrix_mde_ui/docs/design/`.
 
 **Política de entrega:** commits apenas em branch de trabalho;
 validação local pelo mantenedor antes de solicitar PR. Sem PR e sem CI

@@ -1,5 +1,5 @@
+use crate::assets::theme::Palette;
 use crate::elements::uml::class::ViewAppearance;
-use bellatrix_design_system::Palette;
 use bellatrix_mde_cordis::LineMode;
 use bellatrix_mde_cordis::presentation_contract::UmlNotation;
 use gpui::{Bounds, PathBuilder, Pixels, Window, point, px};

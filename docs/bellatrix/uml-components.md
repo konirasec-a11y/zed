@@ -9,8 +9,8 @@ Referência de comportamento: arquivos fornecidos pelo mantenedor em `starUml.zi
 Este documento é do **plugin/engine MDE**, não da identidade visual global
 do Bellatrix. Referências normativas da experiência MDE:
 
-- React: `crates/bellatrix_design_system/docs/design/`.
-- Comportamento: `crates/bellatrix_design_system/docs/ref/staruml/`
+- React: `crates/bellatrix_mde_ui/docs/design/`.
+- Comportamento: `crates/bellatrix_mde_ui/docs/ref/staruml/`
   (Classes Basic, Classes Advanced, Packages e Annotations).
 - Filosofia da plataforma: [PLATFORM_VISION.md](PLATFORM_VISION.md).
 
@@ -57,7 +57,7 @@ quando houver membros). Não desenhar uma Interface como um retângulo de classe
 apenas acrescentando o texto `«interface»`.
 
 Fontes originais **somente para estudo/comportamento**, sem copiar código:
-`crates/bellatrix_design_system/docs/ref/staruml/extensions/essential/uml/quickedits/uml.json`
+`crates/bellatrix_mde_ui/docs/ref/staruml/extensions/essential/uml/quickedits/uml.json`
 (definição `uml.interface`),
 `.../uml/uml-commands.js` (handlers `handleAddSubInterface`,
 `handleAddSuperInterface`, `handleAddRealizingClass`, `handleAddNote`,

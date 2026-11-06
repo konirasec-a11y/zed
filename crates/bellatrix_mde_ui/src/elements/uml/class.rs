@@ -1,6 +1,6 @@
 //! Shared classifier labels, compartments and editing. The notation selects the silhouette.
+use crate::assets::theme::Palette;
 use crate::elements::uml::inline_edit::UmlInlineNameEditor;
-use bellatrix_design_system::Palette;
 use bellatrix_mde_cordis::presentation_contract::{
     ClassifierPresentation, MemberPresentation, RenderStyle, UmlHeader,
 };

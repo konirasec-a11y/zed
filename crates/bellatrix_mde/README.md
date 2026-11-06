@@ -111,7 +111,7 @@ Views. Mapped values are removed from source residue and authored only once.
 This encoding follows the supplied StarUML reference's
 `resources/default/metamodel.json` and `src/core/graphics.js` (`Font.__read`,
 `Font.__write` and Canvas alignment constants), under
-`crates/bellatrix_design_system/docs/ref/staruml`. The adapter is an independent
+`crates/bellatrix_mde_ui/docs/ref/staruml`. The adapter is an independent
 implementation of those file encodings, not copied rendering or application code.
 
 Missing values stay absent. Nulls, partial fonts (`?`), unknown encodings and

@@ -22,9 +22,6 @@ workspace.workspace = true
 project.workspace = true
 language.workspace = true
 serde_json.workspace = true
-bellatrix_design_system = { path = "../bellatrix_design_system" }
-bellatrix_ui_symbols = { path = "../bellatrix_ui_symbols" }
-bellatrix_ui_panels = { path = "../bellatrix_ui_panels" }
 
 # Keep Zed's matched Merman prerelease family aligned with its lockfile.
 merman-core = { version = "=0.8.0-alpha.5", default-features = false }

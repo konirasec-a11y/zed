@@ -461,8 +461,8 @@ mesmo domínio. Navegar modelo ↔ código ↔ diagnóstico com correspondência
 real; abas, Dock, foco, atalhos, buffers e edição continuam nativos Zed.
 
 **Revisão UI/UX é parte deste passo, não substitui os demais.** Reutilizar
-[painéis de design](../../crates/bellatrix_design_system/docs/design/src/components/panels/)
-e [variantes visuais](../../crates/bellatrix_design_system/docs/design/preview/).
+[painéis de design](../../crates/bellatrix_mde_ui/docs/design/src/components/panels/)
+e [variantes visuais](../../crates/bellatrix_mde_ui/docs/design/preview/).
 Executar a matriz UX-01–UX-09 no
 [contrato técnico](MDE_GRAPH_TRANSFORMATION_ARCHITECTURE.md): Working Diagrams,
 catálogo/busca/disponibilidade, árvore semântica, Inspector compacto e

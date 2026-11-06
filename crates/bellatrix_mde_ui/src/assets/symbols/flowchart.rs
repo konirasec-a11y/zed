@@ -1,4 +1,4 @@
-use crate::{ShapeKind, Symbol, SymbolGroup};
+use super::{ShapeKind, Symbol, SymbolGroup};
 
 pub(super) static FLOWCHART: &[SymbolGroup] = &[
     SymbolGroup {

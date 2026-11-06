@@ -116,7 +116,9 @@ pub(crate) fn explorer_diagram_icon(
     };
     let data = explorer_glyph(name)
         .map(|(data, _)| data)
-        .unwrap_or_else(|| bellatrix_ui_symbols::glyph(bellatrix_ui_symbols::ShapeKind::Document));
+        .unwrap_or_else(|| {
+            crate::assets::symbols::glyph(crate::assets::symbols::ShapeKind::Document)
+        });
     explorer_colored_icon(data, ExplorerIconCategory::Diagram, palette)
 }
 
@@ -126,7 +128,9 @@ pub(crate) fn explorer_project_icon(
     use crate::assets::uml::staruml::{ExplorerIconCategory, explorer_glyph};
     let data = explorer_glyph("Project")
         .map(|(data, _)| data)
-        .unwrap_or_else(|| bellatrix_ui_symbols::glyph(bellatrix_ui_symbols::ShapeKind::Package));
+        .unwrap_or_else(|| {
+            crate::assets::symbols::glyph(crate::assets::symbols::ShapeKind::Package)
+        });
     explorer_colored_icon(data, ExplorerIconCategory::Project, palette)
 }
 

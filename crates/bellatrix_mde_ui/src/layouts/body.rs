@@ -374,7 +374,7 @@ impl Render for MdeWorkbenchItem {
                                     .collect();
                                 let render_style = canvas_presentation::render_style(
                                     view,
-                                    bellatrix_design_system::Palette::current(cx),
+                                    crate::assets::theme::Palette::current(cx),
                                 );
                                 let visual = relation
                                     .map(|relation| {
@@ -676,7 +676,7 @@ impl Render for MdeWorkbenchItem {
                         });
                         let render_style = canvas_presentation::render_style(
                             view,
-                            bellatrix_design_system::Palette::current(cx),
+                            crate::assets::theme::Palette::current(cx),
                         );
                         let visual = crate::elements::uml::UmlVisualDefinition::for_element(
                             &element.kind,
@@ -1535,7 +1535,7 @@ impl MdeWorkbenchItem {
         let target_view = interaction_owner.unwrap_or(view);
         let selected = self.presentation.selected_canvas_view() == Some(view.id.as_str());
         let style =
-            canvas_presentation::render_style(view, bellatrix_design_system::Palette::current(cx));
+            canvas_presentation::render_style(view, crate::assets::theme::Palette::current(cx));
         let label = if view.figure.notation == UmlNotation::Unsupported {
             format!("Unsupported figure · {}", view.id)
         } else {

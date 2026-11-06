@@ -3,6 +3,7 @@
 mod toolbox_panel;
 #[path = "../components/view_inspector.rs"]
 mod view_inspector;
+use crate::components::pane_header::PaneHeader;
 use crate::workbench_ui::{
     MdeToolDrag, MdeWorkbenchItem, WorkbenchPalette,
     hierarchy::{ExplorerSortOrder, filter_explorer, project_explorer},
@@ -11,7 +12,6 @@ use crate::workbench_ui::{
 };
 use bellatrix_mde_cordis::ModelingRelationKind;
 use bellatrix_mde_cordis::{ModelingElementKind, ModelingTool};
-use bellatrix_ui_panels::PaneHeader;
 use gpui::{
     Action, App, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement,
     IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Render,

@@ -64,11 +64,11 @@ versionamento, mas representam **o design e o comportamento da experiência
 MDE**, não o design de toda a plataforma Bellatrix:
 
 1. **Aparência, layout, interação visível da MDE:**
-   `crates/bellatrix_design_system/docs/design/`
+   `crates/bellatrix_mde_ui/docs/design/`
    (React: `src/`, `docs/DESIGN_SYSTEM.md`, `docs/UX_ACCEPTANCE.md`,
    `src/components/diagrams/`, `src/components/palette/`, `preview/`).
 2. **Comportamento do editor/modelagem:**
-   `crates/bellatrix_design_system/docs/ref/staruml/`
+   `crates/bellatrix_mde_ui/docs/ref/staruml/`
    (Electron/StarUML: metamodelo UML, Factory, Engine, Diagram,
    Repository, Toolbox, Quick Edit, conectores). **Consultar, não copiar
    código/recursos proprietários sem autorização.**

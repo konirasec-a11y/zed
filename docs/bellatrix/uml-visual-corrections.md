@@ -60,7 +60,7 @@ Port and Part are now direct toolbox entries, alongside DeploymentSpecification 
 
 The interaction toolbox creates a persisted, explicitly visual-only `uml.general_ordering` View. The official notation uses a dotted line and a filled directional arrow within the line, not at its endpoint. `relationship_notation.rs` now supplies shared `LineMode` defaults and a middle marker; `relationship.rs` places that marker on the authored path with the local line/cubic tangent. The existing occurrence-position anchors preserve the selected positions, including two positions on one Lifeline, without creating OccurrenceSpecifications or evaluating before/after semantics. Explicit View line-style overrides remain available and can intentionally differ from UML notation. SVG uses the same default stroke resolver for canonical and visual-only relationships; native marker/timing geometry export remains pending.
 
-The bundled StarUML reference was checked under `crates/bellatrix_design_system/docs/ref/staruml` (UML extension and vector-icon sources); no GeneralOrdering-specific identifier was found. Its new toolbox SVG is an independent rendering of the official dotted-line/middle-arrow notation, not copied proprietary artwork.
+The bundled StarUML reference was checked under `crates/bellatrix_mde_ui/docs/ref/staruml` (UML extension and vector-icon sources); no GeneralOrdering-specific identifier was found. Its new toolbox SVG is an independent rendering of the official dotted-line/middle-arrow notation, not copied proprietary artwork.
 
 ## Provided and required Interface forms
 

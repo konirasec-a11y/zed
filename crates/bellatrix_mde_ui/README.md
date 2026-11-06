@@ -13,17 +13,20 @@
 - `src/layouts/` contains the canvas body, native Dock sidebar composition and
   status-bar footer entry. Zed continues to own the outer window and Dock layout.
 - `src/components/` contains Toolbox, Model Explorer, Inspector, Quick Tools,
-  style/timing editors, symbol library and diagnostic/preview renderers.
+  style/timing editors, symbol library, reusable pane headers, the symbol gallery
+  and diagnostic/preview renderers.
 - `src/api/` contains the existing source/session adapter, model and relationship
   command dispatch, validation and native document I/O.
   It delegates to Cordis; it does not introduce another model store or mutate UML
   contracts locally.
 - `src/elements/uml.rs` and `src/elements/uml/` own the MDE UML figures, geometry,
   inline editors, quick edits and shared visual definitions.
-- `src/assets/theme.rs` exposes the shared design-system theme.
+- `src/assets/theme.rs` owns the shared design-system theme.
   `src/assets/uml/staruml.rs` owns MDE explorer glyphs; `assets/staruml/` keeps their
-  notice and reproduction script. Generic multi-diagram symbols, panel headers
-  and design tokens remain reusable dependencies, not a second MDE UI.
+  notice and reproduction script. `src/assets/symbols.rs` and
+  `src/assets/symbols/` own the multi-diagram catalog and SVGs. All Bellatrix
+  visual code belongs to this crate; the former design-system, panel and symbol
+  crates have been removed. Their design references live in `docs/`.
 - `src/view-model/` contains renderer-independent inspector/style drafts,
   snapshots and document guards. These files do not depend on GPUI. The UI
   composes them through explicit module paths; they do not own another model.
@@ -130,12 +133,12 @@ do not grow a large suite of overlapping implementation tests.
 
 ## Existing-design frontend integration
 
-The visual source is `../bellatrix_design_system/docs/design/src/components/panels/`,
+The visual source is `docs/design/src/components/panels/`,
 with reference captures in that package's `preview/` directory. Its React controls
 are layout specimens, not permission to introduce unsupported model operations.
 
 The native workbench uses compact rows of native Zed controls and
-`bellatrix_ui_panels::PaneHeader` for panel disclosure/actions. Inspector editing
+`bellatrix_mde_ui::components::pane_header::PaneHeader` for panel disclosure/actions. Inspector editing
 is event-driven: typing, toggling a boolean or choosing an option queues the
 captured property command immediately. There is no Apply or Cancel step.
 The existing presentation state keeps only transient input, validation and

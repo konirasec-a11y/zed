@@ -1,4 +1,4 @@
-use bellatrix_design_system::Palette;
+use crate::assets::theme::Palette;
 use bellatrix_mde_cordis::Geometry;
 use bellatrix_mde_cordis::presentation_contract::{RenderStyle, UmlNotation};
 use bellatrix_mde_cordis::projection::{ModelingProjection, View};

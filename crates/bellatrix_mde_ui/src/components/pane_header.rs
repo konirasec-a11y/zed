@@ -1,6 +1,6 @@
 //! Reusable panel headers; the embedding workspace owns dock layout and panel contents.
 
-use bellatrix_design_system::Palette;
+use crate::assets::theme::Palette;
 use gpui::{
     AnyElement, App, ClickEvent, IntoElement, RenderOnce, SharedString, Window, div, prelude::*,
 };

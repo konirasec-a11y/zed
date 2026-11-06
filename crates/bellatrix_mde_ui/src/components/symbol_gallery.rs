@@ -1,6 +1,6 @@
 //! Public symbol gallery on the same GPUI runtime as Zed Workspace.
-use crate::{Family, count, glyph, groups};
-use bellatrix_design_system::Palette;
+use crate::assets::symbols::{Family, count, glyph, groups};
+use crate::assets::theme::Palette;
 use gpui::{
     App, IntoElement, RenderOnce, StatefulInteractiveElement, Window, div, prelude::*, px, rgb, svg,
 };

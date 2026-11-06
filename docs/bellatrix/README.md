@@ -19,7 +19,7 @@ Bellatrix is implemented directly within the **Zed fork**. Zed owns the GPUI run
 - `crates/bellatrix_mde` and `crates/bellatrix_mde_{cordis,rust_generator,html_exporter,cli}`: headless Model-Driven Engineering domain and its typed Cordis events/services.
 - `crates/bellatrix_mde_workbench`: native Zed Workspace Item, Dock Panels, Canvas, Toolbox, Inspector, and a typed bridge to MDE; shown as a native Workspace Item with a focus/reopen action (`bellatrix_mde::OpenMdeWorkbench`).
 - `crates/bellatrix_zed_host`: installs Project/MDE Cordis plugins inside the existing Zed initialization; no separate GUI event loop.
-- `crates/bellatrix_design_system` and `crates/bellatrix_ui_*`: presentation and symbol vocabulary on Zed's pinned GPUI.
+- `crates/bellatrix_mde_ui/src/components` and `src/assets`: shared presentation, theme roles and symbol vocabulary on Zed's pinned GPUI, within the single Bellatrix UI crate.
 - `crates/bellatrix_mde/fixtures`: MDE fixtures. The engine owns persistence codecs in `src/persistence`, separate from Zed RPC/proto.
 
 See [Zed protocol and persistence reuse audit](protocol-and-persistence.md) for the exact separation between Zed's Protobuf RPC, GPUI local events, SQLite Workspace/Item state and Cordis domain events. In particular, MDE Items are not yet registered with Zed's `SerializableItem` restoration lifecycle; this is the first integration gap to close.

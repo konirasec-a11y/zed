@@ -7,7 +7,7 @@ from fontTools.pens.svgPathPen import SVGPathPen
 from fontTools.ttLib import TTFont
 
 root = Path(__file__).resolve().parents[4]
-source = root / "crates/bellatrix_design_system/docs/ref/staruml/src/static"
+source = root / "crates/bellatrix_mde_ui/docs/ref/staruml/src/static"
 font = TTFont(source / "icon-font/icons.ttf")
 glyphs = font.getGlyphSet()
 character_map = font.getBestCmap()

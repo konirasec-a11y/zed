@@ -1,5 +1,5 @@
+use crate::assets::theme::Palette;
 use crate::elements::uml::class::ViewAppearance;
-use bellatrix_design_system::Palette;
 use bellatrix_mde_cordis::{LineMode, TimingMode, TimingPoint, TimingPresentation};
 use gpui::{AnyElement, IntoElement, PathBuilder, canvas, div, point, prelude::*, px, relative};
 

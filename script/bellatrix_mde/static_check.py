@@ -21,9 +21,6 @@ CRATES = [
     "bellatrix_mde_cli",
     "bellatrix_zed_host",
     "bellatrix_mde_ui",
-    "bellatrix_design_system",
-    "bellatrix_ui_symbols",
-    "bellatrix_ui_panels",
 ]
 HEADLESS = {
     "bellatrix_project",

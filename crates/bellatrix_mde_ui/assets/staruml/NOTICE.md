@@ -2,7 +2,7 @@
 
 The 174 outlines in `src/assets/uml/staruml.rs` are extracted without shape changes from the
 StarUML 7.1.1 icon font already present in this repository at
-`crates/bellatrix_design_system/docs/ref/staruml/src/static/icon-font/icons.ttf`.
+`crates/bellatrix_mde_ui/docs/ref/staruml/src/static/icon-font/icons.ttf`.
 Names/codepoints come from the adjacent `icons.css`; semantic color categories
 come from `src/static/styles/icon-colors.less`. The source package attributes
 copyright to MKLabs Co., Ltd. (https://staruml.io).

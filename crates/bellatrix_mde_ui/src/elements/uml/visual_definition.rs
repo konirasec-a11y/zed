@@ -1,9 +1,9 @@
+use crate::assets::symbols::{ShapeKind, glyph};
 use crate::assets::uml::staruml::{ExplorerIconCategory, explorer_glyph};
 use crate::elements::uml::{UmlClassifier, UmlFigure, UmlRelationGlyph};
 use bellatrix_mde_cordis::presentation_contract::{FigurePresentation, RelationshipStyle};
 use bellatrix_mde_cordis::projection::SemanticIdentity;
 use bellatrix_mde_cordis::{ModelingElementKind, ModelingRelationKind, ModelingTool};
-use bellatrix_ui_symbols::{ShapeKind, glyph};
 use gpui::SharedString;
 
 #[derive(Clone, Copy)]
@@ -73,7 +73,7 @@ impl UmlVisualDefinition {
                 ExplorerIconCategory::Element
             };
             (
-                bellatrix_ui_symbols::glyph(element_glyph(kind, name)),
+                crate::assets::symbols::glyph(element_glyph(kind, name)),
                 category,
             )
         });
@@ -273,8 +273,8 @@ impl UmlVisualDefinition {
     }
 }
 
-fn element_glyph(kind: &str, type_label: &str) -> bellatrix_ui_symbols::ShapeKind {
-    use bellatrix_ui_symbols::ShapeKind;
+fn element_glyph(kind: &str, type_label: &str) -> crate::assets::symbols::ShapeKind {
+    use crate::assets::symbols::ShapeKind;
     // Member and relationship symbols are metaclass based, never inferred from names.
     match kind {
         "uml.composition" => return ShapeKind::Composition,
@@ -299,7 +299,7 @@ fn element_glyph(kind: &str, type_label: &str) -> bellatrix_ui_symbols::ShapeKin
     } else {
         type_label
     };
-    bellatrix_ui_symbols::groups(bellatrix_ui_symbols::Family::Uml)
+    crate::assets::symbols::groups(crate::assets::symbols::Family::Uml)
         .iter()
         .flat_map(|group| group.items)
         .find(|symbol| symbol.label.eq_ignore_ascii_case(label))
