@@ -6,53 +6,53 @@ use workbench_state::{PendingRelationEndpoint, SelectionChange, WorkbenchState};
 
 #[path = "../view-model/canvas_presentation.rs"]
 mod canvas_presentation;
-#[path = "diagram_canvas.rs"]
+#[path = "../layout/body.rs"]
 mod diagram_canvas;
-#[path = "execution_dashboard.rs"]
+#[path = "../components/execution_dashboard.rs"]
 mod execution_dashboard;
 #[path = "../view-model/explorer.rs"]
 mod explorer;
-#[path = "hierarchy.rs"]
+#[path = "../components/model_explorer.rs"]
 mod hierarchy;
 #[path = "../view-model/inspector_drafts.rs"]
 mod inspector_drafts;
-#[path = "integration.rs"]
+#[path = "../api/integration.rs"]
 mod integration;
-#[path = "model_editing.rs"]
+#[path = "../api/model_editing.rs"]
 mod model_editing;
-#[path = "native_document.rs"]
+#[path = "../api/native_document.rs"]
 mod native_document;
 #[path = "../view-model/native_document_guard.rs"]
 mod native_document_guard;
-#[path = "panels.rs"]
+#[path = "../layout/sidebar.rs"]
 pub mod panels;
-#[path = "property_editor.rs"]
+#[path = "../components/inspector.rs"]
 mod property_editor;
-#[path = "quick_edit_view.rs"]
+#[path = "../components/quick_tools.rs"]
 mod quick_edit_view;
-#[path = "relationship_creation.rs"]
+#[path = "../api/relationship_creation.rs"]
 mod relationship_creation;
 #[path = "../view-model/selection.rs"]
 mod selection;
 #[path = "../view-model/snapshot.rs"]
 mod snapshot;
-#[path = "source.rs"]
+#[path = "../api/source.rs"]
 mod source;
-#[path = "status_entry.rs"]
+#[path = "../layout/footer.rs"]
 mod status_entry;
 #[path = "../view-model/style_drafts.rs"]
 mod style_drafts;
-#[path = "style_editor.rs"]
+#[path = "../components/style_editor.rs"]
 mod style_editor;
-#[path = "symbol_library.rs"]
+#[path = "../components/symbol_library.rs"]
 mod symbol_library;
-#[path = "theme.rs"]
+#[path = "../assets/theme.rs"]
 mod theme;
-#[path = "timing_editor.rs"]
+#[path = "../components/timing_editor.rs"]
 mod timing_editor;
-#[path = "validation.rs"]
+#[path = "../api/validation.rs"]
 mod validation;
-#[path = "visual_draft_canvas.rs"]
+#[path = "../components/visual_draft_canvas.rs"]
 mod visual_draft_canvas;
 pub use bellatrix_mde_cordis::MODELING_NAMESPACE;
 pub use integration::register_mde_workspace;

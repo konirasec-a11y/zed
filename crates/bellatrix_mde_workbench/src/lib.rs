@@ -1,5 +1,5 @@
 //! Native Zed UI for the Bellatrix MDE model.
-#[path = "UI/workbench.rs"]
+#[path = "page/home_page.rs"]
 mod workbench_ui;
 
 pub use workbench_ui::{

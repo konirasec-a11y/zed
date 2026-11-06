@@ -5,10 +5,18 @@
 ## Source boundaries
 
 - `src/lib.rs` is the public facade; existing public imports remain available.
-- `src/UI/workbench.rs` owns the GPUI item, gestures, entities, focus and rendering.
-  The other `src/UI/` modules own widgets, canvases, panels, native document and
-  Workspace integration, and the lifecycle-owned source adapter. Panel children
-  live in `src/UI/panels/`.
+- `src/page/home_page.rs` owns the existing GPUI item, gestures, focus and
+  subscriptions. It is the single native page, not a second application shell.
+- `src/layout/` contains the canvas body, native Dock sidebar composition and
+  status-bar footer entry. Zed continues to own the outer window and Dock layout.
+- `src/components/` contains Toolbox, Model Explorer, Inspector, Quick Tools,
+  style/timing editors, symbol library and diagnostic/preview renderers.
+- `src/api/` contains the existing source/session adapter, model and relationship
+  command dispatch, validation, native document I/O and Workspace integration.
+  It delegates to Cordis; it does not introduce another model store or mutate UML
+  contracts locally.
+- `src/assets/theme.rs` exposes the shared design-system theme. Symbols and figure
+  implementations remain in the existing `bellatrix_ui_*` crates.
 - `src/view-model/` contains renderer-independent inspector/style drafts,
   snapshots and document guards. These files do not depend on GPUI. The UI
   composes them through explicit module paths; they do not own another model.
@@ -20,6 +28,16 @@ The private `workbench_ui` module keeps widget implementation and state together
 root reexports preserve the crate API. The pure view-model files still belong
 to this GPUI-dependent crate; this layout does not provide a separately
 compilable view-model package or claim that every MDE dependency is one-way.
+
+## Remaining extraction
+
+This first migration moves existing implementations without changing their Rust
+module identities or public exports. Header and navigation controls remain in
+`layout/body.rs`; Working Diagrams and panel composition remain in
+`layout/sidebar.rs`. Extracting those smaller components is still pending.
+Presentation-only drafts, selection and snapshots stay in `view-model/`; they
+are not an independent authoritative UML store. This directory migration does
+not claim that all command paths have already been normalized.
 
 ## Integration
 
