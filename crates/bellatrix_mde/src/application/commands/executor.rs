@@ -1154,6 +1154,27 @@ fn create_relation(
         to: to.into(),
         properties,
     });
+    if kind == ModelingRelationKind::DirectedAssociation {
+        // Directed Association is a creation intent, not a UML metaclass. Persist
+        // its target arrow as Association::navigableOwnedEnd (UML 2.5.1 §11.5.3).
+        crate::uml::associations::migrate(section, project_id, &id)?;
+        let target_end_id = {
+            let references = crate::uml::references::ReferenceIndex::new(
+                crate::uml::root::Model::from_section(section),
+            );
+            let ends = crate::uml::associations::member_ends(&references, &id)?;
+            let [_, target_end] = ends.as_slice() else {
+                return Err("Directed Association requires exactly two member ends".into());
+            };
+            target_end.id.clone()
+        };
+        crate::uml::associations::set_navigation_knowledge(
+            section,
+            &id,
+            &target_end_id,
+            crate::NavigationKnowledge::Known(true),
+        )?;
+    }
     // Source-owned relationship records already encode this owner in `from`.
     // Other authored ownership stays explicit, including incomplete UML drafts.
     let owner_is_encoded_by_source = matches!(

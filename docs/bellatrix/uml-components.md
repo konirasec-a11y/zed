@@ -226,3 +226,16 @@ The two-click controller retains only transient selection and gesture state.
 `create_relation` remains a two-View convenience entry into the same operation.
 Explicit Provided/Required Interface visual tools remain presentation-only;
 Quick Edit's related Interface creation remains an atomic semantic operation.
+
+### Directed Association creation
+
+The Directed Association tool is an explicit request for target-end navigation,
+not a separate UML metaclass. The shared relationship executor creates an
+Association, materializes its two Property member ends, and declares the target
+Property in `Association::navigableOwnedEnd` through the existing navigation
+setter. This follows UML 2.5.1 §11.5.3 and the pinned
+`Association-navigableOwnedEnd` XMI property, which subsets `ownedEnd`. The native
+renderer and Inspector consume these canonical ends after serialization.
+Ordinary Association and Quick Edit Associated Class do not acquire an inferred
+navigation direction. Existing documents and visual-only drafts are not migrated
+by this creation policy.

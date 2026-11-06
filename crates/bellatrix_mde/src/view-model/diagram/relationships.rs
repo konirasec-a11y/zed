@@ -813,6 +813,7 @@ pub fn relation_kind_for_creation(
     kind: ModelingRelationKind,
 ) -> (&'static str, Option<&'static str>) {
     match kind {
+        ModelingRelationKind::DirectedAssociation => ("uml.association", None),
         ModelingRelationKind::Aggregation => ("uml.association", Some("shared")),
         ModelingRelationKind::Composition => ("uml.association", Some("composite")),
         other => (other.model_kind(), None),
