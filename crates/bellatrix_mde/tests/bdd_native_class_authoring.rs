@@ -1058,6 +1058,17 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
     reopen_both_formats(&flow.document, &authored)?;
 
     let mut with_layout_leaf = authored.clone();
+    // These deletion scenarios deliberately exercise an independent diagram;
+    // the native blank's contextual diagram was verified to reject root deletion above.
+    with_layout_leaf
+        .diagrams
+        .iter_mut()
+        .find(|diagram| diagram.id == "classes")
+        .ok_or("missing independent diagram for deletion scenarios")?
+        .model_elements
+        .clear();
+    with_layout_leaf.hierarchy.remove("classes");
+
     let layout_view = with_layout_leaf
         .diagrams
         .iter_mut()
