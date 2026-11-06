@@ -218,3 +218,11 @@ The UML 2.5.1 XML (`standards/uml/20161101/UML.xmi`) and clauses 11.5.3.1 and
 11.8.1 specify Association member ends, ownership and navigation. This frontend
 migration does not change those semantic contracts or infer new owners from the
 Explorer hierarchy. The kernel remains authoritative for their validation.
+
+Relationship connection uses `MdeUiSource::connect_relation` for both semantic
+creation and visual-only tools. It resolves endpoint occurrences, admission of
+free found/lost message endpoints, message anchors, labels and draft geometry.
+The two-click controller retains only transient selection and gesture state.
+`create_relation` remains a two-View convenience entry into the same operation.
+Explicit Provided/Required Interface visual tools remain presentation-only;
+Quick Edit's related Interface creation remains an atomic semantic operation.

@@ -76,13 +76,9 @@ impl MdeWorkbenchItem {
             return;
         }
         let target_subject = target_view.and_then(|view| view.subject.clone());
-        let message_kind = metadata.message_kind.as_deref();
         if self.presentation.pending_relation_source().is_none() {
-            let valid_start = if message_kind == Some("found") {
-                target.is_none()
-            } else {
-                target.is_some()
-            };
+            let valid_start =
+                MdeUiSource::accepts_relation_endpoint(metadata, true, target.is_some());
             if !valid_start {
                 self.feedback = metadata.endpoint_instruction.clone();
                 cx.notify();
@@ -129,11 +125,7 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         }
-        let valid_end = if message_kind == Some("lost") {
-            target.is_none()
-        } else {
-            target.is_some()
-        };
+        let valid_end = MdeUiSource::accepts_relation_endpoint(metadata, false, target.is_some());
         if !valid_end {
             self.feedback = metadata.endpoint_instruction.clone();
             cx.notify();
@@ -144,92 +136,19 @@ impl MdeWorkbenchItem {
             .presentation
             .select_relation_target(target_subject.clone(), target.clone());
         self.apply_selection_change(change, cx);
-        if !self.presentation.visual_draft_mode() && !metadata.is_visual_only {
-            let (Some(source_view_id), Some(target_view_id)) = (from.clone(), target.clone())
-            else {
-                return;
-            };
-            let result = self.source.create_relation(
-                &diagram.id,
-                kind,
-                &source_view_id,
-                &target_view_id,
-                source.revision,
-            );
-            self.report_command_result(result, cx);
-            self.presentation.cancel_tool();
-            cx.notify();
-            return;
-        }
-        let locate = |id: Option<&str>, authored: Option<bellatrix_mde_cordis::Point>| match id {
-            Some(id) => diagram
-                .views
-                .iter()
-                .find(|view| view.id == id)
-                .and_then(|view| super::visual_draft_canvas::resolve_visual_center(&view.geometry)),
-            None => authored,
-        };
-        let (Some(start), Some(to)) = (
-            locate(from.as_deref(), source.point),
-            locate(target.as_deref(), point),
-        ) else {
-            self.feedback = "The selected endpoints do not have usable connection geometry".into();
-            cx.notify();
-            return;
-        };
-        let mut properties = std::collections::BTreeMap::new();
-        let source_point = source.point;
-        if metadata.uses_occurrence_anchors {
-            for (key, view_id, point) in [
-                ("source_anchor", from.as_deref(), source_point),
-                ("target_anchor", target.as_deref(), point),
-            ] {
-                if diagram.interaction_kind.as_deref() != Some("communication")
-                    && let Some(view_id) = view_id
-                    && let Some(anchor) = point.and_then(|point| {
-                        crate::workbench_ui::visual_draft_canvas::resolve_message_anchor(
-                            &snapshot.section,
-                            diagram,
-                            view_id,
-                            point,
-                        )
-                    })
-                {
-                    properties.insert(key.into(), serde_json::json!({"x":anchor.x,"y":anchor.y}));
-                }
-            }
-        }
-        if let Some(message_kind) = message_kind {
-            properties.insert("messageKind".into(), serde_json::json!(message_kind));
-        }
-        let label = if let Some(sort) = metadata.message_sort.as_deref() {
-            properties.insert("messageSort".into(), serde_json::json!(sort));
-            Some(
-                if diagram.interaction_kind.as_deref() == Some("communication") {
-                    "1: message()".to_owned()
-                } else {
-                    "message()".to_owned()
-                },
-            )
-        } else {
-            None
-        };
-        let result = self.source.create_visual_draft(
+        let result = self.source.connect_relation(
             &diagram.id,
-            &metadata.model_kind,
-            label,
-            Geometry::Path {
-                start,
-                segments: vec![PathSegment::Line { to }],
-            },
-            properties,
-            None,
-            from,
-            target,
-            snapshot.revision,
+            kind,
+            (from.as_deref(), source.point),
+            (target.as_deref(), point),
+            self.presentation.visual_draft_mode(),
+            source.revision,
         );
+        let sent = result.is_ok();
         self.report_command_result(result, cx);
-        self.presentation.cancel_tool();
+        if sent {
+            self.presentation.cancel_tool();
+        }
         cx.notify();
     }
 }

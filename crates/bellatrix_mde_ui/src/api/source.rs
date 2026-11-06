@@ -288,6 +288,35 @@ impl MdeUiSource {
         target_view_id: &str,
         expected_revision: u64,
     ) -> Result<(), String> {
+        self.connect_relation(
+            diagram_id,
+            kind,
+            (Some(source_view_id), None),
+            (Some(target_view_id), None),
+            false,
+            expected_revision,
+        )
+    }
+
+    pub(crate) fn accepts_relation_endpoint(
+        metadata: &bellatrix_mde_cordis::RelationToolMetadata,
+        source: bool,
+        has_view: bool,
+    ) -> bool {
+        let free_endpoint =
+            metadata.message_kind.as_deref() == Some(if source { "found" } else { "lost" });
+        has_view != free_endpoint
+    }
+
+    pub fn connect_relation(
+        &self,
+        diagram_id: &str,
+        kind: bellatrix_mde_cordis::ModelingRelationKind,
+        source: (Option<&str>, Option<bellatrix_mde_cordis::Point>),
+        target: (Option<&str>, Option<bellatrix_mde_cordis::Point>),
+        visual_draft: bool,
+        expected_revision: u64,
+    ) -> Result<(), String> {
         use bellatrix_mde_cordis::ModelingRelationKind as Kind;
         let snapshot = self.editable_snapshot(expected_revision)?;
         if !snapshot.section.tools.allows_tool(
@@ -296,47 +325,120 @@ impl MdeUiSource {
         ) {
             return Err("This tool is not available for the target diagram's domain".into());
         }
+        let metadata = snapshot
+            .section
+            .tools
+            .relation(kind)
+            .ok_or("Relationship tool metadata unavailable")?;
+        if !Self::accepts_relation_endpoint(metadata, true, source.0.is_some())
+            || !Self::accepts_relation_endpoint(metadata, false, target.0.is_some())
+        {
+            return Err(metadata.endpoint_instruction.clone());
+        }
         let diagram = snapshot
             .section
             .diagrams
             .iter()
             .find(|diagram| diagram.id == diagram_id)
             .ok_or("diagram not found")?;
-        let source = diagram
-            .all_views()
-            .find(|view| view.id == source_view_id)
-            .ok_or("source View not found in diagram")?;
-        let target = diagram
-            .all_views()
-            .find(|view| view.id == target_view_id)
-            .ok_or("target View not found in diagram")?;
-        let owner_id = match kind {
-            Kind::Generalization
-            | Kind::InterfaceRealization
-            | Kind::TemplateBinding
-            | Kind::Include
-            | Kind::Extend
-            | Kind::ElementImport
-            | Kind::PackageImport
-            | Kind::PackageMerge
-            | Kind::Manifestation
-            | Kind::Deployment => source.subject.clone(),
-            // A diagram or root is not an explicit choice of semantic owner.
-            _ => None,
+        let resolve = |id: Option<&str>| -> Result<_, String> {
+            id.map(|id| {
+                diagram
+                    .all_views()
+                    .find(|view| view.id == id)
+                    .ok_or_else(|| "The selected View no longer exists in this diagram".to_owned())
+            })
+            .transpose()
         };
-        self.submit(MdeUiCommand::CreateRelationAtViewsOrVisualDraft(
-            bellatrix_mde_cordis::ModelingCreateRelationAtViewsRequested {
-                project_id: self.project_id.clone(),
-                diagram_id: diagram_id.into(),
-                owner_id,
-                kind,
-                source_view_id: source_view_id.into(),
-                target_view_id: target_view_id.into(),
-                from: source.subject.clone(),
-                to: target.subject.clone(),
-                expected_revision,
+        let source_view = resolve(source.0)?;
+        let target_view = resolve(target.0)?;
+        if !visual_draft && !metadata.is_visual_only {
+            let (Some(source_view), Some(target_view)) = (source_view, target_view) else {
+                return Err("Semantic relationships require two endpoint Views".into());
+            };
+            let owner_id = match kind {
+                Kind::Generalization
+                | Kind::InterfaceRealization
+                | Kind::TemplateBinding
+                | Kind::Include
+                | Kind::Extend
+                | Kind::ElementImport
+                | Kind::PackageImport
+                | Kind::PackageMerge
+                | Kind::Manifestation
+                | Kind::Deployment => source_view.subject.clone(),
+                // A diagram or root is not an explicit choice of semantic owner.
+                _ => None,
+            };
+            return self.submit(MdeUiCommand::CreateRelationAtViewsOrVisualDraft(
+                bellatrix_mde_cordis::ModelingCreateRelationAtViewsRequested {
+                    project_id: self.project_id.clone(),
+                    diagram_id: diagram_id.into(),
+                    owner_id,
+                    kind,
+                    source_view_id: source_view.id.clone(),
+                    target_view_id: target_view.id.clone(),
+                    from: source_view.subject.clone(),
+                    to: target_view.subject.clone(),
+                    expected_revision,
+                },
+            ));
+        }
+        let locate = |view: Option<&bellatrix_mde_cordis::projection::View>, point| match view {
+            Some(view) => {
+                crate::workbench_ui::visual_draft_canvas::resolve_visual_center(&view.geometry)
+            }
+            None => point,
+        };
+        let (Some(start), Some(to)) =
+            (locate(source_view, source.1), locate(target_view, target.1))
+        else {
+            return Err("The selected endpoints do not have usable connection geometry".into());
+        };
+        let mut properties = std::collections::BTreeMap::new();
+        if metadata.uses_occurrence_anchors
+            && diagram.interaction_kind.as_deref() != Some("communication")
+        {
+            for (key, (view_id, point)) in [("source_anchor", source), ("target_anchor", target)] {
+                if let Some(view_id) = view_id
+                    && let Some(anchor) = point.and_then(|point| {
+                        crate::workbench_ui::visual_draft_canvas::resolve_message_anchor(
+                            &snapshot.section,
+                            diagram,
+                            view_id,
+                            point,
+                        )
+                    })
+                {
+                    properties.insert(key.into(), serde_json::json!({"x":anchor.x,"y":anchor.y}));
+                }
+            }
+        }
+        if let Some(message_kind) = &metadata.message_kind {
+            properties.insert("messageKind".into(), serde_json::json!(message_kind));
+        }
+        let label = metadata.message_sort.as_ref().map(|sort| {
+            properties.insert("messageSort".into(), serde_json::json!(sort));
+            if diagram.interaction_kind.as_deref() == Some("communication") {
+                "1: message()".to_owned()
+            } else {
+                "message()".to_owned()
+            }
+        });
+        self.create_visual_draft(
+            diagram_id,
+            &metadata.model_kind,
+            label,
+            bellatrix_mde_cordis::Geometry::Path {
+                start,
+                segments: vec![bellatrix_mde_cordis::PathSegment::Line { to }],
             },
-        ))
+            properties,
+            None,
+            source.0.map(str::to_owned),
+            target.0.map(str::to_owned),
+            expected_revision,
+        )
     }
 
     pub fn add_member(
