@@ -288,6 +288,80 @@ impl MdeUiSource {
         ))
     }
 
+    pub fn execute_quick_action(
+        &self,
+        element_id: &str,
+        action_id: &str,
+        diagram_id: Option<&str>,
+        view_id: Option<&str>,
+        expected_revision: u64,
+    ) -> Result<(), String> {
+        use bellatrix_mde_cordis::{
+            ModelingMemberKind, QuickEditAvailability, QuickEditControl, UmlQuickCreate,
+        };
+        let snapshot = self.editable_snapshot(expected_revision)?;
+        let element = snapshot
+            .section
+            .elements
+            .iter()
+            .find(|element| element.id == element_id)
+            .ok_or("Element was removed from the model")?;
+        if !element.quick_actions.iter().any(|action| {
+            action.id == action_id
+                && action.availability == QuickEditAvailability::Implemented
+                && action.control == QuickEditControl::Button
+        }) {
+            return Err("This element does not support the quick action".into());
+        }
+        match action_id {
+            "uml.delete-parameter" => return self.delete_element(element_id, expected_revision),
+            "uml.move-parameter-up" | "uml.move-parameter-down" => {
+                return self.move_parameter(
+                    element_id,
+                    action_id == "uml.move-parameter-up",
+                    expected_revision,
+                );
+            }
+            _ => {}
+        }
+        if !self.allows_creation() {
+            return Err("Quick creation is not available for this document".into());
+        }
+        let member = match action_id {
+            "uml.add-attribute" => Some(ModelingMemberKind::Attribute),
+            "uml.add-operation" => Some(ModelingMemberKind::Operation),
+            "uml.add-reception" => Some(ModelingMemberKind::Reception),
+            "uml.add-parameter" => Some(ModelingMemberKind::Parameter),
+            _ => None,
+        };
+        if let Some(kind) = member {
+            return self.add_member(element_id, kind, expected_revision);
+        }
+        let action = match action_id {
+            "uml.add-note" => UmlQuickCreate::Note,
+            "uml.add-constraint" => UmlQuickCreate::Constraint,
+            "uml.add-subinterface" | "uml.add-subclass" => UmlQuickCreate::Subtype,
+            "uml.add-superinterface" | "uml.add-superclass" => UmlQuickCreate::Supertype,
+            "uml.add-realizing-class" => UmlQuickCreate::RealizingClass,
+            "uml.add-template-parameter" => UmlQuickCreate::TemplateParameter,
+            "uml.add-provided-interface" => UmlQuickCreate::ProvidedInterface,
+            "uml.add-required-interface" => UmlQuickCreate::RequiredInterface,
+            "uml.add-associated-class" => UmlQuickCreate::AssociatedClass,
+            "uml.add-aggregated-class" => UmlQuickCreate::AggregatedClass,
+            "uml.add-composited-class" => UmlQuickCreate::CompositedClass,
+            "uml.add-port" => UmlQuickCreate::Port,
+            "uml.add-part" => UmlQuickCreate::Part,
+            _ => return Err("Quick action has no registered command".into()),
+        };
+        self.quick_create(
+            diagram_id.ok_or("Select a diagram for quick creation")?,
+            element_id,
+            view_id,
+            action,
+            expected_revision,
+        )
+    }
+
     pub fn quick_create(
         &self,
         diagram_id: &str,

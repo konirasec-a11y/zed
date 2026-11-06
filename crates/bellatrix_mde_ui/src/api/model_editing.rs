@@ -37,51 +37,13 @@ impl MdeWorkbenchItem {
             cx.notify();
             return;
         }
-        let Ok(snapshot) = self.source.snapshot() else {
-            self.feedback = "Project snapshot unavailable".into();
-            cx.notify();
-            return;
-        };
-        if snapshot.revision != expected_revision {
-            self.feedback = "Parameter action not sent: the model changed; try again".into();
-            cx.notify();
-            return;
-        }
-        let Some(element) = snapshot
-            .section
-            .elements
-            .iter()
-            .find(|element| element.id == element_id)
-        else {
-            self.feedback = "Element was removed from the model".into();
-            cx.notify();
-            return;
-        };
-        if !quick_edit_view::parameter_actions(&element.quick_actions)
-            .iter()
-            .any(|(_, available)| *available == action)
-        {
-            self.feedback = "This element does not support the parameter action".into();
-            cx.notify();
-            return;
-        }
-        if matches!(action, ParameterAction::Add) && !self.source.allows_creation() {
-            self.feedback = "Parameter creation is not available for this document".into();
-            cx.notify();
-            return;
-        }
-        let result = match action {
-            ParameterAction::Add => self.source.add_member(
-                &element_id,
-                ModelingMemberKind::Parameter,
-                expected_revision,
-            ),
-            ParameterAction::Delete => self.source.delete_element(&element_id, expected_revision),
-            ParameterAction::Move { up } => {
-                self.source
-                    .move_parameter(&element_id, up, expected_revision)
-            }
-        };
+        let result = self.source.execute_quick_action(
+            &element_id,
+            action.id(),
+            None,
+            None,
+            expected_revision,
+        );
         self.report_command_result(result, cx);
     }
 

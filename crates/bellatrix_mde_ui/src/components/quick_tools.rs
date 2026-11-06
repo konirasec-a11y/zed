@@ -2,8 +2,7 @@
 use crate::elements::uml::{UmlQuickAction, UmlQuickEdit, UmlVisibilityPicker};
 use crate::workbench_ui::MdeWorkbenchItem;
 use bellatrix_mde_cordis::{
-    ModelingMemberKind, QuickEditAction, QuickEditAvailability, QuickEditControl, QuickEditSide,
-    UmlQuickCreate,
+    QuickEditAction, QuickEditAvailability, QuickEditControl, QuickEditSide,
     projection::{Element, ModelingProjection, Relation},
 };
 use bellatrix_project::ProjectId;
@@ -34,6 +33,15 @@ impl ParameterAction {
             "uml.move-parameter-up" => Some(Self::Move { up: true }),
             "uml.move-parameter-down" => Some(Self::Move { up: false }),
             _ => None,
+        }
+    }
+
+    pub(crate) fn id(self) -> &'static str {
+        match self {
+            Self::Add => "uml.add-parameter",
+            Self::Delete => "uml.delete-parameter",
+            Self::Move { up: true } => "uml.move-parameter-up",
+            Self::Move { up: false } => "uml.move-parameter-down",
         }
     }
 
@@ -137,60 +145,7 @@ pub(crate) fn quick_edit_for_element(
         let target = target.clone();
         Some(
             UmlQuickEdit::new(actions, move |id, _, cx| {
-                if owner
-                    .update(cx, |item, cx| item.quick_edit_snapshot(&target, cx))
-                    .is_none()
-                {
-                    return;
-                }
-                if let Some(action) = ParameterAction::from_id(id) {
-                    owner.update(cx, |item, cx| {
-                        item.run_parameter_action(
-                            action,
-                            target.project.clone(),
-                            target.element.clone(),
-                            target.revision,
-                            cx,
-                        );
-                    });
-                    return;
-                }
-                match id {
-                    "uml.add-attribute" | "uml.add-operation" | "uml.add-reception" => {
-                        let kind = match id {
-                            "uml.add-attribute" => ModelingMemberKind::Attribute,
-                            "uml.add-operation" => ModelingMemberKind::Operation,
-                            _ => ModelingMemberKind::Reception,
-                        };
-                        owner.update(cx, |item, cx| {
-                            let result =
-                                item.source
-                                    .add_member(&target.element, kind, target.revision);
-                            item.report_command_result(result, cx);
-                        });
-                    }
-                    id => {
-                        let action = match id {
-                            "uml.add-note" => UmlQuickCreate::Note,
-                            "uml.add-constraint" => UmlQuickCreate::Constraint,
-                            "uml.add-subinterface" | "uml.add-subclass" => UmlQuickCreate::Subtype,
-                            "uml.add-superinterface" | "uml.add-superclass" => {
-                                UmlQuickCreate::Supertype
-                            }
-                            "uml.add-realizing-class" => UmlQuickCreate::RealizingClass,
-                            "uml.add-template-parameter" => UmlQuickCreate::TemplateParameter,
-                            "uml.add-provided-interface" => UmlQuickCreate::ProvidedInterface,
-                            "uml.add-required-interface" => UmlQuickCreate::RequiredInterface,
-                            "uml.add-associated-class" => UmlQuickCreate::AssociatedClass,
-                            "uml.add-aggregated-class" => UmlQuickCreate::AggregatedClass,
-                            "uml.add-composited-class" => UmlQuickCreate::CompositedClass,
-                            "uml.add-port" => UmlQuickCreate::Port,
-                            "uml.add-part" => UmlQuickCreate::Part,
-                            _ => return,
-                        };
-                        owner.update(cx, |item, cx| item.run_quick_action(action, &target, cx));
-                    }
-                }
+                owner.update(cx, |item, cx| item.run_quick_action(id, &target, cx));
             })
             .side(role),
         )

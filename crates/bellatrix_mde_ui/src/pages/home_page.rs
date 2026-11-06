@@ -63,7 +63,7 @@ pub use symbol_library::MdeSymbolLibraryItem;
 pub use theme::WorkbenchPalette;
 
 use crate::elements::uml::{UmlClassifier, UmlFigure, UmlLineSegment, UmlRelationGlyph};
-use bellatrix_mde_cordis::{Geometry, ModelingRelationKind, PathSegment, UmlQuickCreate};
+use bellatrix_mde_cordis::{Geometry, ModelingRelationKind, PathSegment};
 use bellatrix_mde_cordis::{ModelingElementKind, ModelingMemberKind, ModelingTool};
 use bellatrix_project::ProjectId;
 use gpui::{
@@ -605,23 +605,18 @@ impl MdeWorkbenchItem {
 
     pub(crate) fn run_quick_action(
         &mut self,
-        action: UmlQuickCreate,
+        action: &str,
         target: &QuickEditTarget,
         cx: &mut Context<Self>,
     ) {
-        if !self.source.allows_creation() {
-            self.feedback = "Quick creation is not available for this document".into();
-            cx.notify();
-            return;
-        }
         let Some(snapshot) = self.quick_edit_snapshot(target, cx) else {
             return;
         };
-        let result = self.source.quick_create(
-            &target.diagram,
+        let result = self.source.execute_quick_action(
             &target.element,
-            target.view.as_deref(),
             action,
+            Some(&target.diagram),
+            target.view.as_deref(),
             snapshot.revision,
         );
         self.report_command_result(result, cx);
