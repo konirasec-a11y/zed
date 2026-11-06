@@ -844,6 +844,18 @@ pub(crate) fn reparent(
         if owner.metaclass().is_none() {
             return Err("UML ownership requires a supported owner metaclass".into());
         }
+        // UML Element::not_own_self applies transitively, including nested Models.
+        let mut ancestor = Some(owner);
+        let mut visited = HashSet::new();
+        while let Some(current) = ancestor {
+            if current.id() == element_id {
+                return Err("An Element cannot own itself, directly or indirectly".into());
+            }
+            if !visited.insert(current.id()) {
+                return Err("The destination has cyclic UML ownership".into());
+            }
+            ancestor = model.owner(current)?;
+        }
         let role = ownership_property_for_assignment(owner, element)?;
         next_inverse_fields = ownership_inverse_fields(owner, element, role);
         if let Some(ownership) = section
