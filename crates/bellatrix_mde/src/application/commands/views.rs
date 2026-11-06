@@ -281,7 +281,7 @@ pub(super) fn create_draft(
         .into_iter()
         .flatten()
     {
-        if !diagram.views.iter().any(|view| &view.id == identifier) {
+        if !diagram.all_views().any(|view| &view.id == identifier) {
             return Err(format!(
                 "referenced view not found in diagram: {identifier}"
             ));
@@ -350,7 +350,7 @@ pub(super) fn set_endpoints(
         .into_iter()
         .flatten()
     {
-        if identifier == view_id || !diagram.views.iter().any(|view| &view.id == identifier) {
+        if identifier == view_id || !diagram.all_views().any(|view| &view.id == identifier) {
             return Err(format!("invalid endpoint View in diagram: {identifier}"));
         }
     }

@@ -124,13 +124,11 @@ pub(crate) fn apply_with_diagram_operations(
             .find(|diagram| diagram.id == *diagram_id)
             .ok_or("diagram not found")?;
         let source = diagram
-            .views
-            .iter()
+            .all_views()
             .find(|view| view.id == *source_view_id)
             .ok_or("source View not found in diagram")?;
         let target = diagram
-            .views
-            .iter()
+            .all_views()
             .find(|view| view.id == *target_view_id)
             .ok_or("target View not found in diagram")?;
         if source.subject != *from || target.subject != *to {
@@ -208,13 +206,11 @@ pub(crate) fn apply_with_diagram_operations(
             .find(|diagram| diagram.id == *diagram_id)
             .ok_or("diagram not found")?;
         let source = diagram
-            .views
-            .iter()
+            .all_views()
             .find(|view| view.subject.as_ref() == Some(from))
             .ok_or("source view not found")?;
         let target = diagram
-            .views
-            .iter()
+            .all_views()
             .find(|view| view.subject.as_ref() == Some(to))
             .ok_or("target view not found")?;
         return apply_with_diagram_operations(

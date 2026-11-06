@@ -69,7 +69,7 @@ impl MdeWorkbenchItem {
         };
         let target_view = target
             .as_deref()
-            .and_then(|id| diagram.views.iter().find(|view| view.id == id));
+            .and_then(|id| diagram.all_views().find(|view| view.id == id));
         if target.is_some() && target_view.is_none() {
             self.feedback = "The clicked View no longer exists in this diagram".into();
             cx.notify();
@@ -116,7 +116,7 @@ impl MdeWorkbenchItem {
         let source_view = source
             .view_id
             .as_deref()
-            .and_then(|id| diagram.views.iter().find(|view| view.id == id));
+            .and_then(|id| diagram.all_views().find(|view| view.id == id));
         if source.view_id.is_some()
             && source_view.is_none_or(|view| view.subject != source.subject_id)
         {
