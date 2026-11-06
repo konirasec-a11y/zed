@@ -62,10 +62,10 @@ pub use source::MdeUiSource;
 pub use symbol_library::MdeSymbolLibraryItem;
 pub use theme::WorkbenchPalette;
 
+use crate::elements::uml::{UmlClassifier, UmlFigure, UmlLineSegment, UmlRelationGlyph};
 use bellatrix_mde_cordis::{Geometry, ModelingRelationKind, PathSegment, UmlQuickCreate};
 use bellatrix_mde_cordis::{ModelingElementKind, ModelingMemberKind, ModelingTool};
 use bellatrix_project::ProjectId;
-use crate::elements::uml::{UmlClassifier, UmlFigure, UmlLineSegment, UmlRelationGlyph};
 use gpui::{
     App, AppContext, Context, DragMoveEvent, Entity, EventEmitter, FocusHandle, Focusable,
     IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,

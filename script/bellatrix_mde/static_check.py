@@ -133,7 +133,7 @@ def check() -> None:
     shared_style = (ROOT / "crates/bellatrix_mde_ui/src/elements/uml/class.rs").read_text(encoding="utf-8")
     assert "palette.diagram_outline(false)" in shared_style
     assert "rgb(palette.selection)" in shared_style
-    assert workbench.count(".view_style(&view.style)") == 3, "Every native shape/edge renderer must receive its View style"
+    assert workbench.count(".view_style(&render_style)") == 3, "Every native shape/edge renderer must receive its resolved View style"
 
     zed_main = (ROOT / "crates/zed/src/main.rs").read_text(encoding="utf-8")
     assert "initialize_workspace(app_state.clone(), cx);" in zed_main

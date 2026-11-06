@@ -7,4 +7,3 @@ pub use workbench_ui::{
     MdeWorkbenchItem, NativeDocumentImporter, NativeDocumentLease, WorkbenchPalette,
     open_in_workspace, panels, register_mde_workspace,
 };
-

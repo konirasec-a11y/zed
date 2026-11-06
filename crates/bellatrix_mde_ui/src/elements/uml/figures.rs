@@ -1,5 +1,7 @@
 //! Non-classifier notations share editing, but not the classifier silhouette.
-use crate::elements::uml::figure_geometry::{paint_folded_paper, paint_notation, port_label_layout};
+use crate::elements::uml::figure_geometry::{
+    paint_folded_paper, paint_notation, port_label_layout,
+};
 use crate::elements::uml::{
     class::{MemberInteractions, MemberRow, UmlClassifier, ViewAppearance, template_signature},
     inline_edit::UmlInlineNameEditor,

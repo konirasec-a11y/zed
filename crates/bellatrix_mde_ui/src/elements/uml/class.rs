@@ -563,7 +563,8 @@ pub(crate) fn template_signature(
     palette: Palette,
     selected: bool,
 ) -> Option<gpui::AnyElement> {
-    let layout = crate::elements::uml::figure_geometry::template_signature_layout(body_width, rows.len())?;
+    let layout =
+        crate::elements::uml::figure_geometry::template_signature_layout(body_width, rows.len())?;
     let scale = interactions.scale;
     let appearance = interactions.appearance.clone();
     Some(
