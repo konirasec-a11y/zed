@@ -152,6 +152,7 @@ fn explorer_move_menu(
 fn explorer_menu(
     owner: &Entity<MdeWorkbenchItem>,
     subject: &str,
+    occurrence: Option<(String, String)>,
     panel: gpui::WeakEntity<MdeRightPanel>,
     row_key: String,
     window: &mut Window,
@@ -163,7 +164,7 @@ fn explorer_menu(
     let snapshot = owner.read(cx).source().snapshot().ok();
     if let Some(snapshot) = &snapshot {
         for diagram in &snapshot.section.diagrams {
-            for (index, view) in diagram.views.iter().enumerate() {
+            for (index, view) in diagram.all_views().enumerate() {
                 if view.subject.as_deref() == Some(subject) {
                     occurrences.push((
                         diagram.id.clone(),
@@ -190,6 +191,14 @@ fn explorer_menu(
         }
         if read_only {
             return menu.header("Read-only preview");
+        }
+        if let Some((diagram_id, view_id)) = occurrence {
+            let remove_owner = owner.clone();
+            menu = menu.entry("Remove from diagram", None, move |_, cx| {
+                remove_owner.update(cx, |workbench, cx| {
+                    workbench.remove_view(diagram_id.clone(), view_id.clone(), cx)
+                });
+            });
         }
         if let Some(snapshot) = &snapshot {
             menu = explorer_creation_menus(
@@ -1258,9 +1267,24 @@ impl Render for MdeRightPanel {
                                     workbench.select_diagram_view(menu_diagram.clone(), menu_view.clone(), cx);
                                 });
                                 if let Some(subject) = &menu_subject {
-                                    explorer_menu(&menu_owner, subject, member_menu_panel.clone(), member_menu_key.clone(), window, cx)
+                                    explorer_menu(&menu_owner, subject, Some((menu_diagram.clone(), menu_view.clone())), member_menu_panel.clone(), member_menu_key.clone(), window, cx)
                                 } else {
-                                    ui::ContextMenu::build(window, cx, |menu, _, _| menu.header("Visual component"))
+                                    let remove_owner = menu_owner.clone();
+                                    let remove_diagram = menu_diagram.clone();
+                                    let remove_view = menu_view.clone();
+                                    let read_only = remove_owner.read(cx).source().is_read_only()
+                                        || remove_owner.read(cx).source().is_presentation_suspended();
+                                    ui::ContextMenu::build(window, cx, move |menu, _, _| {
+                                        let menu = menu.header("Visual component");
+                                        if read_only {
+                                            return menu.header("Read-only preview");
+                                        }
+                                        menu.entry("Remove from diagram", None, move |_, cx| {
+                                            remove_owner.update(cx, |workbench, cx| {
+                                                workbench.remove_view(remove_diagram.clone(), remove_view.clone(), cx)
+                                            });
+                                        })
+                                    })
                                 }
                             })
                         )));
@@ -1509,7 +1533,7 @@ impl Render for MdeRightPanel {
                                         }
                                         workbench.select_explorer_element(menu_subject.clone(), menu_selection_key.clone(), menu_selection_occurrence.clone(), cx);
                                     });
-                                    explorer_menu(&menu_owner, &menu_subject, member_menu_panel.clone(), member_menu_key.clone(), window, cx)
+                                    explorer_menu(&menu_owner, &menu_subject, None, member_menu_panel.clone(), member_menu_key.clone(), window, cx)
                                 }),
                             ),
                         ),

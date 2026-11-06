@@ -91,8 +91,8 @@ pub(crate) fn selection_occurrence(
     diagram: Option<&str>,
     preferred_view: Option<&str>,
 ) -> Option<(String, ViewOccurrence)> {
-    // Canvas selection keeps its exact occurrence even when the Explorer has
-    // just one row for a subject pictured in several diagrams or views.
+    // A semantic identity can have several diagram occurrences. Select the
+    // exact diagram/view row rather than the first row with the same subject.
     if let Some(diagram) = diagram.and_then(|id| section.diagrams.iter().find(|item| item.id == id))
     {
         let views = diagram
@@ -109,11 +109,11 @@ pub(crate) fn selection_occurrence(
             return None;
         }
         if let Some(view) = chosen {
-            let row = section
-                .explorer
-                .added
-                .iter()
-                .find(|row| !row.diagram && row.element_id == subject)?;
+            let row = section.explorer.added.iter().find(|row| {
+                row.view.as_ref().is_some_and(|occurrence| {
+                    occurrence.diagram_id == diagram.id && occurrence.view_id == view.id
+                })
+            })?;
             return Some((
                 row.key.clone(),
                 ViewOccurrence {

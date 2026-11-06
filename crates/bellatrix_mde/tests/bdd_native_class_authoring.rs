@@ -254,8 +254,17 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
         .iter()
         .filter(|row| row.element_id == invoice)
         .collect::<Vec<_>>();
-    assert_eq!(invoice_rows.len(), 1);
-    assert_eq!(invoice_rows[0].depth, 2);
+    assert_eq!(invoice_rows.len(), 2);
+    assert!(
+        invoice_rows
+            .iter()
+            .any(|row| row.view.is_none() && row.depth == 1)
+    );
+    assert!(
+        invoice_rows
+            .iter()
+            .any(|row| row.view.is_some() && row.depth == 2)
+    );
     assert_eq!(explorer[0].element_id, "model");
     assert_eq!(explorer[1].element_id, "classes");
     let before_delete = flow.document.section_json.clone();
@@ -911,19 +920,32 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
         .iter()
         .filter(|row| row.element_id == invoice)
         .collect::<Vec<_>>();
-    assert_eq!(invoice_rows.len(), 1);
+    assert_eq!(
+        invoice_rows.iter().filter(|row| row.view.is_some()).count(),
+        1
+    );
+    let invoice_semantic = invoice_rows
+        .iter()
+        .find(|row| row.key == format!("semantic:{invoice}"))
+        .ok_or("missing semantic owner row")?;
     let nested_row = explorer
         .iter()
-        .find(|row| row.element_id == nested)
+        .find(|row| row.key == format!("semantic:{nested}"))
         .ok_or("missing owned classifier in Explorer")?;
-    assert_eq!(nested_row.depth, invoice_rows[0].depth + 1);
+    assert_eq!(nested_row.depth, invoice_semantic.depth + 1);
     assert_eq!(
         explorer
             .iter()
-            .filter(|row| row.element_id == exportable)
+            .filter(|row| row.element_id == exportable && row.view.is_some())
             .count(),
-        1,
-        "one semantic ID has one Explorer row even with multiple authored views"
+        authored
+            .diagrams
+            .iter()
+            .flat_map(|diagram| diagram.all_views())
+            .filter(|view| view.subject.as_deref() == Some(exportable.as_str())
+                && !view.presentation.internal)
+            .count(),
+        "each visible occurrence remains distinct from semantic ownership"
     );
 
     let mut multi_diagram = NativeAuthoring {
@@ -964,47 +986,42 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
     let projection = multi_diagram.projection()?;
     for rows in [&projection.explorer.added, &projection.explorer.name] {
         let mut identities = BTreeSet::new();
-        for row in rows.iter().filter(|row| {
-            !row.diagram
-                && row
-                    .view
-                    .as_ref()
-                    .is_none_or(|view| view.subject_id.is_some())
-        }) {
+        for row in rows {
             assert!(
-                identities.insert(row.element_id.clone()),
-                "duplicated Explorer ID {}",
-                row.element_id
+                identities.insert(row.key.clone()),
+                "duplicated Explorer key {}",
+                row.key
+            );
+        }
+        for subject in [&invoice, &same_name] {
+            assert_eq!(
+                rows.iter()
+                    .filter(|row| row.key == format!("semantic:{subject}"))
+                    .count(),
+                1
             );
         }
         assert_eq!(
-            rows.iter().filter(|row| row.element_id == invoice).count(),
-            1
+            rows.iter()
+                .filter(|row| row.element_id == invoice && row.view.is_some())
+                .count(),
+            2
         );
         assert_eq!(
             rows.iter()
-                .filter(|row| row.element_id == same_name)
+                .filter(|row| row.element_id == same_name && row.view.is_some())
                 .count(),
             1
         );
     }
     for row in &projection.explorer.added {
-        if !row.diagram
-            && row
-                .view
-                .as_ref()
-                .is_none_or(|view| view.subject_id.is_some())
-        {
-            assert_eq!(
-                projection
-                    .explorer
-                    .name
-                    .iter()
-                    .find(|candidate| candidate.element_id == row.element_id)
-                    .map(|candidate| &candidate.key),
-                Some(&row.key)
-            );
-        }
+        assert!(
+            projection
+                .explorer
+                .name
+                .iter()
+                .any(|candidate| candidate.key == row.key)
+        );
     }
     assert_eq!(multi_diagram.document.section_json, before_projection);
     assert_eq!(
