@@ -299,6 +299,8 @@ fn canonical_name(name: &str) -> String {
         })
         .collect();
     match name.as_str() {
+        "Choice" | "Junction" | "StateFork" | "StateJoin" | "ShallowHistory" | "DeepHistory"
+        | "EntryPoint" | "ExitPoint" | "Terminate" => "Pseudostate".into(),
         "Metaclass" => "MetaClass".into(),
         "Property" => "Attribute".into(),
         "InstanceSpecification" => "Object".into(),
@@ -325,13 +327,13 @@ fn canonical_name(name: &str) -> String {
         "FlowFinal" => "FlowFinalNode".into(),
         "Partition" => "ActivityPartition".into(),
         "InitialPseudostate" => "Pseudostate".into(),
-        "History" => "ShallowHistory".into(),
+        "History" => "Pseudostate".into(),
         "Execution" => "BehaviorExecutionSpecification".into(),
         "SubjectBoundary" => "Frame".into(),
         "ActorLifeline" => "Actor".into(),
         "InteractionOverview" => "Interaction".into(),
         "TimingFrame" => "Frame".into(),
-        "Fork/Join" => "ForkNode".into(),
+        "Fork/Join" => "Pseudostate".into(),
         "StateMachineDiagram" => "StatechartDiagram".into(),
         "InteractionDiagram" => "SequenceDiagram".into(),
         "Label" => "Text".into(),

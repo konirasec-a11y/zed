@@ -90,7 +90,18 @@ impl RenderOnce for SymbolGallery {
                                         .render_icon(24.0, cx.theme().colors().panel_background)
                                     } else {
                                         svg()
-                                            .data(crate::assets::icons::glyph(symbol.kind))
+                                            .data(
+                                                symbol
+                                                    .kind
+                                                    .map(crate::assets::icons::glyph)
+                                                    .unwrap_or_else(|| {
+                                                        crate::assets::icons::uml_icon(
+                                                            symbol.label,
+                                                            false,
+                                                        )
+                                                        .0
+                                                    }),
+                                            )
                                             .size(px(24.0))
                                             .text_color(rgb(p.muted))
                                     })

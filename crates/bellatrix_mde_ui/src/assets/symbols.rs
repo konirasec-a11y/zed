@@ -83,7 +83,7 @@ pub enum ShapeKind {
 pub struct Symbol {
     pub id: &'static str,
     pub label: &'static str,
-    pub kind: ShapeKind,
+    pub kind: Option<ShapeKind>,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SymbolGroup {
