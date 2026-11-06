@@ -1506,15 +1506,20 @@ fn remove_element(section: &mut ModelingSection, id: &str) -> Result<(), String>
         }
         return Err("element not found or structural link cannot be deleted directly".into());
     }
+    // Ownership is immutable until the closure is complete. Resolve every element
+    // in model order, including unrelated ones, to preserve the first owner error
+    // without repeating the same graph scans on each fixed-point iteration.
+    let mut ownership = Vec::new();
+    for element in semantic.elements() {
+        if let Some(owner) = semantic.owner(element)? {
+            ownership.push((element.id(), owner.id()));
+        }
+    }
     let mut deleted = HashSet::from([id.to_owned()]);
     loop {
         let mut changed = false;
-        for element in semantic.elements() {
-            if semantic
-                .owner(element)?
-                .is_some_and(|owner| deleted.contains(owner.id()))
-                && deleted.insert(element.id().to_owned())
-            {
+        for &(element_id, owner_id) in &ownership {
+            if deleted.contains(owner_id) && deleted.insert(element_id.to_owned()) {
                 changed = true;
             }
         }
