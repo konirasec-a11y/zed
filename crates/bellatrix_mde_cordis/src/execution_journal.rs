@@ -3,9 +3,9 @@ use crate::ModelingExecutionTrace;
 use crate::{ExecutionEvent, TraceOutcome, TracePhase};
 pub use bellatrix_mde_contracts::events::ExecutionJournalSnapshot;
 use std::{
-    collections::VecDeque,
+    collections::BTreeMap,
     sync::{
-        Mutex,
+        Arc, Mutex, Weak,
         atomic::{AtomicU64, Ordering},
     },
     time::Instant,
@@ -17,17 +17,63 @@ static NEXT_UI_SESSION: AtomicU64 = AtomicU64::new(1);
 const CAPACITY: usize = 2_000;
 const LOSS_NOTICE_CAPACITY: usize = 100;
 
+#[derive(Default)]
+pub(crate) struct ExecutionJournals {
+    journals: Mutex<BTreeMap<bellatrix_project::ProjectId, Weak<ExecutionJournal>>>,
+}
+
+impl cordis::Service for ExecutionJournals {
+    const NAME: &'static str = "bellatrix/mde-execution-journals/v1";
+}
+
+impl ExecutionJournals {
+    pub(crate) fn journal(
+        &self,
+        project_id: &bellatrix_project::ProjectId,
+    ) -> Arc<ExecutionJournal> {
+        let mut journals = self
+            .journals
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if let Some(journal) = journals.get(project_id).and_then(Weak::upgrade) {
+            return journal;
+        }
+        journals.retain(|_, journal| journal.strong_count() > 0);
+        let journal = Arc::new(ExecutionJournal::new(project_id.clone()));
+        journals.insert(project_id.clone(), Arc::downgrade(&journal));
+        journal
+    }
+}
+
+pub(crate) fn register(context: &cordis::Context) -> Result<(), std::io::Error> {
+    let journals = Arc::new(ExecutionJournals::default());
+    let _service = context
+        .provide(Arc::clone(&journals))
+        .map_err(|error| std::io::Error::other(error.to_string()))?;
+    let _listener = context
+        .on::<crate::ModelingExecutionTraceEvent, _>(cordis::event::observer_sync(
+            move |_, batch: ModelingExecutionTrace| {
+                journals.journal(&batch.project_id).append(batch);
+                Ok::<_, std::convert::Infallible>(())
+            },
+        ))
+        .map_err(|error| std::io::Error::other(error.to_string()))?;
+    Ok(())
+}
+
 pub struct ExecutionJournal {
+    project_id: bellatrix_project::ProjectId,
     state: Mutex<ExecutionJournalSnapshot>,
     changes: watch::Sender<u64>,
     interaction_run: String,
     interaction_started: Instant,
     interaction_sequence: AtomicU64,
 }
-impl Default for ExecutionJournal {
-    fn default() -> Self {
+impl ExecutionJournal {
+    pub fn new(project_id: bellatrix_project::ProjectId) -> Self {
         let (changes, _) = watch::channel(0);
         Self {
+            project_id,
             state: Mutex::new(ExecutionJournalSnapshot::default()),
             changes,
             interaction_run: format!("ui-{}", NEXT_UI_SESSION.fetch_add(1, Ordering::Relaxed)),
@@ -39,6 +85,9 @@ impl Default for ExecutionJournal {
 impl ExecutionJournal {
     pub fn append(&self, batch: ModelingExecutionTrace) {
         let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+        // Every producer reaches this boundary once; the panel and stderr are consumers,
+        // not independent histories. Keep publication in the same order as retention.
+        crate::trace_output::write(&batch);
         if batch.dropped > 0 {
             state.producer_dropped_events =
                 state.producer_dropped_events.saturating_add(batch.dropped);
@@ -65,7 +114,6 @@ impl ExecutionJournal {
         identity: Option<&str>,
         outcome: TraceOutcome,
     ) {
-        let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
         let event = ExecutionEvent {
             run_id: self.interaction_run.clone(),
             revision: Some(revision.to_string()),
@@ -84,14 +132,14 @@ impl ExecutionJournal {
             message: None,
             context: Default::default(),
         };
-        if state.events.len() == CAPACITY {
-            state.events.pop_front();
-            state.evicted_events = state.evicted_events.saturating_add(1);
-        }
-        state.events.push_back(event);
-        state.version = state.version.saturating_add(1);
-        self.changes.send_replace(state.version);
+        self.append(ModelingExecutionTrace {
+            project_id: self.project_id.clone(),
+            run_id: self.interaction_run.clone(),
+            events: vec![event],
+            dropped: 0,
+        });
     }
+
     /// Retain host operation results through the same bounded trace formatter and journal.
     /// Result messages may contain model data; never pass document bytes or payloads here.
     pub fn record_result<T>(

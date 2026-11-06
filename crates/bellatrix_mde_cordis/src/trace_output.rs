@@ -4,8 +4,9 @@ use bellatrix_mde::MdeExecutionTrace as ExecutionTrace;
 use cordis::{Context, Routing};
 use std::{
     sync::{
-        Arc,
+        Arc, OnceLock,
         atomic::{AtomicU64, Ordering},
+        mpsc::{SyncSender, sync_channel},
     },
     time::Duration,
 };
@@ -25,22 +26,7 @@ pub(crate) fn start(
     });
     let run_id = trace.run_id().to_owned();
     tokio::spawn(async move {
-        let output = std::env::var_os("BELLATRIX_MDE_TRACE").is_none_or(|value| value != "off");
         while let Some(event) = receiver.recv().await {
-            if output {
-                match serde_json::to_value(&event) {
-                    Ok(mut value) => {
-                        if let Some(fields) = value.as_object_mut() {
-                            fields.insert(
-                                "project_id".into(),
-                                serde_json::json!(project_id.as_str()),
-                            );
-                        }
-                        eprintln!("MDE_TRACE {value}");
-                    }
-                    Err(error) => eprintln!("Bellatrix trace serialization error: {error}"),
-                }
-            }
             let delivery = context.emit_parallel::<crate::diagrams::ModelingExecutionTraceEvent>(
                 Routing::Unscoped,
                 crate::diagrams::ModelingExecutionTrace {
@@ -64,12 +50,6 @@ pub(crate) fn start(
         }
         let count = dropped.load(Ordering::Relaxed);
         if count > 0 {
-            if output {
-                eprintln!(
-                    "MDE_TRACE {}",
-                    serde_json::json!({"record_type": "dropped", "project_id": project_id.as_str(), "run_id": run_id, "count": count})
-                );
-            }
             let notice = context.emit_parallel::<crate::diagrams::ModelingExecutionTraceEvent>(
                 Routing::Unscoped,
                 crate::diagrams::ModelingExecutionTrace {
@@ -86,4 +66,74 @@ pub(crate) fn start(
             }
         }
     })
+}
+
+static OUTPUT: OnceLock<Option<SyncSender<crate::ModelingExecutionTrace>>> = OnceLock::new();
+static OUTPUT_DROPPED: AtomicU64 = AtomicU64::new(0);
+
+/// Terminal I/O must not hold up GPUI or retention when stderr is a slow pipe.
+pub(crate) fn write(batch: &crate::ModelingExecutionTrace) {
+    if std::env::var_os("BELLATRIX_MDE_TRACE").is_some_and(|value| value == "off") {
+        return;
+    }
+    let sender = OUTPUT.get_or_init(|| {
+        let (sender, receiver) = sync_channel::<crate::ModelingExecutionTrace>(1024);
+        match std::thread::Builder::new()
+            .name("mde-trace-output".into())
+            .spawn(move || {
+                while let Ok(batch) = receiver.recv() {
+                    write_batch(&batch);
+                    let dropped = OUTPUT_DROPPED.swap(0, Ordering::Relaxed);
+                    if dropped > 0 {
+                        eprintln!(
+                            "MDE_TRACE {}",
+                            serde_json::json!({
+                                "record_type": "terminal_output_dropped", "count": dropped
+                            })
+                        );
+                    }
+                }
+            }) {
+            Ok(_) => Some(sender),
+            Err(error) => {
+                eprintln!("Bellatrix terminal trace worker unavailable: {error}");
+                None
+            }
+        }
+    });
+    if sender
+        .as_ref()
+        .is_none_or(|sender| sender.try_send(batch.clone()).is_err())
+    {
+        OUTPUT_DROPPED.fetch_add(
+            batch.events.len() as u64 + u64::from(batch.dropped > 0),
+            Ordering::Relaxed,
+        );
+    }
+}
+
+fn write_batch(batch: &crate::ModelingExecutionTrace) {
+    for event in &batch.events {
+        match serde_json::to_value(event) {
+            Ok(mut value) => {
+                if let Some(fields) = value.as_object_mut() {
+                    fields.insert(
+                        "project_id".into(),
+                        serde_json::json!(batch.project_id.as_str()),
+                    );
+                }
+                eprintln!("MDE_TRACE {value}");
+            }
+            Err(error) => eprintln!("Bellatrix trace serialization error: {error}"),
+        }
+    }
+    if batch.dropped > 0 {
+        eprintln!(
+            "MDE_TRACE {}",
+            serde_json::json!({
+                "record_type": "dropped", "project_id": batch.project_id.as_str(),
+                "run_id": batch.run_id, "count": batch.dropped
+            })
+        );
+    }
 }

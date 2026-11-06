@@ -41,61 +41,50 @@ impl MdeUiBridge {
         let (validation_tx, validations) = watch::channel(None);
         let (save_tx, saves) = watch::channel(None);
         let (session, submissions) = crate::ui_session::create(projects, document);
-        let journal = Arc::new(crate::ExecutionJournal::default());
+        let journal = context
+            .try_service::<crate::execution_journal::ExecutionJournals>()
+            .map_err(|error| io::Error::other(error.to_string()))?
+            .journal(&project_id);
         let mut listeners = Vec::new();
-        let registration =
-            (|| {
-                let observed = session.clone();
-                let revisions = revision_tx.clone();
-                listeners.push(context.on::<ProjectStateChangedEvent, _>(observer_sync(
-                    move |_, changed: ProjectStateChanged| {
-                        if observed.snapshot().is_ok_and(|document| {
-                            document.id() == &changed.id && document.revision() == changed.revision
-                        }) {
-                            revisions.send_replace(changed.revision);
-                        }
-                        Ok::<_, Infallible>(())
-                    },
-                ))?);
-                let observed = session.clone();
-                let closed_id = project_id.clone();
-                let revisions = revision_tx.clone();
-                listeners.push(context.on::<ProjectClosedEvent, _>(observer_sync(
-                    move |_, closed: ProjectClosed| {
-                        if closed.id == closed_id && observed.matches_session(&closed.session) {
-                            observed.shutdown();
-                            revisions.send_modify(|_| {});
-                        }
-                        Ok::<_, Infallible>(())
-                    },
-                ))?);
-                let observed = session.clone();
-                listeners.push(context.on::<ProjectSavedEvent, _>(observer_sync(
-                    move |_, saved: ProjectSaved| {
-                        if observed
-                            .snapshot()
-                            .is_ok_and(|document| Arc::ptr_eq(&document, &saved.document))
-                        {
-                            save_tx.send_replace(Some(saved.revision));
-                        }
-                        Ok::<_, Infallible>(())
-                    },
-                ))?);
-                let trace_journal = Arc::clone(&journal);
-                let observed = session.clone();
-                listeners.push(context.on::<crate::ModelingExecutionTraceEvent, _>(
-                    observer_sync(move |_, trace: crate::ModelingExecutionTrace| {
-                        if observed
-                            .snapshot()
-                            .is_ok_and(|document| document.id() == &trace.project_id)
-                        {
-                            trace_journal.append(trace);
-                        }
-                        Ok::<_, Infallible>(())
-                    }),
-                )?);
-                Ok::<_, cordis::event::ListenerRegistrationError>(())
-            })();
+        let registration = (|| {
+            let observed = session.clone();
+            let revisions = revision_tx.clone();
+            listeners.push(context.on::<ProjectStateChangedEvent, _>(observer_sync(
+                move |_, changed: ProjectStateChanged| {
+                    if observed.snapshot().is_ok_and(|document| {
+                        document.id() == &changed.id && document.revision() == changed.revision
+                    }) {
+                        revisions.send_replace(changed.revision);
+                    }
+                    Ok::<_, Infallible>(())
+                },
+            ))?);
+            let observed = session.clone();
+            let closed_id = project_id.clone();
+            let revisions = revision_tx.clone();
+            listeners.push(context.on::<ProjectClosedEvent, _>(observer_sync(
+                move |_, closed: ProjectClosed| {
+                    if closed.id == closed_id && observed.matches_session(&closed.session) {
+                        observed.shutdown();
+                        revisions.send_modify(|_| {});
+                    }
+                    Ok::<_, Infallible>(())
+                },
+            ))?);
+            let observed = session.clone();
+            listeners.push(context.on::<ProjectSavedEvent, _>(observer_sync(
+                move |_, saved: ProjectSaved| {
+                    if observed
+                        .snapshot()
+                        .is_ok_and(|document| Arc::ptr_eq(&document, &saved.document))
+                    {
+                        save_tx.send_replace(Some(saved.revision));
+                    }
+                    Ok::<_, Infallible>(())
+                },
+            ))?);
+            Ok::<_, cordis::event::ListenerRegistrationError>(())
+        })();
         if let Err(error) = registration {
             for listener in listeners {
                 listener.remove();

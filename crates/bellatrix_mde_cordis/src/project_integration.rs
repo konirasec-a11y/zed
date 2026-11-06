@@ -33,6 +33,7 @@ impl Plugin for MdePlugin {
         let projects = ctx
             .try_service::<ProjectService>()
             .map_err(|error| io::Error::other(error.to_string()))?;
+        crate::execution_journal::register(&ctx)?;
         crate::headless_operations::register(&ctx)
             .map_err(|error| io::Error::other(error.to_string()))?;
         crate::html_export::register(&ctx).map_err(|error| io::Error::other(error.to_string()))?;
