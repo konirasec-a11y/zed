@@ -1,128 +1,5 @@
 use super::*;
 
-fn tool_glyph(tool: ModelingTool) -> ShapeKind {
-    match tool {
-        ModelingTool::ProvidedInterface => ShapeKind::ProvidedInterface,
-        ModelingTool::RequiredInterface => ShapeKind::RequiredInterface,
-        ModelingTool::Element(kind) => match kind {
-            ModelingElementKind::Port => ShapeKind::Port,
-            ModelingElementKind::Part => ShapeKind::Class,
-            ModelingElementKind::DeploymentSpecification => ShapeKind::Document,
-            ModelingElementKind::CollaborationUse => ShapeKind::Collaboration,
-            ModelingElementKind::DestructionOccurrenceSpecification => ShapeKind::Terminate,
-            ModelingElementKind::Continuation => ShapeKind::State,
-
-            ModelingElementKind::Choice => ShapeKind::Decision,
-            ModelingElementKind::Junction => ShapeKind::Junction,
-            ModelingElementKind::StateFork | ModelingElementKind::StateJoin => ShapeKind::Fork,
-            ModelingElementKind::ShallowHistory => ShapeKind::History,
-            ModelingElementKind::DeepHistory => ShapeKind::DeepHistory,
-            ModelingElementKind::EntryPoint => ShapeKind::EntryPoint,
-            ModelingElementKind::ExitPoint => ShapeKind::FlowFinal,
-            ModelingElementKind::Terminate => ShapeKind::Terminate,
-            ModelingElementKind::InputPin | ModelingElementKind::ValuePin => ShapeKind::InputPin,
-            ModelingElementKind::OutputPin => ShapeKind::OutputPin,
-            ModelingElementKind::InteractionOperand => ShapeKind::InteractionOperand,
-            ModelingElementKind::Class
-            | ModelingElementKind::Template
-            | ModelingElementKind::AssociationClass => ShapeKind::Class,
-            ModelingElementKind::Interface => ShapeKind::Interface,
-            ModelingElementKind::Component => ShapeKind::Component,
-            ModelingElementKind::Artifact => ShapeKind::Document,
-            ModelingElementKind::Enumeration => ShapeKind::Enum,
-            ModelingElementKind::Package
-            | ModelingElementKind::Model
-            | ModelingElementKind::Subsystem => ShapeKind::Package,
-            ModelingElementKind::Node
-            | ModelingElementKind::Device
-            | ModelingElementKind::ExecutionEnvironment => ShapeKind::Deployment,
-            ModelingElementKind::Collaboration => ShapeKind::Collaboration,
-            ModelingElementKind::UseCase => ShapeKind::Usecase,
-            ModelingElementKind::InstanceSpecification | ModelingElementKind::Stereotype => {
-                ShapeKind::Class
-            }
-            ModelingElementKind::Profile => ShapeKind::Package,
-            ModelingElementKind::Actor => ShapeKind::Actor,
-            ModelingElementKind::Activity => ShapeKind::Activity,
-            ModelingElementKind::StateMachine => ShapeKind::State,
-            ModelingElementKind::Interaction | ModelingElementKind::InteractionUse => {
-                ShapeKind::Boundary
-            }
-            ModelingElementKind::CombinedFragment => ShapeKind::CombinedFragment,
-            ModelingElementKind::Region | ModelingElementKind::ActivityPartition => {
-                ShapeKind::Partition
-            }
-            ModelingElementKind::OpaqueAction => ShapeKind::Activity,
-            ModelingElementKind::SendSignalAction => ShapeKind::SendSignal,
-            ModelingElementKind::AcceptEventAction => ShapeKind::AcceptEvent,
-            ModelingElementKind::InitialNode | ModelingElementKind::Pseudostate => {
-                ShapeKind::InitialNode
-            }
-            ModelingElementKind::ActivityFinalNode | ModelingElementKind::FinalState => {
-                ShapeKind::FinalNode
-            }
-            ModelingElementKind::FlowFinalNode => ShapeKind::FlowFinal,
-            ModelingElementKind::State | ModelingElementKind::StateInvariant => ShapeKind::State,
-            ModelingElementKind::DecisionNode | ModelingElementKind::MergeNode => {
-                ShapeKind::Decision
-            }
-            ModelingElementKind::ForkNode | ModelingElementKind::JoinNode => ShapeKind::Fork,
-            ModelingElementKind::Lifeline => ShapeKind::Lifeline,
-            ModelingElementKind::BehaviorExecutionSpecification => ShapeKind::Execution,
-            ModelingElementKind::CentralBufferNode | ModelingElementKind::DataStoreNode => {
-                ShapeKind::ObjectNode
-            }
-            ModelingElementKind::Comment => ShapeKind::Note,
-            ModelingElementKind::Frame => ShapeKind::Boundary,
-            ModelingElementKind::NaryAssociation => ShapeKind::Aggregate,
-            ModelingElementKind::Signal
-            | ModelingElementKind::DataType
-            | ModelingElementKind::PrimitiveType => ShapeKind::Class,
-        },
-        ModelingTool::Relation(kind) => match kind {
-            ModelingRelationKind::MessageSynchronous => ShapeKind::SynchronousMessage,
-            ModelingRelationKind::MessageAsynchronous => ShapeKind::Message,
-            ModelingRelationKind::MessageReply => ShapeKind::ReplyMessage,
-            ModelingRelationKind::MessageFound => ShapeKind::FoundMessage,
-            ModelingRelationKind::MessageLost => ShapeKind::LostMessage,
-            ModelingRelationKind::GeneralOrdering => ShapeKind::GeneralOrdering,
-
-            ModelingRelationKind::Extension => ShapeKind::Extension,
-            ModelingRelationKind::Connector => ShapeKind::Association,
-            ModelingRelationKind::NoteLink | ModelingRelationKind::ConstraintLink => {
-                ShapeKind::DashedLink
-            }
-            ModelingRelationKind::ElementImport | ModelingRelationKind::ProfileApplication => {
-                ShapeKind::Dependency
-            }
-            ModelingRelationKind::AssociationClassAttachment => {
-                ShapeKind::AssociationClassAttachment
-            }
-            ModelingRelationKind::Usage
-            | ModelingRelationKind::Abstraction
-            | ModelingRelationKind::Include
-            | ModelingRelationKind::Extend
-            | ModelingRelationKind::PackageImport
-            | ModelingRelationKind::PackageMerge
-            | ModelingRelationKind::Deployment
-            | ModelingRelationKind::Manifestation => ShapeKind::Dependency,
-            ModelingRelationKind::ControlFlow
-            | ModelingRelationKind::ObjectFlow
-            | ModelingRelationKind::Transition => ShapeKind::Relation,
-            ModelingRelationKind::Association
-            | ModelingRelationKind::DirectedAssociation
-            | ModelingRelationKind::Containment => ShapeKind::Association,
-            ModelingRelationKind::Aggregation => ShapeKind::Aggregate,
-            ModelingRelationKind::Composition => ShapeKind::Composition,
-            ModelingRelationKind::Generalization | ModelingRelationKind::InterfaceRealization => {
-                ShapeKind::Inheritance
-            }
-            ModelingRelationKind::Dependency
-            | ModelingRelationKind::Realization
-            | ModelingRelationKind::TemplateBinding => ShapeKind::Dependency,
-        },
-    }
-}
 
 pub struct MdeLeftPanel {
     pub(super) state: PanelState,
@@ -799,7 +676,7 @@ fn tool_entry(
         })
         .child(
             svg()
-                .data(glyph(tool_glyph(tool)))
+                .data(bellatrix_ui_uml::UmlVisualDefinition::for_tool(tool).icon())
                 .size(px(20.0))
                 .text_color(if chosen == Some(tool) {
                     palette.selection

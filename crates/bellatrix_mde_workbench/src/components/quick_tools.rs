@@ -117,6 +117,7 @@ pub(crate) fn quick_edit_for_element(
                     id: action.id,
                     label: action.title,
                     icon,
+                    visual: bellatrix_ui_uml::UmlVisualDefinition::for_quick_action(action.id),
                     row: action.row,
                     shortcut: action.shortcut,
                 },
@@ -232,9 +233,8 @@ pub(crate) fn quick_edit_for_relationship(
     window: &mut gpui::Window,
     cx: &mut gpui::App,
 ) -> Option<gpui::AnyElement> {
-    use crate::workbench_ui::{WorkbenchPalette, panels::element_glyph};
+    use crate::workbench_ui::WorkbenchPalette;
     use bellatrix_mde_cordis::PropertyEditor;
-    use bellatrix_ui_symbols::glyph;
     use gpui::{MouseButton, div, prelude::*, px, svg};
     use ui::{ContextMenu, DropdownMenu, Icon, IconButton, Label, Tooltip, prelude::*};
 
@@ -383,10 +383,14 @@ pub(crate) fn quick_edit_for_relationship(
                     .gap_2()
                     .child(
                         svg()
-                            .data(glyph(element_glyph(
-                                &inspection.presentation_kind,
-                                &inspection.type_label,
-                            )))
+                            .data(
+                                bellatrix_ui_uml::UmlVisualDefinition::for_kind(
+                                    &inspection.presentation_kind,
+                                    &inspection.type_label,
+                                    true,
+                                )
+                                .icon(),
+                            )
                             .size(px(16.0))
                             .flex_none()
                             .text_color(palette.muted),

@@ -2306,6 +2306,7 @@ version = "0.1.0"
 dependencies = [
  "bellatrix_design_system",
  "bellatrix_mde_cordis",
+ "bellatrix_ui_symbols",
  "gpui",
  "log",
  "ui",

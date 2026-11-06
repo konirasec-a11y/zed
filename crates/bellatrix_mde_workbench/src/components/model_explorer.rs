@@ -95,102 +95,13 @@ pub(crate) fn explorer_view_icon(
         .child(explorer_element_icon(kind, identity, palette))
 }
 
-pub(crate) fn element_glyph(kind: &str, type_label: &str) -> bellatrix_ui_symbols::ShapeKind {
-    use bellatrix_ui_symbols::ShapeKind;
-    // Member and relationship symbols are metaclass based, never inferred from names.
-    match kind {
-        "uml.composition" => return ShapeKind::Composition,
-        "uml.aggregation" => return ShapeKind::Aggregate,
-        _ => {}
-    }
-    match type_label {
-        "Attribute" | "Property" => return ShapeKind::Aggregate,
-        "Operation" => return ShapeKind::Process,
-        "Reception" => return ShapeKind::AcceptEvent,
-        "Parameter" => return ShapeKind::Input,
-        "Constraint" => return ShapeKind::Note,
-        "Generalization" => return ShapeKind::Inheritance,
-        "Frame" => return ShapeKind::Boundary,
-        "Rectangle" => return ShapeKind::Process,
-        "RoundRect" | "RoundedRectangle" => return ShapeKind::Topic,
-        "Ellipse" => return ShapeKind::Usecase,
-        _ => {}
-    }
-    let label = if kind == "rust.module" {
-        "Package"
-    } else {
-        type_label
-    };
-    bellatrix_ui_symbols::groups(bellatrix_ui_symbols::Family::Uml)
-        .iter()
-        .flat_map(|group| group.items)
-        .find(|symbol| symbol.label.eq_ignore_ascii_case(label))
-        .map(|symbol| symbol.kind)
-        .unwrap_or(ShapeKind::Document)
-}
-
 pub(crate) fn explorer_element_icon(
     kind: &str,
     identity: &bellatrix_mde_cordis::projection::SemanticIdentity,
     palette: &crate::workbench_ui::WorkbenchPalette,
 ) -> impl gpui::IntoElement {
-    use bellatrix_ui_symbols::staruml::{ExplorerIconCategory, explorer_glyph};
-    let imported_name = kind.strip_prefix("mdj.").map(|kind| {
-        let kind = kind.strip_prefix("UML").unwrap_or(kind);
-        kind.strip_suffix("View").unwrap_or(kind)
-    });
-    let name = match kind {
-        "mdj.ERDDataModel" => "Package",
-        "mdj.ERDEntity" => "Class",
-        "mdj.ERDColumn" => "Attribute",
-        "mdj.ERDRelationship" | "mdj.ERDRelationshipEnd" => "Association",
-        "uml.attribute" | "uml.property" | "rust.field" => "Attribute",
-        "uml.part" => "Part",
-        "depends_on" => "Dependency",
-        "uml.composition" => "Composition",
-        "uml.aggregation" => "Aggregation",
-        "uml.nary_association" => "NaryAssociationNode",
-        "uml.instance_specification" => "Object",
-        "uml.comment" => "Note",
-        "uml.opaque_action" | "uml.call_behavior_action" | "uml.call_operation_action" => "Action",
-        "uml.final_node" => "ActivityFinalNode",
-        "uml.initial_node" => "InitialNode",
-        "uml.decision_node" => "DecisionNode",
-        "uml.merge_node" => "MergeNode",
-        "uml.fork_node" => "ForkNode",
-        "uml.join_node" => "JoinNode",
-        "uml.message" => "Message",
-        "rust.module" => "Package",
-        "rust.struct" => "Class",
-        "rust.enum" => "Enumeration",
-        "rust.trait" => "Interface",
-        "rust.function" | "rust.method" => "Operation",
-        _ => imported_name.unwrap_or_else(|| {
-            identity
-                .metaclass
-                .as_deref()
-                .unwrap_or(&identity.type_label)
-        }),
-    };
-    // These are presentation aliases only; opaque source objects keep their
-    // imported identity and never gain canonical UML editing capabilities.
-    let name = match name {
-        "Label" | "NodeLabel" | "EdgeLabel" => "Text",
-        "RoundRect" => "RoundedRectangle",
-        _ => name,
-    };
-    let (data, category) = explorer_glyph(name).unwrap_or_else(|| {
-        let category = if identity.relationship {
-            ExplorerIconCategory::Relation
-        } else {
-            ExplorerIconCategory::Element
-        };
-        (
-            bellatrix_ui_symbols::glyph(element_glyph(kind, name)),
-            category,
-        )
-    });
-    explorer_colored_icon(data, category, palette)
+    let visual = bellatrix_ui_uml::UmlVisualDefinition::for_element(kind, identity);
+    explorer_colored_icon(visual.icon(), visual.category(), palette)
 }
 
 pub(crate) fn explorer_diagram_icon(

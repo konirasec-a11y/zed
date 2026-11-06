@@ -2,14 +2,13 @@
 use crate::workbench_ui::{
     MdeWorkbenchItem, WorkbenchPalette,
     inspector_drafts::{DraftKey, DraftState},
-    panels::{MdeRightPanel, element_glyph},
+    panels::MdeRightPanel,
     quick_edit_view::parameter_actions,
 };
 use bellatrix_mde_cordis::{
     ElementInspector, InspectorProperty, InspectorReferenceChoice, PropertyEditor,
 };
 use bellatrix_project::ProjectId;
-use bellatrix_ui_symbols::glyph;
 use gpui::{AnyElement, Context, Entity, Focusable, IntoElement, Window, div, prelude::*, px, svg};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -952,10 +951,14 @@ pub(crate) fn render_inspector(
             .border_color(palette.border)
             .child(
                 svg()
-                    .data(glyph(element_glyph(
-                        &inspector.presentation_kind,
-                        &inspector.type_label,
-                    )))
+                    .data(
+                        bellatrix_ui_uml::UmlVisualDefinition::for_kind(
+                            &inspector.presentation_kind,
+                            &inspector.type_label,
+                            false,
+                        )
+                        .icon(),
+                    )
                     .size(px(20.0))
                     .flex_none()
                     .text_color(palette.muted),

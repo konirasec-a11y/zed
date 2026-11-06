@@ -15,3 +15,6 @@ pub use inline_edit::UmlInlineNameEditor;
 pub use interface_presentation::render_interface_icon;
 pub use quick_edit::{UmlQuickAction, UmlQuickEdit, UmlVisibilityPicker};
 pub use relationship::{UmlLineSegment, UmlRelationGlyph};
+
+mod visual_definition;
+pub use visual_definition::UmlVisualDefinition;

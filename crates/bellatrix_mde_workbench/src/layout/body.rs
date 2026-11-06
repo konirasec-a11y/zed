@@ -376,7 +376,19 @@ impl Render for MdeWorkbenchItem {
                                     view,
                                     bellatrix_design_system::Palette::current(cx),
                                 );
-                                let glyph = UmlRelationGlyph::new(
+                                let visual = relation
+                                    .map(|relation| {
+                                        bellatrix_ui_uml::UmlVisualDefinition::for_element(
+                                            &relation.kind,
+                                            &snapshot.section.identity(&relation.kind),
+                                        )
+                                    })
+                                    .unwrap_or_else(|| {
+                                        bellatrix_ui_uml::UmlVisualDefinition::for_kind(
+                                            "", "Association", true,
+                                        )
+                                    });
+                                let glyph = visual.relationship(
                                     resolved.style,
                                     width,
                                     height,
@@ -663,7 +675,11 @@ impl Render for MdeWorkbenchItem {
                             view,
                             bellatrix_design_system::Palette::current(cx),
                         );
-                        let mut classifier = UmlClassifier::new(element.name.clone())
+                        let visual = bellatrix_ui_uml::UmlVisualDefinition::for_element(
+                            &element.kind,
+                            &snapshot.section.identity(&element.kind),
+                        );
+                        let mut classifier = visual.classifier(element.name.clone())
                             .authored_contents(authored_contents)
                             .show_internal_structure(
                                 has_nested_views
@@ -787,13 +803,13 @@ impl Render for MdeWorkbenchItem {
                             }
                         }
                         let figure: gpui::AnyElement =
-                            if UmlFigure::supports(&view.figure) || view.interface_icon.is_some() {
+                            if visual.uses_figure(&view.figure) || view.interface_icon.is_some() {
                                 let edit_owner = cx.weak_entity();
                                 let edit_id = element.id.clone();
                                 let edit_diagram = diagram.id.clone();
                                 let edit_view = view.id.clone();
                                 let mut figure =
-                                    UmlFigure::new(view.figure.clone(), view.display_label.clone())
+                                    visual.figure(view.figure.clone(), view.display_label.clone())
                                         .interface_icon(view.interface_icon.clone())
                                         .authored_contents(authored_contents)
                                         .nested_views(has_nested_views)

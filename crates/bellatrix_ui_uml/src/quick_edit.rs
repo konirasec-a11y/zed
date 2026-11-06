@@ -16,6 +16,7 @@ pub struct UmlQuickAction {
     pub id: &'static str,
     pub label: &'static str,
     pub icon: IconName,
+    pub visual: Option<crate::UmlVisualDefinition>,
     pub row: u8,
     pub shortcut: Option<&'static str>,
 }
@@ -47,24 +48,37 @@ impl UmlQuickEdit {
 }
 
 impl RenderOnce for UmlQuickEdit {
-    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         // Preserve the source Quick Edit row indices: Class has four rows,
         // Interface has two. Never collapse specialized rows onto one strip.
         let mut rows: [Vec<gpui::AnyElement>; 4] = std::array::from_fn(|_| Vec::new());
         for action in self.actions {
             let handler = self.handler.clone();
-            let button = IconButton::new(format!("uml-action-{}", action.id), action.icon)
-                .shape(IconButtonShape::Square)
-                .aria_label(action.label)
-                .tooltip(Tooltip::text(match action.shortcut {
-                    Some(keys) => format!("{} ({keys})", action.label),
-                    None => action.label.into(),
-                }))
-                .on_click(move |_, window, cx| {
-                    handler(action.id, window, cx);
-                    cx.stop_propagation();
-                })
-                .into_any_element();
+            let button = if let Some(visual) = action.visual {
+                ui::ButtonLike::new(format!("uml-action-{}", action.id))
+                    .width(ui::IconSize::default().square(window, cx))
+                    .height(ui::IconSize::default().square(window, cx).into())
+                    .child(
+                        gpui::svg()
+                            .data(visual.icon())
+                            .size(gpui::px(16.0))
+                            .text_color(ui::Color::Default.color(cx)),
+                    )
+            } else {
+                IconButton::new(format!("uml-action-{}", action.id), action.icon)
+                    .shape(IconButtonShape::Square)
+                    .render(window, cx)
+            }
+            .aria_label(action.label)
+            .tooltip(Tooltip::text(match action.shortcut {
+                Some(keys) => format!("{} ({keys})", action.label),
+                None => action.label.into(),
+            }))
+            .on_click(move |_, window, cx| {
+                handler(action.id, window, cx);
+                cx.stop_propagation();
+            })
+            .into_any_element();
             let row = usize::from(action.row.saturating_sub(1)).min(3);
             rows[row].push(button);
         }
