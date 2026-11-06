@@ -1,5 +1,5 @@
 //! Bellatrix symbol catalog as a normal Zed Workspace Item.
-//! The public catalog and its SVGs live in crate::assets::symbols; this is a
+//! The catalog lives in crate::assets::symbols and SVGs in crate::assets::icons; this is a
 //! preview, not a second Dock and not a substitute for domain commands.
 use crate::assets::symbols::Family;
 use crate::components::symbol_gallery::SymbolGallery;

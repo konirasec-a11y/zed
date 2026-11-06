@@ -26,8 +26,8 @@
   artwork in `src/assets/icons/svg/`. `UmlVisualDefinition` resolves semantic
   identities and supplies consistent category colors to every MDE surface.
   `src/assets/symbols.rs` and `src/assets/symbols/` contain catalog metadata only.
-  The old StarUML outlines and provenance remain in `assets/staruml/` as
-  historical reference and are not part of the runtime. All Bellatrix
+  Historical attribution is preserved in `src/assets/icons/NOTICE.md`; the old
+  StarUML collection exists only in Git history. All Bellatrix
   visual code belongs to this crate; the former design-system, panel and symbol
   crates have been removed. Their design references live in `docs/`.
 - `src/view_model/` contains renderer-independent inspector/style drafts,
