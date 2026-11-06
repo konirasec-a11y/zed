@@ -201,7 +201,21 @@ pub(super) fn reorder(
         .iter_mut()
         .find(|diagram| diagram.id == diagram_id)
         .ok_or("diagram not found")?;
-    let mut ordered: Vec<_> = diagram.views.iter().enumerate().collect();
+    fn siblings_mut<'a>(views: &'a mut [View], view_id: &str) -> Option<&'a mut [View]> {
+        if views.iter().any(|view| view.id == view_id) {
+            return Some(views);
+        }
+        for view in views {
+            if let Some(siblings) = siblings_mut(&mut view.children, view_id) {
+                return Some(siblings);
+            }
+        }
+        None
+    }
+    // Canvas stacking is local to siblings. Reordering must not detach a child
+    // or change its parent's position relative to other root Views.
+    let siblings = siblings_mut(&mut diagram.views, view_id).ok_or("view not found in diagram")?;
+    let mut ordered: Vec<_> = siblings.iter().enumerate().collect();
     ordered.sort_by_key(|(_, view)| view.z_index);
     let position = ordered
         .iter()
@@ -222,7 +236,7 @@ pub(super) fn reorder(
     let indices: Vec<_> = ordered.into_iter().map(|(index, _)| index).collect();
     for (rank, index) in indices.into_iter().enumerate() {
         let rank = i32::try_from(rank).map_err(|_| "too many views to reorder")?;
-        diagram.views[index].z_index = rank;
+        siblings[index].z_index = rank;
     }
     Ok(())
 }
